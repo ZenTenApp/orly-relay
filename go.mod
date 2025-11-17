@@ -41,6 +41,7 @@ require (
 	github.com/google/pprof v0.0.0-20251007162407-5df77e3f7d1d // indirect
 	github.com/klauspost/compress v1.18.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+	github.com/neo4j/neo4j-go-driver/v5 v5.28.4 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/templexxx/cpu v0.1.1 // indirect

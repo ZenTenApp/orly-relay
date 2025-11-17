@@ -22,6 +22,7 @@ import (
 	"next.orly.dev/pkg/crypto/keys"
 	"next.orly.dev/pkg/database"
 	_ "next.orly.dev/pkg/dgraph" // Import to register dgraph factory
+	_ "next.orly.dev/pkg/neo4j"  // Import to register neo4j factory
 	"next.orly.dev/pkg/encoders/hex"
 	"next.orly.dev/pkg/utils/interrupt"
 	"next.orly.dev/pkg/version"

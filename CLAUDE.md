@@ -8,11 +8,11 @@ ORLY is a high-performance Nostr relay written in Go, designed for personal rela
 
 **Key Technologies:**
 - **Language**: Go 1.25.3+
-- **Database**: Badger v4 (embedded key-value store)
+- **Database**: Badger v4 (embedded key-value store) or DGraph (distributed graph database)
 - **Cryptography**: Custom p8k library using purego for secp256k1 operations (no CGO)
 - **Web UI**: Svelte frontend embedded in the binary
 - **WebSocket**: gorilla/websocket for Nostr protocol
-- **Performance**: SIMD-accelerated SHA256 and hex encoding
+- **Performance**: SIMD-accelerated SHA256 and hex encoding, query result caching with zstd compression
 
 ## Build Commands
 
@@ -41,8 +41,8 @@ go build -o orly
 ### Development Mode (Web UI Hot Reload)
 ```bash
 # Terminal 1: Start relay with dev proxy
-export ORLY_WEB_DISABLE_EMBEDDED=true
-export ORLY_WEB_DEV_PROXY_URL=localhost:5000
+export ORLY_WEB_DISABLE=true
+export ORLY_WEB_DEV_PROXY_URL=http://localhost:5173
 ./orly &
 
 # Terminal 2: Start dev server
@@ -89,11 +89,18 @@ go run cmd/relay-tester/main.go -url ws://localhost:3334 -test "Basic Event"
 
 ### Benchmarking
 ```bash
-# Run benchmarks in specific package
+# Run Go benchmarks in specific package
 go test -bench=. -benchmem ./pkg/database
 
 # Crypto benchmarks
 cd pkg/crypto/p8k && make bench
+
+# Run full relay benchmark suite
+cd cmd/benchmark
+go run main.go -data-dir /tmp/bench-db -events 10000 -workers 4
+
+# Benchmark reports are saved to cmd/benchmark/reports/
+# The benchmark tool tests event storage, queries, and subscription performance
 ```
 
 ## Running the Relay
@@ -131,6 +138,18 @@ export ORLY_SPROCKET_ENABLED=true
 
 # Enable policy system
 export ORLY_POLICY_ENABLED=true
+
+# Database backend selection (badger or dgraph)
+export ORLY_DB_TYPE=badger
+export ORLY_DGRAPH_URL=localhost:9080  # Only for dgraph backend
+
+# Query cache configuration (improves REQ response times)
+export ORLY_QUERY_CACHE_SIZE_MB=512      # Default: 512MB
+export ORLY_QUERY_CACHE_MAX_AGE=5m       # Cache expiry time
+
+# Database cache tuning (for Badger backend)
+export ORLY_DB_BLOCK_CACHE_MB=512        # Block cache size
+export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
 ```
 
 ## Code Architecture
@@ -155,10 +174,12 @@ export ORLY_POLICY_ENABLED=true
 - `web.go` - Embedded web UI serving and dev proxy
 - `config/` - Environment variable configuration using go-simpler.org/env
 
-**`pkg/database/`** - Badger-based event storage
-- `database.go` - Database initialization with cache tuning
+**`pkg/database/`** - Database abstraction layer with multiple backend support
+- `interface.go` - Database interface definition for pluggable backends
+- `factory.go` - Database backend selection (Badger or DGraph)
+- `database.go` - Badger implementation with cache tuning and query cache
 - `save-event.go` - Event storage with index updates
-- `query-events.go` - Main query execution engine
+- `query-events.go` - Main query execution engine with filter normalization
 - `query-for-*.go` - Specialized query builders for different filter patterns
 - `indexes/` - Index key construction for efficient lookups
 - `export.go` / `import.go` - Event export/import in JSONL format
@@ -238,10 +259,19 @@ export ORLY_POLICY_ENABLED=true
 - This avoids CGO complexity while maintaining C library performance
 - `libsecp256k1.so` must be in `LD_LIBRARY_PATH` or same directory as binary
 
+**Database Backend Selection:**
+- Supports multiple backends via `ORLY_DB_TYPE` environment variable
+- **Badger** (default): Embedded key-value store with custom indexing, ideal for single-instance deployments
+- **DGraph**: Distributed graph database for larger, multi-node deployments
+- Backend selected via factory pattern in `pkg/database/factory.go`
+- All backends implement the same `Database` interface defined in `pkg/database/interface.go`
+
 **Database Query Pattern:**
 - Filters are analyzed in `get-indexes-from-filter.go` to determine optimal query strategy
+- Filters are normalized before cache lookup, ensuring identical queries with different field ordering hit the cache
 - Different query builders (`query-for-kinds.go`, `query-for-authors.go`, etc.) handle specific filter patterns
 - All queries return event serials (uint64) for efficient joining
+- Query results cached with zstd level 9 compression (configurable size and TTL)
 - Final events fetched via `fetch-events-by-serials.go`
 
 **WebSocket Message Flow:**
@@ -272,7 +302,7 @@ export ORLY_POLICY_ENABLED=true
 
 ### Making Changes to Web UI
 1. Edit files in `app/web/src/`
-2. For hot reload: `cd app/web && bun run dev` (with `ORLY_WEB_DISABLE_EMBEDDED=true`)
+2. For hot reload: `cd app/web && bun run dev` (with `ORLY_WEB_DISABLE=true` and `ORLY_WEB_DEV_PROXY_URL=http://localhost:5173`)
 3. For production build: `./scripts/update-embedded-web.sh`
 
 ### Adding New Nostr Protocol Handlers
@@ -377,11 +407,41 @@ sudo journalctl -u orly -f
 
 ## Performance Considerations
 
-- **Database Caching**: Tune `ORLY_DB_BLOCK_CACHE_MB` and `ORLY_DB_INDEX_CACHE_MB` for workload
-- **Query Optimization**: Add indexes for common filter patterns
+- **Query Cache**: 512MB query result cache (configurable via `ORLY_QUERY_CACHE_SIZE_MB`) with zstd level 9 compression reduces database load for repeated queries
+- **Filter Normalization**: Filters are normalized before cache lookup, so identical queries with different field ordering produce cache hits
+- **Database Caching**: Tune `ORLY_DB_BLOCK_CACHE_MB` and `ORLY_DB_INDEX_CACHE_MB` for workload (Badger backend only)
+- **Query Optimization**: Add indexes for common filter patterns; multiple specialized query builders optimize different filter combinations
+- **Batch Operations**: ID lookups and event fetching use batch operations via `GetSerialsByIds` and `FetchEventsBySerials`
 - **Memory Pooling**: Use buffer pools in encoders (see `pkg/encoders/event/`)
-- **SIMD Operations**: Leverage minio/sha256-simd and templexxx/xhex
+- **SIMD Operations**: Leverage minio/sha256-simd and templexxx/xhex for cryptographic operations
 - **Goroutine Management**: Each WebSocket connection runs in its own goroutine
+
+## Recent Optimizations
+
+ORLY has received several significant performance improvements in recent updates:
+
+### Query Cache System (Latest)
+- 512MB query result cache with zstd level 9 compression
+- Filter normalization ensures cache hits regardless of filter field ordering
+- Configurable size (`ORLY_QUERY_CACHE_SIZE_MB`) and TTL (`ORLY_QUERY_CACHE_MAX_AGE`)
+- Dramatically reduces database load for repeated queries (common in Nostr clients)
+- Cache key includes normalized filter representation for optimal hit rate
+
+### Badger Cache Tuning
+- Optimized block cache (default 512MB, tune via `ORLY_DB_BLOCK_CACHE_MB`)
+- Optimized index cache (default 256MB, tune via `ORLY_DB_INDEX_CACHE_MB`)
+- Resulted in 10-15% improvement in most benchmark scenarios
+- See git history for cache tuning evolution
+
+### Query Execution Improvements
+- Multiple specialized query builders for different filter patterns:
+  - `query-for-kinds.go` - Kind-based queries
+  - `query-for-authors.go` - Author-based queries
+  - `query-for-tags.go` - Tag-based queries
+  - Combination builders for `kinds+authors`, `kinds+tags`, `kinds+authors+tags`
+- Batch operations for ID lookups via `GetSerialsByIds`
+- Serial-based event fetching for efficiency
+- Filter analysis in `get-indexes-from-filter.go` selects optimal strategy
 
 ## Release Process
 
