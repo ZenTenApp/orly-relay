@@ -5,7 +5,6 @@ import (
 
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/errorf"
-	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/database/indexes/types"
 	"next.orly.dev/pkg/encoders/event"
 	"next.orly.dev/pkg/encoders/filter"
@@ -21,7 +20,7 @@ import (
 // pubkeys that also may delete the event, normally only the author is allowed
 // to delete an event.
 func (d *D) CheckForDeleted(ev *event.E, admins [][]byte) (err error) {
-	log.T.F("CheckForDeleted: checking event %x", ev.ID)
+	// log.T.F("CheckForDeleted: checking event %x", ev.ID)
 	keys := append([][]byte{ev.Pubkey}, admins...)
 	authors := tag.NewFromBytesSlice(keys...)
 	// if the event is addressable, check for a deletion event with the same
@@ -186,9 +185,9 @@ func (d *D) CheckForDeleted(ev *event.E, admins [][]byte) (err error) {
 		return
 	}
 	// otherwise we check for a delete by event id
-	log.T.F("CheckForDeleted: checking for e-tag deletion of event %x", ev.ID)
-	log.T.F("CheckForDeleted: authors filter: %v", authors)
-	log.T.F("CheckForDeleted: looking for tag e with value: %s", hex.Enc(ev.ID))
+	// log.T.F("CheckForDeleted: checking for e-tag deletion of event %x", ev.ID)
+	// log.T.F("CheckForDeleted: authors filter: %v", authors)
+	// log.T.F("CheckForDeleted: looking for tag e with value: %s", hex.Enc(ev.ID))
 	var idxs []Range
 	if idxs, err = GetIndexesFromFilter(
 		&filter.F{
@@ -201,18 +200,18 @@ func (d *D) CheckForDeleted(ev *event.E, admins [][]byte) (err error) {
 	); chk.E(err) {
 		return
 	}
-	log.T.F("CheckForDeleted: found %d indexes", len(idxs))
+	// log.T.F("CheckForDeleted: found %d indexes", len(idxs))
 	var sers types.Uint40s
-	for i, idx := range idxs {
-		log.T.F("CheckForDeleted: checking index %d: %v", i, idx)
+	for _, idx := range idxs {
+		// log.T.F("CheckForDeleted: checking index %d: %v", i, idx)
 		var s types.Uint40s
 		if s, err = d.GetSerialsByRange(idx); chk.E(err) {
 			return
 		}
-		log.T.F("CheckForDeleted: index %d returned %d serials", i, len(s))
+		// log.T.F("CheckForDeleted: index %d returned %d serials", i, len(s))
 		if len(s) > 0 {
 			// Any e-tag deletion found means the exact event was deleted and cannot be resubmitted
-			log.T.F("CheckForDeleted: found e-tag deletion for event %x", ev.ID)
+			// log.T.F("CheckForDeleted: found e-tag deletion for event %x", ev.ID)
 			err = errorf.E("blocked: %0x has been deleted", ev.ID)
 			return
 		}

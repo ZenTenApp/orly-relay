@@ -127,10 +127,8 @@ func (d *D) buildEventNQuads(ev *event.E, serial uint64) string {
 
 // GetSerialsFromFilter returns event serials matching a filter
 func (d *D) GetSerialsFromFilter(f *filter.F) (serials types.Uint40s, err error) {
-	// For dgraph, we'll use the event.serial field
-	// This is a stub implementation
-	err = fmt.Errorf("not implemented")
-	return
+	// Use QueryForSerials which already implements the proper filter logic
+	return d.QueryForSerials(context.Background(), f)
 }
 
 // WouldReplaceEvent checks if an event would replace existing events

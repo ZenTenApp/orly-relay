@@ -36,6 +36,9 @@ type BenchmarkConfig struct {
 	RelayURL   string
 	NetWorkers int
 	NetRate    int // events/sec per worker
+
+	// Backend selection
+	UseDgraph bool
 }
 
 type BenchmarkResult struct {
@@ -71,7 +74,14 @@ func main() {
 		return
 	}
 
-	fmt.Printf("Starting Nostr Relay Benchmark\n")
+	if config.UseDgraph {
+		// Run dgraph benchmark
+		runDgraphBenchmark(config)
+		return
+	}
+
+	// Run standard Badger benchmark
+	fmt.Printf("Starting Nostr Relay Benchmark (Badger Backend)\n")
 	fmt.Printf("Data Directory: %s\n", config.DataDir)
 	fmt.Printf(
 		"Events: %d, Workers: %d, Duration: %v\n",
@@ -87,6 +97,28 @@ func main() {
 	// Generate reports
 	benchmark.GenerateReport()
 	benchmark.GenerateAsciidocReport()
+}
+
+func runDgraphBenchmark(config *BenchmarkConfig) {
+	fmt.Printf("Starting Nostr Relay Benchmark (Dgraph Backend)\n")
+	fmt.Printf("Data Directory: %s\n", config.DataDir)
+	fmt.Printf(
+		"Events: %d, Workers: %d\n",
+		config.NumEvents, config.ConcurrentWorkers,
+	)
+
+	dgraphBench, err := NewDgraphBenchmark(config)
+	if err != nil {
+		log.Fatalf("Failed to create dgraph benchmark: %v", err)
+	}
+	defer dgraphBench.Close()
+
+	// Run dgraph benchmark suite
+	dgraphBench.RunSuite()
+
+	// Generate reports
+	dgraphBench.GenerateReport()
+	dgraphBench.GenerateAsciidocReport()
 }
 
 func parseFlags() *BenchmarkConfig {
@@ -123,6 +155,12 @@ func parseFlags() *BenchmarkConfig {
 		"Network workers (connections)",
 	)
 	flag.IntVar(&config.NetRate, "net-rate", 20, "Events per second per worker")
+
+	// Backend selection
+	flag.BoolVar(
+		&config.UseDgraph, "dgraph", false,
+		"Use dgraph backend (requires Docker)",
+	)
 
 	flag.Parse()
 	return config
@@ -286,7 +324,7 @@ func NewBenchmark(config *BenchmarkConfig) *Benchmark {
 	ctx := context.Background()
 	cancel := func() {}
 
-	db, err := database.New(ctx, cancel, config.DataDir, "info")
+	db, err := database.New(ctx, cancel, config.DataDir, "warn")
 	if err != nil {
 		log.Fatalf("Failed to create database: %v", err)
 	}
@@ -974,7 +1012,7 @@ func (b *Benchmark) generateEvents(count int) []*event.E {
 		log.Fatalf("Failed to generate keys for benchmark events: %v", err)
 	}
 
-	// Define size distribution - from minimal to 500MB
+	// Define size distribution - from minimal to 500KB
 	// We'll create a logarithmic distribution to test various sizes
 	sizeBuckets := []int{
 		0,          // Minimal: empty content, no tags
@@ -984,13 +1022,8 @@ func (b *Benchmark) generateEvents(count int) []*event.E {
 		10 * 1024,  // 10 KB
 		50 * 1024,  // 50 KB
 		100 * 1024, // 100 KB
-		500 * 1024, // 500 KB
-		1024 * 1024,      // 1 MB
-		5 * 1024 * 1024,  // 5 MB
-		10 * 1024 * 1024, // 10 MB
-		50 * 1024 * 1024, // 50 MB
-		100 * 1024 * 1024, // 100 MB
-		500000000,  // 500 MB (500,000,000 bytes)
+		250 * 1024, // 250 KB
+		500 * 1024, // 500 KB (max realistic size for Nostr)
 	}
 
 	for i := 0; i < count; i++ {

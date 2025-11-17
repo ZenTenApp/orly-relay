@@ -2,7 +2,9 @@ package dgraph
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/dgraph-io/dgo/v230/protos/api"
 	"next.orly.dev/pkg/database/indexes/types"
@@ -98,13 +100,83 @@ func (d *D) DeleteEventBySerial(c context.Context, ser *types.Uint40, ev *event.
 	return nil
 }
 
-// DeleteExpired removes events that have passed their expiration time
+// DeleteExpired removes events that have passed their expiration time (NIP-40)
 func (d *D) DeleteExpired() {
-	// Query for events with expiration tags
-	// This is a stub - full implementation would:
-	// 1. Find events with "expiration" tag
-	// 2. Check if current time > expiration time
-	// 3. Delete those events
+	// Query for events that have an "expiration" tag
+	// NIP-40: events should have a tag ["expiration", "<unix timestamp>"]
+	query := `{
+		events(func: has(event.tags)) {
+			uid
+			event.id
+			event.tags
+			event.created_at
+		}
+	}`
+
+	resp, err := d.Query(context.Background(), query)
+	if err != nil {
+		d.Logger.Errorf("failed to query events for expiration: %v", err)
+		return
+	}
+
+	var result struct {
+		Events []struct {
+			UID       string `json:"uid"`
+			ID        string `json:"event.id"`
+			Tags      string `json:"event.tags"`
+			CreatedAt int64  `json:"event.created_at"`
+		} `json:"events"`
+	}
+
+	if err = unmarshalJSON(resp.Json, &result); err != nil {
+		d.Logger.Errorf("failed to parse events for expiration: %v", err)
+		return
+	}
+
+	now := time.Now().Unix()
+	deletedCount := 0
+
+	for _, ev := range result.Events {
+		// Parse tags
+		if ev.Tags == "" {
+			continue
+		}
+
+		var tags [][]string
+		if err := json.Unmarshal([]byte(ev.Tags), &tags); err != nil {
+			continue
+		}
+
+		// Look for expiration tag
+		var expirationTime int64
+		for _, tag := range tags {
+			if len(tag) >= 2 && tag[0] == "expiration" {
+				// Parse expiration timestamp
+				if _, err := fmt.Sscanf(tag[1], "%d", &expirationTime); err != nil {
+					continue
+				}
+				break
+			}
+		}
+
+		// If expiration time found and passed, delete the event
+		if expirationTime > 0 && now > expirationTime {
+			mutation := &api.Mutation{
+				DelNquads: []byte(fmt.Sprintf("<%s> * * .", ev.UID)),
+				CommitNow: true,
+			}
+
+			if _, err := d.Mutate(context.Background(), mutation); err != nil {
+				d.Logger.Warningf("failed to delete expired event %s: %v", ev.ID, err)
+			} else {
+				deletedCount++
+			}
+		}
+	}
+
+	if deletedCount > 0 {
+		d.Logger.Infof("deleted %d expired events", deletedCount)
+	}
 }
 
 // ProcessDelete processes a kind 5 deletion event

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/database/indexes/types"
@@ -54,15 +55,16 @@ func (d *D) FetchEventsBySerials(serials []*types.Uint40) (
 		return make(map[uint64]*event.E), nil
 	}
 
-	// Build query for multiple serials
-	serialStrs := make([]string, len(serials))
+	// Build a filter for multiple serials using OR conditions
+	serialConditions := make([]string, len(serials))
 	for i, ser := range serials {
-		serialStrs[i] = fmt.Sprintf("%d", ser.Get())
+		serialConditions[i] = fmt.Sprintf("eq(event.serial, %d)", ser.Get())
 	}
+	serialFilter := strings.Join(serialConditions, " OR ")
 
-	// Use uid() function for efficient multi-get
+	// Query with proper batch filtering
 	query := fmt.Sprintf(`{
-		events(func: uid(%s)) {
+		events(func: has(event.serial)) @filter(%s) {
 			event.id
 			event.kind
 			event.created_at
@@ -72,24 +74,70 @@ func (d *D) FetchEventsBySerials(serials []*types.Uint40) (
 			event.tags
 			event.serial
 		}
-	}`, serialStrs[0]) // Simplified - in production you'd handle multiple UIDs properly
+	}`, serialFilter)
 
 	resp, err := d.Query(context.Background(), query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch events by serials: %w", err)
 	}
 
-	evs, err := d.parseEventsFromResponse(resp.Json)
-	if err != nil {
+	// Parse the response including serial numbers
+	var result struct {
+		Events []struct {
+			ID        string `json:"event.id"`
+			Kind      int    `json:"event.kind"`
+			CreatedAt int64  `json:"event.created_at"`
+			Content   string `json:"event.content"`
+			Sig       string `json:"event.sig"`
+			Pubkey    string `json:"event.pubkey"`
+			Tags      string `json:"event.tags"`
+			Serial    int64  `json:"event.serial"`
+		} `json:"events"`
+	}
+
+	if err = json.Unmarshal(resp.Json, &result); err != nil {
 		return nil, err
 	}
 
-	// Map events by serial
+	// Map events by their serial numbers
 	events = make(map[uint64]*event.E)
-	for i, ser := range serials {
-		if i < len(evs) {
-			events[ser.Get()] = evs[i]
+	for _, ev := range result.Events {
+		// Decode hex strings
+		id, err := hex.Dec(ev.ID)
+		if err != nil {
+			continue
 		}
+		sig, err := hex.Dec(ev.Sig)
+		if err != nil {
+			continue
+		}
+		pubkey, err := hex.Dec(ev.Pubkey)
+		if err != nil {
+			continue
+		}
+
+		// Parse tags from JSON
+		var tags tag.S
+		if ev.Tags != "" {
+			if err := json.Unmarshal([]byte(ev.Tags), &tags); err != nil {
+				continue
+			}
+		}
+
+		// Create event
+		e := &event.E{
+			Kind:      uint16(ev.Kind),
+			CreatedAt: ev.CreatedAt,
+			Content:   []byte(ev.Content),
+			Tags:      &tags,
+		}
+
+		// Copy fixed-size arrays
+		copy(e.ID[:], id)
+		copy(e.Sig[:], sig)
+		copy(e.Pubkey[:], pubkey)
+
+		events[uint64(ev.Serial)] = e
 	}
 
 	return events, nil
@@ -140,15 +188,52 @@ func (d *D) GetSerialsByIds(ids *tag.T) (
 		return serials, nil
 	}
 
-	// Query each ID individually (simplified implementation)
-	for _, id := range ids.T {
-		if len(id) >= 2 {
-			idStr := string(id[1])
-			serial, err := d.GetSerialById([]byte(idStr))
-			if err == nil {
-				serials[idStr] = serial
-			}
+	// Build batch query for all IDs at once
+	idConditions := make([]string, 0, len(ids.T))
+	idMap := make(map[string][]byte) // Map hex ID to original bytes
+
+	for _, idBytes := range ids.T {
+		if len(idBytes) > 0 {
+			idStr := hex.Enc(idBytes)
+			idConditions = append(idConditions, fmt.Sprintf("eq(event.id, %q)", idStr))
+			idMap[idStr] = idBytes
 		}
+	}
+
+	if len(idConditions) == 0 {
+		return serials, nil
+	}
+
+	// Create single query with OR conditions
+	idFilter := strings.Join(idConditions, " OR ")
+	query := fmt.Sprintf(`{
+		events(func: has(event.id)) @filter(%s) {
+			event.id
+			event.serial
+		}
+	}`, idFilter)
+
+	resp, err := d.Query(context.Background(), query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch query serials by IDs: %w", err)
+	}
+
+	var result struct {
+		Events []struct {
+			ID     string `json:"event.id"`
+			Serial int64  `json:"event.serial"`
+		} `json:"events"`
+	}
+
+	if err = json.Unmarshal(resp.Json, &result); err != nil {
+		return nil, err
+	}
+
+	// Map results back
+	for _, ev := range result.Events {
+		serial := types.Uint40{}
+		serial.Set(uint64(ev.Serial))
+		serials[ev.ID] = &serial
 	}
 
 	return serials, nil
@@ -191,10 +276,47 @@ func (d *D) GetSerialsByIdsWithFilter(
 func (d *D) GetSerialsByRange(idx database.Range) (
 	serials types.Uint40s, err error,
 ) {
-	// This would need to be implemented based on how ranges are defined
-	// For now, returning not implemented
-	err = fmt.Errorf("not implemented")
-	return
+	// Range represents a byte-prefix range for index scanning
+	// For dgraph, we need to convert this to a query on indexed fields
+	// The range is typically used for scanning event IDs or other hex-encoded keys
+
+	if len(idx.Start) == 0 && len(idx.End) == 0 {
+		return nil, fmt.Errorf("empty range provided")
+	}
+
+	startStr := hex.Enc(idx.Start)
+	endStr := hex.Enc(idx.End)
+
+	// Query for events with IDs in the specified range
+	query := fmt.Sprintf(`{
+		events(func: ge(event.id, %q)) @filter(le(event.id, %q)) {
+			event.serial
+		}
+	}`, startStr, endStr)
+
+	resp, err := d.Query(context.Background(), query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query serials by range: %w", err)
+	}
+
+	var result struct {
+		Events []struct {
+			Serial int64 `json:"event.serial"`
+		} `json:"events"`
+	}
+
+	if err = json.Unmarshal(resp.Json, &result); err != nil {
+		return nil, err
+	}
+
+	serials = make([]*types.Uint40, 0, len(result.Events))
+	for _, ev := range result.Events {
+		serial := types.Uint40{}
+		serial.Set(uint64(ev.Serial))
+		serials = append(serials, &serial)
+	}
+
+	return serials, nil
 }
 
 // GetFullIdPubkeyBySerial retrieves ID and pubkey for a serial number

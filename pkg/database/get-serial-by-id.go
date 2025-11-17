@@ -10,12 +10,12 @@ import (
 	"next.orly.dev/pkg/database/indexes/types"
 	"next.orly.dev/pkg/encoders/event"
 	"next.orly.dev/pkg/encoders/filter"
-	"next.orly.dev/pkg/encoders/hex"
+	// "next.orly.dev/pkg/encoders/hex"
 	"next.orly.dev/pkg/encoders/tag"
 )
 
 func (d *D) GetSerialById(id []byte) (ser *types.Uint40, err error) {
-	log.T.F("GetSerialById: input id=%s", hex.Enc(id))
+	// log.T.F("GetSerialById: input id=%s", hex.Enc(id))
 	var idxs []Range
 	if idxs, err = GetIndexesFromFilter(&filter.F{Ids: tag.NewFromBytesSlice(id)}); chk.E(err) {
 		return
@@ -58,7 +58,7 @@ func (d *D) GetSerialById(id []byte) (ser *types.Uint40, err error) {
 		return
 	}
 	if !idFound {
-		err = errorf.T("id not found in database: %s", hex.Enc(id))
+		// err = errorf.T("id not found in database: %s", hex.Enc(id))
 		return
 	}
 
@@ -80,7 +80,7 @@ func (d *D) GetSerialsByIds(ids *tag.T) (
 func (d *D) GetSerialsByIdsWithFilter(
 	ids *tag.T, fn func(ev *event.E, ser *types.Uint40) bool,
 ) (serials map[string]*types.Uint40, err error) {
-	log.T.F("GetSerialsByIdsWithFilter: input ids count=%d", ids.Len())
+	// log.T.F("GetSerialsByIdsWithFilter: input ids count=%d", ids.Len())
 
 	// Initialize the result map with estimated capacity to reduce reallocations
 	serials = make(map[string]*types.Uint40, ids.Len())

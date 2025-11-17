@@ -48,6 +48,20 @@ func (d *D) QueryEventsWithOptions(
 
 // buildDQLQuery constructs a DQL query from a Nostr filter
 func (d *D) buildDQLQuery(f *filter.F, includeDeleteEvents bool) string {
+	return d.buildDQLQueryWithFields(f, includeDeleteEvents, []string{
+		"uid",
+		"event.id",
+		"event.kind",
+		"event.created_at",
+		"event.content",
+		"event.sig",
+		"event.pubkey",
+		"event.tags",
+	})
+}
+
+// buildDQLQueryWithFields constructs a DQL query with custom field selection
+func (d *D) buildDQLQueryWithFields(f *filter.F, includeDeleteEvents bool, fields []string) string {
 	var conditions []string
 	var funcQuery string
 
@@ -139,18 +153,14 @@ func (d *D) buildDQLQuery(f *filter.F, includeDeleteEvents bool) string {
 		limitStr = fmt.Sprintf(", first: %d", f.Limit)
 	}
 
+	// Build field list
+	fieldStr := strings.Join(fields, "\n\t\t\t")
+
 	query := fmt.Sprintf(`{
 		events(func: %s%s%s%s) {
-			uid
-			event.id
-			event.kind
-			event.created_at
-			event.content
-			event.sig
-			event.pubkey
-			event.tags
+			%s
 		}
-	}`, funcQuery, filterStr, orderBy, limitStr)
+	}`, funcQuery, filterStr, orderBy, limitStr, fieldStr)
 
 	return query
 }
@@ -257,12 +267,8 @@ func (d *D) QueryDeleteEventsByTargetId(c context.Context, targetEventId []byte)
 func (d *D) QueryForSerials(c context.Context, f *filter.F) (
 	serials types.Uint40s, err error,
 ) {
-	// Build query
-	query := d.buildDQLQuery(f, false)
-
-	// Modify query to only return serial numbers
-	query = strings.Replace(query, "event.id\n\t\t\tevent.kind", "event.serial", 1)
-	query = strings.Replace(query, "\t\t\tevent.created_at\n\t\t\tevent.content\n\t\t\tevent.sig\n\t\t\tevent.pubkey\n\t\t\tevent.tags", "", 1)
+	// Build query requesting only serial numbers
+	query := d.buildDQLQueryWithFields(f, false, []string{"event.serial"})
 
 	resp, err := d.Query(c, query)
 	if err != nil {
@@ -293,11 +299,13 @@ func (d *D) QueryForSerials(c context.Context, f *filter.F) (
 func (d *D) QueryForIds(c context.Context, f *filter.F) (
 	idPkTs []*store.IdPkTs, err error,
 ) {
-	// Build query
-	query := d.buildDQLQuery(f, false)
-
-	// Modify query to only return ID, pubkey, created_at, serial
-	query = strings.Replace(query, "event.kind\n\t\t\tevent.created_at\n\t\t\tevent.content\n\t\t\tevent.sig\n\t\t\tevent.pubkey\n\t\t\tevent.tags", "event.id\n\t\t\tevent.pubkey\n\t\t\tevent.created_at\n\t\t\tevent.serial", 1)
+	// Build query requesting only ID, pubkey, created_at, serial
+	query := d.buildDQLQueryWithFields(f, false, []string{
+		"event.id",
+		"event.pubkey",
+		"event.created_at",
+		"event.serial",
+	})
 
 	resp, err := d.Query(c, query)
 	if err != nil {
@@ -342,11 +350,8 @@ func (d *D) QueryForIds(c context.Context, f *filter.F) (
 func (d *D) CountEvents(c context.Context, f *filter.F) (
 	count int, approximate bool, err error,
 ) {
-	// Build query with count
-	query := d.buildDQLQuery(f, false)
-
-	// Modify to count instead of returning full data
-	query = strings.Replace(query, "uid\n\t\t\tevent.id\n\t\t\tevent.kind\n\t\t\tevent.created_at\n\t\t\tevent.content\n\t\t\tevent.sig\n\t\t\tevent.pubkey\n\t\t\tevent.tags", "count(uid)", 1)
+	// Build query requesting only count
+	query := d.buildDQLQueryWithFields(f, false, []string{"count(uid)"})
 
 	resp, err := d.Query(c, query)
 	if err != nil {

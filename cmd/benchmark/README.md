@@ -2,7 +2,7 @@
 
 A comprehensive benchmarking system for testing and comparing the performance of multiple Nostr relay implementations, including:
 
-- **next.orly.dev** (this repository) - BadgerDB-based relay
+- **next.orly.dev** (this repository) - Badger and DGraph backend variants
 - **Khatru** - SQLite and Badger variants
 - **Relayer** - Basic example implementation
 - **Strfry** - C++ LMDB-based relay
@@ -91,13 +91,16 @@ ls reports/run_YYYYMMDD_HHMMSS/
 
 ### Docker Compose Services
 
-| Service          | Port | Description                               |
-| ---------------- | ---- | ----------------------------------------- |
-| next-orly        | 8001 | This repository's BadgerDB relay          |
-| khatru-sqlite    | 8002 | Khatru with SQLite backend                |
-| khatru-badger    | 8003 | Khatru with Badger backend                |
-| relayer-basic    | 8004 | Basic relayer example                     |
-| strfry           | 8005 | Strfry C++ LMDB relay                     |
+| Service            | Port | Description                               |
+| ------------------ | ---- | ----------------------------------------- |
+| next-orly-badger   | 8001 | This repository's Badger relay            |
+| next-orly-dgraph   | 8007 | This repository's DGraph relay            |
+| dgraph-zero        | 5080 | DGraph cluster coordinator                |
+| dgraph-alpha       | 9080 | DGraph data node                          |
+| khatru-sqlite      | 8002 | Khatru with SQLite backend                |
+| khatru-badger      | 8003 | Khatru with Badger backend                |
+| relayer-basic      | 8004 | Basic relayer example                     |
+| strfry             | 8005 | Strfry C++ LMDB relay                     |
 | nostr-rs-relay   | 8006 | Rust SQLite relay                         |
 | benchmark-runner | -    | Orchestrates tests and aggregates results |
 
@@ -172,6 +175,39 @@ go build -o benchmark main.go
   -workers=4 \
   -duration=30s
 ```
+
+## Database Backend Comparison
+
+The benchmark suite includes **next.orly.dev** with two different database backends to compare architectural approaches:
+
+### Badger Backend (next-orly-badger)
+- **Type**: Embedded key-value store
+- **Architecture**: Single-process, no network overhead
+- **Best for**: Personal relays, single-instance deployments
+- **Characteristics**:
+  - Lower latency for single-instance operations
+  - No network round-trips
+  - Simpler deployment
+  - Limited to single-node scaling
+
+### DGraph Backend (next-orly-dgraph)
+- **Type**: Distributed graph database
+- **Architecture**: Client-server with dgraph-zero (coordinator) and dgraph-alpha (data node)
+- **Best for**: Distributed deployments, horizontal scaling
+- **Characteristics**:
+  - Network overhead from gRPC communication
+  - Supports multi-node clustering
+  - Built-in replication and sharding
+  - More complex deployment
+
+### Comparing the Backends
+
+The benchmark results will show:
+- **Latency differences**: Embedded vs. distributed overhead
+- **Throughput trade-offs**: Single-process optimization vs. distributed scalability
+- **Resource usage**: Memory and CPU patterns for different architectures
+
+This comparison helps determine which backend is appropriate for different deployment scenarios.
 
 ## Benchmark Results Interpretation
 

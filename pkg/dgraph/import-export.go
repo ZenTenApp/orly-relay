@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"next.orly.dev/pkg/encoders/event"
+	"next.orly.dev/pkg/encoders/hex"
 )
 
 // Import imports events from a reader (JSONL format)
@@ -17,11 +19,83 @@ func (d *D) Import(rr io.Reader) {
 
 // Export exports events to a writer (JSONL format)
 func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
-	// Query all events or events for specific pubkeys
-	// Write as JSONL
+	// Build query based on whether pubkeys are specified
+	var query string
 
-	// Stub implementation
-	fmt.Fprintf(w, "# Export not yet implemented for dgraph\n")
+	if len(pubkeys) > 0 {
+		// Build pubkey filter
+		pubkeyStrs := make([]string, len(pubkeys))
+		for i, pk := range pubkeys {
+			pubkeyStrs[i] = fmt.Sprintf("eq(event.pubkey, %q)", hex.Enc(pk))
+		}
+		pubkeyFilter := strings.Join(pubkeyStrs, " OR ")
+
+		query = fmt.Sprintf(`{
+			events(func: has(event.id)) @filter(%s) {
+				event.id
+				event.kind
+				event.created_at
+				event.content
+				event.sig
+				event.pubkey
+				event.tags
+			}
+		}`, pubkeyFilter)
+	} else {
+		// Export all events
+		query = `{
+			events(func: has(event.id)) {
+				event.id
+				event.kind
+				event.created_at
+				event.content
+				event.sig
+				event.pubkey
+				event.tags
+			}
+		}`
+	}
+
+	// Execute query
+	resp, err := d.Query(c, query)
+	if err != nil {
+		d.Logger.Errorf("failed to query events for export: %v", err)
+		fmt.Fprintf(w, "# Error: failed to query events: %v\n", err)
+		return
+	}
+
+	// Parse events
+	evs, err := d.parseEventsFromResponse(resp.Json)
+	if err != nil {
+		d.Logger.Errorf("failed to parse events for export: %v", err)
+		fmt.Fprintf(w, "# Error: failed to parse events: %v\n", err)
+		return
+	}
+
+	// Write header comment
+	fmt.Fprintf(w, "# Exported %d events from dgraph\n", len(evs))
+
+	// Write each event as JSONL
+	count := 0
+	for _, ev := range evs {
+		jsonData, err := json.Marshal(ev)
+		if err != nil {
+			d.Logger.Warningf("failed to marshal event: %v", err)
+			continue
+		}
+
+		if _, err := fmt.Fprintf(w, "%s\n", jsonData); err != nil {
+			d.Logger.Errorf("failed to write event: %v", err)
+			return
+		}
+
+		count++
+		if count%1000 == 0 {
+			d.Logger.Infof("exported %d events", count)
+		}
+	}
+
+	d.Logger.Infof("export complete: %d events written", count)
 }
 
 // ImportEventsFromReader imports events from a reader

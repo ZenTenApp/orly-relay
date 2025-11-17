@@ -31,8 +31,8 @@ fi
 
 # Create fresh data directories with correct permissions
 echo "Preparing data directories..."
-mkdir -p data/{next-orly,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,postgres}
-chmod 777 data/{next-orly,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,postgres}
+mkdir -p data/{next-orly-badger,next-orly-dgraph,dgraph-zero,dgraph-alpha,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,postgres}
+chmod 777 data/{next-orly-badger,next-orly-dgraph,dgraph-zero,dgraph-alpha,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,postgres}
 
 echo "Starting benchmark suite..."
 echo "This will automatically shut down all containers when the benchmark completes."

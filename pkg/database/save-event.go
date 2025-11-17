@@ -180,10 +180,10 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 	if idxs, err = GetIndexesForEvent(ev, serial); chk.E(err) {
 		return
 	}
-	log.T.F(
-		"SaveEvent: generated %d indexes for event %x (kind %d)", len(idxs),
-		ev.ID, ev.Kind,
-	)
+	// log.T.F(
+	// 	"SaveEvent: generated %d indexes for event %x (kind %d)", len(idxs),
+	// 	ev.ID, ev.Kind,
+	// )
 
 	// Serialize event once to check size
 	eventDataBuf := new(bytes.Buffer)
@@ -247,10 +247,10 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 				if err = txn.Set(keyBuf.Bytes(), nil); chk.E(err) {
 					return
 				}
-				log.T.F(
-					"SaveEvent: stored small event inline (%d bytes)",
-					len(eventData),
-				)
+				// log.T.F(
+				// 	"SaveEvent: stored small event inline (%d bytes)",
+				// 	len(eventData),
+				// )
 			} else {
 				// Large event: store separately with evt prefix
 				keyBuf := new(bytes.Buffer)
@@ -260,10 +260,10 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 				if err = txn.Set(keyBuf.Bytes(), eventData); chk.E(err) {
 					return
 				}
-				log.T.F(
-					"SaveEvent: stored large event separately (%d bytes)",
-					len(eventData),
-				)
+				// log.T.F(
+				// "SaveEvent: stored large event separately (%d bytes)",
+				// len(eventData),
+				// )
 			}
 
 			// Additionally, store replaceable/addressable events with specialized keys for direct access
@@ -293,7 +293,7 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 				if err = txn.Set(keyBuf.Bytes(), nil); chk.E(err) {
 					return
 				}
-				log.T.F("SaveEvent: also stored addressable event with specialized key")
+				// log.T.F("SaveEvent: also stored addressable event with specialized key")
 			} else if isReplaceableEvent && isSmallEvent {
 				// Replaceable event: also store with rev|pubkey_hash|kind|size|data
 				pubHash := new(types.PubHash)
@@ -340,7 +340,7 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 	// This ensures subsequent queries will see the new event
 	if d.queryCache != nil {
 		d.queryCache.Invalidate()
-		log.T.F("SaveEvent: invalidated query cache")
+		// log.T.F("SaveEvent: invalidated query cache")
 	}
 
 	return

@@ -1,19 +1,20 @@
 version: "3.8"
 
 services:
-  # Next.orly.dev relay (this repository)
-  next-orly:
+  # Next.orly.dev relay with Badger (this repository)
+  next-orly-badger:
     build:
       context: ../..
       dockerfile: cmd/benchmark/Dockerfile.next-orly
-    container_name: benchmark-next-orly
+    container_name: benchmark-next-orly-badger
     environment:
       - ORLY_DATA_DIR=/data
       - ORLY_LISTEN=0.0.0.0
       - ORLY_PORT=8080
       - ORLY_LOG_LEVEL=off
+      - ORLY_DB_TYPE=badger
     volumes:
-      - ./data/next-orly:/data
+      - ./data/next-orly-badger:/data
     ports:
       - "8001:8080"
     networks:
@@ -24,6 +25,78 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # Next.orly.dev relay with DGraph (this repository)
+  next-orly-dgraph:
+    build:
+      context: ../..
+      dockerfile: cmd/benchmark/Dockerfile.next-orly
+    container_name: benchmark-next-orly-dgraph
+    environment:
+      - ORLY_DATA_DIR=/data
+      - ORLY_LISTEN=0.0.0.0
+      - ORLY_PORT=8080
+      - ORLY_LOG_LEVEL=off
+      - ORLY_DB_TYPE=dgraph
+      - ORLY_DGRAPH_URL=dgraph-alpha:9080
+    volumes:
+      - ./data/next-orly-dgraph:/data
+    ports:
+      - "8007:8080"
+    networks:
+      - benchmark-net
+    depends_on:
+      dgraph-alpha:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # DGraph Zero - cluster coordinator
+  dgraph-zero:
+    image: dgraph/dgraph:v23.1.0
+    container_name: benchmark-dgraph-zero
+    working_dir: /data/zero
+    ports:
+      - "5080:5080"
+      - "6080:6080"
+    volumes:
+      - ./data/dgraph-zero:/data
+    command: dgraph zero --my=dgraph-zero:5080
+    networks:
+      - benchmark-net
+    healthcheck:
+      test: ["CMD", "sh", "-c", "dgraph version || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # DGraph Alpha - data node
+  dgraph-alpha:
+    image: dgraph/dgraph:v23.1.0
+    container_name: benchmark-dgraph-alpha
+    working_dir: /data/alpha
+    ports:
+      - "8088:8080"
+      - "9080:9080"
+    volumes:
+      - ./data/dgraph-alpha:/data
+    command: dgraph alpha --my=dgraph-alpha:7080 --zero=dgraph-zero:5080 --security whitelist=0.0.0.0/0
+    networks:
+      - benchmark-net
+    depends_on:
+      dgraph-zero:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-c", "dgraph version || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
 
   # Khatru with SQLite
   khatru-sqlite:
@@ -145,7 +218,9 @@ services:
       dockerfile: cmd/benchmark/Dockerfile.benchmark
     container_name: benchmark-runner
     depends_on:
-      next-orly:
+      next-orly-badger:
+        condition: service_healthy
+      next-orly-dgraph:
         condition: service_healthy
       khatru-sqlite:
         condition: service_healthy
@@ -158,7 +233,7 @@ services:
       nostr-rs-relay:
         condition: service_healthy
     environment:
-      - BENCHMARK_TARGETS=next-orly:8080,khatru-sqlite:3334,khatru-badger:3334,relayer-basic:7447,strfry:8080,nostr-rs-relay:8080
+      - BENCHMARK_TARGETS=next-orly-badger:8080,next-orly-dgraph:8080,khatru-sqlite:3334,khatru-badger:3334,relayer-basic:7447,strfry:8080,nostr-rs-relay:8080
       - BENCHMARK_EVENTS=50000
       - BENCHMARK_WORKERS=24
       - BENCHMARK_DURATION=60s

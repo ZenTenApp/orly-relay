@@ -4,6 +4,7 @@ package dgraph
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,11 +13,11 @@ import (
 	"github.com/dgraph-io/dgo/v230"
 	"github.com/dgraph-io/dgo/v230/protos/api"
 	"google.golang.org/grpc"
-	"next.orly.dev/pkg/encoders/filter"
 	"google.golang.org/grpc/credentials/insecure"
 	"lol.mleku.dev"
 	"lol.mleku.dev/chk"
 	"next.orly.dev/pkg/database"
+	"next.orly.dev/pkg/encoders/filter"
 	"next.orly.dev/pkg/utils/apputil"
 )
 
@@ -198,8 +199,11 @@ func (d *D) Mutate(ctx context.Context, mutation *api.Mutation) (*api.Response, 
 		return nil, fmt.Errorf("dgraph mutation failed: %w", err)
 	}
 
-	if err := txn.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("dgraph commit failed: %w", err)
+	// Only commit if CommitNow is false (mutation didn't auto-commit)
+	if !mutation.CommitNow {
+		if err := txn.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("dgraph commit failed: %w", err)
+		}
 	}
 
 	return resp, nil
@@ -256,12 +260,38 @@ func (d *D) SetLogLevel(level string) {
 	// d.Logger.SetLevel(lol.GetLogLevel(level))
 }
 
-// EventIdsBySerial retrieves event IDs by serial range (stub)
+// EventIdsBySerial retrieves event IDs by serial range
 func (d *D) EventIdsBySerial(start uint64, count int) (
 	evs []uint64, err error,
 ) {
-	err = fmt.Errorf("not implemented")
-	return
+	// Query for events in the specified serial range
+	query := fmt.Sprintf(`{
+		events(func: ge(event.serial, %d), orderdesc: event.serial, first: %d) {
+			event.serial
+		}
+	}`, start, count)
+
+	resp, err := d.Query(context.Background(), query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query event IDs by serial: %w", err)
+	}
+
+	var result struct {
+		Events []struct {
+			Serial int64 `json:"event.serial"`
+		} `json:"events"`
+	}
+
+	if err = json.Unmarshal(resp.Json, &result); err != nil {
+		return nil, err
+	}
+
+	evs = make([]uint64, 0, len(result.Events))
+	for _, ev := range result.Events {
+		evs = append(evs, uint64(ev.Serial))
+	}
+
+	return evs, nil
 }
 
 // RunMigrations runs database migrations (no-op for dgraph)

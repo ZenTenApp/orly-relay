@@ -83,7 +83,16 @@
       "Bash(ORLY_LOG_LEVEL=debug timeout 60 ./orly:*)",
       "Bash(ORLY_LOG_LEVEL=debug timeout 30 ./orly:*)",
       "Bash(killall:*)",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(gh repo list:*)",
+      "Bash(gh auth:*)",
+      "Bash(/tmp/backup-github-repos.sh)",
+      "Bash(./benchmark:*)",
+      "Bash(env)",
+      "Bash(./run-badger-benchmark.sh:*)",
+      "Bash(./update-github-vpn.sh:*)",
+      "Bash(dmesg:*)",
+      "Bash(export:*)"
     ],
     "deny": [],
     "ask": []

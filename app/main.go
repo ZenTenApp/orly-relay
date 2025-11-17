@@ -85,9 +85,9 @@ func Run(
 	// Initialize policy manager
 	l.policyManager = policy.NewWithManager(ctx, cfg.AppName, cfg.PolicyEnabled)
 
-	// Initialize spider manager based on mode
-	if cfg.SpiderMode != "none" {
-		if l.spiderManager, err = spider.New(ctx, db.(*database.D), l.publishers, cfg.SpiderMode); chk.E(err) {
+	// Initialize spider manager based on mode (only for Badger backend)
+	if badgerDB, ok := db.(*database.D); ok && cfg.SpiderMode != "none" {
+		if l.spiderManager, err = spider.New(ctx, badgerDB, l.publishers, cfg.SpiderMode); chk.E(err) {
 			log.E.F("failed to create spider manager: %v", err)
 		} else {
 			// Set up callbacks for follows mode
@@ -141,67 +141,79 @@ func Run(
 		}
 	}
 
-	// Initialize relay group manager
-	l.relayGroupMgr = dsync.NewRelayGroupManager(db.(*database.D), cfg.RelayGroupAdmins)
-
-	// Initialize sync manager if relay peers are configured
-	var peers []string
-	if len(cfg.RelayPeers) > 0 {
-		peers = cfg.RelayPeers
-	} else {
-		// Try to get peers from relay group configuration
-		if config, err := l.relayGroupMgr.FindAuthoritativeConfig(ctx); err == nil && config != nil {
-			peers = config.Relays
-			log.I.F("using relay group configuration with %d peers", len(peers))
-		}
+	// Initialize relay group manager (only for Badger backend)
+	if badgerDB, ok := db.(*database.D); ok {
+		l.relayGroupMgr = dsync.NewRelayGroupManager(badgerDB, cfg.RelayGroupAdmins)
+	} else if cfg.SpiderMode != "none" || len(cfg.RelayPeers) > 0 || len(cfg.ClusterAdmins) > 0 {
+		log.I.Ln("spider, sync, and cluster features require Badger backend (currently using alternative backend)")
 	}
 
-	if len(peers) > 0 {
-		// Get relay identity for node ID
-		sk, err := db.GetOrCreateRelayIdentitySecret()
-		if err != nil {
-			log.E.F("failed to get relay identity for sync: %v", err)
+	// Initialize sync manager if relay peers are configured (only for Badger backend)
+	if badgerDB, ok := db.(*database.D); ok {
+		var peers []string
+		if len(cfg.RelayPeers) > 0 {
+			peers = cfg.RelayPeers
 		} else {
-			nodeID, err := keys.SecretBytesToPubKeyHex(sk)
-			if err != nil {
-				log.E.F("failed to derive pubkey for sync node ID: %v", err)
-			} else {
-				relayURL := cfg.RelayURL
-				if relayURL == "" {
-					relayURL = fmt.Sprintf("http://localhost:%d", cfg.Port)
+			// Try to get peers from relay group configuration
+			if l.relayGroupMgr != nil {
+				if config, err := l.relayGroupMgr.FindAuthoritativeConfig(ctx); err == nil && config != nil {
+					peers = config.Relays
+					log.I.F("using relay group configuration with %d peers", len(peers))
 				}
-				l.syncManager = dsync.NewManager(ctx, db.(*database.D), nodeID, relayURL, peers, l.relayGroupMgr, l.policyManager)
-				log.I.F("distributed sync manager initialized with %d peers", len(peers))
+			}
+		}
+
+		if len(peers) > 0 {
+			// Get relay identity for node ID
+			sk, err := db.GetOrCreateRelayIdentitySecret()
+			if err != nil {
+				log.E.F("failed to get relay identity for sync: %v", err)
+			} else {
+				nodeID, err := keys.SecretBytesToPubKeyHex(sk)
+				if err != nil {
+					log.E.F("failed to derive pubkey for sync node ID: %v", err)
+				} else {
+					relayURL := cfg.RelayURL
+					if relayURL == "" {
+						relayURL = fmt.Sprintf("http://localhost:%d", cfg.Port)
+					}
+					l.syncManager = dsync.NewManager(ctx, badgerDB, nodeID, relayURL, peers, l.relayGroupMgr, l.policyManager)
+					log.I.F("distributed sync manager initialized with %d peers", len(peers))
+				}
 			}
 		}
 	}
 
-	// Initialize cluster manager for cluster replication
-	var clusterAdminNpubs []string
-	if len(cfg.ClusterAdmins) > 0 {
-		clusterAdminNpubs = cfg.ClusterAdmins
-	} else {
-		// Default to regular admins if no cluster admins specified
-		for _, admin := range cfg.Admins {
-			clusterAdminNpubs = append(clusterAdminNpubs, admin)
+	// Initialize cluster manager for cluster replication (only for Badger backend)
+	if badgerDB, ok := db.(*database.D); ok {
+		var clusterAdminNpubs []string
+		if len(cfg.ClusterAdmins) > 0 {
+			clusterAdminNpubs = cfg.ClusterAdmins
+		} else {
+			// Default to regular admins if no cluster admins specified
+			for _, admin := range cfg.Admins {
+				clusterAdminNpubs = append(clusterAdminNpubs, admin)
+			}
 		}
-	}
 
-	if len(clusterAdminNpubs) > 0 {
-		l.clusterManager = dsync.NewClusterManager(ctx, db.(*database.D), clusterAdminNpubs, cfg.ClusterPropagatePrivilegedEvents, l.publishers)
-		l.clusterManager.Start()
-		log.I.F("cluster replication manager initialized with %d admin npubs", len(clusterAdminNpubs))
+		if len(clusterAdminNpubs) > 0 {
+			l.clusterManager = dsync.NewClusterManager(ctx, badgerDB, clusterAdminNpubs, cfg.ClusterPropagatePrivilegedEvents, l.publishers)
+			l.clusterManager.Start()
+			log.I.F("cluster replication manager initialized with %d admin npubs", len(clusterAdminNpubs))
+		}
 	}
 
 	// Initialize the user interface
 	l.UserInterface()
 
-	// Initialize Blossom blob storage server
-	if l.blossomServer, err = initializeBlossomServer(ctx, cfg, db.(*database.D)); err != nil {
-		log.E.F("failed to initialize blossom server: %v", err)
-		// Continue without blossom server
-	} else if l.blossomServer != nil {
-		log.I.F("blossom blob storage server initialized")
+	// Initialize Blossom blob storage server (only for Badger backend)
+	if badgerDB, ok := db.(*database.D); ok {
+		if l.blossomServer, err = initializeBlossomServer(ctx, cfg, badgerDB); err != nil {
+			log.E.F("failed to initialize blossom server: %v", err)
+			// Continue without blossom server
+		} else if l.blossomServer != nil {
+			log.I.F("blossom blob storage server initialized")
+		}
 	}
 
 	// Ensure a relay identity secret key exists when subscriptions and NWC are enabled
@@ -237,14 +249,17 @@ func Run(
 		}
 	}
 
-	if l.paymentProcessor, err = NewPaymentProcessor(ctx, cfg, db.(*database.D)); err != nil {
-		// log.E.F("failed to create payment processor: %v", err)
-		// Continue without payment processor
-	} else {
-		if err = l.paymentProcessor.Start(); err != nil {
-			log.E.F("failed to start payment processor: %v", err)
+	// Initialize payment processor (only for Badger backend)
+	if badgerDB, ok := db.(*database.D); ok {
+		if l.paymentProcessor, err = NewPaymentProcessor(ctx, cfg, badgerDB); err != nil {
+			// log.E.F("failed to create payment processor: %v", err)
+			// Continue without payment processor
 		} else {
-			log.I.F("payment processor started successfully")
+			if err = l.paymentProcessor.Start(); err != nil {
+				log.E.F("failed to start payment processor: %v", err)
+			} else {
+				log.I.F("payment processor started successfully")
+			}
 		}
 	}
 

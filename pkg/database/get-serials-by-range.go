@@ -33,7 +33,7 @@ func (d *D) GetSerialsByRange(idx Range) (
 			}
 			iterCount := 0
 			it.Seek(endBoundary)
-			log.T.F("GetSerialsByRange: iterator valid=%v, sought to endBoundary", it.Valid())
+			// log.T.F("GetSerialsByRange: iterator valid=%v, sought to endBoundary", it.Valid())
 			for it.Valid() {
 				iterCount++
 				if iterCount > 100 {
@@ -46,12 +46,12 @@ func (d *D) GetSerialsByRange(idx Range) (
 				key = item.Key()
 				keyWithoutSerial := key[:len(key)-5]
 				cmp := bytes.Compare(keyWithoutSerial, idx.Start)
-				log.T.F("GetSerialsByRange: iter %d, key prefix matches=%v, cmp=%d", iterCount, bytes.HasPrefix(key, idx.Start[:len(idx.Start)-8]), cmp)
+				// log.T.F("GetSerialsByRange: iter %d, key prefix matches=%v, cmp=%d", iterCount, bytes.HasPrefix(key, idx.Start[:len(idx.Start)-8]), cmp)
 				if cmp < 0 {
 					// didn't find it within the timestamp range
-					log.T.F("GetSerialsByRange: key out of range (cmp=%d), stopping iteration", cmp)
-					log.T.F("  keyWithoutSerial len=%d: %x", len(keyWithoutSerial), keyWithoutSerial)
-					log.T.F("  idx.Start len=%d: %x", len(idx.Start), idx.Start)
+					// log.T.F("GetSerialsByRange: key out of range (cmp=%d), stopping iteration", cmp)
+					// log.T.F("  keyWithoutSerial len=%d: %x", len(keyWithoutSerial), keyWithoutSerial)
+					// log.T.F("  idx.Start len=%d: %x", len(idx.Start), idx.Start)
 					return
 				}
 				ser := new(types.Uint40)
@@ -62,7 +62,7 @@ func (d *D) GetSerialsByRange(idx Range) (
 				sers = append(sers, ser)
 				it.Next()
 			}
-			log.T.F("GetSerialsByRange: iteration complete, found %d serials", len(sers))
+			// log.T.F("GetSerialsByRange: iteration complete, found %d serials", len(sers))
 			return
 		},
 	); chk.E(err) {
