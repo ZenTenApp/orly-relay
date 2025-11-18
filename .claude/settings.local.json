@@ -92,7 +92,9 @@
       "Bash(./run-badger-benchmark.sh:*)",
       "Bash(./update-github-vpn.sh:*)",
       "Bash(dmesg:*)",
-      "Bash(export:*)"
+      "Bash(export:*)",
+      "Bash(timeout 60 /tmp/benchmark-fixed:*)",
+      "Bash(/tmp/test-auth-event.sh)"
     ],
     "deny": [],
     "ask": []

@@ -58,10 +58,11 @@ type BenchmarkResult struct {
 }
 
 type Benchmark struct {
-	config  *BenchmarkConfig
-	db      *database.D
-	results []*BenchmarkResult
-	mu      sync.RWMutex
+	config      *BenchmarkConfig
+	db          *database.D
+	eventStream *EventStream
+	results     []*BenchmarkResult
+	mu          sync.RWMutex
 }
 
 func main() {
@@ -329,10 +330,23 @@ func NewBenchmark(config *BenchmarkConfig) *Benchmark {
 		log.Fatalf("Failed to create database: %v", err)
 	}
 
+	// Create event stream (stores events on disk to avoid memory bloat)
+	eventStream, err := NewEventStream(config.DataDir, config.NumEvents)
+	if err != nil {
+		log.Fatalf("Failed to create event stream: %v", err)
+	}
+
+	// Pre-generate all events to disk
+	fmt.Printf("Pre-generating %d events to disk to avoid memory bloat...\n", config.NumEvents)
+	if err := eventStream.Generate(); err != nil {
+		log.Fatalf("Failed to generate events: %v", err)
+	}
+
 	b := &Benchmark{
-		config:  config,
-		db:      db,
-		results: make([]*BenchmarkResult, 0),
+		config:      config,
+		db:          db,
+		eventStream: eventStream,
+		results:     make([]*BenchmarkResult, 0),
 	}
 
 	// Trigger compaction/GC before starting tests
@@ -347,31 +361,49 @@ func (b *Benchmark) Close() {
 	}
 }
 
-// RunSuite runs the three tests with a 10s pause between them and repeats the
-// set twice with a 10s pause between rounds.
+// RunSuite runs the memory-optimized tests (Peak Throughput and Burst Pattern only)
 func (b *Benchmark) RunSuite() {
-	for round := 1; round <= 2; round++ {
-		fmt.Printf("\n=== Starting test round %d/2 ===\n", round)
-		fmt.Printf("RunPeakThroughputTest..\n")
-		b.RunPeakThroughputTest()
-		time.Sleep(10 * time.Second)
-		fmt.Printf("RunBurstPatternTest..\n")
-		b.RunBurstPatternTest()
-		time.Sleep(10 * time.Second)
-		fmt.Printf("RunMixedReadWriteTest..\n")
-		b.RunMixedReadWriteTest()
-		time.Sleep(10 * time.Second)
-		fmt.Printf("RunQueryTest..\n")
-		b.RunQueryTest()
-		time.Sleep(10 * time.Second)
-		fmt.Printf("RunConcurrentQueryStoreTest..\n")
-		b.RunConcurrentQueryStoreTest()
-		if round < 2 {
-			fmt.Printf("\nPausing 10s before next round...\n")
-			time.Sleep(10 * time.Second)
-		}
-		fmt.Printf("\n=== Test round completed ===\n\n")
+	fmt.Printf("\n=== Running Memory-Optimized Tests ===\n")
+
+	fmt.Printf("RunPeakThroughputTest..\n")
+	b.RunPeakThroughputTest()
+
+	// Clear database between tests to avoid duplicate event issues
+	fmt.Printf("\nClearing database for next test...\n")
+	if err := b.db.Close(); err != nil {
+		log.Printf("Error closing database: %v", err)
 	}
+	time.Sleep(1 * time.Second)
+
+	// Remove database files (.sst, .vlog, MANIFEST, etc.)
+	// Badger stores files directly in the data directory
+	matches, err := filepath.Glob(filepath.Join(b.config.DataDir, "*.sst"))
+	if err == nil {
+		for _, f := range matches {
+			os.Remove(f)
+		}
+	}
+	matches, err = filepath.Glob(filepath.Join(b.config.DataDir, "*.vlog"))
+	if err == nil {
+		for _, f := range matches {
+			os.Remove(f)
+		}
+	}
+	os.Remove(filepath.Join(b.config.DataDir, "MANIFEST"))
+	os.Remove(filepath.Join(b.config.DataDir, "DISCARD"))
+	os.Remove(filepath.Join(b.config.DataDir, "KEYREGISTRY"))
+
+	// Create fresh database
+	ctx := context.Background()
+	cancel := func() {}
+	db, err := database.New(ctx, cancel, b.config.DataDir, "warn")
+	if err != nil {
+		log.Fatalf("Failed to create fresh database: %v", err)
+	}
+	b.db = db
+
+	fmt.Printf("RunBurstPatternTest..\n")
+	b.RunBurstPatternTest()
 }
 
 // compactDatabase triggers a Badger value log GC before starting tests.
@@ -386,49 +418,70 @@ func (b *Benchmark) compactDatabase() {
 func (b *Benchmark) RunPeakThroughputTest() {
 	fmt.Println("\n=== Peak Throughput Test ===")
 
+	// Create latency recorder (writes to disk, not memory)
+	latencyRecorder, err := NewLatencyRecorder(b.config.DataDir, "peak_throughput")
+	if err != nil {
+		log.Fatalf("Failed to create latency recorder: %v", err)
+	}
+
 	start := time.Now()
 	var wg sync.WaitGroup
 	var totalEvents int64
-	var errors []error
-	var latencies []time.Duration
+	var errorCount int64
 	var mu sync.Mutex
 
-	events := b.generateEvents(b.config.NumEvents)
-	eventChan := make(chan *event.E, len(events))
-
-	// Fill event channel
-	for _, ev := range events {
-		eventChan <- ev
-	}
-	close(eventChan)
+	// Stream events from disk with reasonable buffer
+	eventChan, errChan := b.eventStream.GetEventChannel(1000)
 
 	// Start workers
+	ctx := context.Background()
 	for i := 0; i < b.config.ConcurrentWorkers; i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
 
-			ctx := context.Background()
 			for ev := range eventChan {
 				eventStart := time.Now()
-
 				_, err := b.db.SaveEvent(ctx, ev)
 				latency := time.Since(eventStart)
 
 				mu.Lock()
 				if err != nil {
-					errors = append(errors, err)
+					errorCount++
 				} else {
 					totalEvents++
-					latencies = append(latencies, latency)
+					if err := latencyRecorder.Record(latency); err != nil {
+						log.Printf("Failed to record latency: %v", err)
+					}
 				}
 				mu.Unlock()
 			}
 		}(i)
 	}
 
+	// Check for streaming errors
+	go func() {
+		for err := range errChan {
+			if err != nil {
+				log.Printf("Event stream error: %v", err)
+			}
+		}
+	}()
+
 	wg.Wait()
 	duration := time.Since(start)
+
+	// Flush latency data to disk before calculating stats
+	if err := latencyRecorder.Close(); err != nil {
+		log.Printf("Failed to close latency recorder: %v", err)
+	}
+
+	// Calculate statistics from disk
+	latencyStats, err := latencyRecorder.CalculateStats()
+	if err != nil {
+		log.Printf("Failed to calculate latency stats: %v", err)
+		latencyStats = &LatencyStats{}
+	}
 
 	// Calculate metrics
 	result := &BenchmarkResult{
@@ -438,29 +491,22 @@ func (b *Benchmark) RunPeakThroughputTest() {
 		EventsPerSecond:   float64(totalEvents) / duration.Seconds(),
 		ConcurrentWorkers: b.config.ConcurrentWorkers,
 		MemoryUsed:        getMemUsage(),
-	}
-
-	if len(latencies) > 0 {
-		result.AvgLatency = calculateAvgLatency(latencies)
-		result.P90Latency = calculatePercentileLatency(latencies, 0.90)
-		result.P95Latency = calculatePercentileLatency(latencies, 0.95)
-		result.P99Latency = calculatePercentileLatency(latencies, 0.99)
-		result.Bottom10Avg = calculateBottom10Avg(latencies)
+		AvgLatency:        latencyStats.Avg,
+		P90Latency:        latencyStats.P90,
+		P95Latency:        latencyStats.P95,
+		P99Latency:        latencyStats.P99,
+		Bottom10Avg:       latencyStats.Bottom10,
 	}
 
 	result.SuccessRate = float64(totalEvents) / float64(b.config.NumEvents) * 100
-
-	for _, err := range errors {
-		result.Errors = append(result.Errors, err.Error())
-	}
 
 	b.mu.Lock()
 	b.results = append(b.results, result)
 	b.mu.Unlock()
 
 	fmt.Printf(
-		"Events saved: %d/%d (%.1f%%)\n", totalEvents, b.config.NumEvents,
-		result.SuccessRate,
+		"Events saved: %d/%d (%.1f%%), errors: %d\n",
+		totalEvents, b.config.NumEvents, result.SuccessRate, errorCount,
 	)
 	fmt.Printf("Duration: %v\n", duration)
 	fmt.Printf("Events/sec: %.2f\n", result.EventsPerSecond)
@@ -474,14 +520,28 @@ func (b *Benchmark) RunPeakThroughputTest() {
 func (b *Benchmark) RunBurstPatternTest() {
 	fmt.Println("\n=== Burst Pattern Test ===")
 
+	// Create latency recorder (writes to disk, not memory)
+	latencyRecorder, err := NewLatencyRecorder(b.config.DataDir, "burst_pattern")
+	if err != nil {
+		log.Fatalf("Failed to create latency recorder: %v", err)
+	}
+
 	start := time.Now()
 	var totalEvents int64
-	var errors []error
-	var latencies []time.Duration
+	var errorCount int64
 	var mu sync.Mutex
 
-	// Generate events for burst pattern
-	events := b.generateEvents(b.config.NumEvents)
+	// Stream events from disk
+	eventChan, errChan := b.eventStream.GetEventChannel(500)
+
+	// Check for streaming errors
+	go func() {
+		for err := range errChan {
+			if err != nil {
+				log.Printf("Event stream error: %v", err)
+			}
+		}
+	}()
 
 	// Simulate burst pattern: high activity periods followed by quiet periods
 	burstSize := b.config.NumEvents / 10 // 10% of events in each burst
@@ -489,37 +549,51 @@ func (b *Benchmark) RunBurstPatternTest() {
 	burstPeriod := 100 * time.Millisecond
 
 	ctx := context.Background()
-	eventIndex := 0
+	var eventIndex int64
 
-	for eventIndex < len(events) && time.Since(start) < b.config.TestDuration {
-		// Burst period - send events rapidly
-		burstStart := time.Now()
-		var wg sync.WaitGroup
+	// Start persistent worker pool (prevents goroutine explosion)
+	numWorkers := b.config.ConcurrentWorkers
+	eventQueue := make(chan *event.E, numWorkers*4)
+	var wg sync.WaitGroup
 
-		for i := 0; i < burstSize && eventIndex < len(events); i++ {
-			wg.Add(1)
-			go func(ev *event.E) {
-				defer wg.Done()
-
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for ev := range eventQueue {
 				eventStart := time.Now()
 				_, err := b.db.SaveEvent(ctx, ev)
 				latency := time.Since(eventStart)
 
 				mu.Lock()
 				if err != nil {
-					errors = append(errors, err)
+					errorCount++
 				} else {
 					totalEvents++
-					latencies = append(latencies, latency)
+					// Record latency to disk instead of keeping in memory
+					if err := latencyRecorder.Record(latency); err != nil {
+						log.Printf("Failed to record latency: %v", err)
+					}
 				}
 				mu.Unlock()
-			}(events[eventIndex])
+			}
+		}()
+	}
 
+	for int(eventIndex) < b.config.NumEvents && time.Since(start) < b.config.TestDuration {
+		// Burst period - send events rapidly
+		burstStart := time.Now()
+
+		for i := 0; i < burstSize && int(eventIndex) < b.config.NumEvents; i++ {
+			ev, ok := <-eventChan
+			if !ok {
+				break
+			}
+			eventQueue <- ev
 			eventIndex++
 			time.Sleep(burstPeriod / time.Duration(burstSize))
 		}
 
-		wg.Wait()
 		fmt.Printf(
 			"Burst completed: %d events in %v\n", burstSize,
 			time.Since(burstStart),
@@ -529,7 +603,22 @@ func (b *Benchmark) RunBurstPatternTest() {
 		time.Sleep(quietPeriod)
 	}
 
+	close(eventQueue)
+	wg.Wait()
+
 	duration := time.Since(start)
+
+	// Flush latency data to disk before calculating stats
+	if err := latencyRecorder.Close(); err != nil {
+		log.Printf("Failed to close latency recorder: %v", err)
+	}
+
+	// Calculate statistics from disk
+	latencyStats, err := latencyRecorder.CalculateStats()
+	if err != nil {
+		log.Printf("Failed to calculate latency stats: %v", err)
+		latencyStats = &LatencyStats{}
+	}
 
 	// Calculate metrics
 	result := &BenchmarkResult{
@@ -539,27 +628,23 @@ func (b *Benchmark) RunBurstPatternTest() {
 		EventsPerSecond:   float64(totalEvents) / duration.Seconds(),
 		ConcurrentWorkers: b.config.ConcurrentWorkers,
 		MemoryUsed:        getMemUsage(),
-	}
-
-	if len(latencies) > 0 {
-		result.AvgLatency = calculateAvgLatency(latencies)
-		result.P90Latency = calculatePercentileLatency(latencies, 0.90)
-		result.P95Latency = calculatePercentileLatency(latencies, 0.95)
-		result.P99Latency = calculatePercentileLatency(latencies, 0.99)
-		result.Bottom10Avg = calculateBottom10Avg(latencies)
+		AvgLatency:        latencyStats.Avg,
+		P90Latency:        latencyStats.P90,
+		P95Latency:        latencyStats.P95,
+		P99Latency:        latencyStats.P99,
+		Bottom10Avg:       latencyStats.Bottom10,
 	}
 
 	result.SuccessRate = float64(totalEvents) / float64(eventIndex) * 100
-
-	for _, err := range errors {
-		result.Errors = append(result.Errors, err.Error())
-	}
 
 	b.mu.Lock()
 	b.results = append(b.results, result)
 	b.mu.Unlock()
 
-	fmt.Printf("Burst test completed: %d events in %v\n", totalEvents, duration)
+	fmt.Printf(
+		"Burst test completed: %d events in %v, errors: %d\n",
+		totalEvents, duration, errorCount,
+	)
 	fmt.Printf("Events/sec: %.2f\n", result.EventsPerSecond)
 }
 

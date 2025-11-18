@@ -253,6 +253,12 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 		).Write(l); chk.E(err) {
 			return
 		}
+		// Send AUTH challenge to prompt authentication
+		log.D.F("HandleEvent: sending AUTH challenge to %s", l.remote)
+		if err = authenvelope.NewChallengeWith(l.challenge.Load()).
+			Write(l); chk.E(err) {
+			return
+		}
 		return
 	}
 

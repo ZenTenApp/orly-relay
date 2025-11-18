@@ -118,7 +118,8 @@ whitelist:
 	chal := make([]byte, 32)
 	rand.Read(chal)
 	listener.challenge.Store([]byte(hex.Enc(chal)))
-	if s.Config.ACLMode != "none" {
+	// Send AUTH challenge if ACL mode requires it, or if auth is required/required for writes
+	if s.Config.ACLMode != "none" || s.Config.AuthRequired || s.Config.AuthToWrite {
 		log.D.F("sending AUTH challenge to %s", remote)
 		if err = authenvelope.NewChallengeWith(listener.challenge.Load()).
 			Write(listener); chk.E(err) {
