@@ -199,7 +199,7 @@ func TestLongRunningSubscriptionStability(t *testing.T) {
 		ev := createSignedTestEvent(t, 1, fmt.Sprintf("Test event %d for long-running subscription", i))
 
 		// Save event to database
-		if _, err := server.D.SaveEvent(context.Background(), ev); err != nil {
+		if _, err := server.DB.SaveEvent(context.Background(), ev); err != nil {
 			t.Errorf("Failed to save event %d: %v", i, err)
 			continue
 		}
@@ -376,7 +376,7 @@ func TestMultipleConcurrentSubscriptions(t *testing.T) {
 			// Create and sign test event
 			ev := createSignedTestEvent(t, uint16(sub.kind), fmt.Sprintf("Test for kind %d event %d", sub.kind, i))
 
-			if _, err := server.D.SaveEvent(context.Background(), ev); err != nil {
+			if _, err := server.DB.SaveEvent(context.Background(), ev); err != nil {
 				t.Errorf("Failed to save event: %v", err)
 			}
 
@@ -431,7 +431,7 @@ func setupTestServer(t *testing.T) (*Server, func()) {
 	// Setup server
 	server := &Server{
 		Config:     cfg,
-		D:          db,
+		DB:         db,
 		Ctx:        ctx,
 		publishers: publish.New(NewPublisher(ctx)),
 		Admins:     [][]byte{},

@@ -7,9 +7,11 @@ import (
 	"time"
 
 	"next.orly.dev/app/config"
+	"next.orly.dev/pkg/acl"
 	"next.orly.dev/pkg/crypto/keys"
 	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/encoders/event"
+	"next.orly.dev/pkg/encoders/hex"
 	"next.orly.dev/pkg/encoders/tag"
 	"next.orly.dev/pkg/interfaces/signer/p8k"
 	"next.orly.dev/pkg/protocol/nip43"
@@ -38,24 +40,47 @@ func setupTestListener(t *testing.T) (*Listener, *database.D, func()) {
 		RelayURL:               "wss://test.relay",
 		Listen:                 "localhost",
 		Port:                   3334,
+		ACLMode:                "none",
 	}
 
 	server := &Server{
 		Ctx:           ctx,
 		Config:        cfg,
-		D:             db,
+		DB:            db,
 		publishers:    publish.New(NewPublisher(ctx)),
 		InviteManager: nip43.NewInviteManager(cfg.NIP43InviteExpiry),
 		cfg:           cfg,
 		db:            db,
 	}
 
-	listener := &Listener{
-		Server: server,
-		ctx:    ctx,
+	// Configure ACL registry
+	acl.Registry.Active.Store(cfg.ACLMode)
+	if err = acl.Registry.Configure(cfg, db, ctx); err != nil {
+		db.Close()
+		os.RemoveAll(tempDir)
+		t.Fatalf("failed to configure ACL: %v", err)
 	}
 
+	listener := &Listener{
+		Server:         server,
+		ctx:            ctx,
+		writeChan:      make(chan publish.WriteRequest, 100),
+		writeDone:      make(chan struct{}),
+		messageQueue:   make(chan messageRequest, 100),
+		processingDone: make(chan struct{}),
+		subscriptions:  make(map[string]context.CancelFunc),
+	}
+
+	// Start write worker and message processor
+	go listener.writeWorker()
+	go listener.messageProcessor()
+
 	cleanup := func() {
+		// Close listener channels
+		close(listener.writeChan)
+		<-listener.writeDone
+		close(listener.messageQueue)
+		<-listener.processingDone
 		db.Close()
 		os.RemoveAll(tempDir)
 	}
@@ -350,8 +375,13 @@ func TestHandleNIP43InviteRequest_ValidRequest(t *testing.T) {
 	}
 	adminPubkey := adminSigner.Pub()
 
-	// Add admin to server (simulating admin config)
-	listener.Server.Admins = [][]byte{adminPubkey}
+	// Add admin to config and reconfigure ACL
+	adminHex := hex.Enc(adminPubkey)
+	listener.Server.Config.Admins = []string{adminHex}
+	acl.Registry.Active.Store("none")
+	if err = acl.Registry.Configure(listener.Server.Config, listener.Server.DB, listener.ctx); err != nil {
+		t.Fatalf("failed to reconfigure ACL: %v", err)
+	}
 
 	// Handle invite request
 	inviteEvent, err := listener.Server.HandleNIP43InviteRequest(adminPubkey)

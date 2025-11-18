@@ -161,6 +161,12 @@ func (l *Listener) writeWorker() {
 				return
 			}
 
+			// Skip writes if no connection (unit tests)
+			if l.conn == nil {
+				log.T.F("ws->%s skipping write (no connection)", l.remote)
+				continue
+			}
+
 			// Handle the write request
 			var err error
 			if req.IsPing {

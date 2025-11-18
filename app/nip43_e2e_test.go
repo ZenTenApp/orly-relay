@@ -11,14 +11,43 @@ import (
 	"time"
 
 	"next.orly.dev/app/config"
+	"next.orly.dev/pkg/acl"
 	"next.orly.dev/pkg/crypto/keys"
 	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/encoders/event"
+	"next.orly.dev/pkg/encoders/hex"
 	"next.orly.dev/pkg/encoders/tag"
 	"next.orly.dev/pkg/protocol/nip43"
 	"next.orly.dev/pkg/protocol/publish"
 	"next.orly.dev/pkg/protocol/relayinfo"
 )
+
+// newTestListener creates a properly initialized Listener for testing
+func newTestListener(server *Server, ctx context.Context) *Listener {
+	listener := &Listener{
+		Server:         server,
+		ctx:            ctx,
+		writeChan:      make(chan publish.WriteRequest, 100),
+		writeDone:      make(chan struct{}),
+		messageQueue:   make(chan messageRequest, 100),
+		processingDone: make(chan struct{}),
+		subscriptions:  make(map[string]context.CancelFunc),
+	}
+
+	// Start write worker and message processor
+	go listener.writeWorker()
+	go listener.messageProcessor()
+
+	return listener
+}
+
+// closeTestListener properly closes a test listener
+func closeTestListener(listener *Listener) {
+	close(listener.writeChan)
+	<-listener.writeDone
+	close(listener.messageQueue)
+	<-listener.processingDone
+}
 
 // setupE2ETest creates a full test server for end-to-end testing
 func setupE2ETest(t *testing.T) (*Server, *httptest.Server, func()) {
@@ -61,16 +90,28 @@ func setupE2ETest(t *testing.T) (*Server, *httptest.Server, func()) {
 	}
 	adminPubkey := adminSigner.Pub()
 
+	// Add admin to config for ACL
+	cfg.Admins = []string{hex.Enc(adminPubkey)}
+
 	server := &Server{
 		Ctx:           ctx,
 		Config:        cfg,
-		D:             db,
+		DB:            db,
 		publishers:    publish.New(NewPublisher(ctx)),
 		Admins:        [][]byte{adminPubkey},
 		InviteManager: nip43.NewInviteManager(cfg.NIP43InviteExpiry),
 		cfg:           cfg,
 		db:            db,
 	}
+
+	// Configure ACL registry
+	acl.Registry.Active.Store(cfg.ACLMode)
+	if err = acl.Registry.Configure(cfg, db, ctx); err != nil {
+		db.Close()
+		os.RemoveAll(tempDir)
+		t.Fatalf("failed to configure ACL: %v", err)
+	}
+
 	server.mux = http.NewServeMux()
 
 	// Set up HTTP handlers
@@ -177,6 +218,7 @@ func TestE2E_CompleteJoinFlow(t *testing.T) {
 	joinEv := event.New()
 	joinEv.Kind = nip43.KindJoinRequest
 	copy(joinEv.Pubkey, userPubkey)
+	joinEv.Tags = tag.NewS()
 	joinEv.Tags.Append(tag.NewFromAny("-"))
 	joinEv.Tags.Append(tag.NewFromAny("claim", inviteCode))
 	joinEv.CreatedAt = time.Now().Unix()
@@ -186,17 +228,15 @@ func TestE2E_CompleteJoinFlow(t *testing.T) {
 	}
 
 	// Step 3: Process join request
-	listener := &Listener{
-		Server: server,
-		ctx:    server.Ctx,
-	}
+	listener := newTestListener(server, server.Ctx)
+	defer closeTestListener(listener)
 	err = listener.HandleNIP43JoinRequest(joinEv)
 	if err != nil {
 		t.Fatalf("failed to handle join request: %v", err)
 	}
 
 	// Step 4: Verify membership
-	isMember, err := server.D.IsNIP43Member(userPubkey)
+	isMember, err := server.DB.IsNIP43Member(userPubkey)
 	if err != nil {
 		t.Fatalf("failed to check membership: %v", err)
 	}
@@ -204,7 +244,7 @@ func TestE2E_CompleteJoinFlow(t *testing.T) {
 		t.Error("user was not added as member")
 	}
 
-	membership, err := server.D.GetNIP43Membership(userPubkey)
+	membership, err := server.DB.GetNIP43Membership(userPubkey)
 	if err != nil {
 		t.Fatalf("failed to get membership: %v", err)
 	}
@@ -227,10 +267,8 @@ func TestE2E_InviteCodeReuse(t *testing.T) {
 		t.Fatalf("failed to generate invite code: %v", err)
 	}
 
-	listener := &Listener{
-		Server: server,
-		ctx:    server.Ctx,
-	}
+	listener := newTestListener(server, server.Ctx)
+	defer closeTestListener(listener)
 
 	// First user uses the code
 	user1Secret, err := keys.GenerateSecretKey()
@@ -249,6 +287,7 @@ func TestE2E_InviteCodeReuse(t *testing.T) {
 	joinEv1 := event.New()
 	joinEv1.Kind = nip43.KindJoinRequest
 	copy(joinEv1.Pubkey, user1Pubkey)
+	joinEv1.Tags = tag.NewS()
 	joinEv1.Tags.Append(tag.NewFromAny("-"))
 	joinEv1.Tags.Append(tag.NewFromAny("claim", code))
 	joinEv1.CreatedAt = time.Now().Unix()
@@ -263,7 +302,7 @@ func TestE2E_InviteCodeReuse(t *testing.T) {
 	}
 
 	// Verify first user is member
-	isMember, err := server.D.IsNIP43Member(user1Pubkey)
+	isMember, err := server.DB.IsNIP43Member(user1Pubkey)
 	if err != nil {
 		t.Fatalf("failed to check user1 membership: %v", err)
 	}
@@ -288,6 +327,7 @@ func TestE2E_InviteCodeReuse(t *testing.T) {
 	joinEv2 := event.New()
 	joinEv2.Kind = nip43.KindJoinRequest
 	copy(joinEv2.Pubkey, user2Pubkey)
+	joinEv2.Tags = tag.NewS()
 	joinEv2.Tags.Append(tag.NewFromAny("-"))
 	joinEv2.Tags.Append(tag.NewFromAny("claim", code))
 	joinEv2.CreatedAt = time.Now().Unix()
@@ -303,7 +343,7 @@ func TestE2E_InviteCodeReuse(t *testing.T) {
 	}
 
 	// Verify second user is NOT member
-	isMember, err = server.D.IsNIP43Member(user2Pubkey)
+	isMember, err = server.DB.IsNIP43Member(user2Pubkey)
 	if err != nil {
 		t.Fatalf("failed to check user2 membership: %v", err)
 	}
@@ -317,10 +357,8 @@ func TestE2E_MembershipListGeneration(t *testing.T) {
 	server, _, cleanup := setupE2ETest(t)
 	defer cleanup()
 
-	listener := &Listener{
-		Server: server,
-		ctx:    server.Ctx,
-	}
+	listener := newTestListener(server, server.Ctx)
+	defer closeTestListener(listener)
 
 	// Add multiple members
 	memberCount := 5
@@ -338,7 +376,7 @@ func TestE2E_MembershipListGeneration(t *testing.T) {
 		members[i] = userPubkey
 
 		// Add directly to database for speed
-		err = server.D.AddNIP43Member(userPubkey, "code")
+		err = server.DB.AddNIP43Member(userPubkey, "code")
 		if err != nil {
 			t.Fatalf("failed to add member %d: %v", i, err)
 		}
@@ -379,17 +417,15 @@ func TestE2E_ExpiredInviteCode(t *testing.T) {
 	server := &Server{
 		Ctx:           ctx,
 		Config:        cfg,
-		D:             db,
+		DB:            db,
 		publishers:    publish.New(NewPublisher(ctx)),
 		InviteManager: nip43.NewInviteManager(cfg.NIP43InviteExpiry),
 		cfg:           cfg,
 		db:            db,
 	}
 
-	listener := &Listener{
-		Server: server,
-		ctx:    ctx,
-	}
+	listener := newTestListener(server, ctx)
+	defer closeTestListener(listener)
 
 	// Generate invite code
 	code, err := server.InviteManager.GenerateCode()
@@ -417,6 +453,7 @@ func TestE2E_ExpiredInviteCode(t *testing.T) {
 	joinEv := event.New()
 	joinEv.Kind = nip43.KindJoinRequest
 	copy(joinEv.Pubkey, userPubkey)
+	joinEv.Tags = tag.NewS()
 	joinEv.Tags.Append(tag.NewFromAny("-"))
 	joinEv.Tags.Append(tag.NewFromAny("claim", code))
 	joinEv.CreatedAt = time.Now().Unix()
@@ -445,10 +482,8 @@ func TestE2E_InvalidTimestampRejected(t *testing.T) {
 	server, _, cleanup := setupE2ETest(t)
 	defer cleanup()
 
-	listener := &Listener{
-		Server: server,
-		ctx:    server.Ctx,
-	}
+	listener := newTestListener(server, server.Ctx)
+	defer closeTestListener(listener)
 
 	// Generate invite code
 	code, err := server.InviteManager.GenerateCode()
@@ -474,6 +509,7 @@ func TestE2E_InvalidTimestampRejected(t *testing.T) {
 	joinEv := event.New()
 	joinEv.Kind = nip43.KindJoinRequest
 	copy(joinEv.Pubkey, userPubkey)
+	joinEv.Tags = tag.NewS()
 	joinEv.Tags.Append(tag.NewFromAny("-"))
 	joinEv.Tags.Append(tag.NewFromAny("claim", code))
 	joinEv.CreatedAt = time.Now().Unix() - 700 // More than 10 minutes ago
@@ -489,7 +525,7 @@ func TestE2E_InvalidTimestampRejected(t *testing.T) {
 	}
 
 	// Verify user was NOT added
-	isMember, err := server.D.IsNIP43Member(userPubkey)
+	isMember, err := server.DB.IsNIP43Member(userPubkey)
 	if err != nil {
 		t.Fatalf("failed to check membership: %v", err)
 	}
@@ -523,17 +559,15 @@ func BenchmarkJoinRequestProcessing(b *testing.B) {
 	server := &Server{
 		Ctx:           ctx,
 		Config:        cfg,
-		D:             db,
+		DB:            db,
 		publishers:    publish.New(NewPublisher(ctx)),
 		InviteManager: nip43.NewInviteManager(cfg.NIP43InviteExpiry),
 		cfg:           cfg,
 		db:            db,
 	}
 
-	listener := &Listener{
-		Server: server,
-		ctx:    ctx,
-	}
+	listener := newTestListener(server, ctx)
+	defer closeTestListener(listener)
 
 	b.ResetTimer()
 
@@ -547,6 +581,7 @@ func BenchmarkJoinRequestProcessing(b *testing.B) {
 		joinEv := event.New()
 		joinEv.Kind = nip43.KindJoinRequest
 		copy(joinEv.Pubkey, userPubkey)
+		joinEv.Tags = tag.NewS()
 		joinEv.Tags.Append(tag.NewFromAny("-"))
 		joinEv.Tags.Append(tag.NewFromAny("claim", code))
 		joinEv.CreatedAt = time.Now().Unix()

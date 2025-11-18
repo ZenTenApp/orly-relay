@@ -93,21 +93,12 @@ func (n *N) ProcessDelete(ev *event.E, admins [][]byte) error {
 			continue
 		}
 
-		neo4jResult, ok := result.(interface {
-			Next(context.Context) bool
-			Record() *interface{}
-			Err() error
-		})
-		if !ok {
-			continue
-		}
-
-		if neo4jResult.Next(ctx) {
-			record := neo4jResult.Record()
+		if result.Next(ctx) {
+			record := result.Record()
 			if record != nil {
-				recordMap, ok := (*record).(map[string]any)
-				if ok {
-					if pubkeyStr, ok := recordMap["pubkey"].(string); ok {
+				pubkeyValue, found := record.Get("pubkey")
+				if found {
+					if pubkeyStr, ok := pubkeyValue.(string); ok {
 						pubkey, err := hex.Dec(pubkeyStr)
 						if err != nil {
 							continue
@@ -160,12 +151,7 @@ LIMIT 1`
 		return nil // Not deleted
 	}
 
-	neo4jResult, ok := result.(interface {
-		Next(context.Context) bool
-		Record() *interface{}
-		Err() error
-	})
-	if ok && neo4jResult.Next(ctx) {
+	if result.Next(ctx) {
 		return fmt.Errorf("event has been deleted")
 	}
 

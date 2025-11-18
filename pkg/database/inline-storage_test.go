@@ -20,7 +20,7 @@ import (
 )
 
 // TestInlineSmallEventStorage tests the Reiser4-inspired inline storage optimization
-// for small events (<=384 bytes).
+// for small events (<=1024 bytes by default).
 func TestInlineSmallEventStorage(t *testing.T) {
 	// Create a temporary directory for the database
 	tempDir, err := os.MkdirTemp("", "test-inline-db-*")
@@ -129,8 +129,8 @@ func TestInlineSmallEventStorage(t *testing.T) {
 		largeEvent := event.New()
 		largeEvent.Kind = kind.TextNote.K
 		largeEvent.CreatedAt = timestamp.Now().V
-		// Create content larger than 384 bytes
-		largeContent := make([]byte, 500)
+		// Create content larger than 1024 bytes (the default inline storage threshold)
+		largeContent := make([]byte, 1500)
 		for i := range largeContent {
 			largeContent[i] = 'x'
 		}

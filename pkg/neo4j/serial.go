@@ -31,22 +31,13 @@ func (n *N) getNextSerial() (uint64, error) {
 		return 0, fmt.Errorf("failed to query serial counter: %w", err)
 	}
 
-	neo4jResult, ok := result.(interface {
-		Next(context.Context) bool
-		Record() *interface{}
-		Err() error
-	})
-	if !ok {
-		return 1, nil
-	}
-
 	var currentSerial uint64 = 1
-	if neo4jResult.Next(ctx) {
-		record := neo4jResult.Record()
+	if result.Next(ctx) {
+		record := result.Record()
 		if record != nil {
-			recordMap, ok := (*record).(map[string]any)
-			if ok {
-				if value, ok := recordMap["value"].(int64); ok {
+			valueRaw, found := record.Get("value")
+			if found {
+				if value, ok := valueRaw.(int64); ok {
 					currentSerial = uint64(value)
 				}
 			}
@@ -86,12 +77,7 @@ func (n *N) initSerialCounter() error {
 		return fmt.Errorf("failed to check serial counter: %w", err)
 	}
 
-	neo4jResult, ok := result.(interface {
-		Next(context.Context) bool
-		Record() *interface{}
-		Err() error
-	})
-	if ok && neo4jResult.Next(ctx) {
+	if result.Next(ctx) {
 		// Counter already exists
 		return nil
 	}

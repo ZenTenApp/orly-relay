@@ -35,7 +35,7 @@ func TestHandleNIP86Management_Basic(t *testing.T) {
 	// Setup server
 	server := &Server{
 		Config: cfg,
-		D:      db,
+		DB:     db,
 		Admins: [][]byte{[]byte("admin1")},
 		Owners: [][]byte{[]byte("owner1")},
 	}

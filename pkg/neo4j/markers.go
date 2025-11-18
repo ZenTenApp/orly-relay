@@ -42,21 +42,13 @@ func (n *N) GetMarker(key string) (value []byte, err error) {
 	}
 
 	ctx := context.Background()
-	neo4jResult, ok := result.(interface {
-		Next(context.Context) bool
-		Record() *interface{}
-		Err() error
-	})
-	if !ok {
-		return nil, fmt.Errorf("invalid result type")
-	}
 
-	if neo4jResult.Next(ctx) {
-		record := neo4jResult.Record()
+	if result.Next(ctx) {
+		record := result.Record()
 		if record != nil {
-			recordMap, ok := (*record).(map[string]any)
-			if ok {
-				if valueStr, ok := recordMap["value"].(string); ok {
+			valueRaw, found := record.Get("value")
+			if found {
+				if valueStr, ok := valueRaw.(string); ok {
 					// Decode hex value
 					value, err = hex.Dec(valueStr)
 					if err != nil {

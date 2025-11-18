@@ -58,7 +58,7 @@ func (d *D) GetSerialById(id []byte) (ser *types.Uint40, err error) {
 		return
 	}
 	if !idFound {
-		// err = errorf.T("id not found in database: %s", hex.Enc(id))
+		err = errorf.E("id not found in database")
 		return
 	}
 

@@ -94,7 +94,8 @@
       "Bash(dmesg:*)",
       "Bash(export:*)",
       "Bash(timeout 60 /tmp/benchmark-fixed:*)",
-      "Bash(/tmp/test-auth-event.sh)"
+      "Bash(/tmp/test-auth-event.sh)",
+      "Bash(CGO_ENABLED=0 timeout 180 go test:*)"
     ],
     "deny": [],
     "ask": []

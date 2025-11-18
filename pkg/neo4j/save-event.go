@@ -27,12 +27,7 @@ func (n *N) SaveEvent(c context.Context, ev *event.E) (exists bool, err error) {
 
 	// Check if we got a result
 	ctx := context.Background()
-	neo4jResult, ok := result.(interface {
-		Next(context.Context) bool
-		Record() *interface{}
-		Err() error
-	})
-	if ok && neo4jResult.Next(ctx) {
+	if result.Next(ctx) {
 		return true, nil // Event already exists
 	}
 
@@ -232,30 +227,25 @@ ORDER BY e.created_at DESC`
 	}
 
 	// Parse results
-	neo4jResult, ok := result.(interface {
-		Next(context.Context) bool
-		Record() *interface{}
-		Err() error
-	})
-	if !ok {
-		return false, nil, fmt.Errorf("invalid result type")
-	}
-
 	var serials types.Uint40s
 	wouldReplace := false
 
-	for neo4jResult.Next(ctx) {
-		record := neo4jResult.Record()
+	for result.Next(ctx) {
+		record := result.Record()
 		if record == nil {
 			continue
 		}
 
-		recordMap, ok := (*record).(map[string]any)
+		serialRaw, found := record.Get("serial")
+		if !found {
+			continue
+		}
+
+		serialVal, ok := serialRaw.(int64)
 		if !ok {
 			continue
 		}
 
-		serialVal, _ := recordMap["serial"].(int64)
 		wouldReplace = true
 		serial := types.Uint40{}
 		serial.Set(uint64(serialVal))

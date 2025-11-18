@@ -82,35 +82,30 @@ RETURN e.id AS id,
 	events = make(map[uint64]*event.E)
 	ctx := context.Background()
 
-	neo4jResult, ok := result.(interface {
-		Next(context.Context) bool
-		Record() *interface{}
-		Err() error
-	})
-	if !ok {
-		return events, nil
-	}
-
-	for neo4jResult.Next(ctx) {
-		record := neo4jResult.Record()
+	for result.Next(ctx) {
+		record := result.Record()
 		if record == nil {
 			continue
 		}
 
-		recordMap, ok := (*record).(map[string]any)
-		if !ok {
-			continue
-		}
-
 		// Parse event
-		idStr, _ := recordMap["id"].(string)
-		kind, _ := recordMap["kind"].(int64)
-		createdAt, _ := recordMap["created_at"].(int64)
-		content, _ := recordMap["content"].(string)
-		sigStr, _ := recordMap["sig"].(string)
-		pubkeyStr, _ := recordMap["pubkey"].(string)
-		tagsStr, _ := recordMap["tags"].(string)
-		serialVal, _ := recordMap["serial"].(int64)
+		idRaw, _ := record.Get("id")
+		kindRaw, _ := record.Get("kind")
+		createdAtRaw, _ := record.Get("created_at")
+		contentRaw, _ := record.Get("content")
+		sigRaw, _ := record.Get("sig")
+		pubkeyRaw, _ := record.Get("pubkey")
+		tagsRaw, _ := record.Get("tags")
+		serialRaw, _ := record.Get("serial")
+
+		idStr, _ := idRaw.(string)
+		kind, _ := kindRaw.(int64)
+		createdAt, _ := createdAtRaw.(int64)
+		content, _ := contentRaw.(string)
+		sigStr, _ := sigRaw.(string)
+		pubkeyStr, _ := pubkeyRaw.(string)
+		tagsStr, _ := tagsRaw.(string)
+		serialVal, _ := serialRaw.(int64)
 
 		id, err := hex.Dec(idStr)
 		if err != nil {
@@ -160,21 +155,13 @@ func (n *N) GetSerialById(id []byte) (ser *types.Uint40, err error) {
 	}
 
 	ctx := context.Background()
-	neo4jResult, ok := result.(interface {
-		Next(context.Context) bool
-		Record() *interface{}
-		Err() error
-	})
-	if !ok {
-		return nil, fmt.Errorf("invalid result type")
-	}
 
-	if neo4jResult.Next(ctx) {
-		record := neo4jResult.Record()
+	if result.Next(ctx) {
+		record := result.Record()
 		if record != nil {
-			recordMap, ok := (*record).(map[string]any)
-			if ok {
-				if serialVal, ok := recordMap["serial"].(int64); ok {
+			serialRaw, found := record.Get("serial")
+			if found {
+				if serialVal, ok := serialRaw.(int64); ok {
 					ser = &types.Uint40{}
 					ser.Set(uint64(serialVal))
 					return ser, nil
@@ -221,28 +208,24 @@ RETURN e.id AS id, e.serial AS serial`
 	}
 
 	ctx := context.Background()
-	neo4jResult, ok := result.(interface {
-		Next(context.Context) bool
-		Record() *interface{}
-		Err() error
-	})
-	if !ok {
-		return serials, nil
-	}
 
-	for neo4jResult.Next(ctx) {
-		record := neo4jResult.Record()
+	for result.Next(ctx) {
+		record := result.Record()
 		if record == nil {
 			continue
 		}
 
-		recordMap, ok := (*record).(map[string]any)
-		if !ok {
+		idRaw, found := record.Get("id")
+		if !found {
+			continue
+		}
+		serialRaw, found := record.Get("serial")
+		if !found {
 			continue
 		}
 
-		idStr, _ := recordMap["id"].(string)
-		serialVal, _ := recordMap["serial"].(int64)
+		idStr, _ := idRaw.(string)
+		serialVal, _ := serialRaw.(int64)
 
 		serial := &types.Uint40{}
 		serial.Set(uint64(serialVal))
@@ -322,43 +305,45 @@ RETURN e.id AS id,
 	}
 
 	ctx := context.Background()
-	neo4jResult, ok := result.(interface {
-		Next(context.Context) bool
-		Record() *interface{}
-		Err() error
-	})
-	if !ok {
-		return nil, fmt.Errorf("invalid result type")
-	}
 
-	if neo4jResult.Next(ctx) {
-		record := neo4jResult.Record()
+	if result.Next(ctx) {
+		record := result.Record()
 		if record != nil {
-			recordMap, ok := (*record).(map[string]any)
-			if ok {
-				idStr, _ := recordMap["id"].(string)
-				pubkeyStr, _ := recordMap["pubkey"].(string)
-				createdAt, _ := recordMap["created_at"].(int64)
-
-				id, err := hex.Dec(idStr)
-				if err != nil {
-					return nil, err
-				}
-
-				pubkey, err := hex.Dec(pubkeyStr)
-				if err != nil {
-					return nil, err
-				}
-
-				fidpk = &store.IdPkTs{
-					Id:  id,
-					Pub: pubkey,
-					Ts:  createdAt,
-					Ser: serial,
-				}
-
-				return fidpk, nil
+			idRaw, found := record.Get("id")
+			if !found {
+				return nil, fmt.Errorf("event not found")
 			}
+			pubkeyRaw, found := record.Get("pubkey")
+			if !found {
+				return nil, fmt.Errorf("event not found")
+			}
+			createdAtRaw, found := record.Get("created_at")
+			if !found {
+				return nil, fmt.Errorf("event not found")
+			}
+
+			idStr, _ := idRaw.(string)
+			pubkeyStr, _ := pubkeyRaw.(string)
+			createdAt, _ := createdAtRaw.(int64)
+
+			id, err := hex.Dec(idStr)
+			if err != nil {
+				return nil, err
+			}
+
+			pubkey, err := hex.Dec(pubkeyStr)
+			if err != nil {
+				return nil, err
+			}
+
+			fidpk = &store.IdPkTs{
+				Id:  id,
+				Pub: pubkey,
+				Ts:  createdAt,
+				Ser: serial,
+			}
+
+			return fidpk, nil
 		}
 	}
 
@@ -397,30 +382,34 @@ RETURN e.id AS id,
 	}
 
 	ctx := context.Background()
-	neo4jResult, ok := result.(interface {
-		Next(context.Context) bool
-		Record() *interface{}
-		Err() error
-	})
-	if !ok {
-		return fidpks, nil
-	}
 
-	for neo4jResult.Next(ctx) {
-		record := neo4jResult.Record()
+	for result.Next(ctx) {
+		record := result.Record()
 		if record == nil {
 			continue
 		}
 
-		recordMap, ok := (*record).(map[string]any)
-		if !ok {
+		idRaw, found := record.Get("id")
+		if !found {
+			continue
+		}
+		pubkeyRaw, found := record.Get("pubkey")
+		if !found {
+			continue
+		}
+		createdAtRaw, found := record.Get("created_at")
+		if !found {
+			continue
+		}
+		serialRaw, found := record.Get("serial")
+		if !found {
 			continue
 		}
 
-		idStr, _ := recordMap["id"].(string)
-		pubkeyStr, _ := recordMap["pubkey"].(string)
-		createdAt, _ := recordMap["created_at"].(int64)
-		serialVal, _ := recordMap["serial"].(int64)
+		idStr, _ := idRaw.(string)
+		pubkeyStr, _ := pubkeyRaw.(string)
+		createdAt, _ := createdAtRaw.(int64)
+		serialVal, _ := serialRaw.(int64)
 
 		id, err := hex.Dec(idStr)
 		if err != nil {
