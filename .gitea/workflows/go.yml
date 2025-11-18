@@ -1,5 +1,5 @@
-# This workflow will build a golang project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
+# This workflow will build a golang project for Gitea Actions
+# For more information see: https://docs.gitea.com/usage/actions/overview
 #
 # NOTE: All builds use CGO_ENABLED=0 since p8k library uses purego (not CGO)
 #       The library dynamically loads libsecp256k1 at runtime via purego
@@ -10,9 +10,9 @@
 #    git tag v1.2.3
 #    git push origin v1.2.3
 # 3. The workflow will automatically:
-#    - Build binaries for multiple platforms (Linux, macOS, Windows)
-#    - Create a GitHub release with the binaries
-#    - Generate release notes
+#    - Build binaries for Linux AMD64
+#    - Create a Gitea release with the binaries
+#    - Generate checksums
 
 name: Go
 
@@ -25,10 +25,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: "1.25"
 
@@ -40,26 +43,26 @@ jobs:
           # Copy the libsecp256k1.so to root directory so tests can find it
           cp pkg/crypto/p8k/libsecp256k1.so .
           CGO_ENABLED=0 go test -v $(go list ./... | xargs -n1 sh -c 'ls $0/*_test.go 1>/dev/null 2>&1 && echo $0' | grep .)
+
   release:
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: '1.25'
 
       - name: Build Release Binaries (Pure Go + purego)
-        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           # Extract version from tag (e.g., v1.2.3 -> 1.2.3)
-          VERSION=${GITHUB_REF#refs/tags/v}
+          VERSION=${GITHUB_REF_NAME#v}
           echo "Building release binaries for version $VERSION (pure Go + purego)"
 
           # Create directory for binaries
@@ -72,17 +75,17 @@ jobs:
           echo "Building Linux AMD64 (pure Go + purego dynamic loading)..."
           GOEXPERIMENT=greenteagc,jsonv2 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
             go build -ldflags "-s -w" -o release-binaries/orly-${VERSION}-linux-amd64 .
-          
+
           # Create checksums
           cd release-binaries
           sha256sum * > SHA256SUMS.txt
           cd ..
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
+      - name: Create Gitea Release
+        uses: actions/upload-release-action@v1
         with:
-          files: release-binaries/*
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+          repo_token: ${{ secrets.GITEA_TOKEN }}
+          file: release-binaries/*
+          tag: ${{ github.ref_name }}
+          overwrite: true
+          file_glob: true
