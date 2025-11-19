@@ -109,7 +109,8 @@
       "Bash(timeout 30 sh:*)",
       "Bash(timeout 60 go test:*)",
       "Bash(timeout 120 go test:*)",
-      "Bash(timeout 180 ./scripts/test.sh:*)"
+      "Bash(timeout 180 ./scripts/test.sh:*)",
+      "Bash(CGO_ENABLED=0 timeout 60 go test:*)"
     ],
     "deny": [],
     "ask": []

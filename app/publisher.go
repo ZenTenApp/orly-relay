@@ -15,6 +15,7 @@ import (
 	"next.orly.dev/pkg/encoders/kind"
 	"next.orly.dev/pkg/interfaces/publisher"
 	"next.orly.dev/pkg/interfaces/typer"
+	"next.orly.dev/pkg/policy"
 	"next.orly.dev/pkg/protocol/publish"
 	"next.orly.dev/pkg/utils"
 )
@@ -183,36 +184,12 @@ func (p *P) Deliver(ev *event.E) {
 		// either the event pubkey or appears in any 'p' tag of the event.
 		// Only check authentication if AuthRequired is true (ACL is active)
 		if kind.IsPrivileged(ev.Kind) && d.sub.AuthRequired {
-			if len(d.sub.AuthedPubkey) == 0 {
-				// Not authenticated - cannot see privileged events
-				log.D.F(
-					"subscription delivery DENIED for privileged event %s to %s (not authenticated)",
-					hex.Enc(ev.ID), d.sub.remote,
-				)
-				continue
-			}
-
 			pk := d.sub.AuthedPubkey
-			allowed := false
-			// Direct author match
-			if utils.FastEqual(ev.Pubkey, pk) {
-				allowed = true
-			} else if ev.Tags != nil {
-				for _, pTag := range ev.Tags.GetAll([]byte("p")) {
-					// pTag.Value() returns []byte hex string; decode to bytes
-					dec, derr := hex.Dec(string(pTag.Value()))
-					if derr != nil {
-						continue
-					}
-					if utils.FastEqual(dec, pk) {
-						allowed = true
-						break
-					}
-				}
-			}
-			if !allowed {
+
+			// Use centralized IsPartyInvolved function for consistent privilege checking
+			if !policy.IsPartyInvolved(ev, pk) {
 				log.D.F(
-					"subscription delivery DENIED for privileged event %s to %s (auth mismatch)",
+					"subscription delivery DENIED for privileged event %s to %s (not authenticated or not a party involved)",
 					hex.Enc(ev.ID), d.sub.remote,
 				)
 				// Skip delivery for this subscriber

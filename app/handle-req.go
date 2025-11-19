@@ -24,6 +24,7 @@ import (
 	"next.orly.dev/pkg/encoders/kind"
 	"next.orly.dev/pkg/encoders/reason"
 	"next.orly.dev/pkg/encoders/tag"
+	"next.orly.dev/pkg/policy"
 	"next.orly.dev/pkg/protocol/nip43"
 	"next.orly.dev/pkg/utils"
 	"next.orly.dev/pkg/utils/normalize"
@@ -360,59 +361,23 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 				},
 			)
 			pk := l.authedPubkey.Load()
-			if pk == nil {
-				// Not authenticated - cannot see privileged events
+
+			// Use centralized IsPartyInvolved function for consistent privilege checking
+			if policy.IsPartyInvolved(ev, pk) {
 				log.T.C(
 					func() string {
 						return fmt.Sprintf(
-							"privileged event %s denied - not authenticated",
-							ev.ID,
-						)
-					},
-				)
-				continue
-			}
-			// Check if user is authorized to see this privileged event
-			authorized := false
-			if utils.FastEqual(ev.Pubkey, pk) {
-				authorized = true
-				log.T.C(
-					func() string {
-						return fmt.Sprintf(
-							"privileged event %s is for logged in pubkey %0x",
+							"privileged event %s allowed for logged in pubkey %0x",
 							ev.ID, pk,
 						)
 					},
 				)
-			} else {
-				// Check p tags
-				pTags := ev.Tags.GetAll([]byte("p"))
-				for _, pTag := range pTags {
-					var pt []byte
-					if pt, err = hexenc.Dec(string(pTag.Value())); chk.E(err) {
-						continue
-					}
-					if utils.FastEqual(pt, pk) {
-						authorized = true
-						log.T.C(
-							func() string {
-								return fmt.Sprintf(
-									"privileged event %s is for logged in pubkey %0x",
-									ev.ID, pk,
-								)
-							},
-						)
-						break
-					}
-				}
-			}
-			if authorized {
 				tmp = append(tmp, ev)
 			} else {
 				log.T.C(
 					func() string {
 						return fmt.Sprintf(
-							"privileged event %s does not contain the logged in pubkey %0x",
+							"privileged event %s denied for pubkey %0x (not authenticated or not a party involved)",
 							ev.ID, pk,
 						)
 					},

@@ -271,6 +271,43 @@ func New(policyJSON []byte) (p *P, err error) {
 	return
 }
 
+// IsPartyInvolved checks if the given pubkey is a party involved in the event.
+// A party is involved if they are either:
+// 1. The author of the event (ev.Pubkey == userPubkey)
+// 2. Mentioned in a p-tag of the event
+//
+// Both ev.Pubkey and userPubkey must be binary ([]byte), not hex-encoded.
+// P-tags are assumed to contain hex-encoded pubkeys that will be decoded.
+//
+// This is the single source of truth for "parties_involved" / "privileged" checks.
+func IsPartyInvolved(ev *event.E, userPubkey []byte) bool {
+	// Must be authenticated
+	if len(userPubkey) == 0 {
+		return false
+	}
+
+	// Check if user is the author
+	if bytes.Equal(ev.Pubkey, userPubkey) {
+		return true
+	}
+
+	// Check if user is in p tags
+	pTags := ev.Tags.GetAll([]byte("p"))
+	for _, pTag := range pTags {
+		// pTag.Value() returns hex-encoded string; decode to bytes for comparison
+		pt, err := hex.Dec(string(pTag.Value()))
+		if err != nil {
+			// Skip malformed tags
+			continue
+		}
+		if bytes.Equal(pt, userPubkey) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // getDefaultPolicyAction returns true if the default policy is "allow", false if "deny"
 func (p *P) getDefaultPolicyAction() (allowed bool) {
 	switch p.DefaultPolicy {
@@ -999,6 +1036,7 @@ func (p *P) checkRulePolicy(
 	} else if access == "read" {
 		// For read access, check the logged-in user's pubkey (who is trying to READ),
 		// not the event author's pubkey
+
 		// Prefer binary cache for performance (3x faster than hex)
 		// Fall back to hex comparison if cache not populated (for backwards compatibility with tests)
 		if len(rule.readAllowBin) > 0 {
@@ -1095,30 +1133,12 @@ func (p *P) checkRulePolicy(
 		}
 	}
 
-	// Check privileged events
+	// Check privileged events using centralized function
 	if rule.Privileged {
-		if len(loggedInPubkey) == 0 {
-			return false, nil // Must be authenticated
-		}
-		// Check if event is authored by logged in user or contains logged in user in p tags
-		if !bytes.Equal(ev.Pubkey, loggedInPubkey) {
-			// Check p tags
-			pTags := ev.Tags.GetAll([]byte("p"))
-			found := false
-			for _, pTag := range pTags {
-				// pTag.Value() returns hex-encoded string; decode to bytes
-				pt, err := hex.Dec(string(pTag.Value()))
-				if err != nil {
-					continue
-				}
-				if bytes.Equal(pt, loggedInPubkey) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return false, nil
-			}
+		// Use the centralized IsPartyInvolved function to check
+		// This ensures consistent hex/binary handling across all privilege checks
+		if !IsPartyInvolved(ev, loggedInPubkey) {
+			return false, nil
 		}
 	}
 
