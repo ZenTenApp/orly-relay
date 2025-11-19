@@ -91,18 +91,26 @@ func (dgb *DgraphBenchmark) RunSuite() {
 
 	fmt.Printf("RunPeakThroughputTest (dgraph)..\n")
 	dgb.bench.RunPeakThroughputTest()
+	fmt.Println("Wiping database between tests...")
+	dgb.database.Wipe()
 	time.Sleep(10 * time.Second)
 
 	fmt.Printf("RunBurstPatternTest (dgraph)..\n")
 	dgb.bench.RunBurstPatternTest()
+	fmt.Println("Wiping database between tests...")
+	dgb.database.Wipe()
 	time.Sleep(10 * time.Second)
 
 	fmt.Printf("RunMixedReadWriteTest (dgraph)..\n")
 	dgb.bench.RunMixedReadWriteTest()
+	fmt.Println("Wiping database between tests...")
+	dgb.database.Wipe()
 	time.Sleep(10 * time.Second)
 
 	fmt.Printf("RunQueryTest (dgraph)..\n")
 	dgb.bench.RunQueryTest()
+	fmt.Println("Wiping database between tests...")
+	dgb.database.Wipe()
 	time.Sleep(10 * time.Second)
 
 	fmt.Printf("RunConcurrentQueryStoreTest (dgraph)..\n")

@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dgraph-io/badger/v4"
 	"github.com/dgraph-io/dgo/v230"
 	"github.com/dgraph-io/dgo/v230/protos/api"
 	"google.golang.org/grpc"
@@ -31,9 +30,6 @@ type D struct {
 	// Dgraph client connection
 	client *dgo.Dgraph
 	conn   *grpc.ClientConn
-
-	// Fallback badger storage for metadata
-	pstore *badger.DB
 
 	// Configuration
 	dgraphURL           string
@@ -106,11 +102,6 @@ func New(
 		return
 	}
 
-	// Initialize badger for metadata storage
-	if err = d.initStorage(); chk.E(err) {
-		return
-	}
-
 	// Apply Nostr schema to dgraph
 	if err = d.applySchema(ctx); chk.E(err) {
 		return
@@ -130,9 +121,6 @@ func New(
 		d.cancel()
 		if d.conn != nil {
 			d.conn.Close()
-		}
-		if d.pstore != nil {
-			d.pstore.Close()
 		}
 	}()
 
@@ -156,25 +144,6 @@ func (d *D) initDgraphClient() error {
 	return nil
 }
 
-// initStorage opens Badger database for metadata storage
-func (d *D) initStorage() error {
-	metadataDir := filepath.Join(d.dataDir, "metadata")
-
-	if err := os.MkdirAll(metadataDir, 0755); err != nil {
-		return fmt.Errorf("failed to create metadata directory: %w", err)
-	}
-
-	opts := badger.DefaultOptions(metadataDir)
-
-	var err error
-	d.pstore, err = badger.Open(opts)
-	if err != nil {
-		return fmt.Errorf("failed to open badger metadata store: %w", err)
-	}
-
-	d.Logger.Infof("metadata storage initialized")
-	return nil
-}
 
 // Query executes a DQL query against dgraph
 func (d *D) Query(ctx context.Context, query string) (*api.Response, error) {
@@ -218,11 +187,8 @@ func (d *D) Init(path string) (err error) {
 	return nil
 }
 
-// Sync flushes pending writes
+// Sync flushes pending writes (DGraph handles persistence automatically)
 func (d *D) Sync() (err error) {
-	if d.pstore != nil {
-		return d.pstore.Sync()
-	}
 	return nil
 }
 
@@ -234,25 +200,26 @@ func (d *D) Close() (err error) {
 			err = e
 		}
 	}
-	if d.pstore != nil {
-		if e := d.pstore.Close(); e != nil && err == nil {
-			err = e
-		}
-	}
 	return
 }
 
 // Wipe removes all data
 func (d *D) Wipe() (err error) {
-	if d.pstore != nil {
-		if err = d.pstore.Close(); chk.E(err) {
-			return
-		}
+	// Drop all data in DGraph using Alter
+	op := &api.Operation{
+		DropOp: api.Operation_DATA,
 	}
+
+	if err = d.client.Alter(context.Background(), op); err != nil {
+		return fmt.Errorf("failed to drop dgraph data: %w", err)
+	}
+
+	// Remove data directory
 	if err = os.RemoveAll(d.dataDir); chk.E(err) {
 		return
 	}
-	return d.initStorage()
+
+	return nil
 }
 
 // SetLogLevel sets the logging level

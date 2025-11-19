@@ -18,10 +18,12 @@ import (
 
 // BenchmarkAdapter adapts a database.Database interface to work with benchmark tests
 type BenchmarkAdapter struct {
-	config  *BenchmarkConfig
-	db      database.Database
-	results []*BenchmarkResult
-	mu      sync.RWMutex
+	config       *BenchmarkConfig
+	db           database.Database
+	results      []*BenchmarkResult
+	mu           sync.RWMutex
+	cachedEvents []*event.E // Cache generated events to avoid expensive re-generation
+	eventCacheMu sync.Mutex
 }
 
 // NewBenchmarkAdapter creates a new benchmark adapter
@@ -53,16 +55,23 @@ func (ba *BenchmarkAdapter) RunPeakThroughputTest() {
 	}
 	close(eventChan)
 
-	// Start workers
+	// Calculate per-worker rate to avoid mutex contention
+	perWorkerRate := 20000.0 / float64(ba.config.ConcurrentWorkers)
+
 	for i := 0; i < ba.config.ConcurrentWorkers; i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
 
+			// Each worker gets its own rate limiter
+			workerLimiter := NewRateLimiter(perWorkerRate)
+
 			ctx := context.Background()
 			for ev := range eventChan {
-				eventStart := time.Now()
+				// Wait for rate limiter to allow this event
+				workerLimiter.Wait()
 
+				eventStart := time.Now()
 				_, err := ba.db.SaveEvent(ctx, ev)
 				latency := time.Since(eventStart)
 
@@ -132,6 +141,9 @@ func (ba *BenchmarkAdapter) RunBurstPatternTest() {
 	burstSize := 100
 	bursts := ba.config.NumEvents / burstSize
 
+	// Create rate limiter: cap at 20,000 events/second globally
+	rateLimiter := NewRateLimiter(20000)
+
 	for i := 0; i < bursts; i++ {
 		// Generate a burst of events
 		events := ba.generateEvents(burstSize)
@@ -141,6 +153,9 @@ func (ba *BenchmarkAdapter) RunBurstPatternTest() {
 			wg.Add(1)
 			go func(e *event.E) {
 				defer wg.Done()
+
+				// Wait for rate limiter to allow this event
+				rateLimiter.Wait()
 
 				eventStart := time.Now()
 				_, err := ba.db.SaveEvent(ctx, e)
@@ -212,6 +227,9 @@ func (ba *BenchmarkAdapter) RunMixedReadWriteTest() {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
+	// Create rate limiter for writes: cap at 20,000 events/second
+	rateLimiter := NewRateLimiter(20000)
+
 	// Start workers doing mixed read/write
 	for i := 0; i < ba.config.ConcurrentWorkers; i++ {
 		wg.Add(1)
@@ -235,7 +253,8 @@ func (ba *BenchmarkAdapter) RunMixedReadWriteTest() {
 					readCount++
 					mu.Unlock()
 				} else {
-					// Write operation
+					// Write operation - apply rate limiting
+					rateLimiter.Wait()
 					_, _ = ba.db.SaveEvent(ctx, ev)
 
 					mu.Lock()
@@ -401,6 +420,9 @@ func (ba *BenchmarkAdapter) RunConcurrentQueryStoreTest() {
 		halfWorkers = 1
 	}
 
+	// Create rate limiter for writes: cap at 20,000 events/second
+	rateLimiter := NewRateLimiter(20000)
+
 	// Writers
 	for i := 0; i < halfWorkers; i++ {
 		wg.Add(1)
@@ -409,6 +431,9 @@ func (ba *BenchmarkAdapter) RunConcurrentQueryStoreTest() {
 
 			events := ba.generateEvents(ba.config.NumEvents / halfWorkers)
 			for _, ev := range events {
+				// Wait for rate limiter to allow this event
+				rateLimiter.Wait()
+
 				eventStart := time.Now()
 				ba.db.SaveEvent(ctx, ev)
 				latency := time.Since(eventStart)
@@ -480,36 +505,66 @@ func (ba *BenchmarkAdapter) RunConcurrentQueryStoreTest() {
 	ba.printResult(result)
 }
 
-// generateEvents generates test events with proper signatures
+// generateEvents generates unique synthetic events with realistic content sizes
 func (ba *BenchmarkAdapter) generateEvents(count int) []*event.E {
-	events := make([]*event.E, count)
+	fmt.Printf("Generating %d unique synthetic events (minimum 300 bytes each)...\n", count)
 
-	// Create a test signer
+	// Create a single signer for all events (reusing key is faster)
 	signer := p8k.MustNew()
 	if err := signer.Generate(); err != nil {
-		panic(fmt.Sprintf("failed to generate test key: %v", err))
+		panic(fmt.Sprintf("Failed to generate keypair: %v", err))
 	}
 
+	// Base timestamp - start from current time and increment
+	baseTime := time.Now().Unix()
+
+	// Minimum content size
+	const minContentSize = 300
+
+	// Base content template
+	baseContent := "This is a benchmark test event with realistic content size. "
+
+	// Pre-calculate how much padding we need
+	paddingNeeded := minContentSize - len(baseContent)
+	if paddingNeeded < 0 {
+		paddingNeeded = 0
+	}
+
+	// Create padding string (with varied characters for realistic size)
+	padding := make([]byte, paddingNeeded)
+	for i := range padding {
+		padding[i] = ' ' + byte(i%94) // Printable ASCII characters
+	}
+
+	events := make([]*event.E, count)
 	for i := 0; i < count; i++ {
 		ev := event.New()
-		ev.Kind = kind.TextNote.ToU16()
-		ev.CreatedAt = time.Now().Unix()
-		ev.Content = []byte(fmt.Sprintf("Benchmark event #%d - Testing Nostr relay performance with automated load generation", i))
+		ev.Kind = kind.TextNote.K
+		ev.CreatedAt = baseTime + int64(i) // Unique timestamp for each event
 		ev.Tags = tag.NewS()
 
-		// Add some tags for variety
-		if i%10 == 0 {
-			benchmarkTag := tag.NewFromBytesSlice([]byte("t"), []byte("benchmark"))
-			ev.Tags.Append(benchmarkTag)
-		}
+		// Create content with unique identifier and padding
+		ev.Content = []byte(fmt.Sprintf("%s Event #%d. %s", baseContent, i, string(padding)))
 
-		// Sign the event (sets Pubkey, ID, and Sig)
+		// Sign the event (this calculates ID and Sig)
 		if err := ev.Sign(signer); err != nil {
-			panic(fmt.Sprintf("failed to sign event: %v", err))
+			panic(fmt.Sprintf("Failed to sign event %d: %v", i, err))
 		}
 
 		events[i] = ev
 	}
+
+	// Print stats
+	totalSize := int64(0)
+	for _, ev := range events {
+		totalSize += int64(len(ev.Content))
+	}
+	avgSize := totalSize / int64(count)
+
+	fmt.Printf("Generated %d events:\n", count)
+	fmt.Printf("  Average content size: %d bytes\n", avgSize)
+	fmt.Printf("  All events are unique (incremental timestamps)\n")
+	fmt.Printf("  All events are properly signed\n\n")
 
 	return events
 }

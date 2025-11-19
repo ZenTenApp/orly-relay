@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: orly-benchmark-neo4j
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/benchmark123
+      - NEO4J_server_memory_heap_initial__size=2G
+      - NEO4J_server_memory_heap_max__size=4G
+      - NEO4J_server_memory_pagecache_size=2G
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_dbms_security_procedures_allowlist=apoc.*
+      - NEO4JLABS_PLUGINS=["apoc"]
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    networks:
+      - orly-benchmark
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p benchmark123 'RETURN 1;' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+networks:
+  orly-benchmark:
+    name: orly-benchmark-network
+    driver: bridge
+
+volumes:
+  neo4j-data:
+  neo4j-logs:

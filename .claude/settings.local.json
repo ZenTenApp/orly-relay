@@ -95,7 +95,21 @@
       "Bash(export:*)",
       "Bash(timeout 60 /tmp/benchmark-fixed:*)",
       "Bash(/tmp/test-auth-event.sh)",
-      "Bash(CGO_ENABLED=0 timeout 180 go test:*)"
+      "Bash(CGO_ENABLED=0 timeout 180 go test:*)",
+      "Bash(/tmp/benchmark-real-events:*)",
+      "Bash(CGO_ENABLED=0 timeout 240 go build:*)",
+      "Bash(/tmp/benchmark-final --events 500 --workers 2 --datadir /tmp/test-real-final)",
+      "Bash(timeout 60 /tmp/benchmark-final:*)",
+      "Bash(timeout 120 ./benchmark:*)",
+      "Bash(timeout 60 ./benchmark:*)",
+      "Bash(timeout 30 ./benchmark:*)",
+      "Bash(timeout 15 ./benchmark:*)",
+      "Bash(docker build:*)",
+      "Bash(xargs:*)",
+      "Bash(timeout 30 sh:*)",
+      "Bash(timeout 60 go test:*)",
+      "Bash(timeout 120 go test:*)",
+      "Bash(timeout 180 ./scripts/test.sh:*)"
     ],
     "deny": [],
     "ask": []

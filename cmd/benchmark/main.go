@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -16,12 +19,13 @@ import (
 	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/encoders/envelopes/eventenvelope"
 	"next.orly.dev/pkg/encoders/event"
+	examples "next.orly.dev/pkg/encoders/event/examples"
 	"next.orly.dev/pkg/encoders/filter"
 	"next.orly.dev/pkg/encoders/kind"
 	"next.orly.dev/pkg/encoders/tag"
 	"next.orly.dev/pkg/encoders/timestamp"
-	"next.orly.dev/pkg/protocol/ws"
 	"next.orly.dev/pkg/interfaces/signer/p8k"
+	"next.orly.dev/pkg/protocol/ws"
 )
 
 type BenchmarkConfig struct {
@@ -39,6 +43,7 @@ type BenchmarkConfig struct {
 
 	// Backend selection
 	UseDgraph bool
+	UseNeo4j  bool
 }
 
 type BenchmarkResult struct {
@@ -57,12 +62,46 @@ type BenchmarkResult struct {
 	Errors            []string
 }
 
+// RateLimiter implements a simple token bucket rate limiter
+type RateLimiter struct {
+	rate       float64       // events per second
+	interval   time.Duration // time between events
+	lastEvent  time.Time
+	mu         sync.Mutex
+}
+
+// NewRateLimiter creates a rate limiter for the specified events per second
+func NewRateLimiter(eventsPerSecond float64) *RateLimiter {
+	return &RateLimiter{
+		rate:      eventsPerSecond,
+		interval:  time.Duration(float64(time.Second) / eventsPerSecond),
+		lastEvent: time.Now(),
+	}
+}
+
+// Wait blocks until the next event is allowed based on the rate limit
+func (rl *RateLimiter) Wait() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	nextAllowed := rl.lastEvent.Add(rl.interval)
+
+	if now.Before(nextAllowed) {
+		time.Sleep(nextAllowed.Sub(now))
+		rl.lastEvent = nextAllowed
+	} else {
+		rl.lastEvent = now
+	}
+}
+
 type Benchmark struct {
-	config      *BenchmarkConfig
-	db          *database.D
-	eventStream *EventStream
-	results     []*BenchmarkResult
-	mu          sync.RWMutex
+	config       *BenchmarkConfig
+	db           *database.D
+	results      []*BenchmarkResult
+	mu           sync.RWMutex
+	cachedEvents []*event.E // Real-world events from examples.Cache
+	eventCacheMu sync.Mutex
 }
 
 func main() {
@@ -78,6 +117,12 @@ func main() {
 	if config.UseDgraph {
 		// Run dgraph benchmark
 		runDgraphBenchmark(config)
+		return
+	}
+
+	if config.UseNeo4j {
+		// Run Neo4j benchmark
+		runNeo4jBenchmark(config)
 		return
 	}
 
@@ -122,6 +167,28 @@ func runDgraphBenchmark(config *BenchmarkConfig) {
 	dgraphBench.GenerateAsciidocReport()
 }
 
+func runNeo4jBenchmark(config *BenchmarkConfig) {
+	fmt.Printf("Starting Nostr Relay Benchmark (Neo4j Backend)\n")
+	fmt.Printf("Data Directory: %s\n", config.DataDir)
+	fmt.Printf(
+		"Events: %d, Workers: %d\n",
+		config.NumEvents, config.ConcurrentWorkers,
+	)
+
+	neo4jBench, err := NewNeo4jBenchmark(config)
+	if err != nil {
+		log.Fatalf("Failed to create Neo4j benchmark: %v", err)
+	}
+	defer neo4jBench.Close()
+
+	// Run Neo4j benchmark suite
+	neo4jBench.RunSuite()
+
+	// Generate reports
+	neo4jBench.GenerateReport()
+	neo4jBench.GenerateAsciidocReport()
+}
+
 func parseFlags() *BenchmarkConfig {
 	config := &BenchmarkConfig{}
 
@@ -132,8 +199,8 @@ func parseFlags() *BenchmarkConfig {
 		&config.NumEvents, "events", 10000, "Number of events to generate",
 	)
 	flag.IntVar(
-		&config.ConcurrentWorkers, "workers", runtime.NumCPU(),
-		"Number of concurrent workers",
+		&config.ConcurrentWorkers, "workers", max(2, runtime.NumCPU()/4),
+		"Number of concurrent workers (default: CPU cores / 4 for low CPU usage)",
 	)
 	flag.DurationVar(
 		&config.TestDuration, "duration", 60*time.Second, "Test duration",
@@ -161,6 +228,10 @@ func parseFlags() *BenchmarkConfig {
 	flag.BoolVar(
 		&config.UseDgraph, "dgraph", false,
 		"Use dgraph backend (requires Docker)",
+	)
+	flag.BoolVar(
+		&config.UseNeo4j, "neo4j", false,
+		"Use Neo4j backend (requires Docker)",
 	)
 
 	flag.Parse()
@@ -330,23 +401,10 @@ func NewBenchmark(config *BenchmarkConfig) *Benchmark {
 		log.Fatalf("Failed to create database: %v", err)
 	}
 
-	// Create event stream (stores events on disk to avoid memory bloat)
-	eventStream, err := NewEventStream(config.DataDir, config.NumEvents)
-	if err != nil {
-		log.Fatalf("Failed to create event stream: %v", err)
-	}
-
-	// Pre-generate all events to disk
-	fmt.Printf("Pre-generating %d events to disk to avoid memory bloat...\n", config.NumEvents)
-	if err := eventStream.Generate(); err != nil {
-		log.Fatalf("Failed to generate events: %v", err)
-	}
-
 	b := &Benchmark{
-		config:      config,
-		db:          db,
-		eventStream: eventStream,
-		results:     make([]*BenchmarkResult, 0),
+		config:  config,
+		db:      db,
+		results: make([]*BenchmarkResult, 0),
 	}
 
 	// Trigger compaction/GC before starting tests
@@ -361,49 +419,42 @@ func (b *Benchmark) Close() {
 	}
 }
 
-// RunSuite runs the memory-optimized tests (Peak Throughput and Burst Pattern only)
+// RunSuite runs the full benchmark test suite
 func (b *Benchmark) RunSuite() {
-	fmt.Printf("\n=== Running Memory-Optimized Tests ===\n")
+	fmt.Println("\n╔════════════════════════════════════════════════════════╗")
+	fmt.Println("║         BADGER BACKEND BENCHMARK SUITE                 ║")
+	fmt.Println("╚════════════════════════════════════════════════════════╝")
 
-	fmt.Printf("RunPeakThroughputTest..\n")
+	fmt.Printf("\n=== Starting Badger benchmark ===\n")
+
+	fmt.Printf("RunPeakThroughputTest (Badger)..\n")
 	b.RunPeakThroughputTest()
+	fmt.Println("Wiping database between tests...")
+	b.db.Wipe()
+	time.Sleep(10 * time.Second)
 
-	// Clear database between tests to avoid duplicate event issues
-	fmt.Printf("\nClearing database for next test...\n")
-	if err := b.db.Close(); err != nil {
-		log.Printf("Error closing database: %v", err)
-	}
-	time.Sleep(1 * time.Second)
-
-	// Remove database files (.sst, .vlog, MANIFEST, etc.)
-	// Badger stores files directly in the data directory
-	matches, err := filepath.Glob(filepath.Join(b.config.DataDir, "*.sst"))
-	if err == nil {
-		for _, f := range matches {
-			os.Remove(f)
-		}
-	}
-	matches, err = filepath.Glob(filepath.Join(b.config.DataDir, "*.vlog"))
-	if err == nil {
-		for _, f := range matches {
-			os.Remove(f)
-		}
-	}
-	os.Remove(filepath.Join(b.config.DataDir, "MANIFEST"))
-	os.Remove(filepath.Join(b.config.DataDir, "DISCARD"))
-	os.Remove(filepath.Join(b.config.DataDir, "KEYREGISTRY"))
-
-	// Create fresh database
-	ctx := context.Background()
-	cancel := func() {}
-	db, err := database.New(ctx, cancel, b.config.DataDir, "warn")
-	if err != nil {
-		log.Fatalf("Failed to create fresh database: %v", err)
-	}
-	b.db = db
-
-	fmt.Printf("RunBurstPatternTest..\n")
+	fmt.Printf("RunBurstPatternTest (Badger)..\n")
 	b.RunBurstPatternTest()
+	fmt.Println("Wiping database between tests...")
+	b.db.Wipe()
+	time.Sleep(10 * time.Second)
+
+	fmt.Printf("RunMixedReadWriteTest (Badger)..\n")
+	b.RunMixedReadWriteTest()
+	fmt.Println("Wiping database between tests...")
+	b.db.Wipe()
+	time.Sleep(10 * time.Second)
+
+	fmt.Printf("RunQueryTest (Badger)..\n")
+	b.RunQueryTest()
+	fmt.Println("Wiping database between tests...")
+	b.db.Wipe()
+	time.Sleep(10 * time.Second)
+
+	fmt.Printf("RunConcurrentQueryStoreTest (Badger)..\n")
+	b.RunConcurrentQueryStoreTest()
+
+	fmt.Printf("\n=== Badger benchmark completed ===\n\n")
 }
 
 // compactDatabase triggers a Badger value log GC before starting tests.
@@ -430,17 +481,28 @@ func (b *Benchmark) RunPeakThroughputTest() {
 	var errorCount int64
 	var mu sync.Mutex
 
-	// Stream events from disk with reasonable buffer
-	eventChan, errChan := b.eventStream.GetEventChannel(1000)
+	// Stream events from memory (real-world sample events)
+	eventChan, errChan := b.getEventChannel(b.config.NumEvents, 1000)
 
-	// Start workers
+	// Calculate per-worker rate: 20k events/sec total divided by worker count
+	// This prevents all workers from synchronizing and hitting DB simultaneously
+	perWorkerRate := 20000.0 / float64(b.config.ConcurrentWorkers)
+
+	// Start workers with rate limiting
 	ctx := context.Background()
+
 	for i := 0; i < b.config.ConcurrentWorkers; i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
 
+			// Each worker gets its own rate limiter to avoid mutex contention
+			workerLimiter := NewRateLimiter(perWorkerRate)
+
 			for ev := range eventChan {
+				// Wait for rate limiter to allow this event
+				workerLimiter.Wait()
+
 				eventStart := time.Now()
 				_, err := b.db.SaveEvent(ctx, ev)
 				latency := time.Since(eventStart)
@@ -531,8 +593,8 @@ func (b *Benchmark) RunBurstPatternTest() {
 	var errorCount int64
 	var mu sync.Mutex
 
-	// Stream events from disk
-	eventChan, errChan := b.eventStream.GetEventChannel(500)
+	// Stream events from memory (real-world sample events)
+	eventChan, errChan := b.getEventChannel(b.config.NumEvents, 500)
 
 	// Check for streaming errors
 	go func() {
@@ -556,11 +618,21 @@ func (b *Benchmark) RunBurstPatternTest() {
 	eventQueue := make(chan *event.E, numWorkers*4)
 	var wg sync.WaitGroup
 
+	// Calculate per-worker rate to avoid mutex contention
+	perWorkerRate := 20000.0 / float64(numWorkers)
+
 	for w := 0; w < numWorkers; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+
+			// Each worker gets its own rate limiter
+			workerLimiter := NewRateLimiter(perWorkerRate)
+
 			for ev := range eventQueue {
+				// Wait for rate limiter to allow this event
+				workerLimiter.Wait()
+
 				eventStart := time.Now()
 				_, err := b.db.SaveEvent(ctx, ev)
 				latency := time.Since(eventStart)
@@ -669,17 +741,25 @@ func (b *Benchmark) RunMixedReadWriteTest() {
 	events := b.generateEvents(b.config.NumEvents)
 	var wg sync.WaitGroup
 
+	// Calculate per-worker rate to avoid mutex contention
+	perWorkerRate := 20000.0 / float64(b.config.ConcurrentWorkers)
+
 	// Start mixed read/write workers
 	for i := 0; i < b.config.ConcurrentWorkers; i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
 
+			// Each worker gets its own rate limiter
+			workerLimiter := NewRateLimiter(perWorkerRate)
+
 			eventIndex := workerID
 			for time.Since(start) < b.config.TestDuration && eventIndex < len(events) {
 				// Alternate between write and read operations
 				if eventIndex%2 == 0 {
-					// Write operation
+					// Write operation - apply rate limiting
+					workerLimiter.Wait()
+
 					writeStart := time.Now()
 					_, err := b.db.SaveEvent(ctx, events[eventIndex])
 					writeLatency := time.Since(writeStart)
@@ -850,9 +930,8 @@ func (b *Benchmark) RunQueryTest() {
 				mu.Unlock()
 
 				queryCount++
-				if queryCount%10 == 0 {
-					time.Sleep(10 * time.Millisecond) // Small delay every 10 queries
-				}
+				// Always add delay to prevent CPU saturation (queries are CPU-intensive)
+				time.Sleep(1 * time.Millisecond)
 			}
 		}(i)
 	}
@@ -952,6 +1031,9 @@ func (b *Benchmark) RunConcurrentQueryStoreTest() {
 	numReaders := b.config.ConcurrentWorkers / 2
 	numWriters := b.config.ConcurrentWorkers - numReaders
 
+	// Calculate per-worker write rate to avoid mutex contention
+	perWorkerRate := 20000.0 / float64(numWriters)
+
 	// Start query workers (readers)
 	for i := 0; i < numReaders; i++ {
 		wg.Add(1)
@@ -986,9 +1068,8 @@ func (b *Benchmark) RunConcurrentQueryStoreTest() {
 				mu.Unlock()
 
 				queryCount++
-				if queryCount%5 == 0 {
-					time.Sleep(5 * time.Millisecond) // Small delay
-				}
+				// Always add delay to prevent CPU saturation (queries are CPU-intensive)
+				time.Sleep(1 * time.Millisecond)
 			}
 		}(i)
 	}
@@ -999,11 +1080,16 @@ func (b *Benchmark) RunConcurrentQueryStoreTest() {
 		go func(workerID int) {
 			defer wg.Done()
 
+			// Each worker gets its own rate limiter
+			workerLimiter := NewRateLimiter(perWorkerRate)
+
 			eventIndex := workerID
 			writeCount := 0
 
 			for time.Since(start) < b.config.TestDuration && eventIndex < len(writeEvents) {
-				// Write operation
+				// Write operation - apply rate limiting
+				workerLimiter.Wait()
+
 				writeStart := time.Now()
 				_, err := b.db.SaveEvent(ctx, writeEvents[eventIndex])
 				writeLatency := time.Since(writeStart)
@@ -1019,10 +1105,6 @@ func (b *Benchmark) RunConcurrentQueryStoreTest() {
 
 				eventIndex += numWriters
 				writeCount++
-
-				if writeCount%10 == 0 {
-					time.Sleep(10 * time.Millisecond) // Small delay every 10 writes
-				}
 			}
 		}(i)
 	}
@@ -1083,109 +1165,201 @@ func (b *Benchmark) RunConcurrentQueryStoreTest() {
 }
 
 func (b *Benchmark) generateEvents(count int) []*event.E {
+	fmt.Printf("Generating %d unique synthetic events (minimum 300 bytes each)...\n", count)
+
+	// Create a single signer for all events (reusing key is faster)
+	signer := p8k.MustNew()
+	if err := signer.Generate(); err != nil {
+		log.Fatalf("Failed to generate keypair: %v", err)
+	}
+
+	// Base timestamp - start from current time and increment
+	baseTime := time.Now().Unix()
+
+	// Minimum content size
+	const minContentSize = 300
+
+	// Base content template
+	baseContent := "This is a benchmark test event with realistic content size. "
+
+	// Pre-calculate how much padding we need
+	paddingNeeded := minContentSize - len(baseContent)
+	if paddingNeeded < 0 {
+		paddingNeeded = 0
+	}
+
+	// Create padding string (with varied characters for realistic size)
+	padding := make([]byte, paddingNeeded)
+	for i := range padding {
+		padding[i] = ' ' + byte(i%94) // Printable ASCII characters
+	}
+
 	events := make([]*event.E, count)
-	now := timestamp.Now()
-
-	// Generate a keypair for signing all events
-	var keys *p8k.Signer
-	var err error
-	if keys, err = p8k.New(); err != nil {
-		fmt.Printf("failed to create signer: %v\n", err)
-		return nil
-	}
-	if err := keys.Generate(); err != nil {
-		log.Fatalf("Failed to generate keys for benchmark events: %v", err)
-	}
-
-	// Define size distribution - from minimal to 500KB
-	// We'll create a logarithmic distribution to test various sizes
-	sizeBuckets := []int{
-		0,          // Minimal: empty content, no tags
-		10,         // Tiny: ~10 bytes
-		100,        // Small: ~100 bytes
-		1024,       // 1 KB
-		10 * 1024,  // 10 KB
-		50 * 1024,  // 50 KB
-		100 * 1024, // 100 KB
-		250 * 1024, // 250 KB
-		500 * 1024, // 500 KB (max realistic size for Nostr)
-	}
-
 	for i := 0; i < count; i++ {
 		ev := event.New()
-
-		ev.CreatedAt = now.I64()
 		ev.Kind = kind.TextNote.K
+		ev.CreatedAt = baseTime + int64(i) // Unique timestamp for each event
+		ev.Tags = tag.NewS()
 
-		// Distribute events across size buckets
-		bucketIndex := i % len(sizeBuckets)
-		targetSize := sizeBuckets[bucketIndex]
+		// Create content with unique identifier and padding
+		ev.Content = []byte(fmt.Sprintf("%s Event #%d. %s", baseContent, i, string(padding)))
 
-		// Generate content based on target size
-		if targetSize == 0 {
-			// Minimal event: empty content, no tags
-			ev.Content = []byte{}
-			ev.Tags = tag.NewS() // Empty tag set
-		} else if targetSize < 1024 {
-			// Small events: simple text content
-			ev.Content = []byte(fmt.Sprintf(
-				"Event %d - Size bucket: %d bytes. %s",
-				i, targetSize, strings.Repeat("x", max(0, targetSize-50)),
-			))
-			// Add minimal tags
-			ev.Tags = tag.NewS(
-				tag.NewFromBytesSlice([]byte("t"), []byte("benchmark")),
-			)
-		} else {
-			// Larger events: fill with repeated content to reach target size
-			// Account for JSON overhead (~200 bytes for event structure)
-			contentSize := targetSize - 200
-			if contentSize < 0 {
-				contentSize = targetSize
-			}
-
-			// Build content with repeated pattern
-			pattern := fmt.Sprintf("Event %d, target size %d bytes. ", i, targetSize)
-			repeatCount := contentSize / len(pattern)
-			if repeatCount < 1 {
-				repeatCount = 1
-			}
-			ev.Content = []byte(strings.Repeat(pattern, repeatCount))
-
-			// Add some tags (contributes to total size)
-			numTags := min(5, max(1, targetSize/10000)) // More tags for larger events
-			tags := make([]*tag.T, 0, numTags+1)
-			tags = append(tags, tag.NewFromBytesSlice([]byte("t"), []byte("benchmark")))
-			for j := 0; j < numTags; j++ {
-				tags = append(tags, tag.NewFromBytesSlice(
-					[]byte("e"),
-					[]byte(fmt.Sprintf("ref_%d_%d", i, j)),
-				))
-			}
-			ev.Tags = tag.NewS(tags...)
-		}
-
-		// Properly sign the event
-		if err := ev.Sign(keys); err != nil {
+		// Sign the event (this calculates ID and Sig)
+		if err := ev.Sign(signer); err != nil {
 			log.Fatalf("Failed to sign event %d: %v", i, err)
 		}
 
 		events[i] = ev
 	}
 
-	// Log size distribution summary
-	fmt.Printf("\nGenerated %d events with size distribution:\n", count)
-	for idx, size := range sizeBuckets {
-		eventsInBucket := count / len(sizeBuckets)
-		if idx < count%len(sizeBuckets) {
-			eventsInBucket++
-		}
-		sizeStr := formatSize(size)
-		fmt.Printf("  %s: ~%d events\n", sizeStr, eventsInBucket)
+	// Print stats
+	totalSize := int64(0)
+	for _, ev := range events {
+		totalSize += int64(len(ev.Content))
 	}
-	fmt.Println()
+	avgSize := totalSize / int64(count)
+
+	fmt.Printf("Generated %d events:\n", count)
+	fmt.Printf("  Average content size: %d bytes\n", avgSize)
+	fmt.Printf("  All events are unique (incremental timestamps)\n")
+	fmt.Printf("  All events are properly signed\n\n")
 
 	return events
+}
+
+// printEventStats prints statistics about the loaded real-world events
+func (b *Benchmark) printEventStats() {
+	if len(b.cachedEvents) == 0 {
+		return
+	}
+
+	// Analyze event distribution
+	kindCounts := make(map[uint16]int)
+	var totalSize int64
+
+	for _, ev := range b.cachedEvents {
+		kindCounts[ev.Kind]++
+		totalSize += int64(len(ev.Content))
+	}
+
+	avgSize := totalSize / int64(len(b.cachedEvents))
+
+	fmt.Printf("\nEvent Statistics:\n")
+	fmt.Printf("  Total events: %d\n", len(b.cachedEvents))
+	fmt.Printf("  Average content size: %d bytes\n", avgSize)
+	fmt.Printf("  Event kinds found: %d unique\n", len(kindCounts))
+	fmt.Printf("  Most common kinds:\n")
+
+	// Print top 5 kinds
+	type kindCount struct {
+		kind  uint16
+		count int
+	}
+	var counts []kindCount
+	for k, c := range kindCounts {
+		counts = append(counts, kindCount{k, c})
+	}
+	sort.Slice(counts, func(i, j int) bool {
+		return counts[i].count > counts[j].count
+	})
+	for i := 0; i < min(5, len(counts)); i++ {
+		fmt.Printf("    Kind %d: %d events\n", counts[i].kind, counts[i].count)
+	}
+	fmt.Println()
+}
+
+// loadRealEvents loads events from embedded examples.Cache on first call
+func (b *Benchmark) loadRealEvents() {
+	b.eventCacheMu.Lock()
+	defer b.eventCacheMu.Unlock()
+
+	// Only load once
+	if len(b.cachedEvents) > 0 {
+		return
+	}
+
+	fmt.Println("Loading real-world sample events (11,596 events from 6 months of Nostr)...")
+	scanner := bufio.NewScanner(bytes.NewReader(examples.Cache))
+
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+
+	for scanner.Scan() {
+		var ev event.E
+		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
+			fmt.Printf("Warning: failed to unmarshal event: %v\n", err)
+			continue
+		}
+		b.cachedEvents = append(b.cachedEvents, &ev)
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("Failed to read events: %v", err)
+	}
+
+	fmt.Printf("Loaded %d real-world events (already signed, zero crypto overhead)\n", len(b.cachedEvents))
+	b.printEventStats()
+}
+
+// getEventChannel returns a channel that streams unique synthetic events
+// bufferSize controls memory usage - larger buffers improve throughput but use more memory
+func (b *Benchmark) getEventChannel(count int, bufferSize int) (<-chan *event.E, <-chan error) {
+	eventChan := make(chan *event.E, bufferSize)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(eventChan)
+		defer close(errChan)
+
+		// Create a single signer for all events
+		signer := p8k.MustNew()
+		if err := signer.Generate(); err != nil {
+			errChan <- fmt.Errorf("failed to generate keypair: %w", err)
+			return
+		}
+
+		// Base timestamp - start from current time and increment
+		baseTime := time.Now().Unix()
+
+		// Minimum content size
+		const minContentSize = 300
+
+		// Base content template
+		baseContent := "This is a benchmark test event with realistic content size. "
+
+		// Pre-calculate padding
+		paddingNeeded := minContentSize - len(baseContent)
+		if paddingNeeded < 0 {
+			paddingNeeded = 0
+		}
+
+		// Create padding string (with varied characters for realistic size)
+		padding := make([]byte, paddingNeeded)
+		for i := range padding {
+			padding[i] = ' ' + byte(i%94) // Printable ASCII characters
+		}
+
+		// Stream unique events
+		for i := 0; i < count; i++ {
+			ev := event.New()
+			ev.Kind = kind.TextNote.K
+			ev.CreatedAt = baseTime + int64(i) // Unique timestamp for each event
+			ev.Tags = tag.NewS()
+
+			// Create content with unique identifier and padding
+			ev.Content = []byte(fmt.Sprintf("%s Event #%d. %s", baseContent, i, string(padding)))
+
+			// Sign the event (this calculates ID and Sig)
+			if err := ev.Sign(signer); err != nil {
+				errChan <- fmt.Errorf("failed to sign event %d: %w", i, err)
+				return
+			}
+
+			eventChan <- ev
+		}
+	}()
+
+	return eventChan, errChan
 }
 
 // formatSize formats byte size in human-readable format

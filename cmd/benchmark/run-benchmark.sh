@@ -29,11 +29,27 @@ if [ -d "data" ]; then
     fi
 fi
 
+# Stop any running containers from previous runs
+echo "Stopping any running containers..."
+$DOCKER_COMPOSE down 2>/dev/null || true
+
 # Create fresh data directories with correct permissions
 echo "Preparing data directories..."
-mkdir -p data/{next-orly-badger,next-orly-dgraph,dgraph-zero,dgraph-alpha,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,postgres}
-chmod 777 data/{next-orly-badger,next-orly-dgraph,dgraph-zero,dgraph-alpha,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,postgres}
 
+# Clean Neo4j data to prevent "already running" errors
+if [ -d "data/neo4j" ]; then
+    echo "Cleaning Neo4j data directory..."
+    rm -rf data/neo4j/*
+fi
+
+mkdir -p data/{next-orly-badger,next-orly-dgraph,next-orly-neo4j,dgraph-zero,dgraph-alpha,neo4j,neo4j-logs,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,postgres}
+chmod 777 data/{next-orly-badger,next-orly-dgraph,next-orly-neo4j,dgraph-zero,dgraph-alpha,neo4j,neo4j-logs,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,postgres}
+
+echo "Building fresh Docker images..."
+# Force rebuild to pick up latest code changes
+$DOCKER_COMPOSE build --no-cache benchmark-runner next-orly-badger next-orly-dgraph next-orly-neo4j
+
+echo ""
 echo "Starting benchmark suite..."
 echo "This will automatically shut down all containers when the benchmark completes."
 echo ""

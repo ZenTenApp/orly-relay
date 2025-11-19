@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dgraph-io/badger/v4"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"lol.mleku.dev"
 	"lol.mleku.dev/chk"
@@ -27,9 +26,6 @@ type N struct {
 
 	// Neo4j client connection
 	driver neo4j.DriverWithContext
-
-	// Fallback badger storage for metadata (markers, identity, etc.)
-	pstore *badger.DB
 
 	// Configuration
 	neo4jURI      string
@@ -110,11 +106,6 @@ func New(
 		return
 	}
 
-	// Initialize badger for metadata storage
-	if err = n.initStorage(); chk.E(err) {
-		return
-	}
-
 	// Apply Nostr schema to neo4j (create constraints and indexes)
 	if err = n.applySchema(ctx); chk.E(err) {
 		return
@@ -134,9 +125,6 @@ func New(
 		n.cancel()
 		if n.driver != nil {
 			n.driver.Close(context.Background())
-		}
-		if n.pstore != nil {
-			n.pstore.Close()
 		}
 	}()
 
@@ -168,25 +156,6 @@ func (n *N) initNeo4jClient() error {
 	return nil
 }
 
-// initStorage opens Badger database for metadata storage
-func (n *N) initStorage() error {
-	metadataDir := filepath.Join(n.dataDir, "metadata")
-
-	if err := os.MkdirAll(metadataDir, 0755); err != nil {
-		return fmt.Errorf("failed to create metadata directory: %w", err)
-	}
-
-	opts := badger.DefaultOptions(metadataDir)
-
-	var err error
-	n.pstore, err = badger.Open(opts)
-	if err != nil {
-		return fmt.Errorf("failed to open badger metadata store: %w", err)
-	}
-
-	n.Logger.Infof("metadata storage initialized")
-	return nil
-}
 
 // ExecuteRead executes a read query against Neo4j
 func (n *N) ExecuteRead(ctx context.Context, cypher string, params map[string]any) (neo4j.ResultWithContext, error) {
@@ -231,11 +200,8 @@ func (n *N) Init(path string) (err error) {
 	return nil
 }
 
-// Sync flushes pending writes
+// Sync flushes pending writes (Neo4j handles persistence automatically)
 func (n *N) Sync() (err error) {
-	if n.pstore != nil {
-		return n.pstore.Sync()
-	}
 	return nil
 }
 
@@ -247,26 +213,11 @@ func (n *N) Close() (err error) {
 			err = e
 		}
 	}
-	if n.pstore != nil {
-		if e := n.pstore.Close(); e != nil && err == nil {
-			err = e
-		}
-	}
 	return
 }
 
 // Wipe removes all data
 func (n *N) Wipe() (err error) {
-	// Close and remove badger metadata
-	if n.pstore != nil {
-		if err = n.pstore.Close(); chk.E(err) {
-			return
-		}
-	}
-	if err = os.RemoveAll(n.dataDir); chk.E(err) {
-		return
-	}
-
 	// Delete all nodes and relationships in Neo4j
 	ctx := context.Background()
 	_, err = n.ExecuteWrite(ctx, "MATCH (n) DETACH DELETE n", nil)
@@ -274,7 +225,12 @@ func (n *N) Wipe() (err error) {
 		return fmt.Errorf("failed to wipe neo4j database: %w", err)
 	}
 
-	return n.initStorage()
+	// Remove data directory
+	if err = os.RemoveAll(n.dataDir); chk.E(err) {
+		return
+	}
+
+	return nil
 }
 
 // SetLogLevel sets the logging level

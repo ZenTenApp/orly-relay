@@ -2,6 +2,7 @@ package database
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/dgraph-io/badger/v4"
 	"lol.mleku.dev/chk"
@@ -10,6 +11,7 @@ import (
 	"next.orly.dev/pkg/database/indexes/types"
 	"next.orly.dev/pkg/encoders/event"
 	"next.orly.dev/pkg/encoders/filter"
+
 	// "next.orly.dev/pkg/encoders/hex"
 	"next.orly.dev/pkg/encoders/tag"
 )
@@ -58,7 +60,7 @@ func (d *D) GetSerialById(id []byte) (ser *types.Uint40, err error) {
 		return
 	}
 	if !idFound {
-		err = errorf.E("id not found in database")
+		err = fmt.Errorf("id not found in database")
 		return
 	}
 

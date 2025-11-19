@@ -19,6 +19,7 @@ import (
 	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/encoders/event"
 	"next.orly.dev/pkg/encoders/hex"
+	"next.orly.dev/pkg/utils"
 )
 
 // Kinds defines whitelist and blacklist policies for event kinds.
@@ -70,6 +71,73 @@ type Rule struct {
 	MaxAgeOfEvent *int64 `json:"max_age_of_event,omitempty"`
 	// MaxAgeEventInFuture is the offset in seconds that is the newest timestamp allowed for an event's created_at time ahead of the current time.
 	MaxAgeEventInFuture *int64 `json:"max_age_event_in_future,omitempty"`
+
+	// Binary caches for faster comparison (populated from hex strings above)
+	// These are not exported and not serialized to JSON
+	writeAllowBin [][]byte
+	writeDenyBin  [][]byte
+	readAllowBin  [][]byte
+	readDenyBin   [][]byte
+}
+
+// populateBinaryCache converts hex-encoded pubkey strings to binary for faster comparison.
+// This should be called after unmarshaling the policy from JSON.
+func (r *Rule) populateBinaryCache() error {
+	var err error
+
+	// Convert WriteAllow hex strings to binary
+	if len(r.WriteAllow) > 0 {
+		r.writeAllowBin = make([][]byte, 0, len(r.WriteAllow))
+		for _, hexPubkey := range r.WriteAllow {
+			binPubkey, decErr := hex.Dec(hexPubkey)
+			if decErr != nil {
+				log.W.F("failed to decode WriteAllow pubkey %q: %v", hexPubkey, decErr)
+				continue
+			}
+			r.writeAllowBin = append(r.writeAllowBin, binPubkey)
+		}
+	}
+
+	// Convert WriteDeny hex strings to binary
+	if len(r.WriteDeny) > 0 {
+		r.writeDenyBin = make([][]byte, 0, len(r.WriteDeny))
+		for _, hexPubkey := range r.WriteDeny {
+			binPubkey, decErr := hex.Dec(hexPubkey)
+			if decErr != nil {
+				log.W.F("failed to decode WriteDeny pubkey %q: %v", hexPubkey, decErr)
+				continue
+			}
+			r.writeDenyBin = append(r.writeDenyBin, binPubkey)
+		}
+	}
+
+	// Convert ReadAllow hex strings to binary
+	if len(r.ReadAllow) > 0 {
+		r.readAllowBin = make([][]byte, 0, len(r.ReadAllow))
+		for _, hexPubkey := range r.ReadAllow {
+			binPubkey, decErr := hex.Dec(hexPubkey)
+			if decErr != nil {
+				log.W.F("failed to decode ReadAllow pubkey %q: %v", hexPubkey, decErr)
+				continue
+			}
+			r.readAllowBin = append(r.readAllowBin, binPubkey)
+		}
+	}
+
+	// Convert ReadDeny hex strings to binary
+	if len(r.ReadDeny) > 0 {
+		r.readDenyBin = make([][]byte, 0, len(r.ReadDeny))
+		for _, hexPubkey := range r.ReadDeny {
+			binPubkey, decErr := hex.Dec(hexPubkey)
+			if decErr != nil {
+				log.W.F("failed to decode ReadDeny pubkey %q: %v", hexPubkey, decErr)
+				continue
+			}
+			r.readDenyBin = append(r.readDenyBin, binPubkey)
+		}
+	}
+
+	return err
 }
 
 // PolicyEvent represents an event with additional context for policy scripts.
@@ -191,6 +259,15 @@ func New(policyJSON []byte) (p *P, err error) {
 	if p.DefaultPolicy == "" {
 		p.DefaultPolicy = "allow"
 	}
+
+	// Populate binary caches for all rules (including global rule)
+	p.Global.populateBinaryCache()
+	for kind := range p.Rules {
+		rule := p.Rules[kind]  // Get a copy
+		rule.populateBinaryCache()
+		p.Rules[kind] = rule  // Store the modified copy back
+	}
+
 	return
 }
 
@@ -457,9 +534,9 @@ func (sr *ScriptRunner) Start() error {
 // Stop stops the script gracefully.
 func (sr *ScriptRunner) Stop() error {
 	sr.mutex.Lock()
-	defer sr.mutex.Unlock()
 
 	if !sr.isRunning || sr.currentCmd == nil {
+		sr.mutex.Unlock()
 		return fmt.Errorf("script is not running")
 	}
 
@@ -473,45 +550,49 @@ func (sr *ScriptRunner) Stop() error {
 		sr.currentCancel()
 	}
 
-	// Wait for graceful shutdown with timeout
-	done := make(chan error, 1)
-	go func() {
-		done <- sr.currentCmd.Wait()
-	}()
+	// Get the process reference before releasing the lock
+	process := sr.currentCmd.Process
+	sr.mutex.Unlock()
 
-	select {
-	case <-done:
-		// Process exited gracefully
-		log.I.F("policy script stopped: %s", sr.scriptPath)
-	case <-time.After(5 * time.Second):
-		// Force kill after 5 seconds
+	// Wait for graceful shutdown with timeout
+	// Note: monitorProcess() is the one that calls cmd.Wait() and cleans up
+	// We just wait for it to finish by polling isRunning
+	gracefulShutdown := false
+	for i := 0; i < 50; i++ { // 5 seconds total (50 * 100ms)
+		time.Sleep(100 * time.Millisecond)
+		sr.mutex.RLock()
+		running := sr.isRunning
+		sr.mutex.RUnlock()
+		if !running {
+			gracefulShutdown = true
+			log.I.F("policy script stopped gracefully: %s", sr.scriptPath)
+			break
+		}
+	}
+
+	if !gracefulShutdown {
+		// Force kill after timeout
 		log.W.F(
 			"policy script did not stop gracefully, sending SIGKILL: %s",
 			sr.scriptPath,
 		)
-		if err := sr.currentCmd.Process.Kill(); chk.E(err) {
-			log.E.F("failed to kill script process: %v", err)
+		if process != nil {
+			if err := process.Kill(); chk.E(err) {
+				log.E.F("failed to kill script process: %v", err)
+			}
 		}
-		<-done // Wait for the kill to complete
-	}
 
-	// Clean up pipes
-	if sr.stdin != nil {
-		sr.stdin.Close()
-		sr.stdin = nil
+		// Wait a bit more for monitorProcess to clean up
+		for i := 0; i < 30; i++ { // 3 more seconds
+			time.Sleep(100 * time.Millisecond)
+			sr.mutex.RLock()
+			running := sr.isRunning
+			sr.mutex.RUnlock()
+			if !running {
+				break
+			}
+		}
 	}
-	if sr.stdout != nil {
-		sr.stdout.Close()
-		sr.stdout = nil
-	}
-	if sr.stderr != nil {
-		sr.stderr.Close()
-		sr.stderr = nil
-	}
-
-	sr.isRunning = false
-	sr.currentCmd = nil
-	sr.currentCancel = nil
 
 	return nil
 }
@@ -747,6 +828,13 @@ func (p *P) LoadFromFile(configPath string) error {
 		return fmt.Errorf("failed to parse policy configuration JSON: %v", err)
 	}
 
+	// Populate binary caches for all rules (including global rule)
+	p.Global.populateBinaryCache()
+	for kind, rule := range p.Rules {
+		rule.populateBinaryCache()
+		p.Rules[kind] = rule // Update the map with the modified rule
+	}
+
 	return nil
 }
 
@@ -863,12 +951,24 @@ func (p *P) checkGlobalRulePolicy(
 func (p *P) checkRulePolicy(
 	access string, ev *event.E, rule Rule, loggedInPubkey []byte,
 ) (allowed bool, err error) {
-	pubkeyHex := hex.Enc(ev.Pubkey)
-
 	// Check pubkey-based access control
 	if access == "write" {
-		// Check write allow/deny lists
-		if len(rule.WriteAllow) > 0 {
+		// Prefer binary cache for performance (3x faster than hex)
+		// Fall back to hex comparison if cache not populated (for backwards compatibility with tests)
+		if len(rule.writeAllowBin) > 0 {
+			allowed = false
+			for _, allowedPubkey := range rule.writeAllowBin {
+				if utils.FastEqual(ev.Pubkey, allowedPubkey) {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				return false, nil
+			}
+		} else if len(rule.WriteAllow) > 0 {
+			// Fallback: binary cache not populated, use hex comparison
+			pubkeyHex := hex.Enc(ev.Pubkey)
 			allowed = false
 			for _, allowedPubkey := range rule.WriteAllow {
 				if pubkeyHex == allowedPubkey {
@@ -879,7 +979,17 @@ func (p *P) checkRulePolicy(
 			if !allowed {
 				return false, nil
 			}
+		}
+
+		if len(rule.writeDenyBin) > 0 {
+			for _, deniedPubkey := range rule.writeDenyBin {
+				if utils.FastEqual(ev.Pubkey, deniedPubkey) {
+					return false, nil
+				}
+			}
 		} else if len(rule.WriteDeny) > 0 {
+			// Fallback: binary cache not populated, use hex comparison
+			pubkeyHex := hex.Enc(ev.Pubkey)
 			for _, deniedPubkey := range rule.WriteDeny {
 				if pubkeyHex == deniedPubkey {
 					return false, nil
@@ -887,11 +997,14 @@ func (p *P) checkRulePolicy(
 			}
 		}
 	} else if access == "read" {
-		// Check read allow/deny lists
-		if len(rule.ReadAllow) > 0 {
+		// For read access, check the logged-in user's pubkey (who is trying to READ),
+		// not the event author's pubkey
+		// Prefer binary cache for performance (3x faster than hex)
+		// Fall back to hex comparison if cache not populated (for backwards compatibility with tests)
+		if len(rule.readAllowBin) > 0 {
 			allowed = false
-			for _, allowedPubkey := range rule.ReadAllow {
-				if pubkeyHex == allowedPubkey {
+			for _, allowedPubkey := range rule.readAllowBin {
+				if utils.FastEqual(loggedInPubkey, allowedPubkey) {
 					allowed = true
 					break
 				}
@@ -899,9 +1012,32 @@ func (p *P) checkRulePolicy(
 			if !allowed {
 				return false, nil
 			}
+		} else if len(rule.ReadAllow) > 0 {
+			// Fallback: binary cache not populated, use hex comparison
+			loggedInPubkeyHex := hex.Enc(loggedInPubkey)
+			allowed = false
+			for _, allowedPubkey := range rule.ReadAllow {
+				if loggedInPubkeyHex == allowedPubkey {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				return false, nil
+			}
+		}
+
+		if len(rule.readDenyBin) > 0 {
+			for _, deniedPubkey := range rule.readDenyBin {
+				if utils.FastEqual(loggedInPubkey, deniedPubkey) {
+					return false, nil
+				}
+			}
 		} else if len(rule.ReadDeny) > 0 {
+			// Fallback: binary cache not populated, use hex comparison
+			loggedInPubkeyHex := hex.Enc(loggedInPubkey)
 			for _, deniedPubkey := range rule.ReadDeny {
-				if pubkeyHex == deniedPubkey {
+				if loggedInPubkeyHex == deniedPubkey {
 					return false, nil
 				}
 			}

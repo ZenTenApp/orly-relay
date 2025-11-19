@@ -98,6 +98,64 @@ services:
       retries: 6
       start_period: 10s
 
+  # Next.orly.dev relay with Neo4j (this repository)
+  next-orly-neo4j:
+    build:
+      context: ../..
+      dockerfile: cmd/benchmark/Dockerfile.next-orly
+    container_name: benchmark-next-orly-neo4j
+    environment:
+      - ORLY_DATA_DIR=/data
+      - ORLY_LISTEN=0.0.0.0
+      - ORLY_PORT=8080
+      - ORLY_LOG_LEVEL=off
+      - ORLY_DB_TYPE=neo4j
+      - ORLY_NEO4J_URI=bolt://neo4j:7687
+      - ORLY_NEO4J_USER=neo4j
+      - ORLY_NEO4J_PASSWORD=benchmark123
+    volumes:
+      - ./data/next-orly-neo4j:/data
+    ports:
+      - "8008:8080"
+    networks:
+      - benchmark-net
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Neo4j database
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: benchmark-neo4j
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/benchmark123
+      - NEO4J_server_memory_heap_initial__size=2G
+      - NEO4J_server_memory_heap_max__size=4G
+      - NEO4J_server_memory_pagecache_size=2G
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_dbms_security_procedures_allowlist=apoc.*
+      - NEO4JLABS_PLUGINS=["apoc"]
+    volumes:
+      - ./data/neo4j:/data
+      - ./data/neo4j-logs:/logs
+    networks:
+      - benchmark-net
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p benchmark123 'RETURN 1;' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
   # Khatru with SQLite
   khatru-sqlite:
     build:
@@ -222,6 +280,8 @@ services:
         condition: service_healthy
       next-orly-dgraph:
         condition: service_healthy
+      next-orly-neo4j:
+        condition: service_healthy
       khatru-sqlite:
         condition: service_healthy
       khatru-badger:
@@ -233,7 +293,7 @@ services:
       nostr-rs-relay:
         condition: service_healthy
     environment:
-      - BENCHMARK_TARGETS=next-orly-badger:8080,next-orly-dgraph:8080,khatru-sqlite:3334,khatru-badger:3334,relayer-basic:7447,strfry:8080,nostr-rs-relay:8080
+      - BENCHMARK_TARGETS=next-orly-badger:8080,next-orly-dgraph:8080,next-orly-neo4j:8080,khatru-sqlite:3334,khatru-badger:3334,relayer-basic:7447,strfry:8080,nostr-rs-relay:8080
       - BENCHMARK_EVENTS=50000
       - BENCHMARK_WORKERS=24
       - BENCHMARK_DURATION=60s

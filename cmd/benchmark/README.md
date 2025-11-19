@@ -2,7 +2,7 @@
 
 A comprehensive benchmarking system for testing and comparing the performance of multiple Nostr relay implementations, including:
 
-- **next.orly.dev** (this repository) - Badger and DGraph backend variants
+- **next.orly.dev** (this repository) - Badger, DGraph, and Neo4j backend variants
 - **Khatru** - SQLite and Badger variants
 - **Relayer** - Basic example implementation
 - **Strfry** - C++ LMDB-based relay
@@ -95,14 +95,16 @@ ls reports/run_YYYYMMDD_HHMMSS/
 | ------------------ | ---- | ----------------------------------------- |
 | next-orly-badger   | 8001 | This repository's Badger relay            |
 | next-orly-dgraph   | 8007 | This repository's DGraph relay            |
+| next-orly-neo4j    | 8008 | This repository's Neo4j relay             |
 | dgraph-zero        | 5080 | DGraph cluster coordinator                |
 | dgraph-alpha       | 9080 | DGraph data node                          |
+| neo4j              | 7474/7687 | Neo4j graph database                 |
 | khatru-sqlite      | 8002 | Khatru with SQLite backend                |
 | khatru-badger      | 8003 | Khatru with Badger backend                |
 | relayer-basic      | 8004 | Basic relayer example                     |
 | strfry             | 8005 | Strfry C++ LMDB relay                     |
-| nostr-rs-relay   | 8006 | Rust SQLite relay                         |
-| benchmark-runner | -    | Orchestrates tests and aggregates results |
+| nostr-rs-relay     | 8006 | Rust SQLite relay                         |
+| benchmark-runner   | -    | Orchestrates tests and aggregates results |
 
 ### File Structure
 
@@ -178,7 +180,7 @@ go build -o benchmark main.go
 
 ## Database Backend Comparison
 
-The benchmark suite includes **next.orly.dev** with two different database backends to compare architectural approaches:
+The benchmark suite includes **next.orly.dev** with three different database backends to compare architectural approaches:
 
 ### Badger Backend (next-orly-badger)
 - **Type**: Embedded key-value store
@@ -200,14 +202,28 @@ The benchmark suite includes **next.orly.dev** with two different database backe
   - Built-in replication and sharding
   - More complex deployment
 
+### Neo4j Backend (next-orly-neo4j)
+- **Type**: Native graph database
+- **Architecture**: Client-server with Neo4j Community Edition
+- **Best for**: Graph queries, relationship-heavy workloads, social network analysis
+- **Characteristics**:
+  - Optimized for relationship traversal (e.g., follow graphs, event references)
+  - Native Cypher query language for graph patterns
+  - ACID transactions with graph-native storage
+  - Network overhead from Bolt protocol
+  - Excellent for complex graph queries (finding common connections, recommendation systems)
+  - Higher memory usage for graph indexes
+  - Ideal for analytics and social graph exploration
+
 ### Comparing the Backends
 
 The benchmark results will show:
-- **Latency differences**: Embedded vs. distributed overhead
-- **Throughput trade-offs**: Single-process optimization vs. distributed scalability
+- **Latency differences**: Embedded vs. distributed overhead, graph traversal efficiency
+- **Throughput trade-offs**: Single-process optimization vs. distributed scalability vs. graph query optimization
 - **Resource usage**: Memory and CPU patterns for different architectures
+- **Query performance**: Graph queries (Neo4j) vs. key-value lookups (Badger) vs. distributed queries (DGraph)
 
-This comparison helps determine which backend is appropriate for different deployment scenarios.
+This comparison helps determine which backend is appropriate for different deployment scenarios and workload patterns.
 
 ## Benchmark Results Interpretation
 

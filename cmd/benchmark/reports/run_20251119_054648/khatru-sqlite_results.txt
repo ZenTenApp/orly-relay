@@ -1,0 +1,422 @@
+Starting Nostr Relay Benchmark (Badger Backend)
+Data Directory: /tmp/benchmark_khatru-sqlite_8
+Events: 50000, Workers: 24, Duration: 1m0s
+1763531812447164ℹ️ migrating to version 1... /build/pkg/database/migrations.go:66
+1763531812447229ℹ️ migrating to version 2... /build/pkg/database/migrations.go:73
+1763531812447253ℹ️ migrating to version 3... /build/pkg/database/migrations.go:80
+1763531812447258ℹ️ cleaning up ephemeral events (kinds 20000-29999)... /build/pkg/database/migrations.go:287
+1763531812447267ℹ️ cleaned up 0 ephemeral events from database /build/pkg/database/migrations.go:332
+1763531812447280ℹ️ migrating to version 4... /build/pkg/database/migrations.go:87
+1763531812447284ℹ️ converting events to optimized inline storage (Reiser4 optimization)... /build/pkg/database/migrations.go:340
+1763531812447299ℹ️ found 0 events to convert (0 regular, 0 replaceable, 0 addressable) /build/pkg/database/migrations.go:429
+1763531812447305ℹ️ migration complete: converted 0 events to optimized inline storage, deleted 0 old keys /build/pkg/database/migrations.go:538
+Loading real-world sample events from embedded data...
+Loading real-world sample events (11,596 events from 6 months of Nostr)...
+Loaded 11596 real-world events (already signed, zero crypto overhead)
+
+Event Statistics:
+  Total events: 11596
+  Average content size: 588 bytes
+  Event kinds found: 25 unique
+  Most common kinds:
+    Kind 1: 7152 events
+    Kind 7: 1973 events
+    Kind 6: 934 events
+    Kind 10002: 337 events
+    Kind 0: 290 events
+
+
+╔════════════════════════════════════════════════════════╗
+║         BADGER BACKEND BENCHMARK SUITE                 ║
+╚════════════════════════════════════════════════════════╝
+
+=== Starting Badger benchmark ===
+RunPeakThroughputTest (Badger)..
+
+=== Peak Throughput Test ===
+1763531812868715🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812885777🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812885785🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812885781🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812888045🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812888883🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812894492🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812894803🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812894864🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812906496🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812906886🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812907798🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812907811🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812970866🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812994211🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812994242🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531812995432🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813002343🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813002408🚨 id not found in database /build/pkg/database/save-event.go:332
+1763531813002419⚠️ failed to process deletion for event 900e73566bb098d7ec1880ec68521ef76e066b933d4d6b71dbe99ee156c4b307: id not found in database /build/pkg/database/save-event.go:333
+1763531813002352🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813002444🚨 id not found in database /build/pkg/database/save-event.go:332
+1763531813002453⚠️ failed to process deletion for event ecd7b942d5a473589b4a3bc34f0b3dadf0c6e0ba9325d7a47604167acc757d5c: id not found in database /build/pkg/database/save-event.go:333
+1763531813015072🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813021384🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813021454🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813024080🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813024096🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813028103🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813028164🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813028163🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813028172🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813029347🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813029380🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813029352🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813029730🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813030214🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813030785🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813030957🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813031557🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813035531🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813036469🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813036495🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813099067🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813562314🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813562971🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813565216🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813565216🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813567538🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813567585🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813567716🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813568218🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813568287🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813569557🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813570316🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813570360🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813570365🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813571136🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813571233🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813572029🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813572530🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813572639🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813574021🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813574064🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813574094🚨 id not found in database /build/pkg/database/save-event.go:332
+1763531813574102⚠️ failed to process deletion for event 63eae8af9f42e2d37f93b1277bcf708c94aeb8935dd83d1e8e80136c4e4f8292: id not found in database /build/pkg/database/save-event.go:333
+1763531813580239🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813580983🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813581043🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813581051🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813581057🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813582095🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813591212🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813592938🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813595510🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813595557🚨 id not found in database /build/pkg/database/save-event.go:332
+1763531813595567⚠️ failed to process deletion for event 2f5e01050c81c0d711e9f391726af47933b5fcfbe497434164069787d201e3b9: id not found in database /build/pkg/database/save-event.go:333
+1763531813596639🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813597830🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813597913🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813597995🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813598000🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813601235🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813601369🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813601858🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813603356🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813603525🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813604715🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813604863🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813605574🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813605606🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813607117🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813607278🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813607509🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813607624🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813612677🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813612797🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813614702🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813614764🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813614882🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813617726🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813623543🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813625833🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813626707🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813627647🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813632382🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813632571🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813635724🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813636426🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813636441🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813639483🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813639507🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813639674🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813639722🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813639732🚨 id not found in database /build/pkg/database/save-event.go:332
+1763531813639741⚠️ failed to process deletion for event e56f683d8a3ad6a1d7ed41f50bf2739179ac8f6e1418ff34e5e20903172237ea: id not found in database /build/pkg/database/save-event.go:333
+1763531813640713🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813643809🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813644009🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813647476🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813647510🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813647627🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813648800🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813648916🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813650458🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813651830🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813651871🚨 id not found in database /build/pkg/database/save-event.go:332
+1763531813651882⚠️ failed to process deletion for event 4b07094ff22787f584f5ceddc11ae44c66ab513d01d7529e156d6adb75323eca: id not found in database /build/pkg/database/save-event.go:333
+1763531813652883🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813652944🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813653924🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813659588🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813659716🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813659733🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813660461🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813660671🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813660696🚨 id not found in database /build/pkg/database/save-event.go:332
+1763531813660706⚠️ failed to process deletion for event 59475e9f41d77977a2b2c0d9acf7c32bad368dafdeab1e8f7be8cf0fe0e00ceb: id not found in database /build/pkg/database/save-event.go:333
+1763531813665655🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813667093🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813669863🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813669986🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813670282🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813717436🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813717882🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813717901🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813718988🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813719942🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813721821🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813738580🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813738746🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813739264🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813748490🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813759607🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813759605🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813760687🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813762309🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813765035🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813765052🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813765323🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813765579🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813765764🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813766675🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813766899🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813767155🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813767196🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813772016🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813772674🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813776484🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813776639🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813778873🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813779242🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813779285🚨 id not found in database /build/pkg/database/save-event.go:332
+1763531813779295⚠️ failed to process deletion for event bd502ba9dc5c173b3b82708561f35118e2ca580f9c7e5baffceccdd9f6502462: id not found in database /build/pkg/database/save-event.go:333
+1763531813779456🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813779483🚨 id not found in database /build/pkg/database/save-event.go:332
+1763531813779497⚠️ failed to process deletion for event 961a3d9582d896fcd8755ccc634b7846e549131284740f6fec0d635d0bb072af: id not found in database /build/pkg/database/save-event.go:333
+1763531813779697🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813780185🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813781185🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813785435🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813786078🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813787727🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813788738🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813788858🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813791644🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813791838🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813791870🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813792007🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813792229🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813793643🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813795596🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813796358🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813797479🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813798679🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813800350🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813800531🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813800925🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813800936🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813800925🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813803971🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813803969🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813804958🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813806100🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813817052🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813817048🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813818064🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813818135🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813818275🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813818876🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813818912🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813819267🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813819296🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813819709🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813820510🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813820746🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813821066🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813821216🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813821322🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813821776🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813822026🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813822031🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813826902🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813827998🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813828498🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813828596🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813828687🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813828721🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813828601🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813829312🚨 id not found in database /build/pkg/database/process-delete.go:43
+1763531813830658🚨 id not found in database /build/pkg/database/process-delete.go:43
+Events saved: 11596/50000 (23.2%), errors: 38404
+Duration: 4.081787895s
+Events/sec: 2840.91
+Avg latency: 4.23095ms
+P90 latency: 3.400435ms
+P95 latency: 4.703046ms
+P99 latency: 81.047331ms
+Bottom 10% Avg latency: 1.142932ms
+Wiping database between tests...
+RunBurstPatternTest (Badger)..
+
+=== Burst Pattern Test ===
+Burst completed: 5000 events in 346.663376ms
+Burst completed: 5000 events in 333.067587ms
+Burst completed: 5000 events in 330.484528ms
+Burst completed: 5000 events in 338.487447ms
+Burst completed: 5000 events in 341.447764ms
+Burst completed: 5000 events in 364.127901ms
+Burst completed: 5000 events in 344.947769ms
+Burst completed: 5000 events in 341.432775ms
+Burst completed: 5000 events in 347.698657ms
+Burst completed: 5000 events in 341.10947ms
+Burst test completed: 0 events in 8.436449617s, errors: 50000
+Events/sec: 0.00
+Wiping database between tests...
+RunMixedReadWriteTest (Badger)..
+
+=== Mixed Read/Write Test ===
+Pre-populating database for read tests...
+Mixed test completed: 0 writes, 25000 reads in 22.467041454s
+Combined ops/sec: 1112.74
+Wiping database between tests...
+RunQueryTest (Badger)..
+
+=== Query Test ===
+Pre-populating database with 10000 events for query tests...
+Query test completed: 408433 queries in 1m0.005096356s
+Queries/sec: 6806.64
+Avg query latency: 1.551089ms
+P95 query latency: 5.244046ms
+P99 query latency: 9.025085ms
+Wiping database between tests...
+RunConcurrentQueryStoreTest (Badger)..
+
+=== Concurrent Query/Store Test ===
+Pre-populating database with 5000 events for concurrent query/store test...
+Concurrent test completed: 564551 operations (564551 queries, 0 writes) in 1m0.000283858s
+Operations/sec: 9409.14
+Avg latency: 45.619µs
+Avg query latency: 45.619µs
+Avg write latency: 0s
+P95 latency: 87.236µs
+P99 latency: 130.949µs
+
+=== Badger benchmark completed ===
+
+
+================================================================================
+BENCHMARK REPORT
+================================================================================
+
+Test: Peak Throughput
+Duration: 4.081787895s
+Total Events: 11596
+Events/sec: 2840.91
+Success Rate: 23.2%
+Concurrent Workers: 24
+Memory Used: 384 MB
+Avg Latency: 4.23095ms
+P90 Latency: 3.400435ms
+P95 Latency: 4.703046ms
+P99 Latency: 81.047331ms
+Bottom 10% Avg Latency: 1.142932ms
+----------------------------------------
+
+Test: Burst Pattern
+Duration: 8.436449617s
+Total Events: 0
+Events/sec: 0.00
+Success Rate: 0.0%
+Concurrent Workers: 24
+Memory Used: 215 MB
+Avg Latency: 0s
+P90 Latency: 0s
+P95 Latency: 0s
+P99 Latency: 0s
+Bottom 10% Avg Latency: 0s
+----------------------------------------
+
+Test: Mixed Read/Write
+Duration: 22.467041454s
+Total Events: 25000
+Events/sec: 1112.74
+Success Rate: 50.0%
+Concurrent Workers: 24
+Memory Used: 385 MB
+Avg Latency: 82.061µs
+P90 Latency: 102.695µs
+P95 Latency: 113.897µs
+P99 Latency: 140.147µs
+Bottom 10% Avg Latency: 129.144µs
+Errors (25000):
+  - blocked: event already exists: 06061b630fd0881cbe7ed02114584fea59b9621c2e9479e6e6aa2be561240a90
+  - blocked: event already exists: 048d7b07155b3832a76eac0b46bea764cac3597dfbc28b559698d51f915cb6d1
+  - blocked: event already exists: 0ea6723d131534cf6e2209169a518c4bc598e3acad0618c2ef34df34c867cca1
+  - blocked: event already exists: 0312061d336fd22dc64b98130663835242e4479c54c7ca88b72c3b3093ef29a2
+  - blocked: event already exists: 11aa0b6defe3d58cef2f93c06fb194bc72241f17fb35312594d279f6c8f13d44
+  ... and 24995 more errors
+----------------------------------------
+
+Test: Query Performance
+Duration: 1m0.005096356s
+Total Events: 408433
+Events/sec: 6806.64
+Success Rate: 100.0%
+Concurrent Workers: 24
+Memory Used: 366 MB
+Avg Latency: 1.551089ms
+P90 Latency: 4.323112ms
+P95 Latency: 5.244046ms
+P99 Latency: 9.025085ms
+Bottom 10% Avg Latency: 6.133631ms
+----------------------------------------
+
+Test: Concurrent Query/Store
+Duration: 1m0.000283858s
+Total Events: 564551
+Events/sec: 9409.14
+Success Rate: 100.0%
+Concurrent Workers: 24
+Memory Used: 353 MB
+Avg Latency: 45.619µs
+P90 Latency: 77.388µs
+P95 Latency: 87.236µs
+P99 Latency: 130.949µs
+Bottom 10% Avg Latency: 98.767µs
+Errors (50000):
+  - blocked: event already exists: 01e9943cf5e805283c512b9c26cf69f7e9ff412710d7543a3a52dc93ac7e8a57
+  - blocked: event already exists: 00a5f5f6c7f1c4e6f71ab7df2c056e238ccd9b441e59ddf119d7ab7f1d7510e0
+  - blocked: event already exists: 0312061d336fd22dc64b98130663835242e4479c54c7ca88b72c3b3093ef29a2
+  - blocked: event already exists: 03edc6b095b2a314733ea3dc689bb54e8739d443e9e69dd61334a5d376bf72a4
+  - blocked: event already exists: 0ea6723d131534cf6e2209169a518c4bc598e3acad0618c2ef34df34c867cca1
+  ... and 49995 more errors
+----------------------------------------
+
+Report saved to: /tmp/benchmark_khatru-sqlite_8/benchmark_report.txt
+AsciiDoc report saved to: /tmp/benchmark_khatru-sqlite_8/benchmark_report.adoc
+
+RELAY_NAME: khatru-sqlite
+RELAY_URL: ws://khatru-sqlite:3334
+TEST_TIMESTAMP: 2025-11-19T06:00:08+00:00
+BENCHMARK_CONFIG:
+  Events: 50000
+  Workers: 24
+  Duration: 60s

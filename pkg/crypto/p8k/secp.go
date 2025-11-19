@@ -3,14 +3,20 @@
 package secp
 
 import (
+	_ "embed"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"unsafe"
 
 	"github.com/ebitengine/purego"
 )
+
+//go:embed libsecp256k1.so
+var embeddedLibLinux []byte
 
 // Constants for context flags
 const (
@@ -40,9 +46,11 @@ const (
 )
 
 var (
-	libHandle   uintptr
-	loadLibOnce sync.Once
-	loadLibErr  error
+	libHandle      uintptr
+	loadLibOnce    sync.Once
+	loadLibErr     error
+	extractedPath  string
+	extractLibOnce sync.Once
 )
 
 // Function pointers
@@ -83,69 +91,132 @@ var (
 	xonlyPubkeyFromPubkey func(ctx uintptr, xonlyPubkey *byte, pkParity *int32, pubkey *byte) int32
 )
 
+// extractEmbeddedLibrary extracts the embedded library to a temporary location
+func extractEmbeddedLibrary() (path string, err error) {
+	extractLibOnce.Do(func() {
+		var libData []byte
+		var filename string
+
+		// Select the appropriate embedded library for this platform
+		switch runtime.GOOS {
+		case "linux":
+			if len(embeddedLibLinux) == 0 {
+				err = fmt.Errorf("no embedded library for linux")
+				return
+			}
+			libData = embeddedLibLinux
+			filename = "libsecp256k1.so"
+		default:
+			err = fmt.Errorf("no embedded library for %s", runtime.GOOS)
+			return
+		}
+
+		// Create a temporary directory for the library
+		// Use a deterministic name so we don't create duplicates
+		tmpDir := filepath.Join(os.TempDir(), "orly-libsecp256k1")
+		if err = os.MkdirAll(tmpDir, 0755); err != nil {
+			err = fmt.Errorf("failed to create temp directory: %w", err)
+			return
+		}
+
+		// Write the library to the temp directory
+		extractedPath = filepath.Join(tmpDir, filename)
+
+		// Check if file already exists and is valid
+		if info, e := os.Stat(extractedPath); e == nil && info.Size() == int64(len(libData)) {
+			// File exists and has correct size, assume it's valid
+			return
+		}
+
+		if err = os.WriteFile(extractedPath, libData, 0755); err != nil {
+			err = fmt.Errorf("failed to write library to %s: %w", extractedPath, err)
+			return
+		}
+
+		log.Printf("INFO: Extracted embedded libsecp256k1 to %s", extractedPath)
+	})
+
+	return extractedPath, err
+}
+
 // LoadLibrary loads the libsecp256k1 shared library
 func LoadLibrary() (err error) {
 	loadLibOnce.Do(func() {
 		var libPath string
 
-		// Try to find the library
-		switch runtime.GOOS {
-		case "linux":
-			// Try common library paths
-			// For linux/amd64, try the bundled library first
-			paths := []string{
-				"./libsecp256k1.so", // Bundled in repo for linux amd64
-				"libsecp256k1.so.5",
-				"libsecp256k1.so.2",
-				"libsecp256k1.so.1",
-				"libsecp256k1.so.0",
-				"libsecp256k1.so",
-				"/usr/lib/libsecp256k1.so",
-				"/usr/local/lib/libsecp256k1.so",
-				"/usr/lib/x86_64-linux-gnu/libsecp256k1.so",
+		// First, try to extract and use the embedded library
+		usedEmbedded := false
+		if embeddedPath, extractErr := extractEmbeddedLibrary(); extractErr == nil {
+			libHandle, err = purego.Dlopen(embeddedPath, purego.RTLD_NOW|purego.RTLD_GLOBAL)
+			if err == nil {
+				libPath = embeddedPath
+				usedEmbedded = true
+			} else {
+				log.Printf("WARN: Failed to load embedded library from %s: %v, falling back to system paths", embeddedPath, err)
 			}
-			for _, p := range paths {
-				libHandle, err = purego.Dlopen(p, purego.RTLD_NOW|purego.RTLD_GLOBAL)
-				if err == nil {
-					libPath = p
-					break
+		} else {
+			log.Printf("WARN: Failed to extract embedded library: %v, falling back to system paths", extractErr)
+		}
+
+		// If embedded library failed, fall back to system paths
+		if err != nil {
+			switch runtime.GOOS {
+			case "linux":
+				// Try common library paths
+				paths := []string{
+					"./libsecp256k1.so", // Bundled in repo for linux amd64
+					"libsecp256k1.so.5",
+					"libsecp256k1.so.2",
+					"libsecp256k1.so.1",
+					"libsecp256k1.so.0",
+					"libsecp256k1.so",
+					"/usr/lib/libsecp256k1.so",
+					"/usr/local/lib/libsecp256k1.so",
+					"/usr/lib/x86_64-linux-gnu/libsecp256k1.so",
 				}
-			}
-		case "darwin":
-			paths := []string{
-				"libsecp256k1.2.dylib",
-				"libsecp256k1.1.dylib",
-				"libsecp256k1.0.dylib",
-				"libsecp256k1.dylib",
-				"/usr/local/lib/libsecp256k1.dylib",
-				"/opt/homebrew/lib/libsecp256k1.dylib",
-			}
-			for _, p := range paths {
-				libHandle, err = purego.Dlopen(p, purego.RTLD_NOW|purego.RTLD_GLOBAL)
-				if err == nil {
-					libPath = p
-					break
+				for _, p := range paths {
+					libHandle, err = purego.Dlopen(p, purego.RTLD_NOW|purego.RTLD_GLOBAL)
+					if err == nil {
+						libPath = p
+						break
+					}
 				}
-			}
-		case "windows":
-			paths := []string{
-				"libsecp256k1-2.dll",
-				"libsecp256k1-1.dll",
-				"libsecp256k1-0.dll",
-				"libsecp256k1.dll",
-				"secp256k1.dll",
-			}
-			for _, p := range paths {
-				libHandle, err = purego.Dlopen(p, purego.RTLD_NOW|purego.RTLD_GLOBAL)
-				if err == nil {
-					libPath = p
-					break
+			case "darwin":
+				paths := []string{
+					"libsecp256k1.2.dylib",
+					"libsecp256k1.1.dylib",
+					"libsecp256k1.0.dylib",
+					"libsecp256k1.dylib",
+					"/usr/local/lib/libsecp256k1.dylib",
+					"/opt/homebrew/lib/libsecp256k1.dylib",
 				}
+				for _, p := range paths {
+					libHandle, err = purego.Dlopen(p, purego.RTLD_NOW|purego.RTLD_GLOBAL)
+					if err == nil {
+						libPath = p
+						break
+					}
+				}
+			case "windows":
+				paths := []string{
+					"libsecp256k1-2.dll",
+					"libsecp256k1-1.dll",
+					"libsecp256k1-0.dll",
+					"libsecp256k1.dll",
+					"secp256k1.dll",
+				}
+				for _, p := range paths {
+					libHandle, err = purego.Dlopen(p, purego.RTLD_NOW|purego.RTLD_GLOBAL)
+					if err == nil {
+						libPath = p
+						break
+					}
+				}
+			default:
+				err = fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+				loadLibErr = err
+				return
 			}
-		default:
-			err = fmt.Errorf("unsupported platform: %s", runtime.GOOS)
-			loadLibErr = err
-			return
 		}
 
 		if err != nil {
@@ -159,7 +230,11 @@ func LoadLibrary() (err error) {
 			return
 		}
 
-		log.Printf("INFO: Successfully loaded libsecp256k1 v5.0.0 from %s", libPath)
+		if usedEmbedded {
+			log.Printf("INFO: Successfully loaded embedded libsecp256k1 v5.0.0 from %s", libPath)
+		} else {
+			log.Printf("INFO: Successfully loaded libsecp256k1 v5.0.0 from system path: %s", libPath)
+		}
 		loadLibErr = nil
 	})
 
