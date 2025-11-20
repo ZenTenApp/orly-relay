@@ -148,12 +148,20 @@ func GetIndexesFromFilter(f *filter.F) (idxs []Range, err error) {
 
 	// Filter out special tags that shouldn't affect index selection
 	var filteredTags *tag.S
+	var pTags *tag.S // Separate collection for p-tags that can use graph index
 	if f.Tags != nil && f.Tags.Len() > 0 {
 		filteredTags = tag.NewSWithCap(f.Tags.Len())
+		pTags = tag.NewS()
 		for _, t := range *f.Tags {
 			// Skip the special "show_all_versions" tag
 			if bytes.Equal(t.Key(), []byte("show_all_versions")) {
 				continue
+			}
+			// Collect p-tags separately for potential graph optimization
+			keyBytes := t.Key()
+			if (len(keyBytes) == 1 && keyBytes[0] == 'p') ||
+			   (len(keyBytes) == 2 && keyBytes[0] == '#' && keyBytes[1] == 'p') {
+				pTags.Append(t)
 			}
 			filteredTags.Append(t)
 		}
@@ -162,6 +170,9 @@ func GetIndexesFromFilter(f *filter.F) (idxs []Range, err error) {
 			sort.Sort(filteredTags)
 		}
 	}
+
+	// Note: P-tag graph optimization is handled in query-for-ptag-graph.go
+	// when appropriate (requires database context for serial lookup)
 
 	// TagKindPubkey tkp
 	if f.Kinds != nil && f.Kinds.Len() > 0 && f.Authors != nil && f.Authors.Len() > 0 && filteredTags != nil && filteredTags.Len() > 0 {

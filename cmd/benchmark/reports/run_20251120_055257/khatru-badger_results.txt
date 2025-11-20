@@ -1,0 +1,194 @@
+Starting Nostr Relay Benchmark (Badger Backend)
+Data Directory: /tmp/benchmark_khatru-badger_8
+Events: 50000, Workers: 24, Duration: 1m0s
+1763618786076815ℹ️ migrating to version 1... /build/pkg/database/migrations.go:66
+1763618786076877ℹ️ migrating to version 2... /build/pkg/database/migrations.go:73
+1763618786076947ℹ️ migrating to version 3... /build/pkg/database/migrations.go:80
+1763618786076977ℹ️ cleaning up ephemeral events (kinds 20000-29999)... /build/pkg/database/migrations.go:287
+1763618786076987ℹ️ cleaned up 0 ephemeral events from database /build/pkg/database/migrations.go:332
+1763618786077003ℹ️ migrating to version 4... /build/pkg/database/migrations.go:87
+1763618786077008ℹ️ converting events to optimized inline storage (Reiser4 optimization)... /build/pkg/database/migrations.go:340
+1763618786077019ℹ️ found 0 events to convert (0 regular, 0 replaceable, 0 addressable) /build/pkg/database/migrations.go:429
+1763618786077024ℹ️ migration complete: converted 0 events to optimized inline storage, deleted 0 old keys /build/pkg/database/migrations.go:538
+
+╔════════════════════════════════════════════════════════╗
+║         BADGER BACKEND BENCHMARK SUITE                 ║
+╚════════════════════════════════════════════════════════╝
+
+=== Starting Badger benchmark ===
+RunPeakThroughputTest (Badger)..
+
+=== Peak Throughput Test ===
+2025/11/20 06:06:26 WARN: Failed to load embedded library from /tmp/orly-libsecp256k1/libsecp256k1.so: Error relocating /tmp/orly-libsecp256k1/libsecp256k1.so: __fprintf_chk: symbol not found, falling back to system paths
+2025/11/20 06:06:26 INFO: Successfully loaded libsecp256k1 v5.0.0 from system path: libsecp256k1.so.2
+Events saved: 50000/50000 (100.0%), errors: 0
+Duration: 2.763121055s
+Events/sec: 18095.48
+Avg latency: 1.143282ms
+P90 latency: 1.487084ms
+P95 latency: 1.721751ms
+P99 latency: 2.433718ms
+Bottom 10% Avg latency: 651.813µs
+Wiping database between tests...
+RunBurstPatternTest (Badger)..
+
+=== Burst Pattern Test ===
+Burst completed: 5000 events in 279.242515ms
+Burst completed: 5000 events in 302.441404ms
+Burst completed: 5000 events in 261.238216ms
+Burst completed: 5000 events in 289.601428ms
+Burst completed: 5000 events in 278.55583ms
+Burst completed: 5000 events in 410.332505ms
+Burst completed: 5000 events in 343.055357ms
+Burst completed: 5000 events in 264.436385ms
+Burst completed: 5000 events in 291.690093ms
+Burst completed: 5000 events in 258.542866ms
+Burst test completed: 50000 events in 7.986045814s, errors: 0
+Events/sec: 6260.92
+Wiping database between tests...
+RunMixedReadWriteTest (Badger)..
+
+=== Mixed Read/Write Test ===
+Generating 1000 unique synthetic events (minimum 300 bytes each)...
+Generated 1000 events:
+  Average content size: 312 bytes
+  All events are unique (incremental timestamps)
+  All events are properly signed
+
+Pre-populating database for read tests...
+Generating 50000 unique synthetic events (minimum 300 bytes each)...
+Generated 50000 events:
+  Average content size: 314 bytes
+  All events are unique (incremental timestamps)
+  All events are properly signed
+
+Mixed test completed: 25000 writes, 25000 reads in 24.456214964s
+Combined ops/sec: 2044.47
+Wiping database between tests...
+RunQueryTest (Badger)..
+
+=== Query Test ===
+Generating 10000 unique synthetic events (minimum 300 bytes each)...
+Generated 10000 events:
+  Average content size: 313 bytes
+  All events are unique (incremental timestamps)
+  All events are properly signed
+
+Pre-populating database with 10000 events for query tests...
+Query test completed: 417411 queries in 1m0.006481017s
+Queries/sec: 6956.10
+Avg query latency: 1.593183ms
+P95 query latency: 6.184979ms
+P99 query latency: 9.84781ms
+Wiping database between tests...
+RunConcurrentQueryStoreTest (Badger)..
+
+=== Concurrent Query/Store Test ===
+Generating 5000 unique synthetic events (minimum 300 bytes each)...
+Generated 5000 events:
+  Average content size: 313 bytes
+  All events are unique (incremental timestamps)
+  All events are properly signed
+
+Pre-populating database with 5000 events for concurrent query/store test...
+Generating 50000 unique synthetic events (minimum 300 bytes each)...
+Generated 50000 events:
+  Average content size: 314 bytes
+  All events are unique (incremental timestamps)
+  All events are properly signed
+
+Concurrent test completed: 325932 operations (275932 queries, 50000 writes) in 1m0.003734546s
+Operations/sec: 5431.86
+Avg latency: 1.403237ms
+Avg query latency: 1.376383ms
+Avg write latency: 1.55144ms
+P95 latency: 3.479172ms
+P99 latency: 5.834682ms
+
+=== Badger benchmark completed ===
+
+
+================================================================================
+BENCHMARK REPORT
+================================================================================
+
+Test: Peak Throughput
+Duration: 2.763121055s
+Total Events: 50000
+Events/sec: 18095.48
+Success Rate: 100.0%
+Concurrent Workers: 24
+Memory Used: 90 MB
+Avg Latency: 1.143282ms
+P90 Latency: 1.487084ms
+P95 Latency: 1.721751ms
+P99 Latency: 2.433718ms
+Bottom 10% Avg Latency: 651.813µs
+----------------------------------------
+
+Test: Burst Pattern
+Duration: 7.986045814s
+Total Events: 50000
+Events/sec: 6260.92
+Success Rate: 100.0%
+Concurrent Workers: 24
+Memory Used: 160 MB
+Avg Latency: 1.203274ms
+P90 Latency: 1.822603ms
+P95 Latency: 2.200764ms
+P99 Latency: 3.362057ms
+Bottom 10% Avg Latency: 456.813µs
+----------------------------------------
+
+Test: Mixed Read/Write
+Duration: 24.456214964s
+Total Events: 50000
+Events/sec: 2044.47
+Success Rate: 100.0%
+Concurrent Workers: 24
+Memory Used: 146 MB
+Avg Latency: 371.63µs
+P90 Latency: 776.991µs
+P95 Latency: 865.67µs
+P99 Latency: 1.069839ms
+Bottom 10% Avg Latency: 1.010599ms
+----------------------------------------
+
+Test: Query Performance
+Duration: 1m0.006481017s
+Total Events: 417411
+Events/sec: 6956.10
+Success Rate: 100.0%
+Concurrent Workers: 24
+Memory Used: 105 MB
+Avg Latency: 1.593183ms
+P90 Latency: 4.714556ms
+P95 Latency: 6.184979ms
+P99 Latency: 9.84781ms
+Bottom 10% Avg Latency: 6.905275ms
+----------------------------------------
+
+Test: Concurrent Query/Store
+Duration: 1m0.003734546s
+Total Events: 325932
+Events/sec: 5431.86
+Success Rate: 100.0%
+Concurrent Workers: 24
+Memory Used: 117 MB
+Avg Latency: 1.403237ms
+P90 Latency: 2.762476ms
+P95 Latency: 3.479172ms
+P99 Latency: 5.834682ms
+Bottom 10% Avg Latency: 4.060934ms
+----------------------------------------
+
+Report saved to: /tmp/benchmark_khatru-badger_8/benchmark_report.txt
+AsciiDoc report saved to: /tmp/benchmark_khatru-badger_8/benchmark_report.adoc
+
+RELAY_NAME: khatru-badger
+RELAY_URL: ws://khatru-badger:3334
+TEST_TIMESTAMP: 2025-11-20T06:09:43+00:00
+BENCHMARK_CONFIG:
+  Events: 50000
+  Workers: 24
+  Duration: 60s

@@ -31,6 +31,18 @@ var (
 func (d *D) GetSerialsFromFilter(f *filter.F) (
 	sers types.Uint40s, err error,
 ) {
+	// Try p-tag graph optimization first
+	if CanUsePTagGraph(f) {
+		log.D.F("GetSerialsFromFilter: trying p-tag graph optimization")
+		if sers, err = d.QueryPTagGraph(f); err == nil && len(sers) >= 0 {
+			log.D.F("GetSerialsFromFilter: p-tag graph optimization returned %d serials", len(sers))
+			return
+		}
+		// Fall through to traditional indexes on error
+		log.D.F("GetSerialsFromFilter: p-tag graph optimization failed, falling back to traditional indexes: %v", err)
+		err = nil
+	}
+
 	var idxs []Range
 	if idxs, err = GetIndexesFromFilter(f); chk.E(err) {
 		return
