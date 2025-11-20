@@ -7,6 +7,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/encoders/event"
 	"next.orly.dev/pkg/encoders/filter"
 )
 
@@ -399,4 +400,187 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// GetEvents retrieves cached events for a filter (decompresses and deserializes on the fly)
+// This is the new method that returns event.E objects instead of marshaled JSON
+func (c *EventCache) GetEvents(f *filter.F) (events []*event.E, found bool) {
+	// Normalize filter by sorting to ensure consistent cache keys
+	f.Sort()
+	filterKey := string(f.Serialize())
+
+	c.mu.RLock()
+	entry, exists := c.entries[filterKey]
+	if !exists {
+		c.mu.RUnlock()
+		c.mu.Lock()
+		c.misses++
+		c.mu.Unlock()
+		return nil, false
+	}
+
+	// Check if entry is expired
+	if time.Since(entry.CreatedAt) > c.maxAge {
+		c.mu.RUnlock()
+		c.mu.Lock()
+		c.removeEntry(entry)
+		c.misses++
+		c.mu.Unlock()
+		return nil, false
+	}
+
+	// Decompress
+	decompressed, err := c.decoder.DecodeAll(entry.CompressedData, nil)
+	c.mu.RUnlock()
+	if err != nil {
+		log.E.F("failed to decompress cached events: %v", err)
+		c.mu.Lock()
+		c.removeEntry(entry)
+		c.misses++
+		c.mu.Unlock()
+		return nil, false
+	}
+
+	// Deserialize events from newline-delimited JSON
+	events = make([]*event.E, 0, entry.EventCount)
+	start := 0
+	for i, b := range decompressed {
+		if b == '\n' {
+			if i > start {
+				ev := event.New()
+				if _, err := ev.Unmarshal(decompressed[start:i]); err != nil {
+					log.E.F("failed to unmarshal cached event: %v", err)
+					c.mu.Lock()
+					c.removeEntry(entry)
+					c.misses++
+					c.mu.Unlock()
+					return nil, false
+				}
+				events = append(events, ev)
+			}
+			start = i + 1
+		}
+	}
+
+	// Handle last event if no trailing newline
+	if start < len(decompressed) {
+		ev := event.New()
+		if _, err := ev.Unmarshal(decompressed[start:]); err != nil {
+			log.E.F("failed to unmarshal cached event: %v", err)
+			c.mu.Lock()
+			c.removeEntry(entry)
+			c.misses++
+			c.mu.Unlock()
+			return nil, false
+		}
+		events = append(events, ev)
+	}
+
+	// Update access time and move to front
+	c.mu.Lock()
+	entry.LastAccess = time.Now()
+	c.lruList.MoveToFront(entry.listElement)
+	c.hits++
+	c.mu.Unlock()
+
+	log.D.F("event cache HIT: filter=%s events=%d compressed=%d uncompressed=%d ratio=%.2f",
+		filterKey[:min(50, len(filterKey))], entry.EventCount, entry.CompressedSize,
+		entry.UncompressedSize, float64(entry.UncompressedSize)/float64(entry.CompressedSize))
+
+	return events, true
+}
+
+// PutEvents stores events in the cache with ZSTD compression
+// This should be called AFTER events are sent to the client
+func (c *EventCache) PutEvents(f *filter.F, events []*event.E) {
+	if len(events) == 0 {
+		return
+	}
+
+	// Normalize filter by sorting to ensure consistent cache keys
+	f.Sort()
+	filterKey := string(f.Serialize())
+
+	// Serialize all events as newline-delimited JSON for compression
+	totalSize := 0
+	for _, ev := range events {
+		totalSize += ev.EstimateSize() + 1 // +1 for newline
+	}
+
+	uncompressed := make([]byte, 0, totalSize)
+	for _, ev := range events {
+		uncompressed = ev.Marshal(uncompressed)
+		uncompressed = append(uncompressed, '\n')
+	}
+
+	// Compress with ZSTD level 9
+	compressed := c.encoder.EncodeAll(uncompressed, nil)
+	compressedSize := len(compressed)
+
+	// Don't cache if compressed size is still too large
+	if int64(compressedSize) > c.maxSize {
+		log.W.F("event cache: compressed entry too large: %d bytes", compressedSize)
+		return
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Check if already exists
+	if existing, exists := c.entries[filterKey]; exists {
+		c.currentSize -= int64(existing.CompressedSize)
+		existing.CompressedData = compressed
+		existing.UncompressedSize = len(uncompressed)
+		existing.CompressedSize = compressedSize
+		existing.EventCount = len(events)
+		existing.LastAccess = time.Now()
+		existing.CreatedAt = time.Now()
+		c.currentSize += int64(compressedSize)
+		c.lruList.MoveToFront(existing.listElement)
+		c.updateCompressionRatio(len(uncompressed), compressedSize)
+		log.T.F("event cache UPDATE: filter=%s events=%d ratio=%.2f",
+			filterKey[:min(50, len(filterKey))], len(events),
+			float64(len(uncompressed))/float64(compressedSize))
+		return
+	}
+
+	// Evict if necessary
+	evictionCount := 0
+	for c.currentSize+int64(compressedSize) > c.maxSize && c.lruList.Len() > 0 {
+		oldest := c.lruList.Back()
+		if oldest != nil {
+			oldEntry := oldest.Value.(*EventCacheEntry)
+			c.removeEntry(oldEntry)
+			c.evictions++
+			evictionCount++
+		}
+	}
+
+	if evictionCount > 0 {
+		c.needsCompaction = true
+		select {
+		case c.compactionChan <- struct{}{}:
+		default:
+		}
+	}
+
+	// Create new entry
+	entry := &EventCacheEntry{
+		FilterKey:        filterKey,
+		CompressedData:   compressed,
+		UncompressedSize: len(uncompressed),
+		CompressedSize:   compressedSize,
+		EventCount:       len(events),
+		LastAccess:       time.Now(),
+		CreatedAt:        time.Now(),
+	}
+
+	entry.listElement = c.lruList.PushFront(entry)
+	c.entries[filterKey] = entry
+	c.currentSize += int64(compressedSize)
+	c.updateCompressionRatio(len(uncompressed), compressedSize)
+
+	log.D.F("event cache PUT: filter=%s events=%d uncompressed=%d compressed=%d ratio=%.2f total=%d/%d",
+		filterKey[:min(50, len(filterKey))], len(events), len(uncompressed), compressedSize,
+		float64(len(uncompressed))/float64(compressedSize), c.currentSize, c.maxSize)
 }

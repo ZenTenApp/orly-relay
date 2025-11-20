@@ -16,6 +16,7 @@ import (
 	"lol.mleku.dev"
 	"lol.mleku.dev/chk"
 	"next.orly.dev/pkg/database"
+	"next.orly.dev/pkg/encoders/event"
 	"next.orly.dev/pkg/encoders/filter"
 	"next.orly.dev/pkg/utils/apputil"
 )
@@ -283,4 +284,6 @@ func (d *D) warmup() {
 }
 func (d *D) GetCachedJSON(f *filter.F) ([][]byte, bool)              { return nil, false }
 func (d *D) CacheMarshaledJSON(f *filter.F, marshaledJSON [][]byte)  {}
+func (d *D) GetCachedEvents(f *filter.F) (event.S, bool)             { return nil, false }
+func (d *D) CacheEvents(f *filter.F, events event.S)                 {}
 func (d *D) InvalidateQueryCache()                                    {}

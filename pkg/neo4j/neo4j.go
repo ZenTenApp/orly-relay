@@ -13,6 +13,7 @@ import (
 	"lol.mleku.dev"
 	"lol.mleku.dev/chk"
 	"next.orly.dev/pkg/database"
+	"next.orly.dev/pkg/encoders/event"
 	"next.orly.dev/pkg/encoders/filter"
 	"next.orly.dev/pkg/utils/apputil"
 )
@@ -272,6 +273,12 @@ func (n *N) GetCachedJSON(f *filter.F) ([][]byte, bool) { return nil, false }
 
 // CacheMarshaledJSON caches marshaled JSON results (not implemented for Neo4j)
 func (n *N) CacheMarshaledJSON(f *filter.F, marshaledJSON [][]byte) {}
+
+// GetCachedEvents retrieves cached events (not implemented for Neo4j)
+func (n *N) GetCachedEvents(f *filter.F) (event.S, bool) { return nil, false }
+
+// CacheEvents caches events (not implemented for Neo4j)
+func (n *N) CacheEvents(f *filter.F, events event.S) {}
 
 // InvalidateQueryCache invalidates the query cache (not implemented for Neo4j)
 func (n *N) InvalidateQueryCache() {}

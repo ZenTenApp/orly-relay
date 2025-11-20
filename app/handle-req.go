@@ -155,11 +155,15 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 	// Multi-filter queries are not cached as they're more complex
 	if len(*env.Filters) == 1 && env.Filters != nil {
 		f := (*env.Filters)[0]
-		if cachedJSON, found := l.DB.GetCachedJSON(f); found {
-			log.D.F("REQ %s: cache HIT, sending %d cached events", env.Subscription, len(cachedJSON))
-			// Send cached JSON directly
-			for _, jsonEnvelope := range cachedJSON {
-				if _, err = l.Write(jsonEnvelope); err != nil {
+		if cachedEvents, found := l.DB.GetCachedEvents(f); found {
+			log.D.F("REQ %s: cache HIT, sending %d cached events", env.Subscription, len(cachedEvents))
+			// Wrap cached events with current subscription ID
+			for _, ev := range cachedEvents {
+				var res *eventenvelope.Result
+				if res, err = eventenvelope.NewResultWith(env.Subscription, ev); chk.E(err) {
+					return
+				}
+				if err = res.Write(l); err != nil {
 					if !strings.Contains(err.Error(), "context canceled") {
 						chk.E(err)
 					}
@@ -171,7 +175,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 				return
 			}
 			// Don't create subscription for cached results with satisfied limits
-			if f.Limit != nil && len(cachedJSON) >= int(*f.Limit) {
+			if f.Limit != nil && len(cachedEvents) >= int(*f.Limit) {
 				log.D.F("REQ %s: limit satisfied by cache, not creating subscription", env.Subscription)
 				return
 			}
@@ -551,8 +555,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 	events = privateFilteredEvents
 
 	seen := make(map[string]struct{})
-	// Collect marshaled JSON for caching (only for single-filter queries)
-	var marshaledForCache [][]byte
+	// Cache events for single-filter queries (without subscription ID)
 	shouldCache := len(*env.Filters) == 1 && len(events) > 0
 
 	for _, ev := range events {
@@ -576,17 +579,6 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 			return
 		}
 
-		// Get serialized envelope for caching
-		if shouldCache {
-			serialized := res.Marshal(nil)
-			if len(serialized) > 0 {
-				// Make a copy for the cache
-				cacheCopy := make([]byte, len(serialized))
-				copy(cacheCopy, serialized)
-				marshaledForCache = append(marshaledForCache, cacheCopy)
-			}
-		}
-
 		if err = res.Write(l); err != nil {
 			// Don't log context canceled errors as they're expected during shutdown
 			if !strings.Contains(err.Error(), "context canceled") {
@@ -599,10 +591,11 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 	}
 
 	// Populate cache after successfully sending all events
-	if shouldCache && len(marshaledForCache) > 0 {
+	// Cache the events themselves (not marshaled JSON with subscription ID)
+	if shouldCache && len(events) > 0 {
 		f := (*env.Filters)[0]
-		l.DB.CacheMarshaledJSON(f, marshaledForCache)
-		log.D.F("REQ %s: cached %d marshaled events", env.Subscription, len(marshaledForCache))
+		l.DB.CacheEvents(f, events)
+		log.D.F("REQ %s: cached %d events", env.Subscription, len(events))
 	}
 	// write the EOSE to signal to the client that all events found have been
 	// sent.

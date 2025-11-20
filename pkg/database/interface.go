@@ -100,6 +100,8 @@ type Database interface {
 	// Query cache methods
 	GetCachedJSON(f *filter.F) ([][]byte, bool)
 	CacheMarshaledJSON(f *filter.F, marshaledJSON [][]byte)
+	GetCachedEvents(f *filter.F) (event.S, bool)
+	CacheEvents(f *filter.F, events event.S)
 	InvalidateQueryCache()
 
 	// Utility methods

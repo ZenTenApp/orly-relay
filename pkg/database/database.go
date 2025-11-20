@@ -13,6 +13,7 @@ import (
 	"lol.mleku.dev"
 	"lol.mleku.dev/chk"
 	"next.orly.dev/pkg/database/querycache"
+	"next.orly.dev/pkg/encoders/event"
 	"next.orly.dev/pkg/encoders/filter"
 	"next.orly.dev/pkg/utils/apputil"
 	"next.orly.dev/pkg/utils/units"
@@ -250,6 +251,22 @@ func (d *D) CacheMarshaledJSON(f *filter.F, marshaledJSON [][]byte) {
 		// Store the serialized JSON directly - this is already in envelope format
 		// We create a wrapper to store it with the right structure
 		d.queryCache.PutJSON(f, marshaledJSON)
+	}
+}
+
+// GetCachedEvents retrieves cached events for a filter (without subscription ID)
+// Returns nil, false if not found
+func (d *D) GetCachedEvents(f *filter.F) (event.S, bool) {
+	if d.queryCache == nil {
+		return nil, false
+	}
+	return d.queryCache.GetEvents(f)
+}
+
+// CacheEvents stores events for a filter (without subscription ID)
+func (d *D) CacheEvents(f *filter.F, events event.S) {
+	if d.queryCache != nil && len(events) > 0 {
+		d.queryCache.PutEvents(f, events)
 	}
 }
 
