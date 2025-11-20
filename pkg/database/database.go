@@ -26,7 +26,8 @@ type D struct {
 	Logger     *logger
 	*badger.DB
 	seq        *badger.Sequence
-	ready      chan struct{} // Closed when database is ready to serve requests
+	pubkeySeq  *badger.Sequence // Sequence for pubkey serials
+	ready      chan struct{}    // Closed when database is ready to serve requests
 	queryCache *querycache.EventCache
 }
 
@@ -134,6 +135,9 @@ func New(
 		return
 	}
 	if d.seq, err = d.DB.GetSequence([]byte("EVENTS"), 1000); chk.E(err) {
+		return
+	}
+	if d.pubkeySeq, err = d.DB.GetSequence([]byte("PUBKEYS"), 1000); chk.E(err) {
 		return
 	}
 	// run code that updates indexes when new indexes have been added and bumps

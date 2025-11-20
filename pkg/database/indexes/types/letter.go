@@ -8,6 +8,13 @@ import (
 
 const LetterLen = 1
 
+// Edge direction constants for pubkey graph relationships
+const (
+	EdgeDirectionAuthor  byte = 0 // The pubkey is the event author
+	EdgeDirectionPTagOut byte = 1 // Outbound: Event author references this pubkey in p-tag
+	EdgeDirectionPTagIn  byte = 2 // Inbound: This pubkey is referenced in event's p-tag
+)
+
 type Letter struct {
 	val byte
 }

@@ -180,6 +180,47 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 	if idxs, err = GetIndexesForEvent(ev, serial); chk.E(err) {
 		return
 	}
+
+	// Collect all pubkeys for graph: author + p-tags
+	// Store with direction indicator: author (0) vs p-tag (1)
+	type pubkeyWithDirection struct {
+		serial    *types.Uint40
+		isAuthor  bool
+	}
+	pubkeysForGraph := make(map[string]pubkeyWithDirection)
+
+	// Add author pubkey
+	var authorSerial *types.Uint40
+	if authorSerial, err = d.GetOrCreatePubkeySerial(ev.Pubkey); chk.E(err) {
+		return
+	}
+	pubkeysForGraph[hex.Enc(ev.Pubkey)] = pubkeyWithDirection{
+		serial:   authorSerial,
+		isAuthor: true,
+	}
+
+	// Extract p-tag pubkeys using GetAll
+	pTags := ev.Tags.GetAll([]byte("p"))
+	for _, pTag := range pTags {
+		if len(pTag.T) >= 2 {
+			// Decode hex pubkey from p-tag
+			var ptagPubkey []byte
+			if ptagPubkey, err = hex.Dec(string(pTag.T[tag.Value])); err == nil && len(ptagPubkey) == 32 {
+				pkHex := hex.Enc(ptagPubkey)
+				// Skip if already added as author
+				if _, exists := pubkeysForGraph[pkHex]; !exists {
+					var ptagSerial *types.Uint40
+					if ptagSerial, err = d.GetOrCreatePubkeySerial(ptagPubkey); chk.E(err) {
+						return
+					}
+					pubkeysForGraph[pkHex] = pubkeyWithDirection{
+						serial:   ptagSerial,
+						isAuthor: false,
+					}
+				}
+			}
+		}
+	}
 	// log.T.F(
 	// 	"SaveEvent: generated %d indexes for event %x (kind %d)", len(idxs),
 	// 	ev.ID, ev.Kind,
@@ -320,6 +361,48 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 				}
 				log.T.F("SaveEvent: also stored replaceable event with specialized key")
 			}
+
+			// Create graph edges between event and all related pubkeys
+			// This creates bidirectional edges: event->pubkey and pubkey->event
+			// Include the event kind and direction for efficient graph queries
+			eventKind := new(types.Uint16)
+			eventKind.Set(ev.Kind)
+
+			for _, pkInfo := range pubkeysForGraph {
+				// Determine direction for forward edge (event -> pubkey perspective)
+				directionForward := new(types.Letter)
+				// Determine direction for reverse edge (pubkey -> event perspective)
+				directionReverse := new(types.Letter)
+
+				if pkInfo.isAuthor {
+					// Event author relationship
+					directionForward.Set(types.EdgeDirectionAuthor)  // 0: author
+					directionReverse.Set(types.EdgeDirectionAuthor)  // 0: is author of event
+				} else {
+					// P-tag relationship
+					directionForward.Set(types.EdgeDirectionPTagOut) // 1: event references pubkey (outbound)
+					directionReverse.Set(types.EdgeDirectionPTagIn)  // 2: pubkey is referenced (inbound)
+				}
+
+				// Create event -> pubkey edge (with kind and direction)
+				keyBuf := new(bytes.Buffer)
+				if err = indexes.EventPubkeyGraphEnc(ser, pkInfo.serial, eventKind, directionForward).MarshalWrite(keyBuf); chk.E(err) {
+					return
+				}
+				if err = txn.Set(keyBuf.Bytes(), nil); chk.E(err) {
+					return
+				}
+
+				// Create pubkey -> event edge (reverse, with kind and direction for filtering)
+				keyBuf.Reset()
+				if err = indexes.PubkeyEventGraphEnc(pkInfo.serial, eventKind, directionReverse, ser).MarshalWrite(keyBuf); chk.E(err) {
+					return
+				}
+				if err = txn.Set(keyBuf.Bytes(), nil); chk.E(err) {
+					return
+				}
+			}
+
 			return
 		},
 	)

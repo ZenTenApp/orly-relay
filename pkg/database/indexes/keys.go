@@ -72,9 +72,15 @@ const (
 	TagPubkeyPrefix     = I("tpc") // tag, pubkey, created at
 	TagKindPubkeyPrefix = I("tkp") // tag, kind, pubkey, created at
 
-	WordPrefix      = I("wrd") // word hash, serial
+	WordPrefix       = I("wrd") // word hash, serial
 	ExpirationPrefix = I("exp") // timestamp of expiration
 	VersionPrefix    = I("ver") // database version number, for triggering reindexes when new keys are added (policy is add-only).
+
+	// Pubkey graph indexes
+	PubkeySerialPrefix       = I("pks") // pubkey hash -> pubkey serial
+	SerialPubkeyPrefix       = I("spk") // pubkey serial -> pubkey hash (full 32 bytes)
+	EventPubkeyGraphPrefix   = I("epg") // event serial -> pubkey serial (graph edges)
+	PubkeyEventGraphPrefix   = I("peg") // pubkey serial -> event serial (reverse edges)
 )
 
 // Prefix returns the three byte human-readable prefixes that go in front of
@@ -118,6 +124,15 @@ func Prefix(prf int) (i I) {
 		return VersionPrefix
 	case Word:
 		return WordPrefix
+
+	case PubkeySerial:
+		return PubkeySerialPrefix
+	case SerialPubkey:
+		return SerialPubkeyPrefix
+	case EventPubkeyGraph:
+		return EventPubkeyGraphPrefix
+	case PubkeyEventGraph:
+		return PubkeyEventGraphPrefix
 	}
 	return
 }
@@ -167,6 +182,15 @@ func Identify(r io.Reader) (i int, err error) {
 		i = Expiration
 	case WordPrefix:
 		i = Word
+
+	case PubkeySerialPrefix:
+		i = PubkeySerial
+	case SerialPubkeyPrefix:
+		i = SerialPubkey
+	case EventPubkeyGraphPrefix:
+		i = EventPubkeyGraph
+	case PubkeyEventGraphPrefix:
+		i = PubkeyEventGraph
 	}
 	return
 }
@@ -518,4 +542,69 @@ func VersionDec(
 	ver *types.Uint32,
 ) (enc *T) {
 	return New(NewPrefix(), ver)
+}
+
+// PubkeySerial maps a pubkey hash to its unique serial number
+//
+//	3 prefix|8 pubkey hash|5 serial
+var PubkeySerial = next()
+
+func PubkeySerialVars() (p *types.PubHash, ser *types.Uint40) {
+	return new(types.PubHash), new(types.Uint40)
+}
+func PubkeySerialEnc(p *types.PubHash, ser *types.Uint40) (enc *T) {
+	return New(NewPrefix(PubkeySerial), p, ser)
+}
+func PubkeySerialDec(p *types.PubHash, ser *types.Uint40) (enc *T) {
+	return New(NewPrefix(), p, ser)
+}
+
+// SerialPubkey maps a pubkey serial to the full 32-byte pubkey
+// This stores the full pubkey (32 bytes) as the value, not inline
+//
+//	3 prefix|5 serial -> 32 byte pubkey value
+var SerialPubkey = next()
+
+func SerialPubkeyVars() (ser *types.Uint40) {
+	return new(types.Uint40)
+}
+func SerialPubkeyEnc(ser *types.Uint40) (enc *T) {
+	return New(NewPrefix(SerialPubkey), ser)
+}
+func SerialPubkeyDec(ser *types.Uint40) (enc *T) {
+	return New(NewPrefix(), ser)
+}
+
+// EventPubkeyGraph creates a bidirectional graph edge between events and pubkeys
+// This stores event_serial -> pubkey_serial relationships with event kind and direction
+// Direction: 0=author, 1=p-tag-out (event references pubkey)
+//
+//	3 prefix|5 event serial|5 pubkey serial|2 kind|1 direction
+var EventPubkeyGraph = next()
+
+func EventPubkeyGraphVars() (eventSer *types.Uint40, pubkeySer *types.Uint40, kind *types.Uint16, direction *types.Letter) {
+	return new(types.Uint40), new(types.Uint40), new(types.Uint16), new(types.Letter)
+}
+func EventPubkeyGraphEnc(eventSer *types.Uint40, pubkeySer *types.Uint40, kind *types.Uint16, direction *types.Letter) (enc *T) {
+	return New(NewPrefix(EventPubkeyGraph), eventSer, pubkeySer, kind, direction)
+}
+func EventPubkeyGraphDec(eventSer *types.Uint40, pubkeySer *types.Uint40, kind *types.Uint16, direction *types.Letter) (enc *T) {
+	return New(NewPrefix(), eventSer, pubkeySer, kind, direction)
+}
+
+// PubkeyEventGraph creates the reverse edge: pubkey_serial -> event_serial with event kind and direction
+// This enables querying all events related to a pubkey, optionally filtered by kind and direction
+// Direction: 0=is-author, 2=p-tag-in (pubkey is referenced by event)
+//
+//	3 prefix|5 pubkey serial|2 kind|1 direction|5 event serial
+var PubkeyEventGraph = next()
+
+func PubkeyEventGraphVars() (pubkeySer *types.Uint40, kind *types.Uint16, direction *types.Letter, eventSer *types.Uint40) {
+	return new(types.Uint40), new(types.Uint16), new(types.Letter), new(types.Uint40)
+}
+func PubkeyEventGraphEnc(pubkeySer *types.Uint40, kind *types.Uint16, direction *types.Letter, eventSer *types.Uint40) (enc *T) {
+	return New(NewPrefix(PubkeyEventGraph), pubkeySer, kind, direction, eventSer)
+}
+func PubkeyEventGraphDec(pubkeySer *types.Uint40, kind *types.Uint16, direction *types.Letter, eventSer *types.Uint40) (enc *T) {
+	return New(NewPrefix(), pubkeySer, kind, direction, eventSer)
 }
