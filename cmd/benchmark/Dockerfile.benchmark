@@ -4,14 +4,19 @@ FROM golang:1.25-alpine AS builder
 # Install build dependencies including libsecp256k1 build requirements
 RUN apk add --no-cache git ca-certificates gcc musl-dev autoconf automake libtool make
 
-# Build libsecp256k1
+# Build libsecp256k1 EARLY - this layer will be cached unless secp256k1 version changes
+# Using specific version tag and parallel builds for faster compilation
 RUN cd /tmp && \
     git clone https://github.com/bitcoin-core/secp256k1.git && \
     cd secp256k1 && \
+    git checkout v0.6.0 && \
+    git submodule init && \
+    git submodule update && \
     ./autogen.sh && \
     ./configure --enable-module-recovery --enable-module-ecdh --enable-module-schnorrsig --enable-module-extrakeys && \
-    make && \
-    make install
+    make -j$(nproc) && \
+    make install && \
+    cd /tmp && rm -rf secp256k1
 
 # Set working directory
 WORKDIR /build

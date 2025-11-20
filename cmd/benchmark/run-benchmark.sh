@@ -42,12 +42,12 @@ if [ -d "data/neo4j" ]; then
     rm -rf data/neo4j/*
 fi
 
-mkdir -p data/{next-orly-badger,next-orly-dgraph,next-orly-neo4j,dgraph-zero,dgraph-alpha,neo4j,neo4j-logs,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,postgres}
-chmod 777 data/{next-orly-badger,next-orly-dgraph,next-orly-neo4j,dgraph-zero,dgraph-alpha,neo4j,neo4j-logs,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,postgres}
+mkdir -p data/{next-orly-badger,next-orly-dgraph,next-orly-neo4j,dgraph-zero,dgraph-alpha,neo4j,neo4j-logs,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,rely-sqlite,postgres}
+chmod 777 data/{next-orly-badger,next-orly-dgraph,next-orly-neo4j,dgraph-zero,dgraph-alpha,neo4j,neo4j-logs,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,rely-sqlite,postgres}
 
 echo "Building fresh Docker images..."
 # Force rebuild to pick up latest code changes
-$DOCKER_COMPOSE build --no-cache benchmark-runner next-orly-badger next-orly-dgraph next-orly-neo4j
+$DOCKER_COMPOSE build --no-cache benchmark-runner next-orly-badger next-orly-dgraph next-orly-neo4j rely-sqlite
 
 echo ""
 echo "Starting benchmark suite..."

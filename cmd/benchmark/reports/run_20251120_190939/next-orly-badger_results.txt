@@ -1,0 +1,77 @@
+Starting Nostr Relay Benchmark (Badger Backend)
+Data Directory: /tmp/benchmark_next-orly-badger_8
+Events: 50000, Workers: 24, Duration: 1m0s
+1763665982729511ℹ️ migrating to version 1... /build/pkg/database/migrations.go:66
+1763665982729576ℹ️ migrating to version 2... /build/pkg/database/migrations.go:73
+1763665982729601ℹ️ migrating to version 3... /build/pkg/database/migrations.go:80
+1763665982729608ℹ️ cleaning up ephemeral events (kinds 20000-29999)... /build/pkg/database/migrations.go:287
+1763665982729620ℹ️ cleaned up 0 ephemeral events from database /build/pkg/database/migrations.go:332
+1763665982729639ℹ️ migrating to version 4... /build/pkg/database/migrations.go:87
+1763665982729646ℹ️ converting events to optimized inline storage (Reiser4 optimization)... /build/pkg/database/migrations.go:340
+1763665982729664ℹ️ found 0 events to convert (0 regular, 0 replaceable, 0 addressable) /build/pkg/database/migrations.go:429
+1763665982729670ℹ️ migration complete: converted 0 events to optimized inline storage, deleted 0 old keys /build/pkg/database/migrations.go:538
+
+╔════════════════════════════════════════════════════════╗
+║         BADGER BACKEND BENCHMARK SUITE                 ║
+╚════════════════════════════════════════════════════════╝
+
+=== Starting Badger benchmark ===
+RunPeakThroughputTest (Badger)..
+
+=== Peak Throughput Test ===
+2025/11/20 19:13:02 WARN: Failed to load embedded library from /tmp/orly-libsecp256k1/libsecp256k1.so: Error relocating /tmp/orly-libsecp256k1/libsecp256k1.so: __fprintf_chk: symbol not found, falling back to system paths
+2025/11/20 19:13:02 INFO: Successfully loaded libsecp256k1 v5.0.0 from system path: libsecp256k1.so.2
+Events saved: 50000/50000 (100.0%), errors: 0
+Duration: 3.002317183s
+Events/sec: 16653.80
+Avg latency: 1.333202ms
+P90 latency: 1.77034ms
+P95 latency: 2.040484ms
+P99 latency: 2.890994ms
+Bottom 10% Avg latency: 755.546µs
+Wiping database between tests...
+RunBurstPatternTest (Badger)..
+
+=== Burst Pattern Test ===
+Burst completed: 5000 events in 288.855321ms
+Burst completed: 5000 events in 312.543723ms
+Burst completed: 5000 events in 287.863452ms
+Burst completed: 5000 events in 340.503526ms
+Burst completed: 5000 events in 311.944621ms
+Burst completed: 5000 events in 338.563592ms
+Burst completed: 5000 events in 306.545393ms
+Burst completed: 5000 events in 280.038154ms
+Burst completed: 5000 events in 311.22972ms
+Burst completed: 5000 events in 292.735765ms
+Burst test completed: 50000 events in 8.076105474s, errors: 0
+Events/sec: 6191.10
+Wiping database between tests...
+RunMixedReadWriteTest (Badger)..
+
+=== Mixed Read/Write Test ===
+Generating 1000 unique synthetic events (minimum 300 bytes each)...
+Generated 1000 events:
+  Average content size: 312 bytes
+  All events are unique (incremental timestamps)
+  All events are properly signed
+
+Pre-populating database for read tests...
+Generating 50000 unique synthetic events (minimum 300 bytes each)...
+Generated 50000 events:
+  Average content size: 314 bytes
+  All events are unique (incremental timestamps)
+  All events are properly signed
+
+Mixed test completed: 25000 writes, 25000 reads in 24.581344169s
+Combined ops/sec: 2034.06
+Wiping database between tests...
+RunQueryTest (Badger)..
+
+=== Query Test ===
+Generating 10000 unique synthetic events (minimum 300 bytes each)...
+Generated 10000 events:
+  Average content size: 313 bytes
+  All events are unique (incremental timestamps)
+  All events are properly signed
+
+Pre-populating database with 10000 events for query tests...

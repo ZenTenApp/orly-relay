@@ -42,8 +42,9 @@ type BenchmarkConfig struct {
 	NetRate    int // events/sec per worker
 
 	// Backend selection
-	UseDgraph bool
-	UseNeo4j  bool
+	UseDgraph     bool
+	UseNeo4j      bool
+	UseRelySQLite bool
 }
 
 type BenchmarkResult struct {
@@ -126,6 +127,12 @@ func main() {
 		return
 	}
 
+	if config.UseRelySQLite {
+		// Run Rely-SQLite benchmark
+		runRelySQLiteBenchmark(config)
+		return
+	}
+
 	// Run standard Badger benchmark
 	fmt.Printf("Starting Nostr Relay Benchmark (Badger Backend)\n")
 	fmt.Printf("Data Directory: %s\n", config.DataDir)
@@ -189,6 +196,28 @@ func runNeo4jBenchmark(config *BenchmarkConfig) {
 	neo4jBench.GenerateAsciidocReport()
 }
 
+func runRelySQLiteBenchmark(config *BenchmarkConfig) {
+	fmt.Printf("Starting Nostr Relay Benchmark (Rely-SQLite Backend)\n")
+	fmt.Printf("Data Directory: %s\n", config.DataDir)
+	fmt.Printf(
+		"Events: %d, Workers: %d\n",
+		config.NumEvents, config.ConcurrentWorkers,
+	)
+
+	relysqliteBench, err := NewRelySQLiteBenchmark(config)
+	if err != nil {
+		log.Fatalf("Failed to create Rely-SQLite benchmark: %v", err)
+	}
+	defer relysqliteBench.Close()
+
+	// Run Rely-SQLite benchmark suite
+	relysqliteBench.RunSuite()
+
+	// Generate reports
+	relysqliteBench.GenerateReport()
+	relysqliteBench.GenerateAsciidocReport()
+}
+
 func parseFlags() *BenchmarkConfig {
 	config := &BenchmarkConfig{}
 
@@ -232,6 +261,10 @@ func parseFlags() *BenchmarkConfig {
 	flag.BoolVar(
 		&config.UseNeo4j, "neo4j", false,
 		"Use Neo4j backend (requires Docker)",
+	)
+	flag.BoolVar(
+		&config.UseRelySQLite, "relysqlite", false,
+		"Use rely-sqlite backend",
 	)
 
 	flag.Parse()

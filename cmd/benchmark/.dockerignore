@@ -1,0 +1,6 @@
+data/
+reports/
+*.log
+*.db
+external/
+configs/

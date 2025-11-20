@@ -269,6 +269,28 @@ services:
       retries: 3
       start_period: 40s
 
+  # Rely-SQLite relay
+  rely-sqlite:
+    build:
+      context: .
+      dockerfile: Dockerfile.rely-sqlite
+    container_name: benchmark-rely-sqlite
+    environment:
+      - DATABASE_PATH=/data/relay.db
+      - RELAY_LISTEN=0.0.0.0:3334
+    volumes:
+      - ./data/rely-sqlite:/data
+    ports:
+      - "8009:3334"
+    networks:
+      - benchmark-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s --max-time 2 http://localhost:3334 2>&1 | head -1 | grep -q ."]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   # Benchmark runner
   benchmark-runner:
     build:
@@ -292,8 +314,10 @@ services:
         condition: service_healthy
       nostr-rs-relay:
         condition: service_healthy
+      rely-sqlite:
+        condition: service_healthy
     environment:
-      - BENCHMARK_TARGETS=next-orly-badger:8080,next-orly-dgraph:8080,next-orly-neo4j:8080,khatru-sqlite:3334,khatru-badger:3334,relayer-basic:7447,strfry:8080,nostr-rs-relay:8080
+      - BENCHMARK_TARGETS=rely-sqlite:3334,next-orly-badger:8080,next-orly-dgraph:8080,next-orly-neo4j:8080,khatru-sqlite:3334,khatru-badger:3334,relayer-basic:7447,strfry:8080,nostr-rs-relay:8080
       - BENCHMARK_EVENTS=50000
       - BENCHMARK_WORKERS=24
       - BENCHMARK_DURATION=60s

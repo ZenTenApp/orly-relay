@@ -4,12 +4,12 @@ FROM ubuntu:22.04 as builder
 # Set environment variables
 ARG GOLANG_VERSION=1.22.5
 
-# Update package list and install dependencies
+# Update package list and install ALL dependencies in one layer
 RUN apt-get update && \
-    apt-get install -y wget ca-certificates && \
+    apt-get install -y wget ca-certificates build-essential autoconf libtool git && \
     rm -rf /var/lib/apt/lists/*
 
-# Download Go binary
+# Download and install Go binary
 RUN wget https://go.dev/dl/go${GOLANG_VERSION}.linux-amd64.tar.gz && \
     rm -rf /usr/local/go && \
     tar -C /usr/local -xzf go${GOLANG_VERSION}.linux-amd64.tar.gz && \
@@ -21,8 +21,7 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 # Verify installation
 RUN go version
 
-RUN apt update && \
-    apt -y install build-essential autoconf libtool git wget
+# Build secp256k1 EARLY - this layer will be cached unless secp256k1 version changes
 RUN cd /tmp && \
     rm -rf secp256k1 && \
     git clone https://github.com/bitcoin-core/secp256k1.git && \
@@ -32,17 +31,18 @@ RUN cd /tmp && \
     git submodule update && \
     ./autogen.sh && \
     ./configure --enable-module-schnorrsig --enable-module-ecdh --prefix=/usr && \
-    make -j1 && \
-    make install
+    make -j$(nproc) && \
+    make install && \
+    cd /tmp && rm -rf secp256k1
 
 # Set working directory
 WORKDIR /build
 
-# Copy go modules
+# Copy go modules AFTER secp256k1 build - this allows module cache to be reused
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source code
+# Copy source code LAST - this is the most frequently changing layer
 COPY . .
 
 # Build the relay (libsecp256k1 installed via make install to /usr/lib)

@@ -110,7 +110,11 @@
       "Bash(timeout 60 go test:*)",
       "Bash(timeout 120 go test:*)",
       "Bash(timeout 180 ./scripts/test.sh:*)",
-      "Bash(CGO_ENABLED=0 timeout 60 go test:*)"
+      "Bash(CGO_ENABLED=0 timeout 60 go test:*)",
+      "Bash(CGO_ENABLED=1 go build:*)",
+      "Bash(lynx:*)",
+      "Bash(sed:*)",
+      "Bash(docker stop:*)"
     ],
     "deny": [],
     "ask": []
