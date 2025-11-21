@@ -9,6 +9,9 @@ GITEA_BASE_DIR="/home/mleku/gitea"
 GITEA_USER="mleku"
 ARCH="linux-amd64"
 
+# Capture script directory before changing directories
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Colors for output
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -182,7 +185,6 @@ chmod -R 755 "${GITEA_BASE_DIR}"
 chmod 640 "${GITEA_BASE_DIR}/custom/conf/app.ini"
 
 # Create systemd service file
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_FILE="${SCRIPT_DIR}/gitea.service"
 
 echo -e "${YELLOW}Creating systemd service file...${NC}"
