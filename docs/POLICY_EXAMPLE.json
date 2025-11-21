@@ -1,0 +1,49 @@
+{
+  "kind": {
+    "whitelist": [1, 3, 4, 5, 6, 7, 1984, 9734, 9735, 10000, 10001, 10002, 30023, 30024, 30078]
+  },
+  "rules": {
+    "4": {
+      "description": "Encrypted Direct Messages - only parties involved can read",
+      "privileged": true
+    },
+    "1059": {
+      "description": "Gift Wrap - only recipient can read",
+      "privileged": true
+    },
+    "1060": {
+      "description": "Gift Unwrap - only parties involved can read",
+      "privileged": true
+    },
+    "14": {
+      "description": "Direct Messages - only parties involved can read",
+      "privileged": true
+    },
+    "10000": {
+      "description": "Mute list - only owner can write and read",
+      "write_allow": ["REPLACE_WITH_YOUR_PUBKEY_HEX"],
+      "read_allow": ["REPLACE_WITH_YOUR_PUBKEY_HEX"],
+      "privileged": true
+    },
+    "10001": {
+      "description": "Pin list - only owner can write",
+      "write_allow": ["REPLACE_WITH_YOUR_PUBKEY_HEX"]
+    },
+    "10002": {
+      "description": "Relay list - only owner can write and read",
+      "write_allow": ["REPLACE_WITH_YOUR_PUBKEY_HEX"],
+      "read_allow": ["REPLACE_WITH_YOUR_PUBKEY_HEX"],
+      "privileged": true
+    },
+    "30078": {
+      "description": "Application-specific data - restricted write",
+      "write_allow": ["REPLACE_WITH_YOUR_PUBKEY_HEX", "REPLACE_WITH_ALLOWED_APP_PUBKEY_HEX"]
+    }
+  },
+  "global": {
+    "description": "Global rules applied to all events",
+    "max_age_of_event": 31536000,
+    "max_age_event_in_future": 3600
+  },
+  "default_policy": "allow"
+}

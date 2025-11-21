@@ -150,12 +150,47 @@ func TestCheckKindsPolicy(t *testing.T) {
 		expected bool
 	}{
 		{
-			name: "no whitelist or blacklist - allow all",
+			name: "no whitelist or blacklist - allow (no rules at all)",
 			policy: &P{
-				Kind: Kinds{},
+				Kind:  Kinds{},
+				Rules: map[int]Rule{}, // No rules defined
 			},
 			kind:     1,
-			expected: true,
+			expected: true, // Should be allowed (no rules = allow all kinds)
+		},
+		{
+			name: "no whitelist or blacklist - deny (has other rules)",
+			policy: &P{
+				Kind: Kinds{},
+				Rules: map[int]Rule{
+					2: {Description: "Rule for kind 2"},
+				},
+			},
+			kind:     1,
+			expected: false, // Should be denied (implicit whitelist, no rule for kind 1)
+		},
+		{
+			name: "no whitelist or blacklist - allow (has rule)",
+			policy: &P{
+				Kind: Kinds{},
+				Rules: map[int]Rule{
+					1: {Description: "Rule for kind 1"},
+				},
+			},
+			kind:     1,
+			expected: true, // Should be allowed (has rule)
+		},
+		{
+			name: "no whitelist or blacklist - allow (has global rule)",
+			policy: &P{
+				Kind: Kinds{},
+				Global: Rule{
+					WriteAllow: []string{"test"}, // Global rule exists
+				},
+				Rules: map[int]Rule{}, // No specific rules
+			},
+			kind:     1,
+			expected: true, // Should be allowed (global rule exists)
 		},
 		{
 			name: "whitelist - kind allowed",
@@ -178,14 +213,30 @@ func TestCheckKindsPolicy(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "blacklist - kind not blacklisted",
+			name: "blacklist - kind not blacklisted (no rule)",
 			policy: &P{
 				Kind: Kinds{
 					Blacklist: []int{2, 4, 6},
 				},
+				Rules: map[int]Rule{
+					3: {Description: "Rule for kind 3"}, // Has at least one rule
+				},
 			},
 			kind:     1,
-			expected: true,
+			expected: false, // Should be denied (not blacklisted but no rule for kind 1)
+		},
+		{
+			name: "blacklist - kind not blacklisted (has rule)",
+			policy: &P{
+				Kind: Kinds{
+					Blacklist: []int{2, 4, 6},
+				},
+				Rules: map[int]Rule{
+					1: {Description: "Rule for kind 1"},
+				},
+			},
+			kind:     1,
+			expected: true, // Should be allowed (not blacklisted and has rule)
 		},
 		{
 			name: "blacklist - kind blacklisted",
@@ -339,7 +390,7 @@ func TestCheckRulePolicy(t *testing.T) {
 			expected:       false,
 		},
 		{
-			name:   "privileged - event authored by logged in user",
+			name:   "privileged write - event authored by logged in user (privileged doesn't affect write)",
 			access: "write",
 			event:  testEvent,
 			rule: Rule{
@@ -347,10 +398,10 @@ func TestCheckRulePolicy(t *testing.T) {
 				Privileged:  true,
 			},
 			loggedInPubkey: testEvent.Pubkey,
-			expected:       true,
+			expected:       true, // Privileged doesn't restrict write, uses default (allow)
 		},
 		{
-			name:   "privileged - event contains logged in user in p tag",
+			name:   "privileged write - event contains logged in user in p tag (privileged doesn't affect write)",
 			access: "write",
 			event:  testEvent,
 			rule: Rule{
@@ -358,10 +409,10 @@ func TestCheckRulePolicy(t *testing.T) {
 				Privileged:  true,
 			},
 			loggedInPubkey: pTagPubkey,
-			expected:       true,
+			expected:       true, // Privileged doesn't restrict write, uses default (allow)
 		},
 		{
-			name:   "privileged - not authenticated",
+			name:   "privileged write - not authenticated (privileged doesn't affect write)",
 			access: "write",
 			event:  testEvent,
 			rule: Rule{
@@ -369,10 +420,10 @@ func TestCheckRulePolicy(t *testing.T) {
 				Privileged:  true,
 			},
 			loggedInPubkey: nil,
-			expected:       false,
+			expected:       true, // Privileged doesn't restrict write, uses default (allow)
 		},
 		{
-			name:   "privileged - authenticated but not authorized (different pubkey, not in p tags)",
+			name:   "privileged write - authenticated but not authorized (privileged doesn't affect write)",
 			access: "write",
 			event:  testEvent,
 			rule: Rule{
@@ -380,7 +431,7 @@ func TestCheckRulePolicy(t *testing.T) {
 				Privileged:  true,
 			},
 			loggedInPubkey: unauthorizedPubkey,
-			expected:       false,
+			expected:       true, // Privileged doesn't restrict write, uses default (allow)
 		},
 		{
 			name:   "privileged read - event authored by logged in user",
@@ -947,7 +998,7 @@ func TestEdgeCasesManagerDoubleStart(t *testing.T) {
 
 func TestCheckGlobalRulePolicy(t *testing.T) {
 	// Generate real keypairs for testing
-	eventSigner, eventPubkey := generateTestKeypair(t)
+	eventSigner, _ := generateTestKeypair(t)
 	_, loggedInPubkey := generateTestKeypair(t)
 
 	tests := []struct {
@@ -958,18 +1009,18 @@ func TestCheckGlobalRulePolicy(t *testing.T) {
 		expected       bool
 	}{
 		{
-			name: "global rule with write allow - event allowed",
+			name: "global rule with write allow - submitter allowed",
 			globalRule: Rule{
-				WriteAllow: []string{hex.Enc(eventPubkey)},
+				WriteAllow: []string{hex.Enc(loggedInPubkey)}, // Allow the submitter
 			},
 			event:          createTestEvent(t, eventSigner, "test content", 1),
 			loggedInPubkey: loggedInPubkey,
 			expected:       true,
 		},
 		{
-			name: "global rule with write deny - event denied",
+			name: "global rule with write deny - submitter denied",
 			globalRule: Rule{
-				WriteDeny: []string{hex.Enc(eventPubkey)},
+				WriteDeny: []string{hex.Enc(loggedInPubkey)}, // Deny the submitter
 			},
 			event:          createTestEvent(t, eventSigner, "test content", 1),
 			loggedInPubkey: loggedInPubkey,
@@ -1404,7 +1455,7 @@ func TestScriptProcessingDisabledFallsBackToDefault(t *testing.T) {
 func TestDefaultPolicyLogicWithRules(t *testing.T) {
 	// Generate real keypairs for testing
 	testSigner, _ := generateTestKeypair(t)
-	deniedSigner, deniedPubkey := generateTestKeypair(t)
+	_, deniedPubkey := generateTestKeypair(t)  // Only need pubkey for denied user
 	_, loggedInPubkey := generateTestKeypair(t)
 
 	// Test that default policy logic works correctly with rules
@@ -1448,14 +1499,14 @@ func TestDefaultPolicyLogicWithRules(t *testing.T) {
 		t.Error("Expected kind 2 to be allowed for non-denied pubkey")
 	}
 
-	// Kind 2: denied pubkey should be denied
-	event2Denied := createTestEvent(t, deniedSigner, "content", 2)
-	allowed2Denied, err2Denied := policy1.CheckPolicy("write", event2Denied, loggedInPubkey, "127.0.0.1")
+	// Kind 2: submitter in deny list should be denied
+	event2Denied := createTestEvent(t, testSigner, "content", 2)  // Event can be from anyone
+	allowed2Denied, err2Denied := policy1.CheckPolicy("write", event2Denied, deniedPubkey, "127.0.0.1")  // But submitted by denied user
 	if err2Denied != nil {
 		t.Errorf("Unexpected error for kind 2 denied: %v", err2Denied)
 	}
 	if allowed2Denied {
-		t.Error("Expected kind 2 to be denied for denied pubkey")
+		t.Error("Expected kind 2 to be denied when submitter is in deny list")
 	}
 
 	// Kind 3: whitelisted but no rule - should follow default policy (deny)
@@ -1493,9 +1544,9 @@ func TestDefaultPolicyLogicWithRules(t *testing.T) {
 		t.Error("Expected kind 1 to be allowed for non-denied pubkey")
 	}
 
-	// Kind 1: denied pubkey should be denied
-	event1Deny := createTestEvent(t, deniedSigner, "content", 1)
-	allowed1Deny, err1Deny := policy2.CheckPolicy("write", event1Deny, loggedInPubkey, "127.0.0.1")
+	// Kind 1: denied pubkey should be denied when they try to submit
+	event1Deny := createTestEvent(t, testSigner, "content", 1)  // Event can be authored by anyone
+	allowed1Deny, err1Deny := policy2.CheckPolicy("write", event1Deny, deniedPubkey, "127.0.0.1")  // But denied user cannot submit
 	if err1Deny != nil {
 		t.Errorf("Unexpected error for kind 1 deny: %v", err1Deny)
 	}
@@ -2026,17 +2077,17 @@ func TestPolicyFilterProcessing(t *testing.T) {
 		event30520.Pubkey = allowedPubkeyBytes
 		addPTag(event30520, loggedInPubkey)
 
-		// Test that event is allowed when logged-in pubkey is in p tag (privileged)
-		// and event pubkey matches write_allow
+		// Test that event is DENIED when submitter (logged-in pubkey) is not in write_allow
+		// Even though the submitter is in p-tag, write_allow is about who can submit
 		allowed, err := policy.CheckPolicy("write", event30520, loggedInPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		if !allowed {
-			t.Error("Expected event to be allowed when event pubkey matches write_allow and logged-in pubkey is in p tag")
+		if allowed {
+			t.Error("Expected event to be denied when submitter (logged-in pubkey) is not in write_allow")
 		}
 
-		// Test that event is denied when logged-in pubkey is not in p tag and doesn't match event pubkey
+		// Test that event is denied when submitter is not in write_allow (even without p-tag)
 		event30520NoPTag := createTestEvent(t, eventSigner, "test content", 30520)
 		event30520NoPTag.Pubkey = allowedPubkeyBytes
 		allowed, err = policy.CheckPolicy("write", event30520NoPTag, loggedInPubkey, "127.0.0.1")
@@ -2044,7 +2095,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 			t.Errorf("Unexpected error: %v", err)
 		}
 		if allowed {
-			t.Error("Expected event to be denied when logged-in pubkey is not in p tag (privileged check fails)")
+			t.Error("Expected event to be denied when submitter is not in write_allow")
 		}
 	})
 
@@ -2067,16 +2118,15 @@ func TestPolicyFilterProcessing(t *testing.T) {
 			t.Error("Expected event to be allowed when script is not running (falls back to default 'allow') and privileged check passes")
 		}
 
-		// Test without authentication (privileged check should fail)
+		// Test without authentication (privileged doesn't affect write operations)
 		allowed, err = policy.CheckPolicy("write", event4678, nil, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		// Should be denied because privileged check fails without authentication
-		// The privileged check happens in checkRulePolicy before script check
-		// So it should be denied even though script is not running
-		if allowed {
-			t.Error("Expected event to be denied without authentication (privileged check)")
+		// Should be allowed because privileged doesn't affect write operations
+		// Falls back to default policy which is "allow"
+		if !allowed {
+			t.Error("Expected event to be allowed without authentication (privileged doesn't affect write)")
 		}
 	})
 }

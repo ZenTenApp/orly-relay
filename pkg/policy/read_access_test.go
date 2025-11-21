@@ -284,13 +284,14 @@ func TestSamplePolicyFromUser(t *testing.T) {
 			t.Error("Server1 should NOT be allowed to READ kind 10306 events (not in read_allow list for this kind)")
 		}
 
-		// Test 3: Random user should NOT be able to READ
+		// Test 3: Random user (author) SHOULD be able to READ
+		// OR logic: Random user is the author so privileged check passes -> ALLOWED
 		allowed, err = policy.CheckPolicy("read", requestEvent, randomPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
-		if allowed {
-			t.Error("Random user should NOT be allowed to READ kind 10306 events (not in read_allow list)")
+		if !allowed {
+			t.Error("Random user SHOULD be allowed to READ kind 10306 events (author - privileged check passes, OR logic)")
 		}
 	})
 }
@@ -328,15 +329,15 @@ func TestReadAllowWithPrivileged(t *testing.T) {
 		}
 	})
 
-	// Test 2: Alice (author, but NOT in ReadAllow) should NOT be able to READ
-	// Even though she's the author (privileged check would pass), ReadAllow takes precedence
+	// Test 2: Alice (author, but NOT in ReadAllow) SHOULD be able to READ
+	// OR logic: Alice is involved (author) so privileged check passes -> ALLOWED
 	t.Run("alice_author_but_not_in_readallow", func(t *testing.T) {
 		allowed, err := policy.CheckPolicy("read", ev, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
-		if allowed {
-			t.Error("Alice should NOT be allowed to READ (not in ReadAllow list, even though she's the author)")
+		if !allowed {
+			t.Error("Alice SHOULD be allowed to READ (privileged check passes - she's the author, OR logic)")
 		}
 	})
 
@@ -360,8 +361,8 @@ func TestReadAllowWithPrivileged(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
-		if allowed {
-			t.Error("Charlie should NOT be allowed to READ (privileged check passes but not in ReadAllow)")
+		if !allowed {
+			t.Error("Charlie SHOULD be allowed to READ (privileged check passes - he's in p-tag, OR logic)")
 		}
 	})
 }

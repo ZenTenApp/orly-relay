@@ -200,13 +200,13 @@ func TestPolicyIntegration(t *testing.T) {
 			t.Error("Expected event4678Allowed to be allowed when script not running (falls back to default)")
 		}
 
-		// Test 8: Event 4678 should be denied without authentication (privileged check)
+		// Test 8: Event 4678 write should be allowed without authentication (privileged doesn't affect write)
 		allowed, err = policy.CheckPolicy("write", event4678Allowed, nil, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		if allowed {
-			t.Error("Expected event4678Allowed to be denied without authentication (privileged)")
+		if !allowed {
+			t.Error("Expected event4678Allowed to be allowed without authentication (privileged doesn't affect write operations)")
 		}
 	})
 

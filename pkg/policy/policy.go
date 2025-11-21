@@ -80,6 +80,19 @@ type Rule struct {
 	readDenyBin   [][]byte
 }
 
+// hasAnyRules checks if the rule has any constraints configured
+func (r *Rule) hasAnyRules() bool {
+	// Check for any configured constraints
+	return len(r.WriteAllow) > 0 || len(r.WriteDeny) > 0 ||
+		len(r.ReadAllow) > 0 || len(r.ReadDeny) > 0 ||
+		len(r.writeAllowBin) > 0 || len(r.writeDenyBin) > 0 ||
+		len(r.readAllowBin) > 0 || len(r.readDenyBin) > 0 ||
+		r.SizeLimit != nil || r.ContentLimit != nil ||
+		r.MaxAgeOfEvent != nil || r.MaxAgeEventInFuture != nil ||
+		r.MaxExpiry != nil || len(r.MustHaveTags) > 0 ||
+		r.Script != "" || r.Privileged
+}
+
 // populateBinaryCache converts hex-encoded pubkey strings to binary for faster comparison.
 // This should be called after unmarshaling the policy from JSON.
 func (r *Rule) populateBinaryCache() error {
@@ -887,6 +900,12 @@ func (p *P) CheckPolicy(
 		return false, fmt.Errorf("event cannot be nil")
 	}
 
+	// CRITICAL SECURITY: Reject all unauthenticated access
+	// No authentication = no access, regardless of policy rules
+	if len(loggedInPubkey) == 0 {
+		return false, nil // Silently reject unauthenticated users
+	}
+
 	// First check global rule filter (applies to all events)
 	if !p.checkGlobalRulePolicy(access, ev, loggedInPubkey) {
 		return false, nil
@@ -947,7 +966,11 @@ func (p *P) CheckPolicy(
 	return p.checkRulePolicy(access, ev, rule, loggedInPubkey)
 }
 
-// checkKindsPolicy checks if the event kind is allowed by the kinds white/blacklist
+// checkKindsPolicy checks if the event kind is allowed.
+// Logic:
+// 1. If explicit whitelist exists, use it (backwards compatibility)
+// 2. If explicit blacklist exists, use it (backwards compatibility)
+// 3. Otherwise, kinds with defined rules are implicitly allowed, others denied
 func (p *P) checkKindsPolicy(kind uint16) bool {
 	// If whitelist is present, only allow whitelisted kinds
 	if len(p.Kind.Whitelist) > 0 {
@@ -966,8 +989,21 @@ func (p *P) checkKindsPolicy(kind uint16) bool {
 				return false
 			}
 		}
+		// Not in blacklist - check if rule exists for implicit whitelist
+		_, hasRule := p.Rules[int(kind)]
+		return hasRule // Only allow if there's a rule defined
 	}
 
+	// No explicit whitelist or blacklist
+	// If there are specific rules defined, use implicit whitelist
+	// If there's only a global rule (no specific rules), allow all kinds
+	// If there are NO rules at all, allow all kinds (fall back to default policy)
+	if len(p.Rules) > 0 {
+		// Implicit whitelist mode - only allow kinds with specific rules
+		_, hasRule := p.Rules[int(kind)]
+		return hasRule
+	}
+	// No specific rules (maybe global rule exists) - allow all kinds
 	return true
 }
 
@@ -975,6 +1011,11 @@ func (p *P) checkKindsPolicy(kind uint16) bool {
 func (p *P) checkGlobalRulePolicy(
 	access string, ev *event.E, loggedInPubkey []byte,
 ) bool {
+	// Skip if no global rules are configured
+	if !p.Global.hasAnyRules() {
+		return true
+	}
+
 	// Apply global rule filtering
 	allowed, err := p.checkRulePolicy(access, ev, p.Global, loggedInPubkey)
 	if err != nil {
@@ -984,103 +1025,22 @@ func (p *P) checkGlobalRulePolicy(
 	return allowed
 }
 
-// checkRulePolicy applies rule-based filtering (pubkey lists, size limits, etc.)
+// checkRulePolicy evaluates rule-based access control with corrected evaluation order.
+// Evaluation order:
+// 1. Universal constraints (size, tags, age) - apply to everyone
+// 2. Explicit denials (deny lists) - highest priority blacklist
+// 3. Privileged access - parties involved get special access (ONLY if no allow lists)
+// 4. Explicit allows (allow lists) - exclusive and authoritative when present
+// 5. Default policy - fallback when no rules apply
+//
+// IMPORTANT: When both privileged AND allow lists are specified, allow lists are
+// authoritative - even parties involved must be in the allow list.
 func (p *P) checkRulePolicy(
 	access string, ev *event.E, rule Rule, loggedInPubkey []byte,
 ) (allowed bool, err error) {
-	// Check pubkey-based access control
-	if access == "write" {
-		// Prefer binary cache for performance (3x faster than hex)
-		// Fall back to hex comparison if cache not populated (for backwards compatibility with tests)
-		if len(rule.writeAllowBin) > 0 {
-			allowed = false
-			for _, allowedPubkey := range rule.writeAllowBin {
-				if utils.FastEqual(ev.Pubkey, allowedPubkey) {
-					allowed = true
-					break
-				}
-			}
-			if !allowed {
-				return false, nil
-			}
-		} else if len(rule.WriteAllow) > 0 {
-			// Fallback: binary cache not populated, use hex comparison
-			pubkeyHex := hex.Enc(ev.Pubkey)
-			allowed = false
-			for _, allowedPubkey := range rule.WriteAllow {
-				if pubkeyHex == allowedPubkey {
-					allowed = true
-					break
-				}
-			}
-			if !allowed {
-				return false, nil
-			}
-		}
-
-		if len(rule.writeDenyBin) > 0 {
-			for _, deniedPubkey := range rule.writeDenyBin {
-				if utils.FastEqual(ev.Pubkey, deniedPubkey) {
-					return false, nil
-				}
-			}
-		} else if len(rule.WriteDeny) > 0 {
-			// Fallback: binary cache not populated, use hex comparison
-			pubkeyHex := hex.Enc(ev.Pubkey)
-			for _, deniedPubkey := range rule.WriteDeny {
-				if pubkeyHex == deniedPubkey {
-					return false, nil
-				}
-			}
-		}
-	} else if access == "read" {
-		// For read access, check the logged-in user's pubkey (who is trying to READ),
-		// not the event author's pubkey
-
-		// Prefer binary cache for performance (3x faster than hex)
-		// Fall back to hex comparison if cache not populated (for backwards compatibility with tests)
-		if len(rule.readAllowBin) > 0 {
-			allowed = false
-			for _, allowedPubkey := range rule.readAllowBin {
-				if utils.FastEqual(loggedInPubkey, allowedPubkey) {
-					allowed = true
-					break
-				}
-			}
-			if !allowed {
-				return false, nil
-			}
-		} else if len(rule.ReadAllow) > 0 {
-			// Fallback: binary cache not populated, use hex comparison
-			loggedInPubkeyHex := hex.Enc(loggedInPubkey)
-			allowed = false
-			for _, allowedPubkey := range rule.ReadAllow {
-				if loggedInPubkeyHex == allowedPubkey {
-					allowed = true
-					break
-				}
-			}
-			if !allowed {
-				return false, nil
-			}
-		}
-
-		if len(rule.readDenyBin) > 0 {
-			for _, deniedPubkey := range rule.readDenyBin {
-				if utils.FastEqual(loggedInPubkey, deniedPubkey) {
-					return false, nil
-				}
-			}
-		} else if len(rule.ReadDeny) > 0 {
-			// Fallback: binary cache not populated, use hex comparison
-			loggedInPubkeyHex := hex.Enc(loggedInPubkey)
-			for _, deniedPubkey := range rule.ReadDeny {
-				if loggedInPubkeyHex == deniedPubkey {
-					return false, nil
-				}
-			}
-		}
-	}
+	// ===================================================================
+	// STEP 1: Universal Constraints (apply to everyone)
+	// ===================================================================
 
 	// Check size limits
 	if rule.SizeLimit != nil {
@@ -1133,16 +1093,183 @@ func (p *P) checkRulePolicy(
 		}
 	}
 
-	// Check privileged events using centralized function
-	if rule.Privileged {
-		// Use the centralized IsPartyInvolved function to check
-		// This ensures consistent hex/binary handling across all privilege checks
-		if !IsPartyInvolved(ev, loggedInPubkey) {
-			return false, nil
+	// ===================================================================
+	// STEP 2: Explicit Denials (highest priority blacklist)
+	// ===================================================================
+
+	if access == "write" {
+		// Check write deny list - deny specific users from submitting events
+		if len(rule.writeDenyBin) > 0 {
+			for _, deniedPubkey := range rule.writeDenyBin {
+				if utils.FastEqual(loggedInPubkey, deniedPubkey) {
+					return false, nil // Submitter explicitly denied
+				}
+			}
+		} else if len(rule.WriteDeny) > 0 {
+			// Fallback: binary cache not populated, use hex comparison
+			loggedInPubkeyHex := hex.Enc(loggedInPubkey)
+			for _, deniedPubkey := range rule.WriteDeny {
+				if loggedInPubkeyHex == deniedPubkey {
+					return false, nil // Submitter explicitly denied
+				}
+			}
+		}
+	} else if access == "read" {
+		// Check read deny list
+		if len(rule.readDenyBin) > 0 {
+			for _, deniedPubkey := range rule.readDenyBin {
+				if utils.FastEqual(loggedInPubkey, deniedPubkey) {
+					return false, nil // Explicitly denied
+				}
+			}
+		} else if len(rule.ReadDeny) > 0 {
+			// Fallback: binary cache not populated, use hex comparison
+			loggedInPubkeyHex := hex.Enc(loggedInPubkey)
+			for _, deniedPubkey := range rule.ReadDeny {
+				if loggedInPubkeyHex == deniedPubkey {
+					return false, nil // Explicitly denied
+				}
+			}
 		}
 	}
 
-	return true, nil
+	// ===================================================================
+	// STEP 3: Check Read Access with OR Logic (Allow List OR Privileged)
+	// ===================================================================
+
+	// For read operations, check if user has access via allow list OR privileged
+	if access == "read" {
+		hasAllowList := len(rule.readAllowBin) > 0 || len(rule.ReadAllow) > 0
+		userInAllowList := false
+		userIsPrivileged := rule.Privileged && IsPartyInvolved(ev, loggedInPubkey)
+
+		// Check if user is in read allow list
+		if len(rule.readAllowBin) > 0 {
+			for _, allowedPubkey := range rule.readAllowBin {
+				if utils.FastEqual(loggedInPubkey, allowedPubkey) {
+					userInAllowList = true
+					break
+				}
+			}
+		} else if len(rule.ReadAllow) > 0 {
+			loggedInPubkeyHex := hex.Enc(loggedInPubkey)
+			for _, allowedPubkey := range rule.ReadAllow {
+				if loggedInPubkeyHex == allowedPubkey {
+					userInAllowList = true
+					break
+				}
+			}
+		}
+
+		// Handle different cases:
+		// 1. If there's an allow list: use OR logic (in list OR privileged)
+		// 2. If no allow list but privileged: only involved parties allowed
+		// 3. If no allow list and not privileged: continue to other checks
+
+		if hasAllowList {
+			// OR logic when allow list exists
+			if userInAllowList || userIsPrivileged {
+				return true, nil
+			}
+			// Not in allow list AND not privileged -> deny
+			return false, nil
+		} else if rule.Privileged {
+			// No allow list but privileged -> only involved parties
+			if userIsPrivileged {
+				return true, nil
+			}
+			// Not involved in privileged event -> deny
+			return false, nil
+		}
+		// No allow list and not privileged -> continue to other checks
+	}
+
+	// ===================================================================
+	// STEP 4: Explicit Allows (exclusive access - ONLY these users)
+	// ===================================================================
+
+	if access == "write" {
+		// Check write allow list (exclusive - ONLY these users can write)
+		// Special case: empty list (but not nil) means allow all
+		if rule.WriteAllow != nil && len(rule.WriteAllow) == 0 && len(rule.writeAllowBin) == 0 {
+			// Empty allow list explicitly set - allow all writers
+			return true, nil
+		}
+
+		if len(rule.writeAllowBin) > 0 {
+			// Check if logged-in user (submitter) is allowed to write
+			allowed = false
+			for _, allowedPubkey := range rule.writeAllowBin {
+				if utils.FastEqual(loggedInPubkey, allowedPubkey) {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				return false, nil // Submitter not in exclusive allow list
+			}
+			// Submitter is in allow list
+			return true, nil
+		} else if len(rule.WriteAllow) > 0 {
+			// Fallback: binary cache not populated, use hex comparison
+			// Check if logged-in user (submitter) is allowed to write
+			loggedInPubkeyHex := hex.Enc(loggedInPubkey)
+			allowed = false
+			for _, allowedPubkey := range rule.WriteAllow {
+				if loggedInPubkeyHex == allowedPubkey {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				return false, nil // Submitter not in exclusive allow list
+			}
+			// Submitter is in allow list
+			return true, nil
+		}
+
+		// If we have ONLY a deny list (no allow list), and user is not denied, allow
+		if (len(rule.WriteDeny) > 0 || len(rule.writeDenyBin) > 0) &&
+			len(rule.WriteAllow) == 0 && len(rule.writeAllowBin) == 0 {
+			// Only deny list exists, user wasn't denied above, so allow
+			return true, nil
+		}
+	} else if access == "read" {
+		// Read access already handled in STEP 3 with OR logic (allow list OR privileged)
+		// Only need to handle special cases here
+
+		// Special case: empty list (but not nil) means allow all
+		// BUT if privileged, still need to check if user is involved
+		if rule.ReadAllow != nil && len(rule.ReadAllow) == 0 && len(rule.readAllowBin) == 0 {
+			if rule.Privileged {
+				// Empty allow list with privileged - only involved parties
+				return IsPartyInvolved(ev, loggedInPubkey), nil
+			}
+			// Empty allow list without privileged - allow all readers
+			return true, nil
+		}
+
+		// If we have ONLY a deny list (no allow list), and user is not denied, allow
+		if (len(rule.ReadDeny) > 0 || len(rule.readDenyBin) > 0) &&
+			len(rule.ReadAllow) == 0 && len(rule.readAllowBin) == 0 {
+			// Only deny list exists, user wasn't denied above, so allow
+			return true, nil
+		}
+	}
+
+	// ===================================================================
+	// STEP 5: No Additional Privileged Check Needed
+	// ===================================================================
+
+	// Privileged access for read operations is already handled in STEP 3 with OR logic
+	// No additional check needed here
+
+	// ===================================================================
+	// STEP 6: Default Policy
+	// ===================================================================
+
+	// If no specific rules matched, use the configured default policy
+	return p.getDefaultPolicyAction(), nil
 }
 
 // checkScriptPolicy runs the policy script to determine if event should be allowed

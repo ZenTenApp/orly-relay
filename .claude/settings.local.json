@@ -114,7 +114,8 @@
       "Bash(CGO_ENABLED=1 go build:*)",
       "Bash(lynx:*)",
       "Bash(sed:*)",
-      "Bash(docker stop:*)"
+      "Bash(docker stop:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []
