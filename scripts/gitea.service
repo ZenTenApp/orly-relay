@@ -1,0 +1,28 @@
+[Unit]
+Description=Gitea (Git with a cup of tea)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=mleku
+Group=mleku
+WorkingDirectory=/home/mleku/gitea
+ExecStart=/home/mleku/gitea/bin/gitea web --config /home/mleku/gitea/custom/conf/app.ini
+Restart=always
+RestartSec=2s
+Environment="USER=mleku" "HOME=/home/mleku" "GITEA_WORK_DIR=/home/mleku/gitea"
+
+# Security enhancements
+PrivateTmp=yes
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=no
+ReadWritePaths=/home/mleku/gitea
+
+# Limits
+LimitNOFILE=65535
+LimitNPROC=65535
+
+[Install]
+WantedBy=multi-user.target
