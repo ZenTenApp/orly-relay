@@ -111,8 +111,8 @@ func ParseAttestation(ev *event.E) (*Attestation, error) {
 	return attestation, nil
 }
 
-// ParseTrustGraph parses a kind 30101 event into a TrustGraph
-func ParseTrustGraph(ev *event.E) (*TrustGraph, error) {
+// ParseTrustGraph parses a kind 30101 event into a TrustGraphEvent
+func ParseTrustGraph(ev *event.E) (*TrustGraphEvent, error) {
 	if uint16(ev.Kind) != KindTrustGraph {
 		return nil, fmt.Errorf("invalid event kind: expected %d, got %d", KindTrustGraph, ev.Kind)
 	}
@@ -157,7 +157,7 @@ func ParseTrustGraph(ev *event.E) (*TrustGraph, error) {
 		})
 	}
 
-	return &TrustGraph{
+	return &TrustGraphEvent{
 		Event:      ev,
 		Entries:    entries,
 		Expiration: expiration,

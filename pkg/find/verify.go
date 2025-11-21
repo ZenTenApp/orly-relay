@@ -197,7 +197,7 @@ func VerifyAttestationExpiration(attestation *Attestation) error {
 }
 
 // VerifyTrustGraphExpiration checks if a trust graph has expired
-func VerifyTrustGraphExpiration(trustGraph *TrustGraph) error {
+func VerifyTrustGraphExpiration(trustGraph *TrustGraphEvent) error {
 	if !trustGraph.Expiration.IsZero() && IsExpired(trustGraph.Expiration) {
 		return fmt.Errorf("trust graph expired at %s", trustGraph.Expiration)
 	}

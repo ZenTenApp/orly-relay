@@ -281,15 +281,15 @@ func (tg *TrustGraph) GetInheritedTrust(fromPubkey, toPubkey string) (float64, [
 	return 0.0, nil
 }
 
-// ExportTrustGraph exports the trust graph for this service as a TrustGraph event
-func (tg *TrustGraph) ExportTrustGraph() *TrustGraph {
+// ExportTrustGraph exports the trust graph for this service as a TrustGraphEvent
+func (tg *TrustGraph) ExportTrustGraph() *TrustGraphEvent {
 	tg.mu.RLock()
 	defer tg.mu.RUnlock()
 
 	selfPubkeyStr := hex.Enc(tg.selfPubkey)
 	entries := tg.entries[selfPubkeyStr]
 
-	exported := &TrustGraph{
+	exported := &TrustGraphEvent{
 		Event:      nil, // TODO: Create event
 		Entries:    make([]TrustEntry, len(entries)),
 		Expiration: time.Now().Add(TrustGraphExpiry),

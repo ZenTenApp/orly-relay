@@ -900,12 +900,6 @@ func (p *P) CheckPolicy(
 		return false, fmt.Errorf("event cannot be nil")
 	}
 
-	// CRITICAL SECURITY: Reject all unauthenticated access
-	// No authentication = no access, regardless of policy rules
-	if len(loggedInPubkey) == 0 {
-		return false, nil // Silently reject unauthenticated users
-	}
-
 	// First check global rule filter (applies to all events)
 	if !p.checkGlobalRulePolicy(access, ev, loggedInPubkey) {
 		return false, nil

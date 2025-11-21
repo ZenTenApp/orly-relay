@@ -80,8 +80,8 @@ type TrustEntry struct {
 	TrustScore float64 // 0.0 to 1.0
 }
 
-// TrustGraph represents a kind 30101 event
-type TrustGraph struct {
+// TrustGraphEvent represents a kind 30101 event (renamed to avoid conflict with TrustGraph manager in trust.go)
+type TrustGraphEvent struct {
 	Event      *event.E
 	Entries    []TrustEntry
 	Expiration time.Time

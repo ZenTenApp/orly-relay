@@ -7,6 +7,7 @@ import (
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/errorf"
 	"next.orly.dev/pkg/database"
+	"next.orly.dev/pkg/encoders/hex"
 )
 
 // ConsensusEngine handles the consensus algorithm for name registrations
@@ -66,7 +67,7 @@ func (ce *ConsensusEngine) ComputeConsensus(proposals []*RegistrationProposal, a
 	totalWeight := 0.0
 
 	for _, proposal := range proposals {
-		proposalAtts := attestationMap[proposal.Event.GetIDString()]
+		proposalAtts := attestationMap[hex.Enc(proposal.Event.ID)]
 		score, weights := ce.ScoreProposal(proposal, proposalAtts)
 
 		scores = append(scores, &ProposalScore{
@@ -101,7 +102,7 @@ func (ce *ConsensusEngine) ComputeConsensus(proposals []*RegistrationProposal, a
 	// Check for conflicts (multiple proposals within margin)
 	conflicted := false
 	for _, ps := range scores {
-		if ps.Proposal.Event.GetIDString() != winner.Proposal.Event.GetIDString() {
+		if hex.Enc(ps.Proposal.Event.ID) != hex.Enc(winner.Proposal.Event.ID) {
 			otherRelative := ps.Score / totalWeight
 			if (relativeScore - otherRelative) < ce.conflictMargin {
 				conflicted = true
@@ -168,7 +169,7 @@ func (ce *ConsensusEngine) ScoreProposal(proposal *RegistrationProposal, attesta
 		// Score = attestation_weight * trust_level / 100
 		score := (attWeight / 100.0) * trustLevel
 
-		weights[att.Event.GetPubkeyString()] = score
+		weights[hex.Enc(att.Event.Pubkey)] = score
 		totalScore += score
 	}
 
@@ -205,7 +206,7 @@ func (ce *ConsensusEngine) ValidateProposal(proposal *RegistrationProposal) erro
 		}
 
 		// Verify proposer owns parent domain
-		proposerPubkey := proposal.Event.GetPubkeyString()
+		proposerPubkey := hex.Enc(proposal.Event.Pubkey)
 		if parentState.Owner != proposerPubkey {
 			return errorf.E("proposer does not own parent domain %s", parent)
 		}
@@ -239,7 +240,7 @@ func (ce *ConsensusEngine) ValidateProposal(proposal *RegistrationProposal) erro
 
 	// During renewal window - only current owner can register
 	if now.Before(nameState.Expiration) {
-		proposerPubkey := proposal.Event.GetPubkeyString()
+		proposerPubkey := hex.Enc(proposal.Event.Pubkey)
 		if proposerPubkey != nameState.Owner {
 			return errorf.E("only current owner can renew during preferential renewal window")
 		}
@@ -320,9 +321,9 @@ func (ce *ConsensusEngine) CreateNameState(result *ConsensusResult, registryPubk
 
 	return &NameState{
 		Name:         proposal.Name,
-		Owner:        proposal.Event.GetPubkeyString(),
+		Owner:        hex.Enc(proposal.Event.Pubkey),
 		RegisteredAt: time.Now(),
-		ProposalID:   proposal.Event.GetIDString(),
+		ProposalID:   hex.Enc(proposal.Event.ID),
 		Attestations: result.Attestations,
 		Confidence:   result.Confidence,
 		Expiration:   time.Now().Add(NameRegistrationPeriod),
@@ -344,7 +345,7 @@ func (ce *ConsensusEngine) ProcessProposalBatch(proposals []*RegistrationProposa
 		// Filter attestations for this name's proposals
 		proposalIDs := make(map[string]bool)
 		for _, p := range nameProposals {
-			proposalIDs[p.Event.GetIDString()] = true
+			proposalIDs[hex.Enc(p.Event.ID)] = true
 		}
 
 		nameAttestations := make([]*Attestation, 0)

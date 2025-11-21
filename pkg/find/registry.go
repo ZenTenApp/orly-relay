@@ -2,10 +2,10 @@ package find
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
-	lol "lol.mleku.dev"
 	"lol.mleku.dev/chk"
 	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/encoders/event"
@@ -71,7 +71,7 @@ func NewRegistryService(ctx context.Context, db database.Database, signer signer
 	// Bootstrap trust graph if configured
 	if len(config.BootstrapServices) > 0 {
 		if err := rs.bootstrapTrustGraph(); chk.E(err) {
-			lol.Err("failed to bootstrap trust graph:", err)
+			fmt.Printf("failed to bootstrap trust graph: %v\n", err)
 		}
 	}
 
@@ -80,7 +80,7 @@ func NewRegistryService(ctx context.Context, db database.Database, signer signer
 
 // Start starts the registry service
 func (rs *RegistryService) Start() error {
-	lol.Info("starting FIND registry service")
+	fmt.Println("starting FIND registry service")
 
 	// Start proposal monitoring goroutine
 	rs.wg.Add(1)
@@ -99,7 +99,7 @@ func (rs *RegistryService) Start() error {
 
 // Stop stops the registry service
 func (rs *RegistryService) Stop() error {
-	lol.Info("stopping FIND registry service")
+	fmt.Println("stopping FIND registry service")
 
 	rs.cancel()
 	rs.wg.Wait()
@@ -139,11 +139,11 @@ func (rs *RegistryService) checkForNewProposals() {
 func (rs *RegistryService) OnProposalReceived(proposal *RegistrationProposal) error {
 	// Validate proposal
 	if err := rs.consensus.ValidateProposal(proposal); chk.E(err) {
-		lol.Warn("invalid proposal:", err)
+		fmt.Printf("invalid proposal: %v\n", err)
 		return err
 	}
 
-	proposalID := proposal.Event.GetIDString()
+	proposalID := hex.Enc(proposal.Event.ID)
 
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -153,7 +153,7 @@ func (rs *RegistryService) OnProposalReceived(proposal *RegistrationProposal) er
 		return nil
 	}
 
-	lol.Info("received new proposal:", proposalID, "name:", proposal.Name)
+	fmt.Printf("received new proposal: %s name: %s\n", proposalID, proposal.Name)
 
 	// Create proposal state
 	state := &ProposalState{
@@ -185,8 +185,8 @@ func (rs *RegistryService) shouldAttest(proposalID string) bool {
 
 	// Sparse attestation: use hash of (proposal_id || service_pubkey) % K == 0
 	// This provides deterministic but distributed attestation
-	hash := hex.Dec(proposalID)
-	if len(hash) == 0 {
+	hash, err := hex.Dec(proposalID)
+	if err != nil || len(hash) == 0 {
 		return false
 	}
 
@@ -197,7 +197,7 @@ func (rs *RegistryService) shouldAttest(proposalID string) bool {
 // publishAttestation publishes an attestation for a proposal
 func (rs *RegistryService) publishAttestation(proposal *RegistrationProposal, decision string, reason string) {
 	attestation := &Attestation{
-		ProposalID: proposal.Event.GetIDString(),
+		ProposalID: hex.Enc(proposal.Event.ID),
 		Decision:   decision,
 		Weight:     100,
 		Reason:     reason,
@@ -209,7 +209,7 @@ func (rs *RegistryService) publishAttestation(proposal *RegistrationProposal, de
 	// TODO: Publish to database
 	_ = attestation
 
-	lol.Debug("published attestation for proposal:", proposal.Name, "decision:", decision)
+	fmt.Printf("published attestation for proposal: %s decision: %s\n", proposal.Name, decision)
 }
 
 // collectAttestations collects attestations from other registry services
@@ -260,7 +260,7 @@ func (rs *RegistryService) processProposal(proposalID string) {
 	state.ProcessedAt = &now
 	rs.mu.Unlock()
 
-	lol.Info("processing proposal:", proposalID, "name:", state.Proposal.Name)
+	fmt.Printf("processing proposal: %s name: %s\n", proposalID, state.Proposal.Name)
 
 	// Check for competing proposals for the same name
 	competingProposals := rs.getCompetingProposals(state.Proposal.Name)
@@ -279,23 +279,24 @@ func (rs *RegistryService) processProposal(proposalID string) {
 
 	result, err := rs.consensus.ComputeConsensus(proposalList, allAttestations)
 	if chk.E(err) {
-		lol.Err("consensus computation failed:", err)
+		fmt.Printf("consensus computation failed: %v\n", err)
 		return
 	}
 
 	// Log result
 	if result.Conflicted {
-		lol.Warn("consensus conflicted for name:", state.Proposal.Name, "reason:", result.Reason)
+		fmt.Printf("consensus conflicted for name: %s reason: %s\n", state.Proposal.Name, result.Reason)
 		return
 	}
 
-	lol.Info("consensus reached for name:", state.Proposal.Name,
-		"winner:", result.Winner.Event.GetIDString(),
-		"confidence:", result.Confidence)
+	fmt.Printf("consensus reached for name: %s winner: %s confidence: %f\n",
+		state.Proposal.Name,
+		hex.Enc(result.Winner.Event.ID),
+		result.Confidence)
 
 	// Publish name state (kind 30102)
 	if err := rs.publishNameState(result); chk.E(err) {
-		lol.Err("failed to publish name state:", err)
+		fmt.Printf("failed to publish name state: %v\n", err)
 		return
 	}
 
@@ -368,7 +369,7 @@ func (rs *RegistryService) refreshTrustGraph() {
 
 // updateTrustGraph fetches trust graphs from other services
 func (rs *RegistryService) updateTrustGraph() {
-	lol.Debug("updating trust graph")
+	fmt.Println("updating trust graph")
 
 	// TODO: Query kind 30101 events (trust graphs) from database
 	// TODO: Parse and update trust graph
@@ -377,7 +378,7 @@ func (rs *RegistryService) updateTrustGraph() {
 
 // bootstrapTrustGraph initializes trust relationships with bootstrap services
 func (rs *RegistryService) bootstrapTrustGraph() error {
-	lol.Info("bootstrapping trust graph with", len(rs.config.BootstrapServices), "services")
+	fmt.Printf("bootstrapping trust graph with %d services\n", len(rs.config.BootstrapServices))
 
 	for _, pubkeyHex := range rs.config.BootstrapServices {
 		entry := TrustEntry{
@@ -387,7 +388,7 @@ func (rs *RegistryService) bootstrapTrustGraph() error {
 		}
 
 		if err := rs.trustGraph.AddEntry(entry); chk.E(err) {
-			lol.Warn("failed to add bootstrap trust entry:", err)
+			fmt.Printf("failed to add bootstrap trust entry: %v\n", err)
 			continue
 		}
 	}

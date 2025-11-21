@@ -115,8 +115,8 @@ func NewAttestation(proposalID, decision string, weight int, reason, serviceURL 
 	return ev, nil
 }
 
-// NewTrustGraph creates a new trust graph event (kind 30101)
-func NewTrustGraph(entries []TrustEntry, signer signer.I) (*event.E, error) {
+// NewTrustGraphEvent creates a new trust graph event (kind 30101)
+func NewTrustGraphEvent(entries []TrustEntry, signer signer.I) (*event.E, error) {
 	// Validate trust entries
 	for i, entry := range entries {
 		if err := ValidateTrustScore(entry.TrustScore); err != nil {
