@@ -8,24 +8,12 @@
 *
 
 # Especially these
-.vscode
 .vscode/
-.vscode/**
-**/.vscode
-**/.vscode/**
-node_modules
+**/.vscode/
 node_modules/
-node_modules/**
-**/node_modules
 **/node_modules/
-**/node_modules/**
 /test*
-.idea
 .idea/
-.idea/**
-/.idea/
-/.idea/**
-/.idea
 # and others
 /go.work.sum
 /secp256k1/
@@ -81,9 +69,7 @@ cmd/benchmark/data
 !license
 !readme
 !*.ico
-!.idea/*
 !*.xml
-!.name
 !.gitignore
 !version
 !out.jsonl
@@ -103,7 +89,7 @@ cmd/benchmark/data
 !app/web/dist/*.ico
 !app/web/dist/*.png
 !app/web/dist/*.svg
-!Dockerfile
+!Dockerfile*
 !.dockerignore
 !libsecp256k1.so
 # ...even if they are in subdirectories
@@ -112,20 +98,6 @@ cmd/benchmark/data
 /gui/gui/main.wasm
 /gui/gui/index.html
 pkg/database/testrealy
-/.idea/workspace.xml
-/.idea/dictionaries/project.xml
-/.idea/shelf/Add_tombstone_handling__enhance_event_ID_logic__update_imports.xml
-/.idea/.gitignore
-/.idea/misc.xml
-/.idea/modules.xml
-/.idea/orly.dev.iml
-/.idea/vcs.xml
-/.idea/codeStyles/codeStyleConfig.xml
-/.idea/material_theme_project_new.xml
-/.idea/orly.iml
-/.idea/go.imports.xml
-/.idea/inspectionProfiles/Project_Default.xml
-/.idea/.name
 /ctxproxy.config.yml
 cmd/benchmark/external/**
 private*
@@ -135,20 +107,5 @@ pkg/protocol/directory-client/node_modules
 build/orly-*
 build/libsecp256k1-*
 build/SHA256SUMS-*
-Dockerfile
-/cmd/benchmark/reports/run_20251116_172629/aggregate_report.txt
-/cmd/benchmark/reports/run_20251116_172629/next-orly_results.txt
-/cmd/benchmark/reports/run_20251116_173450/aggregate_report.txt
-/cmd/benchmark/reports/run_20251116_173450/next-orly_results.txt
-/cmd/benchmark/reports/run_20251116_173846/aggregate_report.txt
-/cmd/benchmark/reports/run_20251116_173846/next-orly_results.txt
-/cmd/benchmark/reports/run_20251116_174246/aggregate_report.txt
-/cmd/benchmark/reports/run_20251116_174246/next-orly_results.txt
-/cmd/benchmark/reports/run_20251116_182250/aggregate_report.txt
-/cmd/benchmark/reports/run_20251116_182250/next-orly_results.txt
-/cmd/benchmark/reports/run_20251116_203720/aggregate_report.txt
-/cmd/benchmark/reports/run_20251116_203720/next-orly_results.txt
-/cmd/benchmark/reports/run_20251116_225648/aggregate_report.txt
-/cmd/benchmark/reports/run_20251116_225648/next-orly_results.txt
-/cmd/benchmark/reports/run_20251116_233547/aggregate_report.txt
-/cmd/benchmark/reports/run_20251116_233547/next-orly_results.txt
+
+cmd/benchmark/data

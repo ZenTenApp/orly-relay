@@ -1,0 +1,47 @@
+# Dockerfile for rely-sqlite relay
+FROM golang:1.25-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git gcc musl-dev sqlite-dev
+
+WORKDIR /build
+
+# Clone rely-sqlite repository
+RUN git clone https://github.com/pippellia-btc/rely-sqlite.git .
+
+# Copy our custom main.go that uses environment variables for configuration
+# Remove build tags (first 3 lines) since we want this file to be compiled here
+COPY rely-sqlite-main.go ./rely-sqlite-main.go
+RUN sed '1,3d' ./rely-sqlite-main.go > ./main.go.new && \
+    mv -f ./main.go.new ./main.go && \
+    rm -f ./rely-sqlite-main.go
+
+# Download dependencies
+RUN go mod download
+
+# Build the relay with CGO enabled (required for SQLite)
+RUN CGO_ENABLED=1 go build -o relay .
+
+# Final stage
+FROM alpine:latest
+
+# Install runtime dependencies (curl for health check)
+RUN apk --no-cache add ca-certificates sqlite-libs curl
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /build/relay /app/relay
+
+# Create data directory
+RUN mkdir -p /data && chmod 777 /data
+
+# Expose port (rely default is 3334)
+EXPOSE 3334
+
+# Environment variables
+ENV DATABASE_PATH=/data/relay.db
+ENV RELAY_LISTEN=0.0.0.0:3334
+
+# Run the relay
+CMD ["/app/relay"]
