@@ -291,3 +291,43 @@ func BenchmarkTagsToSliceOfSliceOfStrings(b *testing.B) {
 	})
 }
 
+func BenchmarkTagEquals(b *testing.B) {
+	b.Run("BinaryToBinary", func(b *testing.B) {
+		b.ReportAllocs()
+		// Create two tags with same binary-encoded value
+		tag1 := New()
+		_, _ = tag1.Unmarshal([]byte(`["e","0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]`))
+		tag2 := New()
+		_, _ = tag2.Unmarshal([]byte(`["e","0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]`))
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = tag1.Equals(tag2)
+		}
+	})
+	b.Run("BinaryToHex", func(b *testing.B) {
+		b.ReportAllocs()
+		// One binary-encoded, one hex (simulate comparison with non-optimized tag)
+		tag1 := New()
+		_, _ = tag1.Unmarshal([]byte(`["e","0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]`))
+		// Create hex version manually (simulating older format)
+		tag2 := NewFromBytesSlice([]byte("e"), []byte("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = tag1.Equals(tag2)
+		}
+	})
+	b.Run("HexToHex", func(b *testing.B) {
+		b.ReportAllocs()
+		// Both hex (non-optimized tags)
+		tag1 := NewFromBytesSlice([]byte("t"), []byte("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
+		tag2 := NewFromBytesSlice([]byte("t"), []byte("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = tag1.Equals(tag2)
+		}
+	})
+}
+

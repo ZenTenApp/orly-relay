@@ -115,7 +115,8 @@
       "Bash(lynx:*)",
       "Bash(sed:*)",
       "Bash(docker stop:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(timeout 30 go test:*)"
     ],
     "deny": [],
     "ask": []
