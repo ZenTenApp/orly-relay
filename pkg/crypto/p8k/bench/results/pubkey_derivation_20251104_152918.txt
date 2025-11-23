@@ -1,9 +1,0 @@
-goos: linux
-goarch: amd64
-pkg: bench
-cpu: AMD Ryzen 5 PRO 4650G with Radeon Graphics
-BenchmarkComparative_PubkeyDerivation/BTCEC-12         	  112177	     32245 ns/op	      80 B/op	       1 allocs/op
-BenchmarkComparative_PubkeyDerivation/P256K1-12        	  132627	     28056 ns/op	       0 B/op	       0 allocs/op
-BenchmarkComparative_PubkeyDerivation/P8K-12           	  188404	     18707 ns/op	     160 B/op	       4 allocs/op
-PASS
-ok  	bench	12.016s

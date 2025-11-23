@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"next.orly.dev/pkg/protocol/nwc"
-	"next.orly.dev/pkg/protocol/ws"
+	"git.mleku.dev/mleku/nostr/ws"
 )
 
 func TestNWCClientCreation(t *testing.T) {

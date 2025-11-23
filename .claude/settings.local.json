@@ -116,7 +116,16 @@
       "Bash(sed:*)",
       "Bash(docker stop:*)",
       "Bash(grep:*)",
-      "Bash(timeout 30 go test:*)"
+      "Bash(timeout 30 go test:*)",
+      "Bash(tree:*)",
+      "Bash(timeout 180 ./migrate-imports.sh:*)",
+      "Bash(./migrate-fast.sh:*)",
+      "Bash(git restore:*)",
+      "Bash(go mod download:*)",
+      "Bash(go clean:*)",
+      "Bash(GOSUMDB=off CGO_ENABLED=0 timeout 240 go build:*)",
+      "Bash(CGO_ENABLED=0 GOFLAGS=-mod=mod timeout 240 go build:*)",
+      "Bash(CGO_ENABLED=0 timeout 120 go test:*)"
     ],
     "deny": [],
     "ask": []

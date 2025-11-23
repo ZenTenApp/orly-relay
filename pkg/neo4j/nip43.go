@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 )
 
 // NIP-43 Invite-based ACL methods

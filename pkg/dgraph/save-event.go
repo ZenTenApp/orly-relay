@@ -8,9 +8,9 @@ import (
 
 	"github.com/dgraph-io/dgo/v230/protos/api"
 	"next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/filter"
-	"next.orly.dev/pkg/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 )
 
 // SaveEvent stores a Nostr event in the Dgraph database.

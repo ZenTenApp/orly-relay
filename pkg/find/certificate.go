@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/hex"
-	"next.orly.dev/pkg/interfaces/signer"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"git.mleku.dev/mleku/nostr/interfaces/signer"
 )
 
 // GenerateChallenge generates a random 32-byte challenge token

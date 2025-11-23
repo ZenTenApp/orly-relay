@@ -3,7 +3,7 @@ package find
 import (
 	"time"
 
-	"next.orly.dev/pkg/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/event"
 )
 
 // Event kind constants as defined in the NIP

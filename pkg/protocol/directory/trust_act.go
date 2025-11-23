@@ -8,8 +8,8 @@ import (
 
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/errorf"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
 )
 
 // TrustAct represents a complete Trust Act event (Kind 39101)

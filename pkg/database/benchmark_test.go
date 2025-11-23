@@ -9,13 +9,13 @@ import (
 	"testing"
 
 	"lol.mleku.dev/chk"
-	"next.orly.dev/pkg/interfaces/signer/p8k"
+	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 	"next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/event/examples"
-	"next.orly.dev/pkg/encoders/filter"
-	"next.orly.dev/pkg/encoders/kind"
-	"next.orly.dev/pkg/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/event/examples"
+	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
 )
 
 var benchDB *D

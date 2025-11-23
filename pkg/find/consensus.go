@@ -7,7 +7,7 @@ import (
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/errorf"
 	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 )
 
 // ConsensusEngine handles the consensus algorithm for name registrations

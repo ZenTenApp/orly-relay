@@ -10,10 +10,10 @@ import (
 	"github.com/gorilla/websocket"
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
-	"next.orly.dev/pkg/encoders/envelopes/authenvelope"
-	"next.orly.dev/pkg/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/envelopes/authenvelope"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"next.orly.dev/pkg/protocol/publish"
-	"next.orly.dev/pkg/utils/units"
+	"git.mleku.dev/mleku/nostr/utils/units"
 )
 
 const (

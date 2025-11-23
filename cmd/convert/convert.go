@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"next.orly.dev/pkg/crypto/ec/schnorr"
-	"next.orly.dev/pkg/crypto/ec/secp256k1"
-	b32 "next.orly.dev/pkg/encoders/bech32encoding"
-	"next.orly.dev/pkg/encoders/hex"
+	"git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
+	"git.mleku.dev/mleku/nostr/crypto/ec/secp256k1"
+	b32 "git.mleku.dev/mleku/nostr/encoders/bech32encoding"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 )
 
 func usage() {

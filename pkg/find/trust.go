@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"next.orly.dev/pkg/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 )
 
 // TrustGraph manages trust relationships between registry services

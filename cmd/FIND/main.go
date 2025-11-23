@@ -5,11 +5,11 @@ import (
 	"os"
 	"time"
 
-	"next.orly.dev/pkg/crypto/keys"
-	"next.orly.dev/pkg/encoders/hex"
+	"git.mleku.dev/mleku/nostr/crypto/keys"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"next.orly.dev/pkg/find"
-	"next.orly.dev/pkg/interfaces/signer"
-	"next.orly.dev/pkg/interfaces/signer/p8k"
+	"git.mleku.dev/mleku/nostr/interfaces/signer"
+	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 )
 
 func main() {

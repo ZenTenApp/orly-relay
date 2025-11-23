@@ -78,9 +78,9 @@ import (
 
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/errorf"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/kind"
-	"next.orly.dev/pkg/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
 )
 
 // Event kinds for the distributed directory consensus protocol

@@ -1,7 +1,7 @@
 package publisher
 
 import (
-	"next.orly.dev/pkg/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/event"
 	"next.orly.dev/pkg/interfaces/typer"
 )
 

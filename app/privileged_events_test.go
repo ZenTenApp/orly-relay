@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/hex"
-	"next.orly.dev/pkg/encoders/kind"
-	"next.orly.dev/pkg/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
 )
 
 // Test helper to create a test event

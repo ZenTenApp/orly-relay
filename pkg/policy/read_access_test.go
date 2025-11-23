@@ -3,8 +3,8 @@ package policy
 import (
 	"testing"
 
-	"next.orly.dev/pkg/encoders/hex"
-	"next.orly.dev/pkg/interfaces/signer/p8k"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 )
 
 // TestReadAllowLogic tests the correct semantics of ReadAllow:

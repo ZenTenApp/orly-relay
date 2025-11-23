@@ -13,10 +13,10 @@ import (
 	"lol.mleku.dev"
 	"lol.mleku.dev/chk"
 	"next.orly.dev/pkg/database/querycache"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"next.orly.dev/pkg/utils/apputil"
-	"next.orly.dev/pkg/utils/units"
+	"git.mleku.dev/mleku/nostr/utils/units"
 )
 
 // D implements the Database interface using Badger as the storage backend

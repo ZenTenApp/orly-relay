@@ -8,9 +8,9 @@ import (
 
 	"lol.mleku.dev/chk"
 	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/hex"
-	"next.orly.dev/pkg/interfaces/signer"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"git.mleku.dev/mleku/nostr/interfaces/signer"
 )
 
 // RegistryService implements the FIND name registry consensus protocol

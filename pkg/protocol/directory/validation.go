@@ -10,10 +10,10 @@ import (
 
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/errorf"
-	"next.orly.dev/pkg/crypto/ec/schnorr"
-	"next.orly.dev/pkg/crypto/ec/secp256k1"
-	"next.orly.dev/pkg/encoders/bech32encoding"
-	"next.orly.dev/pkg/encoders/event"
+	"git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
+	"git.mleku.dev/mleku/nostr/crypto/ec/secp256k1"
+	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
+	"git.mleku.dev/mleku/nostr/encoders/event"
 )
 
 // Validation constants

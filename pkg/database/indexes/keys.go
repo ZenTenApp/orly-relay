@@ -6,7 +6,7 @@ import (
 
 	"lol.mleku.dev/chk"
 	"next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/interfaces/codec"
+	"git.mleku.dev/mleku/nostr/interfaces/codec"
 )
 
 var counter int

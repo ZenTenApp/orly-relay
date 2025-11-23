@@ -12,10 +12,10 @@ import (
 
 	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/filter"
-	"next.orly.dev/pkg/encoders/hex"
-	"next.orly.dev/pkg/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
 )
 
 // Manager handles distributed synchronization between relay peers using serial numbers as clocks

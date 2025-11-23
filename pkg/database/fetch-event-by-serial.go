@@ -8,7 +8,7 @@ import (
 	"lol.mleku.dev/chk"
 	"next.orly.dev/pkg/database/indexes"
 	"next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/event"
 )
 
 func (d *D) FetchEventBySerial(ser *types.Uint40) (ev *event.E, err error) {

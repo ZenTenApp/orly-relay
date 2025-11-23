@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"lol.mleku.dev/chk"
-	"next.orly.dev/pkg/crypto/ec/schnorr"
+	"git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
 	"github.com/minio/sha256-simd"
-	"next.orly.dev/pkg/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"next.orly.dev/pkg/utils"
 )
 

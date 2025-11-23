@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"lol.mleku.dev/chk"
-	"next.orly.dev/pkg/interfaces/signer/p8k"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/filter"
-	"next.orly.dev/pkg/encoders/kind"
-	"next.orly.dev/pkg/encoders/tag"
-	"next.orly.dev/pkg/encoders/timestamp"
+	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/timestamp"
 )
 
 // helper to create a fresh DB

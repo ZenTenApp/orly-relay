@@ -9,16 +9,16 @@ import (
 
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
-	"next.orly.dev/pkg/crypto/encryption"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/filter"
-	"next.orly.dev/pkg/encoders/hex"
-	"next.orly.dev/pkg/encoders/kind"
-	"next.orly.dev/pkg/encoders/tag"
-	"next.orly.dev/pkg/encoders/timestamp"
-	"next.orly.dev/pkg/interfaces/signer"
-	"next.orly.dev/pkg/protocol/ws"
-	"next.orly.dev/pkg/utils/values"
+	"git.mleku.dev/mleku/nostr/crypto/encryption"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/timestamp"
+	"git.mleku.dev/mleku/nostr/interfaces/signer"
+	"git.mleku.dev/mleku/nostr/ws"
+	"git.mleku.dev/mleku/nostr/utils/values"
 )
 
 type Client struct {

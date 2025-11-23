@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/hex"
-	"next.orly.dev/pkg/encoders/tag"
-	"next.orly.dev/pkg/encoders/timestamp"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/timestamp"
 )
 
 // TestFullServerIntegration tests a complete workflow with a real HTTP server

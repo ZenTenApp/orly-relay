@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	"next.orly.dev/pkg/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/event"
 )
 
 // Import imports events from a reader (JSONL format)

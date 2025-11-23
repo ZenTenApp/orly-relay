@@ -7,7 +7,7 @@ import (
 
 	"lol.mleku.dev/chk"
 	"github.com/minio/sha256-simd"
-	"next.orly.dev/pkg/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"next.orly.dev/pkg/utils"
 )
 

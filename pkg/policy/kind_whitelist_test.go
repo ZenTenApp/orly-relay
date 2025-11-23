@@ -3,7 +3,7 @@ package policy
 import (
 	"testing"
 
-	"next.orly.dev/pkg/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 )
 
 // TestKindWhitelistComprehensive verifies that kind whitelisting properly rejects

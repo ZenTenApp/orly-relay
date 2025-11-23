@@ -19,11 +19,11 @@ import (
 	"next.orly.dev/app"
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/crypto/keys"
+	"git.mleku.dev/mleku/nostr/crypto/keys"
 	"next.orly.dev/pkg/database"
 	_ "next.orly.dev/pkg/dgraph" // Import to register dgraph factory
 	_ "next.orly.dev/pkg/neo4j"  // Import to register neo4j factory
-	"next.orly.dev/pkg/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"next.orly.dev/pkg/utils/interrupt"
 	"next.orly.dev/pkg/version"
 )

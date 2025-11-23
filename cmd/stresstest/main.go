@@ -16,16 +16,16 @@ import (
 	"time"
 
 	"lol.mleku.dev/log"
-	"next.orly.dev/pkg/interfaces/signer/p8k"
-	"next.orly.dev/pkg/encoders/envelopes/eventenvelope"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/event/examples"
-	"next.orly.dev/pkg/encoders/filter"
-	"next.orly.dev/pkg/encoders/hex"
-	"next.orly.dev/pkg/encoders/kind"
-	"next.orly.dev/pkg/encoders/tag"
-	"next.orly.dev/pkg/encoders/timestamp"
-	"next.orly.dev/pkg/protocol/ws"
+	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"git.mleku.dev/mleku/nostr/encoders/envelopes/eventenvelope"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/event/examples"
+	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/timestamp"
+	"git.mleku.dev/mleku/nostr/ws"
 )
 
 // randomHex returns a hex-encoded string of n random bytes (2n hex chars)

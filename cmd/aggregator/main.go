@@ -17,17 +17,17 @@ import (
 
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
-	"next.orly.dev/pkg/interfaces/signer/p8k"
+	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 	"github.com/minio/sha256-simd"
-	"next.orly.dev/pkg/encoders/bech32encoding"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/filter"
-	"next.orly.dev/pkg/encoders/hex"
-	"next.orly.dev/pkg/encoders/kind"
-	"next.orly.dev/pkg/encoders/tag"
-	"next.orly.dev/pkg/encoders/timestamp"
-	"next.orly.dev/pkg/interfaces/signer"
-	"next.orly.dev/pkg/protocol/ws"
+	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/timestamp"
+	"git.mleku.dev/mleku/nostr/interfaces/signer"
+	"git.mleku.dev/mleku/nostr/ws"
 )
 
 const (

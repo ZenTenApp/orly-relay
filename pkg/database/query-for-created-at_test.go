@@ -9,10 +9,10 @@ import (
 	"testing"
 
 	"lol.mleku.dev/chk"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/event/examples"
-	"next.orly.dev/pkg/encoders/filter"
-	"next.orly.dev/pkg/encoders/timestamp"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/event/examples"
+	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/timestamp"
 	"next.orly.dev/pkg/interfaces/store"
 	"next.orly.dev/pkg/utils"
 )

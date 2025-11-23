@@ -3,7 +3,7 @@ package dgraph
 import (
 	"fmt"
 
-	"next.orly.dev/pkg/crypto/keys"
+	"git.mleku.dev/mleku/nostr/crypto/keys"
 )
 
 // Relay identity methods

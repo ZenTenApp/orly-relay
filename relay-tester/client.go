@@ -8,8 +8,8 @@ import (
 
 	"github.com/gorilla/websocket"
 	"lol.mleku.dev/errorf"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 )
 
 // Client wraps a WebSocket connection to a relay for testing.

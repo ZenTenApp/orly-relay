@@ -8,7 +8,7 @@ import (
 	"lol.mleku.dev/chk"
 	"next.orly.dev/pkg/acl"
 	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/protocol/httpauth"
+	"git.mleku.dev/mleku/nostr/httpauth"
 )
 
 // NIP86Request represents a NIP-86 JSON-RPC request

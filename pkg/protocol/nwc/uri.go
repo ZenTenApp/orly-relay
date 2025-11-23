@@ -5,10 +5,10 @@ import (
 	"net/url"
 
 	"lol.mleku.dev/chk"
-	"next.orly.dev/pkg/crypto/encryption"
-	"next.orly.dev/pkg/interfaces/signer/p8k"
-	"next.orly.dev/pkg/encoders/hex"
-	"next.orly.dev/pkg/interfaces/signer"
+	"git.mleku.dev/mleku/nostr/crypto/encryption"
+	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"git.mleku.dev/mleku/nostr/interfaces/signer"
 )
 
 type ConnectionParams struct {

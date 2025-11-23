@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"lol.mleku.dev/chk"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/event/examples"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/event/examples"
 )
 
 // TestExport tests the Export function by:

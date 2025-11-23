@@ -5,10 +5,10 @@ import (
 	"strconv"
 	"time"
 
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/tag"
-	"next.orly.dev/pkg/encoders/timestamp"
-	"next.orly.dev/pkg/interfaces/signer"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/timestamp"
+	"git.mleku.dev/mleku/nostr/interfaces/signer"
 )
 
 // NewRegistrationProposal creates a new registration proposal event (kind 30100)

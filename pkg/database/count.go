@@ -3,7 +3,7 @@ package database
 import (
 	"context"
 
-	"next.orly.dev/pkg/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/filter"
 )
 
 // CountEvents mirrors the initial selection logic of QueryEvents but stops

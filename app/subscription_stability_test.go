@@ -15,9 +15,9 @@ import (
 	"github.com/gorilla/websocket"
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/tag"
-	"next.orly.dev/pkg/interfaces/signer/p8k"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 	"next.orly.dev/pkg/protocol/publish"
 )
 

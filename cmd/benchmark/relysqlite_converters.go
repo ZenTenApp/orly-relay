@@ -6,9 +6,9 @@ import (
 
 	"github.com/nbd-wtf/go-nostr"
 
-	orlyEvent "next.orly.dev/pkg/encoders/event"
-	orlyFilter "next.orly.dev/pkg/encoders/filter"
-	orlyTag "next.orly.dev/pkg/encoders/tag"
+	orlyEvent "git.mleku.dev/mleku/nostr/encoders/event"
+	orlyFilter "git.mleku.dev/mleku/nostr/encoders/filter"
+	orlyTag "git.mleku.dev/mleku/nostr/encoders/tag"
 )
 
 // convertToNostrEvent converts an ORLY event to a go-nostr event

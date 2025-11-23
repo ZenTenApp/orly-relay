@@ -7,8 +7,8 @@ import (
 	"github.com/dgraph-io/badger/v4"
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
-	"next.orly.dev/pkg/crypto/keys"
-	"next.orly.dev/pkg/encoders/hex"
+	"git.mleku.dev/mleku/nostr/crypto/keys"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 )
 
 const relayIdentitySecretKey = "relay:identity:sk"

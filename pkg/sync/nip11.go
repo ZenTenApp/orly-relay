@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"next.orly.dev/pkg/protocol/relayinfo"
+	"git.mleku.dev/mleku/nostr/relayinfo"
 )
 
 // NIP11Cache caches relay information documents with TTL

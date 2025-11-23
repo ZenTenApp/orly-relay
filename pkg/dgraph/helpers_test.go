@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"lol.mleku.dev/chk"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/event/examples"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/event/examples"
 )
 
 // isDgraphAvailable checks if a dgraph server is running

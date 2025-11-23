@@ -11,11 +11,11 @@ import (
 
 	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/encoders/bech32encoding"
-	"next.orly.dev/pkg/encoders/event"
-	"next.orly.dev/pkg/encoders/filter"
-	"next.orly.dev/pkg/encoders/kind"
-	"next.orly.dev/pkg/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
+	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
 )
 
 // RelayGroupConfig represents a relay group configuration event

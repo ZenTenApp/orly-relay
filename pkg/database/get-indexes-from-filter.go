@@ -9,8 +9,8 @@ import (
 	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/database/indexes"
 	types2 "next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/encoders/filter"
-	"next.orly.dev/pkg/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
 )
 
 type Range struct {

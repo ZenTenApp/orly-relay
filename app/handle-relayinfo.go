@@ -9,9 +9,9 @@ import (
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/interfaces/signer/p8k"
-	"next.orly.dev/pkg/encoders/hex"
-	"next.orly.dev/pkg/protocol/relayinfo"
+	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"git.mleku.dev/mleku/nostr/relayinfo"
 	"next.orly.dev/pkg/version"
 )
 

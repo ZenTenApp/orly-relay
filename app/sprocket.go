@@ -16,7 +16,7 @@ import (
 	"github.com/adrg/xdg"
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
-	"next.orly.dev/pkg/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/event"
 )
 
 // SprocketResponse represents a response from the sprocket script
