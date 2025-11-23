@@ -203,18 +203,24 @@ func Run(
 		}
 	}
 
-	// Initialize the user interface
-	l.UserInterface()
-
 	// Initialize Blossom blob storage server (only for Badger backend)
+	// MUST be done before UserInterface() which registers routes
 	if badgerDB, ok := db.(*database.D); ok {
+		log.I.F("Badger backend detected, initializing Blossom server...")
 		if l.blossomServer, err = initializeBlossomServer(ctx, cfg, badgerDB); err != nil {
 			log.E.F("failed to initialize blossom server: %v", err)
 			// Continue without blossom server
 		} else if l.blossomServer != nil {
 			log.I.F("blossom blob storage server initialized")
+		} else {
+			log.W.F("blossom server initialization returned nil without error")
 		}
+	} else {
+		log.I.F("Non-Badger backend detected (type: %T), Blossom server not available", db)
 	}
+
+	// Initialize the user interface (registers routes)
+	l.UserInterface()
 
 	// Ensure a relay identity secret key exists when subscriptions and NWC are enabled
 	if cfg.SubscriptionEnabled && cfg.NWCUri != "" {

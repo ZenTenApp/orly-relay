@@ -255,6 +255,8 @@ func (s *Server) UserInterface() {
 	if s.blossomServer != nil {
 		s.mux.HandleFunc("/blossom/", s.blossomHandler)
 		log.Printf("Blossom blob storage API enabled at /blossom")
+	} else {
+		log.Printf("WARNING: Blossom server is nil, routes not registered")
 	}
 
 	// Cluster replication API endpoints

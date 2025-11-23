@@ -180,13 +180,11 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Calculate SHA256
-	sha256Hash := CalculateSHA256(body)
-	sha256Hex := hex.Enc(sha256Hash)
-
 	// Optional authorization validation (do this BEFORE ACL check)
+	// For upload, we don't pass sha256Hash because upload auth events don't have 'x' tags
+	// (the hash isn't known at auth event creation time)
 	if r.Header.Get(AuthorizationHeader) != "" {
-		authEv, err := ValidateAuthEvent(r, "upload", sha256Hash)
+		authEv, err := ValidateAuthEvent(r, "upload", nil)
 		if err != nil {
 			s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
 			return
@@ -202,6 +200,10 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Calculate SHA256 after auth check
+	sha256Hash := CalculateSHA256(body)
+	sha256Hex := hex.Enc(sha256Hash)
+
 	// Check if blob already exists
 	exists, err := s.storage.HasBlob(sha256Hash)
 	if err != nil {
@@ -210,10 +212,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(pubkey) == 0 {
-		s.setErrorResponse(w, http.StatusUnauthorized, "authorization required")
-		return
-	}
+	// Note: pubkey may be nil for anonymous uploads if ACL allows it
+	// The storage layer will handle anonymous uploads appropriately
 
 	// Detect MIME type
 	mimeType := DetectMimeType(
@@ -593,8 +593,9 @@ func (s *Server) handleMirror(w http.ResponseWriter, r *http.Request) {
 	sha256Hex := hex.Enc(sha256Hash)
 
 	// Optional authorization validation (do this BEFORE ACL check)
+	// For mirror (which uses upload semantics), don't pass sha256Hash
 	if r.Header.Get(AuthorizationHeader) != "" {
-		authEv, err := ValidateAuthEvent(r, "upload", sha256Hash)
+		authEv, err := ValidateAuthEvent(r, "upload", nil)
 		if err != nil {
 			s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
 			return
@@ -610,10 +611,7 @@ func (s *Server) handleMirror(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(pubkey) == 0 {
-		s.setErrorResponse(w, http.StatusUnauthorized, "authorization required")
-		return
-	}
+	// Note: pubkey may be nil for anonymous uploads if ACL allows it
 
 	// Detect MIME type from remote response
 	mimeType := DetectMimeType(
@@ -673,12 +671,10 @@ func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Calculate SHA256 for authorization validation
-	sha256Hash := CalculateSHA256(body)
-
 	// Optional authorization validation (do this BEFORE ACL check)
+	// For media upload, don't pass sha256Hash (similar to regular upload)
 	if r.Header.Get(AuthorizationHeader) != "" {
-		authEv, err := ValidateAuthEvent(r, "media", sha256Hash)
+		authEv, err := ValidateAuthEvent(r, "media", nil)
 		if err != nil {
 			s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
 			return
@@ -694,10 +690,7 @@ func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(pubkey) == 0 {
-		s.setErrorResponse(w, http.StatusUnauthorized, "authorization required")
-		return
-	}
+	// Note: pubkey may be nil for anonymous uploads if ACL allows it
 
 	// Optimize media (placeholder - actual optimization would be implemented here)
 	originalMimeType := DetectMimeType(

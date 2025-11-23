@@ -125,7 +125,8 @@
       "Bash(go clean:*)",
       "Bash(GOSUMDB=off CGO_ENABLED=0 timeout 240 go build:*)",
       "Bash(CGO_ENABLED=0 GOFLAGS=-mod=mod timeout 240 go build:*)",
-      "Bash(CGO_ENABLED=0 timeout 120 go test:*)"
+      "Bash(CGO_ENABLED=0 timeout 120 go test:*)",
+      "Bash(./cmd/blossomtest/blossomtest:*)"
     ],
     "deny": [],
     "ask": []
