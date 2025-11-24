@@ -361,14 +361,15 @@ func NewWithManager(ctx context.Context, appName string, enabled bool) *P {
 
 	if enabled {
 		if err := policy.LoadFromFile(configPath); err != nil {
-			log.W.F(
-				"failed to load policy configuration from %s: %v", configPath,
-				err,
+			log.E.F(
+				"FATAL: Policy system is ENABLED (ORLY_POLICY_ENABLED=true) but configuration failed to load from %s: %v",
+				configPath, err,
 			)
-			log.I.F("using default policy configuration")
-		} else {
-			log.I.F("loaded policy configuration from %s", configPath)
+			log.E.F("The relay cannot start with an invalid policy configuration.")
+			log.E.F("Fix: Either disable the policy system (ORLY_POLICY_ENABLED=false) or ensure %s exists and contains valid JSON", configPath)
+			panic(fmt.Sprintf("fatal policy configuration error: %v", err))
 		}
+		log.I.F("loaded policy configuration from %s", configPath)
 
 		// Start the policy script if it exists and is enabled
 		go manager.startPolicyIfExists()
@@ -990,15 +991,15 @@ func (p *P) checkKindsPolicy(kind uint16) bool {
 
 	// No explicit whitelist or blacklist
 	// If there are specific rules defined, use implicit whitelist
-	// If there's only a global rule (no specific rules), allow all kinds
-	// If there are NO rules at all, allow all kinds (fall back to default policy)
+	// If there's only a global rule (no specific rules), fall back to default policy
+	// If there are NO rules at all, fall back to default policy
 	if len(p.Rules) > 0 {
 		// Implicit whitelist mode - only allow kinds with specific rules
 		_, hasRule := p.Rules[int(kind)]
 		return hasRule
 	}
-	// No specific rules (maybe global rule exists) - allow all kinds
-	return true
+	// No specific rules (maybe global rule exists) - fall back to default policy
+	return p.getDefaultPolicyAction()
 }
 
 // checkGlobalRulePolicy checks if the event passes the global rule filter

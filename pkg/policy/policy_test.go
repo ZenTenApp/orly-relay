@@ -738,26 +738,106 @@ func TestPolicyResponseSerialization(t *testing.T) {
 func TestNewWithManager(t *testing.T) {
 	ctx := context.Background()
 	appName := "test-app"
-	enabled := true
 
-	policy := NewWithManager(ctx, appName, enabled)
+	// Test with disabled policy (doesn't require policy.json file)
+	t.Run("disabled policy", func(t *testing.T) {
+		enabled := false
+		policy := NewWithManager(ctx, appName, enabled)
 
-	if policy == nil {
-		t.Fatal("Expected policy but got nil")
-	}
+		if policy == nil {
+			t.Fatal("Expected policy but got nil")
+		}
 
-	if policy.Manager == nil {
-		t.Fatal("Expected policy manager but got nil")
-	}
+		if policy.Manager == nil {
+			t.Fatal("Expected policy manager but got nil")
+		}
 
-	if !policy.Manager.IsEnabled() {
-		t.Error("Expected policy manager to be enabled")
-	}
+		if policy.Manager.IsEnabled() {
+			t.Error("Expected policy manager to be disabled")
+		}
 
-	if policy.Manager.IsRunning() {
-		t.Error("Expected policy manager to not be running initially")
-	}
+		if policy.Manager.IsRunning() {
+			t.Error("Expected policy manager to not be running")
+		}
 
+		// Verify default policy was set
+		if policy.DefaultPolicy != "allow" {
+			t.Errorf("Expected default_policy='allow', got '%s'", policy.DefaultPolicy)
+		}
+
+		// Clean up
+		policy.Manager.Shutdown()
+	})
+
+	// Test with enabled policy and valid config file
+	t.Run("enabled policy with valid config", func(t *testing.T) {
+		// Create a temporary config directory with a valid policy.json
+		tmpDir := t.TempDir()
+		configDir := filepath.Join(tmpDir, "test-policy-enabled")
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			t.Fatalf("Failed to create config dir: %v", err)
+		}
+
+		// Write a minimal valid policy.json
+		policyJSON := `{
+			"default_policy": "allow",
+			"kind": {
+				"whitelist": [1, 3, 4]
+			},
+			"rules": {
+				"1": {
+					"description": "Text notes"
+				}
+			}
+		}`
+		policyPath := filepath.Join(configDir, "policy.json")
+		if err := os.WriteFile(policyPath, []byte(policyJSON), 0644); err != nil {
+			t.Fatalf("Failed to write policy.json: %v", err)
+		}
+
+		// Create policy manager manually to use custom config path
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		manager := &PolicyManager{
+			ctx:        ctx,
+			cancel:     cancel,
+			configDir:  configDir,
+			scriptPath: filepath.Join(configDir, "policy.sh"),
+			enabled:    true,
+			runners:    make(map[string]*ScriptRunner),
+		}
+
+		policy := &P{
+			DefaultPolicy: "allow",
+			Manager:       manager,
+		}
+
+		// Load policy from our test file
+		if err := policy.LoadFromFile(policyPath); err != nil {
+			t.Fatalf("Failed to load policy: %v", err)
+		}
+
+		if policy.Manager == nil {
+			t.Fatal("Expected policy manager but got nil")
+		}
+
+		if !policy.Manager.IsEnabled() {
+			t.Error("Expected policy manager to be enabled")
+		}
+
+		// Verify policy was loaded correctly
+		if len(policy.Kind.Whitelist) != 3 {
+			t.Errorf("Expected 3 whitelisted kinds, got %d", len(policy.Kind.Whitelist))
+		}
+
+		if policy.DefaultPolicy != "allow" {
+			t.Errorf("Expected default_policy='allow', got '%s'", policy.DefaultPolicy)
+		}
+
+		// Clean up
+		policy.Manager.Shutdown()
+	})
 }
 
 func TestPolicyManagerLifecycle(t *testing.T) {

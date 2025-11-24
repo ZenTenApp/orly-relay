@@ -126,7 +126,11 @@
       "Bash(GOSUMDB=off CGO_ENABLED=0 timeout 240 go build:*)",
       "Bash(CGO_ENABLED=0 GOFLAGS=-mod=mod timeout 240 go build:*)",
       "Bash(CGO_ENABLED=0 timeout 120 go test:*)",
-      "Bash(./cmd/blossomtest/blossomtest:*)"
+      "Bash(./cmd/blossomtest/blossomtest:*)",
+      "Bash(sudo journalctl:*)",
+      "Bash(systemctl:*)",
+      "Bash(systemctl show:*)",
+      "Bash(ssh relay1:*)"
     ],
     "deny": [],
     "ask": []
