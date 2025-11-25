@@ -26,7 +26,7 @@ func TestReadAllowLogic(t *testing.T) {
 	// Create policy: Only Bob can READ kind 30166 events
 	policy := &P{
 		DefaultPolicy: "allow",
-		Rules: map[int]Rule{
+		rules: map[int]Rule{
 			30166: {
 				Description: "Private server heartbeat events",
 				ReadAllow:   []string{hex.Enc(bobPubkey)}, // Only Bob can read
@@ -94,7 +94,7 @@ func TestReadDenyLogic(t *testing.T) {
 	// Create policy: Charlie cannot READ kind 1 events (but others can)
 	policy := &P{
 		DefaultPolicy: "allow",
-		Rules: map[int]Rule{
+		rules: map[int]Rule{
 			1: {
 				Description: "Test events",
 				ReadDeny:    []string{hex.Enc(charliePubkey)}, // Charlie cannot read
@@ -305,7 +305,7 @@ func TestReadAllowWithPrivileged(t *testing.T) {
 	// Create policy: Kind 100 is privileged AND has read_allow
 	policy := &P{
 		DefaultPolicy: "allow",
-		Rules: map[int]Rule{
+		rules: map[int]Rule{
 			100: {
 				Description: "Privileged with read_allow",
 				Privileged:  true,
@@ -379,7 +379,7 @@ func TestReadAllowWriteAllowIndependent(t *testing.T) {
 	// - Charlie can do neither
 	policy := &P{
 		DefaultPolicy: "allow",
-		Rules: map[int]Rule{
+		rules: map[int]Rule{
 			200: {
 				Description: "Write/Read separation test",
 				WriteAllow:  []string{hex.Enc(alicePubkey)}, // Only Alice can write
@@ -472,7 +472,7 @@ func TestReadAccessEdgeCases(t *testing.T) {
 
 	policy := &P{
 		DefaultPolicy: "allow",
-		Rules: map[int]Rule{
+		rules: map[int]Rule{
 			300: {
 				Description: "Test edge cases",
 				ReadAllow:   []string{"somepubkey"}, // Non-empty ReadAllow

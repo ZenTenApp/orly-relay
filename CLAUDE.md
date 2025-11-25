@@ -302,6 +302,14 @@ export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
 - Embedded via `//go:embed` directive in `app/web.go`
 - Served at root path `/` with API at `/api/*`
 
+**Domain Boundaries & Encapsulation:**
+- Library packages (e.g., `pkg/policy`) should NOT export internal state variables
+- Use unexported fields (lowercase) for internal state to enforce encapsulation at compile time
+- Provide public API methods (e.g., `IsEnabled()`, `CheckPolicy()`) instead of exposing internals
+- When JSON unmarshalling is needed for unexported fields, use a shadow struct with custom `UnmarshalJSON`
+- External packages (e.g., `app/`) should ONLY use public API methods, never access internal fields
+- **DO NOT** change unexported fields to exported when fixing bugs - this breaks the domain boundary
+
 ## Development Workflow
 
 ### Making Changes to Web UI

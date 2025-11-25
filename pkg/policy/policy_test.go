@@ -135,8 +135,8 @@ func TestNew(t *testing.T) {
 				t.Errorf("Expected policy but got nil")
 				return
 			}
-			if len(policy.Rules) != tt.expectRules {
-				t.Errorf("Expected %d rules, got %d", tt.expectRules, len(policy.Rules))
+			if len(policy.rules) != tt.expectRules {
+				t.Errorf("Expected %d rules, got %d", tt.expectRules, len(policy.rules))
 			}
 		})
 	}
@@ -153,7 +153,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 			name: "no whitelist or blacklist - allow (no rules at all)",
 			policy: &P{
 				Kind:  Kinds{},
-				Rules: map[int]Rule{}, // No rules defined
+				rules: map[int]Rule{}, // No rules defined
 			},
 			kind:     1,
 			expected: true, // Should be allowed (no rules = allow all kinds)
@@ -162,7 +162,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 			name: "no whitelist or blacklist - deny (has other rules)",
 			policy: &P{
 				Kind: Kinds{},
-				Rules: map[int]Rule{
+				rules: map[int]Rule{
 					2: {Description: "Rule for kind 2"},
 				},
 			},
@@ -173,7 +173,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 			name: "no whitelist or blacklist - allow (has rule)",
 			policy: &P{
 				Kind: Kinds{},
-				Rules: map[int]Rule{
+				rules: map[int]Rule{
 					1: {Description: "Rule for kind 1"},
 				},
 			},
@@ -187,7 +187,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 				Global: Rule{
 					WriteAllow: []string{"test"}, // Global rule exists
 				},
-				Rules: map[int]Rule{}, // No specific rules
+				rules: map[int]Rule{}, // No specific rules
 			},
 			kind:     1,
 			expected: true, // Should be allowed (global rule exists)
@@ -218,7 +218,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 				Kind: Kinds{
 					Blacklist: []int{2, 4, 6},
 				},
-				Rules: map[int]Rule{
+				rules: map[int]Rule{
 					3: {Description: "Rule for kind 3"}, // Has at least one rule
 				},
 			},
@@ -231,7 +231,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 				Kind: Kinds{
 					Blacklist: []int{2, 4, 6},
 				},
-				Rules: map[int]Rule{
+				rules: map[int]Rule{
 					1: {Description: "Rule for kind 1"},
 				},
 			},
@@ -517,7 +517,7 @@ func TestCheckPolicy(t *testing.T) {
 			event:  testEvent,
 			policy: &P{
 				Kind:  Kinds{},
-				Rules: map[int]Rule{},
+				rules: map[int]Rule{},
 			},
 			loggedInPubkey: eventPubkey,
 			ipAddress:      "127.0.0.1",
@@ -532,7 +532,7 @@ func TestCheckPolicy(t *testing.T) {
 				Kind: Kinds{
 					Whitelist: []int{3, 5},
 				},
-				Rules: map[int]Rule{},
+				rules: map[int]Rule{},
 			},
 			loggedInPubkey: eventPubkey,
 			ipAddress:      "127.0.0.1",
@@ -545,7 +545,7 @@ func TestCheckPolicy(t *testing.T) {
 			event:  testEvent,
 			policy: &P{
 				Kind: Kinds{},
-				Rules: map[int]Rule{
+				rules: map[int]Rule{
 					1: {
 						Description: "block test",
 						WriteDeny:   []string{hex.Enc(testEvent.Pubkey)},
@@ -632,8 +632,8 @@ func TestLoadFromFile(t *testing.T) {
 				t.Errorf("Unexpected error: %v", err)
 				return
 			}
-			if len(policy.Rules) != tt.expectRules {
-				t.Errorf("Expected %d rules, got %d", tt.expectRules, len(policy.Rules))
+			if len(policy.rules) != tt.expectRules {
+				t.Errorf("Expected %d rules, got %d", tt.expectRules, len(policy.rules))
 			}
 		})
 	}
@@ -748,15 +748,15 @@ func TestNewWithManager(t *testing.T) {
 			t.Fatal("Expected policy but got nil")
 		}
 
-		if policy.Manager == nil {
+		if policy.manager == nil {
 			t.Fatal("Expected policy manager but got nil")
 		}
 
-		if policy.Manager.IsEnabled() {
+		if policy.manager.IsEnabled() {
 			t.Error("Expected policy manager to be disabled")
 		}
 
-		if policy.Manager.IsRunning() {
+		if policy.manager.IsRunning() {
 			t.Error("Expected policy manager to not be running")
 		}
 
@@ -766,7 +766,7 @@ func TestNewWithManager(t *testing.T) {
 		}
 
 		// Clean up
-		policy.Manager.Shutdown()
+		policy.manager.Shutdown()
 	})
 
 	// Test with enabled policy and valid config file
@@ -810,7 +810,7 @@ func TestNewWithManager(t *testing.T) {
 
 		policy := &P{
 			DefaultPolicy: "allow",
-			Manager:       manager,
+			manager:       manager,
 		}
 
 		// Load policy from our test file
@@ -818,11 +818,11 @@ func TestNewWithManager(t *testing.T) {
 			t.Fatalf("Failed to load policy: %v", err)
 		}
 
-		if policy.Manager == nil {
+		if policy.manager == nil {
 			t.Fatal("Expected policy manager but got nil")
 		}
 
-		if !policy.Manager.IsEnabled() {
+		if !policy.manager.IsEnabled() {
 			t.Error("Expected policy manager to be enabled")
 		}
 
@@ -836,7 +836,7 @@ func TestNewWithManager(t *testing.T) {
 		}
 
 		// Clean up
-		policy.Manager.Shutdown()
+		policy.manager.Shutdown()
 	})
 }
 
@@ -962,7 +962,7 @@ func TestEdgeCasesLargeEvent(t *testing.T) {
 
 	policy := &P{
 		Kind: Kinds{},
-		Rules: map[int]Rule{
+		rules: map[int]Rule{
 			1: {
 				Description:  "size limit test",
 				SizeLimit:    int64Ptr(50000), // 50KB limit
@@ -1170,7 +1170,7 @@ func TestCheckPolicyWithGlobalRule(t *testing.T) {
 		Kind: Kinds{
 			Whitelist: []int{1}, // Allow kind 1
 		},
-		Rules: map[int]Rule{
+		rules: map[int]Rule{
 			1: {
 				WriteAllow: []string{hex.Enc(eventPubkey)}, // Allow event pubkey for kind 1
 			},
@@ -1293,13 +1293,13 @@ func TestScriptPolicyDisabledFallsBackToDefault(t *testing.T) {
 	// Create a policy with a script rule but policy is disabled, default policy is "allow"
 	policy := &P{
 		DefaultPolicy: "allow",
-		Rules: map[int]Rule{
+		rules: map[int]Rule{
 			1: {
 				Description: "script rule",
 				Script:      "policy.sh",
 			},
 		},
-		Manager: &PolicyManager{
+		manager: &PolicyManager{
 			enabled: false, // Policy is disabled
 			runners: make(map[string]*ScriptRunner),
 		},
@@ -1336,7 +1336,7 @@ func TestDefaultPolicyAllow(t *testing.T) {
 	policy := &P{
 		DefaultPolicy: "allow",
 		Kind:          Kinds{},
-		Rules:         map[int]Rule{}, // No specific rules
+		rules:         map[int]Rule{}, // No specific rules
 	}
 
 	// Create real test event with proper signing
@@ -1360,7 +1360,7 @@ func TestDefaultPolicyDeny(t *testing.T) {
 	policy := &P{
 		DefaultPolicy: "deny",
 		Kind:          Kinds{},
-		Rules:         map[int]Rule{}, // No specific rules
+		rules:         map[int]Rule{}, // No specific rules
 	}
 
 	// Create real test event with proper signing
@@ -1384,7 +1384,7 @@ func TestDefaultPolicyEmpty(t *testing.T) {
 	policy := &P{
 		DefaultPolicy: "",
 		Kind:          Kinds{},
-		Rules:         map[int]Rule{}, // No specific rules
+		rules:         map[int]Rule{}, // No specific rules
 	}
 
 	// Create real test event with proper signing
@@ -1408,7 +1408,7 @@ func TestDefaultPolicyInvalid(t *testing.T) {
 	policy := &P{
 		DefaultPolicy: "invalid",
 		Kind:          Kinds{},
-		Rules:         map[int]Rule{}, // No specific rules
+		rules:         map[int]Rule{}, // No specific rules
 	}
 
 	// Create real test event with proper signing
@@ -1432,7 +1432,7 @@ func TestDefaultPolicyWithSpecificRule(t *testing.T) {
 	policy := &P{
 		DefaultPolicy: "deny", // Default is deny
 		Kind:          Kinds{},
-		Rules: map[int]Rule{
+		rules: map[int]Rule{
 			1: {
 				Description: "allow kind 1",
 				WriteAllow:  []string{}, // Allow all for kind 1
@@ -1497,13 +1497,13 @@ func TestScriptProcessingDisabledFallsBackToDefault(t *testing.T) {
 	// Test that when policy is disabled, it falls back to default policy
 	policy := &P{
 		DefaultPolicy: "allow",
-		Rules: map[int]Rule{
+		rules: map[int]Rule{
 			1: {
 				Description: "script rule",
 				Script:      "policy.sh",
 			},
 		},
-		Manager: &PolicyManager{
+		manager: &PolicyManager{
 			enabled: false, // Policy is disabled
 			runners: make(map[string]*ScriptRunner),
 		},
@@ -1546,7 +1546,7 @@ func TestDefaultPolicyLogicWithRules(t *testing.T) {
 		Kind: Kinds{
 			Whitelist: []int{1, 2, 3}, // Allow kinds 1, 2, 3
 		},
-		Rules: map[int]Rule{
+		rules: map[int]Rule{
 			1: {
 				Description: "allow all for kind 1",
 				WriteAllow:  []string{}, // Empty means allow all
@@ -1605,7 +1605,7 @@ func TestDefaultPolicyLogicWithRules(t *testing.T) {
 		Kind: Kinds{
 			Whitelist: []int{1, 2, 3}, // Allow kinds 1, 2, 3
 		},
-		Rules: map[int]Rule{
+		rules: map[int]Rule{
 			1: {
 				Description: "deny specific pubkey for kind 1",
 				WriteDeny:   []string{hex.Enc(deniedPubkey)},
@@ -1684,8 +1684,8 @@ done
 	// Create policy with a rule that uses the script
 	policy := &P{
 		DefaultPolicy: "deny",
-		Manager:       manager,
-		Rules: map[int]Rule{
+		manager:       manager,
+		rules: map[int]Rule{
 			4678: {
 				Description: "Test rule with custom script",
 				Script:      scriptPath, // Rule-specific script path
@@ -1906,12 +1906,12 @@ func TestPolicyFilterProcessing(t *testing.T) {
 	}
 
 	// Verify rules are loaded correctly
-	if len(policy.Rules) != 4 {
-		t.Errorf("Expected 4 rules, got %d", len(policy.Rules))
+	if len(policy.rules) != 4 {
+		t.Errorf("Expected 4 rules, got %d", len(policy.rules))
 	}
 
 	// Verify rule 4678 (script-based)
-	rule4678, ok := policy.Rules[4678]
+	rule4678, ok := policy.rules[4678]
 	if !ok {
 		t.Fatal("Rule 4678 not found")
 	}
@@ -1926,7 +1926,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 	}
 
 	// Verify rule 10306 (read_allow)
-	rule10306, ok := policy.Rules[10306]
+	rule10306, ok := policy.rules[10306]
 	if !ok {
 		t.Fatal("Rule 10306 not found")
 	}
@@ -1944,7 +1944,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 	}
 
 	// Verify rule 30520 (write_allow)
-	rule30520, ok := policy.Rules[30520]
+	rule30520, ok := policy.rules[30520]
 	if !ok {
 		t.Fatal("Rule 30520 not found")
 	}
@@ -1962,7 +1962,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 	}
 
 	// Verify rule 30919 (write_allow)
-	rule30919, ok := policy.Rules[30919]
+	rule30919, ok := policy.rules[30919]
 	if !ok {
 		t.Fatal("Rule 30919 not found")
 	}

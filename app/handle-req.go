@@ -26,7 +26,6 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"next.orly.dev/pkg/policy"
 	"next.orly.dev/pkg/protocol/nip43"
-	"next.orly.dev/pkg/utils"
 	"git.mleku.dev/mleku/nostr/utils/normalize"
 	"git.mleku.dev/mleku/nostr/utils/pointers"
 )
@@ -388,64 +387,16 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 				)
 			}
 		} else {
-			// Check if policy defines this event as privileged (even if not in hardcoded list)
-			// Policy check will handle this later, but we can skip it here if not authenticated
-			// to avoid unnecessary processing
-			if l.policyManager != nil && l.policyManager.Manager != nil && l.policyManager.Manager.IsEnabled() {
-				rule, hasRule := l.policyManager.Rules[int(ev.Kind)]
-				if hasRule && rule.Privileged && accessLevel != "admin" {
-					pk := l.authedPubkey.Load()
-					if pk == nil {
-						// Not authenticated - cannot see policy-privileged events
-						log.T.C(
-							func() string {
-								return fmt.Sprintf(
-									"policy-privileged event %s denied - not authenticated",
-									ev.ID,
-								)
-							},
-						)
-						continue
-					}
-					// Policy check will verify authorization later, but we need to check
-					// if user is party to the event here
-					authorized := false
-					if utils.FastEqual(ev.Pubkey, pk) {
-						authorized = true
-					} else {
-						// Check p tags
-						pTags := ev.Tags.GetAll([]byte("p"))
-						for _, pTag := range pTags {
-							var pt []byte
-							if pt, err = hexenc.Dec(string(pTag.Value())); chk.E(err) {
-								continue
-							}
-							if utils.FastEqual(pt, pk) {
-								authorized = true
-								break
-							}
-						}
-					}
-					if !authorized {
-						log.T.C(
-							func() string {
-								return fmt.Sprintf(
-									"policy-privileged event %s does not contain the logged in pubkey %0x",
-									ev.ID, pk,
-								)
-							},
-						)
-						continue
-					}
-				}
-			}
+			// Policy-defined privileged events are handled by the policy engine
+			// at line 455+. No early filtering needed here - delegate entirely to
+			// the policy engine to avoid duplicate logic.
 			tmp = append(tmp, ev)
 		}
 	}
 	events = tmp
 
 	// Apply policy filtering for read access if policy is enabled
-	if l.policyManager != nil && l.policyManager.Manager != nil && l.policyManager.Manager.IsEnabled() {
+	if l.policyManager.IsEnabled() {
 		var policyFilteredEvents event.S
 		for _, ev := range events {
 			allowed, policyErr := l.policyManager.CheckPolicy("read", ev, l.authedPubkey.Load(), l.remote)

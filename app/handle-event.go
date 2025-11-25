@@ -111,7 +111,7 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 	}
 
 	// Check if policy is enabled and process event through it
-	if l.policyManager != nil && l.policyManager.Manager != nil && l.policyManager.Manager.IsEnabled() {
+	if l.policyManager.IsEnabled() {
 
 		// Check policy for write access
 		allowed, policyErr := l.policyManager.CheckPolicy("write", env.E, l.authedPubkey.Load(), l.remote)

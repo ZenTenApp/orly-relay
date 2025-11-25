@@ -332,7 +332,7 @@ done
 		// Initialize policy manager
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		policy.Manager = &PolicyManager{
+		policy.manager = &PolicyManager{
 			ctx:        ctx,
 			cancel:     cancel,
 			configDir:  tempDir,

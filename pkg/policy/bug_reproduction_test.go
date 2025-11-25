@@ -42,7 +42,7 @@ func TestBugReproduction_Kind1AllowedWithWhitelist4678(t *testing.T) {
 		if allowed {
 			t.Errorf("BUG REPRODUCED: Kind 1 event was ALLOWED but should be REJECTED (only kind 4678 is whitelisted)")
 			t.Logf("Policy whitelist: %v", policy.Kind.Whitelist)
-			t.Logf("Policy rules: %v", policy.Rules)
+			t.Logf("Policy rules: %v", policy.rules)
 			t.Logf("Default policy: %s", policy.DefaultPolicy)
 		}
 	})
@@ -112,9 +112,9 @@ func TestBugReproduction_WithPolicyManager(t *testing.T) {
 		if allowed {
 			t.Errorf("BUG REPRODUCED: Kind 1 event was ALLOWED but should be REJECTED")
 			t.Logf("Policy whitelist: %v", policy.Kind.Whitelist)
-			t.Logf("Policy rules: %v", policy.Rules)
+			t.Logf("Policy rules: %v", policy.rules)
 			t.Logf("Default policy: %s", policy.DefaultPolicy)
-			t.Logf("Manager enabled: %v", policy.Manager.IsEnabled())
+			t.Logf("Manager enabled: %v", policy.manager.IsEnabled())
 		}
 	})
 
@@ -130,8 +130,8 @@ func TestBugReproduction_WithPolicyManager(t *testing.T) {
 	})
 
 	// Clean up
-	if policy.Manager != nil {
-		policy.Manager.Shutdown()
+	if policy.manager != nil {
+		policy.manager.Shutdown()
 	}
 }
 
@@ -159,7 +159,7 @@ func TestBugReproduction_DebugPolicyFlow(t *testing.T) {
 	t.Logf("=== Policy Configuration ===")
 	t.Logf("Whitelist: %v", policy.Kind.Whitelist)
 	t.Logf("Blacklist: %v", policy.Kind.Blacklist)
-	t.Logf("Rules: %v", policy.Rules)
+	t.Logf("rules: %v", policy.rules)
 	t.Logf("Default policy: %s", policy.DefaultPolicy)
 	t.Logf("")
 	t.Logf("=== Event Details ===")
@@ -223,7 +223,7 @@ func TestBugFix_FailSafeWhenConfigMissing(t *testing.T) {
 
 		policy := &P{
 			DefaultPolicy: "allow",
-			Manager:       manager,
+			manager:       manager,
 		}
 
 		// Try to load from nonexistent file - this should trigger the panic
@@ -249,7 +249,7 @@ func TestBugFix_FailSafeWhenConfigMissing(t *testing.T) {
 			Kind: Kinds{
 				Whitelist: []int{}, // Empty
 			},
-			Rules: make(map[int]Rule), // No rules
+			rules: make(map[int]Rule), // No rules
 		}
 
 		event := createTestEvent(t, testSigner, "Hello Nostr!", 1)
@@ -269,7 +269,7 @@ func TestBugFix_FailSafeWhenConfigMissing(t *testing.T) {
 			Kind: Kinds{
 				Whitelist: []int{}, // Empty
 			},
-			Rules: make(map[int]Rule), // No rules
+			rules: make(map[int]Rule), // No rules
 		}
 
 		event := createTestEvent(t, testSigner, "Hello Nostr!", 1)

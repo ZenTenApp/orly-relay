@@ -131,8 +131,8 @@ func TestPolicyIntegration(t *testing.T) {
 	}
 
 	// Verify policy loaded correctly
-	if len(policy.Rules) != 4 {
-		t.Errorf("Expected 4 rules, got %d", len(policy.Rules))
+	if len(policy.rules) != 4 {
+		t.Errorf("Expected 4 rules, got %d", len(policy.rules))
 	}
 
 	// Test policy checks directly

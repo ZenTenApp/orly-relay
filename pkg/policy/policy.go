@@ -246,14 +246,37 @@ type PolicyManager struct {
 type P struct {
 	// Kind is policies for accepting or rejecting events by kind number.
 	Kind Kinds `json:"kind"`
-	// Rules is a map of rules for criteria that must be met for the event to be allowed to be written to the relay.
-	Rules map[int]Rule `json:"rules"`
+	// rules is a map of rules for criteria that must be met for the event to be allowed to be written to the relay.
+	// Unexported to enforce use of public API methods (CheckPolicy, IsEnabled).
+	rules map[int]Rule
 	// Global is a rule set that applies to all events.
 	Global Rule `json:"global"`
 	// DefaultPolicy determines the default behavior when no rules deny an event ("allow" or "deny", defaults to "allow")
 	DefaultPolicy string `json:"default_policy"`
-	// Manager handles policy script execution
-	Manager *PolicyManager `json:"-"`
+	// manager handles policy script execution.
+	// Unexported to enforce use of public API methods (CheckPolicy, IsEnabled).
+	manager *PolicyManager
+}
+
+// pJSON is a shadow struct for JSON unmarshalling with exported fields.
+type pJSON struct {
+	Kind          Kinds          `json:"kind"`
+	Rules         map[int]Rule   `json:"rules"`
+	Global        Rule           `json:"global"`
+	DefaultPolicy string         `json:"default_policy"`
+}
+
+// UnmarshalJSON implements custom JSON unmarshalling to handle unexported fields.
+func (p *P) UnmarshalJSON(data []byte) error {
+	var shadow pJSON
+	if err := json.Unmarshal(data, &shadow); err != nil {
+		return err
+	}
+	p.Kind = shadow.Kind
+	p.rules = shadow.Rules
+	p.Global = shadow.Global
+	p.DefaultPolicy = shadow.DefaultPolicy
+	return nil
 }
 
 // New creates a new policy from JSON configuration.
@@ -275,10 +298,10 @@ func New(policyJSON []byte) (p *P, err error) {
 
 	// Populate binary caches for all rules (including global rule)
 	p.Global.populateBinaryCache()
-	for kind := range p.Rules {
-		rule := p.Rules[kind]  // Get a copy
+	for kind := range p.rules {
+		rule := p.rules[kind]  // Get a copy
 		rule.populateBinaryCache()
-		p.Rules[kind] = rule  // Store the modified copy back
+		p.rules[kind] = rule  // Store the modified copy back
 	}
 
 	return
@@ -321,6 +344,12 @@ func IsPartyInvolved(ev *event.E, userPubkey []byte) bool {
 	return false
 }
 
+// IsEnabled returns whether the policy system is enabled and ready to process events.
+// This is the public API for checking if policy filtering should be applied.
+func (p *P) IsEnabled() bool {
+	return p != nil && p.manager != nil && p.manager.IsEnabled()
+}
+
 // getDefaultPolicyAction returns true if the default policy is "allow", false if "deny"
 func (p *P) getDefaultPolicyAction() (allowed bool) {
 	switch p.DefaultPolicy {
@@ -356,7 +385,7 @@ func NewWithManager(ctx context.Context, appName string, enabled bool) *P {
 	// Load policy configuration from JSON file
 	policy := &P{
 		DefaultPolicy: "allow", // Set default value
-		Manager:       manager,
+		manager:       manager,
 	}
 
 	if enabled {
@@ -881,9 +910,9 @@ func (p *P) LoadFromFile(configPath string) error {
 
 	// Populate binary caches for all rules (including global rule)
 	p.Global.populateBinaryCache()
-	for kind, rule := range p.Rules {
+	for kind, rule := range p.rules {
 		rule.populateBinaryCache()
-		p.Rules[kind] = rule // Update the map with the modified rule
+		p.rules[kind] = rule // Update the map with the modified rule
 	}
 
 	return nil
@@ -912,15 +941,15 @@ func (p *P) CheckPolicy(
 	}
 
 	// Get rule for this kind
-	rule, hasRule := p.Rules[int(ev.Kind)]
+	rule, hasRule := p.rules[int(ev.Kind)]
 	if !hasRule {
 		// No specific rule for this kind, use default policy
 		return p.getDefaultPolicyAction(), nil
 	}
 
 	// Check if script is present and enabled
-	if rule.Script != "" && p.Manager != nil {
-		if p.Manager.IsEnabled() {
+	if rule.Script != "" && p.manager != nil {
+		if p.manager.IsEnabled() {
 			// Check if script file exists before trying to use it
 			if _, err := os.Stat(rule.Script); err == nil {
 				// Script exists, try to use it
@@ -985,7 +1014,7 @@ func (p *P) checkKindsPolicy(kind uint16) bool {
 			}
 		}
 		// Not in blacklist - check if rule exists for implicit whitelist
-		_, hasRule := p.Rules[int(kind)]
+		_, hasRule := p.rules[int(kind)]
 		return hasRule // Only allow if there's a rule defined
 	}
 
@@ -993,9 +1022,9 @@ func (p *P) checkKindsPolicy(kind uint16) bool {
 	// If there are specific rules defined, use implicit whitelist
 	// If there's only a global rule (no specific rules), fall back to default policy
 	// If there are NO rules at all, fall back to default policy
-	if len(p.Rules) > 0 {
+	if len(p.rules) > 0 {
 		// Implicit whitelist mode - only allow kinds with specific rules
-		_, hasRule := p.Rules[int(kind)]
+		_, hasRule := p.rules[int(kind)]
 		return hasRule
 	}
 	// No specific rules (maybe global rule exists) - fall back to default policy
@@ -1272,12 +1301,12 @@ func (p *P) checkScriptPolicy(
 	access string, ev *event.E, scriptPath string, loggedInPubkey []byte,
 	ipAddress string,
 ) (allowed bool, err error) {
-	if p.Manager == nil {
+	if p.manager == nil {
 		return false, fmt.Errorf("policy manager is not initialized")
 	}
 
 	// If policy is disabled, fall back to default policy immediately
-	if !p.Manager.IsEnabled() {
+	if !p.manager.IsEnabled() {
 		log.W.F(
 			"policy rule for kind %d is inactive (policy disabled), falling back to default policy (%s)",
 			ev.Kind, p.DefaultPolicy,
@@ -1294,7 +1323,7 @@ func (p *P) checkScriptPolicy(
 	}
 
 	// Get or create a runner for this specific script path
-	runner := p.Manager.getOrCreateRunner(scriptPath)
+	runner := p.manager.getOrCreateRunner(scriptPath)
 
 	// Policy is enabled, check if this runner is running
 	if !runner.IsRunning() {

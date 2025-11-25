@@ -74,7 +74,7 @@ func BenchmarkCheckPolicy(b *testing.B) {
 		Kind: Kinds{
 			Whitelist: []int{1, 3, 5},
 		},
-		Rules: map[int]Rule{
+		rules: map[int]Rule{
 			1: {
 				Description: "test rule",
 				WriteAllow:  []string{hex.Enc(pubkey)},
@@ -132,9 +132,9 @@ done
 	testEvent := createTestEventBench(b, signer, "test content", 1)
 
 	policy := &P{
-		Manager: manager,
+		manager: manager,
 		Kind:    Kinds{},
-		Rules: map[int]Rule{
+		rules: map[int]Rule{
 			1: {
 				Description: "test rule with script",
 				Script:      "policy.sh",
@@ -201,7 +201,7 @@ func BenchmarkCheckPolicyMultipleKinds(b *testing.B) {
 
 	policy := &P{
 		Kind:  Kinds{},
-		Rules: rules,
+		rules: rules,
 	}
 
 	// Generate keypair once for all events
@@ -231,7 +231,7 @@ func BenchmarkCheckPolicyLargeWhitelist(b *testing.B) {
 		Kind: Kinds{
 			Whitelist: whitelist,
 		},
-		Rules: map[int]Rule{},
+		rules: map[int]Rule{},
 	}
 
 	// Generate keypair once for all events
@@ -255,7 +255,7 @@ func BenchmarkCheckPolicyLargeBlacklist(b *testing.B) {
 		Kind: Kinds{
 			Blacklist: blacklist,
 		},
-		Rules: map[int]Rule{},
+		rules: map[int]Rule{},
 	}
 
 	// Generate keypair once for all events
@@ -307,7 +307,7 @@ func BenchmarkCheckPolicyLargeEvent(b *testing.B) {
 
 	policy := &P{
 		Kind: Kinds{},
-		Rules: map[int]Rule{
+		rules: map[int]Rule{
 			1: {
 				Description:  "size limit test",
 				SizeLimit:    int64Ptr(200000), // 200KB limit

@@ -44,7 +44,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 	t.Run("Deny List Overrides Everything", func(t *testing.T) {
 		policy := &P{
 			DefaultPolicy: "allow",
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				100: {
 					Description: "Deny overrides allow and privileged",
 					WriteAllow:  []string{hex.Enc(alicePubkey)}, // Alice in allow list
@@ -75,7 +75,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 	t.Run("Allow List OR Privileged Access", func(t *testing.T) {
 		policy := &P{
 			DefaultPolicy: "allow",
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				200: {
 					Description: "Privileged with allow list",
 					ReadAllow:   []string{hex.Enc(bobPubkey)}, // Only Bob in allow list
@@ -128,7 +128,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 	t.Run("Privileged Grants Access When No Allow List", func(t *testing.T) {
 		policy := &P{
 			DefaultPolicy: "deny", // Default deny to make test clearer
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				300: {
 					Description: "Privileged without allow list",
 					Privileged:  true,
@@ -183,7 +183,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 	t.Run("Allow List Exclusive Without Privileged", func(t *testing.T) {
 		policy := &P{
 			DefaultPolicy: "allow", // Even with allow default
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				400: {
 					Description: "Allow list only",
 					WriteAllow:  []string{hex.Enc(alicePubkey)}, // Only Alice
@@ -223,7 +223,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 	t.Run("Complex Precedence Chain", func(t *testing.T) {
 		policy := &P{
 			DefaultPolicy: "allow",
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				500: {
 					Description: "Complex rules",
 					WriteAllow:  []string{hex.Enc(alicePubkey), hex.Enc(bobPubkey)},
@@ -277,7 +277,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 		// Test 6a: With allow default and no rules
 		policyAllow := &P{
 			DefaultPolicy: "allow",
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				// No rule for kind 600
 			},
 		}
@@ -296,7 +296,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 		// Test 6b: With deny default and no rules
 		policyDeny := &P{
 			DefaultPolicy: "deny",
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				// No rule for kind 600
 			},
 		}
@@ -314,7 +314,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 		// Test 6c: Default does NOT apply when allow list exists
 		policyWithRule := &P{
 			DefaultPolicy: "allow", // Allow default
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				700: {
 					WriteAllow: []string{hex.Enc(bobPubkey)}, // Only Bob
 				},

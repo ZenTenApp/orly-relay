@@ -17,7 +17,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 			Kind: Kinds{
 				Whitelist: []int{1, 3, 5}, // Explicit whitelist
 			},
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				1: {Description: "Rule for kind 1"},
 				3: {Description: "Rule for kind 3"},
 				5: {Description: "Rule for kind 5"},
@@ -40,7 +40,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 			Kind: Kinds{
 				Whitelist: []int{1, 3, 5}, // Explicit whitelist
 			},
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				1: {Description: "Rule for kind 1"},
 				// Kind 3 has no rule
 			},
@@ -62,7 +62,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 			Kind: Kinds{
 				Whitelist: []int{1, 3, 5}, // Explicit whitelist - kind 10 NOT included
 			},
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				1:  {Description: "Rule for kind 1"},
 				10: {Description: "Rule for kind 10"}, // Has rule but not in whitelist!
 			},
@@ -84,7 +84,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 			Kind: Kinds{
 				Whitelist: []int{1, 3, 5}, // Explicit whitelist
 			},
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				1: {Description: "Rule for kind 1"},
 			},
 		}
@@ -103,7 +103,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 		policy := &P{
 			DefaultPolicy: "allow", // Changed to allow so rules without constraints allow by default
 			// No explicit whitelist
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				1: {Description: "Rule for kind 1"},
 				3: {Description: "Rule for kind 3"},
 			},
@@ -123,7 +123,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 		policy := &P{
 			DefaultPolicy: "allow",
 			// No explicit whitelist
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				1: {Description: "Rule for kind 1"},
 				3: {Description: "Rule for kind 3"},
 			},
@@ -149,7 +149,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 				Description: "Global rule applies to all kinds",
 				WriteAllow:  []string{hex.Enc(testPubkey)},
 			},
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				1: {Description: "Rule for kind 1"},
 			},
 		}
@@ -171,7 +171,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 			Kind: Kinds{
 				Blacklist: []int{10, 20}, // Blacklist
 			},
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				1:  {Description: "Rule for kind 1"},
 				10: {Description: "Rule for kind 10"}, // Has rule but blacklisted!
 			},
@@ -194,7 +194,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 			Kind: Kinds{
 				Blacklist: []int{10, 20}, // Blacklist
 			},
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				1: {Description: "Rule for kind 1"},
 				3: {Description: "Rule for kind 3"},
 			},
@@ -219,7 +219,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 				Whitelist: []int{1, 3, 5, 10}, // Whitelist includes 10
 				Blacklist: []int{10, 20},      // Blacklist also includes 10
 			},
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				1:  {Description: "Rule for kind 1"},
 				10: {Description: "Rule for kind 10"},
 			},
@@ -248,7 +248,7 @@ func TestKindWhitelistRealWorld(t *testing.T) {
 			Kind: Kinds{
 				Whitelist: []int{1, 3, 30023},
 			},
-			Rules: map[int]Rule{
+			rules: map[int]Rule{
 				1: {
 					Description: "Text notes",
 					// No WriteAllow = anyone authenticated can write
