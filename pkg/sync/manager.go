@@ -173,10 +173,34 @@ func (m *Manager) syncRoutine() {
 // syncWithPeersSequentially syncs with all configured peers one at a time
 func (m *Manager) syncWithPeersSequentially() {
 	for _, peerURL := range m.peers {
+		// Check if this peer is ourselves via NIP-11 pubkey
+		if m.isSelfPeer(peerURL) {
+			log.D.F("skipping sync with self: %s (pubkey matches our relay identity)", peerURL)
+			continue
+		}
 		m.syncWithPeer(peerURL)
 		// Small delay between peers to avoid overwhelming
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+// isSelfPeer checks if a peer URL is actually ourselves by comparing NIP-11 pubkeys
+func (m *Manager) isSelfPeer(peerURL string) bool {
+	// If we don't have a nodeID, can't compare
+	if m.nodeID == "" {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	peerPubkey, err := m.nip11Cache.GetPubkey(ctx, peerURL)
+	if err != nil {
+		log.D.F("couldn't fetch NIP-11 for %s to check if self: %v", peerURL, err)
+		return false
+	}
+
+	return peerPubkey == m.nodeID
 }
 
 // syncWithPeer syncs with a specific peer
@@ -390,6 +414,13 @@ func (m *Manager) HandleCurrentRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Reject requests from ourselves (same nodeID)
+	if req.NodeID != "" && req.NodeID == m.nodeID {
+		log.D.F("rejecting sync current request from self (nodeID: %s)", req.NodeID)
+		http.Error(w, "Cannot sync with self", http.StatusBadRequest)
+		return
+	}
+
 	resp := CurrentResponse{
 		NodeID:   m.nodeID,
 		RelayURL: m.relayURL,
@@ -410,6 +441,13 @@ func (m *Manager) HandleEventIDsRequest(w http.ResponseWriter, r *http.Request) 
 	var req EventIDsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Reject requests from ourselves (same nodeID)
+	if req.NodeID != "" && req.NodeID == m.nodeID {
+		log.D.F("rejecting sync event-ids request from self (nodeID: %s)", req.NodeID)
+		http.Error(w, "Cannot sync with self", http.StatusBadRequest)
 		return
 	}
 

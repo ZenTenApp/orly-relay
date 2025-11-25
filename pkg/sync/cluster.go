@@ -13,6 +13,7 @@ import (
 	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/database/indexes/types"
+	"git.mleku.dev/mleku/nostr/crypto/keys"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"git.mleku.dev/mleku/nostr/encoders/kind"
@@ -23,6 +24,7 @@ type ClusterManager struct {
 	cancel                        context.CancelFunc
 	db                            *database.D
 	adminNpubs                    []string
+	relayIdentityPubkey           string                    // Our relay's identity pubkey (hex)
 	members                       map[string]*ClusterMember // keyed by relay URL
 	membersMux                    sync.RWMutex
 	pollTicker                    *time.Ticker
@@ -30,6 +32,7 @@ type ClusterManager struct {
 	httpClient                    *http.Client
 	propagatePrivilegedEvents     bool
 	publisher                     interface{ Deliver(*event.E) }
+	nip11Cache                    *NIP11Cache
 }
 
 type ClusterMember struct {
@@ -61,11 +64,20 @@ type EventInfo struct {
 func NewClusterManager(ctx context.Context, db *database.D, adminNpubs []string, propagatePrivilegedEvents bool, publisher interface{ Deliver(*event.E) }) *ClusterManager {
 	ctx, cancel := context.WithCancel(ctx)
 
+	// Get our relay identity pubkey
+	var relayPubkey string
+	if skb, err := db.GetRelayIdentitySecret(); err == nil && len(skb) == 32 {
+		if pk, err := keys.SecretBytesToPubKeyHex(skb); err == nil {
+			relayPubkey = pk
+		}
+	}
+
 	cm := &ClusterManager{
 		ctx:                       ctx,
 		cancel:                    cancel,
 		db:                        db,
 		adminNpubs:                adminNpubs,
+		relayIdentityPubkey:       relayPubkey,
 		members:                   make(map[string]*ClusterMember),
 		pollDone:                  make(chan struct{}),
 		propagatePrivilegedEvents: propagatePrivilegedEvents,
@@ -73,6 +85,7 @@ func NewClusterManager(ctx context.Context, db *database.D, adminNpubs []string,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		nip11Cache: NewNIP11Cache(30 * time.Minute),
 	}
 
 	return cm
@@ -254,6 +267,12 @@ func (cm *ClusterManager) UpdateMembership(relayURLs []string) {
 
 	// Add new members
 	for _, url := range relayURLs {
+		// Skip if this is our own relay (check via NIP-11 pubkey)
+		if cm.isSelfRelay(url) {
+			log.D.F("skipping cluster member (self): %s (pubkey matches our relay identity)", url)
+			continue
+		}
+
 		if _, exists := cm.members[url]; !exists {
 			// For simplicity, assume HTTP and WebSocket URLs are the same
 			// In practice, you'd need to parse these properly
@@ -267,6 +286,25 @@ func (cm *ClusterManager) UpdateMembership(relayURLs []string) {
 			log.I.F("added cluster member: %s", url)
 		}
 	}
+}
+
+// isSelfRelay checks if a relay URL is actually ourselves by comparing NIP-11 pubkeys
+func (cm *ClusterManager) isSelfRelay(relayURL string) bool {
+	// If we don't have a relay identity pubkey, can't compare
+	if cm.relayIdentityPubkey == "" {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	peerPubkey, err := cm.nip11Cache.GetPubkey(ctx, relayURL)
+	if err != nil {
+		log.D.F("couldn't fetch NIP-11 for %s to check if self: %v", relayURL, err)
+		return false
+	}
+
+	return peerPubkey == cm.relayIdentityPubkey
 }
 
 // HandleMembershipEvent processes a cluster membership event (Kind 39108)
@@ -313,6 +351,21 @@ func (cm *ClusterManager) HandleLatestSerial(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Check if request is from ourselves by examining the Referer or Origin header
+	origin := r.Header.Get("Origin")
+	referer := r.Header.Get("Referer")
+
+	if origin != "" && cm.isSelfRelay(origin) {
+		log.D.F("rejecting cluster latest request from self (origin: %s)", origin)
+		http.Error(w, "Cannot sync with self", http.StatusBadRequest)
+		return
+	}
+	if referer != "" && cm.isSelfRelay(referer) {
+		log.D.F("rejecting cluster latest request from self (referer: %s)", referer)
+		http.Error(w, "Cannot sync with self", http.StatusBadRequest)
+		return
+	}
+
 	// Get the latest serial from database by querying for the highest serial
 	latestSerial, err := cm.getLatestSerialFromDB()
 	if err != nil {
@@ -333,6 +386,21 @@ func (cm *ClusterManager) HandleLatestSerial(w http.ResponseWriter, r *http.Requ
 func (cm *ClusterManager) HandleEventsRange(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check if request is from ourselves by examining the Referer or Origin header
+	origin := r.Header.Get("Origin")
+	referer := r.Header.Get("Referer")
+
+	if origin != "" && cm.isSelfRelay(origin) {
+		log.D.F("rejecting cluster events request from self (origin: %s)", origin)
+		http.Error(w, "Cannot sync with self", http.StatusBadRequest)
+		return
+	}
+	if referer != "" && cm.isSelfRelay(referer) {
+		log.D.F("rejecting cluster events request from self (referer: %s)", referer)
+		http.Error(w, "Cannot sync with self", http.StatusBadRequest)
 		return
 	}
 
