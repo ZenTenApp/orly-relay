@@ -35,6 +35,7 @@ export ORLY_NEO4J_PASSWORD=password
 - **Cypher Query Language**: Powerful, expressive query language for complex filters
 - **Automatic Indexing**: Unique constraints and indexes for optimal performance
 - **Relationship Queries**: Native support for event references, mentions, and tags
+- **Web of Trust (WoT) Extensions**: Optional support for trust metrics, social graph analysis, and content filtering (see [WOT_SPEC.md](./WOT_SPEC.md))
 
 ## Architecture
 
@@ -45,10 +46,29 @@ See [docs/NEO4J_BACKEND.md](../../docs/NEO4J_BACKEND.md) for comprehensive docum
 - Development guide
 - Comparison with other backends
 
+### Web of Trust (WoT) Extensions
+
+This package includes schema support for Web of Trust trust metrics computation:
+
+- **[WOT_SPEC.md](./WOT_SPEC.md)** - Complete specification of the WoT data model, based on the [Brainstorm prototype](https://github.com/Pretty-Good-Freedom-Tech/brainstorm)
+  - NostrUser nodes with trust metrics (influence, PageRank, verified counts)
+  - NostrUserWotMetricsCard nodes for personalized multi-tenant metrics
+  - Social graph relationships (FOLLOWS, MUTES, REPORTS)
+  - Cypher schema definitions and example queries
+
+- **[ADDITIONAL_REQUIREMENTS.md](./ADDITIONAL_REQUIREMENTS.md)** - Implementation requirements and missing details
+  - Algorithm implementations (GrapeRank, Personalized PageRank)
+  - Event processing logic for kinds 0, 3, 1984, 10000
+  - Multi-tenant architecture and configuration
+  - Performance considerations and deployment modes
+
+**Note:** The WoT schema is applied automatically but WoT features are not yet fully implemented. See ADDITIONAL_REQUIREMENTS.md for the roadmap.
+
 ## File Structure
 
+### Core Implementation
 - `neo4j.go` - Main database implementation
-- `schema.go` - Graph schema and index definitions
+- `schema.go` - Graph schema and index definitions (includes WoT extensions)
 - `query-events.go` - REQ filter to Cypher translation
 - `save-event.go` - Event storage with relationship creation
 - `fetch-event.go` - Event retrieval by serial/ID
@@ -61,23 +81,70 @@ See [docs/NEO4J_BACKEND.md](../../docs/NEO4J_BACKEND.md) for comprehensive docum
 - `import-export.go` - Event import/export
 - `logger.go` - Logging infrastructure
 
+### Documentation
+- `README.md` - This file
+- `WOT_SPEC.md` - Web of Trust data model specification
+- `ADDITIONAL_REQUIREMENTS.md` - WoT implementation requirements and gaps
+- `EVENT_PROCESSING_SPEC.md` - Event-driven vertex management specification
+- `IMPLEMENTATION_SUMMARY.md` - Implementation overview and status
+- `TESTING.md` - Test guide and troubleshooting
+- `The Brainstorm prototype_ Neo4j Data Model.html` - Original Brainstorm specification document
+
+### Tests
+- `social-event-processor_test.go` - Comprehensive tests for kinds 0, 3, 1984, 10000
+
 ## Testing
 
-```bash
-# Start Neo4j test instance
-docker run -d --name neo4j-test \
-  -p 7687:7687 \
-  -e NEO4J_AUTH=neo4j/test \
-  neo4j:5.15
+### Quick Start
 
-# Run tests
-ORLY_NEO4J_URI="bolt://localhost:7687" \
-ORLY_NEO4J_USER="neo4j" \
-ORLY_NEO4J_PASSWORD="test" \
-go test ./pkg/neo4j/...
+```bash
+# Start Neo4j using docker-compose
+cd pkg/neo4j
+docker-compose up -d
+
+# Wait for Neo4j to be ready (~30 seconds)
+docker-compose logs -f neo4j  # Look for "Started."
+
+# Set Neo4j connection
+export ORLY_NEO4J_URI="bolt://localhost:7687"
+export ORLY_NEO4J_USER="neo4j"
+export ORLY_NEO4J_PASSWORD="testpass123"
+
+# Run all tests
+go test -v
+
+# Run social event processor tests
+go test -v -run TestSocialEventProcessor
 
 # Cleanup
-docker rm -f neo4j-test
+docker-compose down -v
+```
+
+### Test Coverage
+
+The `social-event-processor_test.go` file contains comprehensive tests for:
+- **Kind 0**: Profile metadata processing
+- **Kind 3**: Contact list creation and diff-based updates
+- **Kind 1984**: Report processing (multiple reports, different types)
+- **Kind 10000**: Mute list processing
+- **Event traceability**: Verifies all relationships link to source events
+- **Graph state**: Validates final graph matches expected state
+- **Helper functions**: Unit tests for diff computation and p-tag extraction
+
+See [TESTING.md](./TESTING.md) for detailed test documentation, troubleshooting, and how to view the graph in Neo4j Browser.
+
+### Viewing Test Results
+
+After running tests, explore the graph at http://localhost:7474:
+
+```cypher
+// View all social relationships
+MATCH path = (u1:NostrUser)-[r:FOLLOWS|MUTES|REPORTS]->(u2:NostrUser)
+RETURN path
+
+// View event processing history
+MATCH (evt:ProcessedSocialEvent)
+RETURN evt ORDER BY evt.created_at
 ```
 
 ## Example Cypher Queries

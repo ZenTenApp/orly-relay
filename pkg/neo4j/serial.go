@@ -65,35 +65,25 @@ SET m.value = $value`
 }
 
 // initSerialCounter initializes the serial counter if it doesn't exist
+// Uses MERGE to be idempotent - safe to call multiple times
 func (n *N) initSerialCounter() error {
 	ctx := context.Background()
 
-	// Check if counter exists
-	cypher := "MATCH (m:Marker {key: $key}) RETURN m.value AS value"
-	params := map[string]any{"key": serialCounterKey}
-
-	result, err := n.ExecuteRead(ctx, cypher, params)
-	if err != nil {
-		return fmt.Errorf("failed to check serial counter: %w", err)
-	}
-
-	if result.Next(ctx) {
-		// Counter already exists
-		return nil
-	}
-
-	// Initialize counter at 1
-	initCypher := "CREATE (m:Marker {key: $key, value: $value})"
+	// Use MERGE with ON CREATE to initialize only if it doesn't exist
+	// This is idempotent and avoids race conditions
+	initCypher := `
+MERGE (m:Marker {key: $key})
+ON CREATE SET m.value = $value`
 	initParams := map[string]any{
 		"key":   serialCounterKey,
 		"value": int64(1),
 	}
 
-	_, err = n.ExecuteWrite(ctx, initCypher, initParams)
+	_, err := n.ExecuteWrite(ctx, initCypher, initParams)
 	if err != nil {
 		return fmt.Errorf("failed to initialize serial counter: %w", err)
 	}
 
-	n.Logger.Infof("initialized serial counter")
+	n.Logger.Debugf("serial counter initialized/verified")
 	return nil
 }

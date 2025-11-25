@@ -132,7 +132,8 @@
       "Bash(systemctl show:*)",
       "Bash(ssh relay1:*)",
       "Bash(done)",
-      "Bash(go run:*)"
+      "Bash(go run:*)",
+      "Bash(go doc:*)"
     ],
     "deny": [],
     "ask": []

@@ -13,6 +13,9 @@ import (
 // SaveEvent stores a Nostr event in the Neo4j database.
 // It creates event nodes and relationships for authors, tags, and references.
 // This method leverages Neo4j's graph capabilities to model Nostr's social graph naturally.
+//
+// For social graph events (kinds 0, 3, 1984, 10000), it additionally processes them
+// to maintain NostrUser nodes and FOLLOWS/MUTES/REPORTS relationships with event traceability.
 func (n *N) SaveEvent(c context.Context, ev *event.E) (exists bool, err error) {
 	eventID := hex.Enc(ev.ID[:])
 
@@ -28,6 +31,15 @@ func (n *N) SaveEvent(c context.Context, ev *event.E) (exists bool, err error) {
 	// Check if we got a result
 	ctx := context.Background()
 	if result.Next(ctx) {
+		// Event exists - check if it's a social event that needs reprocessing
+		// (in case relationships changed)
+		if ev.Kind == 0 || ev.Kind == 3 || ev.Kind == 1984 || ev.Kind == 10000 {
+			processor := NewSocialEventProcessor(n)
+			if err := processor.ProcessSocialEvent(c, ev); err != nil {
+				n.Logger.Warningf("failed to reprocess social event %s: %v", eventID[:16], err)
+				// Don't fail the whole save, social processing is supplementary
+			}
+		}
 		return true, nil // Event already exists
 	}
 
@@ -38,10 +50,26 @@ func (n *N) SaveEvent(c context.Context, ev *event.E) (exists bool, err error) {
 	}
 
 	// Build and execute Cypher query to create event with all relationships
+	// This creates Event and Author nodes for NIP-01 query support
 	cypher, params := n.buildEventCreationCypher(ev, serial)
 
 	if _, err = n.ExecuteWrite(c, cypher, params); err != nil {
 		return false, fmt.Errorf("failed to save event: %w", err)
+	}
+
+	// Process social graph events (kinds 0, 3, 1984, 10000)
+	// This creates NostrUser nodes and social relationships (FOLLOWS, MUTES, REPORTS)
+	// with event traceability for diff-based updates
+	if ev.Kind == 0 || ev.Kind == 3 || ev.Kind == 1984 || ev.Kind == 10000 {
+		processor := NewSocialEventProcessor(n)
+		if err := processor.ProcessSocialEvent(c, ev); err != nil {
+			// Log error but don't fail the whole save
+			// NIP-01 queries will still work even if social processing fails
+			n.Logger.Errorf("failed to process social event kind %d, event %s: %v",
+				ev.Kind, eventID[:16], err)
+			// Consider: should we fail here or continue?
+			// For now, continue - social graph is supplementary to base relay
+		}
 	}
 
 	return false, nil
@@ -69,7 +97,13 @@ func (n *N) buildEventCreationCypher(ev *event.E, serial uint64) (string, map[st
 	params["pubkey"] = authorPubkey
 
 	// Serialize tags as JSON string for storage
-	tagsJSON, _ := ev.Tags.MarshalJSON()
+	// Handle nil tags gracefully - nil means empty tags "[]"
+	var tagsJSON []byte
+	if ev.Tags != nil {
+		tagsJSON, _ = ev.Tags.MarshalJSON()
+	} else {
+		tagsJSON = []byte("[]")
+	}
 	params["tags"] = string(tagsJSON)
 
 	// Start building the Cypher query
@@ -100,21 +134,23 @@ CREATE (e)-[:AUTHORED_BY]->(a)
 	eTagIndex := 0
 	pTagIndex := 0
 
-	for _, tagItem := range *ev.Tags {
-		if len(tagItem.T) < 2 {
-			continue
-		}
+	// Only process tags if they exist
+	if ev.Tags != nil {
+		for _, tagItem := range *ev.Tags {
+			if len(tagItem.T) < 2 {
+				continue
+			}
 
-		tagType := string(tagItem.T[0])
-		tagValue := string(tagItem.T[1])
+			tagType := string(tagItem.T[0])
+			tagValue := string(tagItem.T[1])
 
-		switch tagType {
-		case "e": // Event reference - creates REFERENCES relationship
-			// Create reference to another event (if it exists)
-			paramName := fmt.Sprintf("eTag_%d", eTagIndex)
-			params[paramName] = tagValue
+			switch tagType {
+			case "e": // Event reference - creates REFERENCES relationship
+				// Create reference to another event (if it exists)
+				paramName := fmt.Sprintf("eTag_%d", eTagIndex)
+				params[paramName] = tagValue
 
-			cypher += fmt.Sprintf(`
+				cypher += fmt.Sprintf(`
 // Reference to event (e-tag)
 OPTIONAL MATCH (ref%d:Event {id: $%s})
 FOREACH (ignoreMe IN CASE WHEN ref%d IS NOT NULL THEN [1] ELSE [] END |
@@ -122,35 +158,36 @@ FOREACH (ignoreMe IN CASE WHEN ref%d IS NOT NULL THEN [1] ELSE [] END |
 )
 `, eTagIndex, paramName, eTagIndex, eTagIndex)
 
-			eTagIndex++
+				eTagIndex++
 
-		case "p": // Pubkey mention - creates MENTIONS relationship
-			// Create mention to another author
-			paramName := fmt.Sprintf("pTag_%d", pTagIndex)
-			params[paramName] = tagValue
+			case "p": // Pubkey mention - creates MENTIONS relationship
+				// Create mention to another author
+				paramName := fmt.Sprintf("pTag_%d", pTagIndex)
+				params[paramName] = tagValue
 
-			cypher += fmt.Sprintf(`
+				cypher += fmt.Sprintf(`
 // Mention of author (p-tag)
 MERGE (mentioned%d:Author {pubkey: $%s})
 CREATE (e)-[:MENTIONS]->(mentioned%d)
 `, pTagIndex, paramName, pTagIndex)
 
-			pTagIndex++
+				pTagIndex++
 
-		default: // Other tags - creates Tag nodes and TAGGED_WITH relationships
-			// Create tag node and relationship
-			typeParam := fmt.Sprintf("tagType_%d", tagNodeIndex)
-			valueParam := fmt.Sprintf("tagValue_%d", tagNodeIndex)
-			params[typeParam] = tagType
-			params[valueParam] = tagValue
+			default: // Other tags - creates Tag nodes and TAGGED_WITH relationships
+				// Create tag node and relationship
+				typeParam := fmt.Sprintf("tagType_%d", tagNodeIndex)
+				valueParam := fmt.Sprintf("tagValue_%d", tagNodeIndex)
+				params[typeParam] = tagType
+				params[valueParam] = tagValue
 
-			cypher += fmt.Sprintf(`
+				cypher += fmt.Sprintf(`
 // Generic tag relationship
 MERGE (tag%d:Tag {type: $%s, value: $%s})
 CREATE (e)-[:TAGGED_WITH]->(tag%d)
 `, tagNodeIndex, typeParam, valueParam, tagNodeIndex)
 
-			tagNodeIndex++
+				tagNodeIndex++
+			}
 		}
 	}
 

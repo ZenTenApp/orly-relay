@@ -329,17 +329,8 @@ func (n *N) QueryForSerials(c context.Context, f *filter.F) (
 	serials = make([]*types.Uint40, 0)
 	ctx := context.Background()
 
-	resultIter, ok := result.(interface {
-		Next(context.Context) bool
-		Record() *neo4j.Record
-		Err() error
-	})
-	if !ok {
-		return nil, fmt.Errorf("invalid result type")
-	}
-
-	for resultIter.Next(ctx) {
-		record := resultIter.Record()
+	for result.Next(ctx) {
+		record := result.Record()
 		if record == nil {
 			continue
 		}
@@ -396,17 +387,8 @@ func (n *N) QueryForIds(c context.Context, f *filter.F) (
 	idPkTs = make([]*store.IdPkTs, 0)
 	ctx := context.Background()
 
-	resultIter, ok := result.(interface {
-		Next(context.Context) bool
-		Record() *neo4j.Record
-		Err() error
-	})
-	if !ok {
-		return nil, fmt.Errorf("invalid result type")
-	}
-
-	for resultIter.Next(ctx) {
-		record := resultIter.Record()
+	for result.Next(ctx) {
+		record := result.Record()
 		if record == nil {
 			continue
 		}
@@ -466,17 +448,9 @@ func (n *N) CountEvents(c context.Context, f *filter.F) (
 
 	// Parse count from result
 	ctx := context.Background()
-	resultIter, ok := result.(interface {
-		Next(context.Context) bool
-		Record() *neo4j.Record
-		Err() error
-	})
-	if !ok {
-		return 0, false, fmt.Errorf("invalid result type")
-	}
 
-	if resultIter.Next(ctx) {
-		record := resultIter.Record()
+	if result.Next(ctx) {
+		record := result.Record()
 		if record != nil {
 			countRaw, found := record.Get("count")
 			if found {
