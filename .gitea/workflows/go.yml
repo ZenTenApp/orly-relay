@@ -43,6 +43,27 @@ jobs:
           export PATH=/usr/local/go/bin:$PATH
           go version
 
+      - name: Set up Bun
+        run: |
+          echo "Installing Bun..."
+          curl -fsSL https://bun.sh/install | bash
+          export BUN_INSTALL="$HOME/.bun"
+          export PATH="$BUN_INSTALL/bin:$PATH"
+          bun --version
+
+      - name: Build Web UI
+        run: |
+          export BUN_INSTALL="$HOME/.bun"
+          export PATH="$BUN_INSTALL/bin:$PATH"
+          cd ${GITHUB_WORKSPACE}/app/web
+          echo "Installing frontend dependencies..."
+          bun install
+          echo "Building web app..."
+          bun run build
+          echo "Verifying dist directory was created..."
+          ls -lah dist/
+          echo "Web UI build complete"
+
       - name: Build (Pure Go + purego)
         run: |
           export PATH=/usr/local/go/bin:$PATH
