@@ -1,6 +1,14 @@
 # libsecp256k1 Deployment Guide
 
-All build scripts have been updated to ensure libsecp256k1.so is placed next to the executable.
+> **NOTE (Updated 2025):** This project now uses pure Go with purego (no CGO). The crypto library is part of the external `git.mleku.dev/mleku/nostr` dependency. The `libsecp256k1.so` file is automatically downloaded from the nostr repository during build/test. See [CLAUDE.md](../CLAUDE.md) for current build instructions.
+
+## Current Approach (Pure Go + Purego)
+
+All build scripts download `libsecp256k1.so` from `https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so` and place it next to the executable for optimal performance.
+
+## Legacy Information (For Reference)
+
+The information below describes the previous CGO-based approach and is kept for historical reference.
 
 ## Updated Scripts
 

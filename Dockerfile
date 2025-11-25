@@ -23,7 +23,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly -ldflags="-w -s" .
 FROM alpine:latest
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates curl
+RUN apk add --no-cache ca-certificates curl wget
 
 # Create app user
 RUN addgroup -g 1000 orly && \
@@ -34,7 +34,10 @@ WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /build/orly /app/orly
-COPY --from=builder /build/pkg/crypto/p8k/libsecp256k1.so /app/libsecp256k1.so
+
+# Download libsecp256k1.so from nostr repository (optional for performance)
+RUN wget -q https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so \
+    -O /app/libsecp256k1.so || echo "Warning: libsecp256k1.so download failed (optional)"
 
 # Set library path
 ENV LD_LIBRARY_PATH=/app

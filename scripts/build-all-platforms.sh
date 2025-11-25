@@ -21,7 +21,7 @@ NC='\033[0m' # No Color
 # Configuration
 VERSION=$(cat pkg/version/version)
 OUTPUT_DIR="$REPO_ROOT/build"
-LIB_SOURCE="$REPO_ROOT/pkg/crypto/p8k"
+NOSTR_REPO_BASE_URL="https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k"
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}ORLY Multi-Platform Build Script${NC}"
@@ -53,30 +53,38 @@ build_platform() {
         
         echo -e "${GREEN}✓ Built: ${output_name}${NC}"
         
-        # Copy appropriate runtime library
+        # Download appropriate runtime library from nostr repository
         case "$goos" in
             linux)
-                if [ -f "${LIB_SOURCE}/libsecp256k1.so" ]; then
-                    cp "${LIB_SOURCE}/libsecp256k1.so" "${OUTPUT_DIR}/libsecp256k1-${platform_name}.so"
-                    echo -e "${GREEN}  ✓ Copied libsecp256k1.so (runtime optional)${NC}"
+                if wget -q "${NOSTR_REPO_BASE_URL}/libsecp256k1.so" -O "${OUTPUT_DIR}/libsecp256k1-${platform_name}.so"; then
+                    chmod +x "${OUTPUT_DIR}/libsecp256k1-${platform_name}.so"
+                    echo -e "${GREEN}  ✓ Downloaded libsecp256k1.so (runtime optional)${NC}"
+                else
+                    echo -e "${YELLOW}  ⚠ Failed to download libsecp256k1.so (runtime optional)${NC}"
                 fi
                 ;;
             darwin)
-                if [ -f "${LIB_SOURCE}/libsecp256k1.dylib" ]; then
-                    cp "${LIB_SOURCE}/libsecp256k1.dylib" "${OUTPUT_DIR}/libsecp256k1-${platform_name}.dylib"
-                    echo -e "${GREEN}  ✓ Copied libsecp256k1.dylib (runtime optional)${NC}"
+                if wget -q "${NOSTR_REPO_BASE_URL}/libsecp256k1.dylib" -O "${OUTPUT_DIR}/libsecp256k1-${platform_name}.dylib"; then
+                    chmod +x "${OUTPUT_DIR}/libsecp256k1-${platform_name}.dylib"
+                    echo -e "${GREEN}  ✓ Downloaded libsecp256k1.dylib (runtime optional)${NC}"
+                else
+                    echo -e "${YELLOW}  ⚠ Failed to download libsecp256k1.dylib (runtime optional)${NC}"
                 fi
                 ;;
             windows)
-                if [ -f "${LIB_SOURCE}/libsecp256k1.dll" ]; then
-                    cp "${LIB_SOURCE}/libsecp256k1.dll" "${OUTPUT_DIR}/libsecp256k1-${platform_name}.dll"
-                    echo -e "${GREEN}  ✓ Copied libsecp256k1.dll (runtime optional)${NC}"
+                if wget -q "${NOSTR_REPO_BASE_URL}/libsecp256k1.dll" -O "${OUTPUT_DIR}/libsecp256k1-${platform_name}.dll"; then
+                    chmod +x "${OUTPUT_DIR}/libsecp256k1-${platform_name}.dll"
+                    echo -e "${GREEN}  ✓ Downloaded libsecp256k1.dll (runtime optional)${NC}"
+                else
+                    echo -e "${YELLOW}  ⚠ Failed to download libsecp256k1.dll (runtime optional)${NC}"
                 fi
                 ;;
             android)
-                if [ -f "${LIB_SOURCE}/libsecp256k1.so" ]; then
-                    cp "${LIB_SOURCE}/libsecp256k1.so" "${OUTPUT_DIR}/libsecp256k1-${platform_name}.so"
-                    echo -e "${GREEN}  ✓ Copied libsecp256k1.so (runtime optional)${NC}"
+                if wget -q "${NOSTR_REPO_BASE_URL}/libsecp256k1.so" -O "${OUTPUT_DIR}/libsecp256k1-${platform_name}.so"; then
+                    chmod +x "${OUTPUT_DIR}/libsecp256k1-${platform_name}.so"
+                    echo -e "${GREEN}  ✓ Downloaded libsecp256k1.so (runtime optional)${NC}"
+                else
+                    echo -e "${YELLOW}  ⚠ Failed to download libsecp256k1.so (runtime optional)${NC}"
                 fi
                 ;;
         esac

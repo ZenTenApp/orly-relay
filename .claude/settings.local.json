@@ -130,7 +130,8 @@
       "Bash(sudo journalctl:*)",
       "Bash(systemctl:*)",
       "Bash(systemctl show:*)",
-      "Bash(ssh relay1:*)"
+      "Bash(ssh relay1:*)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

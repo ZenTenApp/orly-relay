@@ -59,8 +59,10 @@ cd app/web && bun run dev
 # Or manually with purego setup
 CGO_ENABLED=0 go test ./...
 
-# Note: libsecp256k1.so must be available for crypto tests
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$(pwd)/pkg/crypto/p8k"
+# Note: libsecp256k1.so is automatically downloaded by test.sh if needed
+# It can also be manually downloaded from the nostr repository:
+# wget https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so
+# export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$(pwd)"
 ```
 
 ### Run Specific Package Tests
@@ -92,8 +94,8 @@ go run cmd/relay-tester/main.go -url ws://localhost:3334 -test "Basic Event"
 # Run Go benchmarks in specific package
 go test -bench=. -benchmem ./pkg/database
 
-# Crypto benchmarks
-cd pkg/crypto/p8k && make bench
+# Note: Crypto benchmarks are now in the external nostr library at:
+# https://git.mleku.dev/mleku/nostr
 
 # Run full relay benchmark suite
 cd cmd/benchmark
@@ -203,15 +205,15 @@ export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
 - `hex/` - SIMD-accelerated hex encoding using templexxx/xhex
 - `timestamp/`, `kind/`, `tag/` - Specialized field encoders
 
-**`pkg/crypto/`** - Cryptographic operations
-- `p8k/` - Pure Go secp256k1 using purego (no CGO) to dynamically load libsecp256k1.so
-  - `secp.go` - Dynamic library loading and function binding
-  - `schnorr.go` - Schnorr signature operations (NIP-01)
-  - `ecdh.go` - ECDH for encrypted DMs (NIP-04, NIP-44)
-  - `recovery.go` - Public key recovery from signatures
-  - `libsecp256k1.so` - Pre-compiled secp256k1 library
-- `keys/` - Key derivation and conversion utilities
-- `sha256/` - SIMD-accelerated SHA256 using minio/sha256-simd
+**Cryptographic operations** (from `git.mleku.dev/mleku/nostr` library)
+- Pure Go secp256k1 using purego (no CGO) to dynamically load libsecp256k1.so
+  - Schnorr signature operations (NIP-01)
+  - ECDH for encrypted DMs (NIP-04, NIP-44)
+  - Public key recovery from signatures
+  - `libsecp256k1.so` - Downloaded from nostr repository at runtime/build time
+- Key derivation and conversion utilities
+- SIMD-accelerated SHA256 using minio/sha256-simd
+- SIMD-accelerated hex encoding using templexxx/xhex
 
 **`pkg/acl/`** - Access control systems
 - `acl.go` - ACL registry and interface
@@ -255,9 +257,11 @@ export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
 
 **Pure Go with Purego:**
 - All builds use `CGO_ENABLED=0`
-- The p8k crypto library uses `github.com/ebitengine/purego` to dynamically load `libsecp256k1.so` at runtime
+- The p8k crypto library (from `git.mleku.dev/mleku/nostr`) uses `github.com/ebitengine/purego` to dynamically load `libsecp256k1.so` at runtime
 - This avoids CGO complexity while maintaining C library performance
-- `libsecp256k1.so` must be in `LD_LIBRARY_PATH` or same directory as binary
+- `libsecp256k1.so` is automatically downloaded by build/test scripts from the nostr repository
+- Manual download: `wget https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so`
+- Library must be in `LD_LIBRARY_PATH` or same directory as binary for runtime loading
 
 **Database Backend Selection:**
 - Supports multiple backends via `ORLY_DB_TYPE` environment variable

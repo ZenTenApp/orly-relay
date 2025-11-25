@@ -55,8 +55,12 @@ jobs:
           export PATH=/usr/local/go/bin:$PATH
           cd ${GITHUB_WORKSPACE}
           echo "Running tests..."
-          # Copy the libsecp256k1.so to root directory so tests can find it
-          cp pkg/crypto/p8k/libsecp256k1.so .
+          # Download libsecp256k1.so from nostr repository
+          echo "Downloading libsecp256k1.so from nostr repository..."
+          wget -q https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so -O libsecp256k1.so
+          chmod +x libsecp256k1.so
+          # Set LD_LIBRARY_PATH so tests can find the library
+          export LD_LIBRARY_PATH=${GITHUB_WORKSPACE}:${LD_LIBRARY_PATH}
           CGO_ENABLED=0 go test -v $(go list ./... | grep -v '/cmd/benchmark/external/' | xargs -n1 sh -c 'ls $0/*_test.go 1>/dev/null 2>&1 && echo $0' | grep .) || true
 
       - name: Build Release Binaries (Pure Go + purego)
@@ -71,8 +75,10 @@ jobs:
           # Create directory for binaries
           mkdir -p release-binaries
 
-          # Copy the pre-compiled libsecp256k1.so for Linux AMD64
-          cp pkg/crypto/p8k/libsecp256k1.so release-binaries/libsecp256k1-linux-amd64.so
+          # Download the pre-compiled libsecp256k1.so for Linux AMD64 from nostr repository
+          echo "Downloading libsecp256k1.so from nostr repository..."
+          wget -q https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so -O release-binaries/libsecp256k1-linux-amd64.so
+          chmod +x release-binaries/libsecp256k1-linux-amd64.so
 
           # Build for Linux AMD64 (pure Go + purego dynamic loading)
           echo "Building Linux AMD64 (pure Go + purego dynamic loading)..."

@@ -31,7 +31,7 @@ ORLY relay uses **pure Go builds (`CGO_ENABLED=0`)** across all platforms. The p
 
 ### Purego Dynamic Loading
 
-The p8k library (`pkg/crypto/p8k`) uses purego to:
+The p8k library (from `git.mleku.dev/mleku/nostr`) uses purego to:
 
 1. **At build time**: Compile pure Go code (`CGO_ENABLED=0`)
 2. **At runtime**: Attempt to dynamically load `libsecp256k1`
@@ -287,8 +287,11 @@ RUN go build -ldflags "-s -w" -o orly .
 
 # Runtime can optionally include library
 FROM alpine:latest
+RUN apk add --no-cache wget ca-certificates
 COPY --from=builder /build/orly /app/orly
-COPY --from=builder /build/pkg/crypto/p8k/libsecp256k1.so /app/ || true
+# Download libsecp256k1.so from nostr repository (optional for performance)
+RUN wget -q https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so \
+    -O /app/libsecp256k1.so || echo "Warning: libsecp256k1.so download failed (optional)"
 ENV LD_LIBRARY_PATH=/app
 CMD ["/app/orly"]
 ```
