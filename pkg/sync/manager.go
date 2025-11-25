@@ -26,6 +26,7 @@ type Manager struct {
 	nodeID          string
 	relayURL        string
 	peers           []string
+	selfURLs        map[string]bool   // URLs discovered to be ourselves (for fast lookups)
 	currentSerial   uint64
 	peerSerials     map[string]uint64 // peer URL -> latest serial seen
 	relayGroupMgr   *RelayGroupManager
@@ -72,11 +73,50 @@ func NewManager(ctx context.Context, db *database.D, nodeID, relayURL string, pe
 		nodeID:         nodeID,
 		relayURL:       relayURL,
 		peers:          peers,
+		selfURLs:       make(map[string]bool),
 		currentSerial:   0,
 		peerSerials:     make(map[string]uint64),
 		relayGroupMgr:  relayGroupMgr,
 		nip11Cache:     NewNIP11Cache(30 * time.Minute), // Cache NIP-11 docs for 30 minutes
 		policyManager:  policyManager,
+	}
+
+	// Add our configured relay URL to self-URLs cache if provided
+	if m.relayURL != "" {
+		m.selfURLs[m.relayURL] = true
+	}
+
+	// Remove self from peer list once at startup if we have a nodeID
+	if m.nodeID != "" {
+		filteredPeers := make([]string, 0, len(m.peers))
+		for _, peerURL := range m.peers {
+			// Fast path: check if we already know this URL is ours
+			if m.selfURLs[peerURL] {
+				log.I.F("removed self from sync peer list (known URL): %s", peerURL)
+				continue
+			}
+
+			// Slow path: check via NIP-11 pubkey
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			peerPubkey, err := m.nip11Cache.GetPubkey(ctx, peerURL)
+			cancel()
+
+			if err != nil {
+				log.D.F("couldn't fetch NIP-11 for %s, keeping in peer list: %v", peerURL, err)
+				filteredPeers = append(filteredPeers, peerURL)
+				continue
+			}
+
+			if peerPubkey == m.nodeID {
+				log.I.F("removed self from sync peer list (discovered): %s (pubkey: %s)", peerURL, m.nodeID)
+				// Cache this URL as ours for future fast lookups
+				m.selfURLs[peerURL] = true
+				continue
+			}
+
+			filteredPeers = append(filteredPeers, peerURL)
+		}
+		m.peers = filteredPeers
 	}
 
 	// Start sync routine
@@ -173,34 +213,11 @@ func (m *Manager) syncRoutine() {
 // syncWithPeersSequentially syncs with all configured peers one at a time
 func (m *Manager) syncWithPeersSequentially() {
 	for _, peerURL := range m.peers {
-		// Check if this peer is ourselves via NIP-11 pubkey
-		if m.isSelfPeer(peerURL) {
-			log.D.F("skipping sync with self: %s (pubkey matches our relay identity)", peerURL)
-			continue
-		}
+		// Self-peers are already filtered out during initialization/update
 		m.syncWithPeer(peerURL)
 		// Small delay between peers to avoid overwhelming
 		time.Sleep(100 * time.Millisecond)
 	}
-}
-
-// isSelfPeer checks if a peer URL is actually ourselves by comparing NIP-11 pubkeys
-func (m *Manager) isSelfPeer(peerURL string) bool {
-	// If we don't have a nodeID, can't compare
-	if m.nodeID == "" {
-		return false
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	peerPubkey, err := m.nip11Cache.GetPubkey(ctx, peerURL)
-	if err != nil {
-		log.D.F("couldn't fetch NIP-11 for %s to check if self: %v", peerURL, err)
-		return false
-	}
-
-	return peerPubkey == m.nodeID
 }
 
 // syncWithPeer syncs with a specific peer
@@ -417,6 +434,13 @@ func (m *Manager) HandleCurrentRequest(w http.ResponseWriter, r *http.Request) {
 	// Reject requests from ourselves (same nodeID)
 	if req.NodeID != "" && req.NodeID == m.nodeID {
 		log.D.F("rejecting sync current request from self (nodeID: %s)", req.NodeID)
+		// Cache the requesting relay URL as ours for future fast lookups
+		if req.RelayURL != "" {
+			m.mutex.Lock()
+			m.selfURLs[req.RelayURL] = true
+			m.mutex.Unlock()
+			log.D.F("cached self-URL from inbound request: %s", req.RelayURL)
+		}
 		http.Error(w, "Cannot sync with self", http.StatusBadRequest)
 		return
 	}
@@ -447,6 +471,13 @@ func (m *Manager) HandleEventIDsRequest(w http.ResponseWriter, r *http.Request) 
 	// Reject requests from ourselves (same nodeID)
 	if req.NodeID != "" && req.NodeID == m.nodeID {
 		log.D.F("rejecting sync event-ids request from self (nodeID: %s)", req.NodeID)
+		// Cache the requesting relay URL as ours for future fast lookups
+		if req.RelayURL != "" {
+			m.mutex.Lock()
+			m.selfURLs[req.RelayURL] = true
+			m.mutex.Unlock()
+			log.D.F("cached self-URL from inbound request: %s", req.RelayURL)
+		}
 		http.Error(w, "Cannot sync with self", http.StatusBadRequest)
 		return
 	}

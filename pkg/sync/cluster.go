@@ -25,6 +25,7 @@ type ClusterManager struct {
 	db                            *database.D
 	adminNpubs                    []string
 	relayIdentityPubkey           string                    // Our relay's identity pubkey (hex)
+	selfURLs                      map[string]bool           // URLs discovered to be ourselves (for fast lookups)
 	members                       map[string]*ClusterMember // keyed by relay URL
 	membersMux                    sync.RWMutex
 	pollTicker                    *time.Ticker
@@ -78,6 +79,7 @@ func NewClusterManager(ctx context.Context, db *database.D, adminNpubs []string,
 		db:                        db,
 		adminNpubs:                adminNpubs,
 		relayIdentityPubkey:       relayPubkey,
+		selfURLs:                  make(map[string]bool),
 		members:                   make(map[string]*ClusterMember),
 		pollDone:                  make(chan struct{}),
 		propagatePrivilegedEvents: propagatePrivilegedEvents,
@@ -265,46 +267,45 @@ func (cm *ClusterManager) UpdateMembership(relayURLs []string) {
 		}
 	}
 
-	// Add new members
+	// Add new members (filter out self once at this point)
 	for _, url := range relayURLs {
-		// Skip if this is our own relay (check via NIP-11 pubkey)
-		if cm.isSelfRelay(url) {
-			log.D.F("skipping cluster member (self): %s (pubkey matches our relay identity)", url)
+		// Skip if already exists
+		if _, exists := cm.members[url]; exists {
 			continue
 		}
 
-		if _, exists := cm.members[url]; !exists {
-			// For simplicity, assume HTTP and WebSocket URLs are the same
-			// In practice, you'd need to parse these properly
-			member := &ClusterMember{
-				HTTPURL:      url,
-				WebSocketURL: url, // TODO: Convert to WebSocket URL
-				LastSerial:   0,
-				Status:       "unknown",
-			}
-			cm.members[url] = member
-			log.I.F("added cluster member: %s", url)
+		// Fast path: check if we already know this URL is ours
+		if cm.selfURLs[url] {
+			log.I.F("removed self from cluster members (known URL): %s", url)
+			continue
 		}
+
+		// Slow path: check via NIP-11 pubkey
+		if cm.relayIdentityPubkey != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			peerPubkey, err := cm.nip11Cache.GetPubkey(ctx, url)
+			cancel()
+
+			if err != nil {
+				log.D.F("couldn't fetch NIP-11 for %s, adding to cluster anyway: %v", url, err)
+			} else if peerPubkey == cm.relayIdentityPubkey {
+				log.I.F("removed self from cluster members (discovered): %s (pubkey: %s)", url, cm.relayIdentityPubkey)
+				// Cache this URL as ours for future fast lookups
+				cm.selfURLs[url] = true
+				continue
+			}
+		}
+
+		// Add member
+		member := &ClusterMember{
+			HTTPURL:      url,
+			WebSocketURL: url, // TODO: Convert to WebSocket URL
+			LastSerial:   0,
+			Status:       "unknown",
+		}
+		cm.members[url] = member
+		log.I.F("added cluster member: %s", url)
 	}
-}
-
-// isSelfRelay checks if a relay URL is actually ourselves by comparing NIP-11 pubkeys
-func (cm *ClusterManager) isSelfRelay(relayURL string) bool {
-	// If we don't have a relay identity pubkey, can't compare
-	if cm.relayIdentityPubkey == "" {
-		return false
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	peerPubkey, err := cm.nip11Cache.GetPubkey(ctx, relayURL)
-	if err != nil {
-		log.D.F("couldn't fetch NIP-11 for %s to check if self: %v", relayURL, err)
-		return false
-	}
-
-	return peerPubkey == cm.relayIdentityPubkey
 }
 
 // HandleMembershipEvent processes a cluster membership event (Kind 39108)
@@ -352,18 +353,37 @@ func (cm *ClusterManager) HandleLatestSerial(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Check if request is from ourselves by examining the Referer or Origin header
+	// Note: Self-members are already filtered out, but this catches edge cases
 	origin := r.Header.Get("Origin")
 	referer := r.Header.Get("Referer")
 
-	if origin != "" && cm.isSelfRelay(origin) {
-		log.D.F("rejecting cluster latest request from self (origin: %s)", origin)
-		http.Error(w, "Cannot sync with self", http.StatusBadRequest)
-		return
-	}
-	if referer != "" && cm.isSelfRelay(referer) {
-		log.D.F("rejecting cluster latest request from self (referer: %s)", referer)
-		http.Error(w, "Cannot sync with self", http.StatusBadRequest)
-		return
+	if cm.relayIdentityPubkey != "" && (origin != "" || referer != "") {
+		checkURL := origin
+		if checkURL == "" {
+			checkURL = referer
+		}
+
+		// Fast path: check known self-URLs
+		if cm.selfURLs[checkURL] {
+			log.D.F("rejecting cluster latest request from self (known URL): %s", checkURL)
+			http.Error(w, "Cannot sync with self", http.StatusBadRequest)
+			return
+		}
+
+		// Slow path: verify via NIP-11
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		peerPubkey, err := cm.nip11Cache.GetPubkey(ctx, checkURL)
+		cancel()
+
+		if err == nil && peerPubkey == cm.relayIdentityPubkey {
+			log.D.F("rejecting cluster latest request from self (discovered): %s", checkURL)
+			// Cache for future fast lookups
+			cm.membersMux.Lock()
+			cm.selfURLs[checkURL] = true
+			cm.membersMux.Unlock()
+			http.Error(w, "Cannot sync with self", http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Get the latest serial from database by querying for the highest serial
@@ -390,18 +410,37 @@ func (cm *ClusterManager) HandleEventsRange(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Check if request is from ourselves by examining the Referer or Origin header
+	// Note: Self-members are already filtered out, but this catches edge cases
 	origin := r.Header.Get("Origin")
 	referer := r.Header.Get("Referer")
 
-	if origin != "" && cm.isSelfRelay(origin) {
-		log.D.F("rejecting cluster events request from self (origin: %s)", origin)
-		http.Error(w, "Cannot sync with self", http.StatusBadRequest)
-		return
-	}
-	if referer != "" && cm.isSelfRelay(referer) {
-		log.D.F("rejecting cluster events request from self (referer: %s)", referer)
-		http.Error(w, "Cannot sync with self", http.StatusBadRequest)
-		return
+	if cm.relayIdentityPubkey != "" && (origin != "" || referer != "") {
+		checkURL := origin
+		if checkURL == "" {
+			checkURL = referer
+		}
+
+		// Fast path: check known self-URLs
+		if cm.selfURLs[checkURL] {
+			log.D.F("rejecting cluster events request from self (known URL): %s", checkURL)
+			http.Error(w, "Cannot sync with self", http.StatusBadRequest)
+			return
+		}
+
+		// Slow path: verify via NIP-11
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		peerPubkey, err := cm.nip11Cache.GetPubkey(ctx, checkURL)
+		cancel()
+
+		if err == nil && peerPubkey == cm.relayIdentityPubkey {
+			log.D.F("rejecting cluster events request from self (discovered): %s", checkURL)
+			// Cache for future fast lookups
+			cm.membersMux.Lock()
+			cm.selfURLs[checkURL] = true
+			cm.membersMux.Unlock()
+			http.Error(w, "Cannot sync with self", http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Parse query parameters

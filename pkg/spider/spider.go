@@ -7,16 +7,18 @@ import (
 	"sync"
 	"time"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
-	"lol.mleku.dev/log"
-	"next.orly.dev/pkg/database"
+	"git.mleku.dev/mleku/nostr/crypto/keys"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"git.mleku.dev/mleku/nostr/encoders/timestamp"
-	"next.orly.dev/pkg/interfaces/publisher"
 	"git.mleku.dev/mleku/nostr/ws"
+	"lol.mleku.dev/chk"
+	"lol.mleku.dev/errorf"
+	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/database"
+	"next.orly.dev/pkg/interfaces/publisher"
+	dsync "next.orly.dev/pkg/sync"
 )
 
 const (
@@ -53,8 +55,10 @@ type Spider struct {
 	mode   string
 
 	// Configuration
-	adminRelays []string
-	followList  [][]byte
+	adminRelays       []string
+	followList        [][]byte
+	relayIdentityPubkey string          // Our relay's identity pubkey (hex)
+	selfURLs          map[string]bool // URLs discovered to be ourselves (for fast lookups)
 
 	// State management
 	mu          sync.RWMutex
@@ -129,14 +133,24 @@ func New(ctx context.Context, db *database.D, pub publisher.I, mode string) (s *
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
+
+	// Get relay identity pubkey for self-detection
+	var relayPubkey string
+	if skb, err := db.GetRelayIdentitySecret(); err == nil && len(skb) == 32 {
+		pk, _ := keys.SecretBytesToPubKeyHex(skb)
+		relayPubkey = pk
+	}
+
 	s = &Spider{
-		ctx:               ctx,
-		cancel:            cancel,
-		db:                db,
-		pub:               pub,
-		mode:              mode,
-		connections:       make(map[string]*RelayConnection),
-		followListUpdated: make(chan struct{}, 1),
+		ctx:                 ctx,
+		cancel:              cancel,
+		db:                  db,
+		pub:                 pub,
+		mode:                mode,
+		relayIdentityPubkey: relayPubkey,
+		selfURLs:            make(map[string]bool),
+		connections:         make(map[string]*RelayConnection),
+		followListUpdated:   make(chan struct{}, 1),
 	}
 
 	return
@@ -254,9 +268,15 @@ func (s *Spider) updateConnections() {
 		return
 	}
 
-	// Update connections for current admin relays
+	// Update connections for current admin relays (filtering out self)
 	currentRelays := make(map[string]bool)
 	for _, url := range adminRelays {
+		// Check if this relay URL is ourselves
+		if s.isSelfRelay(url) {
+			log.D.F("spider: skipping self-relay: %s", url)
+			continue
+		}
+
 		currentRelays[url] = true
 
 		if conn, exists := s.connections[url]; exists {
@@ -803,4 +823,43 @@ func (rc *RelayConnection) close() {
 	}
 
 	rc.cancel()
+}
+
+// isSelfRelay checks if a relay URL is actually ourselves by comparing NIP-11 pubkeys
+func (s *Spider) isSelfRelay(relayURL string) bool {
+	// If we don't have a relay identity pubkey, can't compare
+	if s.relayIdentityPubkey == "" {
+		return false
+	}
+
+	s.mu.RLock()
+	// Fast path: check if we already know this URL is ours
+	if s.selfURLs[relayURL] {
+		s.mu.RUnlock()
+		log.D.F("spider: skipping self-relay (known URL): %s", relayURL)
+		return true
+	}
+	s.mu.RUnlock()
+
+	// Slow path: check via NIP-11 pubkey
+	nip11Cache := dsync.NewNIP11Cache(30 * time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	peerPubkey, err := nip11Cache.GetPubkey(ctx, relayURL)
+	if err != nil {
+		log.D.F("spider: couldn't fetch NIP-11 for %s: %v", relayURL, err)
+		return false
+	}
+
+	if peerPubkey == s.relayIdentityPubkey {
+		log.I.F("spider: discovered self-relay: %s (pubkey: %s)", relayURL, s.relayIdentityPubkey)
+		// Cache this URL as ours for future fast lookups
+		s.mu.Lock()
+		s.selfURLs[relayURL] = true
+		s.mu.Unlock()
+		return true
+	}
+
+	return false
 }
