@@ -129,3 +129,4 @@ jobs:
             --asset release-binaries/libsecp256k1-linux-amd64.so \
             --asset release-binaries/SHA256SUMS.txt \
             || echo "Release may already exist, updating..."
+
