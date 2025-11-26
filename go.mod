@@ -3,27 +3,23 @@ module next.orly.dev
 go 1.25.3
 
 require (
-	git.mleku.dev/mleku/nostr v1.0.2
+	git.mleku.dev/mleku/nostr v1.0.3
 	github.com/adrg/xdg v0.5.3
-	github.com/davecgh/go-spew v1.1.1
 	github.com/dgraph-io/badger/v4 v4.8.0
 	github.com/dgraph-io/dgo/v230 v230.0.1
-	github.com/ebitengine/purego v0.9.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0
 	github.com/klauspost/compress v1.18.1
 	github.com/minio/sha256-simd v1.0.1
+	github.com/nbd-wtf/go-nostr v0.52.0
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	github.com/pkg/profile v1.7.0
-	github.com/puzpuzpuz/xsync/v3 v3.5.1
 	github.com/stretchr/testify v1.11.1
-	github.com/templexxx/xhex v0.0.0-20200614015412-aed53437177b
+	github.com/vertex-lab/nostr-sqlite v0.3.2
 	go-simpler.org/env v0.12.0
 	go.uber.org/atomic v1.11.0
 	golang.org/x/crypto v0.45.0
-	golang.org/x/exp v0.0.0-20251113190631-e25ba8c21ef6
 	golang.org/x/lint v0.0.0-20241112194109-818c5a804067
-	golang.org/x/net v0.47.0
 	google.golang.org/grpc v1.76.0
 	honnef.co/go/tools v0.6.1
 	lol.mleku.dev v1.0.5
@@ -40,10 +36,12 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.5 // indirect
 	github.com/coder/websocket v1.8.12 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.1.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
 	github.com/dgraph-io/ristretto/v2 v2.3.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/felixge/fgprof v0.9.5 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -58,22 +56,24 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/nbd-wtf/go-nostr v0.52.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
 	github.com/templexxx/cpu v0.1.1 // indirect
+	github.com/templexxx/xhex v0.0.0-20200614015412-aed53437177b // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
-	github.com/vertex-lab/nostr-sqlite v0.3.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel v1.38.0 // indirect
 	go.opentelemetry.io/otel/metric v1.38.0 // indirect
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	golang.org/x/arch v0.15.0 // indirect
+	golang.org/x/exp v0.0.0-20251113190631-e25ba8c21ef6 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/mod v0.30.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.31.0 // indirect

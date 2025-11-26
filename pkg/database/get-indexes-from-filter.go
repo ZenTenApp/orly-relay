@@ -30,6 +30,16 @@ func IsHexString(data []byte) (isHex bool) {
 	return true
 }
 
+// NormalizeTagValueForHash normalizes a tag value for consistent hashing.
+// For 'e' and 'p' tags, the nostr library stores values in binary format (32 bytes),
+// but filters from clients come with hex strings (64 chars). This function ensures
+// that filter values are converted to binary to match the stored index format.
+//
+// This function delegates to NormalizeTagValue from filter_utils.go for consistency.
+func NormalizeTagValueForHash(key byte, valueBytes []byte) []byte {
+	return NormalizeTagValue(key, valueBytes)
+}
+
 // CreateIdHashFromData creates an IdHash from data that could be hex or binary
 func CreateIdHashFromData(data []byte) (i *types2.IdHash, err error) {
 	i = new(types2.IdHash)
@@ -190,14 +200,18 @@ func GetIndexesFromFilter(f *filter.F) (idxs []Range, err error) {
 						keyBytes := t.Key()
 						key := new(types2.Letter)
 						// If the tag key starts with '#', use the second character as the key
+						var keyByte byte
 						if len(keyBytes) == 2 && keyBytes[0] == '#' {
-							key.Set(keyBytes[1])
+							keyByte = keyBytes[1]
 						} else {
-							key.Set(keyBytes[0])
+							keyByte = keyBytes[0]
 						}
+						key.Set(keyByte)
 						for _, valueBytes := range t.T[1:] {
+							// Normalize e/p tag values from hex to binary for consistent hashing
+							normalizedValue := NormalizeTagValueForHash(keyByte, valueBytes)
 							valueHash := new(types2.Ident)
-							valueHash.FromIdent(valueBytes)
+							valueHash.FromIdent(normalizedValue)
 							start, end := new(bytes.Buffer), new(bytes.Buffer)
 							idxS := indexes.TagKindPubkeyEnc(
 								key, valueHash, kind, p, caStart, nil,
@@ -234,14 +248,18 @@ func GetIndexesFromFilter(f *filter.F) (idxs []Range, err error) {
 					keyBytes := t.Key()
 					key := new(types2.Letter)
 					// If the tag key starts with '#', use the second character as the key
+					var keyByte byte
 					if len(keyBytes) == 2 && keyBytes[0] == '#' {
-						key.Set(keyBytes[1])
+						keyByte = keyBytes[1]
 					} else {
-						key.Set(keyBytes[0])
+						keyByte = keyBytes[0]
 					}
+					key.Set(keyByte)
 					for _, valueBytes := range t.T[1:] {
+						// Normalize e/p tag values from hex to binary for consistent hashing
+						normalizedValue := NormalizeTagValueForHash(keyByte, valueBytes)
 						valueHash := new(types2.Ident)
-						valueHash.FromIdent(valueBytes)
+						valueHash.FromIdent(normalizedValue)
 						start, end := new(bytes.Buffer), new(bytes.Buffer)
 						idxS := indexes.TagKindEnc(
 							key, valueHash, kind, caStart, nil,
@@ -280,14 +298,18 @@ func GetIndexesFromFilter(f *filter.F) (idxs []Range, err error) {
 					keyBytes := t.Key()
 					key := new(types2.Letter)
 					// If the tag key starts with '#', use the second character as the key
+					var keyByte byte
 					if len(keyBytes) == 2 && keyBytes[0] == '#' {
-						key.Set(keyBytes[1])
+						keyByte = keyBytes[1]
 					} else {
-						key.Set(keyBytes[0])
+						keyByte = keyBytes[0]
 					}
+					key.Set(keyByte)
 					for _, valueBytes := range t.T[1:] {
+						// Normalize e/p tag values from hex to binary for consistent hashing
+						normalizedValue := NormalizeTagValueForHash(keyByte, valueBytes)
 						valueHash := new(types2.Ident)
-						valueHash.FromIdent(valueBytes)
+						valueHash.FromIdent(normalizedValue)
 						start, end := new(bytes.Buffer), new(bytes.Buffer)
 						idxS := indexes.TagPubkeyEnc(
 							key, valueHash, p, caStart, nil,
@@ -318,14 +340,18 @@ func GetIndexesFromFilter(f *filter.F) (idxs []Range, err error) {
 				keyBytes := t.Key()
 				key := new(types2.Letter)
 				// If the tag key starts with '#', use the second character as the key
+				var keyByte byte
 				if len(keyBytes) == 2 && keyBytes[0] == '#' {
-					key.Set(keyBytes[1])
+					keyByte = keyBytes[1]
 				} else {
-					key.Set(keyBytes[0])
+					keyByte = keyBytes[0]
 				}
+				key.Set(keyByte)
 				for _, valueBytes := range t.T[1:] {
+					// Normalize e/p tag values from hex to binary for consistent hashing
+					normalizedValue := NormalizeTagValueForHash(keyByte, valueBytes)
 					valueHash := new(types2.Ident)
-					valueHash.FromIdent(valueBytes)
+					valueHash.FromIdent(normalizedValue)
 					start, end := new(bytes.Buffer), new(bytes.Buffer)
 					idxS := indexes.TagEnc(key, valueHash, caStart, nil)
 					if err = idxS.MarshalWrite(start); chk.E(err) {

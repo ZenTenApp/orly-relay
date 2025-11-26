@@ -29,13 +29,14 @@ func (d *D) ProcessDelete(ev *event.E, admins [][]byte) (err error) {
 		if eTag.Len() < 2 {
 			continue
 		}
-		eventId := eTag.Value()
-		if len(eventId) != 64 { // hex encoded event ID
+		// Use ValueHex() to handle both binary and hex storage formats
+		eventIdHex := eTag.ValueHex()
+		if len(eventIdHex) != 64 { // hex encoded event ID
 			continue
 		}
 		// Decode hex event ID
 		var eid []byte
-		if eid, err = hexenc.DecAppend(nil, eventId); chk.E(err) {
+		if eid, err = hexenc.DecAppend(nil, eventIdHex); chk.E(err) {
 			continue
 		}
 		// Fetch the event to verify ownership

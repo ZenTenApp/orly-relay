@@ -928,8 +928,8 @@ func (f *Follows) extractFollowedPubkeys(event *event.E) {
 			continue
 		}
 		// Fall back to hex decoding for non-binary values
-		// ValueHex() handles both formats, but we already checked binary above
-		if pubkey, err := hex.DecodeString(string(tag.Value())); err == nil && len(pubkey) == 32 {
+		// Use ValueHex() which handles both binary and hex storage formats
+		if pubkey, err := hex.DecodeString(string(tag.ValueHex())); err == nil && len(pubkey) == 32 {
 			f.AddFollow(pubkey)
 		}
 	}

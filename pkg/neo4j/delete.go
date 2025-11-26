@@ -78,7 +78,8 @@ func (n *N) ProcessDelete(ev *event.E, admins [][]byte) error {
 			continue
 		}
 
-		eventIDStr := string(eTag.T[1])
+		// Use ValueHex() to correctly handle both binary and hex storage formats
+		eventIDStr := string(eTag.ValueHex())
 		eventID, err := hex.Dec(eventIDStr)
 		if err != nil {
 			continue

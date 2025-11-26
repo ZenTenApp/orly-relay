@@ -63,7 +63,8 @@ func testPrivilegedEventFiltering(events event.S, authedPubkey []byte, aclMode s
 						continue
 					}
 					// Fall back to hex decoding for non-binary values
-					pt, err := hex.Dec(string(pTag.Value()))
+					// Use ValueHex() which handles both binary and hex storage formats
+					pt, err := hex.Dec(string(pTag.ValueHex()))
 					if err != nil {
 						continue
 					}

@@ -78,10 +78,20 @@ func (d *D) QueryPTagGraph(f *filter.F) (sers types.Uint40s, err error) {
 	var pubkeySerials []*types.Uint40
 	for _, pTagBytes := range pTags {
 		var pubkeyBytes []byte
-		// Try to decode as hex
-		if pubkeyBytes, err = hex.Dec(string(pTagBytes)); chk.E(err) {
-			log.D.F("QueryPTagGraph: failed to decode pubkey hex: %v", err)
-			continue
+
+		// Handle both binary-encoded (33 bytes) and hex-encoded (64 chars) values
+		// Filter tags may come as either format depending on how they were parsed
+		if IsBinaryEncoded(pTagBytes) {
+			// Already binary-encoded, extract the 32-byte hash
+			pubkeyBytes = pTagBytes[:HashLen]
+		} else {
+			// Try to decode as hex using NormalizeTagToHex for consistent handling
+			hexBytes := NormalizeTagToHex(pTagBytes)
+			var decErr error
+			if pubkeyBytes, decErr = hex.Dec(string(hexBytes)); chk.E(decErr) {
+				log.D.F("QueryPTagGraph: failed to decode pubkey hex: %v", decErr)
+				continue
+			}
 		}
 		if len(pubkeyBytes) != 32 {
 			log.D.F("QueryPTagGraph: invalid pubkey length: %d", len(pubkeyBytes))

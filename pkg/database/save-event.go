@@ -214,10 +214,11 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 	// Extract p-tag pubkeys using GetAll
 	pTags := ev.Tags.GetAll([]byte("p"))
 	for _, pTag := range pTags {
-		if len(pTag.T) >= 2 {
-			// Decode hex pubkey from p-tag
+		if pTag.Len() >= 2 {
+			// Get pubkey from p-tag, handling both binary and hex storage formats
+			// ValueHex() returns hex regardless of internal storage format
 			var ptagPubkey []byte
-			if ptagPubkey, err = hex.Dec(string(pTag.T[tag.Value])); err == nil && len(ptagPubkey) == 32 {
+			if ptagPubkey, err = hex.Dec(string(pTag.ValueHex())); err == nil && len(ptagPubkey) == 32 {
 				pkHex := hex.Enc(ptagPubkey)
 				// Skip if already added as author
 				if _, exists := pubkeysForGraph[pkHex]; !exists {

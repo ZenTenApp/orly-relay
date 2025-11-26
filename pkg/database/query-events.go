@@ -281,12 +281,14 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 				// For replaceable events, we need to check if there are any
 				// e-tags that reference events with the same kind and pubkey
 				for _, eTag := range eTags {
-					if len(eTag.Value()) != 64 {
+					// Use ValueHex() to handle both binary and hex storage formats
+					eTagHex := eTag.ValueHex()
+					if len(eTagHex) != 64 {
 						continue
 					}
 					// Get the event ID from the e-tag
 					evId := make([]byte, sha256.Size)
-					if _, err = hex.DecBytes(evId, eTag.Value()); err != nil {
+					if _, err = hex.DecBytes(evId, eTagHex); err != nil {
 						continue
 					}
 
@@ -363,10 +365,10 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 									eventTag.Key(), actualKey,
 								) {
 									// Check if the event's tag value matches any of the filter's values
+									// Using TagValuesMatchUsingTagMethods handles binary/hex conversion
+									// for e/p tags automatically
 									for _, filterValue := range filterTag.T[1:] {
-										if bytes.Equal(
-											eventTag.Value(), filterValue,
-										) {
+										if TagValuesMatchUsingTagMethods(eventTag, filterValue) {
 											eventHasTag = true
 											break
 										}
