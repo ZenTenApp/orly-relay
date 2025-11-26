@@ -62,6 +62,34 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Handle 'serve' subcommand: start ephemeral relay with RAM-based storage
+	if config.ServeRequested() {
+		const serveDataDir = "/dev/shm/orlyserve"
+		log.I.F("serve mode: configuring ephemeral relay at %s", serveDataDir)
+
+		// Delete existing directory completely
+		if err = os.RemoveAll(serveDataDir); err != nil && !os.IsNotExist(err) {
+			log.E.F("failed to remove existing serve directory: %v", err)
+			os.Exit(1)
+		}
+
+		// Create fresh directory
+		if err = os.MkdirAll(serveDataDir, 0755); chk.E(err) {
+			log.E.F("failed to create serve directory: %v", err)
+			os.Exit(1)
+		}
+
+		// Override configuration for serve mode
+		cfg.DataDir = serveDataDir
+		cfg.Listen = "0.0.0.0"
+		cfg.Port = 10547
+		cfg.ACLMode = "none"
+		cfg.ServeMode = true // Grant full owner access to all users
+
+		log.I.F("serve mode: listening on %s:%d with ACL mode '%s' (full owner access)",
+			cfg.Listen, cfg.Port, cfg.ACLMode)
+	}
+
 	// Ensure profiling is stopped on interrupts (SIGINT/SIGTERM) as well as on normal exit
 	var profileStopOnce sync.Once
 	profileStop := func() {}

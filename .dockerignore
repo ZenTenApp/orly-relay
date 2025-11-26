@@ -4,6 +4,7 @@ test-build
 *.exe
 *.dll
 *.so
+!libsecp256k1.so
 *.dylib
 
 # Test files

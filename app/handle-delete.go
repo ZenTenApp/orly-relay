@@ -142,19 +142,26 @@ func (l *Listener) HandleDelete(env *eventenvelope.Submission) (err error) {
 		// if e tags are found, delete them if the author is signer, or one of
 		// the owners is signer
 		if utils.FastEqual(t.Key(), []byte("e")) {
-			val := t.Value()
-			if len(val) == 0 {
-				log.W.F("HandleDelete: empty e-tag value")
-				continue
-			}
-			log.I.F("HandleDelete: processing e-tag with value: %s", string(val))
+			// First try binary format (optimized storage for e-tags)
 			var dst []byte
-			if b, e := hex.Dec(string(val)); chk.E(e) {
-				log.E.F("HandleDelete: failed to decode hex event ID %s: %v", string(val), e)
-				continue
+			if binVal := t.ValueBinary(); binVal != nil {
+				dst = binVal
+				log.I.F("HandleDelete: processing binary e-tag event ID: %0x", dst)
 			} else {
-				dst = b
-				log.I.F("HandleDelete: decoded event ID: %0x", dst)
+				// Fall back to hex decoding for non-binary values
+				val := t.Value()
+				if len(val) == 0 {
+					log.W.F("HandleDelete: empty e-tag value")
+					continue
+				}
+				log.I.F("HandleDelete: processing e-tag with value: %s", string(val))
+				if b, e := hex.Dec(string(val)); chk.E(e) {
+					log.E.F("HandleDelete: failed to decode hex event ID %s: %v", string(val), e)
+					continue
+				} else {
+					dst = b
+					log.I.F("HandleDelete: decoded event ID: %0x", dst)
+				}
 			}
 			f := &filter.F{
 				Ids: tag.NewFromBytesSlice(dst),
@@ -164,7 +171,7 @@ func (l *Listener) HandleDelete(env *eventenvelope.Submission) (err error) {
 				log.E.F("HandleDelete: failed to get serials from filter: %v", err)
 				continue
 			}
-			log.I.F("HandleDelete: found %d serials for event ID %s", len(sers), string(val))
+			log.I.F("HandleDelete: found %d serials for event ID %0x", len(sers), dst)
 			// if found, delete them
 			if len(sers) > 0 {
 				// there should be only one event per serial, so we can just

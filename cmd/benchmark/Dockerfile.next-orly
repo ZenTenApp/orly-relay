@@ -1,75 +1,51 @@
-# Dockerfile for next.orly.dev relay
-FROM ubuntu:22.04 as builder
+# Dockerfile for next.orly.dev relay (benchmark version)
+# Uses pure Go build with purego for dynamic libsecp256k1 loading
 
-# Set environment variables
-ARG GOLANG_VERSION=1.22.5
+# Stage 1: Build stage
+# Use Debian-based Go image to match runtime stage (avoids musl/glibc linker mismatch)
+FROM golang:1.25-bookworm AS builder
 
-# Update package list and install ALL dependencies in one layer
-RUN apt-get update && \
-    apt-get install -y wget ca-certificates build-essential autoconf libtool git && \
-    rm -rf /var/lib/apt/lists/*
-
-# Download and install Go binary
-RUN wget https://go.dev/dl/go${GOLANG_VERSION}.linux-amd64.tar.gz && \
-    rm -rf /usr/local/go && \
-    tar -C /usr/local -xzf go${GOLANG_VERSION}.linux-amd64.tar.gz && \
-    rm go${GOLANG_VERSION}.linux-amd64.tar.gz
-
-# Set PATH environment variable
-ENV PATH="/usr/local/go/bin:${PATH}"
-
-# Verify installation
-RUN go version
-
-# Build secp256k1 EARLY - this layer will be cached unless secp256k1 version changes
-RUN cd /tmp && \
-    rm -rf secp256k1 && \
-    git clone https://github.com/bitcoin-core/secp256k1.git && \
-    cd secp256k1 && \
-    git checkout v0.6.0 && \
-    git submodule init && \
-    git submodule update && \
-    ./autogen.sh && \
-    ./configure --enable-module-schnorrsig --enable-module-ecdh --prefix=/usr && \
-    make -j$(nproc) && \
-    make install && \
-    cd /tmp && rm -rf secp256k1
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends git make && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /build
 
-# Copy go modules AFTER secp256k1 build - this allows module cache to be reused
+# Copy go mod files first for better layer caching
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source code LAST - this is the most frequently changing layer
+# Copy source code
 COPY . .
 
-# Build the relay (libsecp256k1 installed via make install to /usr/lib)
-RUN CGO_ENABLED=1 GOOS=linux go build -gcflags "all=-N -l" -o relay .
+# Build the relay with CGO disabled (uses purego for crypto)
+# Include debug symbols for profiling
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -gcflags "all=-N -l" -o relay .
 
 # Create non-root user (uid 1000) for runtime in builder stage (used by analyzer)
-RUN useradd -u 1000 -m -s /bin/bash appuser && \
+RUN useradd -m -u 1000 appuser && \
     chown -R 1000:1000 /build
 # Switch to uid 1000 for any subsequent runtime use of this stage
 USER 1000:1000
 
 # Final stage
-FROM ubuntu:22.04
+# Use Debian slim instead of Alpine because Debian's libsecp256k1 includes
+# Schnorr signatures (secp256k1_schnorrsig_*) and ECDH which Nostr requires.
+# Alpine's libsecp256k1 is built without these modules.
+FROM debian:bookworm-slim
 
 # Install runtime dependencies
-RUN apt-get update && apt-get install -y ca-certificates curl libsecp256k1-0 libsecp256k1-dev && rm -rf /var/lib/apt/lists/* && \
-    ln -sf /usr/lib/x86_64-linux-gnu/libsecp256k1.so.0 /usr/lib/x86_64-linux-gnu/libsecp256k1.so.5
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates curl libsecp256k1-1 && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy binary from builder
+# Copy binary (libsecp256k1.so.1 is already installed via apt)
 COPY --from=builder /build/relay /app/relay
 
-# libsecp256k1 is already installed system-wide in the final stage via apt-get install libsecp256k1-0
-
 # Create runtime user and writable directories
-RUN useradd -u 1000 -m -s /bin/bash appuser && \
+RUN useradd -m -u 1000 appuser && \
     mkdir -p /data /profiles /app && \
     chown -R 1000:1000 /data /profiles /app
 

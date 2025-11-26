@@ -197,13 +197,12 @@ build_application() {
     log_info "Building binary in current directory (pure Go + purego)..."
     CGO_ENABLED=0 go build -o "$BINARY_NAME"
     
-    # Download libsecp256k1.so from nostr repository (optional, for runtime performance)
-    log_info "Downloading libsecp256k1.so from nostr repository..."
-    if wget -q https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so -O libsecp256k1.so; then
+    # Verify libsecp256k1.so exists in repo (used by purego for runtime crypto)
+    if [[ -f "./libsecp256k1.so" ]]; then
         chmod +x libsecp256k1.so
-        log_success "Downloaded libsecp256k1.so successfully (runtime optional)"
+        log_success "Found libsecp256k1.so in repository"
     else
-        log_warning "Failed to download libsecp256k1.so - relay will still work but may have slower crypto"
+        log_warning "libsecp256k1.so not found in repo - relay will still work but may have slower crypto"
     fi
     
     if [[ -f "./$BINARY_NAME" ]]; then

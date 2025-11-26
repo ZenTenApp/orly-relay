@@ -283,15 +283,13 @@ Dockerfiles simplified:
 FROM golang:1.25-alpine AS builder
 WORKDIR /build
 COPY . .
-RUN go build -ldflags "-s -w" -o orly .
+RUN CGO_ENABLED=0 go build -ldflags "-s -w" -o orly .
 
-# Runtime can optionally include library
+# Runtime includes libsecp256k1.so from repository
 FROM alpine:latest
-RUN apk add --no-cache wget ca-certificates
+RUN apk add --no-cache ca-certificates
 COPY --from=builder /build/orly /app/orly
-# Download libsecp256k1.so from nostr repository (optional for performance)
-RUN wget -q https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so \
-    -O /app/libsecp256k1.so || echo "Warning: libsecp256k1.so download failed (optional)"
+COPY --from=builder /build/libsecp256k1.so /app/libsecp256k1.so
 ENV LD_LIBRARY_PATH=/app
 CMD ["/app/orly"]
 ```

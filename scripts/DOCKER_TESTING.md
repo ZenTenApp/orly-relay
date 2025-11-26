@@ -83,7 +83,7 @@ docker-compose -f docker-compose-test.yml down -v
 Multi-stage build for ORLY:
 
 **Stage 1: Builder**
-- Based on golang:1.21-alpine
+- Based on golang:1.25-alpine
 - Downloads dependencies
 - Builds static binary with `CGO_ENABLED=0`
 - Copies libsecp256k1.so for crypto operations
@@ -365,7 +365,7 @@ start_period: 60s  # Default is 20-30s
 
 # Pre-pull images
 docker pull dgraph/standalone:latest
-docker pull golang:1.21-alpine
+docker pull golang:1.25-alpine
 ```
 
 **High memory usage**

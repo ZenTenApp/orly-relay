@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
 )
 
@@ -238,6 +239,100 @@ func TestNoReadAllowNoPrivileged(t *testing.T) {
 		}
 		if !allowed {
 			t.Error("Unauthenticated user should be able to read unrestricted events")
+		}
+	})
+}
+
+// TestPrivilegedWithBinaryEncodedPTags tests that privileged access works correctly
+// when p-tags are stored in binary-optimized format (as happens after JSON unmarshaling).
+// This is the real-world scenario where events come from network JSON.
+func TestPrivilegedWithBinaryEncodedPTags(t *testing.T) {
+	_, alicePubkey := generateTestKeypair(t)
+	_, bobPubkey := generateTestKeypair(t)
+	_, charliePubkey := generateTestKeypair(t)
+
+	// Create policy with privileged flag
+	policyJSON := map[string]interface{}{
+		"rules": map[string]interface{}{
+			"4": map[string]interface{}{
+				"description": "DM - privileged only",
+				"privileged":  true,
+			},
+		},
+	}
+
+	policyBytes, err := json.Marshal(policyJSON)
+	if err != nil {
+		t.Fatalf("Failed to marshal policy: %v", err)
+	}
+
+	policy, err := New(policyBytes)
+	if err != nil {
+		t.Fatalf("Failed to create policy: %v", err)
+	}
+
+	// Create event JSON with p-tag (simulating real network event)
+	// When this JSON is unmarshaled, the p-tag value will be converted to binary format
+	eventJSON := `{
+		"id": "0000000000000000000000000000000000000000000000000000000000000001",
+		"pubkey": "` + hex.Enc(alicePubkey) + `",
+		"created_at": 1234567890,
+		"kind": 4,
+		"tags": [["p", "` + hex.Enc(bobPubkey) + `"]],
+		"content": "Secret message",
+		"sig": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+	}`
+
+	var ev event.E
+	if err := json.Unmarshal([]byte(eventJSON), &ev); err != nil {
+		t.Fatalf("Failed to unmarshal event: %v", err)
+	}
+
+	// Verify the p-tag is stored in binary format
+	pTags := ev.Tags.GetAll([]byte("p"))
+	if len(pTags) == 0 {
+		t.Fatal("Event should have p-tag")
+	}
+	pTag := pTags[0]
+	binValue := pTag.ValueBinary()
+	t.Logf("P-tag Value() length: %d", len(pTag.Value()))
+	t.Logf("P-tag ValueBinary(): %v (len=%d)", binValue != nil, len(binValue))
+	if binValue == nil {
+		t.Log("Warning: P-tag is NOT in binary format (test may not exercise the binary code path)")
+	} else {
+		t.Log("P-tag IS in binary format - testing binary-encoded path")
+	}
+
+	// Test: Bob (in p-tag) should be able to read even with binary-encoded tag
+	t.Run("bob_binary_ptag_can_read", func(t *testing.T) {
+		allowed, err := policy.CheckPolicy("read", &ev, bobPubkey, "127.0.0.1")
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if !allowed {
+			t.Error("BUG! Recipient (in binary-encoded p-tag) should be able to read privileged event")
+		}
+	})
+
+	// Test: Alice (author) should be able to read
+	t.Run("alice_author_can_read", func(t *testing.T) {
+		allowed, err := policy.CheckPolicy("read", &ev, alicePubkey, "127.0.0.1")
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if !allowed {
+			t.Error("Author should be able to read their own privileged event")
+		}
+	})
+
+	// Test: Charlie (third party) should NOT be able to read
+	t.Run("charlie_denied", func(t *testing.T) {
+		allowed, err := policy.CheckPolicy("read", &ev, charliePubkey, "127.0.0.1")
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if allowed {
+			t.Error("Third party should NOT be able to read privileged event")
 		}
 	})
 }

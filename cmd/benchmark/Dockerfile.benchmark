@@ -1,22 +1,11 @@
 # Dockerfile for benchmark runner
-FROM golang:1.25-alpine AS builder
+# Uses pure Go build with purego for dynamic libsecp256k1 loading
 
-# Install build dependencies including libsecp256k1 build requirements
-RUN apk add --no-cache git ca-certificates gcc musl-dev autoconf automake libtool make
+# Use Debian-based Go image to match runtime stage (avoids musl/glibc linker mismatch)
+FROM golang:1.25-bookworm AS builder
 
-# Build libsecp256k1 EARLY - this layer will be cached unless secp256k1 version changes
-# Using specific version tag and parallel builds for faster compilation
-RUN cd /tmp && \
-    git clone https://github.com/bitcoin-core/secp256k1.git && \
-    cd secp256k1 && \
-    git checkout v0.6.0 && \
-    git submodule init && \
-    git submodule update && \
-    ./autogen.sh && \
-    ./configure --enable-module-recovery --enable-module-ecdh --enable-module-schnorrsig --enable-module-extrakeys && \
-    make -j$(nproc) && \
-    make install && \
-    cd /tmp && rm -rf secp256k1
+# Install build dependencies (no secp256k1 build needed)
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /build
@@ -28,26 +17,24 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the benchmark tool with CGO enabled
-RUN CGO_ENABLED=1 GOOS=linux go build -a -o benchmark ./cmd/benchmark
-
-# Copy libsecp256k1.so if available
-RUN if [ -f pkg/crypto/p8k/libsecp256k1.so ]; then \
-        cp pkg/crypto/p8k/libsecp256k1.so /build/; \
-    fi
+# Build the benchmark tool with CGO disabled (uses purego for crypto)
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o benchmark ./cmd/benchmark
 
 # Final stage
-FROM alpine:latest
+# Use Debian slim instead of Alpine because Debian's libsecp256k1 includes
+# Schnorr signatures (secp256k1_schnorrsig_*) and ECDH which Nostr requires.
+# Alpine's libsecp256k1 is built without these modules.
+FROM debian:bookworm-slim
 
-# Install runtime dependencies including libsecp256k1
-RUN apk --no-cache add ca-certificates curl wget libsecp256k1
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates curl libsecp256k1-1 && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy benchmark binary
+# Copy benchmark binary (libsecp256k1.so.1 is already installed via apt)
 COPY --from=builder /build/benchmark /app/benchmark
-
-# libsecp256k1 is already installed system-wide via apk
 
 # Copy benchmark runner script
 COPY cmd/benchmark/benchmark-runner.sh /app/benchmark-runner
@@ -56,12 +43,9 @@ COPY cmd/benchmark/benchmark-runner.sh /app/benchmark-runner
 RUN chmod +x /app/benchmark-runner
 
 # Create runtime user and reports directory owned by uid 1000
-RUN adduser -u 1000 -D appuser && \
+RUN useradd -m -u 1000 appuser && \
     mkdir -p /reports && \
     chown -R 1000:1000 /app /reports
-
-# Set library path
-ENV LD_LIBRARY_PATH=/app:/usr/local/lib:/usr/lib
 
 # Environment variables
 ENV BENCHMARK_EVENTS=50000

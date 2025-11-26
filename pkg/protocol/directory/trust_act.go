@@ -200,7 +200,7 @@ func ParseTrustAct(ev *event.E) (ta *TrustAct, err error) {
 
 	ta = &TrustAct{
 		Event:            ev,
-		TargetPubkey:     string(pTag.Value()),
+		TargetPubkey:     string(pTag.ValueHex()), // ValueHex() handles binary/hex storage
 		TrustLevel:       trustLevel,
 		RelayURL:         string(relayTag.Value()),
 		Expiry:           expiry,

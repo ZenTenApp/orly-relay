@@ -65,7 +65,7 @@ The workflow uses standard Gitea Actions environment variables:
 - **Solution**: Verify `GITEA_TOKEN` secret is set correctly with appropriate permissions
 
 **Issue**: Go version not found
-- **Solution**: The workflow downloads Go 1.25.0 directly from go.dev, ensure the runner has internet access
+- **Solution**: The workflow downloads Go 1.25.3 directly from go.dev, ensure the runner has internet access
 
 ### Customization
 

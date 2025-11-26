@@ -54,9 +54,17 @@ func testPrivilegedEventFiltering(events event.S, authedPubkey []byte, aclMode s
 				// Check p tags
 				pTags := ev.Tags.GetAll([]byte("p"))
 				for _, pTag := range pTags {
-					var pt []byte
-					var err error
-					if pt, err = hex.Dec(string(pTag.Value())); err != nil {
+					// First try binary format (optimized storage)
+					if pt := pTag.ValueBinary(); pt != nil {
+						if bytes.Equal(pt, authedPubkey) {
+							authorized = true
+							break
+						}
+						continue
+					}
+					// Fall back to hex decoding for non-binary values
+					pt, err := hex.Dec(string(pTag.Value()))
+					if err != nil {
 						continue
 					}
 					if bytes.Equal(pt, authedPubkey) {

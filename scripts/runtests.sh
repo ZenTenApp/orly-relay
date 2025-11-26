@@ -3,9 +3,8 @@
 # libsecp256k1 is loaded dynamically at runtime if available
 export CGO_ENABLED=0
 
-# Download libsecp256k1.so from nostr repository if not present
-if [ ! -f "libsecp256k1.so" ]; then
-    wget -q https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so -O libsecp256k1.so 2>/dev/null || true
+# Verify libsecp256k1.so exists in repo (should be at repo root)
+if [ -f "libsecp256k1.so" ]; then
     chmod +x libsecp256k1.so 2>/dev/null || true
 fi
 

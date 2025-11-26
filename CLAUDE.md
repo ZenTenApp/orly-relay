@@ -59,10 +59,8 @@ cd app/web && bun run dev
 # Or manually with purego setup
 CGO_ENABLED=0 go test ./...
 
-# Note: libsecp256k1.so is automatically downloaded by test.sh if needed
-# It can also be manually downloaded from the nostr repository:
-# wget https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so
-# export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$(pwd)"
+# Note: libsecp256k1.so is included in the repository root
+# Set LD_LIBRARY_PATH to use it: export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$(pwd)"
 ```
 
 ### Run Specific Package Tests
@@ -210,7 +208,7 @@ export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
   - Schnorr signature operations (NIP-01)
   - ECDH for encrypted DMs (NIP-04, NIP-44)
   - Public key recovery from signatures
-  - `libsecp256k1.so` - Downloaded from nostr repository at runtime/build time
+  - `libsecp256k1.so` - Included in repository root for runtime loading
 - Key derivation and conversion utilities
 - SIMD-accelerated SHA256 using minio/sha256-simd
 - SIMD-accelerated hex encoding using templexxx/xhex
@@ -259,8 +257,7 @@ export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
 - All builds use `CGO_ENABLED=0`
 - The p8k crypto library (from `git.mleku.dev/mleku/nostr`) uses `github.com/ebitengine/purego` to dynamically load `libsecp256k1.so` at runtime
 - This avoids CGO complexity while maintaining C library performance
-- `libsecp256k1.so` is automatically downloaded by build/test scripts from the nostr repository
-- Manual download: `wget https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so`
+- `libsecp256k1.so` is included in the repository root
 - Library must be in `LD_LIBRARY_PATH` or same directory as binary for runtime loading
 
 **Database Backend Selection:**
@@ -309,6 +306,23 @@ export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
 - When JSON unmarshalling is needed for unexported fields, use a shadow struct with custom `UnmarshalJSON`
 - External packages (e.g., `app/`) should ONLY use public API methods, never access internal fields
 - **DO NOT** change unexported fields to exported when fixing bugs - this breaks the domain boundary
+
+**Binary-Optimized Tag Storage (IMPORTANT):**
+- The nostr library (`git.mleku.dev/mleku/nostr/encoders/tag`) uses binary optimization for `e` and `p` tags
+- When events are unmarshaled from JSON, 64-character hex values in e/p tags are converted to 33-byte binary format (32 bytes hash + null terminator)
+- **DO NOT** use `tag.Value()` directly for e/p tags - it returns raw bytes which may be binary, not hex
+- **ALWAYS** use these methods instead:
+  - `tag.ValueHex()` - Returns hex string regardless of storage format (handles both binary and hex)
+  - `tag.ValueBinary()` - Returns 32-byte binary if stored in binary format, nil otherwise
+- Example pattern for comparing pubkeys:
+  ```go
+  // CORRECT: Use ValueHex() for hex decoding
+  pt, err := hex.Dec(string(pTag.ValueHex()))
+
+  // WRONG: Value() may return binary bytes, not hex
+  pt, err := hex.Dec(string(pTag.Value()))  // Will fail for binary-encoded tags!
+  ```
+- This optimization saves memory and enables faster comparisons in the database layer
 
 ## Development Workflow
 
@@ -370,7 +384,7 @@ export ORLY_PPROF_PATH=/tmp/profiles
 ```
 
 This script:
-1. Installs Go 1.25.0 if needed
+1. Installs Go 1.25.3 if needed
 2. Builds relay with embedded web UI
 3. Installs to `~/.local/bin/orly`
 4. Creates systemd service

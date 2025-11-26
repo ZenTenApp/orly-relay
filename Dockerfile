@@ -1,10 +1,11 @@
 # Multi-stage Dockerfile for ORLY relay
 
 # Stage 1: Build stage
-FROM golang:1.21-alpine AS builder
+# Use Debian-based Go image to match runtime stage (avoids musl/glibc linker mismatch)
+FROM golang:1.25-bookworm AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git make
+RUN apt-get update && apt-get install -y --no-install-recommends git make && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /build
@@ -20,27 +21,25 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly -ldflags="-w -s" .
 
 # Stage 2: Runtime stage
-FROM alpine:latest
+# Use Debian slim instead of Alpine because Debian's libsecp256k1 includes
+# Schnorr signatures (secp256k1_schnorrsig_*) and ECDH which Nostr requires.
+# Alpine's libsecp256k1 is built without these modules.
+FROM debian:bookworm-slim
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates curl wget
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates curl libsecp256k1-1 && \
+    rm -rf /var/lib/apt/lists/*
 
 # Create app user
-RUN addgroup -g 1000 orly && \
-    adduser -D -u 1000 -G orly orly
+RUN groupadd -g 1000 orly && \
+    useradd -m -u 1000 -g orly orly
 
 # Set working directory
 WORKDIR /app
 
-# Copy binary from builder
+# Copy binary (libsecp256k1.so.1 is already installed via apt)
 COPY --from=builder /build/orly /app/orly
-
-# Download libsecp256k1.so from nostr repository (optional for performance)
-RUN wget -q https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so \
-    -O /app/libsecp256k1.so || echo "Warning: libsecp256k1.so download failed (optional)"
-
-# Set library path
-ENV LD_LIBRARY_PATH=/app
 
 # Create data directory
 RUN mkdir -p /data && chown -R orly:orly /data /app

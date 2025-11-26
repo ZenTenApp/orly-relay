@@ -133,7 +133,11 @@
       "Bash(ssh relay1:*)",
       "Bash(done)",
       "Bash(go run:*)",
-      "Bash(go doc:*)"
+      "Bash(go doc:*)",
+      "Bash(/tmp/orly-test help:*)",
+      "Bash(go version:*)",
+      "Bash(ss:*)",
+      "Bash(CGO_ENABLED=0 go clean:*)"
     ],
     "deny": [],
     "ask": []

@@ -313,7 +313,7 @@ func New(policyJSON []byte) (p *P, err error) {
 // 2. Mentioned in a p-tag of the event
 //
 // Both ev.Pubkey and userPubkey must be binary ([]byte), not hex-encoded.
-// P-tags are assumed to contain hex-encoded pubkeys that will be decoded.
+// P-tags may be stored in either binary-optimized format (33 bytes) or hex format.
 //
 // This is the single source of truth for "parties_involved" / "privileged" checks.
 func IsPartyInvolved(ev *event.E, userPubkey []byte) bool {
@@ -330,8 +330,8 @@ func IsPartyInvolved(ev *event.E, userPubkey []byte) bool {
 	// Check if user is in p tags
 	pTags := ev.Tags.GetAll([]byte("p"))
 	for _, pTag := range pTags {
-		// pTag.Value() returns hex-encoded string; decode to bytes for comparison
-		pt, err := hex.Dec(string(pTag.Value()))
+		// ValueHex() handles both binary and hex storage formats automatically
+		pt, err := hex.Dec(string(pTag.ValueHex()))
 		if err != nil {
 			// Skip malformed tags
 			continue

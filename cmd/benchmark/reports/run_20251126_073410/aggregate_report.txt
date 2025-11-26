@@ -1,0 +1,194 @@
+================================================================
+NOSTR RELAY BENCHMARK AGGREGATE REPORT
+================================================================
+Generated: 2025-11-26T08:04:35+00:00
+Benchmark Configuration:
+  Events per test: 50000
+  Concurrent workers: 24
+  Test duration: 60s
+  
+Relays tested: 9
+
+================================================================
+SUMMARY BY RELAY
+================================================================
+
+Relay: rely-sqlite
+----------------------------------------
+Status: COMPLETED
+Events/sec: 16298.40
+Events/sec: 6150.97
+Events/sec: 16298.40
+Success Rate: 100.0%
+Success Rate: 100.0%
+Success Rate: 100.0%
+Avg Latency: 1.360569ms
+Bottom 10% Avg Latency: 746.704µs
+Avg Latency: 1.411735ms
+P95 Latency: 2.160818ms
+P95 Latency: 2.29313ms
+P95 Latency: 916.446µs
+
+Relay: next-orly-badger
+----------------------------------------
+Status: COMPLETED
+Events/sec: 16698.91
+Events/sec: 6011.59
+Events/sec: 16698.91
+Success Rate: 100.0%
+Success Rate: 100.0%
+Success Rate: 100.0%
+Avg Latency: 1.331911ms
+Bottom 10% Avg Latency: 766.682µs
+Avg Latency: 1.496861ms
+P95 Latency: 2.019719ms
+P95 Latency: 2.715024ms
+P95 Latency: 914.112µs
+
+Relay: next-orly-dgraph
+----------------------------------------
+Status: COMPLETED
+Events/sec: 14573.58
+Events/sec: 6072.22
+Events/sec: 14573.58
+Success Rate: 100.0%
+Success Rate: 100.0%
+Success Rate: 100.0%
+Avg Latency: 1.571025ms
+Bottom 10% Avg Latency: 802.953µs
+Avg Latency: 1.454825ms
+P95 Latency: 2.610305ms
+P95 Latency: 2.541414ms
+P95 Latency: 902.751µs
+
+Relay: next-orly-neo4j
+----------------------------------------
+Status: COMPLETED
+Events/sec: 16594.60
+Events/sec: 6139.73
+Events/sec: 16594.60
+Success Rate: 100.0%
+Success Rate: 100.0%
+Success Rate: 100.0%
+Avg Latency: 1.341265ms
+Bottom 10% Avg Latency: 760.268µs
+Avg Latency: 1.417529ms
+P95 Latency: 2.068012ms
+P95 Latency: 2.279114ms
+P95 Latency: 893.313µs
+
+Relay: khatru-sqlite
+----------------------------------------
+Status: COMPLETED
+Events/sec: 16775.48
+Events/sec: 6077.32
+Events/sec: 16775.48
+Success Rate: 100.0%
+Success Rate: 100.0%
+Success Rate: 100.0%
+Avg Latency: 1.316097ms
+Bottom 10% Avg Latency: 743.925µs
+Avg Latency: 1.448816ms
+P95 Latency: 2.019999ms
+P95 Latency: 2.415349ms
+P95 Latency: 915.807µs
+
+Relay: khatru-badger
+----------------------------------------
+Status: COMPLETED
+Events/sec: 14573.64
+Events/sec: 6123.62
+Events/sec: 14573.64
+Success Rate: 100.0%
+Success Rate: 100.0%
+Success Rate: 100.0%
+Avg Latency: 1.582659ms
+Bottom 10% Avg Latency: 849.196µs
+Avg Latency: 1.42045ms
+P95 Latency: 2.584156ms
+P95 Latency: 2.297743ms
+P95 Latency: 911.2µs
+
+Relay: relayer-basic
+----------------------------------------
+Status: COMPLETED
+Events/sec: 16103.85
+Events/sec: 6038.31
+Events/sec: 16103.85
+Success Rate: 100.0%
+Success Rate: 100.0%
+Success Rate: 100.0%
+Avg Latency: 1.401051ms
+Bottom 10% Avg Latency: 788.805µs
+Avg Latency: 1.501362ms
+P95 Latency: 2.187347ms
+P95 Latency: 2.477719ms
+P95 Latency: 920.8µs
+
+Relay: strfry
+----------------------------------------
+Status: COMPLETED
+Events/sec: 16207.30
+Events/sec: 6075.12
+Events/sec: 16207.30
+Success Rate: 100.0%
+Success Rate: 100.0%
+Success Rate: 100.0%
+Avg Latency: 1.381579ms
+Bottom 10% Avg Latency: 760.474µs
+Avg Latency: 1.45496ms
+P95 Latency: 2.15555ms
+P95 Latency: 2.414222ms
+P95 Latency: 907.647µs
+
+Relay: nostr-rs-relay
+----------------------------------------
+Status: COMPLETED
+Events/sec: 15751.45
+Events/sec: 6163.36
+Events/sec: 15751.45
+Success Rate: 100.0%
+Success Rate: 100.0%
+Success Rate: 100.0%
+Avg Latency: 1.442411ms
+Bottom 10% Avg Latency: 812.222µs
+Avg Latency: 1.414472ms
+P95 Latency: 2.22848ms
+P95 Latency: 2.267184ms
+P95 Latency: 921.434µs
+
+
+================================================================
+DETAILED RESULTS
+================================================================
+
+Individual relay reports are available in:
+  - /reports/run_20251126_073410/khatru-badger_results.txt
+  - /reports/run_20251126_073410/khatru-sqlite_results.txt
+  - /reports/run_20251126_073410/next-orly-badger_results.txt
+  - /reports/run_20251126_073410/next-orly-dgraph_results.txt
+  - /reports/run_20251126_073410/next-orly-neo4j_results.txt
+  - /reports/run_20251126_073410/nostr-rs-relay_results.txt
+  - /reports/run_20251126_073410/relayer-basic_results.txt
+  - /reports/run_20251126_073410/rely-sqlite_results.txt
+  - /reports/run_20251126_073410/strfry_results.txt
+
+================================================================
+BENCHMARK COMPARISON TABLE
+================================================================
+
+Relay                Status     Peak Tput/s     Avg Latency     Success Rate   
+----                 ------     -----------     -----------     ------------   
+rely-sqlite          OK         16298.40        1.360569ms      100.0%         
+next-orly-badger     OK         16698.91        1.331911ms      100.0%         
+next-orly-dgraph     OK         14573.58        1.571025ms      100.0%         
+next-orly-neo4j      OK         16594.60        1.341265ms      100.0%         
+khatru-sqlite        OK         16775.48        1.316097ms      100.0%         
+khatru-badger        OK         14573.64        1.582659ms      100.0%         
+relayer-basic        OK         16103.85        1.401051ms      100.0%         
+strfry               OK         16207.30        1.381579ms      100.0%         
+nostr-rs-relay       OK         15751.45        1.442411ms      100.0%         
+
+================================================================
+End of Report
+================================================================

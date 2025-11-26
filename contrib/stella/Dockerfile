@@ -1,54 +1,50 @@
 # Dockerfile for Stella's Nostr Relay (next.orly.dev)
 # Owner: npub1v30tsz9vw6ylpz63g0a702nj3xa26t3m7p5us8f2y2sd8v6cnsvq465zjx
+#
+# Build from repository root:
+#   docker build -f contrib/stella/Dockerfile -t stella-relay .
 
-FROM golang:alpine AS builder
+# Use Debian-based Go image to match runtime stage (avoids musl/glibc linker mismatch)
+FROM golang:1.25-bookworm AS builder
 
 # Install build dependencies
-RUN apk add --no-cache \
-    git \
-    build-base \
-    autoconf \
-    automake \
-    libtool \
-    pkgconfig
-
-# Install secp256k1 library from Alpine packages
-RUN apk add --no-cache libsecp256k1-dev
+RUN apt-get update && apt-get install -y --no-install-recommends git make && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /build
 
 # Copy go modules first (for better caching)
-COPY ../../go.mod go.sum ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy source code
-COPY ../.. .
+COPY . .
 
-# Build the relay with optimizations from v0.4.8
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags "-w -s" -o relay .
+# Build the relay with CGO disabled (uses purego for crypto)
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-w -s" -o relay .
 
 # Create non-root user for security
-RUN adduser -D -u 1000 stella && \
+RUN useradd -m -u 1000 stella && \
     chown -R 1000:1000 /build
 
 # Final stage - minimal runtime image
-FROM alpine:latest
+# Use Debian slim instead of Alpine because Debian's libsecp256k1 includes
+# Schnorr signatures (secp256k1_schnorrsig_*) and ECDH which Nostr requires.
+# Alpine's libsecp256k1 is built without these modules.
+FROM debian:bookworm-slim
 
-# Install only runtime dependencies
-RUN apk add --no-cache \
-    ca-certificates \
-    curl \
-    libsecp256k1 \
-    libsecp256k1-dev
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates curl libsecp256k1-1 && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy binary from builder
+# Copy binary (libsecp256k1.so.1 is already installed via apt)
 COPY --from=builder /build/relay /app/relay
 
 # Create runtime user and directories
-RUN adduser -D -u 1000 stella && \
+RUN useradd -m -u 1000 stella && \
     mkdir -p /data /profiles /app && \
     chown -R 1000:1000 /data /profiles /app
 

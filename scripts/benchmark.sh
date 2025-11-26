@@ -33,11 +33,11 @@ if [[ ! -x "$BENCHMARK_BIN" ]]; then
     echo "Building benchmark binary (pure Go + purego)..."
     cd "$REPO_ROOT/cmd/benchmark"
     CGO_ENABLED=0 go build -o "$BENCHMARK_BIN" .
-    # Download libsecp256k1.so from nostr repository (runtime optional)
-    wget -q https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so \
-        -O "$(dirname "$BENCHMARK_BIN")/libsecp256k1.so" 2>/dev/null || \
-        echo "Warning: Failed to download libsecp256k1.so (optional for performance)"
-    chmod +x "$(dirname "$BENCHMARK_BIN")/libsecp256k1.so" 2>/dev/null || true
+    # Copy libsecp256k1.so from repo root (runtime optional)
+    if [[ -f "$REPO_ROOT/libsecp256k1.so" ]]; then
+        cp "$REPO_ROOT/libsecp256k1.so" "$(dirname "$BENCHMARK_BIN")/"
+        chmod +x "$(dirname "$BENCHMARK_BIN")/libsecp256k1.so" 2>/dev/null || true
+    fi
     cd "$REPO_ROOT"
 fi
 

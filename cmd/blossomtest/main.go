@@ -36,12 +36,12 @@ var (
 
 // BlossomDescriptor represents a blob descriptor returned by the server
 type BlossomDescriptor struct {
-	URL       string   `json:"url"`
-	SHA256    string   `json:"sha256"`
-	Size      int64    `json:"size"`
-	Type      string   `json:"type,omitempty"`
-	Uploaded  int64    `json:"uploaded"`
-	PublicKey string   `json:"public_key,omitempty"`
+	URL       string     `json:"url"`
+	SHA256    string     `json:"sha256"`
+	Size      int64      `json:"size"`
+	Type      string     `json:"type,omitempty"`
+	Uploaded  int64      `json:"uploaded"`
+	PublicKey string     `json:"public_key,omitempty"`
 	Tags      [][]string `json:"tags,omitempty"`
 }
 
@@ -49,7 +49,7 @@ func main() {
 	flag.Parse()
 
 	fmt.Println("🌸 Blossom Test Tool")
-	fmt.Println("===================\n")
+	fmt.Println("===================")
 
 	// Get or generate keypair (only if auth is enabled)
 	var sec, pub []byte

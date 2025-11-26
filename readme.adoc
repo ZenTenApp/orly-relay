@@ -37,7 +37,7 @@ ORLY is a standard Go application that can be built using the Go toolchain.
 
 === prerequisites
 
-- Go 1.25.0 or later
+- Go 1.25.3 or later
 - Git
 - For web UI: link:https://bun.sh/[Bun] JavaScript runtime
 
@@ -179,7 +179,7 @@ cd next.orly.dev
 
 The script will:
 
-1. **Install Go 1.25.0** if not present (in `~/.local/go`)
+1. **Install Go 1.25.3** if not present (in `~/.local/go`)
 2. **Configure environment** by creating `~/.goenv` and updating `~/.bashrc`
 3. **Build the relay** with embedded web UI using `update-embedded-web.sh`
 4. **Set capabilities** for port 443 binding (requires sudo)
@@ -342,6 +342,165 @@ For detailed testing instructions, multi-relay testing scenarios, and advanced u
 
 The benchmark suite provides comprehensive performance testing and comparison across multiple relay implementations, including throughput, latency, and memory usage metrics.
 
+== command-line tools
+
+ORLY includes several command-line utilities in the `cmd/` directory for testing, debugging, and administration.
+
+=== relay-tester
+
+Nostr protocol compliance testing tool. Validates that a relay correctly implements the Nostr protocol specification.
+
+[source,bash]
+----
+# Run all protocol compliance tests
+go run ./cmd/relay-tester -url ws://localhost:3334
+
+# List available tests
+go run ./cmd/relay-tester -list
+
+# Run specific test
+go run ./cmd/relay-tester -url ws://localhost:3334 -test "Basic Event"
+
+# Output results as JSON
+go run ./cmd/relay-tester -url ws://localhost:3334 -json
+----
+
+=== benchmark
+
+Comprehensive relay performance benchmarking tool. Tests event storage, queries, and subscription performance with detailed latency metrics (P90, P95, P99).
+
+[source,bash]
+----
+# Run benchmarks against local database
+go run ./cmd/benchmark -data-dir /tmp/bench-db -events 10000 -workers 4
+
+# Run benchmarks against a running relay
+go run ./cmd/benchmark -relay ws://localhost:3334 -events 5000
+
+# Use different database backends
+go run ./cmd/benchmark -dgraph -events 10000
+go run ./cmd/benchmark -neo4j -events 10000
+----
+
+The `cmd/benchmark/` directory also includes Docker Compose configurations for comparative benchmarks across multiple relay implementations (strfry, nostr-rs-relay, khatru, etc.).
+
+=== stresstest
+
+Load testing tool for evaluating relay performance under sustained high-traffic conditions. Generates events with random content and tags to simulate realistic workloads.
+
+[source,bash]
+----
+# Run stress test with 10 concurrent workers
+go run ./cmd/stresstest -url ws://localhost:3334 -workers 10 -duration 60s
+
+# Generate events with random p-tags (up to 100 per event)
+go run ./cmd/stresstest -url ws://localhost:3334 -workers 5
+----
+
+=== blossomtest
+
+Tests the Blossom blob storage protocol (BUD-01/BUD-02) implementation. Validates upload, download, and authentication flows.
+
+[source,bash]
+----
+# Test with generated key
+go run ./cmd/blossomtest -url http://localhost:3334 -size 1024
+
+# Test with specific nsec
+go run ./cmd/blossomtest -url http://localhost:3334 -nsec nsec1...
+
+# Test anonymous uploads (no authentication)
+go run ./cmd/blossomtest -url http://localhost:3334 -no-auth
+----
+
+=== aggregator
+
+Event aggregation utility that fetches events from multiple relays using bloom filters for deduplication. Useful for syncing events across relays with memory-efficient duplicate detection.
+
+[source,bash]
+----
+go run ./cmd/aggregator -relays wss://relay1.com,wss://relay2.com -output events.jsonl
+----
+
+=== convert
+
+Key format conversion utility. Converts between hex and bech32 (npub/nsec) formats for Nostr keys.
+
+[source,bash]
+----
+# Convert npub to hex
+go run ./cmd/convert npub1abc...
+
+# Convert hex to npub
+go run ./cmd/convert 0123456789abcdef...
+
+# Convert secret key (nsec or hex) - outputs both nsec and derived npub
+go run ./cmd/convert --secret nsec1xyz...
+----
+
+=== FIND
+
+Free Internet Name Daemon - CLI tool for the distributed naming system. Manages name registration, transfers, and certificate issuance.
+
+[source,bash]
+----
+# Validate a name format
+go run ./cmd/FIND verify-name example.nostr
+
+# Generate a new key pair
+go run ./cmd/FIND generate-key
+
+# Create a registration proposal
+go run ./cmd/FIND register myname.nostr
+
+# Transfer a name to a new owner
+go run ./cmd/FIND transfer myname.nostr npub1newowner...
+----
+
+=== policytest
+
+Tests the policy system for event write control. Validates that policy rules correctly allow or reject events based on kind, pubkey, and other criteria.
+
+[source,bash]
+----
+go run ./cmd/policytest -url ws://localhost:3334 -type event -kind 4678
+go run ./cmd/policytest -url ws://localhost:3334 -type req -kind 1
+go run ./cmd/policytest -url ws://localhost:3334 -type publish-and-query -count 5
+----
+
+=== policyfiltertest
+
+Tests policy-based filtering with authorized and unauthorized pubkeys. Validates access control rules for specific users.
+
+[source,bash]
+----
+go run ./cmd/policyfiltertest -url ws://localhost:3334 \
+  -allowed-pubkey <hex> -allowed-sec <hex> \
+  -unauthorized-pubkey <hex> -unauthorized-sec <hex>
+----
+
+=== subscription-test
+
+Tests WebSocket subscription stability over extended periods. Monitors for dropped subscriptions and connection issues.
+
+[source,bash]
+----
+# Run subscription stability test for 60 seconds
+go run ./cmd/subscription-test -url ws://localhost:3334 -duration 60 -kind 1
+
+# With verbose output
+go run ./cmd/subscription-test -url ws://localhost:3334 -duration 120 -v
+----
+
+=== subscription-test-simple
+
+Simplified subscription stability test that verifies subscriptions remain active without dropping over the test duration.
+
+[source,bash]
+----
+go run ./cmd/subscription-test-simple -url ws://localhost:3334 -duration 120
+----
+
 == access control
 
 === follows ACL
@@ -377,4 +536,27 @@ export ORLY_CLUSTER_PROPAGATE_PRIVILEGED_EVENTS=false
 ----
 
 **Important:** When disabled, privileged events will not be replicated to peer relays. This provides better privacy but means these events will only be available on the originating relay. Users should be aware that accessing their privileged events may require connecting directly to the relay where they were originally published.
+
+== developer notes
+
+=== binary-optimized tag storage
+
+The nostr library (`git.mleku.dev/mleku/nostr/encoders/tag`) uses binary optimization for `e` and `p` tags to reduce memory usage and improve comparison performance.
+
+When events are unmarshaled from JSON, 64-character hex values in e/p tags are converted to 33-byte binary format (32 bytes hash + null terminator).
+
+**Important:** When working with e/p tag values in code:
+
+* **DO NOT** use `tag.Value()` directly - it returns raw bytes which may be binary, not hex
+* **ALWAYS** use `tag.ValueHex()` to get a hex string regardless of storage format
+* **Use** `tag.ValueBinary()` to get raw 32-byte binary (returns nil if not binary-encoded)
+
+[source,go]
+----
+// CORRECT: Use ValueHex() for hex decoding
+pt, err := hex.Dec(string(pTag.ValueHex()))
+
+// WRONG: Value() may return binary bytes, not hex
+pt, err := hex.Dec(string(pTag.Value()))  // Will fail for binary-encoded tags!
+----
 

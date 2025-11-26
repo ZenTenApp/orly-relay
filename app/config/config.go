@@ -88,6 +88,10 @@ type C struct {
 
 	// Cluster replication configuration
 	ClusterPropagatePrivilegedEvents bool `env:"ORLY_CLUSTER_PROPAGATE_PRIVILEGED_EVENTS" default:"true" usage:"propagate privileged events (DMs, gift wraps, etc.) to relay peers for replication"`
+
+	// ServeMode is set programmatically by the 'serve' subcommand to grant full owner
+	// access to all users (no env tag - internal use only)
+	ServeMode bool
 }
 
 // New creates and initializes a new configuration object for the relay
@@ -187,6 +191,21 @@ func IdentityRequested() (requested bool) {
 	if len(os.Args) > 1 {
 		switch strings.ToLower(os.Args[1]) {
 		case "identity":
+			requested = true
+		}
+	}
+	return
+}
+
+// ServeRequested checks if the first command line argument is "serve" and returns
+// whether the relay should start in ephemeral serve mode with RAM-based storage.
+//
+// Return Values
+//   - requested: true if the 'serve' subcommand was provided, false otherwise.
+func ServeRequested() (requested bool) {
+	if len(os.Args) > 1 {
+		switch strings.ToLower(os.Args[1]) {
+		case "serve":
 			requested = true
 		}
 	}
@@ -324,10 +343,14 @@ func PrintHelp(cfg *C, printer io.Writer) {
 	)
 	_, _ = fmt.Fprintf(
 		printer,
-		`Usage: %s [env|help]
+		`Usage: %s [env|help|identity|serve]
 
 - env: print environment variables configuring %s
 - help: print this help text
+- identity: print the relay identity secret and public key
+- serve: start ephemeral relay with RAM-based storage at /dev/shm/orlyserve
+         listening on 0.0.0.0:10547 with 'none' ACL mode (open relay)
+         useful for testing and benchmarking
 
 `,
 		cfg.AppName, cfg.AppName,

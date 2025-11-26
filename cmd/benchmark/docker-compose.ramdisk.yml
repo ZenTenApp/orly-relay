@@ -1,0 +1,77 @@
+# Docker Compose override file for ramdisk-based benchmarks
+# Uses /dev/shm (tmpfs) for all database storage to eliminate disk I/O bottlenecks
+# and measure raw relay performance.
+#
+# Usage: docker compose -f docker-compose.yml -f docker-compose.ramdisk.yml up
+# Or via run-benchmark.sh --ramdisk
+
+version: "3.8"
+
+services:
+  # Next.orly.dev relay with Badger
+  next-orly-badger:
+    volumes:
+      - /dev/shm/benchmark/next-orly-badger:/data
+
+  # Next.orly.dev relay with DGraph
+  next-orly-dgraph:
+    volumes:
+      - /dev/shm/benchmark/next-orly-dgraph:/data
+
+  # DGraph Zero - cluster coordinator
+  dgraph-zero:
+    volumes:
+      - /dev/shm/benchmark/dgraph-zero:/data
+
+  # DGraph Alpha - data node
+  dgraph-alpha:
+    volumes:
+      - /dev/shm/benchmark/dgraph-alpha:/data
+
+  # Next.orly.dev relay with Neo4j
+  next-orly-neo4j:
+    volumes:
+      - /dev/shm/benchmark/next-orly-neo4j:/data
+
+  # Neo4j database
+  neo4j:
+    volumes:
+      - /dev/shm/benchmark/neo4j:/data
+      - /dev/shm/benchmark/neo4j-logs:/logs
+
+  # Khatru with SQLite
+  khatru-sqlite:
+    volumes:
+      - /dev/shm/benchmark/khatru-sqlite:/data
+
+  # Khatru with Badger
+  khatru-badger:
+    volumes:
+      - /dev/shm/benchmark/khatru-badger:/data
+
+  # Relayer basic example
+  relayer-basic:
+    volumes:
+      - /dev/shm/benchmark/relayer-basic:/data
+
+  # Strfry
+  strfry:
+    volumes:
+      - /dev/shm/benchmark/strfry:/data
+      - ./configs/strfry.conf:/etc/strfry.conf
+
+  # Nostr-rs-relay
+  nostr-rs-relay:
+    volumes:
+      - /dev/shm/benchmark/nostr-rs-relay:/data
+      - ./configs/config.toml:/app/config.toml
+
+  # Rely-SQLite relay
+  rely-sqlite:
+    volumes:
+      - /dev/shm/benchmark/rely-sqlite:/data
+
+  # PostgreSQL for relayer-basic
+  postgres:
+    volumes:
+      - /dev/shm/benchmark/postgres:/var/lib/postgresql/data

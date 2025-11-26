@@ -523,11 +523,11 @@ func TestServerErrorHandling(t *testing.T) {
 			statusCode: http.StatusNotFound,
 		},
 		{
-			name:       "Missing auth header",
+			name:       "Anonymous upload allowed",
 			method:     "PUT",
 			path:       "/upload",
 			body:       []byte("test"),
-			statusCode: http.StatusUnauthorized,
+			statusCode: http.StatusOK, // RequireAuth=false and ACL=none allows anonymous uploads
 		},
 		{
 			name:       "Invalid JSON in mirror",

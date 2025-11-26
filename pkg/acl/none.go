@@ -52,6 +52,11 @@ func (n *None) Configure(cfg ...any) (err error) {
 }
 
 func (n *None) GetAccessLevel(pub []byte, address string) (level string) {
+	// In serve mode, grant full owner access to everyone
+	if n.cfg != nil && n.cfg.ServeMode {
+		return "owner"
+	}
+
 	// Check owners first
 	for _, v := range n.owners {
 		if utils.FastEqual(v, pub) {

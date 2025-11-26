@@ -123,14 +123,13 @@ func (f *Follows) Configure(cfg ...any) (err error) {
 				}
 				// log.I.F("admin follow list:\n%s", ev.Serialize())
 				for _, v := range ev.Tags.GetAll([]byte("p")) {
-					// log.I.F("adding follow: %s", v.Value())
-					var a []byte
-					if b, e := hex.DecodeString(string(v.Value())); chk.E(e) {
+					// log.I.F("adding follow: %s", v.ValueHex())
+					// ValueHex() automatically handles both binary and hex storage formats
+					if b, e := hex.DecodeString(string(v.ValueHex())); chk.E(e) {
 						continue
 					} else {
-						a = b
+						f.follows = append(f.follows, b)
 					}
-					f.follows = append(f.follows, a)
 				}
 			}
 		}
@@ -923,8 +922,15 @@ func (f *Follows) extractFollowedPubkeys(event *event.E) {
 
 	// Extract all 'p' tags (followed pubkeys) from the kind 3 event
 	for _, tag := range event.Tags.GetAll([]byte("p")) {
-		if len(tag.Value()) == 32 { // Valid pubkey length
-			f.AddFollow(tag.Value())
+		// First try binary format (optimized storage: 33 bytes = 32 hash + null)
+		if pubkey := tag.ValueBinary(); pubkey != nil {
+			f.AddFollow(pubkey)
+			continue
+		}
+		// Fall back to hex decoding for non-binary values
+		// ValueHex() handles both formats, but we already checked binary above
+		if pubkey, err := hex.DecodeString(string(tag.Value())); err == nil && len(pubkey) == 32 {
+			f.AddFollow(pubkey)
 		}
 	}
 }
