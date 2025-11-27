@@ -48,17 +48,22 @@ type Server struct {
 	challengeMutex sync.RWMutex
 	challenges     map[string][]byte
 
-	paymentProcessor *PaymentProcessor
-	sprocketManager  *SprocketManager
-	policyManager    *policy.P
-	spiderManager    *spider.Spider
-	syncManager      *dsync.Manager
-	relayGroupMgr    *dsync.RelayGroupManager
-	clusterManager   *dsync.ClusterManager
-	blossomServer    *blossom.Server
-	InviteManager    *nip43.InviteManager
-	cfg              *config.C
-	db               database.Database // Changed from *database.D to interface
+	// Message processing pause mutex for policy/follow list updates
+	// Use RLock() for normal message processing, Lock() for updates
+	messagePauseMutex sync.RWMutex
+
+	paymentProcessor  *PaymentProcessor
+	sprocketManager   *SprocketManager
+	policyManager     *policy.P
+	spiderManager     *spider.Spider
+	directorySpider   *spider.DirectorySpider
+	syncManager       *dsync.Manager
+	relayGroupMgr     *dsync.RelayGroupManager
+	clusterManager    *dsync.ClusterManager
+	blossomServer     *blossom.Server
+	InviteManager     *nip43.InviteManager
+	cfg               *config.C
+	db                database.Database // Changed from *database.D to interface
 }
 
 // isIPBlacklisted checks if an IP address is blacklisted using the managed ACL system
@@ -1134,4 +1139,33 @@ func (s *Server) updatePeerAdminACL(peerPubkey []byte) {
 			}
 		}
 	}
+}
+
+// =============================================================================
+// Message Processing Pause/Resume for Policy and Follow List Updates
+// =============================================================================
+
+// PauseMessageProcessing acquires an exclusive lock to pause all message processing.
+// This should be called before updating policy configuration or follow lists.
+// Call ResumeMessageProcessing to release the lock after updates are complete.
+func (s *Server) PauseMessageProcessing() {
+	s.messagePauseMutex.Lock()
+}
+
+// ResumeMessageProcessing releases the exclusive lock to resume message processing.
+// This should be called after policy configuration or follow list updates are complete.
+func (s *Server) ResumeMessageProcessing() {
+	s.messagePauseMutex.Unlock()
+}
+
+// AcquireMessageProcessingLock acquires a read lock for normal message processing.
+// This allows concurrent message processing while blocking during policy updates.
+// Call ReleaseMessageProcessingLock when message processing is complete.
+func (s *Server) AcquireMessageProcessingLock() {
+	s.messagePauseMutex.RLock()
+}
+
+// ReleaseMessageProcessingLock releases the read lock after message processing.
+func (s *Server) ReleaseMessageProcessingLock() {
+	s.messagePauseMutex.RUnlock()
 }

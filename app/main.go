@@ -141,6 +141,44 @@ func Run(
 		}
 	}
 
+	// Initialize directory spider if enabled (only for Badger backend)
+	if badgerDB, ok := db.(*database.D); ok && cfg.DirectorySpiderEnabled {
+		if l.directorySpider, err = spider.NewDirectorySpider(
+			ctx,
+			badgerDB,
+			l.publishers,
+			cfg.DirectorySpiderInterval,
+			cfg.DirectorySpiderMaxHops,
+		); chk.E(err) {
+			log.E.F("failed to create directory spider: %v", err)
+		} else {
+			// Set up callback to get seed pubkeys (whitelisted users)
+			l.directorySpider.SetSeedCallback(func() [][]byte {
+				var pubkeys [][]byte
+				// Get followed pubkeys from follows ACL if available
+				for _, aclInstance := range acl.Registry.ACL {
+					if aclInstance.Type() == "follows" {
+						if follows, ok := aclInstance.(*acl.Follows); ok {
+							pubkeys = append(pubkeys, follows.GetFollowedPubkeys()...)
+						}
+					}
+				}
+				// Fall back to admin keys if no follows ACL
+				if len(pubkeys) == 0 {
+					pubkeys = adminKeys
+				}
+				return pubkeys
+			})
+
+			if err = l.directorySpider.Start(); chk.E(err) {
+				log.E.F("failed to start directory spider: %v", err)
+			} else {
+				log.I.F("directory spider started (interval: %v, max hops: %d)",
+					cfg.DirectorySpiderInterval, cfg.DirectorySpiderMaxHops)
+			}
+		}
+	}
+
 	// Initialize relay group manager (only for Badger backend)
 	if badgerDB, ok := db.(*database.D); ok {
 		l.relayGroupMgr = dsync.NewRelayGroupManager(badgerDB, cfg.RelayGroupAdmins)
@@ -358,6 +396,12 @@ func Run(
 		if l.spiderManager != nil {
 			l.spiderManager.Stop()
 			log.I.F("spider manager stopped")
+		}
+
+		// Stop directory spider if running
+		if l.directorySpider != nil {
+			l.directorySpider.Stop()
+			log.I.F("directory spider stopped")
 		}
 
 		// Create shutdown context with timeout
