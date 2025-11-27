@@ -85,6 +85,13 @@ func Run(
 	// Initialize policy manager
 	l.policyManager = policy.NewWithManager(ctx, cfg.AppName, cfg.PolicyEnabled)
 
+	// Initialize policy follows from database (load follow lists of policy admins)
+	// This must be done after policy manager initialization but before accepting connections
+	if err := l.InitializePolicyFollows(); err != nil {
+		log.W.F("failed to initialize policy follows: %v", err)
+		// Continue anyway - follows can be loaded when admins update their follow lists
+	}
+
 	// Initialize spider manager based on mode (only for Badger backend)
 	if badgerDB, ok := db.(*database.D); ok && cfg.SpiderMode != "none" {
 		if l.spiderManager, err = spider.New(ctx, badgerDB, l.publishers, cfg.SpiderMode); chk.E(err) {

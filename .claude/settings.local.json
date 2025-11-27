@@ -138,7 +138,13 @@
       "Bash(go version:*)",
       "Bash(ss:*)",
       "Bash(CGO_ENABLED=0 go clean:*)",
-      "Bash(CGO_ENABLED=0 timeout 30 go test:*)"
+      "Bash(CGO_ENABLED=0 timeout 30 go test:*)",
+      "Bash(~/.local/bin/tea issue 6 --repo mleku/next.orly.dev --remote https://git.nostrdev.com)",
+      "Bash(tea issue:*)",
+      "Bash(tea issues view:*)",
+      "Bash(tea issue view:*)",
+      "Bash(tea issues:*)",
+      "Bash(bun run build:*)"
     ],
     "deny": [],
     "ask": []

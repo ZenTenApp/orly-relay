@@ -142,6 +142,27 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		}
 	}
 
+	// Filter out policy config events (kind 12345) for non-policy-admin users
+	// Policy config events should only be visible to policy administrators
+	if l.policyManager != nil && l.policyManager.IsEnabled() {
+		isPolicyAdmin := l.policyManager.IsPolicyAdmin(l.authedPubkey.Load())
+		if !isPolicyAdmin {
+			// Remove kind 12345 from all filters
+			for _, f := range *env.Filters {
+				if f != nil && f.Kinds != nil && f.Kinds.Len() > 0 {
+					// Create a new kinds list without PolicyConfig
+					var filteredKinds []*kind.K
+					for _, k := range f.Kinds.K {
+						if k.K != kind.PolicyConfig.K {
+							filteredKinds = append(filteredKinds, k)
+						}
+					}
+					f.Kinds.K = filteredKinds
+				}
+			}
+		}
+	}
+
 	var events event.S
 	// Create a single context for all filter queries, isolated from the connection context
 	// to prevent query timeouts from affecting the long-lived websocket connection

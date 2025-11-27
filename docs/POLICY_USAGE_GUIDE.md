@@ -880,6 +880,92 @@ Check logs for policy decisions and errors.
 3. **Permission errors**: Fix file permissions on policy files and scripts
 4. **Configuration errors**: Validate JSON syntax and field names
 
+## Dynamic Policy Configuration via Kind 12345
+
+Policy administrators can update the relay policy dynamically by publishing kind 12345 events. This enables runtime policy changes without relay restarts.
+
+### Enabling Dynamic Policy Updates
+
+1. Add yourself as a policy admin in the initial policy.json:
+
+```json
+{
+  "default_policy": "allow",
+  "policy_admins": ["YOUR_HEX_PUBKEY_HERE"],
+  "policy_follow_whitelist_enabled": false
+}
+```
+
+2. Ensure policy is enabled:
+
+```bash
+export ORLY_POLICY_ENABLED=true
+```
+
+### Publishing a Policy Update
+
+Send a kind 12345 event with the new policy configuration as JSON content:
+
+```json
+{
+  "kind": 12345,
+  "content": "{\"default_policy\": \"deny\", \"kind\": {\"whitelist\": [1,3,7]}, \"policy_admins\": [\"YOUR_HEX_PUBKEY\"]}",
+  "tags": [],
+  "created_at": 1234567890
+}
+```
+
+### Policy Admin Follow List Whitelisting
+
+When `policy_follow_whitelist_enabled` is `true`, the relay automatically grants access to all pubkeys followed by policy admins.
+
+```json
+{
+  "policy_admins": ["ADMIN_PUBKEY_HEX"],
+  "policy_follow_whitelist_enabled": true
+}
+```
+
+- When an admin updates their follow list (kind 3), the relay automatically refreshes the whitelist
+- The `write_allow_follows` rule option grants both read AND write access to follows
+- This enables community-based access control without manual pubkey management
+
+### Security Considerations
+
+- Only pubkeys listed in `policy_admins` can update the policy
+- Policy updates are validated before applying (invalid JSON or pubkeys are rejected)
+- Failed updates preserve the existing policy (no corruption)
+- All policy updates are logged for audit purposes
+
+## Testing the Policy System
+
+### Edge Cases Discovered During Testing
+
+When writing tests for the policy system, the following edge cases were discovered:
+
+1. **Config File Requirement**: `NewWithManager()` with `enabled=true` requires the XDG config file (`~/.config/APP_NAME/policy.json`) to exist before initialization. Tests must create this file first.
+
+2. **Error Message Format**: Validation errors use underscores in field names (e.g., `invalid policy_admin pubkey`) - tests should match this exact format.
+
+3. **Binary Tag Storage**: When comparing pubkeys from e/p tags, always use `tag.ValueHex()` instead of `tag.Value()` due to binary optimization.
+
+4. **Concurrent Access**: The policy system uses `sync.RWMutex` for thread-safe access to the follows list during updates.
+
+5. **Message Processing Pause**: Policy updates pause message processing with an exclusive lock to ensure atomic updates.
+
+### Running Policy Tests
+
+```bash
+# Run all policy package tests
+CGO_ENABLED=0 go test -v ./pkg/policy/...
+
+# Run handler tests for kind 12345
+CGO_ENABLED=0 go test -v ./app/... -run "PolicyConfig|PolicyAdmin"
+
+# Run specific test categories
+CGO_ENABLED=0 go test -v ./pkg/policy/... -run "ValidateJSON|Reload|Follow|TagValidation"
+```
+
 ## Advanced Configuration
 
 ### Multiple Policies

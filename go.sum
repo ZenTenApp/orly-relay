@@ -1,6 +1,4 @@
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
-git.mleku.dev/mleku/nostr v1.0.3 h1:dWpGVzIOrjeWVnDnrX039s2LvcfHwDIo47NyyO1CBbs=
-git.mleku.dev/mleku/nostr v1.0.3/go.mod h1:swI7bWLc7yU1jd7PLCCIrIcUR3Ug5O+GPvpub/w6eTY=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/toml v1.5.0 h1:W5quZX/G/csjUnuI8SUYlsHs9M38FC7znL0lIO+DvMg=
 github.com/BurntSushi/toml v1.5.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=

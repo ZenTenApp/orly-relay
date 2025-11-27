@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -72,6 +73,15 @@ type Rule struct {
 	// MaxAgeEventInFuture is the offset in seconds that is the newest timestamp allowed for an event's created_at time ahead of the current time.
 	MaxAgeEventInFuture *int64 `json:"max_age_event_in_future,omitempty"`
 
+	// WriteAllowFollows grants BOTH read and write access to policy admin follows when enabled.
+	// Requires PolicyFollowWhitelistEnabled=true at the policy level.
+	WriteAllowFollows bool `json:"write_allow_follows,omitempty"`
+
+	// TagValidation is a map of tag_name -> regex pattern for validating tag values.
+	// Each tag present in the event must match its corresponding regex pattern.
+	// Example: {"d": "^[a-z0-9-]{1,64}$", "t": "^[a-z0-9-]{1,32}$"}
+	TagValidation map[string]string `json:"tag_validation,omitempty"`
+
 	// Binary caches for faster comparison (populated from hex strings above)
 	// These are not exported and not serialized to JSON
 	writeAllowBin [][]byte
@@ -90,7 +100,8 @@ func (r *Rule) hasAnyRules() bool {
 		r.SizeLimit != nil || r.ContentLimit != nil ||
 		r.MaxAgeOfEvent != nil || r.MaxAgeEventInFuture != nil ||
 		r.MaxExpiry != nil || len(r.MustHaveTags) > 0 ||
-		r.Script != "" || r.Privileged
+		r.Script != "" || r.Privileged ||
+		r.WriteAllowFollows || len(r.TagValidation) > 0
 }
 
 // populateBinaryCache converts hex-encoded pubkey strings to binary for faster comparison.
@@ -253,6 +264,19 @@ type P struct {
 	Global Rule `json:"global"`
 	// DefaultPolicy determines the default behavior when no rules deny an event ("allow" or "deny", defaults to "allow")
 	DefaultPolicy string `json:"default_policy"`
+
+	// PolicyAdmins is a list of hex-encoded pubkeys that can update policy configuration via kind 12345 events.
+	// These are SEPARATE from ACL relay admins - policy admins manage policy only.
+	PolicyAdmins []string `json:"policy_admins,omitempty"`
+	// PolicyFollowWhitelistEnabled enables automatic whitelisting of pubkeys followed by policy admins.
+	// When true and a rule has WriteAllowFollows=true, policy admin follows get read+write access.
+	PolicyFollowWhitelistEnabled bool `json:"policy_follow_whitelist_enabled,omitempty"`
+
+	// Unexported binary caches for faster comparison (populated from hex strings above)
+	policyAdminsBin [][]byte     // Binary cache for policy admin pubkeys
+	policyFollows   [][]byte     // Cached follow list from policy admins (kind 3 events)
+	policyFollowsMx sync.RWMutex // Protect follows list access
+
 	// manager handles policy script execution.
 	// Unexported to enforce use of public API methods (CheckPolicy, IsEnabled).
 	manager *PolicyManager
@@ -260,10 +284,12 @@ type P struct {
 
 // pJSON is a shadow struct for JSON unmarshalling with exported fields.
 type pJSON struct {
-	Kind          Kinds          `json:"kind"`
-	Rules         map[int]Rule   `json:"rules"`
-	Global        Rule           `json:"global"`
-	DefaultPolicy string         `json:"default_policy"`
+	Kind                         Kinds        `json:"kind"`
+	Rules                        map[int]Rule `json:"rules"`
+	Global                       Rule         `json:"global"`
+	DefaultPolicy                string       `json:"default_policy"`
+	PolicyAdmins                 []string     `json:"policy_admins,omitempty"`
+	PolicyFollowWhitelistEnabled bool         `json:"policy_follow_whitelist_enabled,omitempty"`
 }
 
 // UnmarshalJSON implements custom JSON unmarshalling to handle unexported fields.
@@ -276,6 +302,22 @@ func (p *P) UnmarshalJSON(data []byte) error {
 	p.rules = shadow.Rules
 	p.Global = shadow.Global
 	p.DefaultPolicy = shadow.DefaultPolicy
+	p.PolicyAdmins = shadow.PolicyAdmins
+	p.PolicyFollowWhitelistEnabled = shadow.PolicyFollowWhitelistEnabled
+
+	// Populate binary cache for policy admins
+	if len(p.PolicyAdmins) > 0 {
+		p.policyAdminsBin = make([][]byte, 0, len(p.PolicyAdmins))
+		for _, hexPubkey := range p.PolicyAdmins {
+			binPubkey, err := hex.Dec(hexPubkey)
+			if err != nil {
+				log.W.F("failed to decode PolicyAdmin pubkey %q: %v", hexPubkey, err)
+				continue
+			}
+			p.policyAdminsBin = append(p.policyAdminsBin, binPubkey)
+		}
+	}
+
 	return nil
 }
 
@@ -1117,6 +1159,38 @@ func (p *P) checkRulePolicy(
 		}
 	}
 
+	// Check tag validation rules (regex patterns)
+	// Only apply for write access - we validate what goes in, not what comes out
+	if access == "write" && len(rule.TagValidation) > 0 {
+		for tagName, regexPattern := range rule.TagValidation {
+			// Compile regex pattern (errors should have been caught in ValidateJSON)
+			regex, compileErr := regexp.Compile(regexPattern)
+			if compileErr != nil {
+				log.E.F("invalid regex pattern for tag %q: %v (skipping validation)", tagName, compileErr)
+				continue
+			}
+
+			// Get all tags with this name
+			tags := ev.Tags.GetAll([]byte(tagName))
+
+			// If no tags found and rule requires this tag, validation fails
+			if len(tags) == 0 {
+				log.D.F("tag validation failed: required tag %q not found", tagName)
+				return false, nil
+			}
+
+			// Validate each tag value against regex
+			for _, t := range tags {
+				value := string(t.Value())
+				if !regex.MatchString(value) {
+					log.D.F("tag validation failed: tag %q value %q does not match pattern %q",
+						tagName, value, regexPattern)
+					return false, nil
+				}
+			}
+		}
+	}
+
 	// ===================================================================
 	// STEP 2: Explicit Denials (highest priority blacklist)
 	// ===================================================================
@@ -1154,6 +1228,19 @@ func (p *P) checkRulePolicy(
 					return false, nil // Explicitly denied
 				}
 			}
+		}
+	}
+
+	// ===================================================================
+	// STEP 2.5: Write Allow Follows (grants BOTH read AND write access)
+	// ===================================================================
+
+	// WriteAllowFollows grants both read and write access to policy admin follows
+	// This check applies to BOTH read and write access types
+	if rule.WriteAllowFollows && p.PolicyFollowWhitelistEnabled {
+		if p.IsPolicyFollow(loggedInPubkey) {
+			log.D.F("policy admin follow granted %s access for kind %d", access, ev.Kind)
+			return true, nil // Allow access from policy admin follow
 		}
 	}
 
@@ -1446,4 +1533,273 @@ func (pm *PolicyManager) Shutdown() {
 
 	// Clear runners map
 	pm.runners = make(map[string]*ScriptRunner)
+}
+
+// =============================================================================
+// Policy Hot Reload Methods
+// =============================================================================
+
+// ValidateJSON validates policy JSON without applying changes.
+// This is called BEFORE any modifications to ensure JSON is valid.
+// Returns error if validation fails - no changes are made to current policy.
+func (p *P) ValidateJSON(policyJSON []byte) error {
+	// Try to unmarshal into a temporary policy struct
+	tempPolicy := &P{}
+	if err := json.Unmarshal(policyJSON, tempPolicy); err != nil {
+		return fmt.Errorf("invalid JSON syntax: %v", err)
+	}
+
+	// Validate policy_admins are valid hex pubkeys (64 characters)
+	for _, admin := range tempPolicy.PolicyAdmins {
+		if len(admin) != 64 {
+			return fmt.Errorf("invalid policy_admin pubkey length: %q (expected 64 hex characters)", admin)
+		}
+		if _, err := hex.Dec(admin); err != nil {
+			return fmt.Errorf("invalid policy_admin pubkey format: %q: %v", admin, err)
+		}
+	}
+
+	// Validate regex patterns in tag_validation rules
+	for kind, rule := range tempPolicy.rules {
+		for tagName, pattern := range rule.TagValidation {
+			if _, err := regexp.Compile(pattern); err != nil {
+				return fmt.Errorf("invalid regex pattern for tag %q in kind %d: %v", tagName, kind, err)
+			}
+		}
+	}
+
+	// Validate global rule tag_validation patterns
+	for tagName, pattern := range tempPolicy.Global.TagValidation {
+		if _, err := regexp.Compile(pattern); err != nil {
+			return fmt.Errorf("invalid regex pattern for tag %q in global rule: %v", tagName, err)
+		}
+	}
+
+	// Validate default_policy value
+	if tempPolicy.DefaultPolicy != "" && tempPolicy.DefaultPolicy != "allow" && tempPolicy.DefaultPolicy != "deny" {
+		return fmt.Errorf("invalid default_policy value: %q (must be \"allow\" or \"deny\")", tempPolicy.DefaultPolicy)
+	}
+
+	log.D.F("policy JSON validation passed")
+	return nil
+}
+
+// Reload loads policy from JSON bytes and applies it to the existing policy instance.
+// This validates JSON FIRST, then pauses the policy manager, updates configuration, and resumes.
+// Returns error if validation fails - no changes are made on validation failure.
+func (p *P) Reload(policyJSON []byte, configPath string) error {
+	// Step 1: Validate JSON FIRST (before making any changes)
+	if err := p.ValidateJSON(policyJSON); err != nil {
+		return fmt.Errorf("validation failed: %v", err)
+	}
+
+	// Step 2: Pause policy manager (stop script runners)
+	if err := p.Pause(); err != nil {
+		log.W.F("failed to pause policy manager (continuing anyway): %v", err)
+	}
+
+	// Step 3: Unmarshal JSON into a temporary struct
+	tempPolicy := &P{}
+	if err := json.Unmarshal(policyJSON, tempPolicy); err != nil {
+		// Resume before returning error
+		p.Resume()
+		return fmt.Errorf("failed to unmarshal policy JSON: %v", err)
+	}
+
+	// Step 4: Apply the new configuration (preserve manager reference)
+	p.policyFollowsMx.Lock()
+	p.Kind = tempPolicy.Kind
+	p.rules = tempPolicy.rules
+	p.Global = tempPolicy.Global
+	p.DefaultPolicy = tempPolicy.DefaultPolicy
+	p.PolicyAdmins = tempPolicy.PolicyAdmins
+	p.PolicyFollowWhitelistEnabled = tempPolicy.PolicyFollowWhitelistEnabled
+	p.policyAdminsBin = tempPolicy.policyAdminsBin
+	// Note: policyFollows is NOT reset here - it will be refreshed separately
+	p.policyFollowsMx.Unlock()
+
+	// Step 5: Populate binary caches for all rules
+	p.Global.populateBinaryCache()
+	for kind := range p.rules {
+		rule := p.rules[kind]
+		rule.populateBinaryCache()
+		p.rules[kind] = rule
+	}
+
+	// Step 6: Save to file (atomic write)
+	if err := p.SaveToFile(configPath); err != nil {
+		log.E.F("failed to persist policy to disk: %v (policy was updated in memory)", err)
+		// Continue anyway - policy is loaded in memory
+	}
+
+	// Step 7: Resume policy manager (restart script runners)
+	if err := p.Resume(); err != nil {
+		log.W.F("failed to resume policy manager: %v", err)
+	}
+
+	log.I.F("policy configuration reloaded successfully")
+	return nil
+}
+
+// Pause pauses the policy manager and stops all script runners.
+func (p *P) Pause() error {
+	if p.manager == nil {
+		return fmt.Errorf("policy manager is not initialized")
+	}
+
+	p.manager.mutex.Lock()
+	defer p.manager.mutex.Unlock()
+
+	// Stop all running scripts
+	for path, runner := range p.manager.runners {
+		if runner.IsRunning() {
+			log.I.F("pausing policy script: %s", path)
+			if err := runner.Stop(); err != nil {
+				log.W.F("failed to stop runner %s: %v", path, err)
+			}
+		}
+	}
+
+	log.I.F("policy manager paused")
+	return nil
+}
+
+// Resume resumes the policy manager and restarts script runners.
+func (p *P) Resume() error {
+	if p.manager == nil {
+		return fmt.Errorf("policy manager is not initialized")
+	}
+
+	// Restart the default policy script if it exists
+	go p.manager.startPolicyIfExists()
+
+	// Restart rule-specific scripts
+	for _, rule := range p.rules {
+		if rule.Script != "" {
+			if _, err := os.Stat(rule.Script); err == nil {
+				runner := p.manager.getOrCreateRunner(rule.Script)
+				go func(r *ScriptRunner, script string) {
+					if err := r.Start(); err != nil {
+						log.W.F("failed to restart policy script %s: %v", script, err)
+					}
+				}(runner, rule.Script)
+			}
+		}
+	}
+
+	log.I.F("policy manager resumed")
+	return nil
+}
+
+// SaveToFile persists the current policy configuration to disk using atomic write.
+// Uses temp file + rename pattern to ensure atomic writes.
+func (p *P) SaveToFile(configPath string) error {
+	// Create shadow struct for JSON marshalling
+	shadow := pJSON{
+		Kind:                         p.Kind,
+		Rules:                        p.rules,
+		Global:                       p.Global,
+		DefaultPolicy:                p.DefaultPolicy,
+		PolicyAdmins:                 p.PolicyAdmins,
+		PolicyFollowWhitelistEnabled: p.PolicyFollowWhitelistEnabled,
+	}
+
+	// Marshal to JSON with indentation for readability
+	jsonData, err := json.MarshalIndent(shadow, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal policy to JSON: %v", err)
+	}
+
+	// Write to temp file first (atomic write pattern)
+	tempPath := configPath + ".tmp"
+	if err := os.WriteFile(tempPath, jsonData, 0644); err != nil {
+		return fmt.Errorf("failed to write temp file: %v", err)
+	}
+
+	// Rename temp file to actual config file (atomic on most filesystems)
+	if err := os.Rename(tempPath, configPath); err != nil {
+		// Clean up temp file on failure
+		os.Remove(tempPath)
+		return fmt.Errorf("failed to rename temp file: %v", err)
+	}
+
+	log.I.F("policy configuration saved to %s", configPath)
+	return nil
+}
+
+// =============================================================================
+// Policy Admin and Follow Checking Methods
+// =============================================================================
+
+// IsPolicyAdmin checks if the given pubkey is in the policy_admins list.
+// The pubkey parameter should be binary ([]byte), not hex-encoded.
+func (p *P) IsPolicyAdmin(pubkey []byte) bool {
+	if len(pubkey) == 0 {
+		return false
+	}
+
+	p.policyFollowsMx.RLock()
+	defer p.policyFollowsMx.RUnlock()
+
+	for _, admin := range p.policyAdminsBin {
+		if utils.FastEqual(admin, pubkey) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsPolicyFollow checks if the given pubkey is in the policy admin follows list.
+// The pubkey parameter should be binary ([]byte), not hex-encoded.
+func (p *P) IsPolicyFollow(pubkey []byte) bool {
+	if len(pubkey) == 0 {
+		return false
+	}
+
+	p.policyFollowsMx.RLock()
+	defer p.policyFollowsMx.RUnlock()
+
+	for _, follow := range p.policyFollows {
+		if utils.FastEqual(pubkey, follow) {
+			return true
+		}
+	}
+	return false
+}
+
+// UpdatePolicyFollows replaces the policy follows list with a new set of pubkeys.
+// This is called when policy admins update their follow lists (kind 3 events).
+// The pubkeys should be binary ([]byte), not hex-encoded.
+func (p *P) UpdatePolicyFollows(follows [][]byte) {
+	p.policyFollowsMx.Lock()
+	defer p.policyFollowsMx.Unlock()
+
+	p.policyFollows = follows
+	log.I.F("policy follows list updated with %d pubkeys", len(follows))
+}
+
+// GetPolicyAdminsBin returns a copy of the binary policy admin pubkeys.
+// Used for checking if an event author is a policy admin.
+func (p *P) GetPolicyAdminsBin() [][]byte {
+	p.policyFollowsMx.RLock()
+	defer p.policyFollowsMx.RUnlock()
+
+	// Return a copy to prevent external modification
+	result := make([][]byte, len(p.policyAdminsBin))
+	for i, admin := range p.policyAdminsBin {
+		adminCopy := make([]byte, len(admin))
+		copy(adminCopy, admin)
+		result[i] = adminCopy
+	}
+	return result
+}
+
+// IsPolicyFollowWhitelistEnabled returns whether the policy follow whitelist feature is enabled.
+// When enabled, pubkeys followed by policy admins are automatically whitelisted for access
+// when rules have WriteAllowFollows=true.
+func (p *P) IsPolicyFollowWhitelistEnabled() bool {
+	if p == nil {
+		return false
+	}
+	return p.PolicyFollowWhitelistEnabled
 }

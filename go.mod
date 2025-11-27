@@ -83,4 +83,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
+replace git.mleku.dev/mleku/nostr => /home/mleku/src/git.mleku.dev/mleku/nostr
+
 retract v1.0.3

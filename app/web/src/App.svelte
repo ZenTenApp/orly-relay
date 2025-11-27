@@ -9,6 +9,7 @@
     import ComposeView from "./ComposeView.svelte";
     import RecoveryView from "./RecoveryView.svelte";
     import SprocketView from "./SprocketView.svelte";
+    import PolicyView from "./PolicyView.svelte";
     import SearchResultsView from "./SearchResultsView.svelte";
     import FilterBuilder from "./FilterBuilder.svelte";
     import FilterDisplay from "./FilterDisplay.svelte";
@@ -92,6 +93,16 @@
     let sprocketMessageType = "info";
     let sprocketEnabled = false;
     let sprocketUploadFile = null;
+
+    // Policy management state
+    let policyJson = "";
+    let policyEnabled = false;
+    let isPolicyAdmin = false;
+    let isLoadingPolicy = false;
+    let policyMessage = "";
+    let policyMessageType = "info";
+    let policyValidationErrors = [];
+    let policyFollows = [];
 
     // ACL mode
     let aclMode = "";
@@ -1071,6 +1082,9 @@
 
         // Load sprocket configuration
         loadSprocketConfig();
+
+        // Load policy configuration
+        loadPolicyConfig();
     }
 
     function savePersistentState() {
@@ -1186,6 +1200,25 @@
             }
         } catch (error) {
             console.error("Error loading sprocket config:", error);
+        }
+    }
+
+    async function loadPolicyConfig() {
+        try {
+            const response = await fetch("/api/policy/config", {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
+
+            if (response.ok) {
+                const config = await response.json();
+                policyEnabled = config.enabled || false;
+            }
+        } catch (error) {
+            console.error("Error loading policy config:", error);
+            policyEnabled = false;
         }
     }
 
@@ -1455,6 +1488,327 @@
         }, 5000);
     }
 
+    // Policy management functions
+    function showPolicyMessage(message, type = "info") {
+        policyMessage = message;
+        policyMessageType = type;
+
+        // Auto-hide message after 5 seconds for non-errors
+        if (type !== "error") {
+            setTimeout(() => {
+                policyMessage = "";
+            }, 5000);
+        }
+    }
+
+    async function loadPolicy() {
+        if (!isLoggedIn || (userRole !== "owner" && !isPolicyAdmin)) return;
+
+        try {
+            isLoadingPolicy = true;
+            policyValidationErrors = [];
+
+            // Query for the most recent kind 12345 event (policy config)
+            const filter = { kinds: [12345], limit: 1 };
+            const events = await queryEvents(filter);
+
+            if (events && events.length > 0) {
+                policyJson = events[0].content;
+                // Try to format it nicely
+                try {
+                    policyJson = JSON.stringify(JSON.parse(policyJson), null, 2);
+                } catch (e) {
+                    // Keep as-is if not valid JSON
+                }
+                showPolicyMessage("Policy loaded successfully", "success");
+            } else {
+                // No policy event found, try to load from file via API
+                const response = await fetch("/api/policy", {
+                    method: "GET",
+                    headers: {
+                        Authorization: `Nostr ${await createNIP98Auth("GET", "/api/policy")}`,
+                        "Content-Type": "application/json",
+                    },
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    policyJson = JSON.stringify(data, null, 2);
+                    showPolicyMessage("Policy loaded from file", "success");
+                } else {
+                    showPolicyMessage("No policy configuration found", "info");
+                    policyJson = "";
+                }
+            }
+        } catch (error) {
+            showPolicyMessage(`Error loading policy: ${error.message}`, "error");
+        } finally {
+            isLoadingPolicy = false;
+        }
+    }
+
+    async function validatePolicy() {
+        policyValidationErrors = [];
+
+        if (!policyJson.trim()) {
+            policyValidationErrors = ["Policy JSON is empty"];
+            showPolicyMessage("Validation failed", "error");
+            return false;
+        }
+
+        try {
+            const parsed = JSON.parse(policyJson);
+
+            // Basic structure validation
+            if (typeof parsed !== "object" || parsed === null) {
+                policyValidationErrors = ["Policy must be a JSON object"];
+                showPolicyMessage("Validation failed", "error");
+                return false;
+            }
+
+            // Validate policy_admins if present
+            if (parsed.policy_admins) {
+                if (!Array.isArray(parsed.policy_admins)) {
+                    policyValidationErrors.push("policy_admins must be an array");
+                } else {
+                    for (const admin of parsed.policy_admins) {
+                        if (typeof admin !== "string" || !/^[0-9a-fA-F]{64}$/.test(admin)) {
+                            policyValidationErrors.push(`Invalid policy_admin pubkey: ${admin}`);
+                        }
+                    }
+                }
+            }
+
+            // Validate rules if present
+            if (parsed.rules) {
+                if (typeof parsed.rules !== "object") {
+                    policyValidationErrors.push("rules must be an object");
+                } else {
+                    for (const [kindStr, rule] of Object.entries(parsed.rules)) {
+                        if (!/^\d+$/.test(kindStr)) {
+                            policyValidationErrors.push(`Invalid kind number: ${kindStr}`);
+                        }
+                        if (rule.tag_validation && typeof rule.tag_validation === "object") {
+                            for (const [tag, pattern] of Object.entries(rule.tag_validation)) {
+                                try {
+                                    new RegExp(pattern);
+                                } catch (e) {
+                                    policyValidationErrors.push(`Invalid regex for tag '${tag}': ${pattern}`);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Validate default_policy if present
+            if (parsed.default_policy && !["allow", "deny"].includes(parsed.default_policy)) {
+                policyValidationErrors.push("default_policy must be 'allow' or 'deny'");
+            }
+
+            if (policyValidationErrors.length > 0) {
+                showPolicyMessage("Validation failed - see errors below", "error");
+                return false;
+            }
+
+            showPolicyMessage("Validation passed", "success");
+            return true;
+        } catch (error) {
+            policyValidationErrors = [`JSON parse error: ${error.message}`];
+            showPolicyMessage("Invalid JSON syntax", "error");
+            return false;
+        }
+    }
+
+    async function savePolicy() {
+        if (!isLoggedIn || (userRole !== "owner" && !isPolicyAdmin)) return;
+
+        // Validate first
+        const isValid = await validatePolicy();
+        if (!isValid) return;
+
+        try {
+            isLoadingPolicy = true;
+
+            // Create and publish kind 12345 event
+            const policyEvent = {
+                kind: 12345,
+                created_at: Math.floor(Date.now() / 1000),
+                tags: [],
+                content: policyJson,
+            };
+
+            // Sign and publish the event
+            const result = await publishEventWithAuth(policyEvent, userSigner);
+
+            if (result.success) {
+                showPolicyMessage("Policy updated successfully", "success");
+            } else {
+                showPolicyMessage(`Failed to publish policy: ${result.error || "Unknown error"}`, "error");
+            }
+        } catch (error) {
+            showPolicyMessage(`Error saving policy: ${error.message}`, "error");
+        } finally {
+            isLoadingPolicy = false;
+        }
+    }
+
+    function formatPolicyJson() {
+        try {
+            const parsed = JSON.parse(policyJson);
+            policyJson = JSON.stringify(parsed, null, 2);
+            showPolicyMessage("JSON formatted", "success");
+        } catch (error) {
+            showPolicyMessage(`Cannot format: ${error.message}`, "error");
+        }
+    }
+
+    // Convert npub to hex pubkey
+    function npubToHex(input) {
+        if (!input) return null;
+
+        // If already hex (64 characters)
+        if (/^[0-9a-fA-F]{64}$/.test(input)) {
+            return input.toLowerCase();
+        }
+
+        // If npub, decode it
+        if (input.startsWith("npub1")) {
+            try {
+                // Bech32 decode - simplified implementation
+                const ALPHABET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+                const data = input.slice(5); // Remove "npub1" prefix
+
+                let bits = [];
+                for (const char of data) {
+                    const value = ALPHABET.indexOf(char.toLowerCase());
+                    if (value === -1) throw new Error("Invalid character in npub");
+                    bits.push(...[...Array(5)].map((_, i) => (value >> (4 - i)) & 1));
+                }
+
+                // Remove checksum (last 30 bits = 6 characters * 5 bits)
+                bits = bits.slice(0, -30);
+
+                // Convert 5-bit groups to 8-bit bytes
+                const bytes = [];
+                for (let i = 0; i + 8 <= bits.length; i += 8) {
+                    let byte = 0;
+                    for (let j = 0; j < 8; j++) {
+                        byte = (byte << 1) | bits[i + j];
+                    }
+                    bytes.push(byte);
+                }
+
+                // Convert to hex
+                return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
+            } catch (e) {
+                console.error("Failed to decode npub:", e);
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    function addPolicyAdmin(event) {
+        const input = event.detail;
+        if (!input) {
+            showPolicyMessage("Please enter a pubkey", "error");
+            return;
+        }
+
+        const hexPubkey = npubToHex(input);
+        if (!hexPubkey || hexPubkey.length !== 64) {
+            showPolicyMessage("Invalid pubkey format. Use hex (64 chars) or npub", "error");
+            return;
+        }
+
+        try {
+            const config = JSON.parse(policyJson || "{}");
+            if (!config.policy_admins) {
+                config.policy_admins = [];
+            }
+
+            if (config.policy_admins.includes(hexPubkey)) {
+                showPolicyMessage("Admin already in list", "warning");
+                return;
+            }
+
+            config.policy_admins.push(hexPubkey);
+            policyJson = JSON.stringify(config, null, 2);
+            showPolicyMessage("Admin added - click 'Save & Publish' to apply", "info");
+        } catch (error) {
+            showPolicyMessage(`Error adding admin: ${error.message}`, "error");
+        }
+    }
+
+    function removePolicyAdmin(event) {
+        const pubkey = event.detail;
+
+        try {
+            const config = JSON.parse(policyJson || "{}");
+            if (config.policy_admins) {
+                config.policy_admins = config.policy_admins.filter(p => p !== pubkey);
+                policyJson = JSON.stringify(config, null, 2);
+                showPolicyMessage("Admin removed - click 'Save & Publish' to apply", "info");
+            }
+        } catch (error) {
+            showPolicyMessage(`Error removing admin: ${error.message}`, "error");
+        }
+    }
+
+    async function refreshFollows() {
+        if (!isLoggedIn || (userRole !== "owner" && !isPolicyAdmin)) return;
+
+        try {
+            isLoadingPolicy = true;
+            policyFollows = [];
+
+            // Parse current policy to get admin list
+            let admins = [];
+            try {
+                const config = JSON.parse(policyJson || "{}");
+                admins = config.policy_admins || [];
+            } catch (e) {
+                showPolicyMessage("Cannot parse policy JSON to get admins", "error");
+                return;
+            }
+
+            if (admins.length === 0) {
+                showPolicyMessage("No policy admins configured", "warning");
+                return;
+            }
+
+            // Query kind 3 events from policy admins
+            const filter = {
+                kinds: [3],
+                authors: admins,
+                limit: admins.length
+            };
+
+            const events = await queryEvents(filter);
+
+            // Extract p-tags from all follow lists
+            const followsSet = new Set();
+            for (const event of events) {
+                if (event.tags) {
+                    for (const tag of event.tags) {
+                        if (tag[0] === 'p' && tag[1] && tag[1].length === 64) {
+                            followsSet.add(tag[1]);
+                        }
+                    }
+                }
+            }
+
+            policyFollows = Array.from(followsSet);
+            showPolicyMessage(`Loaded ${policyFollows.length} follows from ${events.length} admin(s)`, "success");
+        } catch (error) {
+            showPolicyMessage(`Error loading follows: ${error.message}`, "error");
+        } finally {
+            isLoadingPolicy = false;
+        }
+    }
+
     function handleSprocketFileSelect(event) {
         sprocketUploadFile = event.target.files[0];
     }
@@ -1522,6 +1876,7 @@
             requiresOwner: true,
         },
         { id: "sprocket", icon: "⚙️", label: "Sprocket", requiresOwner: true },
+        { id: "policy", icon: "📜", label: "Policy", requiresOwner: true },
     ];
 
     // Filter tabs based on current effective role (including view-as setting)
@@ -2669,6 +3024,27 @@
                 on:loadVersions={loadVersions}
                 on:loadVersion={(e) => loadVersion(e.detail)}
                 on:deleteVersion={(e) => deleteVersion(e.detail)}
+                on:openLoginModal={openLoginModal}
+            />
+        {:else if selectedTab === "policy"}
+            <PolicyView
+                {isLoggedIn}
+                {userRole}
+                {isPolicyAdmin}
+                {policyEnabled}
+                bind:policyJson
+                {isLoadingPolicy}
+                {policyMessage}
+                {policyMessageType}
+                validationErrors={policyValidationErrors}
+                {policyFollows}
+                on:loadPolicy={loadPolicy}
+                on:validatePolicy={validatePolicy}
+                on:savePolicy={savePolicy}
+                on:formatJson={formatPolicyJson}
+                on:addPolicyAdmin={addPolicyAdmin}
+                on:removePolicyAdmin={removePolicyAdmin}
+                on:refreshFollows={refreshFollows}
                 on:openLoginModal={openLoginModal}
             />
         {:else if selectedTab === "recovery"}

@@ -165,6 +165,7 @@ export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
 **`app/`** - HTTP/WebSocket server and handlers
 - `server.go` - Main Server struct and HTTP request routing
 - `handle-*.go` - Nostr protocol message handlers (EVENT, REQ, COUNT, CLOSE, AUTH, DELETE)
+- `handle-policy-config.go` - Kind 12345 policy updates and kind 3 admin follow list handling
 - `handle-websocket.go` - WebSocket connection lifecycle and frame handling
 - `listener.go` - Network listener setup
 - `sprocket.go` - External event processing script manager
@@ -222,6 +223,14 @@ export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
 **`pkg/policy/`** - Event filtering and validation policies
 - Policy configuration loaded from `~/.config/ORLY/policy.json`
 - Per-kind size limits, age restrictions, custom scripts
+- **Dynamic Policy Hot Reload via Kind 12345 Events:**
+  - Policy admins can update policy configuration without relay restart
+  - Kind 12345 events contain JSON policy in content field
+  - Validation-first approach: JSON validated before pausing message processing
+  - Message processing uses RWMutex: RLock for normal ops, Lock for policy updates
+  - Policy admin follow lists (kind 3) trigger immediate cache refresh
+  - `WriteAllowFollows` rule grants both read+write access to admin follows
+  - Tag validation supports regex patterns per tag type
 - See `docs/POLICY_USAGE_GUIDE.md` for configuration examples
 
 **`pkg/sync/`** - Distributed synchronization
@@ -241,7 +250,8 @@ export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
 **Web UI (`app/web/`):**
 - Svelte-based admin interface
 - Embedded in binary via `go:embed`
-- Features: event browser, sprocket management, user admin, settings
+- Features: event browser, sprocket management, policy management, user admin, settings
+- **Policy Management Tab:** JSON editor with validation, save publishes kind 12345 event
 
 **Command-line Tools (`cmd/`):**
 - `relay-tester/` - Nostr protocol compliance testing

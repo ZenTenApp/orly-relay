@@ -223,6 +223,33 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 			log.E.F("failed to process NIP-43 leave request: %v", err)
 		}
 		return
+	case kind.PolicyConfig.K:
+		// Handle policy configuration update events (kind 12345)
+		// Only policy admins can update policy configuration
+		if err = l.HandlePolicyConfigUpdate(env.E); chk.E(err) {
+			log.E.F("failed to process policy config update: %v", err)
+			if err = Ok.Error(l, env, err.Error()); chk.E(err) {
+				return
+			}
+			return
+		}
+		// Send OK response
+		if err = Ok.Ok(l, env, "policy configuration updated"); chk.E(err) {
+			return
+		}
+		return
+	case kind.FollowList.K:
+		// Check if this is a follow list update from a policy admin
+		// If so, refresh the policy follows cache immediately
+		if l.IsPolicyAdminFollowListEvent(env.E) {
+			// Process the follow list update (async, don't block)
+			go func() {
+				if updateErr := l.HandlePolicyAdminFollowListUpdate(env.E); updateErr != nil {
+					log.W.F("failed to update policy follows from admin follow list: %v", updateErr)
+				}
+			}()
+		}
+		// Continue with normal follow list processing (store the event)
 	}
 
 	// check permissions of user

@@ -40,6 +40,11 @@ func validateJSONMessage(msg []byte) (err error) {
 }
 
 func (l *Listener) HandleMessage(msg []byte, remote string) {
+	// Acquire read lock for message processing - allows concurrent processing
+	// but blocks during policy/follow list updates (which acquire write lock)
+	l.Server.AcquireMessageProcessingLock()
+	defer l.Server.ReleaseMessageProcessingLock()
+
 	// Handle blacklisted IPs - discard messages but keep connection open until timeout
 	if l.isBlacklisted {
 		// Check if timeout has been reached
