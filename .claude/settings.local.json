@@ -144,7 +144,9 @@
       "Bash(tea issues view:*)",
       "Bash(tea issue view:*)",
       "Bash(tea issues:*)",
-      "Bash(bun run build:*)"
+      "Bash(bun run build:*)",
+      "Bash(git tag:*)",
+      "Bash(/tmp/orly-test version:*)"
     ],
     "deny": [],
     "ask": []

@@ -486,6 +486,7 @@ Only the current owner of a name (as determined by kind 30102 name state events)
 | **TXT** | Text record | Any text string (max 1024 chars) | Max 10 records |
 | **NS** | Name server (delegation) | Hostname of authoritative name server | Max 5 records |
 | **SRV** | Service location | Hostname + priority, weight, port tags | Max 10 records |
+| **GIT** | Git repository location | Repository URL with protocol + optional metadata | Max 10 records |
 
 **Record Type Details:**
 
@@ -603,9 +604,16 @@ Registry services and clients SHOULD enforce the following limits:
    - CNAME: Valid name format, no circular references
    - MX/NS/SRV: Valid hostname format
    - TXT: Max 1024 characters
+   - GIT: Valid git-compatible URL (git://, https://, ssh://, file://)
    - Priority/weight/port: Valid integer ranges (0-65535)
 4. **CNAME exclusivity**: If CNAME record exists, A/AAAA records MUST NOT exist for the same name
 5. **Owner authorization**: Record pubkey MUST match current name owner
+6. **GIT record validation**:
+   - Protocol tag matches URL scheme in value tag
+   - Description max 256 characters
+   - Access level is "public", "private", or "restricted" (if specified)
+   - Mirror flag is "true" or absent
+   - SSH/HTTPS URLs are valid if provided
 
 **Record Expiration:**
 
@@ -614,6 +622,208 @@ Name records do not have separate expiration. They are implicitly valid while th
 - Clients MUST stop resolving records for expired names
 - Relays MAY prune expired name records for housekeeping
 - New owner must publish fresh records after re-registering
+
+**GIT Record (Git Repository Location):**
+```json
+{
+  "tags": [
+    ["d", "example.n:GIT:1"],
+    ["name", "example.n"],
+    ["type", "GIT"],
+    ["value", "git://git.example.n/repo.git"],
+    ["ttl", "3600"],
+    ["protocol", "git"],
+    ["clone_url", "https://git.example.n/repo.git"],
+    ["ssh_url", "ssh://git@git.example.n:repo.git"],
+    ["description", "My awesome project"],
+    ["default_branch", "main"]
+  ]
+}
+```
+Maps name to git repository location with access metadata. Supports multiple protocols (git://, https://, ssh://). Multiple GIT records can provide different repository locations (mirrors, forks).
+
+**GIT Record Field Specifications:**
+
+- `value` tag: Primary repository URL (any git-compatible protocol)
+- `protocol` tag: Primary protocol (git, https, ssh, file)
+- `clone_url` tag: Optional HTTPS clone URL for web-based access
+- `ssh_url` tag: Optional SSH URL for authenticated access
+- `description` tag: Optional repository description (max 256 chars)
+- `default_branch` tag: Optional default branch name (default: "main")
+- `access` tag: Optional access level (public, private, restricted)
+- `mirror` tag: Optional flag indicating this is a mirror ("true")
+
+**GIT Record Limit:** Max 10 records per name (supporting multiple mirrors and access methods)
+
+**GIT Record Usage Examples:**
+
+**Example 1: Public Repository with Multiple Access Methods**
+```json
+{
+  "kind": 30103,
+  "pubkey": "<name_owner_pubkey>",
+  "tags": [
+    ["d", "myproject.n:GIT:1"],
+    ["name", "myproject.n"],
+    ["type", "GIT"],
+    ["value", "https://git.myproject.n/myproject.git"],
+    ["ttl", "3600"],
+    ["protocol", "https"],
+    ["clone_url", "https://git.myproject.n/myproject.git"],
+    ["ssh_url", "git@git.myproject.n:myproject.git"],
+    ["description", "Decentralized social network built on Nostr"],
+    ["default_branch", "main"],
+    ["access", "public"]
+  ]
+}
+```
+
+**Example 2: Repository with Multiple Mirrors**
+```json
+{
+  "kind": 30103,
+  "pubkey": "<name_owner_pubkey>",
+  "tags": [
+    ["d", "bitcoin.n:GIT:1"],
+    ["name", "bitcoin.n"],
+    ["type", "GIT"],
+    ["value", "https://git.bitcoin.n/bitcoin.git"],
+    ["protocol", "https"],
+    ["description", "Bitcoin Core reference implementation"],
+    ["default_branch", "master"]
+  ]
+}
+```
+
+```json
+{
+  "kind": 30103,
+  "pubkey": "<name_owner_pubkey>",
+  "tags": [
+    ["d", "bitcoin.n:GIT:2"],
+    ["name", "bitcoin.n"],
+    ["type", "GIT"],
+    ["value", "https://mirror1.bitcoin.n/bitcoin.git"],
+    ["protocol", "https"],
+    ["mirror", "true"],
+    ["description", "Bitcoin Core reference implementation (Mirror 1)"]
+  ]
+}
+```
+
+```json
+{
+  "kind": 30103,
+  "pubkey": "<name_owner_pubkey>",
+  "tags": [
+    ["d", "bitcoin.n:GIT:3"],
+    ["name", "bitcoin.n"],
+    ["type", "GIT"],
+    ["value", "git://mirror2.bitcoin.n/bitcoin.git"],
+    ["protocol", "git"],
+    ["mirror", "true"],
+    ["description", "Bitcoin Core reference implementation (Mirror 2)"]
+  ]
+}
+```
+
+**Example 3: Subdomain for Repository Organization**
+```json
+{
+  "kind": 30103,
+  "tags": [
+    ["d", "orly.mleku.dev:GIT:1"],
+    ["name", "orly.mleku.dev"],
+    ["type", "GIT"],
+    ["value", "https://git.mleku.dev/mleku/orly.git"],
+    ["protocol", "https"],
+    ["clone_url", "https://git.mleku.dev/mleku/orly.git"],
+    ["ssh_url", "git@git.mleku.dev:mleku/orly.git"],
+    ["description", "ORLY - High-performance Nostr relay in Go"],
+    ["default_branch", "main"],
+    ["access", "public"]
+  ]
+}
+```
+
+**Example 4: Private Repository with SSH-Only Access**
+```json
+{
+  "kind": 30103,
+  "tags": [
+    ["d", "private.company.n:GIT:1"],
+    ["name", "private.company.n"],
+    ["type", "GIT"],
+    ["value", "ssh://git@git.company.n:internal/project.git"],
+    ["protocol", "ssh"],
+    ["ssh_url", "git@git.company.n:internal/project.git"],
+    ["description", "Internal company project (authorized access only)"],
+    ["default_branch", "develop"],
+    ["access", "private"]
+  ]
+}
+```
+
+**GIT Record Client Resolution:**
+
+When resolving a git repository name, clients should:
+
+1. **Verify name ownership:**
+   - Query kind 30102 for name state
+   - Check name is not expired
+   - Note the owner pubkey
+
+2. **Query GIT records:**
+   - Subscribe to kind 30103 events with `name` and `type=GIT` tags
+   - Filter to only records where `record.pubkey == name_state.owner`
+
+3. **Select repository URL:**
+   - Primary: Use `value` tag as main repository URL
+   - HTTPS fallback: Use `clone_url` if available
+   - SSH access: Use `ssh_url` for authenticated operations
+   - Mirror selection: If multiple records exist with `mirror=true`, randomly select or prefer by latency
+
+4. **Display metadata:**
+   - Show `description` to users
+   - Indicate `access` level (public/private/restricted)
+   - Note if repository is a mirror
+
+5. **Clone operation:**
+   ```bash
+   # Automatic resolution via client tool
+   git clone myproject.n
+
+   # Explicit protocol selection
+   git clone https://myproject.n
+   git clone git@myproject.n
+   ```
+
+**Integration with Existing Git Tools:**
+
+Git clients can be extended to resolve names via a custom URL handler or Git credential helper:
+
+```bash
+# Example: Custom git-remote-n helper
+# Resolves myproject.n by querying Nostr relays
+git clone n://myproject.n
+
+# Or via DNS-style integration (if local resolver configured)
+git clone https://myproject.n/repo.git
+```
+
+**GIT Record Validation:**
+
+Registry services and clients SHOULD validate GIT records:
+
+1. **URL format**: Valid git-compatible URL (git://, https://, ssh://, file://)
+2. **Protocol consistency**: `protocol` tag matches URL scheme in `value`
+3. **Description length**: Max 256 characters
+4. **Access level**: One of "public", "private", "restricted" (if specified)
+5. **Mirror flag**: Must be "true" or absent
+6. **SSH URL format**: Valid SSH URL if `ssh_url` provided
+7. **HTTPS URL format**: Valid HTTPS URL if `clone_url` provided
+8. **Per-name limit**: Maximum 10 GIT records per name
+9. **Owner authorization**: Record pubkey matches current name owner
 
 **Subdomain Delegation:**
 
