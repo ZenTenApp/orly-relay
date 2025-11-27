@@ -479,6 +479,36 @@ ORLY has received several significant performance improvements in recent updates
 - Serial-based event fetching for efficiency
 - Filter analysis in `get-indexes-from-filter.go` selects optimal strategy
 
+## Git Commit Message Format
+
+When asked to "make a commit comment", generate a commit message following this standard format:
+
+**Structure:**
+- **First line**: 72 characters maximum, imperative mood summary
+- **Second line**: Empty line
+- **Body**: Bullet points describing each change in detail
+- **Optional**: "Files modified:" section listing affected files
+
+**Example:**
+```
+Fix directory spider tag loss: size limits and validation
+
+- Increase WebSocket message size limit from 500KB to 10MB to prevent
+  truncation of large kind 3 follow list events (8000+ follows)
+- Add validation in SaveEvent to reject kind 3 events without p tags
+  before storage, preventing malformed events from buggy relays
+- Implement CleanupKind3WithoutPTags() to remove existing malformed
+  kind 3 events at startup
+- Add enhanced logging showing tag count and event ID when rejecting
+  invalid kind 3 events for better observability
+
+Files modified:
+- app/handle-websocket.go: Increase DefaultMaxMessageSize to 10MB
+- pkg/database/save-event.go: Add kind 3 validation with logging
+- pkg/database/cleanup-kind3.go: New cleanup function
+- app/main.go: Invoke cleanup at startup
+```
+
 ## Release Process
 
 1. Update version in `pkg/version/version` file (e.g., v1.2.3)

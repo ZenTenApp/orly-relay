@@ -92,6 +92,13 @@ func Run(
 		// Continue anyway - follows can be loaded when admins update their follow lists
 	}
 
+	// Cleanup any kind 3 events that lost their p tags (only for Badger backend)
+	if badgerDB, ok := db.(*database.D); ok {
+		if err := badgerDB.CleanupKind3WithoutPTags(ctx); chk.E(err) {
+			log.E.F("failed to cleanup kind 3 events: %v", err)
+		}
+	}
+
 	// Initialize spider manager based on mode (only for Badger backend)
 	if badgerDB, ok := db.(*database.D); ok && cfg.SpiderMode != "none" {
 		if l.spiderManager, err = spider.New(ctx, badgerDB, l.publishers, cfg.SpiderMode); chk.E(err) {

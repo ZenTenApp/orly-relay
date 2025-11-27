@@ -134,6 +134,31 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 		return
 	}
 
+	// Validate kind 3 (follow list) events have at least one p tag
+	// This prevents storing malformed follow lists that may come from buggy relays
+	if ev.Kind == 3 {
+		hasPTag := false
+		tagCount := 0
+		if ev.Tags != nil {
+			tagCount = ev.Tags.Len()
+			for _, tag := range *ev.Tags {
+				if tag != nil && tag.Len() >= 2 {
+					key := tag.Key()
+					if len(key) == 1 && key[0] == 'p' {
+						hasPTag = true
+						break
+					}
+				}
+			}
+		}
+		if !hasPTag {
+			log.W.F("SaveEvent: rejecting kind 3 event without p tags from pubkey %x (total tags: %d, event ID: %x)",
+				ev.Pubkey, tagCount, ev.ID)
+			err = errors.New("blocked: kind 3 follow list events must have at least one p tag")
+			return
+		}
+	}
+
 	// check if the event already exists
 	var ser *types.Uint40
 	if ser, err = d.GetSerialById(ev.ID); err == nil && ser != nil {

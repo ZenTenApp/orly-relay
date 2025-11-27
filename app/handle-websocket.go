@@ -21,7 +21,10 @@ const (
 	DefaultPongWait       = 60 * time.Second
 	DefaultPingWait       = DefaultPongWait / 2
 	DefaultWriteTimeout   = 3 * time.Second
-	DefaultMaxMessageSize = 512000 // Match khatru's MaxMessageSize
+	// DefaultMaxMessageSize is the maximum message size for WebSocket connections
+	// Increased from 512KB to 10MB to support large kind 3 follow lists (10k+ follows)
+	// and other large events without truncation
+	DefaultMaxMessageSize = 10 * 1024 * 1024 // 10MB
 	// ClientMessageSizeLimit is the maximum message size that clients can handle
 	// This is set to 100MB to allow large messages
 	ClientMessageSizeLimit = 100 * 1024 * 1024 // 100MB
