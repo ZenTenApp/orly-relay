@@ -146,7 +146,14 @@
       "Bash(tea issues:*)",
       "Bash(bun run build:*)",
       "Bash(git tag:*)",
-      "Bash(/tmp/orly-test version:*)"
+      "Bash(/tmp/orly-test version:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git config:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(git commit:*)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(git stash:*)"
     ],
     "deny": [],
     "ask": []

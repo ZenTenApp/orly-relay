@@ -14,6 +14,7 @@ require (
 	github.com/nbd-wtf/go-nostr v0.52.0
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	github.com/pkg/profile v1.7.0
+	github.com/sosodev/duration v1.3.1
 	github.com/stretchr/testify v1.11.1
 	github.com/vertex-lab/nostr-sqlite v0.3.2
 	go-simpler.org/env v0.12.0

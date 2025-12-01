@@ -231,6 +231,11 @@ export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
   - Policy admin follow lists (kind 3) trigger immediate cache refresh
   - `WriteAllowFollows` rule grants both read+write access to admin follows
   - Tag validation supports regex patterns per tag type
+- **New Policy Rule Fields:**
+  - `max_expiry_duration`: ISO-8601 duration format (e.g., "P7D", "PT1H30M") for event expiry limits
+  - `protected_required`: Requires NIP-70 protected events (must have "-" tag)
+  - `identifier_regex`: Regex pattern for validating "d" tag identifiers
+  - `follows_whitelist_admins`: Per-rule admin pubkeys whose follows are whitelisted
 - See `docs/POLICY_USAGE_GUIDE.md` for configuration examples
 
 **`pkg/sync/`** - Distributed synchronization

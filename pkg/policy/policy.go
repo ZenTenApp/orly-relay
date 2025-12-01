@@ -11,17 +11,46 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/adrg/xdg"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"github.com/adrg/xdg"
+	"github.com/sosodev/duration"
+	"lol.mleku.dev/chk"
+	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/utils"
 )
+
+// parseDuration parses an ISO-8601 duration string into seconds.
+// ISO-8601 format: P[n]Y[n]M[n]DT[n]H[n]M[n]S
+// Examples: "P1D" (1 day), "PT1H" (1 hour), "P7DT12H" (7 days 12 hours), "PT30M" (30 minutes)
+// Uses the github.com/sosodev/duration library for strict ISO-8601 compliance.
+// Note: Years and Months are converted to approximate time.Duration values
+// (1 year ≈ 365.25 days, 1 month ≈ 30.44 days).
+func parseDuration(s string) (int64, error) {
+	if s == "" {
+		return 0, fmt.Errorf("empty duration string")
+	}
+
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty duration string")
+	}
+
+	// Parse using the ISO-8601 duration library
+	d, err := duration.Parse(s)
+	if err != nil {
+		return 0, fmt.Errorf("invalid ISO-8601 duration %q: %v", s, err)
+	}
+
+	// Convert to time.Duration and then to seconds
+	timeDur := d.ToTimeDuration()
+	return int64(timeDur.Seconds()), nil
+}
 
 // Kinds defines whitelist and blacklist policies for event kinds.
 // Whitelist takes precedence over blacklist - if whitelist is present, only whitelisted kinds are allowed.
@@ -57,7 +86,12 @@ type Rule struct {
 	// ReadDeny is a list of pubkeys that are not allowed to read this event kind from the relay. If any are present, implicitly all others are allowed. Only takes effect in the absence of a ReadAllow.
 	ReadDeny []string `json:"read_deny,omitempty"`
 	// MaxExpiry is the maximum expiry time in seconds for events written to the relay. If 0, there is no maximum expiry. Events must have an expiry time if this is set, and it must be no more than this value in the future compared to the event's created_at time.
+	// Deprecated: Use MaxExpiryDuration instead for human-readable duration strings.
 	MaxExpiry *int64 `json:"max_expiry,omitempty"`
+	// MaxExpiryDuration is the maximum expiry time in ISO-8601 duration format.
+	// Format: P[n]Y[n]M[n]W[n]DT[n]H[n]M[n]S (e.g., "P7D" for 7 days, "PT1H" for 1 hour, "P1DT12H" for 1 day 12 hours).
+	// Parsed into maxExpirySeconds at load time.
+	MaxExpiryDuration string `json:"max_expiry_duration,omitempty"`
 	// MustHaveTags is a list of tag key letters that must be present on the event for it to be allowed to be written to the relay.
 	MustHaveTags []string `json:"must_have_tags,omitempty"`
 	// SizeLimit is the maximum size in bytes for the event's total serialized size.
@@ -77,17 +111,36 @@ type Rule struct {
 	// Requires PolicyFollowWhitelistEnabled=true at the policy level.
 	WriteAllowFollows bool `json:"write_allow_follows,omitempty"`
 
+	// FollowsWhitelistAdmins specifies admin pubkeys (hex-encoded) whose follows are whitelisted for this rule.
+	// Unlike WriteAllowFollows which uses the global PolicyAdmins, this allows per-rule admin configuration.
+	// If set, the relay will fail to start if these admins don't have follow list events (kind 3) in the database.
+	// This provides explicit control over which admin's follow list controls access for specific kinds.
+	FollowsWhitelistAdmins []string `json:"follows_whitelist_admins,omitempty"`
+
 	// TagValidation is a map of tag_name -> regex pattern for validating tag values.
 	// Each tag present in the event must match its corresponding regex pattern.
 	// Example: {"d": "^[a-z0-9-]{1,64}$", "t": "^[a-z0-9-]{1,32}$"}
 	TagValidation map[string]string `json:"tag_validation,omitempty"`
 
+	// ProtectedRequired when true requires events to have a "-" tag (NIP-70 protected events).
+	// Protected events signal that they should only be published to relays that enforce access control.
+	ProtectedRequired bool `json:"protected_required,omitempty"`
+
+	// IdentifierRegex is a regex pattern that "d" tag identifiers must conform to.
+	// This is a convenience field - equivalent to setting TagValidation["d"] = pattern.
+	// Example: "^[a-z0-9-]{1,64}$" requires lowercase alphanumeric with hyphens, max 64 chars.
+	IdentifierRegex string `json:"identifier_regex,omitempty"`
+
 	// Binary caches for faster comparison (populated from hex strings above)
 	// These are not exported and not serialized to JSON
-	writeAllowBin [][]byte
-	writeDenyBin  [][]byte
-	readAllowBin  [][]byte
-	readDenyBin   [][]byte
+	writeAllowBin              [][]byte
+	writeDenyBin               [][]byte
+	readAllowBin               [][]byte
+	readDenyBin                [][]byte
+	maxExpirySeconds           *int64         // Parsed from MaxExpiryDuration or copied from MaxExpiry
+	identifierRegexCache       *regexp.Regexp // Compiled regex for IdentifierRegex
+	followsWhitelistAdminsBin  [][]byte       // Binary cache for FollowsWhitelistAdmins pubkeys
+	followsWhitelistFollowsBin [][]byte       // Cached follow list from FollowsWhitelistAdmins (loaded at startup)
 }
 
 // hasAnyRules checks if the rule has any constraints configured
@@ -99,9 +152,12 @@ func (r *Rule) hasAnyRules() bool {
 		len(r.readAllowBin) > 0 || len(r.readDenyBin) > 0 ||
 		r.SizeLimit != nil || r.ContentLimit != nil ||
 		r.MaxAgeOfEvent != nil || r.MaxAgeEventInFuture != nil ||
-		r.MaxExpiry != nil || len(r.MustHaveTags) > 0 ||
+		r.MaxExpiry != nil || r.MaxExpiryDuration != "" || r.maxExpirySeconds != nil ||
+		len(r.MustHaveTags) > 0 ||
 		r.Script != "" || r.Privileged ||
-		r.WriteAllowFollows || len(r.TagValidation) > 0
+		r.WriteAllowFollows || len(r.FollowsWhitelistAdmins) > 0 ||
+		len(r.TagValidation) > 0 ||
+		r.ProtectedRequired || r.IdentifierRegex != ""
 }
 
 // populateBinaryCache converts hex-encoded pubkey strings to binary for faster comparison.
@@ -161,7 +217,74 @@ func (r *Rule) populateBinaryCache() error {
 		}
 	}
 
+	// Parse MaxExpiryDuration into maxExpirySeconds
+	// MaxExpiryDuration takes precedence over MaxExpiry if both are set
+	if r.MaxExpiryDuration != "" {
+		seconds, parseErr := parseDuration(r.MaxExpiryDuration)
+		if parseErr != nil {
+			log.W.F("failed to parse MaxExpiryDuration %q: %v", r.MaxExpiryDuration, parseErr)
+		} else {
+			r.maxExpirySeconds = &seconds
+		}
+	} else if r.MaxExpiry != nil {
+		// Fall back to MaxExpiry (raw seconds) if MaxExpiryDuration not set
+		r.maxExpirySeconds = r.MaxExpiry
+	}
+
+	// Compile IdentifierRegex pattern
+	if r.IdentifierRegex != "" {
+		compiled, compileErr := regexp.Compile(r.IdentifierRegex)
+		if compileErr != nil {
+			log.W.F("failed to compile IdentifierRegex %q: %v", r.IdentifierRegex, compileErr)
+		} else {
+			r.identifierRegexCache = compiled
+		}
+	}
+
+	// Convert FollowsWhitelistAdmins hex strings to binary
+	if len(r.FollowsWhitelistAdmins) > 0 {
+		r.followsWhitelistAdminsBin = make([][]byte, 0, len(r.FollowsWhitelistAdmins))
+		for _, hexPubkey := range r.FollowsWhitelistAdmins {
+			binPubkey, decErr := hex.Dec(hexPubkey)
+			if decErr != nil {
+				log.W.F("failed to decode FollowsWhitelistAdmins pubkey %q: %v", hexPubkey, decErr)
+				continue
+			}
+			r.followsWhitelistAdminsBin = append(r.followsWhitelistAdminsBin, binPubkey)
+		}
+	}
+
 	return err
+}
+
+// IsInFollowsWhitelist checks if the given pubkey is in this rule's follows whitelist.
+// The pubkey parameter should be binary ([]byte), not hex-encoded.
+func (r *Rule) IsInFollowsWhitelist(pubkey []byte) bool {
+	if len(pubkey) == 0 || len(r.followsWhitelistFollowsBin) == 0 {
+		return false
+	}
+	for _, follow := range r.followsWhitelistFollowsBin {
+		if utils.FastEqual(pubkey, follow) {
+			return true
+		}
+	}
+	return false
+}
+
+// UpdateFollowsWhitelist sets the follows list for this rule's FollowsWhitelistAdmins.
+// The follows should be binary pubkeys ([]byte), not hex-encoded.
+func (r *Rule) UpdateFollowsWhitelist(follows [][]byte) {
+	r.followsWhitelistFollowsBin = follows
+}
+
+// GetFollowsWhitelistAdminsBin returns the binary-encoded admin pubkeys for this rule.
+func (r *Rule) GetFollowsWhitelistAdminsBin() [][]byte {
+	return r.followsWhitelistAdminsBin
+}
+
+// HasFollowsWhitelistAdmins returns true if this rule has FollowsWhitelistAdmins configured.
+func (r *Rule) HasFollowsWhitelistAdmins() bool {
+	return len(r.FollowsWhitelistAdmins) > 0
 }
 
 // PolicyEvent represents an event with additional context for policy scripts.
@@ -341,9 +464,9 @@ func New(policyJSON []byte) (p *P, err error) {
 	// Populate binary caches for all rules (including global rule)
 	p.Global.populateBinaryCache()
 	for kind := range p.rules {
-		rule := p.rules[kind]  // Get a copy
+		rule := p.rules[kind] // Get a copy
 		rule.populateBinaryCache()
-		p.rules[kind] = rule  // Store the modified copy back
+		p.rules[kind] = rule // Store the modified copy back
 	}
 
 	return
@@ -1061,15 +1184,19 @@ func (p *P) checkKindsPolicy(kind uint16) bool {
 	}
 
 	// No explicit whitelist or blacklist
-	// If there are specific rules defined, use implicit whitelist
-	// If there's only a global rule (no specific rules), fall back to default policy
-	// If there are NO rules at all, fall back to default policy
+	// Behavior depends on whether default_policy is explicitly set:
+	// - If default_policy is explicitly "allow", allow all kinds (rules add constraints, not restrictions)
+	// - If default_policy is unset or "deny", use implicit whitelist (only allow kinds with rules)
 	if len(p.rules) > 0 {
+		// If default_policy is explicitly "allow", don't use implicit whitelist
+		if p.DefaultPolicy == "allow" {
+			return true
+		}
 		// Implicit whitelist mode - only allow kinds with specific rules
 		_, hasRule := p.rules[int(kind)]
 		return hasRule
 	}
-	// No specific rules (maybe global rule exists) - fall back to default policy
+	// No specific rules - fall back to default policy
 	return p.getDefaultPolicyAction()
 }
 
@@ -1132,13 +1259,51 @@ func (p *P) checkRulePolicy(
 		}
 	}
 
-	// Check expiry time
-	if rule.MaxExpiry != nil {
+	// Check expiry time (uses maxExpirySeconds which is parsed from MaxExpiryDuration or MaxExpiry)
+	if rule.maxExpirySeconds != nil && *rule.maxExpirySeconds > 0 {
 		expiryTag := ev.Tags.GetFirst([]byte("expiration"))
 		if expiryTag == nil {
-			return false, nil // Must have expiry if MaxExpiry is set
+			return false, nil // Must have expiry if max_expiry is set
 		}
-		// TODO: Parse and validate expiry time
+		// Parse expiry timestamp and validate it's within allowed duration from created_at
+		expiryStr := string(expiryTag.Value())
+		expiryTs, parseErr := strconv.ParseInt(expiryStr, 10, 64)
+		if parseErr != nil {
+			log.D.F("invalid expiration tag value %q: %v", expiryStr, parseErr)
+			return false, nil // Invalid expiry format
+		}
+		maxAllowedExpiry := ev.CreatedAt + *rule.maxExpirySeconds
+		if expiryTs > maxAllowedExpiry {
+			log.D.F("expiration %d exceeds max allowed %d (created_at %d + max_expiry %d)",
+				expiryTs, maxAllowedExpiry, ev.CreatedAt, *rule.maxExpirySeconds)
+			return false, nil // Expiry too far in the future
+		}
+	}
+
+	// Check ProtectedRequired (NIP-70: events must have "-" tag)
+	if rule.ProtectedRequired {
+		protectedTag := ev.Tags.GetFirst([]byte("-"))
+		if protectedTag == nil {
+			log.D.F("protected_required: event missing '-' tag (NIP-70)")
+			return false, nil // Must have protected tag
+		}
+	}
+
+	// Check IdentifierRegex (validates "d" tag values)
+	if rule.identifierRegexCache != nil {
+		dTags := ev.Tags.GetAll([]byte("d"))
+		if len(dTags) == 0 {
+			log.D.F("identifier_regex: event missing 'd' tag")
+			return false, nil // Must have d tag if identifier_regex is set
+		}
+		for _, dTag := range dTags {
+			value := string(dTag.Value())
+			if !rule.identifierRegexCache.MatchString(value) {
+				log.D.F("identifier_regex: d tag value %q does not match pattern %q",
+					value, rule.IdentifierRegex)
+				return false, nil
+			}
+		}
 	}
 
 	// Check MaxAgeOfEvent (maximum age of event in seconds)
@@ -1161,6 +1326,8 @@ func (p *P) checkRulePolicy(
 
 	// Check tag validation rules (regex patterns)
 	// Only apply for write access - we validate what goes in, not what comes out
+	// NOTE: TagValidation only validates tags that ARE present on the event.
+	// To REQUIRE a tag to exist, use MustHaveTags instead.
 	if access == "write" && len(rule.TagValidation) > 0 {
 		for tagName, regexPattern := range rule.TagValidation {
 			// Compile regex pattern (errors should have been caught in ValidateJSON)
@@ -1173,10 +1340,10 @@ func (p *P) checkRulePolicy(
 			// Get all tags with this name
 			tags := ev.Tags.GetAll([]byte(tagName))
 
-			// If no tags found and rule requires this tag, validation fails
+			// If no tags found, skip validation for this tag type
+			// (TagValidation validates format, not presence - use MustHaveTags for presence)
 			if len(tags) == 0 {
-				log.D.F("tag validation failed: required tag %q not found", tagName)
-				return false, nil
+				continue
 			}
 
 			// Validate each tag value against regex
@@ -1241,6 +1408,15 @@ func (p *P) checkRulePolicy(
 		if p.IsPolicyFollow(loggedInPubkey) {
 			log.D.F("policy admin follow granted %s access for kind %d", access, ev.Kind)
 			return true, nil // Allow access from policy admin follow
+		}
+	}
+
+	// FollowsWhitelistAdmins grants access to follows of specific admin pubkeys for this rule
+	// This is a per-rule alternative to WriteAllowFollows which uses global PolicyAdmins
+	if rule.HasFollowsWhitelistAdmins() {
+		if rule.IsInFollowsWhitelist(loggedInPubkey) {
+			log.D.F("follows_whitelist_admins granted %s access for kind %d", access, ev.Kind)
+			return true, nil // Allow access from rule-specific admin follow
 		}
 	}
 
@@ -1559,11 +1735,32 @@ func (p *P) ValidateJSON(policyJSON []byte) error {
 		}
 	}
 
-	// Validate regex patterns in tag_validation rules
+	// Validate regex patterns in tag_validation rules and new fields
 	for kind, rule := range tempPolicy.rules {
 		for tagName, pattern := range rule.TagValidation {
 			if _, err := regexp.Compile(pattern); err != nil {
 				return fmt.Errorf("invalid regex pattern for tag %q in kind %d: %v", tagName, kind, err)
+			}
+		}
+		// Validate IdentifierRegex pattern
+		if rule.IdentifierRegex != "" {
+			if _, err := regexp.Compile(rule.IdentifierRegex); err != nil {
+				return fmt.Errorf("invalid identifier_regex pattern in kind %d: %v", kind, err)
+			}
+		}
+		// Validate MaxExpiryDuration format
+		if rule.MaxExpiryDuration != "" {
+			if _, err := parseDuration(rule.MaxExpiryDuration); err != nil {
+				return fmt.Errorf("invalid max_expiry_duration %q in kind %d: %v", rule.MaxExpiryDuration, kind, err)
+			}
+		}
+		// Validate FollowsWhitelistAdmins pubkeys
+		for _, admin := range rule.FollowsWhitelistAdmins {
+			if len(admin) != 64 {
+				return fmt.Errorf("invalid follows_whitelist_admins pubkey length in kind %d: %q (expected 64 hex characters)", kind, admin)
+			}
+			if _, err := hex.Dec(admin); err != nil {
+				return fmt.Errorf("invalid follows_whitelist_admins pubkey format in kind %d: %q: %v", kind, admin, err)
 			}
 		}
 	}
@@ -1572,6 +1769,30 @@ func (p *P) ValidateJSON(policyJSON []byte) error {
 	for tagName, pattern := range tempPolicy.Global.TagValidation {
 		if _, err := regexp.Compile(pattern); err != nil {
 			return fmt.Errorf("invalid regex pattern for tag %q in global rule: %v", tagName, err)
+		}
+	}
+
+	// Validate global rule IdentifierRegex pattern
+	if tempPolicy.Global.IdentifierRegex != "" {
+		if _, err := regexp.Compile(tempPolicy.Global.IdentifierRegex); err != nil {
+			return fmt.Errorf("invalid identifier_regex pattern in global rule: %v", err)
+		}
+	}
+
+	// Validate global rule MaxExpiryDuration format
+	if tempPolicy.Global.MaxExpiryDuration != "" {
+		if _, err := parseDuration(tempPolicy.Global.MaxExpiryDuration); err != nil {
+			return fmt.Errorf("invalid max_expiry_duration %q in global rule: %v", tempPolicy.Global.MaxExpiryDuration, err)
+		}
+	}
+
+	// Validate global rule FollowsWhitelistAdmins pubkeys
+	for _, admin := range tempPolicy.Global.FollowsWhitelistAdmins {
+		if len(admin) != 64 {
+			return fmt.Errorf("invalid follows_whitelist_admins pubkey length in global rule: %q (expected 64 hex characters)", admin)
+		}
+		if _, err := hex.Dec(admin); err != nil {
+			return fmt.Errorf("invalid follows_whitelist_admins pubkey format in global rule: %q: %v", admin, err)
 		}
 	}
 
@@ -1802,4 +2023,93 @@ func (p *P) IsPolicyFollowWhitelistEnabled() bool {
 		return false
 	}
 	return p.PolicyFollowWhitelistEnabled
+}
+
+// =============================================================================
+// FollowsWhitelistAdmins Methods
+// =============================================================================
+
+// GetAllFollowsWhitelistAdmins returns all unique admin pubkeys from FollowsWhitelistAdmins
+// across all rules (including global). Returns hex-encoded pubkeys.
+// This is used at startup to validate that kind 3 events exist for these admins.
+func (p *P) GetAllFollowsWhitelistAdmins() []string {
+	if p == nil {
+		return nil
+	}
+
+	// Use map to deduplicate
+	admins := make(map[string]struct{})
+
+	// Check global rule
+	for _, admin := range p.Global.FollowsWhitelistAdmins {
+		admins[admin] = struct{}{}
+	}
+
+	// Check all kind-specific rules
+	for _, rule := range p.rules {
+		for _, admin := range rule.FollowsWhitelistAdmins {
+			admins[admin] = struct{}{}
+		}
+	}
+
+	// Convert map to slice
+	result := make([]string, 0, len(admins))
+	for admin := range admins {
+		result = append(result, admin)
+	}
+	return result
+}
+
+// GetRuleForKind returns the Rule for a specific kind, or nil if no rule exists.
+// This allows external code to access and modify rule-specific follows whitelists.
+func (p *P) GetRuleForKind(kind int) *Rule {
+	if p == nil || p.rules == nil {
+		return nil
+	}
+	if rule, exists := p.rules[kind]; exists {
+		return &rule
+	}
+	return nil
+}
+
+// UpdateRuleFollowsWhitelist updates the follows whitelist for a specific kind's rule.
+// The follows should be binary pubkeys ([]byte), not hex-encoded.
+func (p *P) UpdateRuleFollowsWhitelist(kind int, follows [][]byte) {
+	if p == nil || p.rules == nil {
+		return
+	}
+	if rule, exists := p.rules[kind]; exists {
+		rule.UpdateFollowsWhitelist(follows)
+		p.rules[kind] = rule
+	}
+}
+
+// UpdateGlobalFollowsWhitelist updates the follows whitelist for the global rule.
+// The follows should be binary pubkeys ([]byte), not hex-encoded.
+func (p *P) UpdateGlobalFollowsWhitelist(follows [][]byte) {
+	if p == nil {
+		return
+	}
+	p.Global.UpdateFollowsWhitelist(follows)
+}
+
+// GetGlobalRule returns a pointer to the global rule for modification.
+func (p *P) GetGlobalRule() *Rule {
+	if p == nil {
+		return nil
+	}
+	return &p.Global
+}
+
+// GetRules returns the rules map for iteration.
+// Note: Returns a copy of the map keys to prevent modification.
+func (p *P) GetRulesKinds() []int {
+	if p == nil || p.rules == nil {
+		return nil
+	}
+	kinds := make([]int, 0, len(p.rules))
+	for kind := range p.rules {
+		kinds = append(kinds, kind)
+	}
+	return kinds
 }

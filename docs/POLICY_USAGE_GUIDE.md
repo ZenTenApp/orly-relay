@@ -240,6 +240,194 @@ Path to a custom script for complex validation logic:
 
 See the script section below for details.
 
+### New Policy Rule Fields (v0.32.0+)
+
+#### max_expiry_duration
+
+Specifies the maximum allowed expiry time using ISO-8601 duration format. Events must have an `expiration` tag within this duration from their `created_at` time.
+
+```json
+{
+  "max_expiry_duration": "P7D"
+}
+```
+
+**ISO-8601 Duration Format:** `P[n]Y[n]M[n]W[n]DT[n]H[n]M[n]S`
+- `P` - Required prefix (Period)
+- `Y` - Years (approximate: 365 days)
+- `M` - Months in date part (approximate: 30 days)
+- `W` - Weeks (7 days)
+- `D` - Days
+- `T` - Required separator before time components
+- `H` - Hours (requires T separator)
+- `M` - Minutes in time part (requires T separator)
+- `S` - Seconds (requires T separator)
+
+**Examples:**
+- `P7D` - 7 days
+- `P30D` - 30 days
+- `PT1H` - 1 hour
+- `PT30M` - 30 minutes
+- `P1DT12H` - 1 day and 12 hours
+- `P1DT2H30M` - 1 day, 2 hours and 30 minutes
+- `P1W` - 1 week
+- `P1M` - 1 month (30 days)
+
+**Example - Ephemeral notes with 24-hour expiry:**
+```json
+{
+  "rules": {
+    "20": {
+      "description": "Ephemeral events must expire within 24 hours",
+      "max_expiry_duration": "P1D"
+    }
+  }
+}
+```
+
+**Note:** This field takes precedence over the deprecated `max_expiry` (which uses raw seconds).
+
+#### protected_required
+
+Requires events to have a `-` tag (NIP-70 protected events). Protected events signal that they should only be published to relays that enforce access control.
+
+```json
+{
+  "protected_required": true
+}
+```
+
+**Example - Require protected tag for DMs:**
+```json
+{
+  "rules": {
+    "4": {
+      "description": "Encrypted DMs must be protected",
+      "protected_required": true,
+      "privileged": true
+    }
+  }
+}
+```
+
+This ensures clients mark their sensitive events appropriately for access-controlled relays.
+
+#### identifier_regex
+
+A regex pattern that `d` tag identifiers must conform to. This is useful for enforcing consistent identifier formats for replaceable events.
+
+```json
+{
+  "identifier_regex": "^[a-z0-9-]{1,64}$"
+}
+```
+
+**Example patterns:**
+- `^[a-z0-9-]{1,64}$` - Lowercase alphanumeric with hyphens, max 64 chars
+- `^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$` - UUID format
+- `^[a-zA-Z0-9_]+$` - Alphanumeric with underscores
+
+**Example - Long-form content with slug identifiers:**
+```json
+{
+  "rules": {
+    "30023": {
+      "description": "Long-form articles with URL-friendly slugs",
+      "identifier_regex": "^[a-z0-9-]{1,64}$"
+    }
+  }
+}
+```
+
+**Note:** If `identifier_regex` is set, events MUST have at least one `d` tag, and ALL `d` tags must match the pattern.
+
+#### follows_whitelist_admins
+
+Specifies admin pubkeys (hex-encoded) whose follows are whitelisted for this specific rule. Unlike `WriteAllowFollows` which uses the global `PolicyAdmins`, this allows per-rule admin configuration.
+
+```json
+{
+  "follows_whitelist_admins": ["hex_pubkey_1", "hex_pubkey_2"]
+}
+```
+
+**Example - Community-curated content:**
+```json
+{
+  "rules": {
+    "30023": {
+      "description": "Long-form articles from community curators' follows",
+      "follows_whitelist_admins": [
+        "4a93c5ac0c6f49d2c7e7a5b8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8",
+        "5b84d6bd1d7e5a3d8e8b6c9e0f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0"
+      ]
+    }
+  }
+}
+```
+
+**Integration with application:**
+At startup, the application should:
+1. Call `policy.GetAllFollowsWhitelistAdmins()` to get all admin pubkeys
+2. Load kind 3 (follow list) events for each admin
+3. Call `policy.UpdateRuleFollowsWhitelist(kind, follows)` or `policy.UpdateGlobalFollowsWhitelist(follows)` to populate the cache
+
+**Note:** The relay will NOT automatically fail to start if follow list events are missing. The application layer should implement this validation if desired.
+
+### Combining New Fields
+
+The new fields can be combined with each other and with existing fields:
+
+**Example - Strict long-form content policy:**
+```json
+{
+  "default_policy": "deny",
+  "rules": {
+    "30023": {
+      "description": "Curated long-form articles with strict requirements",
+      "max_expiry_duration": "P30D",
+      "protected_required": true,
+      "identifier_regex": "^[a-z0-9-]{1,64}$",
+      "follows_whitelist_admins": ["curator_pubkey_hex"],
+      "tag_validation": {
+        "t": "^[a-z0-9-]{1,32}$"
+      },
+      "size_limit": 100000,
+      "content_limit": 50000
+    }
+  }
+}
+```
+
+This policy:
+- Only allows writes from pubkeys followed by the curator
+- Requires events to have a protected tag
+- Requires `d` tag identifiers to be lowercase URL slugs
+- Requires `t` tags to be lowercase topic tags
+- Limits event size to 100KB and content to 50KB
+- Requires events to expire within 30 days
+
+**Example - Global protected requirement with per-kind overrides:**
+```json
+{
+  "default_policy": "allow",
+  "global": {
+    "protected_required": true,
+    "max_expiry_duration": "P7D"
+  },
+  "rules": {
+    "1": {
+      "description": "Text notes - shorter expiry",
+      "max_expiry_duration": "P1D"
+    },
+    "0": {
+      "description": "Metadata - no expiry requirement",
+      "max_expiry_duration": ""
+    }
+  }
+}
+```
+
 ## Policy Scripts
 
 For complex validation logic, use custom scripts that receive events via stdin and return decisions via stdout.

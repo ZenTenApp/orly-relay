@@ -12,12 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
-	"next.orly.dev/app/config"
-	"next.orly.dev/pkg/database"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"github.com/gorilla/websocket"
+	"next.o
 	"next.orly.dev/pkg/protocol/publish"
 )
 
@@ -48,6 +47,24 @@ func createSignedTestEvent(t *testing.T, kind uint16, content string, tags ...*t
 	// Add any provided tags
 	for _, tg := range tags {
 		*ev.Tags = append(*ev.Tags, tg)
+	}
+
+	// Kind 3 (follow list) events must have at least one p tag
+	// Add a dummy p tag if none provided
+	if kind == 3 {
+		hasPTag := false
+		for _, tg := range tags {
+			if tg != nil && tg.Len() >= 1 && string(tg.Key()) == "p" {
+				hasPTag = true
+				break
+			}
+		}
+		if !hasPTag {
+			// Use the signer's own pubkey as the follow target
+			pubkeyHex := signer.Pub()
+			pTag := tag.NewFromBytesSlice([]byte("p"), pubkeyHex)
+			*ev.Tags = append(*ev.Tags, pTag)
+		}
 	}
 
 	// Sign the event (this sets Pubkey, ID, and Sig)

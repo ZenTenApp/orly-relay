@@ -121,7 +121,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 
 	t.Run("Implicit Whitelist (rules) - kind NO rule", func(t *testing.T) {
 		policy := &P{
-			DefaultPolicy: "allow",
+			// DefaultPolicy not set (empty) - uses implicit whitelist when rules exist
 			// No explicit whitelist
 			rules: map[int]Rule{
 				1: {Description: "Rule for kind 1"},

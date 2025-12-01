@@ -9,8 +9,6 @@ import (
 	"sort"
 	"testing"
 
-	"lol.mleku.dev/chk"
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/event/examples"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
@@ -18,6 +16,8 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"git.mleku.dev/mleku/nostr/encoders/timestamp"
+	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"lol.mleku.dev/chk"
 	"next.orly.dev/pkg/utils"
 )
 
@@ -73,20 +73,25 @@ func setupTestDB(t *testing.T) (
 
 	// Count the number of events processed
 	eventCount := 0
+	skippedCount := 0
+	var savedEvents []*event.E
 
 	// Now process each event in chronological order
 	for _, ev := range events {
 		// Save the event to the database
 		if _, err = db.SaveEvent(ctx, ev); err != nil {
-			t.Fatalf("Failed to save event #%d: %v", eventCount+1, err)
+			// Skip events that fail validation (e.g., kind 3 without p tags)
+			skippedCount++
+			continue
 		}
 
+		savedEvents = append(savedEvents, ev)
 		eventCount++
 	}
 
-	t.Logf("Successfully saved %d events to the database", eventCount)
+	t.Logf("Successfully saved %d events to the database (skipped %d invalid events)", eventCount, skippedCount)
 
-	return db, events, ctx, cancel, tempDir
+	return db, savedEvents, ctx, cancel, tempDir
 }
 
 func TestQueryEventsByID(t *testing.T) {

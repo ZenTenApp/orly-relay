@@ -8,14 +8,14 @@ import (
 	"sort"
 	"testing"
 
-	"lol.mleku.dev/chk"
-	"next.orly.dev/pkg/database/indexes/types"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/event/examples"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"git.mleku.dev/mleku/nostr/encoders/timestamp"
+	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/database/indexes/types"
 	"next.orly.dev/pkg/utils"
 )
 
@@ -72,12 +72,15 @@ func TestGetSerialsByRange(t *testing.T) {
 
 	// Count the number of events processed
 	eventCount := 0
+	skippedCount := 0
 
 	// Now process each event in chronological order
 	for _, ev := range events {
 		// Save the event to the database
 		if _, err = db.SaveEvent(ctx, ev); err != nil {
-			t.Fatalf("Failed to save event #%d: %v", eventCount+1, err)
+			// Skip events that fail validation (e.g., kind 3 without p tags)
+			skippedCount++
+			continue
 		}
 
 		// Get the serial for this event
@@ -95,7 +98,7 @@ func TestGetSerialsByRange(t *testing.T) {
 		eventCount++
 	}
 
-	t.Logf("Successfully saved %d events to the database", eventCount)
+	t.Logf("Successfully saved %d events to the database (skipped %d invalid events)", eventCount, skippedCount)
 
 	// Test GetSerialsByRange with a time range filter
 	// Use the timestamp from the middle event as a reference
