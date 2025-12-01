@@ -896,7 +896,7 @@ func TestFollowsWhitelistAdminsWithWriteAllow(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Generate if needed
 			if tt.signer.Pub() == nil {
-				tt.signer.Generate()
+				_ = tt.signer.Generate()
 			}
 
 			ev := createTestEventForNewFields(t, tt.signer, "test", 1)

@@ -9,7 +9,7 @@ require (
 	github.com/dgraph-io/dgo/v230 v230.0.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0
-	github.com/klauspost/compress v1.18.1
+	github.com/klauspost/compress v1.18.2
 	github.com/minio/sha256-simd v1.0.1
 	github.com/nbd-wtf/go-nostr v0.52.0
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4

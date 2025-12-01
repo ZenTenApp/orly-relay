@@ -87,7 +87,7 @@ type Rule struct {
 	ReadDeny []string `json:"read_deny,omitempty"`
 	// MaxExpiry is the maximum expiry time in seconds for events written to the relay. If 0, there is no maximum expiry. Events must have an expiry time if this is set, and it must be no more than this value in the future compared to the event's created_at time.
 	// Deprecated: Use MaxExpiryDuration instead for human-readable duration strings.
-	MaxExpiry *int64 `json:"max_expiry,omitempty"`
+	MaxExpiry *int64 `json:"max_expiry,omitempty"` //nolint:staticcheck // Intentional backward compatibility
 	// MaxExpiryDuration is the maximum expiry time in ISO-8601 duration format.
 	// Format: P[n]Y[n]M[n]W[n]DT[n]H[n]M[n]S (e.g., "P7D" for 7 days, "PT1H" for 1 hour, "P1DT12H" for 1 day 12 hours).
 	// Parsed into maxExpirySeconds at load time.
@@ -152,7 +152,7 @@ func (r *Rule) hasAnyRules() bool {
 		len(r.readAllowBin) > 0 || len(r.readDenyBin) > 0 ||
 		r.SizeLimit != nil || r.ContentLimit != nil ||
 		r.MaxAgeOfEvent != nil || r.MaxAgeEventInFuture != nil ||
-		r.MaxExpiry != nil || r.MaxExpiryDuration != "" || r.maxExpirySeconds != nil ||
+		r.MaxExpiry != nil || r.MaxExpiryDuration != "" || r.maxExpirySeconds != nil || //nolint:staticcheck // Backward compat
 		len(r.MustHaveTags) > 0 ||
 		r.Script != "" || r.Privileged ||
 		r.WriteAllowFollows || len(r.FollowsWhitelistAdmins) > 0 ||
@@ -226,9 +226,9 @@ func (r *Rule) populateBinaryCache() error {
 		} else {
 			r.maxExpirySeconds = &seconds
 		}
-	} else if r.MaxExpiry != nil {
+	} else if r.MaxExpiry != nil { //nolint:staticcheck // Backward compatibility
 		// Fall back to MaxExpiry (raw seconds) if MaxExpiryDuration not set
-		r.maxExpirySeconds = r.MaxExpiry
+		r.maxExpirySeconds = r.MaxExpiry //nolint:staticcheck // Backward compatibility
 	}
 
 	// Compile IdentifierRegex pattern
@@ -956,7 +956,7 @@ func (sr *ScriptRunner) readResponses() {
 }
 
 // logOutput logs the output from stderr
-func (sr *ScriptRunner) logOutput(stdout, stderr io.ReadCloser) {
+func (sr *ScriptRunner) logOutput(_ /* stdout */, stderr io.ReadCloser) {
 	defer stderr.Close()
 
 	// Only log stderr, stdout is used by readResponses

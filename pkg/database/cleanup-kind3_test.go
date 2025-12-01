@@ -36,12 +36,12 @@ func TestKind3TagRoundTrip(t *testing.T) {
 
 	// Verify all tags have key "p"
 	pTagCount := 0
-	for _, tag := range *ev1.Tags {
+	for _, tg := range *ev1.Tags {
 		if tag != nil && tag.Len() >= 2 {
-			key := tag.Key()
+			key := tg.Key()
 			if len(key) == 1 && key[0] == 'p' {
 				pTagCount++
-				t.Logf("Found p tag with value length: %d bytes", len(tag.Value()))
+				t.Logf("Found p tag with value length: %d bytes", len(tg.Value()))
 			}
 		}
 	}
@@ -62,12 +62,12 @@ func TestKind3TagRoundTrip(t *testing.T) {
 
 	// Verify all tags still have key "p"
 	pTagCount2 := 0
-	for _, tag := range *ev2.Tags {
+	for _, tg := range *ev2.Tags {
 		if tag != nil && tag.Len() >= 2 {
-			key := tag.Key()
+			key := tg.Key()
 			if len(key) == 1 && key[0] == 'p' {
 				pTagCount2++
-				t.Logf("Found p tag after round-trip with value length: %d bytes", len(tag.Value()))
+				t.Logf("Found p tag after round-trip with value length: %d bytes", len(tg.Value()))
 			}
 		}
 	}
