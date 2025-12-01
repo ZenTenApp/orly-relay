@@ -94,6 +94,10 @@ cmd/benchmark/data
 !libsecp256k1.so
 # ...even if they are in subdirectories
 !*/
+
+# Re-ignore IDE directories (must come after !*/)
+.idea/
+**/.idea/
 /blocklist.json
 /gui/gui/main.wasm
 /gui/gui/index.html
