@@ -85,6 +85,27 @@ func Run(
 	// Initialize policy manager
 	l.policyManager = policy.NewWithManager(ctx, cfg.AppName, cfg.PolicyEnabled)
 
+	// Merge policy-defined owners with environment-defined owners
+	// This allows cloud deployments to add owners via policy.json when env vars cannot be modified
+	if l.policyManager != nil {
+		policyOwners := l.policyManager.GetOwnersBin()
+		if len(policyOwners) > 0 {
+			// Deduplicate when merging
+			existingOwners := make(map[string]struct{})
+			for _, owner := range l.Owners {
+				existingOwners[string(owner)] = struct{}{}
+			}
+			for _, policyOwner := range policyOwners {
+				if _, exists := existingOwners[string(policyOwner)]; !exists {
+					l.Owners = append(l.Owners, policyOwner)
+					existingOwners[string(policyOwner)] = struct{}{}
+				}
+			}
+			log.I.F("merged %d policy-defined owners with %d environment-defined owners (total: %d unique owners)",
+				len(policyOwners), len(ownerKeys), len(l.Owners))
+		}
+	}
+
 	// Initialize policy follows from database (load follow lists of policy admins)
 	// This must be done after policy manager initialization but before accepting connections
 	if err := l.InitializePolicyFollows(); err != nil {

@@ -64,7 +64,10 @@ sudo systemctl restart orly
     "blacklist": []
   },
   "global": { ... },
-  "rules": { ... }
+  "rules": { ... },
+  "owners": ["hex_pubkey_1", "hex_pubkey_2"],
+  "policy_admins": ["hex_pubkey_1", "hex_pubkey_2"],
+  "policy_follow_whitelist_enabled": true
 }
 ```
 
@@ -89,6 +92,44 @@ Controls which event kinds are processed:
 - `whitelist`: Only these kinds are allowed (if present)
 - `blacklist`: These kinds are denied (if present)
 - Empty arrays allow all kinds
+
+### owners
+
+Specifies relay owners via the policy configuration file. This is particularly useful for **cloud deployments** where environment variables cannot be modified at runtime.
+
+```json
+{
+  "owners": [
+    "4a93c5ac0c6f49d2c7e7a5b8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8",
+    "5b84d6bd1d7e5a3d8e8b6c9e0f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0"
+  ]
+}
+```
+
+**Key points:**
+- Pubkeys must be in **hex format** (64 characters), not npub format
+- Policy-defined owners are **merged** with environment-defined owners (`ORLY_OWNERS`)
+- Duplicate pubkeys are automatically deduplicated during merge
+- Owners have full control of the relay (delete any events, restart, wipe, etc.)
+
+**Example use case - Cloud deployment:**
+
+When deploying to a cloud platform where you cannot set environment variables:
+
+1. Create `~/.config/ORLY/policy.json`:
+```json
+{
+  "default_policy": "allow",
+  "owners": ["your_hex_pubkey_here"]
+}
+```
+
+2. Enable the policy system:
+```bash
+export ORLY_POLICY_ENABLED=true
+```
+
+The relay will recognize your pubkey as an owner, granting full administrative access.
 
 ### Global Rules
 

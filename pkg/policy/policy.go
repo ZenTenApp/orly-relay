@@ -395,10 +395,16 @@ type P struct {
 	// When true and a rule has WriteAllowFollows=true, policy admin follows get read+write access.
 	PolicyFollowWhitelistEnabled bool `json:"policy_follow_whitelist_enabled,omitempty"`
 
+	// Owners is a list of hex-encoded pubkeys that have full control of the relay.
+	// These are merged with owners from the ORLY_OWNERS environment variable.
+	// Useful for cloud deployments where environment variables cannot be modified.
+	Owners []string `json:"owners,omitempty"`
+
 	// Unexported binary caches for faster comparison (populated from hex strings above)
 	policyAdminsBin [][]byte     // Binary cache for policy admin pubkeys
 	policyFollows   [][]byte     // Cached follow list from policy admins (kind 3 events)
 	policyFollowsMx sync.RWMutex // Protect follows list access
+	ownersBin       [][]byte     // Binary cache for policy-defined owner pubkeys
 
 	// manager handles policy script execution.
 	// Unexported to enforce use of public API methods (CheckPolicy, IsEnabled).
@@ -413,6 +419,7 @@ type pJSON struct {
 	DefaultPolicy                string       `json:"default_policy"`
 	PolicyAdmins                 []string     `json:"policy_admins,omitempty"`
 	PolicyFollowWhitelistEnabled bool         `json:"policy_follow_whitelist_enabled,omitempty"`
+	Owners                       []string     `json:"owners,omitempty"`
 }
 
 // UnmarshalJSON implements custom JSON unmarshalling to handle unexported fields.
@@ -427,6 +434,7 @@ func (p *P) UnmarshalJSON(data []byte) error {
 	p.DefaultPolicy = shadow.DefaultPolicy
 	p.PolicyAdmins = shadow.PolicyAdmins
 	p.PolicyFollowWhitelistEnabled = shadow.PolicyFollowWhitelistEnabled
+	p.Owners = shadow.Owners
 
 	// Populate binary cache for policy admins
 	if len(p.PolicyAdmins) > 0 {
@@ -438,6 +446,19 @@ func (p *P) UnmarshalJSON(data []byte) error {
 				continue
 			}
 			p.policyAdminsBin = append(p.policyAdminsBin, binPubkey)
+		}
+	}
+
+	// Populate binary cache for policy-defined owners
+	if len(p.Owners) > 0 {
+		p.ownersBin = make([][]byte, 0, len(p.Owners))
+		for _, hexPubkey := range p.Owners {
+			binPubkey, err := hex.Dec(hexPubkey)
+			if err != nil {
+				log.W.F("failed to decode owner pubkey %q: %v", hexPubkey, err)
+				continue
+			}
+			p.ownersBin = append(p.ownersBin, binPubkey)
 		}
 	}
 
@@ -1735,6 +1756,16 @@ func (p *P) ValidateJSON(policyJSON []byte) error {
 		}
 	}
 
+	// Validate owners are valid hex pubkeys (64 characters)
+	for _, owner := range tempPolicy.Owners {
+		if len(owner) != 64 {
+			return fmt.Errorf("invalid owner pubkey length: %q (expected 64 hex characters)", owner)
+		}
+		if _, err := hex.Dec(owner); err != nil {
+			return fmt.Errorf("invalid owner pubkey format: %q: %v", owner, err)
+		}
+	}
+
 	// Validate regex patterns in tag_validation rules and new fields
 	for kind, rule := range tempPolicy.rules {
 		for tagName, pattern := range rule.TagValidation {
@@ -1835,7 +1866,9 @@ func (p *P) Reload(policyJSON []byte, configPath string) error {
 	p.DefaultPolicy = tempPolicy.DefaultPolicy
 	p.PolicyAdmins = tempPolicy.PolicyAdmins
 	p.PolicyFollowWhitelistEnabled = tempPolicy.PolicyFollowWhitelistEnabled
+	p.Owners = tempPolicy.Owners
 	p.policyAdminsBin = tempPolicy.policyAdminsBin
+	p.ownersBin = tempPolicy.ownersBin
 	// Note: policyFollows is NOT reset here - it will be refreshed separately
 	p.policyFollowsMx.Unlock()
 
@@ -1923,6 +1956,7 @@ func (p *P) SaveToFile(configPath string) error {
 		DefaultPolicy:                p.DefaultPolicy,
 		PolicyAdmins:                 p.PolicyAdmins,
 		PolicyFollowWhitelistEnabled: p.PolicyFollowWhitelistEnabled,
+		Owners:                       p.Owners,
 	}
 
 	// Marshal to JSON with indentation for readability
@@ -2013,6 +2047,36 @@ func (p *P) GetPolicyAdminsBin() [][]byte {
 		result[i] = adminCopy
 	}
 	return result
+}
+
+// GetOwnersBin returns a copy of the binary owner pubkeys defined in the policy.
+// These are merged with environment-defined owners by the application layer.
+// Useful for cloud deployments where environment variables cannot be modified.
+func (p *P) GetOwnersBin() [][]byte {
+	if p == nil {
+		return nil
+	}
+
+	p.policyFollowsMx.RLock()
+	defer p.policyFollowsMx.RUnlock()
+
+	// Return a copy to prevent external modification
+	result := make([][]byte, len(p.ownersBin))
+	for i, owner := range p.ownersBin {
+		ownerCopy := make([]byte, len(owner))
+		copy(ownerCopy, owner)
+		result[i] = ownerCopy
+	}
+	return result
+}
+
+// GetOwners returns the hex-encoded owner pubkeys defined in the policy.
+// These are merged with environment-defined owners by the application layer.
+func (p *P) GetOwners() []string {
+	if p == nil {
+		return nil
+	}
+	return p.Owners
 }
 
 // IsPolicyFollowWhitelistEnabled returns whether the policy follow whitelist feature is enabled.

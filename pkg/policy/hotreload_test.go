@@ -161,6 +161,48 @@ func TestValidateJSON(t *testing.T) {
 			}`),
 			expectError: false,
 		},
+		{
+			name: "valid owners - single owner",
+			json: []byte(`{
+				"owners": ["0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]
+			}`),
+			expectError: false,
+		},
+		{
+			name: "valid owners - multiple owners",
+			json: []byte(`{
+				"owners": [
+					"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+					"fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+				]
+			}`),
+			expectError: false,
+		},
+		{
+			name: "invalid owners - wrong length",
+			json: []byte(`{
+				"owners": ["not-64-chars"]
+			}`),
+			expectError: true,
+			errorSubstr: "invalid owner pubkey",
+		},
+		{
+			name: "invalid owners - non-hex characters",
+			json: []byte(`{
+				"owners": ["zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"]
+			}`),
+			expectError: true,
+			errorSubstr: "invalid owner pubkey",
+		},
+		{
+			name: "valid policy with both owners and policy_admins",
+			json: []byte(`{
+				"owners": ["0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"],
+				"policy_admins": ["fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"],
+				"policy_follow_whitelist_enabled": true
+			}`),
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -400,4 +442,66 @@ func TestReloadPreservesExistingOnFailure(t *testing.T) {
 // containsSubstring checks if a string contains a substring (case-insensitive)
 func containsSubstring(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
+}
+
+// TestGetOwnersBin tests the GetOwnersBin method for policy-defined owners
+func TestGetOwnersBin(t *testing.T) {
+	policy, cleanup := setupHotreloadTestPolicy(t, "test-get-owners-bin")
+	defer cleanup()
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "policy.json")
+
+	// Test 1: Policy with no owners
+	emptyJSON := []byte(`{"default_policy": "allow"}`)
+	if err := policy.Reload(emptyJSON, configPath); err != nil {
+		t.Fatalf("Failed to reload policy: %v", err)
+	}
+
+	owners := policy.GetOwnersBin()
+	if len(owners) != 0 {
+		t.Errorf("Expected 0 owners, got %d", len(owners))
+	}
+
+	// Test 2: Policy with owners
+	ownerHex := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	withOwnersJSON := []byte(`{
+		"default_policy": "allow",
+		"owners": ["` + ownerHex + `"]
+	}`)
+	if err := policy.Reload(withOwnersJSON, configPath); err != nil {
+		t.Fatalf("Failed to reload policy with owners: %v", err)
+	}
+
+	owners = policy.GetOwnersBin()
+	if len(owners) != 1 {
+		t.Errorf("Expected 1 owner, got %d", len(owners))
+	}
+	if len(owners) > 0 && len(owners[0]) != 32 {
+		t.Errorf("Expected owner binary to be 32 bytes, got %d", len(owners[0]))
+	}
+
+	// Test 3: GetOwners returns hex strings
+	hexOwners := policy.GetOwners()
+	if len(hexOwners) != 1 {
+		t.Errorf("Expected 1 hex owner, got %d", len(hexOwners))
+	}
+	if len(hexOwners) > 0 && hexOwners[0] != ownerHex {
+		t.Errorf("Expected owner %q, got %q", ownerHex, hexOwners[0])
+	}
+
+	// Test 4: Policy with multiple owners
+	owner2Hex := "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+	multiOwnersJSON := []byte(`{
+		"default_policy": "allow",
+		"owners": ["` + ownerHex + `", "` + owner2Hex + `"]
+	}`)
+	if err := policy.Reload(multiOwnersJSON, configPath); err != nil {
+		t.Fatalf("Failed to reload policy with multiple owners: %v", err)
+	}
+
+	owners = policy.GetOwnersBin()
+	if len(owners) != 2 {
+		t.Errorf("Expected 2 owners, got %d", len(owners))
+	}
 }
