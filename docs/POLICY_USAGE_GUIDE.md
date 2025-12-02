@@ -1111,19 +1111,61 @@ Check logs for policy decisions and errors.
 
 ## Dynamic Policy Configuration via Kind 12345
 
-Policy administrators can update the relay policy dynamically by publishing kind 12345 events. This enables runtime policy changes without relay restarts.
+Both **owners** and **policy admins** can update the relay policy dynamically by publishing kind 12345 events. This enables runtime policy changes without relay restarts, with different permission levels for each role.
+
+### Role Hierarchy and Permissions
+
+ORLY uses a layered permission model for policy updates:
+
+| Role | Source | Can Modify | Restrictions |
+|------|--------|------------|--------------|
+| **Owner** | `ORLY_OWNERS` env or `owners` in policy.json | All fields | Owners list must remain non-empty |
+| **Policy Admin** | `policy_admins` in policy.json | Extend rules, add blacklists | Cannot modify `owners` or `policy_admins`, cannot reduce permissions |
+
+### Composition Rules
+
+Policy updates from owners and policy admins compose as follows:
+
+1. **Owner policy is the base** - Defines minimum permissions and protected fields
+2. **Policy admins can extend** - Add to allow lists, add new kinds, add blacklists
+3. **Blacklists override whitelists** - Policy admins can ban users that owners allowed
+4. **Protected fields are immutable** - Only owners can modify `owners` and `policy_admins`
+
+#### What Policy Admins CAN Do:
+
+- ✅ Add pubkeys to `write_allow` and `read_allow` lists
+- ✅ Add entries to `write_deny` and `read_deny` lists to blacklist malicious users
+- ✅ Blacklist any non-admin user, even if whitelisted by owners or other admins
+- ✅ Add kinds to `kind.whitelist` and `kind.blacklist`
+- ✅ Increase size limits (`size_limit`, `content_limit`, etc.)
+- ✅ Add rules for new kinds not defined by owners
+- ✅ Enable `write_allow_follows` for additional rules
+
+#### What Policy Admins CANNOT Do:
+
+- ❌ Modify the `owners` field
+- ❌ Modify the `policy_admins` field
+- ❌ Blacklist owners or other policy admins (protected users)
+- ❌ Remove pubkeys from allow lists
+- ❌ Remove kinds from whitelist
+- ❌ Reduce size limits
+- ❌ Remove rules defined by owners
+- ❌ Add new required tags (restrictions)
 
 ### Enabling Dynamic Policy Updates
 
-1. Add yourself as a policy admin in the initial policy.json:
+1. Set yourself as both owner and policy admin in the initial policy.json:
 
 ```json
 {
   "default_policy": "allow",
-  "policy_admins": ["YOUR_HEX_PUBKEY_HERE"],
+  "owners": ["YOUR_HEX_PUBKEY_HERE"],
+  "policy_admins": ["ADMIN_HEX_PUBKEY_HERE"],
   "policy_follow_whitelist_enabled": false
 }
 ```
+
+**Important:** The `owners` list must contain at least one pubkey to prevent lockout.
 
 2. Ensure policy is enabled:
 
@@ -1135,14 +1177,27 @@ export ORLY_POLICY_ENABLED=true
 
 Send a kind 12345 event with the new policy configuration as JSON content:
 
+**As Owner (full control):**
 ```json
 {
   "kind": 12345,
-  "content": "{\"default_policy\": \"deny\", \"kind\": {\"whitelist\": [1,3,7]}, \"policy_admins\": [\"YOUR_HEX_PUBKEY\"]}",
+  "content": "{\"default_policy\": \"deny\", \"owners\": [\"OWNER_HEX\"], \"policy_admins\": [\"ADMIN_HEX\"], \"kind\": {\"whitelist\": [1,3,7]}}",
   "tags": [],
   "created_at": 1234567890
 }
 ```
+
+**As Policy Admin (extensions only):**
+```json
+{
+  "kind": 12345,
+  "content": "{\"default_policy\": \"deny\", \"owners\": [\"OWNER_HEX\"], \"policy_admins\": [\"ADMIN_HEX\"], \"kind\": {\"whitelist\": [1,3,7,30023], \"blacklist\": [4]}, \"rules\": {\"1\": {\"write_deny\": [\"BAD_ACTOR_HEX\"]}}}",
+  "tags": [],
+  "created_at": 1234567890
+}
+```
+
+Note: Policy admins must include the original `owners` and `policy_admins` values unchanged.
 
 ### Policy Admin Follow List Whitelisting
 
@@ -1161,10 +1216,27 @@ When `policy_follow_whitelist_enabled` is `true`, the relay automatically grants
 
 ### Security Considerations
 
-- Only pubkeys listed in `policy_admins` can update the policy
-- Policy updates are validated before applying (invalid JSON or pubkeys are rejected)
-- Failed updates preserve the existing policy (no corruption)
-- All policy updates are logged for audit purposes
+- **Privilege separation**: Only owners can add/remove owners and policy admins
+- **Non-empty owners**: At least one owner must always exist to prevent lockout
+- **Protected fields**: Policy admins cannot escalate their privileges by modifying `owners`
+- **Blacklist override**: Policy admins can block bad actors even if owners allowed them
+- **Validation first**: Policy updates are validated before applying (invalid updates are rejected)
+- **Atomic updates**: Failed updates preserve the existing policy (no corruption)
+- **Audit logging**: All policy updates are logged with the submitter's pubkey
+
+### Error Messages
+
+Common validation errors:
+
+| Error | Cause |
+|-------|-------|
+| `owners list cannot be empty` | Owner tried to remove all owners |
+| `cannot modify the 'owners' field` | Policy admin tried to change owners |
+| `cannot modify the 'policy_admins' field` | Policy admin tried to change admins |
+| `cannot remove kind X from whitelist` | Policy admin tried to reduce permissions |
+| `cannot reduce size_limit for kind X` | Policy admin tried to make limits stricter |
+| `cannot blacklist owner X` | Policy admin tried to blacklist an owner |
+| `cannot blacklist policy admin X` | Policy admin tried to blacklist another admin |
 
 ## Testing the Policy System
 

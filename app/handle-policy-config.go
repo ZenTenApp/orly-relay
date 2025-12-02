@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/adrg/xdg"
-	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
@@ -16,11 +15,20 @@ import (
 )
 
 // HandlePolicyConfigUpdate processes kind 12345 policy configuration events.
-// Only policy admins can update policy configuration.
+// Owners and policy admins can update policy configuration, with different permissions:
+//
+// OWNERS can:
+//   - Modify all fields including owners and policy_admins
+//   - But owners list must remain non-empty (to prevent lockout)
+//
+// POLICY ADMINS can:
+//   - Extend rules (add to allow lists, add new kinds, add blacklists)
+//   - CANNOT modify owners or policy_admins (protected fields)
+//   - CANNOT reduce owner-granted permissions
 //
 // Process flow:
-// 1. Verify sender is policy admin (from current policy.policy_admins list)
-// 2. Parse and validate JSON FIRST (before making any changes)
+// 1. Check if sender is owner or policy admin
+// 2. Validate JSON with appropriate rules for the sender type
 // 3. Pause ALL message processing (lock mutex)
 // 4. Reload policy (pause policy engine, update, save, resume)
 // 5. Resume message processing (unlock mutex)
@@ -30,24 +38,40 @@ import (
 func (l *Listener) HandlePolicyConfigUpdate(ev *event.E) error {
 	log.I.F("received policy config update from pubkey: %s", hex.Enc(ev.Pubkey))
 
-	// 1. Verify sender is policy admin (from current policy.policy_admins list)
+	// 1. Verify sender is owner or policy admin
 	if l.policyManager == nil {
 		return fmt.Errorf("policy system is not enabled")
 	}
 
+	isOwner := l.policyManager.IsOwner(ev.Pubkey)
 	isAdmin := l.policyManager.IsPolicyAdmin(ev.Pubkey)
-	if !isAdmin {
-		log.W.F("policy config update rejected: pubkey %s is not a policy admin", hex.Enc(ev.Pubkey))
-		return fmt.Errorf("only policy administrators can update policy configuration")
+
+	if !isOwner && !isAdmin {
+		log.W.F("policy config update rejected: pubkey %s is not an owner or policy admin", hex.Enc(ev.Pubkey))
+		return fmt.Errorf("only owners and policy administrators can update policy configuration")
 	}
 
-	log.I.F("policy admin verified: %s", hex.Enc(ev.Pubkey))
+	if isOwner {
+		log.I.F("owner verified: %s", hex.Enc(ev.Pubkey))
+	} else {
+		log.I.F("policy admin verified: %s", hex.Enc(ev.Pubkey))
+	}
 
-	// 2. Parse and validate JSON FIRST (before making any changes)
+	// 2. Parse and validate JSON with appropriate validation rules
 	policyJSON := []byte(ev.Content)
-	if err := l.policyManager.ValidateJSON(policyJSON); chk.E(err) {
-		log.E.F("policy config update validation failed: %v", err)
-		return fmt.Errorf("invalid policy configuration: %v", err)
+	var validationErr error
+
+	if isOwner {
+		// Owners can modify all fields, but owners list must be non-empty
+		validationErr = l.policyManager.ValidateOwnerPolicyUpdate(policyJSON)
+	} else {
+		// Policy admins have restrictions: can't modify protected fields, can't reduce permissions
+		validationErr = l.policyManager.ValidatePolicyAdminUpdate(policyJSON, ev.Pubkey)
+	}
+
+	if validationErr != nil {
+		log.E.F("policy config update validation failed: %v", validationErr)
+		return fmt.Errorf("invalid policy configuration: %v", validationErr)
 	}
 
 	log.I.F("policy config validation passed")
@@ -65,12 +89,23 @@ func (l *Listener) HandlePolicyConfigUpdate(ev *event.E) error {
 
 	// 4. Reload policy (this will pause policy engine, update, save, and resume)
 	log.I.F("applying policy configuration update")
-	if err := l.policyManager.Reload(policyJSON, configPath); chk.E(err) {
-		log.E.F("policy config update failed: %v", err)
-		return fmt.Errorf("failed to apply policy configuration: %v", err)
+	var reloadErr error
+	if isOwner {
+		reloadErr = l.policyManager.ReloadAsOwner(policyJSON, configPath)
+	} else {
+		reloadErr = l.policyManager.ReloadAsPolicyAdmin(policyJSON, configPath, ev.Pubkey)
 	}
 
-	log.I.F("policy configuration updated successfully by admin: %s", hex.Enc(ev.Pubkey))
+	if reloadErr != nil {
+		log.E.F("policy config update failed: %v", reloadErr)
+		return fmt.Errorf("failed to apply policy configuration: %v", reloadErr)
+	}
+
+	if isOwner {
+		log.I.F("policy configuration updated successfully by owner: %s", hex.Enc(ev.Pubkey))
+	} else {
+		log.I.F("policy configuration updated successfully by policy admin: %s", hex.Enc(ev.Pubkey))
+	}
 
 	// 5. Message processing mutex will be unlocked by defer
 	return nil

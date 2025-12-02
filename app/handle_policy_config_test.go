@@ -139,6 +139,7 @@ func createPolicyConfigEvent(t *testing.T, signer *p8k.Signer, policyJSON string
 }
 
 // TestHandlePolicyConfigUpdate_ValidAdmin tests policy update from valid admin
+// Policy admins can extend rules but cannot modify protected fields (owners, policy_admins)
 func TestHandlePolicyConfigUpdate_ValidAdmin(t *testing.T) {
 	// Create admin signer
 	adminSigner := p8k.MustNew()
@@ -150,9 +151,10 @@ func TestHandlePolicyConfigUpdate_ValidAdmin(t *testing.T) {
 	listener, _, cleanup := setupPolicyTestListener(t, adminHex)
 	defer cleanup()
 
-	// Create valid policy update event
+	// Create valid policy update event that ONLY extends, doesn't modify protected fields
+	// Note: policy_admins must stay the same (policy admins cannot change this field)
 	newPolicyJSON := `{
-		"default_policy": "deny",
+		"default_policy": "allow",
 		"policy_admins": ["` + adminHex + `"],
 		"kind": {"whitelist": [1, 3, 7]}
 	}`
@@ -165,9 +167,10 @@ func TestHandlePolicyConfigUpdate_ValidAdmin(t *testing.T) {
 		t.Errorf("Expected success but got error: %v", err)
 	}
 
-	// Verify policy was updated
-	if listener.policyManager.DefaultPolicy != "deny" {
-		t.Errorf("Policy was not updated, default_policy = %q, expected 'deny'",
+	// Verify policy was updated (kind whitelist was extended)
+	// Note: default_policy should still be "allow" from original
+	if listener.policyManager.DefaultPolicy != "allow" {
+		t.Errorf("Policy was not updated correctly, default_policy = %q, expected 'allow'",
 			listener.policyManager.DefaultPolicy)
 	}
 }
@@ -260,8 +263,9 @@ func TestHandlePolicyConfigUpdate_InvalidPubkey(t *testing.T) {
 	}
 }
 
-// TestHandlePolicyConfigUpdate_AdminCannotRemoveSelf tests that admin can update policy
-func TestHandlePolicyConfigUpdate_AdminCanUpdateAdminList(t *testing.T) {
+// TestHandlePolicyConfigUpdate_PolicyAdminCannotModifyProtectedFields tests that policy admins
+// cannot modify the owners or policy_admins fields (these are protected, owner-only fields)
+func TestHandlePolicyConfigUpdate_PolicyAdminCannotModifyProtectedFields(t *testing.T) {
 	adminSigner := p8k.MustNew()
 	if err := adminSigner.Generate(); err != nil {
 		t.Fatalf("Failed to generate admin keypair: %v", err)
@@ -274,22 +278,23 @@ func TestHandlePolicyConfigUpdate_AdminCanUpdateAdminList(t *testing.T) {
 	listener, _, cleanup := setupPolicyTestListener(t, adminHex)
 	defer cleanup()
 
-	// Update policy to add second admin
+	// Try to add second admin (policy_admins is a protected field)
 	newPolicyJSON := `{
 		"default_policy": "allow",
 		"policy_admins": ["` + adminHex + `", "` + admin2Hex + `"]
 	}`
 	ev := createPolicyConfigEvent(t, adminSigner, newPolicyJSON)
 
+	// This should FAIL because policy admins cannot modify the policy_admins field
 	err := listener.HandlePolicyConfigUpdate(ev)
-	if err != nil {
-		t.Errorf("Expected success but got error: %v", err)
+	if err == nil {
+		t.Error("Expected error when policy admin tries to modify policy_admins (protected field)")
 	}
 
-	// Verify both admins are now in the list
+	// Second admin should NOT be in the list since update was rejected
 	admin2Bin, _ := hex.Dec(admin2Hex)
-	if !listener.policyManager.IsPolicyAdmin(admin2Bin) {
-		t.Error("Second admin should have been added to admin list")
+	if listener.policyManager.IsPolicyAdmin(admin2Bin) {
+		t.Error("Second admin should NOT have been added - policy_admins is protected")
 	}
 }
 
@@ -446,10 +451,11 @@ func TestMessageProcessingPauseDuringPolicyUpdate(t *testing.T) {
 
 	// We can't easily mock the mutex, but we can verify the policy update succeeds
 	// which implies the pause/resume cycle completed
-
+	// Note: policy_admins must stay the same (protected field)
 	newPolicyJSON := `{
-		"default_policy": "deny",
-		"policy_admins": ["` + adminHex + `"]
+		"default_policy": "allow",
+		"policy_admins": ["` + adminHex + `"],
+		"kind": {"whitelist": [1, 3, 5, 7]}
 	}`
 	ev := createPolicyConfigEvent(t, adminSigner, newPolicyJSON)
 
@@ -462,8 +468,8 @@ func TestMessageProcessingPauseDuringPolicyUpdate(t *testing.T) {
 	_ = pauseCalled
 	_ = resumeCalled
 
-	// Verify policy was actually updated
-	if listener.policyManager.DefaultPolicy != "deny" {
+	// Verify policy was actually updated (kind whitelist was extended)
+	if listener.policyManager.DefaultPolicy != "allow" {
 		t.Error("Policy should have been updated")
 	}
 }

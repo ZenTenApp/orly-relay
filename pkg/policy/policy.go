@@ -1766,6 +1766,8 @@ func (p *P) ValidateJSON(policyJSON []byte) error {
 		}
 	}
 
+	// Note: Owner-specific validation (non-empty owners) is done in ValidateOwnerPolicyUpdate
+
 	// Validate regex patterns in tag_validation rules and new fields
 	for kind, rule := range tempPolicy.rules {
 		for tagName, pattern := range rule.TagValidation {
@@ -2176,4 +2178,255 @@ func (p *P) GetRulesKinds() []int {
 		kinds = append(kinds, kind)
 	}
 	return kinds
+}
+
+// =============================================================================
+// Owner vs Policy Admin Update Validation
+// =============================================================================
+
+// ValidateOwnerPolicyUpdate validates a full policy update from an owner.
+// Owners can modify all fields but the owners list must be non-empty.
+func (p *P) ValidateOwnerPolicyUpdate(policyJSON []byte) error {
+	// First run standard validation
+	if err := p.ValidateJSON(policyJSON); err != nil {
+		return err
+	}
+
+	// Parse the new policy
+	tempPolicy := &P{}
+	if err := json.Unmarshal(policyJSON, tempPolicy); err != nil {
+		return fmt.Errorf("failed to parse policy JSON: %v", err)
+	}
+
+	// Owner-specific validation: owners list cannot be empty
+	if len(tempPolicy.Owners) == 0 {
+		return fmt.Errorf("owners list cannot be empty: at least one owner must be defined to prevent lockout")
+	}
+
+	return nil
+}
+
+// ValidatePolicyAdminUpdate validates a policy update from a policy admin.
+// Policy admins CANNOT modify: owners, policy_admins
+// Policy admins CAN: extend rules, add blacklists, add new kind rules
+func (p *P) ValidatePolicyAdminUpdate(policyJSON []byte, adminPubkey []byte) error {
+	// First run standard validation
+	if err := p.ValidateJSON(policyJSON); err != nil {
+		return err
+	}
+
+	// Parse the new policy
+	tempPolicy := &P{}
+	if err := json.Unmarshal(policyJSON, tempPolicy); err != nil {
+		return fmt.Errorf("failed to parse policy JSON: %v", err)
+	}
+
+	// Protected field check: owners must match current
+	if !stringSliceEqual(tempPolicy.Owners, p.Owners) {
+		return fmt.Errorf("policy admins cannot modify the 'owners' field: this is a protected field that only owners can change")
+	}
+
+	// Protected field check: policy_admins must match current
+	if !stringSliceEqual(tempPolicy.PolicyAdmins, p.PolicyAdmins) {
+		return fmt.Errorf("policy admins cannot modify the 'policy_admins' field: this is a protected field that only owners can change")
+	}
+
+	// Validate that the admin is not reducing owner-granted permissions
+	// This check ensures policy admins can only extend, not restrict
+	if err := p.validateNoPermissionReduction(tempPolicy); err != nil {
+		return fmt.Errorf("policy admins cannot reduce owner-granted permissions: %v", err)
+	}
+
+	return nil
+}
+
+// validateNoPermissionReduction checks that the new policy doesn't reduce
+// permissions that were granted in the current (owner) policy.
+//
+// Policy admins CAN:
+//   - ADD to allow lists (write_allow, read_allow)
+//   - ADD to deny lists (write_deny, read_deny) to blacklist non-admin users
+//   - INCREASE limits (size_limit, content_limit, max_age_of_event)
+//   - ADD new kinds to whitelist or blacklist
+//   - ADD new rules for kinds not defined by owner
+//
+// Policy admins CANNOT:
+//   - REMOVE from allow lists
+//   - DECREASE limits
+//   - REMOVE kinds from whitelist
+//   - REMOVE rules defined by owner
+//   - ADD new required tags (restrictions)
+//   - BLACKLIST owners or other policy admins
+func (p *P) validateNoPermissionReduction(newPolicy *P) error {
+	// Check kind whitelist - new policy must include all current whitelisted kinds
+	for _, kind := range p.Kind.Whitelist {
+		found := false
+		for _, newKind := range newPolicy.Kind.Whitelist {
+			if kind == newKind {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("cannot remove kind %d from whitelist", kind)
+		}
+	}
+
+	// Check each rule in the current policy
+	for kind, currentRule := range p.rules {
+		newRule, exists := newPolicy.rules[kind]
+		if !exists {
+			return fmt.Errorf("cannot remove rule for kind %d", kind)
+		}
+
+		// Check write_allow - new rule must include all current pubkeys
+		for _, pk := range currentRule.WriteAllow {
+			if !containsString(newRule.WriteAllow, pk) {
+				return fmt.Errorf("cannot remove pubkey %s from write_allow for kind %d", pk, kind)
+			}
+		}
+
+		// Check read_allow - new rule must include all current pubkeys
+		for _, pk := range currentRule.ReadAllow {
+			if !containsString(newRule.ReadAllow, pk) {
+				return fmt.Errorf("cannot remove pubkey %s from read_allow for kind %d", pk, kind)
+			}
+		}
+
+		// Check write_deny - cannot blacklist owners or policy admins
+		for _, pk := range newRule.WriteDeny {
+			if containsString(p.Owners, pk) {
+				return fmt.Errorf("cannot blacklist owner %s in write_deny for kind %d", pk, kind)
+			}
+			if containsString(p.PolicyAdmins, pk) {
+				return fmt.Errorf("cannot blacklist policy admin %s in write_deny for kind %d", pk, kind)
+			}
+		}
+
+		// Check read_deny - cannot blacklist owners or policy admins
+		for _, pk := range newRule.ReadDeny {
+			if containsString(p.Owners, pk) {
+				return fmt.Errorf("cannot blacklist owner %s in read_deny for kind %d", pk, kind)
+			}
+			if containsString(p.PolicyAdmins, pk) {
+				return fmt.Errorf("cannot blacklist policy admin %s in read_deny for kind %d", pk, kind)
+			}
+		}
+
+		// Check size limits - new limit cannot be smaller
+		if currentRule.SizeLimit != nil && newRule.SizeLimit != nil {
+			if *newRule.SizeLimit < *currentRule.SizeLimit {
+				return fmt.Errorf("cannot reduce size_limit for kind %d from %d to %d", kind, *currentRule.SizeLimit, *newRule.SizeLimit)
+			}
+		}
+
+		// Check content limits - new limit cannot be smaller
+		if currentRule.ContentLimit != nil && newRule.ContentLimit != nil {
+			if *newRule.ContentLimit < *currentRule.ContentLimit {
+				return fmt.Errorf("cannot reduce content_limit for kind %d from %d to %d", kind, *currentRule.ContentLimit, *newRule.ContentLimit)
+			}
+		}
+
+		// Check max_age_of_event - new limit cannot be smaller (smaller = more restrictive)
+		if currentRule.MaxAgeOfEvent != nil && newRule.MaxAgeOfEvent != nil {
+			if *newRule.MaxAgeOfEvent < *currentRule.MaxAgeOfEvent {
+				return fmt.Errorf("cannot reduce max_age_of_event for kind %d from %d to %d", kind, *currentRule.MaxAgeOfEvent, *newRule.MaxAgeOfEvent)
+			}
+		}
+
+		// Check must_have_tags - cannot add new required tags (more restrictive)
+		for _, tag := range newRule.MustHaveTags {
+			found := false
+			for _, currentTag := range currentRule.MustHaveTags {
+				if tag == currentTag {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("cannot add required tag %q for kind %d (only owners can add restrictions)", tag, kind)
+			}
+		}
+	}
+
+	// Check global rule write_deny - cannot blacklist owners or policy admins
+	for _, pk := range newPolicy.Global.WriteDeny {
+		if containsString(p.Owners, pk) {
+			return fmt.Errorf("cannot blacklist owner %s in global write_deny", pk)
+		}
+		if containsString(p.PolicyAdmins, pk) {
+			return fmt.Errorf("cannot blacklist policy admin %s in global write_deny", pk)
+		}
+	}
+
+	// Check global rule read_deny - cannot blacklist owners or policy admins
+	for _, pk := range newPolicy.Global.ReadDeny {
+		if containsString(p.Owners, pk) {
+			return fmt.Errorf("cannot blacklist owner %s in global read_deny", pk)
+		}
+		if containsString(p.PolicyAdmins, pk) {
+			return fmt.Errorf("cannot blacklist policy admin %s in global read_deny", pk)
+		}
+	}
+
+	// Check global rule size limits
+	if p.Global.SizeLimit != nil && newPolicy.Global.SizeLimit != nil {
+		if *newPolicy.Global.SizeLimit < *p.Global.SizeLimit {
+			return fmt.Errorf("cannot reduce global size_limit from %d to %d", *p.Global.SizeLimit, *newPolicy.Global.SizeLimit)
+		}
+	}
+
+	return nil
+}
+
+// ReloadAsOwner reloads the policy from an owner's kind 12345 event.
+// Owners can modify all fields but the owners list must be non-empty.
+func (p *P) ReloadAsOwner(policyJSON []byte, configPath string) error {
+	// Validate as owner update
+	if err := p.ValidateOwnerPolicyUpdate(policyJSON); err != nil {
+		return fmt.Errorf("owner policy validation failed: %v", err)
+	}
+
+	// Use existing Reload logic
+	return p.Reload(policyJSON, configPath)
+}
+
+// ReloadAsPolicyAdmin reloads the policy from a policy admin's kind 12345 event.
+// Policy admins cannot modify protected fields (owners, policy_admins) and
+// cannot reduce owner-granted permissions.
+func (p *P) ReloadAsPolicyAdmin(policyJSON []byte, configPath string, adminPubkey []byte) error {
+	// Validate as policy admin update
+	if err := p.ValidatePolicyAdminUpdate(policyJSON, adminPubkey); err != nil {
+		return fmt.Errorf("policy admin validation failed: %v", err)
+	}
+
+	// Use existing Reload logic
+	return p.Reload(policyJSON, configPath)
+}
+
+// stringSliceEqual checks if two string slices are equal (order-independent).
+func stringSliceEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	// Create maps for comparison
+	aMap := make(map[string]int)
+	for _, v := range a {
+		aMap[v]++
+	}
+
+	bMap := make(map[string]int)
+	for _, v := range b {
+		bMap[v]++
+	}
+
+	// Compare maps
+	for k, v := range aMap {
+		if bMap[k] != v {
+			return false
+		}
+	}
+
+	return true
 }

@@ -37,7 +37,7 @@ func TestKind3TagRoundTrip(t *testing.T) {
 	// Verify all tags have key "p"
 	pTagCount := 0
 	for _, tg := range *ev1.Tags {
-		if tag != nil && tag.Len() >= 2 {
+		if tg != nil && tg.Len() >= 2 {
 			key := tg.Key()
 			if len(key) == 1 && key[0] == 'p' {
 				pTagCount++
@@ -63,7 +63,7 @@ func TestKind3TagRoundTrip(t *testing.T) {
 	// Verify all tags still have key "p"
 	pTagCount2 := 0
 	for _, tg := range *ev2.Tags {
-		if tag != nil && tag.Len() >= 2 {
+		if tg != nil && tg.Len() >= 2 {
 			key := tg.Key()
 			if len(key) == 1 && key[0] == 'p' {
 				pTagCount2++
