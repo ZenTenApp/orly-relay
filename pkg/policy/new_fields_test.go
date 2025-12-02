@@ -1072,6 +1072,94 @@ func TestNewFieldsInGlobalRule(t *testing.T) {
 }
 
 // =============================================================================
+// New() Validation Tests - Ensures invalid configs fail at load time
+// =============================================================================
+
+// TestNewRejectsInvalidMaxExpiryDuration verifies that New() fails fast when
+// given an invalid max_expiry_duration format like "T10M" instead of "PT10M".
+// This prevents silent failures where constraints are ignored.
+func TestNewRejectsInvalidMaxExpiryDuration(t *testing.T) {
+	tests := []struct {
+		name        string
+		json        string
+		expectError bool
+		errorMatch  string
+	}{
+		{
+			name: "valid PT10M format accepted",
+			json: `{
+				"rules": {
+					"4": {"max_expiry_duration": "PT10M"}
+				}
+			}`,
+			expectError: false,
+		},
+		{
+			name: "invalid T10M format (missing P prefix) rejected",
+			json: `{
+				"rules": {
+					"4": {"max_expiry_duration": "T10M"}
+				}
+			}`,
+			expectError: true,
+			errorMatch:  "max_expiry_duration",
+		},
+		{
+			name: "invalid 10M format (missing PT prefix) rejected",
+			json: `{
+				"rules": {
+					"4": {"max_expiry_duration": "10M"}
+				}
+			}`,
+			expectError: true,
+			errorMatch:  "max_expiry_duration",
+		},
+		{
+			name: "valid P7D format accepted",
+			json: `{
+				"rules": {
+					"1": {"max_expiry_duration": "P7D"}
+				}
+			}`,
+			expectError: false,
+		},
+		{
+			name: "invalid 7D format (missing P prefix) rejected",
+			json: `{
+				"rules": {
+					"1": {"max_expiry_duration": "7D"}
+				}
+			}`,
+			expectError: true,
+			errorMatch:  "max_expiry_duration",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			policy, err := New([]byte(tt.json))
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("New() should have rejected invalid config, but returned policy: %+v", policy)
+					return
+				}
+				if tt.errorMatch != "" && !contains(err.Error(), tt.errorMatch) {
+					t.Errorf("Error %q should contain %q", err.Error(), tt.errorMatch)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("New() unexpected error for valid config: %v", err)
+				}
+				if policy == nil {
+					t.Error("New() returned nil policy for valid config")
+				}
+			}
+		})
+	}
+}
+
+// =============================================================================
 // ValidateJSON Tests for New Fields
 // =============================================================================
 

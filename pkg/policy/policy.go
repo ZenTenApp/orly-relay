@@ -468,11 +468,19 @@ func (p *P) UnmarshalJSON(data []byte) error {
 // New creates a new policy from JSON configuration.
 // If policyJSON is empty, returns a policy with default settings.
 // The default_policy field defaults to "allow" if not specified.
+// Returns an error if the policy JSON contains invalid values (e.g., invalid
+// ISO-8601 duration format for max_expiry_duration, invalid regex patterns, etc.).
 func New(policyJSON []byte) (p *P, err error) {
 	p = &P{
 		DefaultPolicy: "allow", // Set default value
 	}
 	if len(policyJSON) > 0 {
+		// Validate JSON before loading to fail fast on invalid configurations.
+		// This prevents silent failures where invalid values (like "T10M" instead
+		// of "PT10M" for max_expiry_duration) are ignored and constraints don't apply.
+		if err = p.ValidateJSON(policyJSON); err != nil {
+			return nil, fmt.Errorf("policy validation failed: %v", err)
+		}
 		if err = json.Unmarshal(policyJSON, p); chk.E(err) {
 			return nil, fmt.Errorf("failed to unmarshal policy JSON: %v", err)
 		}
@@ -1784,7 +1792,7 @@ func (p *P) ValidateJSON(policyJSON []byte) error {
 		// Validate MaxExpiryDuration format
 		if rule.MaxExpiryDuration != "" {
 			if _, err := parseDuration(rule.MaxExpiryDuration); err != nil {
-				return fmt.Errorf("invalid max_expiry_duration %q in kind %d: %v", rule.MaxExpiryDuration, kind, err)
+				return fmt.Errorf("invalid max_expiry_duration %q in kind %d: %v (format must be ISO-8601 duration, e.g. \"PT10M\" for 10 minutes, \"P7D\" for 7 days, \"P1DT12H\" for 1 day 12 hours)", rule.MaxExpiryDuration, kind, err)
 			}
 		}
 		// Validate FollowsWhitelistAdmins pubkeys
@@ -1815,7 +1823,7 @@ func (p *P) ValidateJSON(policyJSON []byte) error {
 	// Validate global rule MaxExpiryDuration format
 	if tempPolicy.Global.MaxExpiryDuration != "" {
 		if _, err := parseDuration(tempPolicy.Global.MaxExpiryDuration); err != nil {
-			return fmt.Errorf("invalid max_expiry_duration %q in global rule: %v", tempPolicy.Global.MaxExpiryDuration, err)
+			return fmt.Errorf("invalid max_expiry_duration %q in global rule: %v (format must be ISO-8601 duration, e.g. \"PT10M\" for 10 minutes, \"P7D\" for 7 days, \"P1DT12H\" for 1 day 12 hours)", tempPolicy.Global.MaxExpiryDuration, err)
 		}
 	}
 
