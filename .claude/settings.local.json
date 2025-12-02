@@ -153,7 +153,9 @@
       "Bash(git check-ignore:*)",
       "Bash(git commit:*)",
       "WebFetch(domain:www.npmjs.com)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:hal.science)"
     ],
     "deny": [],
     "ask": []
