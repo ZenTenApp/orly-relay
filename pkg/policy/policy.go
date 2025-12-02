@@ -1280,7 +1280,8 @@ func (p *P) checkRulePolicy(
 	}
 
 	// Check required tags
-	if len(rule.MustHaveTags) > 0 {
+	// Only apply for write access - we validate what goes in, not what comes out
+	if access == "write" && len(rule.MustHaveTags) > 0 {
 		for _, requiredTag := range rule.MustHaveTags {
 			if ev.Tags.GetFirst([]byte(requiredTag)) == nil {
 				return false, nil
@@ -1289,7 +1290,8 @@ func (p *P) checkRulePolicy(
 	}
 
 	// Check expiry time (uses maxExpirySeconds which is parsed from MaxExpiryDuration or MaxExpiry)
-	if rule.maxExpirySeconds != nil && *rule.maxExpirySeconds > 0 {
+	// Only apply for write access - we validate what goes in, not what comes out
+	if access == "write" && rule.maxExpirySeconds != nil && *rule.maxExpirySeconds > 0 {
 		expiryTag := ev.Tags.GetFirst([]byte("expiration"))
 		if expiryTag == nil {
 			return false, nil // Must have expiry if max_expiry is set
@@ -1302,7 +1304,7 @@ func (p *P) checkRulePolicy(
 			return false, nil // Invalid expiry format
 		}
 		maxAllowedExpiry := ev.CreatedAt + *rule.maxExpirySeconds
-		if expiryTs > maxAllowedExpiry {
+		if expiryTs >= maxAllowedExpiry {
 			log.D.F("expiration %d exceeds max allowed %d (created_at %d + max_expiry %d)",
 				expiryTs, maxAllowedExpiry, ev.CreatedAt, *rule.maxExpirySeconds)
 			return false, nil // Expiry too far in the future
@@ -1310,7 +1312,8 @@ func (p *P) checkRulePolicy(
 	}
 
 	// Check ProtectedRequired (NIP-70: events must have "-" tag)
-	if rule.ProtectedRequired {
+	// Only apply for write access - we validate what goes in, not what comes out
+	if access == "write" && rule.ProtectedRequired {
 		protectedTag := ev.Tags.GetFirst([]byte("-"))
 		if protectedTag == nil {
 			log.D.F("protected_required: event missing '-' tag (NIP-70)")
@@ -1319,7 +1322,8 @@ func (p *P) checkRulePolicy(
 	}
 
 	// Check IdentifierRegex (validates "d" tag values)
-	if rule.identifierRegexCache != nil {
+	// Only apply for write access - we validate what goes in, not what comes out
+	if access == "write" && rule.identifierRegexCache != nil {
 		dTags := ev.Tags.GetAll([]byte("d"))
 		if len(dTags) == 0 {
 			log.D.F("identifier_regex: event missing 'd' tag")
@@ -1336,7 +1340,8 @@ func (p *P) checkRulePolicy(
 	}
 
 	// Check MaxAgeOfEvent (maximum age of event in seconds)
-	if rule.MaxAgeOfEvent != nil && *rule.MaxAgeOfEvent > 0 {
+	// Only apply for write access - we validate what goes in, not what comes out
+	if access == "write" && rule.MaxAgeOfEvent != nil && *rule.MaxAgeOfEvent > 0 {
 		currentTime := time.Now().Unix()
 		maxAllowedTime := currentTime - *rule.MaxAgeOfEvent
 		if ev.CreatedAt < maxAllowedTime {
@@ -1345,7 +1350,8 @@ func (p *P) checkRulePolicy(
 	}
 
 	// Check MaxAgeEventInFuture (maximum time event can be in the future in seconds)
-	if rule.MaxAgeEventInFuture != nil && *rule.MaxAgeEventInFuture > 0 {
+	// Only apply for write access - we validate what goes in, not what comes out
+	if access == "write" && rule.MaxAgeEventInFuture != nil && *rule.MaxAgeEventInFuture > 0 {
 		currentTime := time.Now().Unix()
 		maxFutureTime := currentTime + *rule.MaxAgeEventInFuture
 		if ev.CreatedAt > maxFutureTime {

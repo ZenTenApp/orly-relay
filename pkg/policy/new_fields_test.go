@@ -113,11 +113,11 @@ func TestMaxExpiryDuration(t *testing.T) {
 			expectAllow:       true,
 		},
 		{
-			name:              "valid expiry at exact limit",
+			name:              "expiry at exact limit rejected",
 			maxExpiryDuration: "PT1H",
-			eventExpiry:       3600, // exactly 1 hour
+			eventExpiry:       3600, // exactly 1 hour - >= means this is rejected
 			hasExpiryTag:      true,
-			expectAllow:       true,
+			expectAllow:       false,
 		},
 		{
 			name:              "expiry exceeds limit",
@@ -232,6 +232,79 @@ func TestMaxExpiryDurationPrecedence(t *testing.T) {
 
 	if !allowed {
 		t.Error("MaxExpiryDuration should take precedence over MaxExpiry; expected allow")
+	}
+}
+
+// Test that max_expiry_duration only applies to writes, not reads
+func TestMaxExpiryDurationWriteOnly(t *testing.T) {
+	signer, pubkey := generateTestKeypair(t)
+
+	// Policy with strict max_expiry_duration
+	policyJSON := []byte(`{
+		"default_policy": "allow",
+		"rules": {
+			"4": {
+				"description": "DM events with expiry",
+				"max_expiry_duration": "PT10M",
+				"privileged": true
+			}
+		}
+	}`)
+
+	policy, err := New(policyJSON)
+	if err != nil {
+		t.Fatalf("Failed to create policy: %v", err)
+	}
+
+	// Create event WITHOUT an expiry tag - this would fail write validation
+	// but should still be readable
+	ev := createTestEventForNewFields(t, signer, "test DM", 4)
+	if err := ev.Sign(signer); chk.E(err) {
+		t.Fatalf("Failed to sign: %v", err)
+	}
+
+	// Write should fail (no expiry tag when max_expiry_duration is set)
+	allowed, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CheckPolicy write error: %v", err)
+	}
+	if allowed {
+		t.Error("Write should be denied for event without expiry tag when max_expiry_duration is set")
+	}
+
+	// Read should succeed (validation constraints don't apply to reads)
+	allowed, err = policy.CheckPolicy("read", ev, pubkey, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CheckPolicy read error: %v", err)
+	}
+	if !allowed {
+		t.Error("Read should be allowed - max_expiry_duration is write-only validation")
+	}
+
+	// Also test with an event that has expiry exceeding the limit
+	ev2 := createTestEventForNewFields(t, signer, "test DM 2", 4)
+	expiryTs := ev2.CreatedAt + 7200 // 2 hours - exceeds 10 minute limit
+	addTagString(ev2, "expiration", int64ToString(expiryTs))
+	if err := ev2.Sign(signer); chk.E(err) {
+		t.Fatalf("Failed to sign: %v", err)
+	}
+
+	// Write should fail (expiry exceeds limit)
+	allowed, err = policy.CheckPolicy("write", ev2, pubkey, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CheckPolicy write error: %v", err)
+	}
+	if allowed {
+		t.Error("Write should be denied for event with expiry exceeding max_expiry_duration")
+	}
+
+	// Read should still succeed
+	allowed, err = policy.CheckPolicy("read", ev2, pubkey, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CheckPolicy read error: %v", err)
+	}
+	if !allowed {
+		t.Error("Read should be allowed - max_expiry_duration is write-only validation")
 	}
 }
 
