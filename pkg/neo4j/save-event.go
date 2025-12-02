@@ -134,6 +134,10 @@ CREATE (e)-[:AUTHORED_BY]->(a)
 	eTagIndex := 0
 	pTagIndex := 0
 
+	// Track if we need to add WITH clause before OPTIONAL MATCH
+	// This is required because Cypher doesn't allow MATCH after CREATE without WITH
+	needsWithClause := true
+
 	// Only process tags if they exist
 	if ev.Tags != nil {
 		for _, tagItem := range *ev.Tags {
@@ -149,6 +153,15 @@ CREATE (e)-[:AUTHORED_BY]->(a)
 				// Create reference to another event (if it exists)
 				paramName := fmt.Sprintf("eTag_%d", eTagIndex)
 				params[paramName] = tagValue
+
+				// Add WITH clause before first OPTIONAL MATCH to transition from CREATE to MATCH
+				if needsWithClause {
+					cypher += `
+// Carry forward event and author nodes for tag processing
+WITH e, a
+`
+					needsWithClause = false
+				}
 
 				cypher += fmt.Sprintf(`
 // Reference to event (e-tag)
