@@ -8,11 +8,12 @@ ORLY is a high-performance Nostr relay written in Go, designed for personal rela
 
 **Key Technologies:**
 - **Language**: Go 1.25.3+
-- **Database**: Badger v4 (embedded key-value store) or DGraph (distributed graph database)
+- **Database**: Badger v4 (embedded), DGraph (distributed graph), or Neo4j (social graph)
 - **Cryptography**: Custom p8k library using purego for secp256k1 operations (no CGO)
 - **Web UI**: Svelte frontend embedded in the binary
 - **WebSocket**: gorilla/websocket for Nostr protocol
 - **Performance**: SIMD-accelerated SHA256 and hex encoding, query result caching with zstd compression
+- **Social Graph**: Neo4j backend with Web of Trust (WoT) extensions for trust metrics
 
 ## Build Commands
 
@@ -158,6 +159,19 @@ export ORLY_QUERY_CACHE_MAX_AGE=5m       # Cache expiry time
 export ORLY_DB_BLOCK_CACHE_MB=512        # Block cache size
 export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
 export ORLY_INLINE_EVENT_THRESHOLD=1024  # Inline storage threshold (bytes)
+
+# Directory Spider (metadata sync from other relays)
+export ORLY_DIRECTORY_SPIDER=true        # Enable directory spider
+export ORLY_DIRECTORY_SPIDER_INTERVAL=24h # How often to run
+export ORLY_DIRECTORY_SPIDER_HOPS=3      # Max hops for relay discovery
+
+# NIP-43 Relay Access Metadata
+export ORLY_NIP43_ENABLED=true           # Enable invite system
+export ORLY_NIP43_INVITE_EXPIRY=24h      # Invite code validity
+
+# Authentication modes
+export ORLY_AUTH_REQUIRED=false          # Require auth for all requests
+export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
 ```
 
 ## Code Architecture
@@ -185,7 +199,7 @@ export ORLY_INLINE_EVENT_THRESHOLD=1024  # Inline storage threshold (bytes)
 
 **`pkg/database/`** - Database abstraction layer with multiple backend support
 - `interface.go` - Database interface definition for pluggable backends
-- `factory.go` - Database backend selection (Badger or DGraph)
+- `factory.go` - Database backend selection (Badger, DGraph, or Neo4j)
 - `database.go` - Badger implementation with cache tuning and query cache
 - `save-event.go` - Event storage with index updates
 - `query-events.go` - Main query execution engine with filter normalization
@@ -195,6 +209,15 @@ export ORLY_INLINE_EVENT_THRESHOLD=1024  # Inline storage threshold (bytes)
 - `subscriptions.go` - Active subscription tracking
 - `identity.go` - Relay identity key management
 - `migrations.go` - Database schema migration runner
+
+**`pkg/neo4j/`** - Neo4j graph database backend with social graph support
+- `neo4j.go` - Main database implementation
+- `schema.go` - Graph schema and index definitions (includes WoT extensions)
+- `query-events.go` - REQ filter to Cypher translation
+- `save-event.go` - Event storage with relationship creation
+- `social-event-processor.go` - Processes kinds 0, 3, 1984, 10000 for social graph
+- `WOT_SPEC.md` - Web of Trust data model specification (NostrUser nodes, trust metrics)
+- `MODIFYING_SCHEMA.md` - Guide for schema modifications
 
 **`pkg/protocol/`** - Nostr protocol implementation
 - `ws/` - WebSocket message framing and parsing
@@ -231,6 +254,9 @@ export ORLY_INLINE_EVENT_THRESHOLD=1024  # Inline storage threshold (bytes)
 **`pkg/policy/`** - Event filtering and validation policies
 - Policy configuration loaded from `~/.config/ORLY/policy.json`
 - Per-kind size limits, age restrictions, custom scripts
+- **Write-Only Validation**: Size, age, tag, and expiry validations apply ONLY to write operations
+- **Read-Only Filtering**: `read_allow`, `read_deny`, `privileged` apply ONLY to read operations
+- See `docs/POLICY_CONFIGURATION_REFERENCE.md` for authoritative read vs write applicability
 - **Dynamic Policy Hot Reload via Kind 12345 Events:**
   - Policy admins can update policy configuration without relay restart
   - Kind 12345 events contain JSON policy in content field
@@ -239,12 +265,16 @@ export ORLY_INLINE_EVENT_THRESHOLD=1024  # Inline storage threshold (bytes)
   - Policy admin follow lists (kind 3) trigger immediate cache refresh
   - `WriteAllowFollows` rule grants both read+write access to admin follows
   - Tag validation supports regex patterns per tag type
-- **New Policy Rule Fields:**
+- **Policy Rule Fields:**
   - `max_expiry_duration`: ISO-8601 duration format (e.g., "P7D", "PT1H30M") for event expiry limits
   - `protected_required`: Requires NIP-70 protected events (must have "-" tag)
   - `identifier_regex`: Regex pattern for validating "d" tag identifiers
   - `follows_whitelist_admins`: Per-rule admin pubkeys whose follows are whitelisted
+  - `write_allow` / `write_deny`: Pubkey whitelist/blacklist for writing (write-only)
+  - `read_allow` / `read_deny`: Pubkey whitelist/blacklist for reading (read-only)
+  - `privileged`: Party-involved access control (read-only)
 - See `docs/POLICY_USAGE_GUIDE.md` for configuration examples
+- See `pkg/policy/README.md` for quick reference
 
 **`pkg/sync/`** - Distributed synchronization
 - `cluster_manager.go` - Active replication between relay peers
@@ -254,6 +284,12 @@ export ORLY_INLINE_EVENT_THRESHOLD=1024  # Inline storage threshold (bytes)
 **`pkg/spider/`** - Event syncing from other relays
 - `spider.go` - Spider manager for "follows" mode
 - Fetches events from admin relays for followed pubkeys
+- **Directory Spider** (`directory.go`):
+  - Discovers relays by crawling kind 10002 (relay list) events
+  - Expands outward from seed pubkeys (whitelisted users) via hop distance
+  - Fetches metadata events (kinds 0, 3, 10000, 10002) from discovered relays
+  - Self-detection prevents querying own relay
+  - Configurable interval and max hops via `ORLY_DIRECTORY_SPIDER_*` env vars
 
 **`pkg/utils/`** - Shared utilities
 - `atomic/` - Extended atomic operations
@@ -287,6 +323,11 @@ export ORLY_INLINE_EVENT_THRESHOLD=1024  # Inline storage threshold (bytes)
 - Supports multiple backends via `ORLY_DB_TYPE` environment variable
 - **Badger** (default): Embedded key-value store with custom indexing, ideal for single-instance deployments
 - **DGraph**: Distributed graph database for larger, multi-node deployments
+- **Neo4j**: Graph database with social graph and Web of Trust (WoT) extensions
+  - Processes kinds 0 (profile), 3 (contacts), 1984 (reports), 10000 (mute list) for social graph
+  - NostrUser nodes with trust metrics (influence, PageRank)
+  - FOLLOWS, MUTES, REPORTS relationships for WoT analysis
+  - See `pkg/neo4j/WOT_SPEC.md` for full schema specification
 - Backend selected via factory pattern in `pkg/database/factory.go`
 - All backends implement the same `Database` interface defined in `pkg/database/interface.go`
 
@@ -538,3 +579,52 @@ Files modified:
    ```
 3. GitHub Actions workflow builds binaries for multiple platforms
 4. Release created automatically with binaries and checksums
+
+## Recent Features (v0.31.x)
+
+### Directory Spider
+The directory spider (`pkg/spider/directory.go`) automatically discovers and syncs metadata from other relays:
+- Crawls kind 10002 (relay list) events to discover relays
+- Expands outward from seed pubkeys (whitelisted users) via configurable hop distance
+- Fetches essential metadata events (kinds 0, 3, 10000, 10002)
+- Self-detection prevents querying own relay
+- Enable with `ORLY_DIRECTORY_SPIDER=true`
+
+### Neo4j Social Graph Backend
+The Neo4j backend (`pkg/neo4j/`) includes Web of Trust (WoT) extensions:
+- **Social Event Processor**: Handles kinds 0, 3, 1984, 10000 for social graph management
+- **NostrUser nodes**: Store profile data and trust metrics (influence, PageRank)
+- **Relationships**: FOLLOWS, MUTES, REPORTS for social graph analysis
+- **WoT Schema**: See `pkg/neo4j/WOT_SPEC.md` for full specification
+- **Schema Modifications**: See `pkg/neo4j/MODIFYING_SCHEMA.md` for how to update
+
+### Policy System Enhancements
+- **Write-Only Validation**: Size, age, tag validations apply ONLY to writes
+- **Read-Only Filtering**: `read_allow`, `read_deny`, `privileged` apply ONLY to reads
+- **Scripts**: Policy scripts execute ONLY for write operations
+- **Reference Documentation**: `docs/POLICY_CONFIGURATION_REFERENCE.md` provides authoritative read vs write applicability
+- See also: `pkg/policy/README.md` for quick reference
+
+### Authentication Modes
+- `ORLY_AUTH_REQUIRED=true`: Require authentication for ALL requests
+- `ORLY_AUTH_TO_WRITE=true`: Require authentication only for writes (allow anonymous reads)
+
+### NIP-43 Relay Access Metadata
+Invite-based access control system:
+- `ORLY_NIP43_ENABLED=true`: Enable invite system
+- Publishes kind 8000/8001 events for member changes
+- Publishes kind 13534 membership list events
+- Configurable invite expiry via `ORLY_NIP43_INVITE_EXPIRY`
+
+## Documentation Index
+
+| Document | Purpose |
+|----------|---------|
+| `docs/POLICY_CONFIGURATION_REFERENCE.md` | Authoritative policy config reference with read/write applicability |
+| `docs/POLICY_USAGE_GUIDE.md` | Comprehensive policy system user guide |
+| `pkg/policy/README.md` | Policy system quick reference |
+| `pkg/neo4j/README.md` | Neo4j backend overview |
+| `pkg/neo4j/WOT_SPEC.md` | Web of Trust schema specification |
+| `pkg/neo4j/MODIFYING_SCHEMA.md` | How to modify Neo4j schema |
+| `pkg/neo4j/TESTING.md` | Neo4j testing guide |
+| `readme.adoc` | Project README with feature overview |
