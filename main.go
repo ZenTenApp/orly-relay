@@ -42,8 +42,8 @@ func main() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		var db database.Database
-		if db, err = database.NewDatabase(
-			ctx, cancel, cfg.DBType, cfg.DataDir, cfg.DBLogLevel,
+		if db, err = database.NewDatabaseWithConfig(
+			ctx, cancel, cfg.DBType, makeDatabaseConfig(cfg),
 		); chk.E(err) {
 			os.Exit(1)
 		}
@@ -318,8 +318,8 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	var db database.Database
 	log.I.F("initializing %s database at %s", cfg.DBType, cfg.DataDir)
-	if db, err = database.NewDatabase(
-		ctx, cancel, cfg.DBType, cfg.DataDir, cfg.DBLogLevel,
+	if db, err = database.NewDatabaseWithConfig(
+		ctx, cancel, cfg.DBType, makeDatabaseConfig(cfg),
 	); chk.E(err) {
 		os.Exit(1)
 	}
@@ -429,4 +429,29 @@ func main() {
 		}
 	}
 	// log.I.F("exiting")
+}
+
+// makeDatabaseConfig creates a database.DatabaseConfig from the app config.
+// This helper function extracts all database-specific configuration values
+// and constructs the appropriate struct for the database package.
+func makeDatabaseConfig(cfg *config.C) *database.DatabaseConfig {
+	dataDir, logLevel,
+		blockCacheMB, indexCacheMB, queryCacheSizeMB,
+		queryCacheMaxAge,
+		inlineEventThreshold,
+		dgraphURL, neo4jURI, neo4jUser, neo4jPassword := cfg.GetDatabaseConfigValues()
+
+	return &database.DatabaseConfig{
+		DataDir:              dataDir,
+		LogLevel:             logLevel,
+		BlockCacheMB:         blockCacheMB,
+		IndexCacheMB:         indexCacheMB,
+		QueryCacheSizeMB:     queryCacheSizeMB,
+		QueryCacheMaxAge:     queryCacheMaxAge,
+		InlineEventThreshold: inlineEventThreshold,
+		DgraphURL:            dgraphURL,
+		Neo4jURI:             neo4jURI,
+		Neo4jUser:            neo4jUser,
+		Neo4jPassword:        neo4jPassword,
+	}
 }

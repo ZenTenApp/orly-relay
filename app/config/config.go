@@ -1,5 +1,13 @@
 // Package config provides a go-simpler.org/env configuration table and helpers
 // for working with the list of key/value lists stored in .env files.
+//
+// IMPORTANT: This file is the SINGLE SOURCE OF TRUTH for all environment variables.
+// All configuration options MUST be defined here with proper `env` struct tags.
+// Never use os.Getenv() directly in other packages - pass configuration via structs.
+// This ensures all options appear in `./orly help` output and are documented.
+//
+// For database backends, use GetDatabaseConfigValues() to extract database-specific
+// settings, then construct a database.DatabaseConfig in the caller (e.g., main.go).
 package config
 
 import (
@@ -82,10 +90,18 @@ type C struct {
 	NIP43InviteExpiry     time.Duration `env:"ORLY_NIP43_INVITE_EXPIRY" default:"24h" usage:"how long invite codes remain valid"`
 
 	// Database configuration
-	DBType             string `env:"ORLY_DB_TYPE" default:"badger" usage:"database backend to use: badger or dgraph"`
+	DBType             string `env:"ORLY_DB_TYPE" default:"badger" usage:"database backend to use: badger, dgraph, or neo4j"`
 	DgraphURL          string `env:"ORLY_DGRAPH_URL" default:"localhost:9080" usage:"dgraph gRPC endpoint address (only used when ORLY_DB_TYPE=dgraph)"`
 	QueryCacheSizeMB   int    `env:"ORLY_QUERY_CACHE_SIZE_MB" default:"512" usage:"query cache size in MB (caches database query results for faster REQ responses)"`
 	QueryCacheMaxAge   string `env:"ORLY_QUERY_CACHE_MAX_AGE" default:"5m" usage:"maximum age for cached query results (e.g., 5m, 10m, 1h)"`
+
+	// Neo4j configuration (only used when ORLY_DB_TYPE=neo4j)
+	Neo4jURI      string `env:"ORLY_NEO4J_URI" default:"bolt://localhost:7687" usage:"Neo4j bolt URI (only used when ORLY_DB_TYPE=neo4j)"`
+	Neo4jUser     string `env:"ORLY_NEO4J_USER" default:"neo4j" usage:"Neo4j authentication username (only used when ORLY_DB_TYPE=neo4j)"`
+	Neo4jPassword string `env:"ORLY_NEO4J_PASSWORD" default:"password" usage:"Neo4j authentication password (only used when ORLY_DB_TYPE=neo4j)"`
+
+	// Advanced database tuning
+	InlineEventThreshold int `env:"ORLY_INLINE_EVENT_THRESHOLD" default:"1024" usage:"size threshold in bytes for inline event storage in Badger (0 to disable, typical values: 384-1024)"`
 
 	// TLS configuration
 	TLSDomains []string `env:"ORLY_TLS_DOMAINS" usage:"comma-separated list of domains to respond to for TLS"`
@@ -368,4 +384,29 @@ func PrintHelp(cfg *C, printer io.Writer) {
 	fmt.Fprintf(printer, "\ncurrent configuration:\n\n")
 	PrintEnv(cfg, printer)
 	fmt.Fprintln(printer)
+}
+
+// GetDatabaseConfigValues returns the database configuration values as individual fields.
+// This avoids circular imports with pkg/database while allowing main.go to construct
+// a database.DatabaseConfig with the correct type.
+func (cfg *C) GetDatabaseConfigValues() (
+	dataDir, logLevel string,
+	blockCacheMB, indexCacheMB, queryCacheSizeMB int,
+	queryCacheMaxAge time.Duration,
+	inlineEventThreshold int,
+	dgraphURL, neo4jURI, neo4jUser, neo4jPassword string,
+) {
+	// Parse query cache max age from string to duration
+	queryCacheMaxAge = 5 * time.Minute // Default
+	if cfg.QueryCacheMaxAge != "" {
+		if duration, err := time.ParseDuration(cfg.QueryCacheMaxAge); err == nil {
+			queryCacheMaxAge = duration
+		}
+	}
+
+	return cfg.DataDir, cfg.DBLogLevel,
+		cfg.DBBlockCacheMB, cfg.DBIndexCacheMB, cfg.QueryCacheSizeMB,
+		queryCacheMaxAge,
+		cfg.InlineEventThreshold,
+		cfg.DgraphURL, cfg.Neo4jURI, cfg.Neo4jUser, cfg.Neo4jPassword
 }

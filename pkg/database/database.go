@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -21,10 +20,11 @@ import (
 
 // D implements the Database interface using Badger as the storage backend
 type D struct {
-	ctx        context.Context
-	cancel     context.CancelFunc
-	dataDir    string
-	Logger     *logger
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	dataDir              string
+	Logger               *logger
+	inlineEventThreshold int // Configurable threshold for inline event storage
 	*badger.DB
 	seq        *badger.Sequence
 	pubkeySeq  *badger.Sequence // Sequence for pubkey serials
@@ -35,63 +35,85 @@ type D struct {
 // Ensure D implements Database interface at compile time
 var _ Database = (*D)(nil)
 
+// New creates a new Badger database instance with default configuration.
+// This is provided for backward compatibility with existing callers.
+// For full configuration control, use NewWithConfig instead.
 func New(
 	ctx context.Context, cancel context.CancelFunc, dataDir, logLevel string,
 ) (
 	d *D, err error,
 ) {
-	// Initialize query cache with configurable size (default 512MB)
-	queryCacheSize := int64(512 * 1024 * 1024) // 512 MB
-	if v := os.Getenv("ORLY_QUERY_CACHE_SIZE_MB"); v != "" {
-		if n, perr := strconv.Atoi(v); perr == nil && n > 0 {
-			queryCacheSize = int64(n * 1024 * 1024)
-		}
+	// Create a default config for backward compatibility
+	cfg := &DatabaseConfig{
+		DataDir:              dataDir,
+		LogLevel:             logLevel,
+		BlockCacheMB:         1024,              // Default 1024 MB
+		IndexCacheMB:         512,               // Default 512 MB
+		QueryCacheSizeMB:     512,               // Default 512 MB
+		QueryCacheMaxAge:     5 * time.Minute,   // Default 5 minutes
+		InlineEventThreshold: 1024,              // Default 1024 bytes
 	}
-	queryCacheMaxAge := 5 * time.Minute // Default 5 minutes
-	if v := os.Getenv("ORLY_QUERY_CACHE_MAX_AGE"); v != "" {
-		if duration, perr := time.ParseDuration(v); perr == nil {
-			queryCacheMaxAge = duration
-		}
+	return NewWithConfig(ctx, cancel, cfg)
+}
+
+// NewWithConfig creates a new Badger database instance with full configuration.
+// This is the preferred method when you have access to DatabaseConfig.
+func NewWithConfig(
+	ctx context.Context, cancel context.CancelFunc, cfg *DatabaseConfig,
+) (
+	d *D, err error,
+) {
+	// Apply defaults for zero values (backward compatibility)
+	blockCacheMB := cfg.BlockCacheMB
+	if blockCacheMB == 0 {
+		blockCacheMB = 1024 // Default 1024 MB
+	}
+	indexCacheMB := cfg.IndexCacheMB
+	if indexCacheMB == 0 {
+		indexCacheMB = 512 // Default 512 MB
+	}
+	queryCacheSizeMB := cfg.QueryCacheSizeMB
+	if queryCacheSizeMB == 0 {
+		queryCacheSizeMB = 512 // Default 512 MB
+	}
+	queryCacheMaxAge := cfg.QueryCacheMaxAge
+	if queryCacheMaxAge == 0 {
+		queryCacheMaxAge = 5 * time.Minute // Default 5 minutes
+	}
+	inlineEventThreshold := cfg.InlineEventThreshold
+	if inlineEventThreshold == 0 {
+		inlineEventThreshold = 1024 // Default 1024 bytes
 	}
 
+	queryCacheSize := int64(queryCacheSizeMB * 1024 * 1024)
+
 	d = &D{
-		ctx:        ctx,
-		cancel:     cancel,
-		dataDir:    dataDir,
-		Logger:     NewLogger(lol.GetLogLevel(logLevel), dataDir),
-		DB:         nil,
-		seq:        nil,
-		ready:      make(chan struct{}),
-		queryCache: querycache.NewEventCache(queryCacheSize, queryCacheMaxAge),
+		ctx:                  ctx,
+		cancel:               cancel,
+		dataDir:              cfg.DataDir,
+		Logger:               NewLogger(lol.GetLogLevel(cfg.LogLevel), cfg.DataDir),
+		inlineEventThreshold: inlineEventThreshold,
+		DB:                   nil,
+		seq:                  nil,
+		ready:                make(chan struct{}),
+		queryCache:           querycache.NewEventCache(queryCacheSize, queryCacheMaxAge),
 	}
 
 	// Ensure the data directory exists
-	if err = os.MkdirAll(dataDir, 0755); chk.E(err) {
+	if err = os.MkdirAll(cfg.DataDir, 0755); chk.E(err) {
 		return
 	}
 
 	// Also ensure the directory exists using apputil.EnsureDir for any
 	// potential subdirectories
-	dummyFile := filepath.Join(dataDir, "dummy.sst")
+	dummyFile := filepath.Join(cfg.DataDir, "dummy.sst")
 	if err = apputil.EnsureDir(dummyFile); chk.E(err) {
 		return
 	}
 
 	opts := badger.DefaultOptions(d.dataDir)
-	// Configure caches based on environment to better match workload.
+	// Configure caches based on config to better match workload.
 	// Defaults aim for higher hit ratios under read-heavy workloads while remaining safe.
-	var blockCacheMB = 1024 // default 512 MB
-	var indexCacheMB = 512  // default 256 MB
-	if v := os.Getenv("ORLY_DB_BLOCK_CACHE_MB"); v != "" {
-		if n, perr := strconv.Atoi(v); perr == nil && n > 0 {
-			blockCacheMB = n
-		}
-	}
-	if v := os.Getenv("ORLY_DB_INDEX_CACHE_MB"); v != "" {
-		if n, perr := strconv.Atoi(v); perr == nil && n > 0 {
-			indexCacheMB = n
-		}
-	}
 	opts.BlockCacheSize = int64(blockCacheMB * units.Mb)
 	opts.IndexCacheSize = int64(indexCacheMB * units.Mb)
 	opts.BlockSize = 4 * units.Kb // 4 KB block size

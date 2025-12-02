@@ -70,38 +70,29 @@ func init() {
 	database.RegisterNeo4jFactory(func(
 		ctx context.Context,
 		cancel context.CancelFunc,
-		dataDir string,
-		logLevel string,
+		cfg *database.DatabaseConfig,
 	) (database.Database, error) {
-		return New(ctx, cancel, dataDir, logLevel)
+		return NewWithConfig(ctx, cancel, cfg)
 	})
 }
 
-// Config holds configuration options for the Neo4j database
-type Config struct {
-	DataDir       string
-	LogLevel      string
-	Neo4jURI      string // Neo4j bolt URI (e.g., "bolt://localhost:7687")
-	Neo4jUser     string // Authentication username
-	Neo4jPassword string // Authentication password
-}
-
-// New creates a new Neo4j-based database instance
-func New(
-	ctx context.Context, cancel context.CancelFunc, dataDir, logLevel string,
+// NewWithConfig creates a new Neo4j-based database instance with full configuration.
+// Configuration is passed from the centralized app config via DatabaseConfig.
+func NewWithConfig(
+	ctx context.Context, cancel context.CancelFunc, cfg *database.DatabaseConfig,
 ) (
 	n *N, err error,
 ) {
-	// Get Neo4j connection details from environment
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
+	// Apply defaults for empty values
+	neo4jURI := cfg.Neo4jURI
 	if neo4jURI == "" {
 		neo4jURI = "bolt://localhost:7687"
 	}
-	neo4jUser := os.Getenv("ORLY_NEO4J_USER")
+	neo4jUser := cfg.Neo4jUser
 	if neo4jUser == "" {
 		neo4jUser = "neo4j"
 	}
-	neo4jPassword := os.Getenv("ORLY_NEO4J_PASSWORD")
+	neo4jPassword := cfg.Neo4jPassword
 	if neo4jPassword == "" {
 		neo4jPassword = "password"
 	}
@@ -109,8 +100,8 @@ func New(
 	n = &N{
 		ctx:           ctx,
 		cancel:        cancel,
-		dataDir:       dataDir,
-		Logger:        NewLogger(lol.GetLogLevel(logLevel), dataDir),
+		dataDir:       cfg.DataDir,
+		Logger:        NewLogger(lol.GetLogLevel(cfg.LogLevel), cfg.DataDir),
 		neo4jURI:      neo4jURI,
 		neo4jUser:     neo4jUser,
 		neo4jPassword: neo4jPassword,
@@ -118,12 +109,12 @@ func New(
 	}
 
 	// Ensure the data directory exists
-	if err = os.MkdirAll(dataDir, 0755); chk.E(err) {
+	if err = os.MkdirAll(cfg.DataDir, 0755); chk.E(err) {
 		return
 	}
 
 	// Ensure directory structure
-	dummyFile := filepath.Join(dataDir, "dummy.sst")
+	dummyFile := filepath.Join(cfg.DataDir, "dummy.sst")
 	if err = apputil.EnsureDir(dummyFile); chk.E(err) {
 		return
 	}
@@ -156,6 +147,21 @@ func New(
 	}()
 
 	return
+}
+
+// New creates a new Neo4j-based database instance with default configuration.
+// This is provided for backward compatibility with existing callers (tests, etc.).
+// For full configuration control, use NewWithConfig instead.
+func New(
+	ctx context.Context, cancel context.CancelFunc, dataDir, logLevel string,
+) (
+	n *N, err error,
+) {
+	cfg := &database.DatabaseConfig{
+		DataDir:  dataDir,
+		LogLevel: logLevel,
+	}
+	return NewWithConfig(ctx, cancel, cfg)
 }
 
 // initNeo4jClient establishes connection to Neo4j server

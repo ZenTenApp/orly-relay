@@ -177,6 +177,10 @@ LIMIT $limit
 
 ## Configuration
 
+All configuration is centralized in `app/config/config.go` and visible via `./orly help`.
+
+> **Important:** All environment variables must be defined in `app/config/config.go`. Do not use `os.Getenv()` directly in package code. Database backends receive configuration via the `database.DatabaseConfig` struct.
+
 ### Environment Variables
 
 ```bash

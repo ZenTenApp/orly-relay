@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"strconv"
 	"strings"
 
 	"github.com/dgraph-io/badger/v4"
@@ -270,14 +268,9 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 	eventData := eventDataBuf.Bytes()
 
 	// Determine storage strategy (Reiser4 optimizations)
-	// Get threshold from environment, default to 0 (disabled)
-	// When enabled, typical values: 384 (conservative), 512 (recommended), 1024 (aggressive)
-	smallEventThreshold := 1024
-	if v := os.Getenv("ORLY_INLINE_EVENT_THRESHOLD"); v != "" {
-		if n, perr := strconv.Atoi(v); perr == nil && n >= 0 {
-			smallEventThreshold = n
-		}
-	}
+	// Use the threshold from database configuration
+	// Typical values: 384 (conservative), 512 (recommended), 1024 (aggressive)
+	smallEventThreshold := d.inlineEventThreshold
 	isSmallEvent := smallEventThreshold > 0 && len(eventData) <= smallEventThreshold
 	isReplaceableEvent := kind.IsReplaceable(ev.Kind)
 	isAddressableEvent := kind.IsParameterizedReplaceable(ev.Kind)

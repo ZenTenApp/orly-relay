@@ -139,9 +139,16 @@ export ORLY_SPROCKET_ENABLED=true
 # Enable policy system
 export ORLY_POLICY_ENABLED=true
 
-# Database backend selection (badger or dgraph)
+# Database backend selection (badger, dgraph, or neo4j)
 export ORLY_DB_TYPE=badger
-export ORLY_DGRAPH_URL=localhost:9080  # Only for dgraph backend
+
+# DGraph configuration (only when ORLY_DB_TYPE=dgraph)
+export ORLY_DGRAPH_URL=localhost:9080
+
+# Neo4j configuration (only when ORLY_DB_TYPE=neo4j)
+export ORLY_NEO4J_URI=bolt://localhost:7687
+export ORLY_NEO4J_USER=neo4j
+export ORLY_NEO4J_PASSWORD=password
 
 # Query cache configuration (improves REQ response times)
 export ORLY_QUERY_CACHE_SIZE_MB=512      # Default: 512MB
@@ -150,6 +157,7 @@ export ORLY_QUERY_CACHE_MAX_AGE=5m       # Cache expiry time
 # Database cache tuning (for Badger backend)
 export ORLY_DB_BLOCK_CACHE_MB=512        # Block cache size
 export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
+export ORLY_INLINE_EVENT_THRESHOLD=1024  # Inline storage threshold (bytes)
 ```
 
 ## Code Architecture
@@ -299,9 +307,15 @@ export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
 
 **Configuration System:**
 - Uses `go-simpler.org/env` for struct tags
-- All config in `app/config/config.go` with `ORLY_` prefix
+- **IMPORTANT: ALL environment variables MUST be defined in `app/config/config.go`**
+  - Never use `os.Getenv()` directly in packages - always pass config via structs
+  - This ensures all config options appear in `./orly help` output
+  - Database backends receive config via `database.DatabaseConfig` struct
+  - Use `GetDatabaseConfigValues()` helper to extract DB config from app config
+- All config fields use `ORLY_` prefix with struct tags defining defaults and usage
 - Supports XDG directories via `github.com/adrg/xdg`
 - Default data directory: `~/.local/share/ORLY`
+- Database-specific config (Neo4j, DGraph, Badger) is passed via `DatabaseConfig` struct in `pkg/database/factory.go`
 
 **Event Publishing:**
 - `pkg/protocol/publish/` manages publisher registry

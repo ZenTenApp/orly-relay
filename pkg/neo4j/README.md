@@ -15,12 +15,16 @@ docker run -d --name neo4j \
 
 ### 2. Configure Environment
 
+All Neo4j configuration is defined in `app/config/config.go` and visible via `./orly help`:
+
 ```bash
 export ORLY_DB_TYPE=neo4j
 export ORLY_NEO4J_URI=bolt://localhost:7687
 export ORLY_NEO4J_USER=neo4j
 export ORLY_NEO4J_PASSWORD=password
 ```
+
+> **Note:** Configuration is centralized in `app/config/config.go`. Do not use `os.Getenv()` directly in package code - all environment variables should be passed via the `database.DatabaseConfig` struct.
 
 ### 3. Run ORLY
 

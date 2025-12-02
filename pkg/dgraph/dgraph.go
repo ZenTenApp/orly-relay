@@ -48,30 +48,21 @@ func init() {
 	database.RegisterDgraphFactory(func(
 		ctx context.Context,
 		cancel context.CancelFunc,
-		dataDir string,
-		logLevel string,
+		cfg *database.DatabaseConfig,
 	) (database.Database, error) {
-		return New(ctx, cancel, dataDir, logLevel)
+		return NewWithConfig(ctx, cancel, cfg)
 	})
 }
 
-// Config holds configuration options for the Dgraph database
-type Config struct {
-	DataDir             string
-	LogLevel            string
-	DgraphURL           string // Dgraph gRPC endpoint (e.g., "localhost:9080")
-	EnableGraphQL       bool
-	EnableIntrospection bool
-}
-
-// New creates a new Dgraph-based database instance
-func New(
-	ctx context.Context, cancel context.CancelFunc, dataDir, logLevel string,
+// NewWithConfig creates a new Dgraph-based database instance with full configuration.
+// Configuration is passed from the centralized app config via DatabaseConfig.
+func NewWithConfig(
+	ctx context.Context, cancel context.CancelFunc, cfg *database.DatabaseConfig,
 ) (
 	d *D, err error,
 ) {
-	// Get dgraph URL from environment, default to localhost
-	dgraphURL := os.Getenv("ORLY_DGRAPH_URL")
+	// Apply defaults for empty values
+	dgraphURL := cfg.DgraphURL
 	if dgraphURL == "" {
 		dgraphURL = "localhost:9080"
 	}
@@ -79,8 +70,8 @@ func New(
 	d = &D{
 		ctx:                 ctx,
 		cancel:              cancel,
-		dataDir:             dataDir,
-		Logger:              NewLogger(lol.GetLogLevel(logLevel), dataDir),
+		dataDir:             cfg.DataDir,
+		Logger:              NewLogger(lol.GetLogLevel(cfg.LogLevel), cfg.DataDir),
 		dgraphURL:           dgraphURL,
 		enableGraphQL:       false,
 		enableIntrospection: false,
@@ -88,12 +79,12 @@ func New(
 	}
 
 	// Ensure the data directory exists
-	if err = os.MkdirAll(dataDir, 0755); chk.E(err) {
+	if err = os.MkdirAll(cfg.DataDir, 0755); chk.E(err) {
 		return
 	}
 
 	// Ensure directory structure
-	dummyFile := filepath.Join(dataDir, "dummy.sst")
+	dummyFile := filepath.Join(cfg.DataDir, "dummy.sst")
 	if err = apputil.EnsureDir(dummyFile); chk.E(err) {
 		return
 	}
@@ -126,6 +117,21 @@ func New(
 	}()
 
 	return
+}
+
+// New creates a new Dgraph-based database instance with default configuration.
+// This is provided for backward compatibility with existing callers (tests, etc.).
+// For full configuration control, use NewWithConfig instead.
+func New(
+	ctx context.Context, cancel context.CancelFunc, dataDir, logLevel string,
+) (
+	d *D, err error,
+) {
+	cfg := &database.DatabaseConfig{
+		DataDir:  dataDir,
+		LogLevel: logLevel,
+	}
+	return NewWithConfig(ctx, cancel, cfg)
 }
 
 // initDgraphClient establishes connection to dgraph server
