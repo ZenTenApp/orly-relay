@@ -3,7 +3,7 @@ module next.orly.dev
 go 1.25.3
 
 require (
-	git.mleku.dev/mleku/nostr v1.0.4
+	git.mleku.dev/mleku/nostr v1.0.7
 	github.com/adrg/xdg v0.5.3
 	github.com/dgraph-io/badger/v4 v4.8.0
 	github.com/dgraph-io/dgo/v230 v230.0.1
@@ -82,6 +82,7 @@ require (
 	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	p256k1.mleku.dev v1.0.3 // indirect
 )
 
 retract v1.0.3
