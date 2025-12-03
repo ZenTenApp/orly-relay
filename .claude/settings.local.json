@@ -173,7 +173,8 @@
       "Bash(GOROOT=/home/mleku/go node:*)",
       "Bash(GOOS=js GOARCH=wasm go build:*)",
       "Bash(go mod graph:*)",
-      "Bash(xxd:*)"
+      "Bash(xxd:*)",
+      "Bash(CGO_ENABLED=0 go mod tidy:*)"
     ],
     "deny": [],
     "ask": []

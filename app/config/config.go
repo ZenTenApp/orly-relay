@@ -90,9 +90,8 @@ type C struct {
 	NIP43InviteExpiry     time.Duration `env:"ORLY_NIP43_INVITE_EXPIRY" default:"24h" usage:"how long invite codes remain valid"`
 
 	// Database configuration
-	DBType             string `env:"ORLY_DB_TYPE" default:"badger" usage:"database backend to use: badger, dgraph, or neo4j"`
-	DgraphURL          string `env:"ORLY_DGRAPH_URL" default:"localhost:9080" usage:"dgraph gRPC endpoint address (only used when ORLY_DB_TYPE=dgraph)"`
-	QueryCacheSizeMB   int    `env:"ORLY_QUERY_CACHE_SIZE_MB" default:"512" usage:"query cache size in MB (caches database query results for faster REQ responses)"`
+	DBType           string `env:"ORLY_DB_TYPE" default:"badger" usage:"database backend to use: badger or neo4j"`
+	QueryCacheSizeMB int    `env:"ORLY_QUERY_CACHE_SIZE_MB" default:"512" usage:"query cache size in MB (caches database query results for faster REQ responses)"`
 	QueryCacheMaxAge   string `env:"ORLY_QUERY_CACHE_MAX_AGE" default:"5m" usage:"maximum age for cached query results (e.g., 5m, 10m, 1h)"`
 
 	// Neo4j configuration (only used when ORLY_DB_TYPE=neo4j)
@@ -410,7 +409,7 @@ func (cfg *C) GetDatabaseConfigValues() (
 	blockCacheMB, indexCacheMB, queryCacheSizeMB int,
 	queryCacheMaxAge time.Duration,
 	inlineEventThreshold int,
-	dgraphURL, neo4jURI, neo4jUser, neo4jPassword string,
+	neo4jURI, neo4jUser, neo4jPassword string,
 ) {
 	// Parse query cache max age from string to duration
 	queryCacheMaxAge = 5 * time.Minute // Default
@@ -424,5 +423,5 @@ func (cfg *C) GetDatabaseConfigValues() (
 		cfg.DBBlockCacheMB, cfg.DBIndexCacheMB, cfg.QueryCacheSizeMB,
 		queryCacheMaxAge,
 		cfg.InlineEventThreshold,
-		cfg.DgraphURL, cfg.Neo4jURI, cfg.Neo4jUser, cfg.Neo4jPassword
+		cfg.Neo4jURI, cfg.Neo4jUser, cfg.Neo4jPassword
 }

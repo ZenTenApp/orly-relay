@@ -5,9 +5,10 @@ go 1.25.3
 require (
 	git.mleku.dev/mleku/nostr v1.0.7
 	github.com/adrg/xdg v0.5.3
+	github.com/aperturerobotics/go-indexeddb v0.2.3
 	github.com/dgraph-io/badger/v4 v4.8.0
-	github.com/dgraph-io/dgo/v230 v230.0.1
 	github.com/gorilla/websocket v1.5.3
+	github.com/hack-pad/safejs v0.1.1
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0
 	github.com/klauspost/compress v1.18.2
 	github.com/minio/sha256-simd v1.0.1
@@ -21,7 +22,6 @@ require (
 	go.uber.org/atomic v1.11.0
 	golang.org/x/crypto v0.45.0
 	golang.org/x/lint v0.0.0-20241112194109-818c5a804067
-	google.golang.org/grpc v1.76.0
 	honnef.co/go/tools v0.6.1
 	lol.mleku.dev v1.0.5
 	lukechampine.com/frand v1.5.1
@@ -30,7 +30,6 @@ require (
 require (
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/ImVexed/fasturl v0.0.0-20230304231329-4e41488060f3 // indirect
-	github.com/aperturerobotics/go-indexeddb v0.2.3 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
 	github.com/bytedance/sonic v1.13.1 // indirect
@@ -47,11 +46,8 @@ require (
 	github.com/felixge/fgprof v0.9.5 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/flatbuffers v25.9.23+incompatible // indirect
 	github.com/google/pprof v0.0.0-20251007162407-5df77e3f7d1d // indirect
-	github.com/hack-pad/safejs v0.1.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
@@ -59,7 +55,6 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
 	github.com/templexxx/cpu v0.1.1 // indirect
@@ -81,7 +76,6 @@ require (
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/tools v0.39.0 // indirect
-	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	p256k1.mleku.dev v1.0.3 // indirect

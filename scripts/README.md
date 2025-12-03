@@ -4,20 +4,6 @@ This directory contains automation scripts for building, testing, and deploying 
 
 ## Quick Reference
 
-### Dgraph Integration Testing
-
-```bash
-# Local testing (requires dgraph server)
-./dgraph-start.sh           # Start dgraph server
-./test-dgraph.sh            # Run dgraph package tests
-./test-dgraph.sh --relay-tester  # Run tests + relay-tester
-
-# Docker testing (containers for everything)
-./docker-build.sh           # Build ORLY docker image
-./test-docker.sh            # Run integration tests in containers
-./test-docker.sh --relay-tester --keep-running  # Full test, keep running
-```
-
 ### Build & Deploy
 
 ```bash
@@ -26,44 +12,14 @@ This directory contains automation scripts for building, testing, and deploying 
 ./update-embedded-web.sh    # Build and embed web UI
 ```
 
+### Testing
+
+```bash
+./test.sh                   # Run all Go tests
+./test-docker.sh            # Run integration tests in containers
+```
+
 ## Script Descriptions
-
-### Dgraph Testing Scripts
-
-#### dgraph-start.sh
-Starts dgraph server using docker-compose for local testing.
-
-**Usage:**
-```bash
-./dgraph-start.sh
-```
-
-**What it does:**
-- Checks if dgraph is already running
-- Starts dgraph via docker-compose
-- Waits for health check
-- Shows endpoints and commands
-
-#### dgraph-docker-compose.yml
-Docker Compose configuration for standalone dgraph server.
-
-**Ports:**
-- 8080: HTTP API
-- 9080: gRPC (ORLY connects here)
-- 8000: Ratel UI
-
-#### test-dgraph.sh
-Runs dgraph package tests against a running dgraph server.
-
-**Usage:**
-```bash
-./test-dgraph.sh                    # Just tests
-./test-dgraph.sh --relay-tester     # Tests + relay-tester
-```
-
-**Requirements:**
-- Dgraph server running at ORLY_DGRAPH_URL (default: localhost:9080)
-- Go 1.21+
 
 ### Docker Integration Scripts
 
@@ -81,16 +37,14 @@ Builds Docker images for ORLY and optionally relay-tester.
 - orly-relay-tester:latest (if --with-tester)
 
 #### docker-compose-test.yml
-Full-stack docker-compose with dgraph, ORLY, and relay-tester.
+Full-stack docker-compose with ORLY and relay-tester.
 
 **Services:**
-- dgraph: Database backend
-- orly: Relay with dgraph backend
+- orly: Relay with Badger backend
 - relay-tester: Protocol tests (optional, profile: test)
 
 **Features:**
 - Health checks for all services
-- Dependency management (ORLY waits for dgraph)
 - Custom network with DNS
 - Persistent volumes
 
@@ -109,12 +63,11 @@ Comprehensive integration testing in Docker containers.
 **What it does:**
 1. Stops any existing containers
 2. Optionally rebuilds images
-3. Starts dgraph and waits for health
-4. Starts ORLY and waits for health
-5. Verifies connectivity
-6. Optionally runs relay-tester
-7. Shows status and endpoints
-8. Cleanup (unless --keep-running)
+3. Starts ORLY and waits for health
+4. Verifies connectivity
+5. Optionally runs relay-tester
+6. Shows status and endpoints
+7. Cleanup (unless --keep-running)
 
 ### Build Scripts
 
@@ -166,10 +119,6 @@ TEST_LOG=1 ./test.sh  # With logging
 ### Common Variables
 
 ```bash
-# Dgraph
-export ORLY_DGRAPH_URL=localhost:9080    # Dgraph endpoint
-export ORLY_DB_TYPE=dgraph               # Use dgraph backend
-
 # Logging
 export ORLY_LOG_LEVEL=debug              # Log verbosity
 export TEST_LOG=1                        # Enable test logging
@@ -180,6 +129,10 @@ export ORLY_LISTEN=0.0.0.0               # Listen address
 
 # Data
 export ORLY_DATA_DIR=/path/to/data       # Data directory
+
+# Database backend
+export ORLY_DB_TYPE=badger               # Use badger backend (default)
+export ORLY_DB_TYPE=neo4j                # Use Neo4j backend
 ```
 
 ### Script-Specific Variables
@@ -188,9 +141,6 @@ export ORLY_DATA_DIR=/path/to/data       # Data directory
 # Docker scripts
 export SKIP_BUILD=true                   # Skip image rebuild
 export KEEP_RUNNING=true                 # Don't cleanup containers
-
-# Dgraph scripts
-export DGRAPH_VERSION=latest             # Dgraph image tag
 ```
 
 ## File Organization
@@ -198,12 +148,7 @@ export DGRAPH_VERSION=latest             # Dgraph image tag
 ```
 scripts/
 ├── README.md                    # This file
-├── DGRAPH_TESTING.md           # Dgraph testing guide
 ├── DOCKER_TESTING.md           # Docker testing guide
-│
-├── dgraph-start.sh             # Start dgraph server
-├── dgraph-docker-compose.yml   # Dgraph docker config
-├── test-dgraph.sh              # Run dgraph tests
 │
 ├── docker-build.sh             # Build docker images
 ├── docker-compose-test.yml     # Full stack docker config
@@ -217,43 +162,35 @@ scripts/
 
 ## Workflows
 
-### Local Development with Dgraph
+### Local Development
 
 ```bash
-# 1. Start dgraph
-./scripts/dgraph-start.sh
-
-# 2. Run ORLY locally with dgraph
-export ORLY_DB_TYPE=dgraph
-export ORLY_DGRAPH_URL=localhost:9080
+# 1. Run ORLY locally
 ./orly
 
-# 3. Test changes
+# 2. Test changes
 go run cmd/relay-tester/main.go -url ws://localhost:3334
 
-# 4. Run unit tests
-./scripts/test-dgraph.sh
+# 3. Run unit tests
+./scripts/test.sh
 ```
 
 ### Docker Development
 
 ```bash
-# 1. Make changes
-vim pkg/dgraph/save-event.go
-
-# 2. Build and test in containers
+# 1. Build and test in containers
 ./scripts/test-docker.sh --relay-tester --keep-running
 
-# 3. Make more changes
+# 2. Make changes
 
-# 4. Rebuild just ORLY
+# 3. Rebuild just ORLY
 cd scripts
 docker-compose -f docker-compose-test.yml up -d --build orly
 
-# 5. View logs
+# 4. View logs
 docker logs orly-relay -f
 
-# 6. Stop when done
+# 5. Stop when done
 docker-compose -f docker-compose-test.yml down
 ```
 
@@ -287,19 +224,6 @@ journalctl -u orly -f
 ```
 
 ## Troubleshooting
-
-### Dgraph Not Available
-
-```bash
-# Check if running
-docker ps | grep dgraph
-
-# Start it
-./scripts/dgraph-start.sh
-
-# Check logs
-docker logs dgraph-orly-test -f
-```
 
 ### Port Conflicts
 
@@ -352,9 +276,6 @@ newgrp docker
    # Check docker
    docker --version
    docker-compose --version
-
-   # Check dgraph
-   curl http://localhost:9080/health
    ```
 
 3. **Clean up after testing**
@@ -379,15 +300,12 @@ newgrp docker
    docker logs orly-relay --tail 100
 
    # Test output
-   ./scripts/test-dgraph.sh 2>&1 | tee test.log
+   ./scripts/test.sh 2>&1 | tee test.log
    ```
 
 ## Related Documentation
 
-- [Dgraph Testing Guide](DGRAPH_TESTING.md)
 - [Docker Testing Guide](DOCKER_TESTING.md)
-- [Package Tests](../pkg/dgraph/TESTING.md)
-- [Main Implementation Status](../DGRAPH_IMPLEMENTATION_STATUS.md)
 
 ## Contributing
 

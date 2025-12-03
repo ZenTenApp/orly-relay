@@ -445,7 +445,7 @@ func makeDatabaseConfig(cfg *config.C) *database.DatabaseConfig {
 		blockCacheMB, indexCacheMB, queryCacheSizeMB,
 		queryCacheMaxAge,
 		inlineEventThreshold,
-		dgraphURL, neo4jURI, neo4jUser, neo4jPassword := cfg.GetDatabaseConfigValues()
+		neo4jURI, neo4jUser, neo4jPassword := cfg.GetDatabaseConfigValues()
 
 	return &database.DatabaseConfig{
 		DataDir:              dataDir,
@@ -455,7 +455,6 @@ func makeDatabaseConfig(cfg *config.C) *database.DatabaseConfig {
 		QueryCacheSizeMB:     queryCacheSizeMB,
 		QueryCacheMaxAge:     queryCacheMaxAge,
 		InlineEventThreshold: inlineEventThreshold,
-		DgraphURL:            dgraphURL,
 		Neo4jURI:             neo4jURI,
 		Neo4jUser:            neo4jUser,
 		Neo4jPassword:        neo4jPassword,

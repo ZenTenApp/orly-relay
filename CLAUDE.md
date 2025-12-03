@@ -8,7 +8,7 @@ ORLY is a high-performance Nostr relay written in Go, designed for personal rela
 
 **Key Technologies:**
 - **Language**: Go 1.25.3+
-- **Database**: Badger v4 (embedded), DGraph (distributed graph), or Neo4j (social graph)
+- **Database**: Badger v4 (embedded) or Neo4j (social graph)
 - **Cryptography**: Custom p8k library using purego for secp256k1 operations (no CGO)
 - **Web UI**: Svelte frontend embedded in the binary
 - **WebSocket**: gorilla/websocket for Nostr protocol
@@ -140,11 +140,8 @@ export ORLY_SPROCKET_ENABLED=true
 # Enable policy system
 export ORLY_POLICY_ENABLED=true
 
-# Database backend selection (badger, dgraph, or neo4j)
+# Database backend selection (badger or neo4j)
 export ORLY_DB_TYPE=badger
-
-# DGraph configuration (only when ORLY_DB_TYPE=dgraph)
-export ORLY_DGRAPH_URL=localhost:9080
 
 # Neo4j configuration (only when ORLY_DB_TYPE=neo4j)
 export ORLY_NEO4J_URI=bolt://localhost:7687
@@ -199,7 +196,7 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
 
 **`pkg/database/`** - Database abstraction layer with multiple backend support
 - `interface.go` - Database interface definition for pluggable backends
-- `factory.go` - Database backend selection (Badger, DGraph, or Neo4j)
+- `factory.go` - Database backend selection (Badger or Neo4j)
 - `database.go` - Badger implementation with cache tuning and query cache
 - `save-event.go` - Event storage with index updates
 - `query-events.go` - Main query execution engine with filter normalization
@@ -322,7 +319,6 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
 **Database Backend Selection:**
 - Supports multiple backends via `ORLY_DB_TYPE` environment variable
 - **Badger** (default): Embedded key-value store with custom indexing, ideal for single-instance deployments
-- **DGraph**: Distributed graph database for larger, multi-node deployments
 - **Neo4j**: Graph database with social graph and Web of Trust (WoT) extensions
   - Processes kinds 0 (profile), 3 (contacts), 1984 (reports), 10000 (mute list) for social graph
   - NostrUser nodes with trust metrics (influence, PageRank)
@@ -357,7 +353,7 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
 - All config fields use `ORLY_` prefix with struct tags defining defaults and usage
 - Supports XDG directories via `github.com/adrg/xdg`
 - Default data directory: `~/.local/share/ORLY`
-- Database-specific config (Neo4j, DGraph, Badger) is passed via `DatabaseConfig` struct in `pkg/database/factory.go`
+- Database-specific config (Neo4j, Badger) is passed via `DatabaseConfig` struct in `pkg/database/factory.go`
 
 **Constants - CRITICAL RULES:**
 - **ALWAYS** define named constants for values used more than a few times
@@ -455,8 +451,6 @@ if IsValidHexPubkey(pubkey) { ... }
 - `pkg/neo4j/save-event.go` - Event storage with e/p tag handling
 - `pkg/neo4j/social-event-processor.go` - Social graph with p-tag extraction
 - `pkg/neo4j/query-events.go` - Filter queries with tag matching
-- `pkg/dgraph/save-event.go` - DGraph event storage with e/p tag handling
-- `pkg/dgraph/delete.go` - DGraph event deletion with e-tag handling
 - `pkg/database/save-event.go` - Badger event storage
 - `pkg/database/filter_utils.go` - Tag normalization utilities
 - `pkg/find/parser.go` - FIND protocol parser with p-tag extraction

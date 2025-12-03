@@ -1,11 +1,11 @@
 # Docker-Based Integration Testing
 
-This guide covers running ORLY and Dgraph together in Docker containers for integration testing.
+This guide covers running ORLY in Docker containers for integration testing.
 
 ## Overview
 
 The Docker setup provides:
-- **Isolated Environment**: Dgraph + ORLY in containers
+- **Isolated Environment**: ORLY in containers
 - **Automated Testing**: Health checks and dependency management
 - **Reproducible Tests**: Consistent environment across systems
 - **Easy Cleanup**: Remove everything with one command
@@ -16,19 +16,17 @@ The Docker setup provides:
 ┌─────────────────────────────────────────────┐
 │           Docker Network (orly-network)     │
 │                                             │
-│  ┌──────────────────┐  ┌─────────────────┐ │
-│  │   Dgraph         │  │   ORLY Relay    │ │
-│  │   standalone     │◄─┤   (dgraph mode) │ │
-│  │                  │  │                 │ │
-│  │   :8080 (HTTP)   │  │   :3334 (WS)    │ │
-│  │   :9080 (gRPC)   │  │                 │ │
-│  │   :8000 (Ratel)  │  │                 │ │
-│  └──────────────────┘  └─────────────────┘ │
-│         │                       │           │
-└─────────┼───────────────────────┼───────────┘
-          │                       │
-      Published                Published
-      to host                  to host
+│  ┌─────────────────┐  ┌─────────────────┐  │
+│  │   ORLY Relay    │  │  relay-tester   │  │
+│  │  (badger mode)  │  │  (optional)     │  │
+│  │                 │  │                 │  │
+│  │   :3334 (WS)    │  │                 │  │
+│  └─────────────────┘  └─────────────────┘  │
+│         │                                   │
+└─────────┼───────────────────────────────────┘
+          │
+      Published
+      to host
 ```
 
 ## Quick Start
@@ -107,18 +105,12 @@ Builds relay-tester for automated testing:
 Orchestrates the full stack:
 
 **Services:**
-1. **dgraph** - Database backend
-   - Health check via HTTP
-   - Persistent volume for data
-   - Exposed ports for debugging
-
-2. **orly** - Relay server
-   - Depends on dgraph (waits for healthy)
-   - Configured with ORLY_DB_TYPE=dgraph
+1. **orly** - Relay server
+   - Configured with ORLY_DB_TYPE=badger (default)
    - Health check via HTTP
    - Auto-restart on failure
 
-3. **relay-tester** - Test runner
+2. **relay-tester** - Test runner
    - Profile: test (optional)
    - Runs tests against ORLY
    - Exits after completion
@@ -130,10 +122,6 @@ Orchestrates the full stack:
 The docker-compose file sets:
 
 ```yaml
-# Database
-ORLY_DB_TYPE: dgraph
-ORLY_DGRAPH_URL: dgraph:9080  # Internal network name
-
 # Server
 ORLY_LISTEN: 0.0.0.0
 ORLY_PORT: 3334
@@ -141,7 +129,7 @@ ORLY_DATA_DIR: /data
 
 # Application
 ORLY_LOG_LEVEL: info
-ORLY_APP_NAME: ORLY-Dgraph-Test
+ORLY_APP_NAME: ORLY-Test
 ORLY_ACL_MODE: none
 ```
 
@@ -158,13 +146,12 @@ EOF
 ### Volumes
 
 **Persistent Data:**
-- `dgraph-data:/dgraph` - Dgraph database
-- `orly-data:/data` - ORLY metadata
+- `orly-data:/data` - ORLY database and metadata
 
 **Inspect Volumes:**
 ```bash
 docker volume ls
-docker volume inspect scripts_dgraph-data
+docker volume inspect scripts_orly-data
 ```
 
 ### Networks
@@ -185,12 +172,11 @@ docker volume inspect scripts_dgraph-data
 
 **What it does:**
 1. Stops any existing containers
-2. Starts dgraph and waits for health
-3. Starts ORLY and waits for health
-4. Verifies HTTP connectivity
-5. Tests WebSocket (if websocat installed)
-6. Shows container status
-7. Cleans up (unless --keep-running)
+2. Starts ORLY and waits for health
+3. Verifies HTTP connectivity
+4. Tests WebSocket (if websocat installed)
+5. Shows container status
+6. Cleans up (unless --keep-running)
 
 ### With Relay-Tester
 
@@ -211,7 +197,7 @@ docker volume inspect scripts_dgraph-data
 ./scripts/test-docker.sh --keep-running
 
 # Make changes to code
-vim pkg/dgraph/save-event.go
+vim pkg/database/save-event.go
 
 # Rebuild and restart
 docker-compose -f scripts/docker-compose-test.yml up -d --build orly
@@ -236,7 +222,6 @@ docker-compose -f scripts/docker-compose-test.yml logs -f
 
 # Specific service
 docker logs orly-relay -f
-docker logs orly-dgraph -f
 
 # Last N lines
 docker logs orly-relay --tail 50
@@ -253,18 +238,7 @@ docker exec orly-relay ps aux
 
 # Inspect data directory
 docker exec orly-relay ls -la /data
-
-# Query dgraph
-docker exec orly-dgraph curl http://localhost:8080/health
 ```
-
-### Access Ratel UI
-
-Open http://localhost:8000 in browser:
-- View dgraph schema
-- Run DQL queries
-- Inspect stored data
-- Monitor performance
 
 ### Network Inspection
 
@@ -274,10 +248,6 @@ docker network ls
 
 # Inspect orly network
 docker network inspect scripts_orly-network
-
-# Test connectivity
-docker exec orly-relay ping dgraph
-docker exec orly-relay nc -zv dgraph 9080
 ```
 
 ### Health Check Status
@@ -298,10 +268,9 @@ docker inspect --format='{{json .State.Health}}' orly-relay | jq
 
 ```bash
 # Ensure library exists
-ls -l pkg/crypto/p8k/libsecp256k1.so
+ls -l libsecp256k1.so
 
-# Rebuild if needed
-cd pkg/crypto/p8k && make
+# Library should be in repository root
 ```
 
 **Error: Go module download fails**
@@ -324,22 +293,7 @@ docker logs orly-relay
 
 # Common issues:
 # - Port already in use: docker ps (check for conflicts)
-# - Dgraph not ready: docker logs orly-dgraph
 # - Bad configuration: docker exec orly-relay env
-```
-
-**Cannot connect to dgraph**
-
-```bash
-# Verify dgraph is healthy
-docker inspect orly-dgraph | grep Health
-
-# Check network connectivity
-docker exec orly-relay ping dgraph
-docker exec orly-relay nc -zv dgraph 9080
-
-# Verify dgraph is listening
-docker exec orly-dgraph netstat -tlnp | grep 9080
 ```
 
 **WebSocket connection fails**
@@ -364,7 +318,6 @@ sudo iptables -L | grep 3334
 start_period: 60s  # Default is 20-30s
 
 # Pre-pull images
-docker pull dgraph/standalone:latest
 docker pull golang:1.25-alpine
 ```
 
@@ -415,7 +368,6 @@ jobs:
           name: container-logs
           path: |
             scripts/orly-relay.log
-            scripts/dgraph.log
 ```
 
 ### GitLab CI Example
@@ -524,14 +476,12 @@ docker-compose -f docker-compose-test.yml stop
 # Remove only one service
 docker-compose -f docker-compose-test.yml rm -s -f orly
 
-# Clear dgraph data
-docker volume rm scripts_dgraph-data
+# Clear ORLY data
+docker volume rm scripts_orly-data
 ```
 
 ## Related Documentation
 
-- [Main Testing Guide](DGRAPH_TESTING.md)
-- [Package Tests](../pkg/dgraph/TESTING.md)
 - [Docker Documentation](https://docs.docker.com/)
 - [Docker Compose](https://docs.docker.com/compose/)
 
@@ -540,7 +490,7 @@ docker volume rm scripts_dgraph-data
 1. **Always use health checks** - Ensure services are ready
 2. **Use specific tags** - Don't rely on :latest in production
 3. **Limit resources** - Prevent container resource exhaustion
-4. **Volume backups** - Backup dgraph-data volume before updates
+4. **Volume backups** - Backup orly-data volume before updates
 5. **Network isolation** - Use custom networks for security
 6. **Read-only root** - Run as non-root user
 7. **Clean up regularly** - Remove unused containers/volumes
