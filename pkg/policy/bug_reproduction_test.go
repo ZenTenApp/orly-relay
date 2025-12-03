@@ -168,8 +168,8 @@ func TestBugReproduction_DebugPolicyFlow(t *testing.T) {
 	t.Logf("=== Policy Check Flow ===")
 
 	// Step 1: Check kinds policy
-	kindsAllowed := policy.checkKindsPolicy(event.Kind)
-	t.Logf("1. checkKindsPolicy(kind=%d) returned: %v", event.Kind, kindsAllowed)
+	kindsAllowed := policy.checkKindsPolicy("write", event.Kind)
+	t.Logf("1. checkKindsPolicy(access=write, kind=%d) returned: %v", event.Kind, kindsAllowed)
 
 	// Full policy check
 	allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")

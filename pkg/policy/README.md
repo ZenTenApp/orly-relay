@@ -19,6 +19,7 @@ The policy system provides fine-grained control over event storage and retrieval
 - [Dynamic Policy Updates](#dynamic-policy-updates)
 - [Evaluation Order](#evaluation-order)
 - [Examples](#examples)
+  - [Permissive Mode Examples](#permissive-mode-examples)
 
 ## Overview
 
@@ -270,6 +271,38 @@ Validates that tag values match the specified regex patterns. Only validates tag
 | `write_follows_whitelist` | array | Pubkeys whose follows can WRITE events. Restricts write access when set. |
 
 See [Follows-Based Whitelisting](#follows-based-whitelisting) for details.
+
+#### Permissive Mode Overrides
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `read_allow_permissive` | boolean | Override kind whitelist for READ access (reads allowed for all kinds) |
+| `write_allow_permissive` | boolean | Override kind whitelist for WRITE access (writes use global rule only) |
+
+These fields, when set on the **global** rule, allow independent control over read and write access relative to the kind whitelist/blacklist:
+
+```json
+{
+  "kind": {
+    "whitelist": [1, 3, 5, 7]
+  },
+  "global": {
+    "read_allow_permissive": true,
+    "size_limit": 100000
+  }
+}
+```
+
+In this example:
+- **READ**: Allowed for ALL kinds (permissive override ignores whitelist)
+- **WRITE**: Only kinds 1, 3, 5, 7 can be written (whitelist applies)
+
+**Important constraints:**
+- These flags only work on the **global** rule (ignored on kind-specific rules)
+- You cannot enable BOTH `read_allow_permissive` AND `write_allow_permissive` when a kind whitelist/blacklist is configured (this would make the whitelist meaningless)
+- Blacklists always take precedence—permissive flags do NOT override explicit blacklist entries
+
+See [Permissive Mode Examples](#permissive-mode-examples) for detailed use cases.
 
 #### Rate Limiting
 
@@ -808,6 +841,83 @@ access_allowed = (
   }
 }
 ```
+
+### Permissive Mode Examples
+
+#### Read-Permissive Relay (Write-Restricted)
+
+Allow anyone to read all events, but restrict writes to specific kinds:
+
+```json
+{
+  "default_policy": "allow",
+  "kind": {
+    "whitelist": [1, 3, 7, 9735]
+  },
+  "global": {
+    "read_allow_permissive": true,
+    "size_limit": 100000
+  }
+}
+```
+
+**Behavior:**
+- **READ**: Any kind can be read (permissive override)
+- **WRITE**: Only kinds 1, 3, 7, 9735 can be written
+
+This is useful for relays that want to serve as aggregators (read any event type) but only accept specific event types from clients.
+
+#### Write-Permissive with Read Restrictions
+
+Allow writes of any kind (with global constraints), but restrict reads:
+
+```json
+{
+  "default_policy": "allow",
+  "kind": {
+    "whitelist": [0, 1, 3]
+  },
+  "global": {
+    "write_allow_permissive": true,
+    "size_limit": 50000,
+    "max_age_of_event": 86400
+  }
+}
+```
+
+**Behavior:**
+- **READ**: Only kinds 0, 1, 3 can be read (whitelist applies)
+- **WRITE**: Any kind can be written (with size and age limits from global rule)
+
+This is useful for relays that want to accept any event type but only serve a curated subset.
+
+#### Archive Relay (Read Any, Accept Specific)
+
+Perfect for archive/backup relays:
+
+```json
+{
+  "default_policy": "allow",
+  "kind": {
+    "whitelist": [0, 1, 3, 4, 7, 30023]
+  },
+  "global": {
+    "read_allow_permissive": true,
+    "size_limit": 500000
+  },
+  "rules": {
+    "30023": {
+      "description": "Long-form articles with validation",
+      "identifier_regex": "^[a-z0-9-]{1,64}$",
+      "max_expiry_duration": "P365D"
+    }
+  }
+}
+```
+
+**Behavior:**
+- **READ**: All kinds can be read (historical data)
+- **WRITE**: Only whitelisted kinds accepted, with specific rules for articles
 
 ## Testing
 

@@ -1351,6 +1351,57 @@ func TestValidateJSONNewFields(t *testing.T) {
 			}`,
 			expectError: false,
 		},
+		// Tests for read_allow_permissive and write_allow_permissive
+		{
+			name: "valid read_allow_permissive alone with whitelist",
+			json: `{
+				"kind": {"whitelist": [1, 3, 5]},
+				"global": {"read_allow_permissive": true}
+			}`,
+			expectError: false,
+		},
+		{
+			name: "valid write_allow_permissive alone with whitelist",
+			json: `{
+				"kind": {"whitelist": [1, 3, 5]},
+				"global": {"write_allow_permissive": true}
+			}`,
+			expectError: false,
+		},
+		{
+			name: "invalid both permissive flags with whitelist",
+			json: `{
+				"kind": {"whitelist": [1, 3, 5]},
+				"global": {
+					"read_allow_permissive": true,
+					"write_allow_permissive": true
+				}
+			}`,
+			expectError: true,
+			errorMatch:  "read_allow_permissive and write_allow_permissive cannot be enabled together",
+		},
+		{
+			name: "invalid both permissive flags with blacklist",
+			json: `{
+				"kind": {"blacklist": [2, 4, 6]},
+				"global": {
+					"read_allow_permissive": true,
+					"write_allow_permissive": true
+				}
+			}`,
+			expectError: true,
+			errorMatch:  "read_allow_permissive and write_allow_permissive cannot be enabled together",
+		},
+		{
+			name: "valid both permissive flags without any kind restriction",
+			json: `{
+				"global": {
+					"read_allow_permissive": true,
+					"write_allow_permissive": true
+				}
+			}`,
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {

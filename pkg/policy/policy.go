@@ -144,6 +144,23 @@ type Rule struct {
 	// Example: "^[a-z0-9-]{1,64}$" requires lowercase alphanumeric with hyphens, max 64 chars.
 	IdentifierRegex string `json:"identifier_regex,omitempty"`
 
+	// ReadAllowPermissive when set on a GLOBAL rule, allows read access for ALL kinds,
+	// even when a kind whitelist is configured. This allows the kind whitelist to
+	// restrict WRITE operations while keeping reads permissive.
+	// When true:
+	// - READ: Allowed for all kinds (global rule still applies for other read restrictions)
+	// - WRITE: Kind whitelist/blacklist applies as normal
+	// Only meaningful on the Global rule - ignored on kind-specific rules.
+	ReadAllowPermissive bool `json:"read_allow_permissive,omitempty"`
+
+	// WriteAllowPermissive when set on a GLOBAL rule, allows write access for kinds
+	// that don't have specific rules defined, bypassing the implicit kind whitelist.
+	// When true:
+	// - Kinds without specific rules apply global rule constraints only
+	// - Kind whitelist still blocks reads for unlisted kinds (unless ReadAllowPermissive is also set)
+	// Only meaningful on the Global rule - ignored on kind-specific rules.
+	WriteAllowPermissive bool `json:"write_allow_permissive,omitempty"`
+
 	// Binary caches for faster comparison (populated from hex strings above)
 	// These are not exported and not serialized to JSON
 	writeAllowBin              [][]byte
@@ -178,7 +195,8 @@ func (r *Rule) hasAnyRules() bool {
 		len(r.ReadFollowsWhitelist) > 0 || len(r.WriteFollowsWhitelist) > 0 ||
 		len(r.readFollowsWhitelistBin) > 0 || len(r.writeFollowsWhitelistBin) > 0 ||
 		len(r.TagValidation) > 0 ||
-		r.ProtectedRequired || r.IdentifierRegex != ""
+		r.ProtectedRequired || r.IdentifierRegex != "" ||
+		r.ReadAllowPermissive || r.WriteAllowPermissive
 }
 
 // populateBinaryCache converts hex-encoded pubkey strings to binary for faster comparison.
@@ -1280,7 +1298,7 @@ func (p *P) CheckPolicy(
 	// ==========================================================================
 	// STEP 1: Check kinds whitelist/blacklist (applies before any rule checks)
 	// ==========================================================================
-	if !p.checkKindsPolicy(ev.Kind) {
+	if !p.checkKindsPolicy(access, ev.Kind) {
 		return false, nil
 	}
 
@@ -1341,18 +1359,31 @@ func (p *P) CheckPolicy(
 	return p.getDefaultPolicyAction(), nil
 }
 
-// checkKindsPolicy checks if the event kind is allowed.
+// checkKindsPolicy checks if the event kind is allowed for the given access type.
 // Logic:
-// 1. If explicit whitelist exists, use it (backwards compatibility)
-// 2. If explicit blacklist exists, use it (backwards compatibility)
-// 3. Otherwise, kinds with defined rules are implicitly allowed, others denied
-func (p *P) checkKindsPolicy(kind uint16) bool {
-	// If whitelist is present, only allow whitelisted kinds
+// 1. If explicit whitelist exists, use it (but respect permissive flags for read/write)
+// 2. If explicit blacklist exists, use it (but respect permissive flags for read/write)
+// 3. Otherwise, kinds with defined rules are implicitly allowed, others denied (with permissive overrides)
+//
+// Permissive flags (set on Global rule):
+// - ReadAllowPermissive: Allows READ access for kinds not in whitelist (write still restricted)
+// - WriteAllowPermissive: Allows WRITE access for kinds not in whitelist (uses global rule constraints)
+func (p *P) checkKindsPolicy(access string, kind uint16) bool {
+	// If whitelist is present, only allow whitelisted kinds (with permissive overrides)
 	if len(p.Kind.Whitelist) > 0 {
 		for _, allowedKind := range p.Kind.Whitelist {
 			if kind == uint16(allowedKind) {
 				return true
 			}
+		}
+		// Kind not in whitelist - check permissive flags
+		if access == "read" && p.Global.ReadAllowPermissive {
+			log.D.F("read_allow_permissive: allowing read for kind %d not in whitelist", kind)
+			return true // Allow read even though kind not whitelisted
+		}
+		if access == "write" && p.Global.WriteAllowPermissive {
+			log.D.F("write_allow_permissive: allowing write for kind %d not in whitelist (global rules apply)", kind)
+			return true // Allow write even though kind not whitelisted, global rule will be applied
 		}
 		return false
 	}
@@ -1361,12 +1392,25 @@ func (p *P) checkKindsPolicy(kind uint16) bool {
 	if len(p.Kind.Blacklist) > 0 {
 		for _, deniedKind := range p.Kind.Blacklist {
 			if kind == uint16(deniedKind) {
+				// Kind is explicitly blacklisted - permissive flags don't override blacklist
 				return false
 			}
 		}
 		// Not in blacklist - check if rule exists for implicit whitelist
 		_, hasRule := p.rules[int(kind)]
-		return hasRule // Only allow if there's a rule defined
+		if hasRule {
+			return true
+		}
+		// No kind-specific rule - check permissive flags
+		if access == "read" && p.Global.ReadAllowPermissive {
+			log.D.F("read_allow_permissive: allowing read for kind %d (not blacklisted, no rule)", kind)
+			return true
+		}
+		if access == "write" && p.Global.WriteAllowPermissive {
+			log.D.F("write_allow_permissive: allowing write for kind %d (not blacklisted, no rule)", kind)
+			return true
+		}
+		return false // Only allow if there's a rule defined
 	}
 
 	// No explicit whitelist or blacklist
@@ -1374,6 +1418,7 @@ func (p *P) checkKindsPolicy(kind uint16) bool {
 	// - If default_policy is explicitly "allow", allow all kinds (rules add constraints, not restrictions)
 	// - If default_policy is unset or "deny", use implicit whitelist (only allow kinds with rules)
 	// - If global rule has any configuration, allow kinds through for global rule checking
+	// - Permissive flags can override implicit whitelist behavior
 	if len(p.rules) > 0 {
 		// If default_policy is explicitly "allow", don't use implicit whitelist
 		if p.DefaultPolicy == "allow" {
@@ -1387,6 +1432,15 @@ func (p *P) checkKindsPolicy(kind uint16) bool {
 		// No kind-specific rule, but check if global rule exists
 		if p.Global.hasAnyRules() {
 			return true // Allow through for global rule check
+		}
+		// Check permissive flags for implicit whitelist override
+		if access == "read" && p.Global.ReadAllowPermissive {
+			log.D.F("read_allow_permissive: allowing read for kind %d (implicit whitelist override)", kind)
+			return true
+		}
+		if access == "write" && p.Global.WriteAllowPermissive {
+			log.D.F("write_allow_permissive: allowing write for kind %d (implicit whitelist override)", kind)
+			return true
 		}
 		return false
 	}
@@ -2050,6 +2104,13 @@ func (p *P) ValidateJSON(policyJSON []byte) error {
 	// Validate default_policy value
 	if tempPolicy.DefaultPolicy != "" && tempPolicy.DefaultPolicy != "allow" && tempPolicy.DefaultPolicy != "deny" {
 		return fmt.Errorf("invalid default_policy value: %q (must be \"allow\" or \"deny\")", tempPolicy.DefaultPolicy)
+	}
+
+	// Validate permissive flags: if both read_allow_permissive AND write_allow_permissive are set
+	// with a kind whitelist or blacklist, this makes the whitelist/blacklist meaningless
+	hasKindRestriction := len(tempPolicy.Kind.Whitelist) > 0 || len(tempPolicy.Kind.Blacklist) > 0
+	if hasKindRestriction && tempPolicy.Global.ReadAllowPermissive && tempPolicy.Global.WriteAllowPermissive {
+		return fmt.Errorf("invalid policy: both read_allow_permissive and write_allow_permissive cannot be enabled together with a kind whitelist or blacklist (this would make the kind restriction meaningless)")
 	}
 
 	log.D.F("policy JSON validation passed")

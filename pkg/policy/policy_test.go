@@ -146,6 +146,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 	tests := []struct {
 		name     string
 		policy   *P
+		access   string // "read" or "write"
 		kind     uint16
 		expected bool
 	}{
@@ -155,6 +156,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 				Kind:  Kinds{},
 				rules: map[int]Rule{}, // No rules defined
 			},
+			access:   "write",
 			kind:     1,
 			expected: true, // Should be allowed (no rules = allow all kinds)
 		},
@@ -166,6 +168,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 					2: {Description: "Rule for kind 2"},
 				},
 			},
+			access:   "write",
 			kind:     1,
 			expected: false, // Should be denied (implicit whitelist, no rule for kind 1)
 		},
@@ -177,6 +180,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 					1: {Description: "Rule for kind 1"},
 				},
 			},
+			access:   "write",
 			kind:     1,
 			expected: true, // Should be allowed (has rule)
 		},
@@ -189,6 +193,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 				},
 				rules: map[int]Rule{}, // No specific rules
 			},
+			access:   "write",
 			kind:     1,
 			expected: true, // Should be allowed (global rule exists)
 		},
@@ -199,6 +204,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 					Whitelist: []int{1, 3, 5},
 				},
 			},
+			access:   "write",
 			kind:     1,
 			expected: true,
 		},
@@ -209,6 +215,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 					Whitelist: []int{1, 3, 5},
 				},
 			},
+			access:   "write",
 			kind:     2,
 			expected: false,
 		},
@@ -222,6 +229,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 					3: {Description: "Rule for kind 3"}, // Has at least one rule
 				},
 			},
+			access:   "write",
 			kind:     1,
 			expected: false, // Should be denied (not blacklisted but no rule for kind 1)
 		},
@@ -235,6 +243,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 					1: {Description: "Rule for kind 1"},
 				},
 			},
+			access:   "write",
 			kind:     1,
 			expected: true, // Should be allowed (not blacklisted and has rule)
 		},
@@ -245,6 +254,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 					Blacklist: []int{2, 4, 6},
 				},
 			},
+			access:   "write",
 			kind:     2,
 			expected: false,
 		},
@@ -256,14 +266,87 @@ func TestCheckKindsPolicy(t *testing.T) {
 					Blacklist: []int{1, 2, 3},
 				},
 			},
+			access:   "write",
 			kind:     1,
 			expected: true,
+		},
+		// Tests for new permissive flags
+		{
+			name: "read_allow_permissive - allows read for non-whitelisted kind",
+			policy: &P{
+				Kind: Kinds{
+					Whitelist: []int{1, 3, 5},
+				},
+				Global: Rule{
+					ReadAllowPermissive: true,
+				},
+			},
+			access:   "read",
+			kind:     2,
+			expected: true, // Should be allowed (read permissive overrides whitelist)
+		},
+		{
+			name: "read_allow_permissive - write still blocked for non-whitelisted kind",
+			policy: &P{
+				Kind: Kinds{
+					Whitelist: []int{1, 3, 5},
+				},
+				Global: Rule{
+					ReadAllowPermissive: true,
+				},
+			},
+			access:   "write",
+			kind:     2,
+			expected: false, // Should be denied (only read is permissive)
+		},
+		{
+			name: "write_allow_permissive - allows write for non-whitelisted kind",
+			policy: &P{
+				Kind: Kinds{
+					Whitelist: []int{1, 3, 5},
+				},
+				Global: Rule{
+					WriteAllowPermissive: true,
+				},
+			},
+			access:   "write",
+			kind:     2,
+			expected: true, // Should be allowed (write permissive overrides whitelist)
+		},
+		{
+			name: "write_allow_permissive - read still blocked for non-whitelisted kind",
+			policy: &P{
+				Kind: Kinds{
+					Whitelist: []int{1, 3, 5},
+				},
+				Global: Rule{
+					WriteAllowPermissive: true,
+				},
+			},
+			access:   "read",
+			kind:     2,
+			expected: false, // Should be denied (only write is permissive)
+		},
+		{
+			name: "blacklist - permissive flags do NOT override blacklist",
+			policy: &P{
+				Kind: Kinds{
+					Blacklist: []int{2, 4, 6},
+				},
+				Global: Rule{
+					ReadAllowPermissive:  true,
+					WriteAllowPermissive: true,
+				},
+			},
+			access:   "write",
+			kind:     2,
+			expected: false, // Should be denied (blacklist always applies)
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.policy.checkKindsPolicy(tt.kind)
+			result := tt.policy.checkKindsPolicy(tt.access, tt.kind)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v", tt.expected, result)
 			}
@@ -996,19 +1079,19 @@ func TestEdgeCasesWhitelistBlacklistConflict(t *testing.T) {
 	}
 
 	// Test kind in both whitelist and blacklist - whitelist should win
-	allowed := policy.checkKindsPolicy(1)
+	allowed := policy.checkKindsPolicy("write", 1)
 	if !allowed {
 		t.Error("Expected whitelist to override blacklist")
 	}
 
 	// Test kind in blacklist but not whitelist
-	allowed = policy.checkKindsPolicy(2)
+	allowed = policy.checkKindsPolicy("write", 2)
 	if allowed {
 		t.Error("Expected kind in blacklist but not whitelist to be blocked")
 	}
 
 	// Test kind in whitelist but not blacklist
-	allowed = policy.checkKindsPolicy(5)
+	allowed = policy.checkKindsPolicy("write", 5)
 	if !allowed {
 		t.Error("Expected kind in whitelist to be allowed")
 	}
