@@ -24,9 +24,6 @@ type DatabaseConfig struct {
 	QueryCacheMaxAge     time.Duration // ORLY_QUERY_CACHE_MAX_AGE
 	InlineEventThreshold int           // ORLY_INLINE_EVENT_THRESHOLD
 
-	// DGraph-specific settings
-	DgraphURL string // ORLY_DGRAPH_URL
-
 	// Neo4j-specific settings
 	Neo4jURI      string // ORLY_NEO4J_URI
 	Neo4jUser     string // ORLY_NEO4J_USER
@@ -34,7 +31,7 @@ type DatabaseConfig struct {
 }
 
 // NewDatabase creates a database instance based on the specified type.
-// Supported types in WASM: "wasmdb", "dgraph", "neo4j"
+// Supported types in WASM: "wasmdb", "neo4j"
 // Note: "badger" is not available in WASM builds due to filesystem dependencies
 func NewDatabase(
 	ctx context.Context,
@@ -67,12 +64,6 @@ func NewDatabaseWithConfig(
 			return nil, fmt.Errorf("wasmdb database backend not available (import _ \"next.orly.dev/pkg/wasmdb\")")
 		}
 		return newWasmDBDatabase(ctx, cancel, cfg)
-	case "dgraph":
-		// Use the dgraph implementation (HTTP-based, works in WASM)
-		if newDgraphDatabase == nil {
-			return nil, fmt.Errorf("dgraph database backend not available (import _ \"next.orly.dev/pkg/dgraph\")")
-		}
-		return newDgraphDatabase(ctx, cancel, cfg)
 	case "neo4j":
 		// Use the neo4j implementation (HTTP-based, works in WASM)
 		if newNeo4jDatabase == nil {
@@ -80,18 +71,8 @@ func NewDatabaseWithConfig(
 		}
 		return newNeo4jDatabase(ctx, cancel, cfg)
 	default:
-		return nil, fmt.Errorf("unsupported database type: %s (supported in WASM: wasmdb, dgraph, neo4j)", dbType)
+		return nil, fmt.Errorf("unsupported database type: %s (supported in WASM: wasmdb, neo4j)", dbType)
 	}
-}
-
-// newDgraphDatabase creates a dgraph database instance
-// This is defined here to avoid import cycles
-var newDgraphDatabase func(context.Context, context.CancelFunc, *DatabaseConfig) (Database, error)
-
-// RegisterDgraphFactory registers the dgraph database factory
-// This is called from the dgraph package's init() function
-func RegisterDgraphFactory(factory func(context.Context, context.CancelFunc, *DatabaseConfig) (Database, error)) {
-	newDgraphDatabase = factory
 }
 
 // newNeo4jDatabase creates a neo4j database instance

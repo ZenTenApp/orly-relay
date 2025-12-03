@@ -42,7 +42,6 @@ type BenchmarkConfig struct {
 	NetRate    int // events/sec per worker
 
 	// Backend selection
-	UseDgraph     bool
 	UseNeo4j      bool
 	UseRelySQLite bool
 }
@@ -115,12 +114,6 @@ func main() {
 		return
 	}
 
-	if config.UseDgraph {
-		// Run dgraph benchmark
-		runDgraphBenchmark(config)
-		return
-	}
-
 	if config.UseNeo4j {
 		// Run Neo4j benchmark
 		runNeo4jBenchmark(config)
@@ -150,28 +143,6 @@ func main() {
 	// Generate reports
 	benchmark.GenerateReport()
 	benchmark.GenerateAsciidocReport()
-}
-
-func runDgraphBenchmark(config *BenchmarkConfig) {
-	fmt.Printf("Starting Nostr Relay Benchmark (Dgraph Backend)\n")
-	fmt.Printf("Data Directory: %s\n", config.DataDir)
-	fmt.Printf(
-		"Events: %d, Workers: %d\n",
-		config.NumEvents, config.ConcurrentWorkers,
-	)
-
-	dgraphBench, err := NewDgraphBenchmark(config)
-	if err != nil {
-		log.Fatalf("Failed to create dgraph benchmark: %v", err)
-	}
-	defer dgraphBench.Close()
-
-	// Run dgraph benchmark suite
-	dgraphBench.RunSuite()
-
-	// Generate reports
-	dgraphBench.GenerateReport()
-	dgraphBench.GenerateAsciidocReport()
 }
 
 func runNeo4jBenchmark(config *BenchmarkConfig) {
@@ -254,10 +225,6 @@ func parseFlags() *BenchmarkConfig {
 	flag.IntVar(&config.NetRate, "net-rate", 20, "Events per second per worker")
 
 	// Backend selection
-	flag.BoolVar(
-		&config.UseDgraph, "dgraph", false,
-		"Use dgraph backend (requires Docker)",
-	)
 	flag.BoolVar(
 		&config.UseNeo4j, "neo4j", false,
 		"Use Neo4j backend (requires Docker)",

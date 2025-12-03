@@ -13,7 +13,7 @@ import (
 )
 
 // Database defines the interface that all database implementations must satisfy.
-// This allows switching between different storage backends (badger, dgraph, etc.)
+// This allows switching between different storage backends (badger, neo4j, etc.)
 type Database interface {
 	// Core lifecycle methods
 	Path() string

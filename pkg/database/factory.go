@@ -31,7 +31,7 @@ type DatabaseConfig struct {
 }
 
 // NewDatabase creates a database instance based on the specified type.
-// Supported types: "badger", "dgraph", "neo4j"
+// Supported types: "badger", "neo4j"
 func NewDatabase(
 	ctx context.Context,
 	cancel context.CancelFunc,

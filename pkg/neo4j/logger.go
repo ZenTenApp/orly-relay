@@ -10,7 +10,7 @@ import (
 	"lol.mleku.dev/log"
 )
 
-// NewLogger creates a new dgraph logger.
+// NewLogger creates a new neo4j logger.
 func NewLogger(logLevel int, label string) (l *logger) {
 	l = &logger{Label: label}
 	l.Level.Store(int32(logLevel))
