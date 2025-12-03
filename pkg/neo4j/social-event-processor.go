@@ -220,11 +220,12 @@ func (p *SocialEventProcessor) processReport(ctx context.Context, ev *event.E) e
 	var reportedPubkey string
 	var reportType string = "other" // default
 
-	for _, tag := range *ev.Tags {
-		if len(tag.T) >= 2 && string(tag.T[0]) == "p" {
-			reportedPubkey = string(tag.T[1])
-			if len(tag.T) >= 3 {
-				reportType = string(tag.T[2])
+	for _, t := range *ev.Tags {
+		if len(t.T) >= 2 && string(t.T[0]) == "p" {
+			// Use ExtractPTagValue to handle binary encoding and normalize to lowercase
+			reportedPubkey = ExtractPTagValue(t)
+			if len(t.T) >= 3 {
+				reportType = string(t.T[2])
 			}
 			break // Use first p-tag
 		}
@@ -574,14 +575,17 @@ func (p *SocialEventProcessor) BatchProcessContactLists(ctx context.Context, eve
 // Helper functions
 
 // extractPTags extracts unique pubkeys from p-tags
+// Uses ExtractPTagValue to properly handle binary-encoded tag values
+// and normalizes to lowercase hex for consistent Neo4j storage
 func extractPTags(ev *event.E) []string {
 	seen := make(map[string]bool)
 	var pubkeys []string
 
-	for _, tag := range *ev.Tags {
-		if len(tag.T) >= 2 && string(tag.T[0]) == "p" {
-			pubkey := string(tag.T[1])
-			if len(pubkey) == 64 && !seen[pubkey] { // Basic validation: 64 hex chars
+	for _, t := range *ev.Tags {
+		if len(t.T) >= 2 && string(t.T[0]) == "p" {
+			// Use ExtractPTagValue to handle binary encoding and normalize to lowercase
+			pubkey := ExtractPTagValue(t)
+			if IsValidHexPubkey(pubkey) && !seen[pubkey] {
 				seen[pubkey] = true
 				pubkeys = append(pubkeys, pubkey)
 			}

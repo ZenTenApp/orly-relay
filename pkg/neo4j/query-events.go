@@ -113,32 +113,49 @@ func (n *N) buildCypherQuery(f *filter.F, includeDeleteEvents bool) (string, map
 	// Tag filters - this is where Neo4j's graph capabilities shine
 	// We can efficiently traverse tag relationships
 	tagIndex := 0
-	for _, tagValues := range *f.Tags {
-		if len(tagValues.T) > 0 {
-			tagVarName := fmt.Sprintf("t%d", tagIndex)
-			tagTypeParam := fmt.Sprintf("tagType_%d", tagIndex)
-			tagValuesParam := fmt.Sprintf("tagValues_%d", tagIndex)
+	if f.Tags != nil {
+		for _, tagValues := range *f.Tags {
+			if len(tagValues.T) > 0 {
+				tagVarName := fmt.Sprintf("t%d", tagIndex)
+				tagTypeParam := fmt.Sprintf("tagType_%d", tagIndex)
+				tagValuesParam := fmt.Sprintf("tagValues_%d", tagIndex)
 
-			// Add tag relationship to MATCH clause
-			matchClause += fmt.Sprintf(" OPTIONAL MATCH (e)-[:TAGGED_WITH]->(%s:Tag)", tagVarName)
+				// Add tag relationship to MATCH clause
+				matchClause += fmt.Sprintf(" OPTIONAL MATCH (e)-[:TAGGED_WITH]->(%s:Tag)", tagVarName)
 
-			// The first element is the tag type (e.g., "e", "p", etc.)
-			tagType := string(tagValues.T[0])
+				// The first element is the tag type (e.g., "e", "p", etc.)
+				tagType := string(tagValues.T[0])
 
-			// Convert remaining tag values to strings (skip first element which is the type)
-			tagValueStrings := make([]string, len(tagValues.T)-1)
-			for i, tv := range tagValues.T[1:] {
-				tagValueStrings[i] = string(tv)
+				// Convert remaining tag values to strings (skip first element which is the type)
+				// For e/p tags, use NormalizePubkeyHex to handle binary encoding and uppercase hex
+				tagValueStrings := make([]string, 0, len(tagValues.T)-1)
+				for _, tv := range tagValues.T[1:] {
+					if tagType == "e" || tagType == "p" {
+						// Normalize e/p tag values to lowercase hex (handles binary encoding)
+						normalized := NormalizePubkeyHex(tv)
+						if normalized != "" {
+							tagValueStrings = append(tagValueStrings, normalized)
+						}
+					} else {
+						// For other tags, use direct string conversion
+						tagValueStrings = append(tagValueStrings, string(tv))
+					}
+				}
+
+				// Skip if no valid values after normalization
+				if len(tagValueStrings) == 0 {
+					continue
+				}
+
+				// Add WHERE conditions for this tag
+				params[tagTypeParam] = tagType
+				params[tagValuesParam] = tagValueStrings
+				whereClauses = append(whereClauses,
+					fmt.Sprintf("(%s.type = $%s AND %s.value IN $%s)",
+						tagVarName, tagTypeParam, tagVarName, tagValuesParam))
+
+				tagIndex++
 			}
-
-			// Add WHERE conditions for this tag
-			params[tagTypeParam] = tagType
-			params[tagValuesParam] = tagValueStrings
-			whereClauses = append(whereClauses,
-				fmt.Sprintf("(%s.type = $%s AND %s.value IN $%s)",
-					tagVarName, tagTypeParam, tagVarName, tagValuesParam))
-
-			tagIndex++
 		}
 	}
 

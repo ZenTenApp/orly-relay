@@ -171,7 +171,9 @@
       "Bash(GOOS=js GOARCH=wasm go test:*)",
       "Bash(ls:*)",
       "Bash(GOROOT=/home/mleku/go node:*)",
-      "Bash(GOOS=js GOARCH=wasm go build:*)"
+      "Bash(GOOS=js GOARCH=wasm go build:*)",
+      "Bash(go mod graph:*)",
+      "Bash(xxd:*)"
     ],
     "deny": [],
     "ask": []

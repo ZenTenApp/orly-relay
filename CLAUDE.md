@@ -393,22 +393,75 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
 - External packages (e.g., `app/`) should ONLY use public API methods, never access internal fields
 - **DO NOT** change unexported fields to exported when fixing bugs - this breaks the domain boundary
 
-**Binary-Optimized Tag Storage (IMPORTANT):**
-- The nostr library (`git.mleku.dev/mleku/nostr/encoders/tag`) uses binary optimization for `e` and `p` tags
-- When events are unmarshaled from JSON, 64-character hex values in e/p tags are converted to 33-byte binary format (32 bytes hash + null terminator)
-- **DO NOT** use `tag.Value()` directly for e/p tags - it returns raw bytes which may be binary, not hex
-- **ALWAYS** use these methods instead:
-  - `tag.ValueHex()` - Returns hex string regardless of storage format (handles both binary and hex)
-  - `tag.ValueBinary()` - Returns 32-byte binary if stored in binary format, nil otherwise
-- Example pattern for comparing pubkeys:
-  ```go
-  // CORRECT: Use ValueHex() for hex decoding
-  pt, err := hex.Dec(string(pTag.ValueHex()))
+**Binary-Optimized Tag Storage (CRITICAL - Read Carefully):**
 
-  // WRONG: Value() may return binary bytes, not hex
-  pt, err := hex.Dec(string(pTag.Value()))  // Will fail for binary-encoded tags!
-  ```
-- This optimization saves memory and enables faster comparisons in the database layer
+The nostr library (`git.mleku.dev/mleku/nostr/encoders/tag`) uses binary optimization for `e` and `p` tags. This is a common source of bugs when working with pubkeys and event IDs.
+
+**How Binary Encoding Works:**
+- When events are unmarshaled from JSON, 64-character hex values in e/p tags are converted to 33-byte binary format (32 bytes hash + null terminator)
+- The `tag.T` field contains `[][]byte` where each element may be binary or hex depending on tag type
+- `event.E.ID`, `event.E.Pubkey`, and `event.E.Sig` are always stored as fixed-size byte arrays (`[32]byte` or `[64]byte`)
+
+**NEVER Do This:**
+```go
+// WRONG: tag.T[1] may be 33-byte binary, not 64-char hex!
+pubkey := string(tag.T[1])  // Results in garbage for binary-encoded tags
+
+// WRONG: Will fail for binary-encoded e/p tags
+pt, err := hex.Dec(string(pTag.Value()))
+```
+
+**ALWAYS Do This:**
+```go
+// CORRECT: Use ValueHex() which handles both binary and hex formats
+pubkey := string(pTag.ValueHex())  // Always returns lowercase hex
+
+// CORRECT: For decoding to bytes
+pt, err := hex.Dec(string(pTag.ValueHex()))
+
+// CORRECT: For event.E fields (always binary, use hex.Enc)
+pubkeyHex := hex.Enc(ev.Pubkey[:])  // Always produces lowercase hex
+eventIDHex := hex.Enc(ev.ID[:])
+sigHex := hex.Enc(ev.Sig[:])
+```
+
+**Tag Methods Reference:**
+- `tag.ValueHex()` - Returns hex string regardless of storage format (handles both binary and hex)
+- `tag.ValueBinary()` - Returns 32-byte binary if stored in binary format, nil otherwise
+- `tag.Value()` - Returns raw bytes **DANGEROUS for e/p tags** - may be binary
+
+**Hex Case Sensitivity:**
+- The hex encoder (`git.mleku.dev/mleku/nostr/encoders/hex`) **always produces lowercase hex**
+- External sources may send uppercase hex (e.g., `"ABCD..."` instead of `"abcd..."`)
+- When storing pubkeys/event IDs (especially in Neo4j), **always normalize to lowercase**
+- Mixed case causes duplicate entities in graph databases
+
+**Neo4j-Specific Helpers (pkg/neo4j/hex_utils.go):**
+```go
+// ExtractPTagValue handles binary encoding and normalizes to lowercase
+pubkey := ExtractPTagValue(pTag)
+
+// ExtractETagValue handles binary encoding and normalizes to lowercase
+eventID := ExtractETagValue(eTag)
+
+// NormalizePubkeyHex handles both binary and uppercase hex
+normalized := NormalizePubkeyHex(rawValue)
+
+// IsValidHexPubkey validates 64-char hex
+if IsValidHexPubkey(pubkey) { ... }
+```
+
+**Files Most Affected by These Rules:**
+- `pkg/neo4j/save-event.go` - Event storage with e/p tag handling
+- `pkg/neo4j/social-event-processor.go` - Social graph with p-tag extraction
+- `pkg/neo4j/query-events.go` - Filter queries with tag matching
+- `pkg/dgraph/save-event.go` - DGraph event storage with e/p tag handling
+- `pkg/dgraph/delete.go` - DGraph event deletion with e-tag handling
+- `pkg/database/save-event.go` - Badger event storage
+- `pkg/database/filter_utils.go` - Tag normalization utilities
+- `pkg/find/parser.go` - FIND protocol parser with p-tag extraction
+
+This optimization saves memory and enables faster comparisons in the database layer.
 
 **Interface Design - CRITICAL RULES:**
 

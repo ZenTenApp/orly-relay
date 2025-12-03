@@ -4,11 +4,50 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 )
+
+// Tag binary encoding constants (matching the nostr library)
+const (
+	binaryEncodedLen = 33 // 32 bytes hash + null terminator
+	hexEncodedLen    = 64 // 64 hex characters for 32 bytes
+	hashLen          = 32
+)
+
+// isBinaryEncoded checks if a value is stored in the nostr library's binary-optimized format
+func isBinaryEncoded(val []byte) bool {
+	return len(val) == binaryEncodedLen && val[hashLen] == 0
+}
+
+// normalizePubkeyHex ensures a pubkey is in lowercase hex format.
+// Handles binary-encoded values (33 bytes) and uppercase hex strings.
+func normalizePubkeyHex(val []byte) string {
+	if isBinaryEncoded(val) {
+		return hex.Enc(val[:hashLen])
+	}
+	if len(val) == hexEncodedLen {
+		return strings.ToLower(string(val))
+	}
+	return strings.ToLower(string(val))
+}
+
+// extractPTagValue extracts a pubkey from a p-tag, handling binary encoding.
+// Returns lowercase hex string.
+func extractPTagValue(t *tag.T) string {
+	if t == nil || len(t.T) < 2 {
+		return ""
+	}
+	hexVal := t.ValueHex()
+	if len(hexVal) == 0 {
+		return ""
+	}
+	return strings.ToLower(string(hexVal))
+}
 
 // getTagValue retrieves the value of the first tag with the given key
 func getTagValue(ev *event.E, key string) string {
@@ -128,6 +167,7 @@ func ParseTrustGraph(ev *event.E) (*TrustGraphEvent, error) {
 	}
 
 	// Parse p tags (trust entries)
+	// Use extractPTagValue to handle binary-encoded pubkeys
 	var entries []TrustEntry
 	pTags := getAllTags(ev, "p")
 	for _, t := range pTags {
@@ -135,7 +175,12 @@ func ParseTrustGraph(ev *event.E) (*TrustGraphEvent, error) {
 			continue // Skip malformed tags
 		}
 
-		pubkey := string(t.T[1])
+		// Use extractPTagValue to handle binary encoding and normalize to lowercase hex
+		pubkey := extractPTagValue(t)
+		if pubkey == "" {
+			continue // Skip invalid p-tags
+		}
+
 		serviceURL := ""
 		trustScore := 0.5 // default
 
@@ -336,6 +381,8 @@ func ParseCertificate(ev *event.E) (*Certificate, error) {
 	validUntil := time.Unix(validUntilUnix, 0)
 
 	// Parse witness tags
+	// Note: "witness" is a custom tag key (not "p"), so it doesn't have binary encoding,
+	// but we normalize the pubkey to lowercase for consistency
 	var witnesses []WitnessSignature
 	witnessTags := getAllTags(ev, "witness")
 	for _, t := range witnessTags {
@@ -344,7 +391,7 @@ func ParseCertificate(ev *event.E) (*Certificate, error) {
 		}
 
 		witnesses = append(witnesses, WitnessSignature{
-			Pubkey:    string(t.T[1]),
+			Pubkey:    normalizePubkeyHex(t.T[1]), // Normalize to lowercase
 			Signature: string(t.T[2]),
 		})
 	}

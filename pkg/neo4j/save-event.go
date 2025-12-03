@@ -164,10 +164,15 @@ CREATE (e)-[:AUTHORED_BY]->(a)
 			}
 
 			tagType := string(tagItem.T[0])
-			tagValue := string(tagItem.T[1])
 
 			switch tagType {
 			case "e": // Event reference - creates REFERENCES relationship
+				// Use ExtractETagValue to handle binary encoding and normalize to lowercase hex
+				tagValue := ExtractETagValue(tagItem)
+				if tagValue == "" {
+					continue // Skip invalid e-tags
+				}
+
 				// Create reference to another event (if it exists)
 				paramName := fmt.Sprintf("eTag_%d", eTagIndex)
 				params[paramName] = tagValue
@@ -201,6 +206,12 @@ FOREACH (ignoreMe IN CASE WHEN ref%d IS NOT NULL THEN [1] ELSE [] END |
 				eTagIndex++
 
 			case "p": // Pubkey mention - creates MENTIONS relationship
+				// Use ExtractPTagValue to handle binary encoding and normalize to lowercase hex
+				tagValue := ExtractPTagValue(tagItem)
+				if tagValue == "" {
+					continue // Skip invalid p-tags
+				}
+
 				// Create mention to another author
 				paramName := fmt.Sprintf("pTag_%d", pTagIndex)
 				params[paramName] = tagValue
@@ -214,6 +225,9 @@ CREATE (e)-[:MENTIONS]->(mentioned%d)
 				pTagIndex++
 
 			default: // Other tags - creates Tag nodes and TAGGED_WITH relationships
+				// For non-e/p tags, use direct string conversion (no binary encoding)
+				tagValue := string(tagItem.T[1])
+
 				// Create tag node and relationship
 				typeParam := fmt.Sprintf("tagType_%d", tagNodeIndex)
 				valueParam := fmt.Sprintf("tagValue_%d", tagNodeIndex)
