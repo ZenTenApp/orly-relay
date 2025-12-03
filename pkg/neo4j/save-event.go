@@ -3,12 +3,18 @@ package neo4j
 import (
 	"context"
 	"fmt"
+	"strconv"
 
-	"next.orly.dev/pkg/database/indexes/types"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/database/indexes/types"
 )
+
+// parseInt64 parses a string to int64
+func parseInt64(s string) (int64, error) {
+	return strconv.ParseInt(s, 10, 64)
+}
 
 // SaveEvent stores a Nostr event in the Neo4j database.
 // It creates event nodes and relationships for authors, tags, and references.
@@ -96,6 +102,17 @@ func (n *N) buildEventCreationCypher(ev *event.E, serial uint64) (string, map[st
 	params["sig"] = hex.Enc(ev.Sig[:])
 	params["pubkey"] = authorPubkey
 
+	// Check for expiration tag (NIP-40)
+	var expirationTs int64 = 0
+	if ev.Tags != nil {
+		if expTag := ev.Tags.GetFirst([]byte("expiration")); expTag != nil && len(expTag.T) >= 2 {
+			if ts, err := parseInt64(string(expTag.T[1])); err == nil {
+				expirationTs = ts
+			}
+		}
+	}
+	params["expiration"] = expirationTs
+
 	// Serialize tags as JSON string for storage
 	// Handle nil tags gracefully - nil means empty tags "[]"
 	var tagsJSON []byte
@@ -112,7 +129,7 @@ func (n *N) buildEventCreationCypher(ev *event.E, serial uint64) (string, map[st
 // Create or match author node
 MERGE (a:Author {pubkey: $pubkey})
 
-// Create event node
+// Create event node with expiration for NIP-40 support
 CREATE (e:Event {
   id: $eventId,
   serial: $serial,
@@ -121,7 +138,8 @@ CREATE (e:Event {
   content: $content,
   sig: $sig,
   pubkey: $pubkey,
-  tags: $tags
+  tags: $tags,
+  expiration: $expiration
 })
 
 // Link event to author

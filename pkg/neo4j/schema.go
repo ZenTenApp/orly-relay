@@ -125,6 +125,10 @@ func (n *N) applySchema(ctx context.Context) error {
 		// Used for cursor-based pagination and sync operations
 		"CREATE INDEX event_serial IF NOT EXISTS FOR (e:Event) ON (e.serial)",
 
+		// OPTIONAL (NIP-40): Event.expiration for expired event cleanup
+		// Used by DeleteExpired to efficiently find events past their expiration time
+		"CREATE INDEX event_expiration IF NOT EXISTS FOR (e:Event) ON (e.expiration)",
+
 		// ============================================================
 		// === OPTIONAL: Social Graph Event Processing Indexes ===
 		// Support tracking of processed social events for graph updates
@@ -230,6 +234,7 @@ func (n *N) dropAll(ctx context.Context) error {
 
 		// OPTIONAL (Internal) indexes
 		"DROP INDEX event_serial IF EXISTS",
+		"DROP INDEX event_expiration IF EXISTS",
 
 		// OPTIONAL (Social Graph) indexes
 		"DROP INDEX processedSocialEvent_pubkey_kind IF EXISTS",

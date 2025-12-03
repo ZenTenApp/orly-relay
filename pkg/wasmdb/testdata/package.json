@@ -1,0 +1,12 @@
+{
+  "name": "wasmdb-test",
+  "version": "1.0.0",
+  "description": "Node.js test harness for wasmdb WASM tests",
+  "type": "module",
+  "scripts": {
+    "test": "node run_wasm_tests.mjs"
+  },
+  "dependencies": {
+    "fake-indexeddb": "^6.0.0"
+  }
+}

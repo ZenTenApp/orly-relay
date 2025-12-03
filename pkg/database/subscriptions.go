@@ -1,3 +1,5 @@
+//go:build !(js && wasm)
+
 package database
 
 import (
@@ -11,13 +13,6 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 )
-
-type Subscription struct {
-	TrialEnd       time.Time `json:"trial_end"`
-	PaidUntil      time.Time `json:"paid_until"`
-	BlossomLevel   string    `json:"blossom_level,omitempty"`   // Service level name (e.g., "basic", "premium")
-	BlossomStorage int64     `json:"blossom_storage,omitempty"` // Storage quota in MB
-}
 
 func (d *D) GetSubscription(pubkey []byte) (*Subscription, error) {
 	key := fmt.Sprintf("sub:%s", hex.EncodeToString(pubkey))
@@ -120,13 +115,6 @@ func (d *D) ExtendSubscription(pubkey []byte, days int) error {
 			return txn.Set([]byte(key), data)
 		},
 	)
-}
-
-type Payment struct {
-	Amount    int64     `json:"amount"`
-	Timestamp time.Time `json:"timestamp"`
-	Invoice   string    `json:"invoice"`
-	Preimage  string    `json:"preimage"`
 }
 
 func (d *D) RecordPayment(

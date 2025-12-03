@@ -1,3 +1,5 @@
+//go:build !(js && wasm)
+
 package database
 
 import (
@@ -72,8 +74,14 @@ func NewDatabaseWithConfig(
 			return nil, fmt.Errorf("neo4j database backend not available (import _ \"next.orly.dev/pkg/neo4j\")")
 		}
 		return newNeo4jDatabase(ctx, cancel, cfg)
+	case "wasmdb", "indexeddb", "wasm":
+		// Use the wasmdb implementation (IndexedDB backend for WebAssembly)
+		if newWasmDBDatabase == nil {
+			return nil, fmt.Errorf("wasmdb database backend not available (import _ \"next.orly.dev/pkg/wasmdb\")")
+		}
+		return newWasmDBDatabase(ctx, cancel, cfg)
 	default:
-		return nil, fmt.Errorf("unsupported database type: %s (supported: badger, dgraph, neo4j)", dbType)
+		return nil, fmt.Errorf("unsupported database type: %s (supported: badger, dgraph, neo4j, wasmdb)", dbType)
 	}
 }
 
@@ -95,4 +103,14 @@ var newNeo4jDatabase func(context.Context, context.CancelFunc, *DatabaseConfig) 
 // This is called from the neo4j package's init() function
 func RegisterNeo4jFactory(factory func(context.Context, context.CancelFunc, *DatabaseConfig) (Database, error)) {
 	newNeo4jDatabase = factory
+}
+
+// newWasmDBDatabase creates a wasmdb database instance (IndexedDB backend for WebAssembly)
+// This is defined here to avoid import cycles
+var newWasmDBDatabase func(context.Context, context.CancelFunc, *DatabaseConfig) (Database, error)
+
+// RegisterWasmDBFactory registers the wasmdb database factory
+// This is called from the wasmdb package's init() function
+func RegisterWasmDBFactory(factory func(context.Context, context.CancelFunc, *DatabaseConfig) (Database, error)) {
+	newWasmDBDatabase = factory
 }

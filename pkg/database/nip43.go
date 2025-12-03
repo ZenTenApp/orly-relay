@@ -1,3 +1,5 @@
+//go:build !(js && wasm)
+
 package database
 
 import (
@@ -10,13 +12,6 @@ import (
 	"lol.mleku.dev/log"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
 )
-
-// NIP43Membership represents membership metadata for NIP-43
-type NIP43Membership struct {
-	Pubkey    []byte
-	AddedAt   time.Time
-	InviteCode string
-}
 
 // Database key prefixes for NIP-43
 const (

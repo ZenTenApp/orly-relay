@@ -1,3 +1,5 @@
+//go:build !(js && wasm)
+
 // Package database provides shared import utilities for events
 package database
 

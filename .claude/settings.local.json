@@ -168,7 +168,10 @@
       "Bash(./orly:*)",
       "Bash(./orly -version:*)",
       "Bash(./orly --version:*)",
-      "Bash(GOOS=js GOARCH=wasm go test:*)"
+      "Bash(GOOS=js GOARCH=wasm go test:*)",
+      "Bash(ls:*)",
+      "Bash(GOROOT=/home/mleku/go node:*)",
+      "Bash(GOOS=js GOARCH=wasm go build:*)"
     ],
     "deny": [],
     "ask": []

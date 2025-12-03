@@ -3,10 +3,11 @@ package neo4j
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"next.orly.dev/pkg/database/indexes/types"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/database/indexes/types"
 )
 
 // DeleteEvent deletes an event by its ID
@@ -39,10 +40,60 @@ func (n *N) DeleteEventBySerial(c context.Context, ser *types.Uint40, ev *event.
 	return nil
 }
 
-// DeleteExpired deletes expired events (stub implementation)
+// DeleteExpired deletes expired events based on NIP-40 expiration tags
+// Events with an expiration property > 0 and <= current time are deleted
 func (n *N) DeleteExpired() {
-	// This would need to implement expiration logic based on event.expiration tag (NIP-40)
-	// For now, this is a no-op
+	ctx := context.Background()
+	now := time.Now().Unix()
+
+	// Query for expired events (expiration > 0 means it has an expiration, and <= now means it's expired)
+	cypher := `
+MATCH (e:Event)
+WHERE e.expiration > 0 AND e.expiration <= $now
+RETURN e.serial AS serial, e.id AS id
+LIMIT 1000`
+
+	params := map[string]any{"now": now}
+
+	result, err := n.ExecuteRead(ctx, cypher, params)
+	if err != nil {
+		n.Logger.Warningf("failed to query expired events: %v", err)
+		return
+	}
+
+	// Collect serials to delete
+	var deleteCount int
+	for result.Next(ctx) {
+		record := result.Record()
+		if record == nil {
+			continue
+		}
+
+		idRaw, found := record.Get("id")
+		if !found {
+			continue
+		}
+
+		idStr, ok := idRaw.(string)
+		if !ok {
+			continue
+		}
+
+		// Delete the expired event
+		deleteCypher := "MATCH (e:Event {id: $id}) DETACH DELETE e"
+		deleteParams := map[string]any{"id": idStr}
+
+		if _, err := n.ExecuteWrite(ctx, deleteCypher, deleteParams); err != nil {
+			n.Logger.Warningf("failed to delete expired event %s: %v", idStr[:16], err)
+			continue
+		}
+
+		deleteCount++
+	}
+
+	if deleteCount > 0 {
+		n.Logger.Infof("deleted %d expired events", deleteCount)
+	}
 }
 
 // ProcessDelete processes a kind 5 deletion event

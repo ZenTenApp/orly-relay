@@ -10,8 +10,6 @@
 # Especially these
 .vscode/
 **/.vscode/
-node_modules/
-**/node_modules/
 /test*
 .idea/
 # and others
@@ -98,6 +96,10 @@ cmd/benchmark/data
 # Re-ignore IDE directories (must come after !*/)
 .idea/
 **/.idea/
+
+# Re-ignore node_modules everywhere (must come after !*/)
+node_modules/
+**/node_modules/
 /blocklist.json
 /gui/gui/main.wasm
 /gui/gui/index.html
@@ -105,7 +107,6 @@ pkg/database/testrealy
 /ctxproxy.config.yml
 cmd/benchmark/external/**
 private*
-pkg/protocol/directory-client/node_modules
 
 # Build outputs
 build/orly-*
