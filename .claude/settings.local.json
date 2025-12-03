@@ -155,7 +155,19 @@
       "WebFetch(domain:www.npmjs.com)",
       "Bash(git stash:*)",
       "WebFetch(domain:arxiv.org)",
-      "WebFetch(domain:hal.science)"
+      "WebFetch(domain:hal.science)",
+      "WebFetch(domain:pkg.go.dev)",
+      "Bash(GOOS=js GOARCH=wasm CGO_ENABLED=0 go build:*)",
+      "Bash(GOOS=js GOARCH=wasm go doc:*)",
+      "Bash(GOOS=js GOARCH=wasm CGO_ENABLED=0 go test:*)",
+      "Bash(node --version:*)",
+      "Bash(npm install)",
+      "Bash(node run_wasm_tests.mjs:*)",
+      "Bash(go env:*)",
+      "Bash(GOROOT=/home/mleku/go node run_wasm_tests.mjs:*)",
+      "Bash(./orly:*)",
+      "Bash(./orly -version:*)",
+      "Bash(./orly --version:*)"
     ],
     "deny": [],
     "ask": []
