@@ -65,6 +65,12 @@ func (r *CollectedResult) Len() int {
 	return len(r.records)
 }
 
+// Err returns any error from iteration (always nil for pre-collected results)
+// This method satisfies the resultiter.Neo4jResultIterator interface
+func (r *CollectedResult) Err() error {
+	return nil
+}
+
 // init registers the neo4j database factory
 func init() {
 	database.RegisterNeo4jFactory(func(

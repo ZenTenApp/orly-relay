@@ -10,7 +10,6 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/interfaces/resultiter"
 	"next.orly.dev/pkg/interfaces/store"
 )
 
@@ -170,7 +169,7 @@ RETURN e.id AS id,
 
 	// Add limit if specified
 	limitClause := ""
-	if *f.Limit > 0 {
+	if f.Limit != nil && *f.Limit > 0 {
 		params["limit"] = *f.Limit
 		limitClause = " LIMIT $limit"
 	}
@@ -182,19 +181,13 @@ RETURN e.id AS id,
 }
 
 // parseEventsFromResult converts Neo4j query results to Nostr events
-func (n *N) parseEventsFromResult(result any) ([]*event.E, error) {
+func (n *N) parseEventsFromResult(result *CollectedResult) ([]*event.E, error) {
 	events := make([]*event.E, 0)
 	ctx := context.Background()
 
-	// Type assert to the result iterator interface
-	resultIter, ok := result.(resultiter.Neo4jResultIterator)
-	if !ok {
-		return nil, fmt.Errorf("invalid result type: expected resultiter.Neo4jResultIterator")
-	}
-
 	// Iterate through result records
-	for resultIter.Next(ctx) {
-		record := resultIter.Record()
+	for result.Next(ctx) {
+		record := result.Record()
 		if record == nil {
 			continue
 		}
@@ -252,7 +245,7 @@ func (n *N) parseEventsFromResult(result any) ([]*event.E, error) {
 		events = append(events, e)
 	}
 
-	if err := resultIter.Err(); err != nil {
+	if err := result.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating results: %w", err)
 	}
 
