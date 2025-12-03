@@ -156,7 +156,6 @@ export ORLY_QUERY_CACHE_MAX_AGE=5m       # Cache expiry time
 export ORLY_DB_BLOCK_CACHE_MB=512        # Block cache size
 export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
 export ORLY_DB_ZSTD_LEVEL=1              # ZSTD level: 0=off, 1=fast, 3=default, 9=best
-export ORLY_INLINE_EVENT_THRESHOLD=1024  # Inline storage threshold (bytes)
 
 # Serial cache for compact event storage (Badger backend)
 export ORLY_SERIAL_CACHE_PUBKEYS=100000   # Max pubkeys to cache (~3.2MB memory)

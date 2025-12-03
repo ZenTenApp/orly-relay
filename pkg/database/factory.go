@@ -18,11 +18,10 @@ type DatabaseConfig struct {
 	LogLevel string
 
 	// Badger-specific settings
-	BlockCacheMB         int           // ORLY_DB_BLOCK_CACHE_MB
-	IndexCacheMB         int           // ORLY_DB_INDEX_CACHE_MB
-	QueryCacheSizeMB     int           // ORLY_QUERY_CACHE_SIZE_MB
-	QueryCacheMaxAge     time.Duration // ORLY_QUERY_CACHE_MAX_AGE
-	InlineEventThreshold int           // ORLY_INLINE_EVENT_THRESHOLD
+	BlockCacheMB     int           // ORLY_DB_BLOCK_CACHE_MB
+	IndexCacheMB     int           // ORLY_DB_INDEX_CACHE_MB
+	QueryCacheSizeMB int           // ORLY_QUERY_CACHE_SIZE_MB
+	QueryCacheMaxAge time.Duration // ORLY_QUERY_CACHE_MAX_AGE
 
 	// Serial cache settings for compact event storage
 	SerialCachePubkeys  int // ORLY_SERIAL_CACHE_PUBKEYS - max pubkeys to cache (default: 100000)

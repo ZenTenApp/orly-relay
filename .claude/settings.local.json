@@ -179,7 +179,8 @@
       "Bash(CGO_ENABLED=0 LOG_LEVEL=trace go test:*)",
       "Bash(go vet:*)",
       "Bash(gofmt:*)",
-      "Skill(cypher)"
+      "Skill(cypher)",
+      "Bash(git mv:*)"
     ],
     "deny": [],
     "ask": []

@@ -19,11 +19,12 @@ import (
 	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 )
 
-// TestInlineSmallEventStorage tests the Reiser4-inspired inline storage optimization
-// for small events (<=1024 bytes by default).
-func TestInlineSmallEventStorage(t *testing.T) {
+// TestCompactEventStorage tests the compact storage format (cmp prefix) which
+// replaced the old inline storage optimization (sev/evt prefixes).
+// All events are now stored in compact format regardless of size.
+func TestCompactEventStorage(t *testing.T) {
 	// Create a temporary directory for the database
-	tempDir, err := os.MkdirTemp("", "test-inline-db-*")
+	tempDir, err := os.MkdirTemp("", "test-compact-db-*")
 	if err != nil {
 		t.Fatalf("Failed to create temporary directory: %v", err)
 	}
@@ -46,8 +47,8 @@ func TestInlineSmallEventStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Test Case 1: Small event (should use inline storage)
-	t.Run("SmallEventInlineStorage", func(t *testing.T) {
+	// Test Case 1: Small event (should use compact storage)
+	t.Run("SmallEventCompactStorage", func(t *testing.T) {
 		smallEvent := event.New()
 		smallEvent.Kind = kind.TextNote.K
 		smallEvent.CreatedAt = timestamp.Now().V
@@ -65,49 +66,27 @@ func TestInlineSmallEventStorage(t *testing.T) {
 			t.Fatalf("Failed to save small event: %v", err)
 		}
 
-		// Verify it was stored with sev prefix
+		// Verify it was stored with cmp prefix
 		serial, err := db.GetSerialById(smallEvent.ID)
 		if err != nil {
 			t.Fatalf("Failed to get serial for small event: %v", err)
 		}
 
-		// Check that sev key exists
-		sevKeyExists := false
+		// Check that cmp key exists (compact format)
+		cmpKeyExists := false
 		db.View(func(txn *badger.Txn) error {
-			smallBuf := new(bytes.Buffer)
-			indexes.SmallEventEnc(serial).MarshalWrite(smallBuf)
+			cmpBuf := new(bytes.Buffer)
+			indexes.CompactEventEnc(serial).MarshalWrite(cmpBuf)
 
-			opts := badger.DefaultIteratorOptions
-			opts.Prefix = smallBuf.Bytes()
-			it := txn.NewIterator(opts)
-			defer it.Close()
-
-			it.Rewind()
-			if it.Valid() {
-				sevKeyExists = true
-			}
-			return nil
-		})
-
-		if !sevKeyExists {
-			t.Errorf("Small event was not stored with sev prefix")
-		}
-
-		// Verify evt key does NOT exist for small event
-		evtKeyExists := false
-		db.View(func(txn *badger.Txn) error {
-			buf := new(bytes.Buffer)
-			indexes.EventEnc(serial).MarshalWrite(buf)
-
-			_, err := txn.Get(buf.Bytes())
+			_, err := txn.Get(cmpBuf.Bytes())
 			if err == nil {
-				evtKeyExists = true
+				cmpKeyExists = true
 			}
 			return nil
 		})
 
-		if evtKeyExists {
-			t.Errorf("Small event should not have evt key (should only use sev)")
+		if !cmpKeyExists {
+			t.Errorf("Small event was not stored with cmp prefix (compact format)")
 		}
 
 		// Fetch and verify the event
@@ -124,12 +103,12 @@ func TestInlineSmallEventStorage(t *testing.T) {
 		}
 	})
 
-	// Test Case 2: Large event (should use traditional storage)
-	t.Run("LargeEventTraditionalStorage", func(t *testing.T) {
+	// Test Case 2: Large event (should also use compact storage)
+	t.Run("LargeEventCompactStorage", func(t *testing.T) {
 		largeEvent := event.New()
 		largeEvent.Kind = kind.TextNote.K
 		largeEvent.CreatedAt = timestamp.Now().V
-		// Create content larger than 1024 bytes (the default inline storage threshold)
+		// Create larger content
 		largeContent := make([]byte, 1500)
 		for i := range largeContent {
 			largeContent[i] = 'x'
@@ -148,27 +127,27 @@ func TestInlineSmallEventStorage(t *testing.T) {
 			t.Fatalf("Failed to save large event: %v", err)
 		}
 
-		// Verify it was stored with evt prefix
+		// Verify it was stored with cmp prefix (compact format)
 		serial, err := db.GetSerialById(largeEvent.ID)
 		if err != nil {
 			t.Fatalf("Failed to get serial for large event: %v", err)
 		}
 
-		// Check that evt key exists
-		evtKeyExists := false
+		// Check that cmp key exists
+		cmpKeyExists := false
 		db.View(func(txn *badger.Txn) error {
-			buf := new(bytes.Buffer)
-			indexes.EventEnc(serial).MarshalWrite(buf)
+			cmpBuf := new(bytes.Buffer)
+			indexes.CompactEventEnc(serial).MarshalWrite(cmpBuf)
 
-			_, err := txn.Get(buf.Bytes())
+			_, err := txn.Get(cmpBuf.Bytes())
 			if err == nil {
-				evtKeyExists = true
+				cmpKeyExists = true
 			}
 			return nil
 		})
 
-		if !evtKeyExists {
-			t.Errorf("Large event was not stored with evt prefix")
+		if !cmpKeyExists {
+			t.Errorf("Large event was not stored with cmp prefix (compact format)")
 		}
 
 		// Fetch and verify the event
@@ -437,8 +416,8 @@ func TestInlineStorageMigration(t *testing.T) {
 	}
 }
 
-// BenchmarkInlineVsTraditionalStorage compares performance of inline vs traditional storage
-func BenchmarkInlineVsTraditionalStorage(b *testing.B) {
+// BenchmarkCompactStorage benchmarks the compact storage format performance
+func BenchmarkCompactStorage(b *testing.B) {
 	// Create a temporary directory for the database
 	tempDir, err := os.MkdirTemp("", "bench-inline-db-*")
 	if err != nil {
@@ -501,7 +480,7 @@ func BenchmarkInlineVsTraditionalStorage(b *testing.B) {
 		}
 	}
 
-	b.Run("FetchSmallEventsInline", func(b *testing.B) {
+	b.Run("FetchSmallEventsCompact", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			idx := i % len(smallSerials)
@@ -509,7 +488,7 @@ func BenchmarkInlineVsTraditionalStorage(b *testing.B) {
 		}
 	})
 
-	b.Run("FetchLargeEventsTraditional", func(b *testing.B) {
+	b.Run("FetchLargeEventsCompact", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			idx := i % len(largeSerials)

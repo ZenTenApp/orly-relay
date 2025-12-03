@@ -22,11 +22,10 @@ import (
 
 // D implements the Database interface using Badger as the storage backend
 type D struct {
-	ctx                  context.Context
-	cancel               context.CancelFunc
-	dataDir              string
-	Logger               *logger
-	inlineEventThreshold int // Configurable threshold for inline event storage
+	ctx     context.Context
+	cancel  context.CancelFunc
+	dataDir string
+	Logger  *logger
 	*badger.DB
 	seq        *badger.Sequence
 	pubkeySeq  *badger.Sequence // Sequence for pubkey serials
@@ -51,13 +50,12 @@ func New(
 ) {
 	// Create a default config for backward compatibility
 	cfg := &DatabaseConfig{
-		DataDir:              dataDir,
-		LogLevel:             logLevel,
-		BlockCacheMB:         1024,              // Default 1024 MB
-		IndexCacheMB:         512,               // Default 512 MB
-		QueryCacheSizeMB:     512,               // Default 512 MB
-		QueryCacheMaxAge:     5 * time.Minute,   // Default 5 minutes
-		InlineEventThreshold: 1024,              // Default 1024 bytes
+		DataDir:          dataDir,
+		LogLevel:         logLevel,
+		BlockCacheMB:     1024,            // Default 1024 MB
+		IndexCacheMB:     512,             // Default 512 MB
+		QueryCacheSizeMB: 512,             // Default 512 MB
+		QueryCacheMaxAge: 5 * time.Minute, // Default 5 minutes
 	}
 	return NewWithConfig(ctx, cancel, cfg)
 }
@@ -86,10 +84,6 @@ func NewWithConfig(
 	if queryCacheMaxAge == 0 {
 		queryCacheMaxAge = 5 * time.Minute // Default 5 minutes
 	}
-	inlineEventThreshold := cfg.InlineEventThreshold
-	if inlineEventThreshold == 0 {
-		inlineEventThreshold = 1024 // Default 1024 bytes
-	}
 
 	// Serial cache configuration for compact event storage
 	serialCachePubkeys := cfg.SerialCachePubkeys
@@ -113,16 +107,15 @@ func NewWithConfig(
 	queryCacheSize := int64(queryCacheSizeMB * 1024 * 1024)
 
 	d = &D{
-		ctx:                  ctx,
-		cancel:               cancel,
-		dataDir:              cfg.DataDir,
-		Logger:               NewLogger(lol.GetLogLevel(cfg.LogLevel), cfg.DataDir),
-		inlineEventThreshold: inlineEventThreshold,
-		DB:                   nil,
-		seq:                  nil,
-		ready:                make(chan struct{}),
-		queryCache:           querycache.NewEventCache(queryCacheSize, queryCacheMaxAge),
-		serialCache:          NewSerialCache(serialCachePubkeys, serialCacheEventIds),
+		ctx:         ctx,
+		cancel:      cancel,
+		dataDir:     cfg.DataDir,
+		Logger:      NewLogger(lol.GetLogLevel(cfg.LogLevel), cfg.DataDir),
+		DB:          nil,
+		seq:         nil,
+		ready:       make(chan struct{}),
+		queryCache:  querycache.NewEventCache(queryCacheSize, queryCacheMaxAge),
+		serialCache: NewSerialCache(serialCachePubkeys, serialCacheEventIds),
 	}
 
 	// Ensure the data directory exists

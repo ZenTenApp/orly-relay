@@ -101,7 +101,6 @@ type C struct {
 	Neo4jPassword string `env:"ORLY_NEO4J_PASSWORD" default:"password" usage:"Neo4j authentication password (only used when ORLY_DB_TYPE=neo4j)"`
 
 	// Advanced database tuning
-	InlineEventThreshold   int `env:"ORLY_INLINE_EVENT_THRESHOLD" default:"1024" usage:"size threshold in bytes for inline event storage in Badger (0 to disable, typical values: 384-1024)"`
 	SerialCachePubkeys     int `env:"ORLY_SERIAL_CACHE_PUBKEYS" default:"100000" usage:"max pubkeys to cache for compact event storage (default: 100000, ~3.2MB memory)"`
 	SerialCacheEventIds    int `env:"ORLY_SERIAL_CACHE_EVENT_IDS" default:"500000" usage:"max event IDs to cache for compact event storage (default: 500000, ~16MB memory)"`
 
@@ -411,7 +410,6 @@ func (cfg *C) GetDatabaseConfigValues() (
 	dataDir, logLevel string,
 	blockCacheMB, indexCacheMB, queryCacheSizeMB int,
 	queryCacheMaxAge time.Duration,
-	inlineEventThreshold int,
 	serialCachePubkeys, serialCacheEventIds int,
 	zstdLevel int,
 	neo4jURI, neo4jUser, neo4jPassword string,
@@ -427,7 +425,6 @@ func (cfg *C) GetDatabaseConfigValues() (
 	return cfg.DataDir, cfg.DBLogLevel,
 		cfg.DBBlockCacheMB, cfg.DBIndexCacheMB, cfg.QueryCacheSizeMB,
 		queryCacheMaxAge,
-		cfg.InlineEventThreshold,
 		cfg.SerialCachePubkeys, cfg.SerialCacheEventIds,
 		cfg.DBZSTDLevel,
 		cfg.Neo4jURI, cfg.Neo4jUser, cfg.Neo4jPassword
