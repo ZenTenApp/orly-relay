@@ -179,22 +179,16 @@ CREATE (e)-[:AUTHORED_BY]->(a)
 				paramName := fmt.Sprintf("eTag_%d", eTagIndex)
 				params[paramName] = tagValue
 
-				// Add WITH clause before OPTIONAL MATCH
-				// This is required because:
-				// 1. Cypher doesn't allow MATCH after CREATE without WITH
-				// 2. Cypher doesn't allow MATCH after FOREACH without WITH
-				// So we need WITH before EVERY OPTIONAL MATCH, not just the first
+				// Add WITH clause before first OPTIONAL MATCH only
+				// This is required because Cypher doesn't allow MATCH after CREATE without WITH.
+				// However, you CAN chain multiple OPTIONAL MATCH + FOREACH pairs without
+				// additional WITH clauses between them - Cypher allows OPTIONAL MATCH after FOREACH.
 				if needsWithClause {
 					cypher += `
 // Carry forward event and author nodes for tag processing
 WITH e, a
 `
 					needsWithClause = false
-				} else {
-					// After a FOREACH, we need WITH to transition back to MATCH
-					cypher += `
-WITH e, a
-`
 				}
 
 				cypher += fmt.Sprintf(`

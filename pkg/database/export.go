@@ -16,52 +16,141 @@ import (
 )
 
 // Export the complete database of stored events to an io.Writer in line structured minified
-// JSON.
+// JSON. Supports both legacy and compact event formats.
 func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 	var err error
 	evB := make([]byte, 0, units.Mb)
 	evBuf := bytes.NewBuffer(evB)
+
+	// Create resolver for compact event decoding
+	resolver := NewDatabaseSerialResolver(d, d.serialCache)
+
+	// Helper function to unmarshal event data (handles both legacy and compact formats)
+	unmarshalEventData := func(val []byte, ser *types.Uint40) (*event.E, error) {
+		// Check if this is compact format (starts with version byte 1)
+		if len(val) > 0 && val[0] == CompactFormatVersion {
+			// Get event ID from SerialEventId table
+			eventId, idErr := d.GetEventIdBySerial(ser)
+			if idErr != nil {
+				// Can't decode without event ID - skip
+				return nil, idErr
+			}
+			return UnmarshalCompactEvent(val, eventId, resolver)
+		}
+
+		// Legacy binary format
+		ev := event.New()
+		evBuf.Reset()
+		evBuf.Write(val)
+		if err := ev.UnmarshalBinary(evBuf); err != nil {
+			return nil, err
+		}
+		return ev, nil
+	}
+
 	if len(pubkeys) == 0 {
+		// Export all events - prefer cmp table, fall back to evt
 		if err = d.View(
 			func(txn *badger.Txn) (err error) {
-				buf := new(bytes.Buffer)
-				if err = indexes.EventEnc(nil).MarshalWrite(buf); chk.E(err) {
+				// First try cmp (compact format) table
+				cmpBuf := new(bytes.Buffer)
+				if err = indexes.CompactEventEnc(nil).MarshalWrite(cmpBuf); chk.E(err) {
 					return
 				}
-				it := txn.NewIterator(badger.IteratorOptions{Prefix: buf.Bytes()})
+
+				it := txn.NewIterator(badger.IteratorOptions{Prefix: cmpBuf.Bytes()})
 				defer it.Close()
+
+				seenSerials := make(map[uint64]bool)
+
 				for it.Rewind(); it.Valid(); it.Next() {
 					item := it.Item()
-					if err = item.Value(
-						func(val []byte) (err error) {
-							evBuf.Write(val)
-							return
-						},
-					); chk.E(err) {
+					key := item.Key()
+
+					// Extract serial from key
+					ser := new(types.Uint40)
+					if err = ser.UnmarshalRead(bytes.NewReader(key[3:8])); chk.E(err) {
 						continue
 					}
-					ev := event.New()
-					if err = ev.UnmarshalBinary(evBuf); chk.E(err) {
+
+					seenSerials[ser.Get()] = true
+
+					var val []byte
+					if val, err = item.ValueCopy(nil); chk.E(err) {
 						continue
 					}
+
+					ev, unmarshalErr := unmarshalEventData(val, ser)
+					if unmarshalErr != nil {
+						continue
+					}
+
 					// Serialize the event to JSON and write it to the output
-					defer func(ev *event.E) {
-						ev.Free()
-						evBuf.Reset()
-					}(ev)
 					if _, err = w.Write(ev.Serialize()); chk.E(err) {
+						ev.Free()
 						return
 					}
 					if _, err = w.Write([]byte{'\n'}); chk.E(err) {
+						ev.Free()
 						return
 					}
+					ev.Free()
 				}
+				it.Close()
+
+				// Then fall back to evt (legacy) table for any events not in cmp
+				evtBuf := new(bytes.Buffer)
+				if err = indexes.EventEnc(nil).MarshalWrite(evtBuf); chk.E(err) {
+					return
+				}
+
+				it2 := txn.NewIterator(badger.IteratorOptions{Prefix: evtBuf.Bytes()})
+				defer it2.Close()
+
+				for it2.Rewind(); it2.Valid(); it2.Next() {
+					item := it2.Item()
+					key := item.Key()
+
+					// Extract serial from key
+					ser := new(types.Uint40)
+					if err = ser.UnmarshalRead(bytes.NewReader(key[3:8])); chk.E(err) {
+						continue
+					}
+
+					// Skip if already exported from cmp table
+					if seenSerials[ser.Get()] {
+						continue
+					}
+
+					var val []byte
+					if val, err = item.ValueCopy(nil); chk.E(err) {
+						continue
+					}
+
+					ev, unmarshalErr := unmarshalEventData(val, ser)
+					if unmarshalErr != nil {
+						continue
+					}
+
+					// Serialize the event to JSON and write it to the output
+					if _, err = w.Write(ev.Serialize()); chk.E(err) {
+						ev.Free()
+						return
+					}
+					if _, err = w.Write([]byte{'\n'}); chk.E(err) {
+						ev.Free()
+						return
+					}
+					ev.Free()
+				}
+
 				return
 			},
 		); err != nil {
 			return
 		}
 	} else {
+		// Export events for specific pubkeys
 		for _, pubkey := range pubkeys {
 			if err = d.View(
 				func(txn *badger.Txn) (err error) {
@@ -79,29 +168,34 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 					defer it.Close()
 					for it.Rewind(); it.Valid(); it.Next() {
 						item := it.Item()
-						if err = item.Value(
-							func(val []byte) (err error) {
-								evBuf.Write(val)
-								return
-							},
-						); chk.E(err) {
+						key := item.Key()
+
+						// Extract serial from pubkey index key
+						// Key format: pc-|pubkey_hash|created_at|serial
+						if len(key) < 3+8+8+5 {
 							continue
 						}
-						ev := event.New()
-						if err = ev.UnmarshalBinary(evBuf); chk.E(err) {
+						ser := new(types.Uint40)
+						if err = ser.UnmarshalRead(bytes.NewReader(key[len(key)-5:])); chk.E(err) {
 							continue
 						}
+
+						// Fetch the event using FetchEventBySerial which handles all formats
+						ev, fetchErr := d.FetchEventBySerial(ser)
+						if fetchErr != nil || ev == nil {
+							continue
+						}
+
 						// Serialize the event to JSON and write it to the output
-						defer func(ev *event.E) {
-							ev.Free()
-							evBuf.Reset()
-						}(ev)
 						if _, err = w.Write(ev.Serialize()); chk.E(err) {
+							ev.Free()
 							continue
 						}
 						if _, err = w.Write([]byte{'\n'}); chk.E(err) {
+							ev.Free()
 							continue
 						}
+						ev.Free()
 					}
 					return
 				},

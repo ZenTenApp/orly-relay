@@ -445,6 +445,8 @@ func makeDatabaseConfig(cfg *config.C) *database.DatabaseConfig {
 		blockCacheMB, indexCacheMB, queryCacheSizeMB,
 		queryCacheMaxAge,
 		inlineEventThreshold,
+		serialCachePubkeys, serialCacheEventIds,
+		zstdLevel,
 		neo4jURI, neo4jUser, neo4jPassword := cfg.GetDatabaseConfigValues()
 
 	return &database.DatabaseConfig{
@@ -455,6 +457,9 @@ func makeDatabaseConfig(cfg *config.C) *database.DatabaseConfig {
 		QueryCacheSizeMB:     queryCacheSizeMB,
 		QueryCacheMaxAge:     queryCacheMaxAge,
 		InlineEventThreshold: inlineEventThreshold,
+		SerialCachePubkeys:   serialCachePubkeys,
+		SerialCacheEventIds:  serialCacheEventIds,
+		ZSTDLevel:            zstdLevel,
 		Neo4jURI:             neo4jURI,
 		Neo4jUser:            neo4jUser,
 		Neo4jPassword:        neo4jPassword,

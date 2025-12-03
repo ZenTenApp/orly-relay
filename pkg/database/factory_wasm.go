@@ -24,6 +24,10 @@ type DatabaseConfig struct {
 	QueryCacheMaxAge     time.Duration // ORLY_QUERY_CACHE_MAX_AGE
 	InlineEventThreshold int           // ORLY_INLINE_EVENT_THRESHOLD
 
+	// Serial cache settings for compact event storage (Badger-specific)
+	SerialCachePubkeys  int // ORLY_SERIAL_CACHE_PUBKEYS - max pubkeys to cache (default: 100000)
+	SerialCacheEventIds int // ORLY_SERIAL_CACHE_EVENT_IDS - max event IDs to cache (default: 500000)
+
 	// Neo4j-specific settings
 	Neo4jURI      string // ORLY_NEO4J_URI
 	Neo4jUser     string // ORLY_NEO4J_USER

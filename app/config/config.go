@@ -41,6 +41,7 @@ type C struct {
 	DBLogLevel          string        `env:"ORLY_DB_LOG_LEVEL" default:"info" usage:"database log level: fatal error warn info debug trace"`
 	DBBlockCacheMB      int           `env:"ORLY_DB_BLOCK_CACHE_MB" default:"512" usage:"Badger block cache size in MB (higher improves read hit ratio)"`
 	DBIndexCacheMB      int           `env:"ORLY_DB_INDEX_CACHE_MB" default:"256" usage:"Badger index cache size in MB (improves index lookup performance)"`
+	DBZSTDLevel         int           `env:"ORLY_DB_ZSTD_LEVEL" default:"1" usage:"Badger ZSTD compression level (1=fast/500MB/s, 3=default, 9=best ratio, 0=disable)"`
 	LogToStdout         bool          `env:"ORLY_LOG_TO_STDOUT" default:"false" usage:"log to stdout instead of stderr"`
 	Pprof               string        `env:"ORLY_PPROF" usage:"enable pprof in modes: cpu,memory,allocation,heap,block,goroutine,threadcreate,mutex"`
 	PprofPath           string        `env:"ORLY_PPROF_PATH" usage:"optional directory to write pprof profiles into (inside container); default is temporary dir"`
@@ -100,7 +101,9 @@ type C struct {
 	Neo4jPassword string `env:"ORLY_NEO4J_PASSWORD" default:"password" usage:"Neo4j authentication password (only used when ORLY_DB_TYPE=neo4j)"`
 
 	// Advanced database tuning
-	InlineEventThreshold int `env:"ORLY_INLINE_EVENT_THRESHOLD" default:"1024" usage:"size threshold in bytes for inline event storage in Badger (0 to disable, typical values: 384-1024)"`
+	InlineEventThreshold   int `env:"ORLY_INLINE_EVENT_THRESHOLD" default:"1024" usage:"size threshold in bytes for inline event storage in Badger (0 to disable, typical values: 384-1024)"`
+	SerialCachePubkeys     int `env:"ORLY_SERIAL_CACHE_PUBKEYS" default:"100000" usage:"max pubkeys to cache for compact event storage (default: 100000, ~3.2MB memory)"`
+	SerialCacheEventIds    int `env:"ORLY_SERIAL_CACHE_EVENT_IDS" default:"500000" usage:"max event IDs to cache for compact event storage (default: 500000, ~16MB memory)"`
 
 	// TLS configuration
 	TLSDomains []string `env:"ORLY_TLS_DOMAINS" usage:"comma-separated list of domains to respond to for TLS"`
@@ -409,6 +412,8 @@ func (cfg *C) GetDatabaseConfigValues() (
 	blockCacheMB, indexCacheMB, queryCacheSizeMB int,
 	queryCacheMaxAge time.Duration,
 	inlineEventThreshold int,
+	serialCachePubkeys, serialCacheEventIds int,
+	zstdLevel int,
 	neo4jURI, neo4jUser, neo4jPassword string,
 ) {
 	// Parse query cache max age from string to duration
@@ -423,5 +428,7 @@ func (cfg *C) GetDatabaseConfigValues() (
 		cfg.DBBlockCacheMB, cfg.DBIndexCacheMB, cfg.QueryCacheSizeMB,
 		queryCacheMaxAge,
 		cfg.InlineEventThreshold,
+		cfg.SerialCachePubkeys, cfg.SerialCacheEventIds,
+		cfg.DBZSTDLevel,
 		cfg.Neo4jURI, cfg.Neo4jUser, cfg.Neo4jPassword
 }

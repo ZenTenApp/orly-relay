@@ -155,7 +155,12 @@ export ORLY_QUERY_CACHE_MAX_AGE=5m       # Cache expiry time
 # Database cache tuning (for Badger backend)
 export ORLY_DB_BLOCK_CACHE_MB=512        # Block cache size
 export ORLY_DB_INDEX_CACHE_MB=256        # Index cache size
+export ORLY_DB_ZSTD_LEVEL=1              # ZSTD level: 0=off, 1=fast, 3=default, 9=best
 export ORLY_INLINE_EVENT_THRESHOLD=1024  # Inline storage threshold (bytes)
+
+# Serial cache for compact event storage (Badger backend)
+export ORLY_SERIAL_CACHE_PUBKEYS=100000   # Max pubkeys to cache (~3.2MB memory)
+export ORLY_SERIAL_CACHE_EVENT_IDS=500000 # Max event IDs to cache (~16MB memory)
 
 # Directory Spider (metadata sync from other relays)
 export ORLY_DIRECTORY_SPIDER=true        # Enable directory spider
@@ -701,6 +706,14 @@ ORLY has received several significant performance improvements in recent updates
 - Configurable size (`ORLY_QUERY_CACHE_SIZE_MB`) and TTL (`ORLY_QUERY_CACHE_MAX_AGE`)
 - Dramatically reduces database load for repeated queries (common in Nostr clients)
 - Cache key includes normalized filter representation for optimal hit rate
+
+### Compact Event Storage (Latest)
+- Events stored with 5-byte serial references instead of 32-byte IDs/pubkeys
+- Achieves up to 40% space savings on event data
+- Serial cache for fast lookups (configurable via `ORLY_SERIAL_CACHE_PUBKEYS` and `ORLY_SERIAL_CACHE_EVENT_IDS`)
+- Automatic migration from legacy format (version 6)
+- Cleanup removes redundant legacy storage after migration
+- Storage stats available via `db.CompactStorageStats()` and `db.LogCompactSavings()`
 
 ### Badger Cache Tuning
 - Optimized block cache (default 512MB, tune via `ORLY_DB_BLOCK_CACHE_MB`)

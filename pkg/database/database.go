@@ -32,6 +32,10 @@ type D struct {
 	pubkeySeq  *badger.Sequence // Sequence for pubkey serials
 	ready      chan struct{}    // Closed when database is ready to serve requests
 	queryCache *querycache.EventCache
+
+	// Serial cache for compact event storage
+	// Caches pubkey and event ID serial mappings for fast compact event decoding
+	serialCache *SerialCache
 }
 
 // Ensure D implements Database interface at compile time
@@ -87,6 +91,25 @@ func NewWithConfig(
 		inlineEventThreshold = 1024 // Default 1024 bytes
 	}
 
+	// Serial cache configuration for compact event storage
+	serialCachePubkeys := cfg.SerialCachePubkeys
+	if serialCachePubkeys == 0 {
+		serialCachePubkeys = 100000 // Default 100k pubkeys (~3.2MB memory)
+	}
+	serialCacheEventIds := cfg.SerialCacheEventIds
+	if serialCacheEventIds == 0 {
+		serialCacheEventIds = 500000 // Default 500k event IDs (~16MB memory)
+	}
+
+	// ZSTD compression level configuration
+	// Level 0 = disabled, 1 = fast (~500 MB/s), 3 = default, 9 = best ratio
+	zstdLevel := cfg.ZSTDLevel
+	if zstdLevel < 0 {
+		zstdLevel = 0
+	} else if zstdLevel > 19 {
+		zstdLevel = 19 // ZSTD maximum level
+	}
+
 	queryCacheSize := int64(queryCacheSizeMB * 1024 * 1024)
 
 	d = &D{
@@ -99,6 +122,7 @@ func NewWithConfig(
 		seq:                  nil,
 		ready:                make(chan struct{}),
 		queryCache:           querycache.NewEventCache(queryCacheSize, queryCacheMaxAge),
+		serialCache:          NewSerialCache(serialCachePubkeys, serialCacheEventIds),
 	}
 
 	// Ensure the data directory exists
@@ -141,8 +165,13 @@ func NewWithConfig(
 	opts.LmaxCompaction = true
 
 	// Enable compression to reduce cache cost
-	opts.Compression = options.ZSTD
-	opts.ZSTDCompressionLevel = 1 // Fast compression (500+ MB/s)
+	// Level 0 disables compression, 1 = fast (~500 MB/s), 3 = default, 9 = best ratio
+	if zstdLevel == 0 {
+		opts.Compression = options.None
+	} else {
+		opts.Compression = options.ZSTD
+		opts.ZSTDCompressionLevel = zstdLevel
+	}
 
 	// Disable conflict detection for write-heavy relay workloads
 	// Nostr events are immutable, no need for transaction conflict checks

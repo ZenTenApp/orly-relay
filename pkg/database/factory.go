@@ -24,6 +24,13 @@ type DatabaseConfig struct {
 	QueryCacheMaxAge     time.Duration // ORLY_QUERY_CACHE_MAX_AGE
 	InlineEventThreshold int           // ORLY_INLINE_EVENT_THRESHOLD
 
+	// Serial cache settings for compact event storage
+	SerialCachePubkeys  int // ORLY_SERIAL_CACHE_PUBKEYS - max pubkeys to cache (default: 100000)
+	SerialCacheEventIds int // ORLY_SERIAL_CACHE_EVENT_IDS - max event IDs to cache (default: 500000)
+
+	// Compression settings
+	ZSTDLevel int // ORLY_DB_ZSTD_LEVEL - ZSTD compression level (0=none, 1=fast, 3=default, 9=best)
+
 	// Neo4j-specific settings
 	Neo4jURI      string // ORLY_NEO4J_URI
 	Neo4jUser     string // ORLY_NEO4J_USER

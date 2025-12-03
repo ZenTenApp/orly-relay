@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	currentVersion uint32 = 5
+	currentVersion uint32 = 6
 )
 
 func (d *D) RunMigrations() {
@@ -98,6 +98,14 @@ func (d *D) RunMigrations() {
 		d.ReencodeEventsWithOptimizedTags()
 		// bump to version 5
 		_ = d.writeVersionTag(5)
+	}
+	if dbVersion < 6 {
+		log.I.F("migrating to version 6...")
+		// convert events to compact serial-reference format
+		// This replaces 32-byte IDs/pubkeys with 5-byte serial references
+		d.ConvertToCompactEventFormat()
+		// bump to version 6
+		_ = d.writeVersionTag(6)
 	}
 }
 
@@ -682,4 +690,338 @@ func (d *D) ReencodeEventsWithOptimizedTags() {
 
 	log.I.F("migration complete: re-encoded %d events, saved approximately %d bytes (%.2f KB)",
 		processedCount, savedBytes, float64(savedBytes)/1024.0)
+}
+
+// ConvertToCompactEventFormat migrates all existing events to the new compact format.
+// This format uses 5-byte serial references instead of 32-byte IDs/pubkeys,
+// dramatically reducing storage requirements (up to 80% savings on ID/pubkey data).
+//
+// The migration:
+// 1. Reads each event from legacy storage (evt/sev prefixes)
+// 2. Creates SerialEventId mapping (sei prefix) for event ID lookup
+// 3. Re-encodes the event in compact format
+// 4. Stores in cmp prefix
+// 5. Optionally removes legacy storage after successful migration
+func (d *D) ConvertToCompactEventFormat() {
+	log.I.F("converting events to compact serial-reference format...")
+	var err error
+
+	type EventMigration struct {
+		Serial    uint64
+		EventId   []byte
+		OldData   []byte
+		OldKey    []byte
+		IsInline  bool // true if from sev, false if from evt
+	}
+
+	var migrations []EventMigration
+	var processedCount int
+	var savedBytes int64
+
+	// Create resolver for compact encoding
+	resolver := NewDatabaseSerialResolver(d, d.serialCache)
+
+	// First pass: collect all events that need migration
+	// Only process events that don't have a cmp entry yet
+	if err = d.View(func(txn *badger.Txn) error {
+		// Process evt (large events) table
+		evtPrf := new(bytes.Buffer)
+		if err = indexes.EventEnc(nil).MarshalWrite(evtPrf); chk.E(err) {
+			return err
+		}
+		it := txn.NewIterator(badger.IteratorOptions{Prefix: evtPrf.Bytes()})
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			key := item.KeyCopy(nil)
+
+			// Extract serial from key
+			ser := indexes.EventVars()
+			if err = indexes.EventDec(ser).UnmarshalRead(bytes.NewBuffer(key)); chk.E(err) {
+				continue
+			}
+
+			// Check if this event already has a cmp entry
+			cmpKey := new(bytes.Buffer)
+			if err = indexes.CompactEventEnc(ser).MarshalWrite(cmpKey); err == nil {
+				if _, getErr := txn.Get(cmpKey.Bytes()); getErr == nil {
+					// Already migrated
+					continue
+				}
+			}
+
+			var val []byte
+			if val, err = item.ValueCopy(nil); chk.E(err) {
+				continue
+			}
+
+			// Skip if this is already compact format
+			if len(val) > 0 && val[0] == CompactFormatVersion {
+				continue
+			}
+
+			// Decode the event to get the ID
+			ev := new(event.E)
+			if err = ev.UnmarshalBinary(bytes.NewBuffer(val)); chk.E(err) {
+				continue
+			}
+
+			migrations = append(migrations, EventMigration{
+				Serial:   ser.Get(),
+				EventId:  ev.ID,
+				OldData:  val,
+				OldKey:   key,
+				IsInline: false,
+			})
+		}
+		it.Close()
+
+		// Process sev (small inline events) table
+		sevPrf := new(bytes.Buffer)
+		if err = indexes.SmallEventEnc(nil).MarshalWrite(sevPrf); chk.E(err) {
+			return err
+		}
+		it2 := txn.NewIterator(badger.IteratorOptions{Prefix: sevPrf.Bytes()})
+		defer it2.Close()
+
+		for it2.Rewind(); it2.Valid(); it2.Next() {
+			item := it2.Item()
+			key := item.KeyCopy(nil)
+
+			// Extract serial and data from inline key
+			if len(key) <= 8+2 {
+				continue
+			}
+
+			// Extract serial
+			ser := new(types.Uint40)
+			if err = ser.UnmarshalRead(bytes.NewReader(key[3:8])); chk.E(err) {
+				continue
+			}
+
+			// Check if this event already has a cmp entry
+			cmpKey := new(bytes.Buffer)
+			if err = indexes.CompactEventEnc(ser).MarshalWrite(cmpKey); err == nil {
+				if _, getErr := txn.Get(cmpKey.Bytes()); getErr == nil {
+					// Already migrated
+					continue
+				}
+			}
+
+			// Extract size and data
+			sizeIdx := 8
+			size := int(key[sizeIdx])<<8 | int(key[sizeIdx+1])
+			dataStart := sizeIdx + 2
+			if len(key) < dataStart+size {
+				continue
+			}
+			eventData := key[dataStart : dataStart+size]
+
+			// Skip if this is already compact format
+			if len(eventData) > 0 && eventData[0] == CompactFormatVersion {
+				continue
+			}
+
+			// Decode the event to get the ID
+			ev := new(event.E)
+			if err = ev.UnmarshalBinary(bytes.NewBuffer(eventData)); chk.E(err) {
+				continue
+			}
+
+			migrations = append(migrations, EventMigration{
+				Serial:   ser.Get(),
+				EventId:  ev.ID,
+				OldData:  eventData,
+				OldKey:   key,
+				IsInline: true,
+			})
+		}
+
+		return nil
+	}); chk.E(err) {
+		return
+	}
+
+	log.I.F("found %d events to convert to compact format", len(migrations))
+
+	if len(migrations) == 0 {
+		log.I.F("no events need conversion")
+		return
+	}
+
+	// Second pass: convert in batches
+	const batchSize = 500
+	for i := 0; i < len(migrations); i += batchSize {
+		end := i + batchSize
+		if end > len(migrations) {
+			end = len(migrations)
+		}
+		batch := migrations[i:end]
+
+		if err = d.Update(func(txn *badger.Txn) error {
+			for _, m := range batch {
+				// Decode the legacy event
+				ev := new(event.E)
+				if err = ev.UnmarshalBinary(bytes.NewBuffer(m.OldData)); chk.E(err) {
+					log.W.F("migration: failed to decode event serial %d: %v", m.Serial, err)
+					continue
+				}
+
+				// Store SerialEventId mapping
+				if err = d.StoreEventIdSerial(txn, m.Serial, m.EventId); chk.E(err) {
+					log.W.F("migration: failed to store event ID mapping for serial %d: %v", m.Serial, err)
+					continue
+				}
+
+				// Encode in compact format
+				compactData, encErr := MarshalCompactEvent(ev, resolver)
+				if encErr != nil {
+					log.W.F("migration: failed to encode compact event for serial %d: %v", m.Serial, encErr)
+					continue
+				}
+
+				// Store compact event
+				ser := new(types.Uint40)
+				if err = ser.Set(m.Serial); chk.E(err) {
+					continue
+				}
+				cmpKey := new(bytes.Buffer)
+				if err = indexes.CompactEventEnc(ser).MarshalWrite(cmpKey); chk.E(err) {
+					continue
+				}
+				if err = txn.Set(cmpKey.Bytes(), compactData); chk.E(err) {
+					log.W.F("migration: failed to store compact event for serial %d: %v", m.Serial, err)
+					continue
+				}
+
+				// Track savings
+				savedBytes += int64(len(m.OldData) - len(compactData))
+				processedCount++
+
+				// Cache the mappings
+				d.serialCache.CacheEventId(m.Serial, m.EventId)
+			}
+			return nil
+		}); chk.E(err) {
+			log.W.F("batch migration failed: %v", err)
+			continue
+		}
+
+		if (i/batchSize)%10 == 0 && i > 0 {
+			log.I.F("migration progress: %d/%d events converted", i, len(migrations))
+		}
+	}
+
+	log.I.F("compact format migration complete: converted %d events, saved approximately %d bytes (%.2f MB)",
+		processedCount, savedBytes, float64(savedBytes)/(1024.0*1024.0))
+
+	// Cleanup legacy storage after successful migration
+	log.I.F("cleaning up legacy event storage (evt/sev prefixes)...")
+	d.CleanupLegacyEventStorage()
+}
+
+// CleanupLegacyEventStorage removes legacy evt and sev storage entries after
+// compact format migration. This reclaims disk space by removing the old storage
+// format entries once all events have been successfully migrated to cmp format.
+//
+// The cleanup:
+// 1. Iterates through all cmp entries (compact format)
+// 2. For each serial found in cmp, deletes corresponding evt and sev entries
+// 3. Reports total bytes reclaimed
+func (d *D) CleanupLegacyEventStorage() {
+	var err error
+	var cleanedEvt, cleanedSev int
+	var bytesReclaimed int64
+
+	// Collect serials from cmp table
+	var serialsToClean []uint64
+
+	if err = d.View(func(txn *badger.Txn) error {
+		cmpPrf := new(bytes.Buffer)
+		if err = indexes.CompactEventEnc(nil).MarshalWrite(cmpPrf); chk.E(err) {
+			return err
+		}
+
+		it := txn.NewIterator(badger.IteratorOptions{Prefix: cmpPrf.Bytes()})
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			key := it.Item().Key()
+			// Extract serial from key (prefix 3 bytes + serial 5 bytes)
+			if len(key) >= 8 {
+				ser := new(types.Uint40)
+				if err = ser.UnmarshalRead(bytes.NewReader(key[3:8])); err == nil {
+					serialsToClean = append(serialsToClean, ser.Get())
+				}
+			}
+		}
+		return nil
+	}); chk.E(err) {
+		log.W.F("failed to collect compact event serials: %v", err)
+		return
+	}
+
+	log.I.F("found %d compact events to clean up legacy storage for", len(serialsToClean))
+
+	// Clean up in batches
+	const batchSize = 1000
+	for i := 0; i < len(serialsToClean); i += batchSize {
+		end := i + batchSize
+		if end > len(serialsToClean) {
+			end = len(serialsToClean)
+		}
+		batch := serialsToClean[i:end]
+
+		if err = d.Update(func(txn *badger.Txn) error {
+			for _, serial := range batch {
+				ser := new(types.Uint40)
+				if err = ser.Set(serial); err != nil {
+					continue
+				}
+
+				// Try to delete evt entry
+				evtKeyBuf := new(bytes.Buffer)
+				if err = indexes.EventEnc(ser).MarshalWrite(evtKeyBuf); err == nil {
+					item, getErr := txn.Get(evtKeyBuf.Bytes())
+					if getErr == nil {
+						// Track size before deleting
+						bytesReclaimed += int64(item.ValueSize())
+						if delErr := txn.Delete(evtKeyBuf.Bytes()); delErr == nil {
+							cleanedEvt++
+						}
+					}
+				}
+
+				// Try to delete sev entry (need to iterate with prefix since key includes inline data)
+				sevKeyBuf := new(bytes.Buffer)
+				if err = indexes.SmallEventEnc(ser).MarshalWrite(sevKeyBuf); err == nil {
+					opts := badger.DefaultIteratorOptions
+					opts.Prefix = sevKeyBuf.Bytes()
+					it := txn.NewIterator(opts)
+
+					it.Rewind()
+					if it.Valid() {
+						key := it.Item().KeyCopy(nil)
+						bytesReclaimed += int64(len(key)) // sev stores data in key
+						if delErr := txn.Delete(key); delErr == nil {
+							cleanedSev++
+						}
+					}
+					it.Close()
+				}
+			}
+			return nil
+		}); chk.E(err) {
+			log.W.F("batch cleanup failed: %v", err)
+			continue
+		}
+
+		if (i/batchSize)%10 == 0 && i > 0 {
+			log.I.F("cleanup progress: %d/%d events processed", i, len(serialsToClean))
+		}
+	}
+
+	log.I.F("legacy storage cleanup complete: removed %d evt entries, %d sev entries, reclaimed approximately %d bytes (%.2f MB)",
+		cleanedEvt, cleanedSev, bytesReclaimed, float64(bytesReclaimed)/(1024.0*1024.0))
 }

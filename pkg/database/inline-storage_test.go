@@ -399,9 +399,11 @@ func TestInlineStorageMigration(t *testing.T) {
 				i, fetchedEvent.Content, ev.Content)
 		}
 
-		// Verify it's now using inline storage
-		sevKeyExists := false
+		// Verify it's now using optimized storage (sev inline OR cmp compact format)
+		// The migration may convert to sev (version 4) or cmp (version 6) depending on migration order
+		optimizedStorageExists := false
 		db.View(func(txn *badger.Txn) error {
+			// Check for sev (small event inline) format
 			smallBuf := new(bytes.Buffer)
 			indexes.SmallEventEnc(serial).MarshalWrite(smallBuf)
 
@@ -412,15 +414,25 @@ func TestInlineStorageMigration(t *testing.T) {
 
 			it.Rewind()
 			if it.Valid() {
-				sevKeyExists = true
-				t.Logf("Event %d (%s) successfully migrated to inline storage",
+				optimizedStorageExists = true
+				t.Logf("Event %d (%s) successfully migrated to inline (sev) storage",
+					i, hex.Enc(ev.ID[:8]))
+				return nil
+			}
+
+			// Check for cmp (compact format) storage
+			cmpBuf := new(bytes.Buffer)
+			indexes.CompactEventEnc(serial).MarshalWrite(cmpBuf)
+			if _, err := txn.Get(cmpBuf.Bytes()); err == nil {
+				optimizedStorageExists = true
+				t.Logf("Event %d (%s) successfully migrated to compact (cmp) storage",
 					i, hex.Enc(ev.ID[:8]))
 			}
 			return nil
 		})
 
-		if !sevKeyExists {
-			t.Errorf("Event %d was not migrated to inline storage", i)
+		if !optimizedStorageExists {
+			t.Errorf("Event %d was not migrated to optimized storage (sev or cmp)", i)
 		}
 	}
 }

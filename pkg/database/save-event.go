@@ -264,18 +264,30 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 	// 	ev.ID, ev.Kind,
 	// )
 
-	// Serialize event once to check size
-	eventDataBuf := new(bytes.Buffer)
-	ev.MarshalBinary(eventDataBuf)
-	eventData := eventDataBuf.Bytes()
+	// Create serial resolver for compact encoding
+	resolver := NewDatabaseSerialResolver(d, d.serialCache)
 
-	// Determine storage strategy (Reiser4 optimizations)
-	// Use the threshold from database configuration
-	// Typical values: 384 (conservative), 512 (recommended), 1024 (aggressive)
-	smallEventThreshold := d.inlineEventThreshold
-	isSmallEvent := smallEventThreshold > 0 && len(eventData) <= smallEventThreshold
-	isReplaceableEvent := kind.IsReplaceable(ev.Kind)
-	isAddressableEvent := kind.IsParameterizedReplaceable(ev.Kind)
+	// Serialize event in compact format using serial references
+	// This dramatically reduces storage by replacing 32-byte IDs/pubkeys with 5-byte serials
+	compactData, compactErr := MarshalCompactEvent(ev, resolver)
+
+	// Calculate legacy size for comparison (for metrics tracking)
+	// We marshal to get accurate size comparison
+	legacyBuf := new(bytes.Buffer)
+	ev.MarshalBinary(legacyBuf)
+	legacySize := legacyBuf.Len()
+
+	if compactErr != nil {
+		// Fall back to legacy format if compact encoding fails
+		log.W.F("SaveEvent: compact encoding failed, using legacy format: %v", compactErr)
+		compactData = legacyBuf.Bytes()
+	} else {
+		// Track storage savings
+		TrackCompactSaving(legacySize, len(compactData))
+		log.T.F("SaveEvent: compact %d bytes vs legacy %d bytes (saved %d bytes, %.1f%%)",
+			len(compactData), legacySize, legacySize-len(compactData),
+			float64(legacySize-len(compactData))/float64(legacySize)*100.0)
+	}
 
 	// Start a transaction to save the event and all its indexes
 	err = d.Update(
@@ -293,106 +305,25 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 				}
 			}
 
-			// Write the event using optimized storage strategy
-			// Determine if we should use inline addressable/replaceable storage
-			useAddressableInline := false
-			var dTag *tag.T
-			if isAddressableEvent && isSmallEvent {
-				dTag = ev.Tags.GetFirst([]byte("d"))
-				useAddressableInline = dTag != nil
+			// Store the SerialEventId mapping (serial -> full 32-byte event ID)
+			// This is required for reconstructing compact events
+			if err = d.StoreEventIdSerial(txn, serial, ev.ID); chk.E(err) {
+				return
 			}
 
-			// All small events get a sev key for serial-based access
-			if isSmallEvent {
-				// Small event: store inline with sev prefix
-				// Format: sev|serial|size_uint16|event_data
-				keyBuf := new(bytes.Buffer)
-				if err = indexes.SmallEventEnc(ser).MarshalWrite(keyBuf); chk.E(err) {
-					return
-				}
-				// Append size as uint16 big-endian (2 bytes for size up to 65535)
-				sizeBytes := []byte{
-					byte(len(eventData) >> 8), byte(len(eventData)),
-				}
-				keyBuf.Write(sizeBytes)
-				// Append event data
-				keyBuf.Write(eventData)
+			// Cache the event ID mapping
+			d.serialCache.CacheEventId(serial, ev.ID)
 
-				if err = txn.Set(keyBuf.Bytes(), nil); chk.E(err) {
-					return
-				}
-				// log.T.F(
-				// 	"SaveEvent: stored small event inline (%d bytes)",
-				// 	len(eventData),
-				// )
-			} else {
-				// Large event: store separately with evt prefix
-				keyBuf := new(bytes.Buffer)
-				if err = indexes.EventEnc(ser).MarshalWrite(keyBuf); chk.E(err) {
-					return
-				}
-				if err = txn.Set(keyBuf.Bytes(), eventData); chk.E(err) {
-					return
-				}
-				// log.T.F(
-				// "SaveEvent: stored large event separately (%d bytes)",
-				// len(eventData),
-				// )
+			// Store compact event with cmp prefix
+			// Format: cmp|serial|compact_event_data
+			// This is the only storage format - legacy evt/sev/aev/rev prefixes
+			// are handled by migration and no longer written for new events
+			cmpKeyBuf := new(bytes.Buffer)
+			if err = indexes.CompactEventEnc(ser).MarshalWrite(cmpKeyBuf); chk.E(err) {
+				return
 			}
-
-			// Additionally, store replaceable/addressable events with specialized keys for direct access
-			if useAddressableInline {
-				// Addressable event: also store with aev|pubkey_hash|kind|dtag_hash|size|data
-				pubHash := new(types.PubHash)
-				pubHash.FromPubkey(ev.Pubkey)
-				kindVal := new(types.Uint16)
-				kindVal.Set(ev.Kind)
-				dTagHash := new(types.Ident)
-				dTagHash.FromIdent(dTag.Value())
-
-				keyBuf := new(bytes.Buffer)
-				if err = indexes.AddressableEventEnc(
-					pubHash, kindVal, dTagHash,
-				).MarshalWrite(keyBuf); chk.E(err) {
-					return
-				}
-				// Append size as uint16 big-endian
-				sizeBytes := []byte{
-					byte(len(eventData) >> 8), byte(len(eventData)),
-				}
-				keyBuf.Write(sizeBytes)
-				// Append event data
-				keyBuf.Write(eventData)
-
-				if err = txn.Set(keyBuf.Bytes(), nil); chk.E(err) {
-					return
-				}
-				// log.T.F("SaveEvent: also stored addressable event with specialized key")
-			} else if isReplaceableEvent && isSmallEvent {
-				// Replaceable event: also store with rev|pubkey_hash|kind|size|data
-				pubHash := new(types.PubHash)
-				pubHash.FromPubkey(ev.Pubkey)
-				kindVal := new(types.Uint16)
-				kindVal.Set(ev.Kind)
-
-				keyBuf := new(bytes.Buffer)
-				if err = indexes.ReplaceableEventEnc(
-					pubHash, kindVal,
-				).MarshalWrite(keyBuf); chk.E(err) {
-					return
-				}
-				// Append size as uint16 big-endian
-				sizeBytes := []byte{
-					byte(len(eventData) >> 8), byte(len(eventData)),
-				}
-				keyBuf.Write(sizeBytes)
-				// Append event data
-				keyBuf.Write(eventData)
-
-				if err = txn.Set(keyBuf.Bytes(), nil); chk.E(err) {
-					return
-				}
-				log.T.F("SaveEvent: also stored replaceable event with specialized key")
+			if err = txn.Set(cmpKeyBuf.Bytes(), compactData); chk.E(err) {
+				return
 			}
 
 			// Create graph edges between event and all related pubkeys

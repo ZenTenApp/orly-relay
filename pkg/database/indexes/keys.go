@@ -81,6 +81,10 @@ const (
 	SerialPubkeyPrefix       = I("spk") // pubkey serial -> pubkey hash (full 32 bytes)
 	EventPubkeyGraphPrefix   = I("epg") // event serial -> pubkey serial (graph edges)
 	PubkeyEventGraphPrefix   = I("peg") // pubkey serial -> event serial (reverse edges)
+
+	// Compact event storage indexes
+	SerialEventIdPrefix = I("sei") // event serial -> full 32-byte event ID
+	CompactEventPrefix  = I("cmp") // compact event storage with serial references
 )
 
 // Prefix returns the three byte human-readable prefixes that go in front of
@@ -133,6 +137,11 @@ func Prefix(prf int) (i I) {
 		return EventPubkeyGraphPrefix
 	case PubkeyEventGraph:
 		return PubkeyEventGraphPrefix
+
+	case SerialEventId:
+		return SerialEventIdPrefix
+	case CompactEvent:
+		return CompactEventPrefix
 	}
 	return
 }
@@ -191,6 +200,11 @@ func Identify(r io.Reader) (i int, err error) {
 		i = EventPubkeyGraph
 	case PubkeyEventGraphPrefix:
 		i = PubkeyEventGraph
+
+	case SerialEventIdPrefix:
+		i = SerialEventId
+	case CompactEventPrefix:
+		i = CompactEvent
 	}
 	return
 }
@@ -608,3 +622,36 @@ func PubkeyEventGraphEnc(pubkeySer *types.Uint40, kind *types.Uint16, direction 
 func PubkeyEventGraphDec(pubkeySer *types.Uint40, kind *types.Uint16, direction *types.Letter, eventSer *types.Uint40) (enc *T) {
 	return New(NewPrefix(), pubkeySer, kind, direction, eventSer)
 }
+
+// SerialEventId maps an event serial to its full 32-byte event ID.
+// This enables reconstruction of the original event ID from compact storage.
+// The event ID is stored as the value (32 bytes), not inline in the key.
+//
+//	3 prefix|5 serial -> 32 byte event ID value
+var SerialEventId = next()
+
+func SerialEventIdVars() (ser *types.Uint40) {
+	return new(types.Uint40)
+}
+func SerialEventIdEnc(ser *types.Uint40) (enc *T) {
+	return New(NewPrefix(SerialEventId), ser)
+}
+func SerialEventIdDec(ser *types.Uint40) (enc *T) {
+	return New(NewPrefix(), ser)
+}
+
+// CompactEvent stores events using serial references instead of full IDs/pubkeys.
+// This dramatically reduces storage size by replacing:
+// - 32-byte event ID with 5-byte serial
+// - 32-byte author pubkey with 5-byte pubkey serial
+// - 32-byte e-tag values with 5-byte event serials (or full ID if unknown)
+// - 32-byte p-tag values with 5-byte pubkey serials
+//
+// Format: cmp|5 serial|compact event data (variable length)
+var CompactEvent = next()
+
+func CompactEventVars() (ser *types.Uint40) { return new(types.Uint40) }
+func CompactEventEnc(ser *types.Uint40) (enc *T) {
+	return New(NewPrefix(CompactEvent), ser)
+}
+func CompactEventDec(ser *types.Uint40) (enc *T) { return New(NewPrefix(), ser) }
