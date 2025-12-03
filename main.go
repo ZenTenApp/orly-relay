@@ -31,6 +31,13 @@ import (
 func main() {
 	runtime.GOMAXPROCS(128)
 	debug.SetGCPercent(10)
+
+	// Handle 'version' subcommand early, before any other initialization
+	if config.VersionRequested() {
+		fmt.Println(version.V)
+		os.Exit(0)
+	}
+
 	var err error
 	var cfg *config.C
 	if cfg, err = config.New(); chk.T(err) {

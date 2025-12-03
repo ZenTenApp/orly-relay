@@ -233,6 +233,21 @@ func ServeRequested() (requested bool) {
 	return
 }
 
+// VersionRequested checks if the first command line argument is "version" and returns
+// whether the version should be printed and the program should exit.
+//
+// Return Values
+//   - requested: true if the 'version' subcommand was provided, false otherwise.
+func VersionRequested() (requested bool) {
+	if len(os.Args) > 1 {
+		switch strings.ToLower(os.Args[1]) {
+		case "version", "-v", "--v", "-version", "--version":
+			requested = true
+		}
+	}
+	return
+}
+
 // KV is a key/value pair.
 type KV struct{ Key, Value string }
 
@@ -364,7 +379,7 @@ func PrintHelp(cfg *C, printer io.Writer) {
 	)
 	_, _ = fmt.Fprintf(
 		printer,
-		`Usage: %s [env|help|identity|serve]
+		`Usage: %s [env|help|identity|serve|version]
 
 - env: print environment variables configuring %s
 - help: print this help text
@@ -372,6 +387,7 @@ func PrintHelp(cfg *C, printer io.Writer) {
 - serve: start ephemeral relay with RAM-based storage at /dev/shm/orlyserve
          listening on 0.0.0.0:10547 with 'none' ACL mode (open relay)
          useful for testing and benchmarking
+- version: print version and exit (also: -v, --v, -version, --version)
 
 `,
 		cfg.AppName, cfg.AppName,
