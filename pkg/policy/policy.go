@@ -115,7 +115,20 @@ type Rule struct {
 	// Unlike WriteAllowFollows which uses the global PolicyAdmins, this allows per-rule admin configuration.
 	// If set, the relay will fail to start if these admins don't have follow list events (kind 3) in the database.
 	// This provides explicit control over which admin's follow list controls access for specific kinds.
+	// DEPRECATED: Use ReadFollowsWhitelist and WriteFollowsWhitelist instead.
 	FollowsWhitelistAdmins []string `json:"follows_whitelist_admins,omitempty"`
+
+	// ReadFollowsWhitelist specifies pubkeys (hex-encoded) whose follows are allowed to READ events.
+	// The relay will fail to start if these pubkeys don't have follow list events (kind 3) in the database.
+	// When present, only the follows of these pubkeys (plus the pubkeys themselves) can read.
+	// This restricts read access - without it, read is permissive by default (except for privileged events).
+	ReadFollowsWhitelist []string `json:"read_follows_whitelist,omitempty"`
+
+	// WriteFollowsWhitelist specifies pubkeys (hex-encoded) whose follows are allowed to WRITE events.
+	// The relay will fail to start if these pubkeys don't have follow list events (kind 3) in the database.
+	// When present, only the follows of these pubkeys (plus the pubkeys themselves) can write.
+	// Without this, write permission is allowed by default.
+	WriteFollowsWhitelist []string `json:"write_follows_whitelist,omitempty"`
 
 	// TagValidation is a map of tag_name -> regex pattern for validating tag values.
 	// Each tag present in the event must match its corresponding regex pattern.
@@ -139,8 +152,14 @@ type Rule struct {
 	readDenyBin                [][]byte
 	maxExpirySeconds           *int64         // Parsed from MaxExpiryDuration or copied from MaxExpiry
 	identifierRegexCache       *regexp.Regexp // Compiled regex for IdentifierRegex
-	followsWhitelistAdminsBin  [][]byte       // Binary cache for FollowsWhitelistAdmins pubkeys
-	followsWhitelistFollowsBin [][]byte       // Cached follow list from FollowsWhitelistAdmins (loaded at startup)
+	followsWhitelistAdminsBin  [][]byte       // Binary cache for FollowsWhitelistAdmins pubkeys (DEPRECATED)
+	followsWhitelistFollowsBin [][]byte       // Cached follow list from FollowsWhitelistAdmins (loaded at startup, DEPRECATED)
+
+	// Binary caches for ReadFollowsWhitelist and WriteFollowsWhitelist
+	readFollowsWhitelistBin  [][]byte // Binary cache for ReadFollowsWhitelist pubkeys
+	writeFollowsWhitelistBin [][]byte // Binary cache for WriteFollowsWhitelist pubkeys
+	readFollowsFollowsBin    [][]byte // Cached follow list from ReadFollowsWhitelist pubkeys
+	writeFollowsFollowsBin   [][]byte // Cached follow list from WriteFollowsWhitelist pubkeys
 }
 
 // hasAnyRules checks if the rule has any constraints configured
@@ -156,6 +175,8 @@ func (r *Rule) hasAnyRules() bool {
 		len(r.MustHaveTags) > 0 ||
 		r.Script != "" || r.Privileged ||
 		r.WriteAllowFollows || len(r.FollowsWhitelistAdmins) > 0 ||
+		len(r.ReadFollowsWhitelist) > 0 || len(r.WriteFollowsWhitelist) > 0 ||
+		len(r.readFollowsWhitelistBin) > 0 || len(r.writeFollowsWhitelistBin) > 0 ||
 		len(r.TagValidation) > 0 ||
 		r.ProtectedRequired || r.IdentifierRegex != ""
 }
@@ -241,7 +262,7 @@ func (r *Rule) populateBinaryCache() error {
 		}
 	}
 
-	// Convert FollowsWhitelistAdmins hex strings to binary
+	// Convert FollowsWhitelistAdmins hex strings to binary (DEPRECATED)
 	if len(r.FollowsWhitelistAdmins) > 0 {
 		r.followsWhitelistAdminsBin = make([][]byte, 0, len(r.FollowsWhitelistAdmins))
 		for _, hexPubkey := range r.FollowsWhitelistAdmins {
@@ -251,6 +272,32 @@ func (r *Rule) populateBinaryCache() error {
 				continue
 			}
 			r.followsWhitelistAdminsBin = append(r.followsWhitelistAdminsBin, binPubkey)
+		}
+	}
+
+	// Convert ReadFollowsWhitelist hex strings to binary
+	if len(r.ReadFollowsWhitelist) > 0 {
+		r.readFollowsWhitelistBin = make([][]byte, 0, len(r.ReadFollowsWhitelist))
+		for _, hexPubkey := range r.ReadFollowsWhitelist {
+			binPubkey, decErr := hex.Dec(hexPubkey)
+			if decErr != nil {
+				log.W.F("failed to decode ReadFollowsWhitelist pubkey %q: %v", hexPubkey, decErr)
+				continue
+			}
+			r.readFollowsWhitelistBin = append(r.readFollowsWhitelistBin, binPubkey)
+		}
+	}
+
+	// Convert WriteFollowsWhitelist hex strings to binary
+	if len(r.WriteFollowsWhitelist) > 0 {
+		r.writeFollowsWhitelistBin = make([][]byte, 0, len(r.WriteFollowsWhitelist))
+		for _, hexPubkey := range r.WriteFollowsWhitelist {
+			binPubkey, decErr := hex.Dec(hexPubkey)
+			if decErr != nil {
+				log.W.F("failed to decode WriteFollowsWhitelist pubkey %q: %v", hexPubkey, decErr)
+				continue
+			}
+			r.writeFollowsWhitelistBin = append(r.writeFollowsWhitelistBin, binPubkey)
 		}
 	}
 
@@ -283,8 +330,89 @@ func (r *Rule) GetFollowsWhitelistAdminsBin() [][]byte {
 }
 
 // HasFollowsWhitelistAdmins returns true if this rule has FollowsWhitelistAdmins configured.
+// DEPRECATED: Use HasReadFollowsWhitelist and HasWriteFollowsWhitelist instead.
 func (r *Rule) HasFollowsWhitelistAdmins() bool {
 	return len(r.FollowsWhitelistAdmins) > 0
+}
+
+// HasReadFollowsWhitelist returns true if this rule has ReadFollowsWhitelist configured.
+func (r *Rule) HasReadFollowsWhitelist() bool {
+	return len(r.ReadFollowsWhitelist) > 0
+}
+
+// HasWriteFollowsWhitelist returns true if this rule has WriteFollowsWhitelist configured.
+func (r *Rule) HasWriteFollowsWhitelist() bool {
+	return len(r.WriteFollowsWhitelist) > 0
+}
+
+// GetReadFollowsWhitelistBin returns the binary-encoded pubkeys for ReadFollowsWhitelist.
+func (r *Rule) GetReadFollowsWhitelistBin() [][]byte {
+	return r.readFollowsWhitelistBin
+}
+
+// GetWriteFollowsWhitelistBin returns the binary-encoded pubkeys for WriteFollowsWhitelist.
+func (r *Rule) GetWriteFollowsWhitelistBin() [][]byte {
+	return r.writeFollowsWhitelistBin
+}
+
+// UpdateReadFollowsWhitelist sets the follows list for this rule's ReadFollowsWhitelist.
+// The follows should be binary pubkeys ([]byte), not hex-encoded.
+func (r *Rule) UpdateReadFollowsWhitelist(follows [][]byte) {
+	r.readFollowsFollowsBin = follows
+}
+
+// UpdateWriteFollowsWhitelist sets the follows list for this rule's WriteFollowsWhitelist.
+// The follows should be binary pubkeys ([]byte), not hex-encoded.
+func (r *Rule) UpdateWriteFollowsWhitelist(follows [][]byte) {
+	r.writeFollowsFollowsBin = follows
+}
+
+// IsInReadFollowsWhitelist checks if the given pubkey is in this rule's read follows whitelist.
+// The pubkey parameter should be binary ([]byte), not hex-encoded.
+// Returns true if either:
+// 1. The pubkey is one of the ReadFollowsWhitelist pubkeys themselves, OR
+// 2. The pubkey is in the follows list of the ReadFollowsWhitelist pubkeys.
+func (r *Rule) IsInReadFollowsWhitelist(pubkey []byte) bool {
+	if len(pubkey) == 0 {
+		return false
+	}
+	// Check if pubkey is one of the whitelist pubkeys themselves
+	for _, wlPubkey := range r.readFollowsWhitelistBin {
+		if utils.FastEqual(pubkey, wlPubkey) {
+			return true
+		}
+	}
+	// Check if pubkey is in the follows list
+	for _, follow := range r.readFollowsFollowsBin {
+		if utils.FastEqual(pubkey, follow) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsInWriteFollowsWhitelist checks if the given pubkey is in this rule's write follows whitelist.
+// The pubkey parameter should be binary ([]byte), not hex-encoded.
+// Returns true if either:
+// 1. The pubkey is one of the WriteFollowsWhitelist pubkeys themselves, OR
+// 2. The pubkey is in the follows list of the WriteFollowsWhitelist pubkeys.
+func (r *Rule) IsInWriteFollowsWhitelist(pubkey []byte) bool {
+	if len(pubkey) == 0 {
+		return false
+	}
+	// Check if pubkey is one of the whitelist pubkeys themselves
+	for _, wlPubkey := range r.writeFollowsWhitelistBin {
+		if utils.FastEqual(pubkey, wlPubkey) {
+			return true
+		}
+	}
+	// Check if pubkey is in the follows list
+	for _, follow := range r.writeFollowsFollowsBin {
+		if utils.FastEqual(pubkey, follow) {
+			return true
+		}
+	}
+	return false
 }
 
 // PolicyEvent represents an event with additional context for policy scripts.
@@ -401,10 +529,15 @@ type P struct {
 	Owners []string `json:"owners,omitempty"`
 
 	// Unexported binary caches for faster comparison (populated from hex strings above)
-	policyAdminsBin [][]byte     // Binary cache for policy admin pubkeys
-	policyFollows   [][]byte     // Cached follow list from policy admins (kind 3 events)
-	policyFollowsMx sync.RWMutex // Protect follows list access
-	ownersBin       [][]byte     // Binary cache for policy-defined owner pubkeys
+	policyAdminsBin [][]byte // Binary cache for policy admin pubkeys
+	policyFollows   [][]byte // Cached follow list from policy admins (kind 3 events)
+	ownersBin       [][]byte // Binary cache for policy-defined owner pubkeys
+
+	// followsMx protects all follows-related caches from concurrent access.
+	// This includes policyFollows, Global.readFollowsFollowsBin, Global.writeFollowsFollowsBin,
+	// and rule-specific follows whitelists.
+	// Use RLock for reads (CheckPolicy) and Lock for writes (Update*Follows*).
+	followsMx sync.RWMutex
 
 	// manager handles policy script execution.
 	// Unexported to enforce use of public API methods (CheckPolicy, IsEnabled).
@@ -1115,73 +1248,97 @@ func (p *P) LoadFromFile(configPath string) error {
 // CheckPolicy checks if an event is allowed based on the policy configuration.
 // The access parameter should be "write" for accepting events or "read" for filtering events.
 // Returns true if the event is allowed, false if denied, and an error if validation fails.
-// Policy evaluation order: global rules → kind filtering → specific rules → default policy.
+//
+// Policy evaluation order (more specific rules take precedence):
+// 1. Kinds whitelist/blacklist - if kind is blocked, deny immediately
+// 2. Kind-specific rule - if exists for this kind, use it exclusively
+// 3. Global rule - fallback if no kind-specific rule exists
+// 4. Default policy - fallback if no rules apply
+//
+// Thread-safety: Uses followsMx.RLock to protect reads of follows whitelists during policy checks.
+// Write operations (Update*) acquire the write lock, which blocks concurrent reads.
 func (p *P) CheckPolicy(
 	access string, ev *event.E, loggedInPubkey []byte, ipAddress string,
 ) (allowed bool, err error) {
+	// Handle nil policy - this should not happen if policy is enabled
+	// If policy is enabled but p is nil, it's a configuration error
+	if p == nil {
+		log.F.Ln("FATAL: CheckPolicy called on nil policy - this indicates misconfiguration. " +
+			"If ORLY_POLICY_ENABLED=true, ensure policy configuration is valid.")
+		return false, fmt.Errorf("policy is nil but policy checking is enabled - check configuration")
+	}
+
 	// Handle nil event
 	if ev == nil {
 		return false, fmt.Errorf("event cannot be nil")
 	}
 
-	// First check global rule filter (applies to all events)
-	if !p.checkGlobalRulePolicy(access, ev, loggedInPubkey) {
-		return false, nil
-	}
+	// Acquire read lock to protect follows whitelists during policy check
+	p.followsMx.RLock()
+	defer p.followsMx.RUnlock()
 
-	// Then check kinds white/blacklist
+	// ==========================================================================
+	// STEP 1: Check kinds whitelist/blacklist (applies before any rule checks)
+	// ==========================================================================
 	if !p.checkKindsPolicy(ev.Kind) {
 		return false, nil
 	}
 
-	// Get rule for this kind
-	rule, hasRule := p.rules[int(ev.Kind)]
-	if !hasRule {
-		// No specific rule for this kind, use default policy
-		return p.getDefaultPolicyAction(), nil
-	}
-
-	// Check if script is present and enabled
-	if rule.Script != "" && p.manager != nil {
-		if p.manager.IsEnabled() {
-			// Check if script file exists before trying to use it
-			if _, err := os.Stat(rule.Script); err == nil {
-				// Script exists, try to use it
-				log.D.F(
-					"using policy script for kind %d: %s", ev.Kind, rule.Script,
-				)
-				allowed, err := p.checkScriptPolicy(
-					access, ev, rule.Script, loggedInPubkey, ipAddress,
-				)
-				if err == nil {
-					// Script ran successfully, return its decision
-					return allowed, nil
+	// ==========================================================================
+	// STEP 2: Check KIND-SPECIFIC rule FIRST (more specific = higher priority)
+	// ==========================================================================
+	// If kind-specific rule exists and accepts, that's final - global is ignored.
+	rule, hasKindRule := p.rules[int(ev.Kind)]
+	if hasKindRule {
+		// Check if script is present and enabled for this kind
+		if rule.Script != "" && p.manager != nil {
+			if p.manager.IsEnabled() {
+				// Check if script file exists before trying to use it
+				if _, err := os.Stat(rule.Script); err == nil {
+					// Script exists, try to use it
+					log.D.F("using policy script for kind %d: %s", ev.Kind, rule.Script)
+					allowed, err := p.checkScriptPolicy(
+						access, ev, rule.Script, loggedInPubkey, ipAddress,
+					)
+					if err == nil {
+						// Script ran successfully, return its decision
+						return allowed, nil
+					}
+					// Script failed, fall through to apply other criteria
+					log.W.F("policy script check failed for kind %d: %v, applying other criteria",
+						ev.Kind, err)
+				} else {
+					// Script configured but doesn't exist
+					log.W.F("policy script configured for kind %d but not found at %s: %v, applying other criteria",
+						ev.Kind, rule.Script, err)
 				}
-				// Script failed, fall through to apply other criteria
-				log.W.F(
-					"policy script check failed for kind %d: %v, applying other criteria",
-					ev.Kind, err,
-				)
+				// Script doesn't exist or failed, fall through to apply other criteria
 			} else {
-				// Script configured but doesn't exist
-				log.W.F(
-					"policy script configured for kind %d but not found at %s: %v, applying other criteria",
-					ev.Kind, rule.Script, err,
-				)
+				// Policy manager is disabled, fall back to default policy
+				log.D.F("policy manager is disabled for kind %d, falling back to default policy (%s)",
+					ev.Kind, p.DefaultPolicy)
+				return p.getDefaultPolicyAction(), nil
 			}
-			// Script doesn't exist or failed, fall through to apply other criteria
-		} else {
-			// Policy manager is disabled, fall back to default policy
-			log.D.F(
-				"policy manager is disabled for kind %d, falling back to default policy (%s)",
-				ev.Kind, p.DefaultPolicy,
-			)
-			return p.getDefaultPolicyAction(), nil
 		}
+
+		// Apply kind-specific rule-based filtering
+		return p.checkRulePolicy(access, ev, rule, loggedInPubkey)
 	}
 
-	// Apply rule-based filtering
-	return p.checkRulePolicy(access, ev, rule, loggedInPubkey)
+	// ==========================================================================
+	// STEP 3: No kind-specific rule - check GLOBAL rule as fallback
+	// ==========================================================================
+
+	// Check if global rule has any configuration
+	if p.Global.hasAnyRules() {
+		// Apply global rule filtering
+		return p.checkRulePolicy(access, ev, p.Global, loggedInPubkey)
+	}
+
+	// ==========================================================================
+	// STEP 4: No kind-specific or global rules - use default policy
+	// ==========================================================================
+	return p.getDefaultPolicyAction(), nil
 }
 
 // checkKindsPolicy checks if the event kind is allowed.
@@ -1216,6 +1373,7 @@ func (p *P) checkKindsPolicy(kind uint16) bool {
 	// Behavior depends on whether default_policy is explicitly set:
 	// - If default_policy is explicitly "allow", allow all kinds (rules add constraints, not restrictions)
 	// - If default_policy is unset or "deny", use implicit whitelist (only allow kinds with rules)
+	// - If global rule has any configuration, allow kinds through for global rule checking
 	if len(p.rules) > 0 {
 		// If default_policy is explicitly "allow", don't use implicit whitelist
 		if p.DefaultPolicy == "allow" {
@@ -1223,13 +1381,63 @@ func (p *P) checkKindsPolicy(kind uint16) bool {
 		}
 		// Implicit whitelist mode - only allow kinds with specific rules
 		_, hasRule := p.rules[int(kind)]
-		return hasRule
+		if hasRule {
+			return true
+		}
+		// No kind-specific rule, but check if global rule exists
+		if p.Global.hasAnyRules() {
+			return true // Allow through for global rule check
+		}
+		return false
 	}
-	// No specific rules - fall back to default policy
+	// No kind-specific rules - check if global rule exists
+	if p.Global.hasAnyRules() {
+		return true // Allow through for global rule check
+	}
+	// No rules at all - fall back to default policy
 	return p.getDefaultPolicyAction()
 }
 
+// checkGlobalFollowsWhitelistAccess checks if the user is explicitly granted access
+// via the global rule's follows whitelists (read_follows_whitelist or write_follows_whitelist).
+// This grants access that bypasses the default policy for kinds without specific rules.
+// Note: p should never be nil here - caller (CheckPolicy) already validates this.
+func (p *P) checkGlobalFollowsWhitelistAccess(access string, loggedInPubkey []byte) bool {
+	if len(loggedInPubkey) == 0 {
+		return false
+	}
+
+	if access == "read" {
+		// Check if user is in global read follows whitelist
+		if p.Global.HasReadFollowsWhitelist() && p.Global.IsInReadFollowsWhitelist(loggedInPubkey) {
+			return true
+		}
+		// Also check legacy WriteAllowFollows and FollowsWhitelistAdmins for read access
+		if p.Global.WriteAllowFollows && p.PolicyFollowWhitelistEnabled && p.IsPolicyFollow(loggedInPubkey) {
+			return true
+		}
+		if p.Global.HasFollowsWhitelistAdmins() && p.Global.IsInFollowsWhitelist(loggedInPubkey) {
+			return true
+		}
+	} else if access == "write" {
+		// Check if user is in global write follows whitelist
+		if p.Global.HasWriteFollowsWhitelist() && p.Global.IsInWriteFollowsWhitelist(loggedInPubkey) {
+			return true
+		}
+		// Also check legacy WriteAllowFollows and FollowsWhitelistAdmins for write access
+		if p.Global.WriteAllowFollows && p.PolicyFollowWhitelistEnabled && p.IsPolicyFollow(loggedInPubkey) {
+			return true
+		}
+		if p.Global.HasFollowsWhitelistAdmins() && p.Global.IsInFollowsWhitelist(loggedInPubkey) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // checkGlobalRulePolicy checks if the event passes the global rule filter
+// Note: p should never be nil here - caller (CheckPolicy) already validates this.
 func (p *P) checkGlobalRulePolicy(
 	access string, ev *event.E, loggedInPubkey []byte,
 ) bool {
@@ -1247,147 +1455,149 @@ func (p *P) checkGlobalRulePolicy(
 	return allowed
 }
 
-// checkRulePolicy evaluates rule-based access control with corrected evaluation order.
-// Evaluation order:
-// 1. Universal constraints (size, tags, age) - apply to everyone
-// 2. Explicit denials (deny lists) - highest priority blacklist
-// 3. Privileged access - parties involved get special access (ONLY if no allow lists)
-// 4. Explicit allows (allow lists) - exclusive and authoritative when present
-// 5. Default policy - fallback when no rules apply
+// checkRulePolicy evaluates rule-based access control with the following logic:
 //
-// IMPORTANT: When both privileged AND allow lists are specified, allow lists are
-// authoritative - even parties involved must be in the allow list.
+// READ ACCESS (default-permissive):
+//   - Denied if in read_deny list
+//   - If read_allow, read_follows_whitelist, or privileged is set, user must pass one of those checks
+//   - Otherwise, read is allowed by default
+//
+// WRITE ACCESS (default-permissive):
+//   - Denied if in write_deny list
+//   - Universal constraints (size, tags, age) apply to writes only
+//   - If write_allow or write_follows_whitelist is set, user must pass one of those checks
+//   - Otherwise, write is allowed by default
+//
+// PRIVILEGED: Only applies to READ operations (party-involved check)
 func (p *P) checkRulePolicy(
 	access string, ev *event.E, rule Rule, loggedInPubkey []byte,
 ) (allowed bool, err error) {
+	log.T.F("checkRulePolicy: access=%s kind=%d readFollowsFollowsBin_len=%d readFollowsWhitelistBin_len=%d HasReadFollowsWhitelist=%v",
+		access, ev.Kind, len(rule.readFollowsFollowsBin), len(rule.readFollowsWhitelistBin), rule.HasReadFollowsWhitelist())
+
 	// ===================================================================
-	// STEP 1: Universal Constraints (apply to everyone)
+	// STEP 1: Universal Constraints (WRITE ONLY - apply to everyone)
 	// ===================================================================
 
-	// Check size limits
-	if rule.SizeLimit != nil {
-		eventSize := int64(len(ev.Serialize()))
-		if eventSize > *rule.SizeLimit {
-			return false, nil
-		}
-	}
-
-	if rule.ContentLimit != nil {
-		contentSize := int64(len(ev.Content))
-		if contentSize > *rule.ContentLimit {
-			return false, nil
-		}
-	}
-
-	// Check required tags
-	// Only apply for write access - we validate what goes in, not what comes out
-	if access == "write" && len(rule.MustHaveTags) > 0 {
-		for _, requiredTag := range rule.MustHaveTags {
-			if ev.Tags.GetFirst([]byte(requiredTag)) == nil {
+	if access == "write" {
+		// Check size limits
+		if rule.SizeLimit != nil {
+			eventSize := int64(len(ev.Serialize()))
+			if eventSize > *rule.SizeLimit {
 				return false, nil
 			}
 		}
-	}
 
-	// Check expiry time (uses maxExpirySeconds which is parsed from MaxExpiryDuration or MaxExpiry)
-	// Only apply for write access - we validate what goes in, not what comes out
-	if access == "write" && rule.maxExpirySeconds != nil && *rule.maxExpirySeconds > 0 {
-		expiryTag := ev.Tags.GetFirst([]byte("expiration"))
-		if expiryTag == nil {
-			return false, nil // Must have expiry if max_expiry is set
-		}
-		// Parse expiry timestamp and validate it's within allowed duration from created_at
-		expiryStr := string(expiryTag.Value())
-		expiryTs, parseErr := strconv.ParseInt(expiryStr, 10, 64)
-		if parseErr != nil {
-			log.D.F("invalid expiration tag value %q: %v", expiryStr, parseErr)
-			return false, nil // Invalid expiry format
-		}
-		maxAllowedExpiry := ev.CreatedAt + *rule.maxExpirySeconds
-		if expiryTs >= maxAllowedExpiry {
-			log.D.F("expiration %d exceeds max allowed %d (created_at %d + max_expiry %d)",
-				expiryTs, maxAllowedExpiry, ev.CreatedAt, *rule.maxExpirySeconds)
-			return false, nil // Expiry too far in the future
-		}
-	}
-
-	// Check ProtectedRequired (NIP-70: events must have "-" tag)
-	// Only apply for write access - we validate what goes in, not what comes out
-	if access == "write" && rule.ProtectedRequired {
-		protectedTag := ev.Tags.GetFirst([]byte("-"))
-		if protectedTag == nil {
-			log.D.F("protected_required: event missing '-' tag (NIP-70)")
-			return false, nil // Must have protected tag
-		}
-	}
-
-	// Check IdentifierRegex (validates "d" tag values)
-	// Only apply for write access - we validate what goes in, not what comes out
-	if access == "write" && rule.identifierRegexCache != nil {
-		dTags := ev.Tags.GetAll([]byte("d"))
-		if len(dTags) == 0 {
-			log.D.F("identifier_regex: event missing 'd' tag")
-			return false, nil // Must have d tag if identifier_regex is set
-		}
-		for _, dTag := range dTags {
-			value := string(dTag.Value())
-			if !rule.identifierRegexCache.MatchString(value) {
-				log.D.F("identifier_regex: d tag value %q does not match pattern %q",
-					value, rule.IdentifierRegex)
+		if rule.ContentLimit != nil {
+			contentSize := int64(len(ev.Content))
+			if contentSize > *rule.ContentLimit {
 				return false, nil
 			}
 		}
-	}
 
-	// Check MaxAgeOfEvent (maximum age of event in seconds)
-	// Only apply for write access - we validate what goes in, not what comes out
-	if access == "write" && rule.MaxAgeOfEvent != nil && *rule.MaxAgeOfEvent > 0 {
-		currentTime := time.Now().Unix()
-		maxAllowedTime := currentTime - *rule.MaxAgeOfEvent
-		if ev.CreatedAt < maxAllowedTime {
-			return false, nil // Event is too old
-		}
-	}
-
-	// Check MaxAgeEventInFuture (maximum time event can be in the future in seconds)
-	// Only apply for write access - we validate what goes in, not what comes out
-	if access == "write" && rule.MaxAgeEventInFuture != nil && *rule.MaxAgeEventInFuture > 0 {
-		currentTime := time.Now().Unix()
-		maxFutureTime := currentTime + *rule.MaxAgeEventInFuture
-		if ev.CreatedAt > maxFutureTime {
-			return false, nil // Event is too far in the future
-		}
-	}
-
-	// Check tag validation rules (regex patterns)
-	// Only apply for write access - we validate what goes in, not what comes out
-	// NOTE: TagValidation only validates tags that ARE present on the event.
-	// To REQUIRE a tag to exist, use MustHaveTags instead.
-	if access == "write" && len(rule.TagValidation) > 0 {
-		for tagName, regexPattern := range rule.TagValidation {
-			// Compile regex pattern (errors should have been caught in ValidateJSON)
-			regex, compileErr := regexp.Compile(regexPattern)
-			if compileErr != nil {
-				log.E.F("invalid regex pattern for tag %q: %v (skipping validation)", tagName, compileErr)
-				continue
-			}
-
-			// Get all tags with this name
-			tags := ev.Tags.GetAll([]byte(tagName))
-
-			// If no tags found, skip validation for this tag type
-			// (TagValidation validates format, not presence - use MustHaveTags for presence)
-			if len(tags) == 0 {
-				continue
-			}
-
-			// Validate each tag value against regex
-			for _, t := range tags {
-				value := string(t.Value())
-				if !regex.MatchString(value) {
-					log.D.F("tag validation failed: tag %q value %q does not match pattern %q",
-						tagName, value, regexPattern)
+		// Check required tags
+		if len(rule.MustHaveTags) > 0 {
+			for _, requiredTag := range rule.MustHaveTags {
+				if ev.Tags.GetFirst([]byte(requiredTag)) == nil {
 					return false, nil
+				}
+			}
+		}
+
+		// Check expiry time (uses maxExpirySeconds which is parsed from MaxExpiryDuration or MaxExpiry)
+		if rule.maxExpirySeconds != nil && *rule.maxExpirySeconds > 0 {
+			expiryTag := ev.Tags.GetFirst([]byte("expiration"))
+			if expiryTag == nil {
+				return false, nil // Must have expiry if max_expiry is set
+			}
+			// Parse expiry timestamp and validate it's within allowed duration from created_at
+			expiryStr := string(expiryTag.Value())
+			expiryTs, parseErr := strconv.ParseInt(expiryStr, 10, 64)
+			if parseErr != nil {
+				log.D.F("invalid expiration tag value %q: %v", expiryStr, parseErr)
+				return false, nil // Invalid expiry format
+			}
+			maxAllowedExpiry := ev.CreatedAt + *rule.maxExpirySeconds
+			if expiryTs >= maxAllowedExpiry {
+				log.D.F("expiration %d exceeds max allowed %d (created_at %d + max_expiry %d)",
+					expiryTs, maxAllowedExpiry, ev.CreatedAt, *rule.maxExpirySeconds)
+				return false, nil // Expiry too far in the future
+			}
+		}
+
+		// Check ProtectedRequired (NIP-70: events must have "-" tag)
+		if rule.ProtectedRequired {
+			protectedTag := ev.Tags.GetFirst([]byte("-"))
+			if protectedTag == nil {
+				log.D.F("protected_required: event missing '-' tag (NIP-70)")
+				return false, nil // Must have protected tag
+			}
+		}
+
+		// Check IdentifierRegex (validates "d" tag values)
+		if rule.identifierRegexCache != nil {
+			dTags := ev.Tags.GetAll([]byte("d"))
+			if len(dTags) == 0 {
+				log.D.F("identifier_regex: event missing 'd' tag")
+				return false, nil // Must have d tag if identifier_regex is set
+			}
+			for _, dTag := range dTags {
+				value := string(dTag.Value())
+				if !rule.identifierRegexCache.MatchString(value) {
+					log.D.F("identifier_regex: d tag value %q does not match pattern %q",
+						value, rule.IdentifierRegex)
+					return false, nil
+				}
+			}
+		}
+
+		// Check MaxAgeOfEvent (maximum age of event in seconds)
+		if rule.MaxAgeOfEvent != nil && *rule.MaxAgeOfEvent > 0 {
+			currentTime := time.Now().Unix()
+			maxAllowedTime := currentTime - *rule.MaxAgeOfEvent
+			if ev.CreatedAt < maxAllowedTime {
+				return false, nil // Event is too old
+			}
+		}
+
+		// Check MaxAgeEventInFuture (maximum time event can be in the future in seconds)
+		if rule.MaxAgeEventInFuture != nil && *rule.MaxAgeEventInFuture > 0 {
+			currentTime := time.Now().Unix()
+			maxFutureTime := currentTime + *rule.MaxAgeEventInFuture
+			if ev.CreatedAt > maxFutureTime {
+				return false, nil // Event is too far in the future
+			}
+		}
+
+		// Check tag validation rules (regex patterns)
+		// NOTE: TagValidation only validates tags that ARE present on the event.
+		// To REQUIRE a tag to exist, use MustHaveTags instead.
+		if len(rule.TagValidation) > 0 {
+			for tagName, regexPattern := range rule.TagValidation {
+				// Compile regex pattern (errors should have been caught in ValidateJSON)
+				regex, compileErr := regexp.Compile(regexPattern)
+				if compileErr != nil {
+					log.E.F("invalid regex pattern for tag %q: %v (skipping validation)", tagName, compileErr)
+					continue
+				}
+
+				// Get all tags with this name
+				tags := ev.Tags.GetAll([]byte(tagName))
+
+				// If no tags found, skip validation for this tag type
+				// (TagValidation validates format, not presence - use MustHaveTags for presence)
+				if len(tags) == 0 {
+					continue
+				}
+
+				// Validate each tag value against regex
+				for _, t := range tags {
+					value := string(t.Value())
+					if !regex.MatchString(value) {
+						log.D.F("tag validation failed: tag %q value %q does not match pattern %q",
+							tagName, value, regexPattern)
+						return false, nil
+					}
 				}
 			}
 		}
@@ -1434,11 +1644,11 @@ func (p *P) checkRulePolicy(
 	}
 
 	// ===================================================================
-	// STEP 2.5: Write Allow Follows (grants BOTH read AND write access)
+	// STEP 3: Legacy WriteAllowFollows (grants BOTH read AND write access)
 	// ===================================================================
 
 	// WriteAllowFollows grants both read and write access to policy admin follows
-	// This check applies to BOTH read and write access types
+	// This check applies to BOTH read and write access types (legacy behavior)
 	if rule.WriteAllowFollows && p.PolicyFollowWhitelistEnabled {
 		if p.IsPolicyFollow(loggedInPubkey) {
 			log.D.F("policy admin follow granted %s access for kind %d", access, ev.Kind)
@@ -1447,7 +1657,7 @@ func (p *P) checkRulePolicy(
 	}
 
 	// FollowsWhitelistAdmins grants access to follows of specific admin pubkeys for this rule
-	// This is a per-rule alternative to WriteAllowFollows which uses global PolicyAdmins
+	// This is a per-rule alternative to WriteAllowFollows which uses global PolicyAdmins (DEPRECATED)
 	if rule.HasFollowsWhitelistAdmins() {
 		if rule.IsInFollowsWhitelist(loggedInPubkey) {
 			log.D.F("follows_whitelist_admins granted %s access for kind %d", access, ev.Kind)
@@ -1456,16 +1666,43 @@ func (p *P) checkRulePolicy(
 	}
 
 	// ===================================================================
-	// STEP 3: Check Read Access with OR Logic (Allow List OR Privileged)
+	// STEP 4: New Follows Whitelist Checks (separate read/write)
 	// ===================================================================
 
-	// For read operations, check if user has access via allow list OR privileged
 	if access == "read" {
-		hasAllowList := len(rule.readAllowBin) > 0 || len(rule.ReadAllow) > 0
-		userInAllowList := false
+		// Check ReadFollowsWhitelist - if set, it acts as a whitelist
+		if rule.HasReadFollowsWhitelist() {
+			if rule.IsInReadFollowsWhitelist(loggedInPubkey) {
+				log.D.F("read_follows_whitelist granted read access for kind %d", ev.Kind)
+				return true, nil
+			}
+			// ReadFollowsWhitelist is set but user is not in it
+			// Continue to check other access methods (privileged, read_allow)
+		}
+	} else if access == "write" {
+		// Check WriteFollowsWhitelist - if set, it acts as a whitelist
+		if rule.HasWriteFollowsWhitelist() {
+			if rule.IsInWriteFollowsWhitelist(loggedInPubkey) {
+				log.D.F("write_follows_whitelist granted write access for kind %d", ev.Kind)
+				return true, nil
+			}
+			// WriteFollowsWhitelist is set but user is not in it - must check write_allow too
+		}
+	}
+
+	// ===================================================================
+	// STEP 5: Read Access Control
+	// ===================================================================
+
+	if access == "read" {
+		hasReadAllowList := len(rule.readAllowBin) > 0 || len(rule.ReadAllow) > 0
+		hasReadFollowsWhitelist := rule.HasReadFollowsWhitelist()
+		// Include deprecated FollowsWhitelistAdmins for backward compatibility (it grants read+write)
+		hasLegacyFollowsWhitelist := rule.HasFollowsWhitelistAdmins()
 		userIsPrivileged := rule.Privileged && IsPartyInvolved(ev, loggedInPubkey)
 
 		// Check if user is in read allow list
+		userInAllowList := false
 		if len(rule.readAllowBin) > 0 {
 			for _, allowedPubkey := range rule.readAllowBin {
 				if utils.FastEqual(loggedInPubkey, allowedPubkey) {
@@ -1483,111 +1720,78 @@ func (p *P) checkRulePolicy(
 			}
 		}
 
-		// Handle different cases:
-		// 1. If there's an allow list: use OR logic (in list OR privileged)
-		// 2. If no allow list but privileged: only involved parties allowed
-		// 3. If no allow list and not privileged: continue to other checks
+		// Determine if any read whitelist restriction is active
+		// Note: Legacy FollowsWhitelistAdmins also counts as a read restriction for backward compatibility
+		hasReadRestriction := hasReadAllowList || hasReadFollowsWhitelist || hasLegacyFollowsWhitelist || rule.Privileged
 
-		if hasAllowList {
-			// OR logic when allow list exists
-			if userInAllowList || userIsPrivileged {
+		if hasReadRestriction {
+			// User must pass one of the configured access methods
+			if userInAllowList {
 				return true, nil
 			}
-			// Not in allow list AND not privileged -> deny
-			return false, nil
-		} else if rule.Privileged {
-			// No allow list but privileged -> only involved parties
 			if userIsPrivileged {
 				return true, nil
 			}
-			// Not involved in privileged event -> deny
+			// User is in ReadFollowsWhitelist was already checked in STEP 4
+			// User in legacy FollowsWhitelistAdmins was already checked in STEP 3
+			// If we reach here with a read restriction, deny access
 			return false, nil
 		}
-		// No allow list and not privileged -> continue to other checks
+
+		// No read restriction configured - read is permissive by default
+		return true, nil
 	}
 
 	// ===================================================================
-	// STEP 4: Explicit Allows (exclusive access - ONLY these users)
+	// STEP 6: Write Access Control
 	// ===================================================================
 
 	if access == "write" {
-		// Check write allow list (exclusive - ONLY these users can write)
-		// Special case: empty list (but not nil) means allow all
-		if rule.WriteAllow != nil && len(rule.WriteAllow) == 0 && len(rule.writeAllowBin) == 0 {
-			// Empty allow list explicitly set - allow all writers
-			return true, nil
-		}
+		hasWriteAllowList := len(rule.writeAllowBin) > 0 || len(rule.WriteAllow) > 0
+		hasWriteFollowsWhitelist := rule.HasWriteFollowsWhitelist()
+		// Include deprecated FollowsWhitelistAdmins for backward compatibility
+		hasLegacyFollowsWhitelist := rule.HasFollowsWhitelistAdmins()
 
+		// Check if user is in write allow list
+		userInAllowList := false
 		if len(rule.writeAllowBin) > 0 {
-			// Check if logged-in user (submitter) is allowed to write
-			allowed = false
 			for _, allowedPubkey := range rule.writeAllowBin {
 				if utils.FastEqual(loggedInPubkey, allowedPubkey) {
-					allowed = true
+					userInAllowList = true
 					break
 				}
 			}
-			if !allowed {
-				return false, nil // Submitter not in exclusive allow list
-			}
-			// Submitter is in allow list
-			return true, nil
 		} else if len(rule.WriteAllow) > 0 {
-			// Fallback: binary cache not populated, use hex comparison
-			// Check if logged-in user (submitter) is allowed to write
 			loggedInPubkeyHex := hex.Enc(loggedInPubkey)
-			allowed = false
 			for _, allowedPubkey := range rule.WriteAllow {
 				if loggedInPubkeyHex == allowedPubkey {
-					allowed = true
+					userInAllowList = true
 					break
 				}
 			}
-			if !allowed {
-				return false, nil // Submitter not in exclusive allow list
+		}
+
+		// Determine if any write whitelist restriction is active
+		// Note: Legacy FollowsWhitelistAdmins also counts as a write restriction for backward compatibility
+		hasWriteRestriction := hasWriteAllowList || hasWriteFollowsWhitelist || hasLegacyFollowsWhitelist
+
+		if hasWriteRestriction {
+			// User must pass one of the configured access methods
+			if userInAllowList {
+				return true, nil
 			}
-			// Submitter is in allow list
-			return true, nil
+			// User in WriteFollowsWhitelist was already checked in STEP 4
+			// User in legacy FollowsWhitelistAdmins was already checked in STEP 3
+			// If we reach here with a write restriction, deny access
+			return false, nil
 		}
 
-		// If we have ONLY a deny list (no allow list), and user is not denied, allow
-		if (len(rule.WriteDeny) > 0 || len(rule.writeDenyBin) > 0) &&
-			len(rule.WriteAllow) == 0 && len(rule.writeAllowBin) == 0 {
-			// Only deny list exists, user wasn't denied above, so allow
-			return true, nil
-		}
-	} else if access == "read" {
-		// Read access already handled in STEP 3 with OR logic (allow list OR privileged)
-		// Only need to handle special cases here
-
-		// Special case: empty list (but not nil) means allow all
-		// BUT if privileged, still need to check if user is involved
-		if rule.ReadAllow != nil && len(rule.ReadAllow) == 0 && len(rule.readAllowBin) == 0 {
-			if rule.Privileged {
-				// Empty allow list with privileged - only involved parties
-				return IsPartyInvolved(ev, loggedInPubkey), nil
-			}
-			// Empty allow list without privileged - allow all readers
-			return true, nil
-		}
-
-		// If we have ONLY a deny list (no allow list), and user is not denied, allow
-		if (len(rule.ReadDeny) > 0 || len(rule.readDenyBin) > 0) &&
-			len(rule.ReadAllow) == 0 && len(rule.readAllowBin) == 0 {
-			// Only deny list exists, user wasn't denied above, so allow
-			return true, nil
-		}
+		// No write restriction configured - write is permissive by default
+		return true, nil
 	}
 
 	// ===================================================================
-	// STEP 5: No Additional Privileged Check Needed
-	// ===================================================================
-
-	// Privileged access for read operations is already handled in STEP 3 with OR logic
-	// No additional check needed here
-
-	// ===================================================================
-	// STEP 6: Default Policy
+	// STEP 7: Default Policy (fallback)
 	// ===================================================================
 
 	// If no specific rules matched, use the configured default policy
@@ -1875,7 +2079,7 @@ func (p *P) Reload(policyJSON []byte, configPath string) error {
 	}
 
 	// Step 4: Apply the new configuration (preserve manager reference)
-	p.policyFollowsMx.Lock()
+	p.followsMx.Lock()
 	p.Kind = tempPolicy.Kind
 	p.rules = tempPolicy.rules
 	p.Global = tempPolicy.Global
@@ -1886,7 +2090,7 @@ func (p *P) Reload(policyJSON []byte, configPath string) error {
 	p.policyAdminsBin = tempPolicy.policyAdminsBin
 	p.ownersBin = tempPolicy.ownersBin
 	// Note: policyFollows is NOT reset here - it will be refreshed separately
-	p.policyFollowsMx.Unlock()
+	p.followsMx.Unlock()
 
 	// Step 5: Populate binary caches for all rules
 	p.Global.populateBinaryCache()
@@ -2009,8 +2213,8 @@ func (p *P) IsPolicyAdmin(pubkey []byte) bool {
 		return false
 	}
 
-	p.policyFollowsMx.RLock()
-	defer p.policyFollowsMx.RUnlock()
+	p.followsMx.RLock()
+	defer p.followsMx.RUnlock()
 
 	for _, admin := range p.policyAdminsBin {
 		if utils.FastEqual(admin, pubkey) {
@@ -2027,8 +2231,8 @@ func (p *P) IsPolicyFollow(pubkey []byte) bool {
 		return false
 	}
 
-	p.policyFollowsMx.RLock()
-	defer p.policyFollowsMx.RUnlock()
+	p.followsMx.RLock()
+	defer p.followsMx.RUnlock()
 
 	for _, follow := range p.policyFollows {
 		if utils.FastEqual(pubkey, follow) {
@@ -2042,8 +2246,8 @@ func (p *P) IsPolicyFollow(pubkey []byte) bool {
 // This is called when policy admins update their follow lists (kind 3 events).
 // The pubkeys should be binary ([]byte), not hex-encoded.
 func (p *P) UpdatePolicyFollows(follows [][]byte) {
-	p.policyFollowsMx.Lock()
-	defer p.policyFollowsMx.Unlock()
+	p.followsMx.Lock()
+	defer p.followsMx.Unlock()
 
 	p.policyFollows = follows
 	log.I.F("policy follows list updated with %d pubkeys", len(follows))
@@ -2052,8 +2256,8 @@ func (p *P) UpdatePolicyFollows(follows [][]byte) {
 // GetPolicyAdminsBin returns a copy of the binary policy admin pubkeys.
 // Used for checking if an event author is a policy admin.
 func (p *P) GetPolicyAdminsBin() [][]byte {
-	p.policyFollowsMx.RLock()
-	defer p.policyFollowsMx.RUnlock()
+	p.followsMx.RLock()
+	defer p.followsMx.RUnlock()
 
 	// Return a copy to prevent external modification
 	result := make([][]byte, len(p.policyAdminsBin))
@@ -2073,8 +2277,8 @@ func (p *P) GetOwnersBin() [][]byte {
 		return nil
 	}
 
-	p.policyFollowsMx.RLock()
-	defer p.policyFollowsMx.RUnlock()
+	p.followsMx.RLock()
+	defer p.followsMx.RUnlock()
 
 	// Return a copy to prevent external modification
 	result := make([][]byte, len(p.ownersBin))
@@ -2154,10 +2358,13 @@ func (p *P) GetRuleForKind(kind int) *Rule {
 
 // UpdateRuleFollowsWhitelist updates the follows whitelist for a specific kind's rule.
 // The follows should be binary pubkeys ([]byte), not hex-encoded.
+// Thread-safe: uses followsMx to protect concurrent access.
 func (p *P) UpdateRuleFollowsWhitelist(kind int, follows [][]byte) {
 	if p == nil || p.rules == nil {
 		return
 	}
+	p.followsMx.Lock()
+	defer p.followsMx.Unlock()
 	if rule, exists := p.rules[kind]; exists {
 		rule.UpdateFollowsWhitelist(follows)
 		p.rules[kind] = rule
@@ -2166,11 +2373,16 @@ func (p *P) UpdateRuleFollowsWhitelist(kind int, follows [][]byte) {
 
 // UpdateGlobalFollowsWhitelist updates the follows whitelist for the global rule.
 // The follows should be binary pubkeys ([]byte), not hex-encoded.
+// Note: We directly modify p.Global's unexported field because Global is a value type (not *Rule),
+// so calling p.Global.UpdateFollowsWhitelist() would operate on a copy and discard changes.
+// Thread-safe: uses followsMx to protect concurrent access.
 func (p *P) UpdateGlobalFollowsWhitelist(follows [][]byte) {
 	if p == nil {
 		return
 	}
-	p.Global.UpdateFollowsWhitelist(follows)
+	p.followsMx.Lock()
+	defer p.followsMx.Unlock()
+	p.Global.followsWhitelistFollowsBin = follows
 }
 
 // GetGlobalRule returns a pointer to the global rule for modification.
@@ -2192,6 +2404,164 @@ func (p *P) GetRulesKinds() []int {
 		kinds = append(kinds, kind)
 	}
 	return kinds
+}
+
+// =============================================================================
+// ReadFollowsWhitelist and WriteFollowsWhitelist Methods
+// =============================================================================
+
+// GetAllReadFollowsWhitelistPubkeys returns all unique pubkeys from ReadFollowsWhitelist
+// across all rules (including global). Returns hex-encoded pubkeys.
+// This is used at startup to validate that kind 3 events exist for these pubkeys.
+func (p *P) GetAllReadFollowsWhitelistPubkeys() []string {
+	if p == nil {
+		return nil
+	}
+
+	// Use map to deduplicate
+	pubkeys := make(map[string]struct{})
+
+	// Check global rule
+	for _, pk := range p.Global.ReadFollowsWhitelist {
+		pubkeys[pk] = struct{}{}
+	}
+
+	// Check all kind-specific rules
+	for _, rule := range p.rules {
+		for _, pk := range rule.ReadFollowsWhitelist {
+			pubkeys[pk] = struct{}{}
+		}
+	}
+
+	// Convert map to slice
+	result := make([]string, 0, len(pubkeys))
+	for pk := range pubkeys {
+		result = append(result, pk)
+	}
+	return result
+}
+
+// GetAllWriteFollowsWhitelistPubkeys returns all unique pubkeys from WriteFollowsWhitelist
+// across all rules (including global). Returns hex-encoded pubkeys.
+// This is used at startup to validate that kind 3 events exist for these pubkeys.
+func (p *P) GetAllWriteFollowsWhitelistPubkeys() []string {
+	if p == nil {
+		return nil
+	}
+
+	// Use map to deduplicate
+	pubkeys := make(map[string]struct{})
+
+	// Check global rule
+	for _, pk := range p.Global.WriteFollowsWhitelist {
+		pubkeys[pk] = struct{}{}
+	}
+
+	// Check all kind-specific rules
+	for _, rule := range p.rules {
+		for _, pk := range rule.WriteFollowsWhitelist {
+			pubkeys[pk] = struct{}{}
+		}
+	}
+
+	// Convert map to slice
+	result := make([]string, 0, len(pubkeys))
+	for pk := range pubkeys {
+		result = append(result, pk)
+	}
+	return result
+}
+
+// GetAllFollowsWhitelistPubkeys returns all unique pubkeys from both ReadFollowsWhitelist
+// and WriteFollowsWhitelist across all rules (including global). Returns hex-encoded pubkeys.
+// This is a convenience method for startup validation to check all required kind 3 events.
+func (p *P) GetAllFollowsWhitelistPubkeys() []string {
+	if p == nil {
+		return nil
+	}
+
+	// Use map to deduplicate
+	pubkeys := make(map[string]struct{})
+
+	// Get read follows whitelist pubkeys
+	for _, pk := range p.GetAllReadFollowsWhitelistPubkeys() {
+		pubkeys[pk] = struct{}{}
+	}
+
+	// Get write follows whitelist pubkeys
+	for _, pk := range p.GetAllWriteFollowsWhitelistPubkeys() {
+		pubkeys[pk] = struct{}{}
+	}
+
+	// Also include deprecated FollowsWhitelistAdmins for backward compatibility
+	for _, pk := range p.GetAllFollowsWhitelistAdmins() {
+		pubkeys[pk] = struct{}{}
+	}
+
+	// Convert map to slice
+	result := make([]string, 0, len(pubkeys))
+	for pk := range pubkeys {
+		result = append(result, pk)
+	}
+	return result
+}
+
+// UpdateRuleReadFollowsWhitelist updates the read follows whitelist for a specific kind's rule.
+// The follows should be binary pubkeys ([]byte), not hex-encoded.
+// Thread-safe: uses followsMx to protect concurrent access.
+func (p *P) UpdateRuleReadFollowsWhitelist(kind int, follows [][]byte) {
+	if p == nil || p.rules == nil {
+		return
+	}
+	p.followsMx.Lock()
+	defer p.followsMx.Unlock()
+	if rule, exists := p.rules[kind]; exists {
+		rule.UpdateReadFollowsWhitelist(follows)
+		p.rules[kind] = rule
+	}
+}
+
+// UpdateRuleWriteFollowsWhitelist updates the write follows whitelist for a specific kind's rule.
+// The follows should be binary pubkeys ([]byte), not hex-encoded.
+// Thread-safe: uses followsMx to protect concurrent access.
+func (p *P) UpdateRuleWriteFollowsWhitelist(kind int, follows [][]byte) {
+	if p == nil || p.rules == nil {
+		return
+	}
+	p.followsMx.Lock()
+	defer p.followsMx.Unlock()
+	if rule, exists := p.rules[kind]; exists {
+		rule.UpdateWriteFollowsWhitelist(follows)
+		p.rules[kind] = rule
+	}
+}
+
+// UpdateGlobalReadFollowsWhitelist updates the read follows whitelist for the global rule.
+// The follows should be binary pubkeys ([]byte), not hex-encoded.
+// Note: We directly modify p.Global's unexported field because Global is a value type (not *Rule),
+// so calling p.Global.UpdateReadFollowsWhitelist() would operate on a copy and discard changes.
+// Thread-safe: uses followsMx to protect concurrent access.
+func (p *P) UpdateGlobalReadFollowsWhitelist(follows [][]byte) {
+	if p == nil {
+		return
+	}
+	p.followsMx.Lock()
+	defer p.followsMx.Unlock()
+	p.Global.readFollowsFollowsBin = follows
+}
+
+// UpdateGlobalWriteFollowsWhitelist updates the write follows whitelist for the global rule.
+// The follows should be binary pubkeys ([]byte), not hex-encoded.
+// Note: We directly modify p.Global's unexported field because Global is a value type (not *Rule),
+// so calling p.Global.UpdateWriteFollowsWhitelist() would operate on a copy and discard changes.
+// Thread-safe: uses followsMx to protect concurrent access.
+func (p *P) UpdateGlobalWriteFollowsWhitelist(follows [][]byte) {
+	if p == nil {
+		return
+	}
+	p.followsMx.Lock()
+	defer p.followsMx.Unlock()
+	p.Global.writeFollowsFollowsBin = follows
 }
 
 // =============================================================================

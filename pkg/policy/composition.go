@@ -485,8 +485,8 @@ func (p *P) IsOwner(pubkey []byte) bool {
 		return false
 	}
 
-	p.policyFollowsMx.RLock()
-	defer p.policyFollowsMx.RUnlock()
+	p.followsMx.RLock()
+	defer p.followsMx.RUnlock()
 
 	for _, owner := range p.ownersBin {
 		if utils.FastEqual(owner, pubkey) {

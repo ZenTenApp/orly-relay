@@ -601,7 +601,76 @@ sudo journalctl -u orly -f
 - `github.com/templexxx/xhex` - SIMD hex encoding
 - `github.com/ebitengine/purego` - CGO-free C library loading
 - `go-simpler.org/env` - Environment variable configuration
-- `lol.mleku.dev` - Custom logging library
+- `lol.mleku.dev` - Custom logging library (see Logging section below)
+
+## Logging (lol.mleku.dev)
+
+The project uses `lol.mleku.dev` (Log Of Location), a simple logging library that prints timestamps and source code locations.
+
+### Log Levels (lowest to highest verbosity)
+| Level | Constant | Emoji | Usage |
+|-------|----------|-------|-------|
+| Off   | `Off`    | (none) | Disables all logging |
+| Fatal | `Fatal`  | ☠️ | Unrecoverable errors, program exits |
+| Error | `Error`  | 🚨 | Errors that need attention |
+| Warn  | `Warn`   | ⚠️ | Warnings, non-critical issues |
+| Info  | `Info`   | ℹ️ | General information (default) |
+| Debug | `Debug`  | 🔎 | Debug information for development |
+| Trace | `Trace`  | 👻 | Very detailed tracing, most verbose |
+
+### Environment Variable
+Set log level via `LOG_LEVEL` environment variable:
+```bash
+export LOG_LEVEL=trace   # Most verbose
+export LOG_LEVEL=debug   # Development debugging
+export LOG_LEVEL=info    # Default
+export LOG_LEVEL=warn    # Only warnings and errors
+export LOG_LEVEL=error   # Only errors
+export LOG_LEVEL=off     # Silent
+```
+
+**Note**: ORLY uses `ORLY_LOG_LEVEL` which is mapped to the underlying `LOG_LEVEL`.
+
+### Usage in Code
+Import and use the log package:
+```go
+import "lol.mleku.dev/log"
+
+// Log methods (each has .Ln, .F, .S, .C variants)
+log.T.F("trace: %s", msg)    // Trace level - very detailed
+log.D.F("debug: %s", msg)    // Debug level
+log.I.F("info: %s", msg)     // Info level
+log.W.F("warn: %s", msg)     // Warning level
+log.E.F("error: %s", msg)    // Error level
+log.F.F("fatal: %s", msg)    // Fatal level
+
+// Check errors (prints if error is not nil, returns bool)
+import "lol.mleku.dev/chk"
+if chk.E(err) {              // chk.E = Error level check
+    return                   // Error was logged
+}
+if chk.D(err) {              // chk.D = Debug level check
+    // ...
+}
+```
+
+### Log Printer Variants
+Each level has these printer types:
+- `.Ln(a...)` - Print items with spaces between
+- `.F(format, a...)` - Printf-style formatting
+- `.S(a...)` - Spew dump (detailed struct output)
+- `.C(func() string)` - Lazy evaluation (only runs closure if level is enabled)
+- `.Chk(error) bool` - Returns true if error is not nil, logs if so
+- `.Err(format, a...) error` - Logs and returns an error
+
+### Output Format
+```
+1764783029014485👻 message text /path/to/file.go:123
+```
+- Unix microsecond timestamp
+- Level emoji
+- Message text
+- Source file:line location
 
 ## Testing Guidelines
 
@@ -709,11 +778,70 @@ The Neo4j backend (`pkg/neo4j/`) includes Web of Trust (WoT) extensions:
 - **Schema Modifications**: See `pkg/neo4j/MODIFYING_SCHEMA.md` for how to update
 
 ### Policy System Enhancements
+- **Default-Permissive Model**: Read and write are allowed by default unless restrictions are configured
 - **Write-Only Validation**: Size, age, tag validations apply ONLY to writes
-- **Read-Only Filtering**: `read_allow`, `read_deny`, `privileged` apply ONLY to reads
+- **Read-Only Filtering**: `read_allow`, `read_follows_whitelist`, `privileged` apply ONLY to reads
+- **Separate Follows Whitelists**: `read_follows_whitelist` and `write_follows_whitelist` for fine-grained control
 - **Scripts**: Policy scripts execute ONLY for write operations
 - **Reference Documentation**: `docs/POLICY_CONFIGURATION_REFERENCE.md` provides authoritative read vs write applicability
 - See also: `pkg/policy/README.md` for quick reference
+
+### Policy JSON Configuration Quick Reference
+
+```json
+{
+  "default_policy": "allow|deny",
+  "kind": {
+    "whitelist": [1, 3, 4],  // Only these kinds allowed
+    "blacklist": [4]          // These kinds denied (ignored if whitelist set)
+  },
+  "global": {
+    // Rule fields applied to ALL events
+    "size_limit": 100000,                          // Max event size (bytes)
+    "content_limit": 50000,                        // Max content size (bytes)
+    "max_age_of_event": 86400,                     // Max age (seconds)
+    "max_age_event_in_future": 300,                // Max future time (seconds)
+    "max_expiry_duration": "P7D",                  // ISO-8601 expiry limit
+    "must_have_tags": ["d", "t"],                  // Required tag keys
+    "protected_required": false,                   // Require NIP-70 "-" tag
+    "identifier_regex": "^[a-z0-9-]{1,64}$",       // Regex for "d" tags
+    "tag_validation": {"t": "^[a-z0-9]+$"},        // Regex for any tag
+    "privileged": false,                           // READ-ONLY: party-involved check
+    "write_allow": ["pubkey_hex"],                 // Pubkeys allowed to write
+    "write_deny": ["pubkey_hex"],                  // Pubkeys denied from writing
+    "read_allow": ["pubkey_hex"],                  // Pubkeys allowed to read
+    "read_deny": ["pubkey_hex"],                   // Pubkeys denied from reading
+    "read_follows_whitelist": ["pubkey_hex"],      // Pubkeys whose follows can read
+    "write_follows_whitelist": ["pubkey_hex"],     // Pubkeys whose follows can write
+    "script": "/path/to/script.sh"                 // External validation script
+  },
+  "rules": {
+    "1": { /* Same fields as global, for kind 1 */ },
+    "30023": { /* Same fields as global, for kind 30023 */ }
+  },
+  "policy_admins": ["pubkey_hex"],                 // Can update via kind 12345
+  "owners": ["pubkey_hex"],                        // Full policy control
+  "policy_follow_whitelist_enabled": false         // Enable legacy write_allow_follows
+}
+```
+
+**Access Control Summary:**
+| Restriction Field | Applies To | When Set |
+|-------------------|------------|----------|
+| `read_allow` | READ | Only listed pubkeys can read |
+| `read_deny` | READ | Listed pubkeys denied (if no read_allow) |
+| `read_follows_whitelist` | READ | Named pubkeys + their follows can read |
+| `write_allow` | WRITE | Only listed pubkeys can write |
+| `write_deny` | WRITE | Listed pubkeys denied (if no write_allow) |
+| `write_follows_whitelist` | WRITE | Named pubkeys + their follows can write |
+| `privileged` | READ | Only author + p-tag recipients can read |
+
+**Nil Policy Error Handling:**
+- If `ORLY_POLICY_ENABLED=true` but the policy fails to load (nil policy), the relay will:
+  - Log a FATAL error message indicating misconfiguration
+  - Return an error for all `CheckPolicy` calls
+  - Deny all events until the configuration is fixed
+- This is a safety measure - a nil policy with policy enabled indicates configuration error
 
 ### Authentication Modes
 - `ORLY_AUTH_REQUIRED=true`: Require authentication for ALL requests

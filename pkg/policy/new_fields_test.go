@@ -1091,9 +1091,12 @@ func TestAllNewFieldsCombined(t *testing.T) {
 }
 
 // Test new fields in global rule
+// Global rule is ONLY used as fallback when NO kind-specific rule exists.
+// If a kind-specific rule exists (even if empty), it takes precedence and global is ignored.
 func TestNewFieldsInGlobalRule(t *testing.T) {
 	signer, pubkey := generateTestKeypair(t)
 
+	// Policy with global constraints and a kind-specific rule for kind 1
 	policyJSON := []byte(`{
 		"default_policy": "allow",
 		"global": {
@@ -1102,7 +1105,7 @@ func TestNewFieldsInGlobalRule(t *testing.T) {
 		},
 		"rules": {
 			"1": {
-				"description": "Kind 1 events"
+				"description": "Kind 1 events - has specific rule, so global is ignored"
 			}
 		}
 	}`)
@@ -1112,7 +1115,8 @@ func TestNewFieldsInGlobalRule(t *testing.T) {
 		t.Fatalf("Failed to create policy: %v", err)
 	}
 
-	// Event without protected tag should fail global rule
+	// Kind 1 has a specific rule, so global protected_required is IGNORED
+	// Event should be ALLOWED even without protected tag
 	ev := createTestEventForNewFields(t, signer, "test", 1)
 	addTagString(ev, "expiration", int64ToString(ev.CreatedAt+3600))
 	if err := ev.Sign(signer); chk.E(err) {
@@ -1124,23 +1128,39 @@ func TestNewFieldsInGlobalRule(t *testing.T) {
 		t.Fatalf("CheckPolicy error: %v", err)
 	}
 
-	if allowed {
-		t.Error("Global protected_required should deny event without - tag")
+	if !allowed {
+		t.Error("Kind 1 has specific rule - global protected_required should be ignored, event should be allowed")
 	}
 
-	// Add protected tag
-	addTagString(ev, "-", "")
-	if err := ev.Sign(signer); chk.E(err) {
+	// Now test kind 999 which has NO specific rule - global should apply
+	ev2 := createTestEventForNewFields(t, signer, "test", 999)
+	addTagString(ev2, "expiration", int64ToString(ev2.CreatedAt+3600))
+	if err := ev2.Sign(signer); chk.E(err) {
 		t.Fatalf("Failed to sign: %v", err)
 	}
 
-	allowed, err = policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
+	allowed, err = policy.CheckPolicy("write", ev2, pubkey, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CheckPolicy error: %v", err)
+	}
+
+	if allowed {
+		t.Error("Kind 999 has NO specific rule - global protected_required should apply, event should be denied")
+	}
+
+	// Add protected tag to kind 999 event - should now be allowed
+	addTagString(ev2, "-", "")
+	if err := ev2.Sign(signer); chk.E(err) {
+		t.Fatalf("Failed to sign: %v", err)
+	}
+
+	allowed, err = policy.CheckPolicy("write", ev2, pubkey, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy error: %v", err)
 	}
 
 	if !allowed {
-		t.Error("Should allow event with protected tag and valid expiry")
+		t.Error("Kind 999 with protected tag and valid expiry should be allowed by global rule")
 	}
 }
 

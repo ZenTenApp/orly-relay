@@ -264,8 +264,10 @@ Validates that tag values match the specified regex patterns. Only validates tag
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `write_allow_follows` | boolean | Grant read+write access to policy admin follows |
-| `follows_whitelist_admins` | array | Per-rule admin pubkeys whose follows are whitelisted |
+| `write_allow_follows` | boolean | **DEPRECATED.** Grant read+write access to policy admin follows |
+| `follows_whitelist_admins` | array | **DEPRECATED.** Per-rule admin pubkeys whose follows are whitelisted |
+| `read_follows_whitelist` | array | Pubkeys whose follows can READ events. Restricts read access when set. |
+| `write_follows_whitelist` | array | Pubkeys whose follows can WRITE events. Restricts write access when set. |
 
 See [Follows-Based Whitelisting](#follows-based-whitelisting) for details.
 
@@ -350,26 +352,47 @@ P[n]Y[n]M[n]W[n]DT[n]H[n]M[n]S
 
 ## Access Control
 
-### Write Access Evaluation
+### Default-Permissive Access Model
+
+The policy system uses a **default-permissive** model for both read and write access:
+
+- **Read**: Allowed by default unless a read restriction is configured
+- **Write**: Allowed by default unless a write restriction is configured
+
+Restrictions become active when any of the following fields are set:
+
+| Access | Restrictions |
+|--------|--------------|
+| Read | `read_allow`, `read_follows_whitelist`, or `privileged` |
+| Write | `write_allow`, `write_follows_whitelist` |
+
+**Important**: `privileged` ONLY applies to READ operations.
+
+### Write Access Evaluation (Default-Permissive)
 
 ```
-1. If write_allow is set and pubkey NOT in list → DENY
-2. If write_deny is set and pubkey IN list → DENY
+1. Universal constraints (size, tags, age) - must pass
+2. If pubkey in write_deny → DENY
 3. If write_allow_follows enabled and pubkey in admin follows → ALLOW
-4. If follows_whitelist_admins set and pubkey in rule follows → ALLOW
-5. Continue to other checks...
+4. If write_follows_whitelist set and pubkey in follows → ALLOW
+5. If write_allow set and pubkey in list → ALLOW
+6. If ANY write restriction is set → DENY (not in any whitelist)
+7. Otherwise → ALLOW (default-permissive)
 ```
 
-### Read Access Evaluation
+### Read Access Evaluation (Default-Permissive)
 
 ```
-1. If read_allow is set and pubkey NOT in list → DENY
-2. If read_deny is set and pubkey IN list → DENY
-3. If privileged is true and pubkey NOT party to event → DENY
-4. Continue to other checks...
+1. If pubkey in read_deny → DENY
+2. If read_allow_follows enabled and pubkey in admin follows → ALLOW
+3. If read_follows_whitelist set and pubkey in follows → ALLOW
+4. If read_allow set and pubkey in list → ALLOW
+5. If privileged set and pubkey is party to event → ALLOW
+6. If ANY read restriction is set → DENY (not in any whitelist)
+7. Otherwise → ALLOW (default-permissive)
 ```
 
-### Privileged Events
+### Privileged Events (Read-Only)
 
 When `privileged: true`, only the author and p-tag recipients can access the event:
 
@@ -386,9 +409,37 @@ When `privileged: true`, only the author and p-tag recipients can access the eve
 
 ## Follows-Based Whitelisting
 
-There are two mechanisms for follows-based access control:
+The policy system supports whitelisting pubkeys based on follow lists (kind 3 events). There are two approaches:
 
-### 1. Global Policy Admin Follows
+### 1. Separate Read/Write Follows Whitelists (Recommended)
+
+Use `read_follows_whitelist` and `write_follows_whitelist` for fine-grained control:
+
+```json
+{
+  "global": {
+    "read_follows_whitelist": ["curator_pubkey_hex"],
+    "write_follows_whitelist": ["moderator_pubkey_hex"]
+  },
+  "rules": {
+    "30023": {
+      "description": "Articles - curated reading, moderated writing",
+      "read_follows_whitelist": ["article_curator_hex"],
+      "write_follows_whitelist": ["article_moderator_hex"]
+    }
+  }
+}
+```
+
+**How it works:**
+- The pubkeys listed AND their follows (from kind 3 events) can access the events
+- `read_follows_whitelist`: Restricts WHO can read (when set)
+- `write_follows_whitelist`: Restricts WHO can write (when set)
+- If not set, the default-permissive behavior applies
+
+**Important:** The relay will fail to start if the named pubkeys don't have kind 3 follow list events in the database. This ensures the follow lists are available for access control.
+
+### 2. Legacy: Global Policy Admin Follows (DEPRECATED)
 
 Enable whitelisting for all pubkeys followed by policy admins:
 
@@ -406,7 +457,7 @@ Enable whitelisting for all pubkeys followed by policy admins:
 
 When `write_allow_follows` is true, pubkeys in the policy admins' kind 3 follow lists get both read AND write access.
 
-### 2. Per-Rule Follows Whitelist
+### 3. Legacy: Per-Rule Follows Whitelist (DEPRECATED)
 
 Configure specific admins per rule:
 
@@ -423,18 +474,33 @@ Configure specific admins per rule:
 
 This allows different rules to use different admin follow lists.
 
-### Loading Follow Lists
+### Loading Follow Lists at Startup
 
-The application must load follow lists at startup:
+The application must load follow lists at startup. The new API provides separate methods:
 
 ```go
-// Get all admin pubkeys that need follow lists loaded
-admins := policy.GetAllFollowsWhitelistAdmins()
+// Get all pubkeys that need follow lists loaded (combines read + write + legacy)
+allPubkeys := policy.GetAllFollowsWhitelistPubkeys()
 
-// For each admin, load their kind 3 event and update the whitelist
-for _, adminHex := range admins {
-    follows := loadFollowsFromKind3(adminHex)
-    policy.UpdateRuleFollowsWhitelist(kind, follows)
+// Or get them separately
+readPubkeys := policy.GetAllReadFollowsWhitelistPubkeys()
+writePubkeys := policy.GetAllWriteFollowsWhitelistPubkeys()
+legacyAdmins := policy.GetAllFollowsWhitelistAdmins()
+
+// Load follows and update the policy
+for _, pubkeyHex := range readPubkeys {
+    follows := loadFollowsFromKind3(pubkeyHex)
+    // Update read follows whitelist for specific kinds
+    policy.UpdateRuleReadFollowsWhitelist(kind, follows)
+    // Or for global rule
+    policy.UpdateGlobalReadFollowsWhitelist(follows)
+}
+
+for _, pubkeyHex := range writePubkeys {
+    follows := loadFollowsFromKind3(pubkeyHex)
+    policy.UpdateRuleWriteFollowsWhitelist(kind, follows)
+    // Or for global rule
+    policy.UpdateGlobalWriteFollowsWhitelist(follows)
 }
 ```
 
