@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"next.orly.dev/pkg/database/indexes/types"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"next.orly.dev/pkg/database/indexes/types"
+	"next.orly.dev/pkg/interfaces/resultiter"
 	"next.orly.dev/pkg/interfaces/store"
 )
 
@@ -186,14 +186,10 @@ func (n *N) parseEventsFromResult(result any) ([]*event.E, error) {
 	events := make([]*event.E, 0)
 	ctx := context.Background()
 
-	// Type assert to the interface we actually use
-	resultIter, ok := result.(interface {
-		Next(context.Context) bool
-		Record() *neo4j.Record
-		Err() error
-	})
+	// Type assert to the result iterator interface
+	resultIter, ok := result.(resultiter.Neo4jResultIterator)
 	if !ok {
-		return nil, fmt.Errorf("invalid result type")
+		return nil, fmt.Errorf("invalid result type: expected resultiter.Neo4jResultIterator")
 	}
 
 	// Iterate through result records

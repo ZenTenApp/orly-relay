@@ -2,6 +2,7 @@
 package acl
 
 import (
+	"git.mleku.dev/mleku/nostr/encoders/event"
 	"next.orly.dev/pkg/interfaces/typer"
 )
 
@@ -30,4 +31,10 @@ type I interface {
 	// that arrive elsewhere relevant to the ACL scheme.
 	Syncer()
 	typer.T
+}
+
+// PolicyChecker is an optional interface that ACL implementations can implement
+// to provide custom event policy checking beyond basic access level checks.
+type PolicyChecker interface {
+	CheckPolicy(ev *event.E) (allowed bool, err error)
 }

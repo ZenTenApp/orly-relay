@@ -82,6 +82,49 @@ func (f *File) Read(p []byte) (n int, err error) {
 }
 ```
 
+### Interface Design - CRITICAL RULES
+
+**Rule 1: Define interfaces in a dedicated package (e.g., `pkg/interfaces/<name>/`)**
+- Interfaces provide isolation between packages and enable dependency inversion
+- Keeping interfaces in a dedicated package prevents circular dependencies
+- Each interface package should be minimal (just the interface, no implementations)
+
+**Rule 2: NEVER use type assertions with interface literals**
+- **NEVER** write `.(interface{ Method() Type })` - this is non-idiomatic and unmaintainable
+- Interface literals cannot be documented, tested for satisfaction, or reused
+
+```go
+// BAD - interface literal in type assertion (NEVER DO THIS)
+if checker, ok := obj.(interface{ Check() bool }); ok {
+    checker.Check()
+}
+
+// GOOD - use defined interface from dedicated package
+import "myproject/pkg/interfaces/checker"
+
+if c, ok := obj.(checker.Checker); ok {
+    c.Check()
+}
+```
+
+**Rule 3: Resolving Circular Dependencies**
+- If a circular dependency occurs, move the interface to `pkg/interfaces/`
+- The implementing type stays in its original package
+- The consuming code imports only the interface package
+- Pattern:
+  ```
+  pkg/interfaces/foo/   <- interface definition (no dependencies)
+       ↑           ↑
+  pkg/bar/         pkg/baz/
+  (implements)     (consumes via interface)
+  ```
+
+**Rule 4: Verify interface satisfaction at compile time**
+```go
+// Add this line to ensure *MyType implements MyInterface
+var _ MyInterface = (*MyType)(nil)
+```
+
 ### Concurrency
 
 Use goroutines and channels for concurrent programming:
@@ -177,6 +220,26 @@ For detailed information, consult the reference files:
    - Comment all exported names
    - Start comments with the name being described
    - Use godoc format
+
+6. **Configuration - CRITICAL**
+   - **NEVER** use `os.Getenv()` scattered throughout packages
+   - **ALWAYS** centralize environment variable parsing in a single config package (e.g., `app/config/`)
+   - Pass configuration via structs, not by reading environment directly
+   - This ensures discoverability, documentation, and testability of all config options
+
+7. **Constants - CRITICAL**
+   - **ALWAYS** define named constants for values used more than a few times
+   - **ALWAYS** define named constants if multiple packages depend on the same value
+   - Constants shared across packages belong in a dedicated package (e.g., `pkg/constants/`)
+   - Magic numbers and strings are forbidden
+   ```go
+   // BAD - magic number
+   if size > 1024 {
+
+   // GOOD - named constant
+   const MaxBufferSize = 1024
+   if size > MaxBufferSize {
+   ```
 
 ## Common Commands
 

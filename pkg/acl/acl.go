@@ -2,20 +2,20 @@ package acl
 
 import (
 	"git.mleku.dev/mleku/nostr/encoders/event"
-	"next.orly.dev/pkg/interfaces/acl"
+	acliface "next.orly.dev/pkg/interfaces/acl"
 	"next.orly.dev/pkg/utils/atomic"
 )
 
 var Registry = &S{}
 
 type S struct {
-	ACL    []acl.I
+	ACL    []acliface.I
 	Active atomic.String
 }
 
 type A struct{ S }
 
-func (s *S) Register(i acl.I) {
+func (s *S) Register(i acliface.I) {
 	(*s).ACL = append((*s).ACL, i)
 }
 
@@ -85,9 +85,7 @@ func (s *S) CheckPolicy(ev *event.E) (allowed bool, err error) {
 	for _, i := range s.ACL {
 		if i.Type() == s.Active.Load() {
 			// Check if the ACL implementation has a CheckPolicy method
-			if policyChecker, ok := i.(interface {
-				CheckPolicy(ev *event.E) (allowed bool, err error)
-			}); ok {
+			if policyChecker, ok := i.(acliface.PolicyChecker); ok {
 				return policyChecker.CheckPolicy(ev)
 			}
 			// If no CheckPolicy method, default to allowing

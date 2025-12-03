@@ -346,10 +346,11 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
 4. Events stored via `database.SaveEvent()`
 5. Active subscriptions notified via `publishers.Publish()`
 
-**Configuration System:**
+**Configuration System - CRITICAL RULES:**
 - Uses `go-simpler.org/env` for struct tags
-- **IMPORTANT: ALL environment variables MUST be defined in `app/config/config.go`**
-  - Never use `os.Getenv()` directly in packages - always pass config via structs
+- **ALL environment variables MUST be defined in `app/config/config.go`**
+  - **NEVER** use `os.Getenv()` directly in packages - always pass config via structs
+  - **NEVER** parse environment variables outside of `app/config/`
   - This ensures all config options appear in `./orly help` output
   - Database backends receive config via `database.DatabaseConfig` struct
   - Use `GetDatabaseConfigValues()` helper to extract DB config from app config
@@ -357,6 +358,21 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
 - Supports XDG directories via `github.com/adrg/xdg`
 - Default data directory: `~/.local/share/ORLY`
 - Database-specific config (Neo4j, DGraph, Badger) is passed via `DatabaseConfig` struct in `pkg/database/factory.go`
+
+**Constants - CRITICAL RULES:**
+- **ALWAYS** define named constants for values used more than a few times
+- **ALWAYS** define named constants if multiple packages depend on the same value
+- Constants shared across packages should be in a dedicated package (e.g., `pkg/constants/`)
+- Magic numbers and strings are forbidden - use named constants with clear documentation
+- Example:
+  ```go
+  // BAD - magic number
+  if timeout > 30 {
+
+  // GOOD - named constant
+  const DefaultTimeoutSeconds = 30
+  if timeout > DefaultTimeoutSeconds {
+  ```
 
 **Event Publishing:**
 - `pkg/protocol/publish/` manages publisher registry
@@ -393,6 +409,53 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
   pt, err := hex.Dec(string(pTag.Value()))  // Will fail for binary-encoded tags!
   ```
 - This optimization saves memory and enables faster comparisons in the database layer
+
+**Interface Design - CRITICAL RULES:**
+
+**Rule 1: ALL interfaces MUST be defined in `pkg/interfaces/<name>/`**
+- Interfaces provide isolation between packages and enable dependency inversion
+- Keeping interfaces in a dedicated package prevents circular dependencies
+- Each interface package should be minimal (just the interface, no implementations)
+
+**Rule 2: NEVER use type assertions with interface literals**
+- **NEVER** write `.(interface{ Method() Type })` - this is non-idiomatic and unmaintainable
+- Interface literals cannot be documented, tested for satisfaction, or reused
+- Example of WRONG approach:
+  ```go
+  // BAD - interface literal in type assertion
+  if checker, ok := obj.(interface{ Check() bool }); ok {
+      checker.Check()
+  }
+  ```
+- Example of CORRECT approach:
+  ```go
+  // GOOD - use defined interface from pkg/interfaces/
+  import "next.orly.dev/pkg/interfaces/checker"
+
+  if c, ok := obj.(checker.Checker); ok {
+      c.Check()
+  }
+  ```
+
+**Rule 3: Resolving Circular Dependencies**
+- If a circular dependency occurs when adding an interface, move the interface to `pkg/interfaces/`
+- The implementing type stays in its original package
+- The consuming code imports only the interface package
+- This pattern:
+  ```
+  pkg/interfaces/foo/   <- interface definition (no dependencies)
+       ↑           ↑
+  pkg/bar/         pkg/baz/
+  (implements)     (consumes via interface)
+  ```
+
+**Existing interfaces in `pkg/interfaces/`:**
+- `acl/` - ACL and PolicyChecker interfaces
+- `neterr/` - TimeoutError interface for network errors
+- `resultiter/` - Neo4jResultIterator for database results
+- `store/` - Storage-related interfaces
+- `publisher/` - Event publishing interfaces
+- `typer/` - Type identification interface
 
 ## Development Workflow
 

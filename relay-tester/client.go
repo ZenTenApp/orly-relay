@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"lol.mleku.dev/errorf"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/interfaces/neterr"
 )
 
 // Client wraps a WebSocket connection to a relay for testing.
@@ -118,7 +119,7 @@ func (c *Client) readLoop() {
 			default:
 			}
 			// Check if it's a timeout - connection might still be alive
-			if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
+			if netErr, ok := err.(neterr.TimeoutError); ok && netErr.Timeout() {
 				// Pong handler should have extended deadline, but if we timeout,
 				// reset it and continue - connection might still be alive
 				// This can happen during idle periods when no messages are received

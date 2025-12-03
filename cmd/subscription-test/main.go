@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"next.orly.dev/pkg/interfaces/neterr"
 )
 
 var (
@@ -123,7 +124,7 @@ func main() {
 				}
 
 				// Check for timeout errors (these are expected during idle periods)
-				if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
+				if netErr, ok := err.(neterr.TimeoutError); ok && netErr.Timeout() {
 					consecutiveTimeouts++
 					if consecutiveTimeouts >= maxConsecutiveTimeouts {
 						log.Printf("Too many consecutive read timeouts (%d), connection may be dead", consecutiveTimeouts)

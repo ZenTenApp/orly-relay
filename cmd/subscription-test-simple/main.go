@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"next.orly.dev/pkg/interfaces/neterr"
 )
 
 var (
@@ -90,7 +91,7 @@ func main() {
 				if ctx.Err() != nil {
 					return
 				}
-				if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
+				if netErr, ok := err.(neterr.TimeoutError); ok && netErr.Timeout() {
 					continue
 				}
 				log.Printf("Read error: %v", err)
