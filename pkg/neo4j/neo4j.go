@@ -135,6 +135,9 @@ func NewWithConfig(
 		return
 	}
 
+	// Run database migrations (e.g., Author -> NostrUser consolidation)
+	n.RunMigrations()
+
 	// Initialize serial counter
 	if err = n.initSerialCounter(); chk.E(err) {
 		return
@@ -298,10 +301,8 @@ func (n *N) EventIdsBySerial(start uint64, count int) (
 	return
 }
 
-// RunMigrations runs database migrations (no-op for neo4j)
-func (n *N) RunMigrations() {
-	// No-op for neo4j
-}
+// RunMigrations is implemented in migrations.go
+// It handles schema migrations like the Author -> NostrUser consolidation
 
 // Ready returns a channel that closes when the database is ready to serve requests.
 // This allows callers to wait for database warmup to complete.

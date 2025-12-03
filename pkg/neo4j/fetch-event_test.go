@@ -331,7 +331,7 @@ func TestGetSerialsByIds(t *testing.T) {
 	}
 
 	// Create and save multiple events
-	ids := tag.NewS()
+	ids := tag.New()
 	for i := 0; i < 3; i++ {
 		ev := event.New()
 		ev.Pubkey = signer.Pub()
@@ -347,7 +347,8 @@ func TestGetSerialsByIds(t *testing.T) {
 			t.Fatalf("Failed to save event: %v", err)
 		}
 
-		ids.Append(tag.NewFromAny("", hex.Enc(ev.ID[:])))
+		// Append ID to the tag's T slice
+		ids.T = append(ids.T, []byte(hex.Enc(ev.ID[:])))
 	}
 
 	// Get serials by IDs

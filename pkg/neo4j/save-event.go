@@ -84,7 +84,7 @@ func (n *N) SaveEvent(c context.Context, ev *event.E) (exists bool, err error) {
 // buildEventCreationCypher constructs a Cypher query to create an event node with all relationships
 // This is a single atomic operation that creates:
 // - Event node with all properties
-// - Author node and AUTHORED_BY relationship
+// - NostrUser node and AUTHORED_BY relationship (unified author + WoT node)
 // - Tag nodes and TAGGED_WITH relationships
 // - Reference relationships (REFERENCES for 'e' tags, MENTIONS for 'p' tags)
 func (n *N) buildEventCreationCypher(ev *event.E, serial uint64) (string, map[string]any) {
@@ -124,10 +124,12 @@ func (n *N) buildEventCreationCypher(ev *event.E, serial uint64) (string, map[st
 	params["tags"] = string(tagsJSON)
 
 	// Start building the Cypher query
-	// Use MERGE to ensure idempotency for author nodes
+	// Use MERGE to ensure idempotency for NostrUser nodes
+	// NostrUser serves both NIP-01 author tracking and WoT social graph
 	cypher := `
-// Create or match author node
-MERGE (a:Author {pubkey: $pubkey})
+// Create or match NostrUser node (unified author + social graph)
+MERGE (a:NostrUser {pubkey: $pubkey})
+ON CREATE SET a.created_at = timestamp(), a.first_seen_event = $eventId
 
 // Create event node with expiration for NIP-40 support
 CREATE (e:Event {
@@ -212,15 +214,16 @@ FOREACH (ignoreMe IN CASE WHEN ref%d IS NOT NULL THEN [1] ELSE [] END |
 					continue // Skip invalid p-tags
 				}
 
-				// Create mention to another author
+				// Create mention to another NostrUser
 				paramName := fmt.Sprintf("pTag_%d", pTagIndex)
 				params[paramName] = tagValue
 
 				cypher += fmt.Sprintf(`
-// Mention of author (p-tag)
-MERGE (mentioned%d:Author {pubkey: $%s})
+// Mention of NostrUser (p-tag)
+MERGE (mentioned%d:NostrUser {pubkey: $%s})
+ON CREATE SET mentioned%d.created_at = timestamp()
 CREATE (e)-[:MENTIONS]->(mentioned%d)
-`, pTagIndex, paramName, pTagIndex)
+`, pTagIndex, paramName, pTagIndex, pTagIndex)
 
 				pTagIndex++
 

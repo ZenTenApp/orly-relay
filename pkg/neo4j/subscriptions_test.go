@@ -5,179 +5,12 @@ import (
 	"os"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 )
 
-func TestSubscriptions_AddAndRemove(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	// Create a subscription
-	subID := "test-sub-123"
-	f := &filter.F{
-		Kinds: kind.NewS(kind.New(1)),
-	}
-
-	// Add subscription
-	db.AddSubscription(subID, f)
-
-	// Get subscription count (should be 1)
-	count := db.GetSubscriptionCount()
-	if count != 1 {
-		t.Fatalf("Expected 1 subscription, got %d", count)
-	}
-
-	// Remove subscription
-	db.RemoveSubscription(subID)
-
-	// Get subscription count (should be 0)
-	count = db.GetSubscriptionCount()
-	if count != 0 {
-		t.Fatalf("Expected 0 subscriptions after removal, got %d", count)
-	}
-
-	t.Logf("✓ Subscription add/remove works correctly")
-}
-
-func TestSubscriptions_MultipleSubscriptions(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	// Add multiple subscriptions
-	for i := 0; i < 5; i++ {
-		subID := string(rune('A' + i))
-		f := &filter.F{
-			Kinds: kind.NewS(kind.New(uint16(i + 1))),
-		}
-		db.AddSubscription(subID, f)
-	}
-
-	// Get subscription count
-	count := db.GetSubscriptionCount()
-	if count != 5 {
-		t.Fatalf("Expected 5 subscriptions, got %d", count)
-	}
-
-	// Remove some subscriptions
-	db.RemoveSubscription("A")
-	db.RemoveSubscription("C")
-
-	count = db.GetSubscriptionCount()
-	if count != 3 {
-		t.Fatalf("Expected 3 subscriptions after removal, got %d", count)
-	}
-
-	// Clear all subscriptions
-	db.ClearSubscriptions()
-
-	count = db.GetSubscriptionCount()
-	if count != 0 {
-		t.Fatalf("Expected 0 subscriptions after clear, got %d", count)
-	}
-
-	t.Logf("✓ Multiple subscriptions managed correctly")
-}
-
-func TestSubscriptions_DuplicateID(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	subID := "duplicate-test"
-
-	// Add first subscription
-	f1 := &filter.F{
-		Kinds: kind.NewS(kind.New(1)),
-	}
-	db.AddSubscription(subID, f1)
-
-	// Add subscription with same ID (should replace)
-	f2 := &filter.F{
-		Kinds: kind.NewS(kind.New(7)),
-	}
-	db.AddSubscription(subID, f2)
-
-	// Should still have only 1 subscription
-	count := db.GetSubscriptionCount()
-	if count != 1 {
-		t.Fatalf("Expected 1 subscription (duplicate replaced), got %d", count)
-	}
-
-	t.Logf("✓ Duplicate subscription ID handling works correctly")
-}
-
-func TestSubscriptions_RemoveNonExistent(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	// Try to remove non-existent subscription (should not panic)
-	db.RemoveSubscription("non-existent")
-
-	// Should still have 0 subscriptions
-	count := db.GetSubscriptionCount()
-	if count != 0 {
-		t.Fatalf("Expected 0 subscriptions, got %d", count)
-	}
-
-	t.Logf("✓ Removing non-existent subscription handled gracefully")
-}
+// Note: WebSocket subscription management (AddSubscription, GetSubscriptionCount,
+// RemoveSubscription, ClearSubscriptions) is handled at the app layer, not the
+// database layer. Tests for those methods have been removed.
 
 func TestMarkers_SetGetDelete(t *testing.T) {
 	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
@@ -371,24 +204,36 @@ func TestIdentity(t *testing.T) {
 
 	<-db.Ready()
 
+	// Wipe to ensure clean state
+	if err := db.Wipe(); err != nil {
+		t.Fatalf("Failed to wipe database: %v", err)
+	}
+
 	// Get identity (creates if not exists)
-	signer := db.Identity()
-	if signer == nil {
-		t.Fatal("Expected non-nil signer from Identity()")
+	secret1, err := db.GetOrCreateRelayIdentitySecret()
+	if err != nil {
+		t.Fatalf("Failed to get identity: %v", err)
+	}
+	if secret1 == nil {
+		t.Fatal("Expected non-nil secret from GetOrCreateRelayIdentitySecret()")
 	}
 
 	// Get identity again (should return same one)
-	signer2 := db.Identity()
-	if signer2 == nil {
-		t.Fatal("Expected non-nil signer from second Identity() call")
+	secret2, err := db.GetOrCreateRelayIdentitySecret()
+	if err != nil {
+		t.Fatalf("Failed to get identity second time: %v", err)
+	}
+	if secret2 == nil {
+		t.Fatal("Expected non-nil secret from second GetOrCreateRelayIdentitySecret() call")
 	}
 
-	// Public keys should match
-	pub1 := signer.Pub()
-	pub2 := signer2.Pub()
-	for i := range pub1 {
-		if pub1[i] != pub2[i] {
-			t.Fatal("Identity pubkeys don't match across calls")
+	// Secrets should match
+	if len(secret1) != len(secret2) {
+		t.Fatalf("Secret lengths don't match: %d vs %d", len(secret1), len(secret2))
+	}
+	for i := range secret1 {
+		if secret1[i] != secret2[i] {
+			t.Fatal("Identity secrets don't match across calls")
 		}
 	}
 

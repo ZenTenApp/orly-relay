@@ -55,7 +55,7 @@ func TestExpiration_SaveEventWithExpiration(t *testing.T) {
 	ev.CreatedAt = timestamp.Now().V
 	ev.Kind = 1
 	ev.Content = []byte("Event with expiration")
-	ev.Tags = tag.NewS(tag.NewFromAny("expiration", timestamp.From(futureExpiration).String()))
+	ev.Tags = tag.NewS(tag.NewFromAny("expiration", timestamp.FromUnix(futureExpiration).String()))
 
 	if err := ev.Sign(signer); err != nil {
 		t.Fatalf("Failed to sign event: %v", err)
@@ -118,7 +118,7 @@ func TestExpiration_DeleteExpiredEvents(t *testing.T) {
 	expiredEv.CreatedAt = timestamp.Now().V - 7200 // 2 hours ago
 	expiredEv.Kind = 1
 	expiredEv.Content = []byte("Expired event")
-	expiredEv.Tags = tag.NewS(tag.NewFromAny("expiration", timestamp.From(pastExpiration).String()))
+	expiredEv.Tags = tag.NewS(tag.NewFromAny("expiration", timestamp.FromUnix(pastExpiration).String()))
 
 	if err := expiredEv.Sign(signer); err != nil {
 		t.Fatalf("Failed to sign expired event: %v", err)
@@ -136,7 +136,7 @@ func TestExpiration_DeleteExpiredEvents(t *testing.T) {
 	validEv.CreatedAt = timestamp.Now().V
 	validEv.Kind = 1
 	validEv.Content = []byte("Valid event")
-	validEv.Tags = tag.NewS(tag.NewFromAny("expiration", timestamp.From(futureExpiration).String()))
+	validEv.Tags = tag.NewS(tag.NewFromAny("expiration", timestamp.FromUnix(futureExpiration).String()))
 
 	if err := validEv.Sign(signer); err != nil {
 		t.Fatalf("Failed to sign valid event: %v", err)

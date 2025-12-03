@@ -37,10 +37,11 @@ func (n *N) applySchema(ctx context.Context) error {
 		// REQ filters can specify: {"ids": ["<event_id>", ...]}
 		"CREATE CONSTRAINT event_id_unique IF NOT EXISTS FOR (e:Event) REQUIRE e.id IS UNIQUE",
 
-		// MANDATORY (NIP-01): Author.pubkey uniqueness for "authors" filter
+		// MANDATORY (NIP-01): NostrUser.pubkey uniqueness for "authors" filter
 		// REQ filters can specify: {"authors": ["<pubkey>", ...]}
-		// Events are linked to Author nodes via AUTHORED_BY relationship
-		"CREATE CONSTRAINT author_pubkey_unique IF NOT EXISTS FOR (a:Author) REQUIRE a.pubkey IS UNIQUE",
+		// Events are linked to NostrUser nodes via AUTHORED_BY relationship
+		// NOTE: NostrUser unifies both NIP-01 author tracking and WoT social graph
+		"CREATE CONSTRAINT nostrUser_pubkey IF NOT EXISTS FOR (n:NostrUser) REQUIRE n.pubkey IS UNIQUE",
 
 		// ============================================================
 		// === OPTIONAL: Internal Relay Operations ===
@@ -66,9 +67,8 @@ func (n *N) applySchema(ctx context.Context) error {
 		// Not required for NIP-01 compliance
 		// ============================================================
 
-		// OPTIONAL (WoT): NostrUser nodes for social graph/trust metrics
-		// Separate from Author nodes - Author is for NIP-01, NostrUser for WoT
-		"CREATE CONSTRAINT nostrUser_pubkey IF NOT EXISTS FOR (n:NostrUser) REQUIRE n.pubkey IS UNIQUE",
+		// NOTE: NostrUser constraint is defined above in MANDATORY section
+		// It serves both NIP-01 (author tracking) and WoT (social graph) purposes
 
 		// OPTIONAL (WoT): Container for WoT metrics cards per observee
 		"CREATE CONSTRAINT setOfNostrUserWotMetricsCards_observee_pubkey IF NOT EXISTS FOR (n:SetOfNostrUserWotMetricsCards) REQUIRE n.observee_pubkey IS UNIQUE",
@@ -200,6 +200,9 @@ func (n *N) dropAll(ctx context.Context) error {
 	constraints := []string{
 		// MANDATORY (NIP-01) constraints
 		"DROP CONSTRAINT event_id_unique IF EXISTS",
+		"DROP CONSTRAINT nostrUser_pubkey IF EXISTS", // Unified author + WoT constraint
+
+		// Legacy constraint (removed in migration)
 		"DROP CONSTRAINT author_pubkey_unique IF EXISTS",
 
 		// OPTIONAL (Internal) constraints
@@ -207,9 +210,6 @@ func (n *N) dropAll(ctx context.Context) error {
 
 		// OPTIONAL (Social Graph) constraints
 		"DROP CONSTRAINT processedSocialEvent_event_id IF EXISTS",
-
-		// OPTIONAL (WoT) constraints
-		"DROP CONSTRAINT nostrUser_pubkey IF EXISTS",
 		"DROP CONSTRAINT setOfNostrUserWotMetricsCards_observee_pubkey IF EXISTS",
 		"DROP CONSTRAINT nostrUserWotMetricsCard_unique_combination_1 IF EXISTS",
 		"DROP CONSTRAINT nostrUserWotMetricsCard_unique_combination_2 IF EXISTS",

@@ -16,12 +16,13 @@ This document provides a comprehensive guide to the Neo4j database schema used b
 
 ## Architecture Overview
 
-The Neo4j implementation uses a **dual-node architecture** to separate concerns:
+The Neo4j implementation uses a **unified node architecture**:
 
-1. **NIP-01 Base Layer**: Stores Nostr events with `Event`, `Author`, and `Tag` nodes for standard relay operations
-2. **WoT Extension Layer**: Stores social graph data with `NostrUser` nodes and relationship types (`FOLLOWS`, `MUTES`, `REPORTS`) for trust calculations
+1. **Event Storage**: `Event` and `Tag` nodes store Nostr events for standard relay operations
+2. **User Identity**: `NostrUser` nodes represent all Nostr users (both event authors and social graph participants)
+3. **Social Graph**: Relationship types (`FOLLOWS`, `MUTES`, `REPORTS`) between `NostrUser` nodes for trust calculations
 
-This separation allows the WoT extension to be modified independently without affecting NIP-01 compliance.
+**Note:** The `Author` label was deprecated and merged into `NostrUser` to eliminate redundancy. A migration automatically converts existing `Author` nodes when the relay starts.
 
 ### Data Model Summary
 
@@ -72,16 +73,17 @@ From the specification document:
 
 These elements are **required** for a NIP-01 compliant relay.
 
-### Constraints (schema.go:30-43)
+### Constraints (schema.go:30-44)
 
 ```cypher
 -- Event ID uniqueness (for "ids" filter)
 CREATE CONSTRAINT event_id_unique IF NOT EXISTS
 FOR (e:Event) REQUIRE e.id IS UNIQUE
 
--- Author pubkey uniqueness (for "authors" filter)
-CREATE CONSTRAINT author_pubkey_unique IF NOT EXISTS
-FOR (a:Author) REQUIRE a.pubkey IS UNIQUE
+-- NostrUser pubkey uniqueness (for "authors" filter and social graph)
+-- NostrUser unifies both NIP-01 author tracking and WoT social graph
+CREATE CONSTRAINT nostrUser_pubkey IF NOT EXISTS
+FOR (n:NostrUser) REQUIRE n.pubkey IS UNIQUE
 ```
 
 ### Indexes (schema.go:84-108)
@@ -122,14 +124,14 @@ Created in `save-event.go:buildEventCreationCypher()`:
 Created in `save-event.go:buildEventCreationCypher()`:
 
 ```cypher
--- Event → Author relationship
-(e:Event)-[:AUTHORED_BY]->(a:Author {pubkey: ...})
+-- Event → NostrUser relationship (author)
+(e:Event)-[:AUTHORED_BY]->(u:NostrUser {pubkey: ...})
 
 -- Event → Event reference (e-tags)
 (e:Event)-[:REFERENCES]->(ref:Event)
 
--- Event → Author mention (p-tags)
-(e:Event)-[:MENTIONS]->(mentioned:Author)
+-- Event → NostrUser mention (p-tags)
+(e:Event)-[:MENTIONS]->(mentioned:NostrUser)
 
 -- Event → Tag (other tags like #t, #d, etc.)
 (e:Event)-[:TAGGED_WITH]->(t:Tag {type: ..., value: ...})
@@ -146,7 +148,7 @@ The `query-events.go` file translates Nostr REQ filters into Cypher queries.
 | NIP-01 Filter | Cypher Translation | Index Used |
 |---------------|-------------------|------------|
 | `ids: ["abc..."]` | `e.id = $id_0` or `e.id STARTS WITH $id_0` | `event_id_unique` |
-| `authors: ["def..."]` | `e.pubkey = $author_0` or `e.pubkey STARTS WITH $author_0` | `author_pubkey_unique` |
+| `authors: ["def..."]` | `e.pubkey = $author_0` or `e.pubkey STARTS WITH $author_0` | `nostrUser_pubkey` |
 | `kinds: [1, 7]` | `e.kind IN $kinds` | `event_kind` |
 | `since: 1234567890` | `e.created_at >= $since` | `event_created_at` |
 | `until: 1234567890` | `e.created_at <= $until` | `event_created_at` |
@@ -435,25 +437,28 @@ if ev.Kind == 1 {
 
 ### Adding NostrEventTag → NostrUser REFERENCES
 
-Per the specification update, p-tags should create `REFERENCES` relationships to `NostrUser` nodes:
+The current implementation creates `MENTIONS` relationships from Events to `NostrUser` nodes for p-tags:
 
 ```go
-// In save-event.go buildEventCreationCypher(), modify p-tag handling:
+// In save-event.go buildEventCreationCypher(), p-tag handling:
 case "p":
-    // Current implementation: creates MENTIONS to Author
+    // Creates MENTIONS to NostrUser (unified node for both author and social graph)
     cypher += fmt.Sprintf(`
-    MERGE (mentioned%d:Author {pubkey: $%s})
+    MERGE (mentioned%d:NostrUser {pubkey: $%s})
+    ON CREATE SET mentioned%d.created_at = timestamp()
     CREATE (e)-[:MENTIONS]->(mentioned%d)
-    `, pTagIndex, paramName, pTagIndex)
+    `, pTagIndex, paramName, pTagIndex, pTagIndex)
+```
 
-    // NEW: Also reference NostrUser for WoT traversal
+To add additional tag nodes for enhanced query patterns:
+
+```go
+    // Optional: Also create a Tag node for the p-tag
     cypher += fmt.Sprintf(`
-    MERGE (user%d:NostrUser {pubkey: $%s})
-    // Create a Tag node for the p-tag
     MERGE (pTag%d:NostrEventTag {tag_name: 'p', tag_value: $%s})
     CREATE (e)-[:HAS_TAG]->(pTag%d)
-    CREATE (pTag%d)-[:REFERENCES]->(user%d)
-    `, pTagIndex, paramName, pTagIndex, paramName, pTagIndex, pTagIndex, pTagIndex)
+    CREATE (pTag%d)-[:REFERENCES]->(mentioned%d)
+    `, pTagIndex, paramName, pTagIndex, pTagIndex, pTagIndex)
 ```
 
 ---

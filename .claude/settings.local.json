@@ -176,7 +176,9 @@
       "Bash(xxd:*)",
       "Bash(CGO_ENABLED=0 go mod tidy:*)",
       "WebFetch(domain:git.mleku.dev)",
-      "Bash(CGO_ENABLED=0 LOG_LEVEL=trace go test:*)"
+      "Bash(CGO_ENABLED=0 LOG_LEVEL=trace go test:*)",
+      "Bash(go vet:*)",
+      "Bash(gofmt:*)"
     ],
     "deny": [],
     "ask": []

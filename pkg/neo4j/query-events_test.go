@@ -290,16 +290,16 @@ func TestQueryEventsWithLimit(t *testing.T) {
 	}
 
 	// Query with limit
-	limit := 5
+	limit := uint(5)
 	evs, err := db.QueryEvents(ctx, &filter.F{
 		Kinds: kind.NewS(kind.New(1)),
-		Limit: limit,
+		Limit: &limit,
 	})
 	if err != nil {
 		t.Fatalf("Failed to query events with limit: %v", err)
 	}
 
-	if len(evs) != limit {
+	if len(evs) != int(limit) {
 		t.Fatalf("Expected %d events with limit, got %d", limit, len(evs))
 	}
 
@@ -406,8 +406,7 @@ func TestQueryEventsMultipleAuthors(t *testing.T) {
 	createAndSaveEvent(t, ctx, db, charlie, 1, "Charlie", nil, baseTs+2)
 
 	// Query for Alice and Bob's events
-	authors := tag.NewFromBytesSlice(alice.Pub())
-	authors.Append(tag.NewFromBytesSlice(bob.Pub()).GetFirst(nil))
+	authors := tag.NewFromBytesSlice(alice.Pub(), bob.Pub())
 
 	evs, err := db.QueryEvents(ctx, &filter.F{
 		Authors: authors,
@@ -437,7 +436,7 @@ func TestCountEvents(t *testing.T) {
 	}
 
 	// Count events
-	count, err := db.CountEvents(ctx, &filter.F{
+	count, _, err := db.CountEvents(ctx, &filter.F{
 		Kinds: kind.NewS(kind.New(1)),
 	})
 	if err != nil {

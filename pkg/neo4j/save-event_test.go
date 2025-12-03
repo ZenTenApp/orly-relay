@@ -542,7 +542,7 @@ func TestSaveEvent_ETagReference(t *testing.T) {
 
 	// Verify MENTIONS relationship was also created for the p-tag
 	mentionsCypher := `
-		MATCH (reply:Event {id: $replyId})-[:MENTIONS]->(author:Author {pubkey: $authorPubkey})
+		MATCH (reply:Event {id: $replyId})-[:MENTIONS]->(author:NostrUser {pubkey: $authorPubkey})
 		RETURN author.pubkey AS pubkey
 	`
 	mentionsParams := map[string]any{

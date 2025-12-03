@@ -168,9 +168,9 @@ RETURN e
 
 ### Social graph query
 ```cypher
-MATCH (author:Author {pubkey: "abc123..."})
+MATCH (author:NostrUser {pubkey: "abc123..."})
 <-[:AUTHORED_BY]-(e:Event)
--[:MENTIONS]->(mentioned:Author)
+-[:MENTIONS]->(mentioned:NostrUser)
 RETURN author, e, mentioned
 ```
 
