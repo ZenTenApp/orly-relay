@@ -236,6 +236,7 @@ func (p *SocialEventProcessor) processReport(ctx context.Context, ev *event.E) e
 	}
 
 	// Create REPORTS relationship
+	// Note: WITH is required between CREATE and MERGE in Cypher
 	cypher := `
 		// Create event tracking node
 		CREATE (evt:ProcessedSocialEvent {
@@ -247,6 +248,9 @@ func (p *SocialEventProcessor) processReport(ctx context.Context, ev *event.E) e
 			relationship_count: 1,
 			superseded_by: null
 		})
+
+		// WITH required to transition from CREATE to MERGE
+		WITH evt
 
 		// Create or get reporter and reported users
 		MERGE (reporter:NostrUser {pubkey: $reporter_pubkey})
@@ -293,12 +297,15 @@ type UpdateContactListParams struct {
 
 // updateContactListGraph performs atomic graph update for contact list changes
 func (p *SocialEventProcessor) updateContactListGraph(ctx context.Context, params UpdateContactListParams) error {
+	// Note: WITH is required between CREATE and MERGE in Cypher
 	cypher := `
 		// Mark old event as superseded (if exists)
 		OPTIONAL MATCH (old:ProcessedSocialEvent {event_id: $old_event_id})
 		SET old.superseded_by = $new_event_id
 
 		// Create new event tracking node
+		// WITH required after OPTIONAL MATCH + SET before CREATE
+		WITH old
 		CREATE (new:ProcessedSocialEvent {
 			event_id: $new_event_id,
 			event_kind: 3,
@@ -308,6 +315,9 @@ func (p *SocialEventProcessor) updateContactListGraph(ctx context.Context, param
 			relationship_count: $total_follows,
 			superseded_by: null
 		})
+
+		// WITH required to transition from CREATE to MERGE
+		WITH new
 
 		// Get or create author node
 		MERGE (author:NostrUser {pubkey: $author_pubkey})
@@ -369,12 +379,15 @@ type UpdateMuteListParams struct {
 
 // updateMuteListGraph performs atomic graph update for mute list changes
 func (p *SocialEventProcessor) updateMuteListGraph(ctx context.Context, params UpdateMuteListParams) error {
+	// Note: WITH is required between CREATE and MERGE in Cypher
 	cypher := `
 		// Mark old event as superseded (if exists)
 		OPTIONAL MATCH (old:ProcessedSocialEvent {event_id: $old_event_id})
 		SET old.superseded_by = $new_event_id
 
 		// Create new event tracking node
+		// WITH required after OPTIONAL MATCH + SET before CREATE
+		WITH old
 		CREATE (new:ProcessedSocialEvent {
 			event_id: $new_event_id,
 			event_kind: 10000,
@@ -384,6 +397,9 @@ func (p *SocialEventProcessor) updateMuteListGraph(ctx context.Context, params U
 			relationship_count: $total_mutes,
 			superseded_by: null
 		})
+
+		// WITH required to transition from CREATE to MERGE
+		WITH new
 
 		// Get or create author node
 		MERGE (author:NostrUser {pubkey: $author_pubkey})

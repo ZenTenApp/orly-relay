@@ -167,7 +167,8 @@
       "Bash(GOROOT=/home/mleku/go node run_wasm_tests.mjs:*)",
       "Bash(./orly:*)",
       "Bash(./orly -version:*)",
-      "Bash(./orly --version:*)"
+      "Bash(./orly --version:*)",
+      "Bash(GOOS=js GOARCH=wasm go test:*)"
     ],
     "deny": [],
     "ask": []
