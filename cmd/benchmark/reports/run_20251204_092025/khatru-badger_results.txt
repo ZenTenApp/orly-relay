@@ -1,0 +1,74 @@
+Starting Nostr Relay Benchmark (Badger Backend)
+Data Directory: /tmp/benchmark_khatru-badger_8
+Events: 50000, Workers: 24, Duration: 1m0s
+1764840830987179ℹ️ migrating to version 1... /build/pkg/database/migrations.go:68
+1764840830987255ℹ️ migrating to version 2... /build/pkg/database/migrations.go:75
+1764840830987278ℹ️ migrating to version 3... /build/pkg/database/migrations.go:82
+1764840830987283ℹ️ cleaning up ephemeral events (kinds 20000-29999)... /build/pkg/database/migrations.go:304
+1764840830987292ℹ️ cleaned up 0 ephemeral events from database /build/pkg/database/migrations.go:349
+1764840830987305ℹ️ migrating to version 4... /build/pkg/database/migrations.go:89
+1764840830987310ℹ️ converting events to optimized inline storage (Reiser4 optimization)... /build/pkg/database/migrations.go:357
+1764840830987336ℹ️ found 0 events to convert (0 regular, 0 replaceable, 0 addressable) /build/pkg/database/migrations.go:446
+1764840830987364ℹ️ migration complete: converted 0 events to optimized inline storage, deleted 0 old keys /build/pkg/database/migrations.go:555
+1764840830987412ℹ️ migrating to version 5... /build/pkg/database/migrations.go:96
+1764840830987419ℹ️ re-encoding events with optimized tag binary format... /build/pkg/database/migrations.go:562
+1764840830987429ℹ️ found 0 events with e/p tags to re-encode /build/pkg/database/migrations.go:649
+1764840830987435ℹ️ no events need re-encoding /build/pkg/database/migrations.go:652
+1764840830987452ℹ️ migrating to version 6... /build/pkg/database/migrations.go:103
+1764840830987458ℹ️ converting events to compact serial-reference format... /build/pkg/database/migrations.go:706
+1764840830987473ℹ️ found 0 events to convert to compact format /build/pkg/database/migrations.go:846
+1764840830987479ℹ️ no events need conversion /build/pkg/database/migrations.go:849
+
+╔════════════════════════════════════════════════════════╗
+║         BADGER BACKEND BENCHMARK SUITE                 ║
+╚════════════════════════════════════════════════════════╝
+
+=== Starting Badger benchmark ===
+RunPeakThroughputTest (Badger)..
+
+=== Peak Throughput Test ===
+2025/12/04 09:33:50 INFO: Successfully loaded embedded libsecp256k1 v5.0.0 from /tmp/orly-libsecp256k1/libsecp256k1.so
+Events saved: 50000/50000 (100.0%), errors: 0
+Duration: 3.213866224s
+Events/sec: 15557.59
+Avg latency: 1.456848ms
+P90 latency: 1.953553ms
+P95 latency: 2.322455ms
+P99 latency: 4.316566ms
+Bottom 10% Avg latency: 793.956µs
+Wiping database between tests...
+RunBurstPatternTest (Badger)..
+
+=== Burst Pattern Test ===
+Burst completed: 5000 events in 336.223018ms
+Burst completed: 5000 events in 314.023603ms
+Burst completed: 5000 events in 296.961158ms
+Burst completed: 5000 events in 313.470891ms
+Burst completed: 5000 events in 312.977339ms
+Burst completed: 5000 events in 304.290846ms
+Burst completed: 5000 events in 279.718158ms
+Burst completed: 5000 events in 351.360773ms
+Burst completed: 5000 events in 413.446584ms
+Burst completed: 5000 events in 412.074279ms
+Burst test completed: 50000 events in 8.341599033s, errors: 0
+Events/sec: 5994.05
+Wiping database between tests...
+RunMixedReadWriteTest (Badger)..
+
+=== Mixed Read/Write Test ===
+Generating 1000 unique synthetic events (minimum 300 bytes each)...
+Generated 1000 events:
+  Average content size: 312 bytes
+  All events are unique (incremental timestamps)
+  All events are properly signed
+
+Pre-populating database for read tests...
+Generating 50000 unique synthetic events (minimum 300 bytes each)...
+Generated 50000 events:
+  Average content size: 314 bytes
+  All events are unique (incremental timestamps)
+  All events are properly signed
+
+Mixed test completed: 25000 writes, 25000 reads in 24.442820936s
+Combined ops/sec: 2045.59
+Wiping database between tests...

@@ -1,0 +1,8 @@
+
+RELAY_NAME: khatru-sqlite
+RELAY_URL: ws://khatru-sqlite:3334
+TEST_TIMESTAMP: 2025-12-04T09:33:45+00:00
+BENCHMARK_CONFIG:
+  Events: 50000
+  Workers: 24
+  Duration: 60s
