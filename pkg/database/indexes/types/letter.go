@@ -15,6 +15,12 @@ const (
 	EdgeDirectionPTagIn  byte = 2 // Inbound: This pubkey is referenced in event's p-tag
 )
 
+// Edge direction constants for event-to-event (e-tag) graph relationships
+const (
+	EdgeDirectionETagOut byte = 0 // Outbound: This event references target event via e-tag
+	EdgeDirectionETagIn  byte = 1 // Inbound: This event is referenced by source event via e-tag
+)
+
 type Letter struct {
 	val byte
 }

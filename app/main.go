@@ -18,6 +18,7 @@ import (
 	"next.orly.dev/pkg/database"
 	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
 	"next.orly.dev/pkg/policy"
+	"next.orly.dev/pkg/protocol/graph"
 	"next.orly.dev/pkg/protocol/nip43"
 	"next.orly.dev/pkg/protocol/publish"
 	"next.orly.dev/pkg/spider"
@@ -117,6 +118,23 @@ func Run(
 	if badgerDB, ok := db.(*database.D); ok {
 		if err := badgerDB.CleanupKind3WithoutPTags(ctx); chk.E(err) {
 			log.E.F("failed to cleanup kind 3 events: %v", err)
+		}
+	}
+
+	// Initialize graph query executor (only for Badger backend)
+	if badgerDB, ok := db.(*database.D); ok {
+		// Get relay identity key for signing graph query responses
+		relaySecretKey, err := badgerDB.GetOrCreateRelayIdentitySecret()
+		if err != nil {
+			log.E.F("failed to get relay identity key for graph executor: %v", err)
+		} else {
+			// Create the graph adapter and executor
+			graphAdapter := database.NewGraphAdapter(badgerDB)
+			if l.graphExecutor, err = graph.NewExecutor(graphAdapter, relaySecretKey); err != nil {
+				log.E.F("failed to create graph executor: %v", err)
+			} else {
+				log.I.F("graph query executor initialized")
+			}
 		}
 	}
 

@@ -82,3 +82,5 @@ require (
 )
 
 retract v1.0.3
+
+replace git.mleku.dev/mleku/nostr => /home/mleku/src/git.mleku.dev/mleku/nostr

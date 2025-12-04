@@ -25,6 +25,7 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/reason"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"next.orly.dev/pkg/policy"
+	"next.orly.dev/pkg/protocol/graph"
 	"next.orly.dev/pkg/protocol/nip43"
 	"git.mleku.dev/mleku/nostr/utils/normalize"
 	"git.mleku.dev/mleku/nostr/utils/pointers"
@@ -138,6 +139,71 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 
 				log.I.F("sent NIP-43 invite event to %s", l.remote)
 				return nil
+			}
+		}
+	}
+
+	// Check for NIP-XX graph queries in filters
+	// Graph queries use the _graph filter extension to traverse the social graph
+	for _, f := range *env.Filters {
+		if f != nil && graph.IsGraphQuery(f) {
+			graphQuery, graphErr := graph.ExtractFromFilter(f)
+			if graphErr != nil {
+				log.W.F("invalid _graph query from %s: %v", l.remote, graphErr)
+				if err = closedenvelope.NewFrom(
+					env.Subscription,
+					reason.Error.F("invalid _graph query: %s", graphErr.Error()),
+				).Write(l); chk.E(err) {
+					return
+				}
+				return
+			}
+			if graphQuery != nil {
+				log.I.F("graph query from %s: method=%s seed=%s depth=%d",
+					l.remote, graphQuery.Method, graphQuery.Seed, graphQuery.Depth)
+
+				// Check if graph executor is available
+				if l.graphExecutor == nil {
+					log.W.F("graph query received but executor not initialized")
+					if err = closedenvelope.NewFrom(
+						env.Subscription,
+						reason.Error.F("graph queries not supported on this relay"),
+					).Write(l); chk.E(err) {
+						return
+					}
+					return
+				}
+
+				// Execute the graph query
+				resultEvent, execErr := l.graphExecutor.Execute(graphQuery)
+				if execErr != nil {
+					log.W.F("graph query execution failed from %s: %v", l.remote, execErr)
+					if err = closedenvelope.NewFrom(
+						env.Subscription,
+						reason.Error.F("graph query failed: %s", execErr.Error()),
+					).Write(l); chk.E(err) {
+						return
+					}
+					return
+				}
+
+				// Send the result event
+				var res *eventenvelope.Result
+				if res, err = eventenvelope.NewResultWith(env.Subscription, resultEvent); chk.E(err) {
+					return
+				}
+				if err = res.Write(l); chk.E(err) {
+					return
+				}
+
+				// Send EOSE to signal completion
+				if err = eoseenvelope.NewFrom(env.Subscription).Write(l); chk.E(err) {
+					return
+				}
+
+				log.I.F("graph query completed for %s: method=%s, returned event kind %d",
+					l.remote, graphQuery.Method, resultEvent.Kind)
+				return
 			}
 		}
 	}

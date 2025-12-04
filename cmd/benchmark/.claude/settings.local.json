@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(go build:*)",
+      "Bash(export LD_LIBRARY_PATH:*)",
+      "Bash(/tmp/benchmark_test:*)",
+      "Bash(grep:*)",
+      "Bash(go doc:*)",
+      "Bash(CGO_ENABLED=0 go build:*)",
+      "Bash(docker compose:*)",
+      "Bash(./run-benchmark.sh:*)",
+      "Bash(tee:*)",
+      "Bash(sudo rm:*)"
     ],
     "deny": [],
     "ask": []

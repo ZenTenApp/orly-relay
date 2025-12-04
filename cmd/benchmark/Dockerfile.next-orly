@@ -1,5 +1,6 @@
 # Dockerfile for next.orly.dev relay (benchmark version)
 # Uses pure Go build with purego for dynamic libsecp256k1 loading
+# Fetches latest tag from git repository instead of local code
 
 # Stage 1: Build stage
 # Use Debian-based Go image to match runtime stage (avoids musl/glibc linker mismatch)
@@ -11,12 +12,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends git make && rm 
 # Set working directory
 WORKDIR /build
 
-# Copy go mod files first for better layer caching
-COPY go.mod go.sum ./
-RUN go mod download
+# Clone the repository and checkout the latest tag
+# Using git.nostrdev.com (primary repo, most up-to-date)
+RUN git clone https://git.nostrdev.com/mleku/next.orly.dev.git . && \
+    LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "main") && \
+    echo "Building ORLY version: ${LATEST_TAG}" && \
+    git checkout "${LATEST_TAG}"
 
-# Copy source code
-COPY . .
+# Download dependencies
+RUN go mod download
 
 # Build the relay with CGO disabled (uses purego for crypto)
 # Include debug symbols for profiling

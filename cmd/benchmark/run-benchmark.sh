@@ -3,17 +3,23 @@
 # Wrapper script to run the benchmark suite and automatically shut down when complete
 #
 # Usage:
-#   ./run-benchmark.sh           # Use disk-based storage (default)
-#   ./run-benchmark.sh --ramdisk # Use /dev/shm ramdisk for maximum performance
+#   ./run-benchmark.sh               # Use disk-based storage (default)
+#   ./run-benchmark.sh --ramdisk     # Use /dev/shm ramdisk for maximum performance
+#   ./run-benchmark.sh --graph       # Also run graph traversal benchmarks
 
 set -e
 
 # Parse command line arguments
 USE_RAMDISK=false
+USE_GRAPH_TRAVERSAL=false
 for arg in "$@"; do
     case $arg in
         --ramdisk)
             USE_RAMDISK=true
+            shift
+            ;;
+        --graph)
+            USE_GRAPH_TRAVERSAL=true
             shift
             ;;
         --help|-h)
@@ -23,6 +29,8 @@ for arg in "$@"; do
             echo "  --ramdisk    Use /dev/shm ramdisk storage instead of disk"
             echo "               This eliminates disk I/O bottlenecks for accurate"
             echo "               relay performance measurement."
+            echo "  --graph      Run graph traversal benchmarks (100k pubkeys,"
+            echo "               1-1000 follows each, 3-degree traversal)"
             echo "  --help, -h   Show this help message"
             echo ""
             echo "Requirements for --ramdisk:"
@@ -38,6 +46,9 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# Export graph traversal setting for docker-compose
+export BENCHMARK_GRAPH_TRAVERSAL="${USE_GRAPH_TRAVERSAL}"
 
 # Determine docker-compose command
 if docker compose version &> /dev/null 2>&1; then
@@ -93,6 +104,17 @@ else
     echo "  Storage location: ${DATA_BASE}"
     echo "  Tip: Use --ramdisk for faster benchmarks without"
     echo "       disk I/O bottlenecks."
+    echo "======================================================"
+    echo ""
+fi
+
+# Show graph traversal status
+if [ "$USE_GRAPH_TRAVERSAL" = true ]; then
+    echo "======================================================"
+    echo "  GRAPH TRAVERSAL BENCHMARK ENABLED"
+    echo "======================================================"
+    echo "  Will test 100k pubkeys with 1-1000 follows each"
+    echo "  performing 3-degree graph traversal queries"
     echo "======================================================"
     echo ""
 fi

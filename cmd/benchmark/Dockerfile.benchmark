@@ -1,5 +1,6 @@
 # Dockerfile for benchmark runner
 # Uses pure Go build with purego for dynamic libsecp256k1 loading
+# Fetches latest tag from git repository for stable builds
 
 # Use Debian-based Go image to match runtime stage (avoids musl/glibc linker mismatch)
 FROM golang:1.25-bookworm AS builder
@@ -10,12 +11,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 # Set working directory
 WORKDIR /build
 
-# Copy go modules
-COPY go.mod go.sum ./
-RUN go mod download
+# Clone the repository and checkout the latest tag
+# Using git.nostrdev.com (primary repo, most up-to-date)
+RUN git clone https://git.nostrdev.com/mleku/next.orly.dev.git . && \
+    LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "main") && \
+    echo "Building benchmark from ORLY version: ${LATEST_TAG}" && \
+    git checkout "${LATEST_TAG}"
 
-# Copy source code
-COPY . .
+# Download dependencies
+RUN go mod download
 
 # Build the benchmark tool with CGO disabled (uses purego for crypto)
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o benchmark ./cmd/benchmark
@@ -36,8 +40,8 @@ WORKDIR /app
 # Copy benchmark binary (libsecp256k1.so.1 is already installed via apt)
 COPY --from=builder /build/benchmark /app/benchmark
 
-# Copy benchmark runner script
-COPY cmd/benchmark/benchmark-runner.sh /app/benchmark-runner
+# Copy benchmark runner script from the local code
+COPY --from=builder /build/cmd/benchmark/benchmark-runner.sh /app/benchmark-runner
 
 # Make scripts executable
 RUN chmod +x /app/benchmark-runner

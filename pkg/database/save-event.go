@@ -349,21 +349,71 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 				}
 
 				// Create event -> pubkey edge (with kind and direction)
-				keyBuf := new(bytes.Buffer)
-				if err = indexes.EventPubkeyGraphEnc(ser, pkInfo.serial, eventKind, directionForward).MarshalWrite(keyBuf); chk.E(err) {
+				epgKeyBuf := new(bytes.Buffer)
+				if err = indexes.EventPubkeyGraphEnc(ser, pkInfo.serial, eventKind, directionForward).MarshalWrite(epgKeyBuf); chk.E(err) {
 					return
 				}
-				if err = txn.Set(keyBuf.Bytes(), nil); chk.E(err) {
+				// Make a copy of the key bytes to avoid buffer reuse issues in txn
+				epgKey := make([]byte, epgKeyBuf.Len())
+				copy(epgKey, epgKeyBuf.Bytes())
+				if err = txn.Set(epgKey, nil); chk.E(err) {
 					return
 				}
 
 				// Create pubkey -> event edge (reverse, with kind and direction for filtering)
-				keyBuf.Reset()
-				if err = indexes.PubkeyEventGraphEnc(pkInfo.serial, eventKind, directionReverse, ser).MarshalWrite(keyBuf); chk.E(err) {
+				pegKeyBuf := new(bytes.Buffer)
+				if err = indexes.PubkeyEventGraphEnc(pkInfo.serial, eventKind, directionReverse, ser).MarshalWrite(pegKeyBuf); chk.E(err) {
 					return
 				}
-				if err = txn.Set(keyBuf.Bytes(), nil); chk.E(err) {
+				if err = txn.Set(pegKeyBuf.Bytes(), nil); chk.E(err) {
 					return
+				}
+			}
+
+			// Create event-to-event graph edges for e-tags
+			// This enables thread traversal and finding replies/reactions to events
+			eTags := ev.Tags.GetAll([]byte("e"))
+			for _, eTag := range eTags {
+				if eTag.Len() >= 2 {
+					// Get event ID from e-tag, handling both binary and hex storage formats
+					var targetEventID []byte
+					if targetEventID, err = hex.Dec(string(eTag.ValueHex())); err != nil || len(targetEventID) != 32 {
+						continue
+					}
+
+					// Look up the target event's serial (if it exists in our database)
+					var targetSerial *types.Uint40
+					if targetSerial, err = d.GetSerialById(targetEventID); err != nil {
+						// Target event not in our database - skip edge creation
+						// This is normal for replies to events we don't have
+						err = nil
+						continue
+					}
+
+					// Create forward edge: source event -> target event (outbound e-tag)
+					directionOut := new(types.Letter)
+					directionOut.Set(types.EdgeDirectionETagOut)
+					eegKeyBuf := new(bytes.Buffer)
+					if err = indexes.EventEventGraphEnc(ser, targetSerial, eventKind, directionOut).MarshalWrite(eegKeyBuf); chk.E(err) {
+						return
+					}
+					// Make a copy of the key bytes to avoid buffer reuse issues in txn
+					eegKey := make([]byte, eegKeyBuf.Len())
+					copy(eegKey, eegKeyBuf.Bytes())
+					if err = txn.Set(eegKey, nil); chk.E(err) {
+						return
+					}
+
+					// Create reverse edge: target event -> source event (inbound e-tag)
+					directionIn := new(types.Letter)
+					directionIn.Set(types.EdgeDirectionETagIn)
+					geeKeyBuf := new(bytes.Buffer)
+					if err = indexes.GraphEventEventEnc(targetSerial, eventKind, directionIn, ser).MarshalWrite(geeKeyBuf); chk.E(err) {
+						return
+					}
+					if err = txn.Set(geeKeyBuf.Bytes(), nil); chk.E(err) {
+						return
+					}
 				}
 			}
 

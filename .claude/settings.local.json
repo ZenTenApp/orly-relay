@@ -180,7 +180,8 @@
       "Bash(go vet:*)",
       "Bash(gofmt:*)",
       "Skill(cypher)",
-      "Bash(git mv:*)"
+      "Bash(git mv:*)",
+      "Bash(CGO_ENABLED=0 go run:*)"
     ],
     "deny": [],
     "ask": []

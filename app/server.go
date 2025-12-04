@@ -26,6 +26,7 @@ import (
 	"next.orly.dev/pkg/policy"
 	"git.mleku.dev/mleku/nostr/protocol/auth"
 	"git.mleku.dev/mleku/nostr/httpauth"
+	"next.orly.dev/pkg/protocol/graph"
 	"next.orly.dev/pkg/protocol/nip43"
 	"next.orly.dev/pkg/protocol/publish"
 	"next.orly.dev/pkg/spider"
@@ -62,6 +63,7 @@ type Server struct {
 	clusterManager    *dsync.ClusterManager
 	blossomServer     *blossom.Server
 	InviteManager     *nip43.InviteManager
+	graphExecutor     *graph.Executor
 	cfg               *config.C
 	db                database.Database // Changed from *database.D to interface
 }

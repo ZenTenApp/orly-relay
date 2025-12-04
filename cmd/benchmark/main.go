@@ -44,6 +44,10 @@ type BenchmarkConfig struct {
 	// Backend selection
 	UseNeo4j      bool
 	UseRelySQLite bool
+
+	// Graph traversal benchmark
+	UseGraphTraversal        bool
+	UseNetworkGraphTraversal bool // Network-mode graph traversal (for multi-relay testing)
 }
 
 type BenchmarkResult struct {
@@ -108,6 +112,15 @@ func main() {
 	// lol.SetLogLevel("trace")
 	config := parseFlags()
 
+	if config.UseNetworkGraphTraversal {
+		// Network graph traversal mode: requires relay URL
+		if config.RelayURL == "" {
+			log.Fatal("Network graph traversal benchmark requires -relay-url flag")
+		}
+		runNetworkGraphTraversalBenchmark(config)
+		return
+	}
+
 	if config.RelayURL != "" {
 		// Network mode: connect to relay and generate traffic
 		runNetworkLoad(config)
@@ -123,6 +136,12 @@ func main() {
 	if config.UseRelySQLite {
 		// Run Rely-SQLite benchmark
 		runRelySQLiteBenchmark(config)
+		return
+	}
+
+	if config.UseGraphTraversal {
+		// Run graph traversal benchmark
+		runGraphTraversalBenchmark(config)
 		return
 	}
 
@@ -189,6 +208,130 @@ func runRelySQLiteBenchmark(config *BenchmarkConfig) {
 	relysqliteBench.GenerateAsciidocReport()
 }
 
+func runGraphTraversalBenchmark(config *BenchmarkConfig) {
+	fmt.Printf("Starting Graph Traversal Benchmark (Badger Backend)\n")
+	fmt.Printf("Data Directory: %s\n", config.DataDir)
+	fmt.Printf("Workers: %d\n", config.ConcurrentWorkers)
+	fmt.Printf("Pubkeys: %d, Follows per pubkey: %d-%d\n",
+		GraphBenchNumPubkeys, GraphBenchMinFollows, GraphBenchMaxFollows)
+
+	// Clean up existing data directory
+	os.RemoveAll(config.DataDir)
+
+	ctx := context.Background()
+	cancel := func() {}
+
+	db, err := database.New(ctx, cancel, config.DataDir, "warn")
+	if err != nil {
+		log.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	// Create and run graph traversal benchmark
+	graphBench := NewGraphTraversalBenchmark(config, db)
+	graphBench.RunSuite()
+
+	// Generate reports
+	graphBench.PrintResults()
+	generateGraphTraversalAsciidocReport(config, graphBench.GetResults())
+}
+
+func generateGraphTraversalAsciidocReport(config *BenchmarkConfig, results []*BenchmarkResult) {
+	path := filepath.Join(config.DataDir, "graph_traversal_report.adoc")
+	file, err := os.Create(path)
+	if err != nil {
+		log.Printf("Failed to create report: %v", err)
+		return
+	}
+	defer file.Close()
+
+	file.WriteString("= Graph Traversal Benchmark Results\n\n")
+	file.WriteString(
+		fmt.Sprintf(
+			"Generated: %s\n\n", time.Now().Format(time.RFC3339),
+		),
+	)
+	file.WriteString(fmt.Sprintf("Pubkeys: %d\n", GraphBenchNumPubkeys))
+	file.WriteString(fmt.Sprintf("Follows per pubkey: %d-%d\n", GraphBenchMinFollows, GraphBenchMaxFollows))
+	file.WriteString(fmt.Sprintf("Traversal depth: %d degrees\n\n", GraphBenchTraversalDepth))
+
+	file.WriteString("[cols=\"1,^1,^1,^1,^1,^1,^1\",options=\"header\"]\n")
+	file.WriteString("|===\n")
+	file.WriteString("| Test | Events/sec | Avg Latency | P90 | P95 | P99 | Bottom 10% Avg\n")
+
+	for _, r := range results {
+		file.WriteString(fmt.Sprintf("| %s\n", r.TestName))
+		file.WriteString(fmt.Sprintf("| %.2f\n", r.EventsPerSecond))
+		file.WriteString(fmt.Sprintf("| %v\n", r.AvgLatency))
+		file.WriteString(fmt.Sprintf("| %v\n", r.P90Latency))
+		file.WriteString(fmt.Sprintf("| %v\n", r.P95Latency))
+		file.WriteString(fmt.Sprintf("| %v\n", r.P99Latency))
+		file.WriteString(fmt.Sprintf("| %v\n", r.Bottom10Avg))
+	}
+	file.WriteString("|===\n")
+
+	fmt.Printf("AsciiDoc report saved to: %s\n", path)
+}
+
+func runNetworkGraphTraversalBenchmark(config *BenchmarkConfig) {
+	fmt.Printf("Starting Network Graph Traversal Benchmark\n")
+	fmt.Printf("Relay URL: %s\n", config.RelayURL)
+	fmt.Printf("Workers: %d\n", config.ConcurrentWorkers)
+	fmt.Printf("Pubkeys: %d, Follows per pubkey: %d-%d\n",
+		GraphBenchNumPubkeys, GraphBenchMinFollows, GraphBenchMaxFollows)
+
+	ctx := context.Background()
+
+	// Create and run network graph traversal benchmark
+	netGraphBench := NewNetworkGraphTraversalBenchmark(config.RelayURL, config.ConcurrentWorkers)
+
+	if err := netGraphBench.RunSuite(ctx); err != nil {
+		log.Fatalf("Network graph traversal benchmark failed: %v", err)
+	}
+
+	// Generate reports
+	netGraphBench.PrintResults()
+	generateNetworkGraphTraversalAsciidocReport(config, netGraphBench.GetResults())
+}
+
+func generateNetworkGraphTraversalAsciidocReport(config *BenchmarkConfig, results []*BenchmarkResult) {
+	path := filepath.Join(config.DataDir, "network_graph_traversal_report.adoc")
+	file, err := os.Create(path)
+	if err != nil {
+		log.Printf("Failed to create report: %v", err)
+		return
+	}
+	defer file.Close()
+
+	file.WriteString("= Network Graph Traversal Benchmark Results\n\n")
+	file.WriteString(
+		fmt.Sprintf(
+			"Generated: %s\n\n", time.Now().Format(time.RFC3339),
+		),
+	)
+	file.WriteString(fmt.Sprintf("Relay URL: %s\n", config.RelayURL))
+	file.WriteString(fmt.Sprintf("Pubkeys: %d\n", GraphBenchNumPubkeys))
+	file.WriteString(fmt.Sprintf("Follows per pubkey: %d-%d\n", GraphBenchMinFollows, GraphBenchMaxFollows))
+	file.WriteString(fmt.Sprintf("Traversal depth: %d degrees\n\n", GraphBenchTraversalDepth))
+
+	file.WriteString("[cols=\"1,^1,^1,^1,^1,^1,^1\",options=\"header\"]\n")
+	file.WriteString("|===\n")
+	file.WriteString("| Test | Events/sec | Avg Latency | P90 | P95 | P99 | Bottom 10% Avg\n")
+
+	for _, r := range results {
+		file.WriteString(fmt.Sprintf("| %s\n", r.TestName))
+		file.WriteString(fmt.Sprintf("| %.2f\n", r.EventsPerSecond))
+		file.WriteString(fmt.Sprintf("| %v\n", r.AvgLatency))
+		file.WriteString(fmt.Sprintf("| %v\n", r.P90Latency))
+		file.WriteString(fmt.Sprintf("| %v\n", r.P95Latency))
+		file.WriteString(fmt.Sprintf("| %v\n", r.P99Latency))
+		file.WriteString(fmt.Sprintf("| %v\n", r.Bottom10Avg))
+	}
+	file.WriteString("|===\n")
+
+	fmt.Printf("AsciiDoc report saved to: %s\n", path)
+}
+
 func parseFlags() *BenchmarkConfig {
 	config := &BenchmarkConfig{}
 
@@ -232,6 +375,16 @@ func parseFlags() *BenchmarkConfig {
 	flag.BoolVar(
 		&config.UseRelySQLite, "relysqlite", false,
 		"Use rely-sqlite backend",
+	)
+
+	// Graph traversal benchmark
+	flag.BoolVar(
+		&config.UseGraphTraversal, "graph", false,
+		"Run graph traversal benchmark (100k pubkeys, 3-degree follows)",
+	)
+	flag.BoolVar(
+		&config.UseNetworkGraphTraversal, "graph-network", false,
+		"Run network graph traversal benchmark against relay specified by -relay-url",
 	)
 
 	flag.Parse()

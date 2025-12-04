@@ -85,6 +85,10 @@ const (
 	// Compact event storage indexes
 	SerialEventIdPrefix = I("sei") // event serial -> full 32-byte event ID
 	CompactEventPrefix  = I("cmp") // compact event storage with serial references
+
+	// Event-to-event graph indexes (for e-tag references)
+	EventEventGraphPrefix = I("eeg") // source event serial -> target event serial (outbound e-tags)
+	GraphEventEventPrefix = I("gee") // target event serial -> source event serial (reverse e-tags)
 )
 
 // Prefix returns the three byte human-readable prefixes that go in front of
@@ -142,6 +146,11 @@ func Prefix(prf int) (i I) {
 		return SerialEventIdPrefix
 	case CompactEvent:
 		return CompactEventPrefix
+
+	case EventEventGraph:
+		return EventEventGraphPrefix
+	case GraphEventEvent:
+		return GraphEventEventPrefix
 	}
 	return
 }
@@ -205,6 +214,11 @@ func Identify(r io.Reader) (i int, err error) {
 		i = SerialEventId
 	case CompactEventPrefix:
 		i = CompactEvent
+
+	case EventEventGraphPrefix:
+		i = EventEventGraph
+	case GraphEventEventPrefix:
+		i = GraphEventEvent
 	}
 	return
 }
@@ -655,3 +669,38 @@ func CompactEventEnc(ser *types.Uint40) (enc *T) {
 	return New(NewPrefix(CompactEvent), ser)
 }
 func CompactEventDec(ser *types.Uint40) (enc *T) { return New(NewPrefix(), ser) }
+
+// EventEventGraph creates a bidirectional graph edge between events via e-tags.
+// This stores source_event_serial -> target_event_serial relationships with event kind and direction.
+// Used for thread traversal and finding replies/reactions/reposts to events.
+// Direction: 0=outbound (this event references target)
+//
+//	3 prefix|5 source event serial|5 target event serial|2 kind|1 direction
+var EventEventGraph = next()
+
+func EventEventGraphVars() (srcSer *types.Uint40, tgtSer *types.Uint40, kind *types.Uint16, direction *types.Letter) {
+	return new(types.Uint40), new(types.Uint40), new(types.Uint16), new(types.Letter)
+}
+func EventEventGraphEnc(srcSer *types.Uint40, tgtSer *types.Uint40, kind *types.Uint16, direction *types.Letter) (enc *T) {
+	return New(NewPrefix(EventEventGraph), srcSer, tgtSer, kind, direction)
+}
+func EventEventGraphDec(srcSer *types.Uint40, tgtSer *types.Uint40, kind *types.Uint16, direction *types.Letter) (enc *T) {
+	return New(NewPrefix(), srcSer, tgtSer, kind, direction)
+}
+
+// GraphEventEvent creates the reverse edge: target_event_serial -> source_event_serial with kind and direction.
+// This enables querying all events that reference a target event (e.g., all replies to a post).
+// Direction: 1=inbound (target is referenced by source)
+//
+//	3 prefix|5 target event serial|2 kind|1 direction|5 source event serial
+var GraphEventEvent = next()
+
+func GraphEventEventVars() (tgtSer *types.Uint40, kind *types.Uint16, direction *types.Letter, srcSer *types.Uint40) {
+	return new(types.Uint40), new(types.Uint16), new(types.Letter), new(types.Uint40)
+}
+func GraphEventEventEnc(tgtSer *types.Uint40, kind *types.Uint16, direction *types.Letter, srcSer *types.Uint40) (enc *T) {
+	return New(NewPrefix(GraphEventEvent), tgtSer, kind, direction, srcSer)
+}
+func GraphEventEventDec(tgtSer *types.Uint40, kind *types.Uint16, direction *types.Letter, srcSer *types.Uint40) (enc *T) {
+	return New(NewPrefix(), tgtSer, kind, direction, srcSer)
+}

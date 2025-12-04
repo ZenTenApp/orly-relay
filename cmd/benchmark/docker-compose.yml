@@ -1,11 +1,11 @@
 version: "3.8"
 
 services:
-  # Next.orly.dev relay with Badger (this repository)
+  # Next.orly.dev relay with Badger (fetches latest tag from git)
   next-orly-badger:
     build:
-      context: ../..
-      dockerfile: cmd/benchmark/Dockerfile.next-orly
+      context: .
+      dockerfile: Dockerfile.next-orly
     container_name: benchmark-next-orly-badger
     environment:
       - ORLY_DATA_DIR=/data
@@ -26,11 +26,11 @@ services:
       retries: 3
       start_period: 40s
 
-  # Next.orly.dev relay with Neo4j (this repository)
+  # Next.orly.dev relay with Neo4j (fetches latest tag from git)
   next-orly-neo4j:
     build:
-      context: ../..
-      dockerfile: cmd/benchmark/Dockerfile.next-orly
+      context: .
+      dockerfile: Dockerfile.next-orly
     container_name: benchmark-next-orly-neo4j
     environment:
       - ORLY_DATA_DIR=/data
@@ -219,11 +219,11 @@ services:
       retries: 10
       start_period: 30s
 
-  # Benchmark runner
+  # Benchmark runner (fetches latest tag from git)
   benchmark-runner:
     build:
-      context: ../..
-      dockerfile: cmd/benchmark/Dockerfile.benchmark
+      context: .
+      dockerfile: Dockerfile.benchmark
     container_name: benchmark-runner
     depends_on:
       next-orly-badger:
@@ -247,6 +247,7 @@ services:
       - BENCHMARK_EVENTS=50000
       - BENCHMARK_WORKERS=24
       - BENCHMARK_DURATION=60s
+      - BENCHMARK_GRAPH_TRAVERSAL=${BENCHMARK_GRAPH_TRAVERSAL:-false}
     volumes:
       - ./reports:/reports
     networks:

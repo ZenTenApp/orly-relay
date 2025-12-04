@@ -27,6 +27,7 @@ echo "Timestamp: $(date)"
 echo "Events per test: ${BENCHMARK_EVENTS}"
 echo "Concurrent workers: ${BENCHMARK_WORKERS}"
 echo "Test duration: ${BENCHMARK_DURATION}"
+echo "Graph traversal: ${BENCHMARK_GRAPH_TRAVERSAL:-false}"
 echo "Output directory: ${RUN_DIR}"
 echo "=================================================="
 
@@ -70,12 +71,12 @@ run_benchmark() {
     local relay_name="$1"
     local relay_url="$2"
     local output_file="$3"
-    
+
     echo ""
     echo "=================================================="
     echo "Testing ${relay_name} at ws://${relay_url}"
     echo "=================================================="
-    
+
     # Wait for relay to be ready
     if ! wait_for_relay "${relay_name}" "${relay_url}"; then
         echo "ERROR: ${relay_name} is not responding, skipping..."
@@ -84,14 +85,14 @@ run_benchmark() {
         echo "ERROR: Connection failed" >> "${output_file}"
         return 1
     fi
-    
+
     # Run the benchmark
     echo "Running benchmark against ${relay_name}..."
-    
+
     # Create temporary directory for this relay's data
     TEMP_DATA_DIR="/tmp/benchmark_${relay_name}_$$"
     mkdir -p "${TEMP_DATA_DIR}"
-    
+
     # Run benchmark and capture both stdout and stderr
     if /app/benchmark \
         -datadir="${TEMP_DATA_DIR}" \
@@ -99,9 +100,9 @@ run_benchmark() {
         -workers="${BENCHMARK_WORKERS}" \
         -duration="${BENCHMARK_DURATION}" \
         > "${output_file}" 2>&1; then
-        
+
         echo "✓ Benchmark completed successfully for ${relay_name}"
-        
+
         # Add relay identification to the report
         echo "" >> "${output_file}"
         echo "RELAY_NAME: ${relay_name}" >> "${output_file}"
@@ -111,7 +112,7 @@ run_benchmark() {
         echo "  Events: ${BENCHMARK_EVENTS}" >> "${output_file}"
         echo "  Workers: ${BENCHMARK_WORKERS}" >> "${output_file}"
         echo "  Duration: ${BENCHMARK_DURATION}" >> "${output_file}"
-        
+
     else
         echo "✗ Benchmark failed for ${relay_name}"
         echo "" >> "${output_file}"
@@ -120,7 +121,67 @@ run_benchmark() {
         echo "STATUS: FAILED" >> "${output_file}"
         echo "TEST_TIMESTAMP: $(date -Iseconds)" >> "${output_file}"
     fi
-    
+
+    # Clean up temporary data
+    rm -rf "${TEMP_DATA_DIR}"
+}
+
+# Function to run network graph traversal benchmark against a specific relay
+run_graph_traversal_benchmark() {
+    local relay_name="$1"
+    local relay_url="$2"
+    local output_file="$3"
+
+    echo ""
+    echo "=================================================="
+    echo "Graph Traversal Benchmark: ${relay_name} at ws://${relay_url}"
+    echo "=================================================="
+
+    # Wait for relay to be ready
+    if ! wait_for_relay "${relay_name}" "${relay_url}"; then
+        echo "ERROR: ${relay_name} is not responding, skipping graph traversal..."
+        echo "RELAY: ${relay_name}" > "${output_file}"
+        echo "STATUS: FAILED - Relay not responding" >> "${output_file}"
+        echo "ERROR: Connection failed" >> "${output_file}"
+        return 1
+    fi
+
+    # Run the network graph traversal benchmark
+    echo "Running network graph traversal benchmark against ${relay_name}..."
+
+    # Create temporary directory for this relay's data
+    TEMP_DATA_DIR="/tmp/graph_benchmark_${relay_name}_$$"
+    mkdir -p "${TEMP_DATA_DIR}"
+
+    # Run graph traversal benchmark via WebSocket
+    if /app/benchmark \
+        -graph-network \
+        -relay-url="ws://${relay_url}" \
+        -datadir="${TEMP_DATA_DIR}" \
+        -workers="${BENCHMARK_WORKERS}" \
+        > "${output_file}" 2>&1; then
+
+        echo "✓ Graph traversal benchmark completed successfully for ${relay_name}"
+
+        # Add relay identification to the report
+        echo "" >> "${output_file}"
+        echo "RELAY_NAME: ${relay_name}" >> "${output_file}"
+        echo "RELAY_URL: ws://${relay_url}" >> "${output_file}"
+        echo "TEST_TYPE: Graph Traversal (100k pubkeys, 3-degree follows)" >> "${output_file}"
+        echo "TEST_TIMESTAMP: $(date -Iseconds)" >> "${output_file}"
+        echo "BENCHMARK_CONFIG:" >> "${output_file}"
+        echo "  Workers: ${BENCHMARK_WORKERS}" >> "${output_file}"
+
+    else
+        echo "✗ Graph traversal benchmark failed for ${relay_name}"
+        echo "" >> "${output_file}"
+        echo "RELAY_NAME: ${relay_name}" >> "${output_file}"
+        echo "RELAY_URL: ws://${relay_url}" >> "${output_file}"
+        echo "TEST_TYPE: Graph Traversal" >> "${output_file}"
+        echo "STATUS: FAILED" >> "${output_file}"
+        echo "TEST_TIMESTAMP: $(date -Iseconds)" >> "${output_file}"
+    fi
+
     # Clean up temporary data
     rm -rf "${TEMP_DATA_DIR}"
 }
@@ -234,21 +295,49 @@ EOF
 # Main execution
 echo "Starting relay benchmark suite..."
 
+# Check if graph traversal mode is enabled
+BENCHMARK_GRAPH_TRAVERSAL="${BENCHMARK_GRAPH_TRAVERSAL:-false}"
+
 # Parse targets and run benchmarks
 echo "${BENCHMARK_TARGETS}" | tr ',' '\n' | while IFS=':' read -r relay_name relay_port; do
     if [ -z "${relay_name}" ] || [ -z "${relay_port}" ]; then
         echo "WARNING: Skipping invalid target: ${relay_name}:${relay_port}"
         continue
     fi
-    
+
     relay_url="${relay_name}:${relay_port}"
     output_file="${RUN_DIR}/${relay_name}_results.txt"
-    
+
     run_benchmark "${relay_name}" "${relay_url}" "${output_file}"
-    
+
     # Small delay between tests
     sleep 5
 done
+
+# Run graph traversal benchmarks if enabled
+if [ "${BENCHMARK_GRAPH_TRAVERSAL}" = "true" ]; then
+    echo ""
+    echo "=================================================="
+    echo "Starting Graph Traversal Benchmark Suite"
+    echo "=================================================="
+    echo "This tests 100k pubkeys with 1-1000 follows each"
+    echo "and performs 3-degree traversal queries"
+    echo "=================================================="
+
+    echo "${BENCHMARK_TARGETS}" | tr ',' '\n' | while IFS=':' read -r relay_name relay_port; do
+        if [ -z "${relay_name}" ] || [ -z "${relay_port}" ]; then
+            continue
+        fi
+
+        relay_url="${relay_name}:${relay_port}"
+        output_file="${RUN_DIR}/${relay_name}_graph_traversal_results.txt"
+
+        run_graph_traversal_benchmark "${relay_name}" "${relay_url}" "${output_file}"
+
+        # Longer delay between graph traversal tests (they're more intensive)
+        sleep 10
+    done
+fi
 
 # Generate aggregate report
 generate_aggregate_report
