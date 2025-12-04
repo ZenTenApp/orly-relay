@@ -1,0 +1,24 @@
+# Docker Compose file for Neo4j test database
+# Usage: docker compose up -d && go test ./pkg/neo4j/... && docker compose down
+services:
+  neo4j-test:
+    image: neo4j:5.15.0-community
+    container_name: neo4j-test
+    ports:
+      - "7687:7687"  # Bolt protocol
+      - "7474:7474"  # HTTP (browser interface)
+    environment:
+      - NEO4J_AUTH=neo4j/testpassword
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=1g
+      - NEO4J_dbms_memory_pagecache_size=512m
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "testpassword", "RETURN 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    tmpfs:
+      - /data  # Use tmpfs for faster tests

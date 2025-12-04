@@ -25,7 +25,15 @@ func (l *Listener) HandleDelete(env *eventenvelope.Submission) (err error) {
 	log.I.F("HandleDelete: processing delete event %0x from pubkey %0x", env.E.ID, env.E.Pubkey)
 	log.I.F("HandleDelete: delete event tags: %d tags", len(*env.E.Tags))
 	for i, t := range *env.E.Tags {
-		log.I.F("HandleDelete: tag %d: %s = %s", i, string(t.Key()), string(t.Value()))
+		// Use ValueHex() for e/p tags to properly display binary-encoded values
+		key := string(t.Key())
+		var val string
+		if key == "e" || key == "p" {
+			val = string(t.ValueHex()) // Properly converts binary to hex
+		} else {
+			val = string(t.Value())
+		}
+		log.I.F("HandleDelete: tag %d: %s = %s", i, key, val)
 	}
 
 	// Debug: log admin and owner lists
@@ -142,27 +150,21 @@ func (l *Listener) HandleDelete(env *eventenvelope.Submission) (err error) {
 		// if e tags are found, delete them if the author is signer, or one of
 		// the owners is signer
 		if utils.FastEqual(t.Key(), []byte("e")) {
-			// First try binary format (optimized storage for e-tags)
-			var dst []byte
-			if binVal := t.ValueBinary(); binVal != nil {
-				dst = binVal
-				log.I.F("HandleDelete: processing binary e-tag event ID: %0x", dst)
-			} else {
-				// Fall back to hex decoding for non-binary values
-				val := t.Value()
-				if len(val) == 0 {
-					log.W.F("HandleDelete: empty e-tag value")
-					continue
-				}
-				log.I.F("HandleDelete: processing e-tag with value: %s", string(val))
-				if b, e := hex.Dec(string(val)); chk.E(e) {
-					log.E.F("HandleDelete: failed to decode hex event ID %s: %v", string(val), e)
-					continue
-				} else {
-					dst = b
-					log.I.F("HandleDelete: decoded event ID: %0x", dst)
-				}
+			// Use ValueHex() which properly handles both binary-encoded and hex string formats
+			hexVal := t.ValueHex()
+			if len(hexVal) == 0 {
+				log.W.F("HandleDelete: empty e-tag value")
+				continue
 			}
+			log.I.F("HandleDelete: processing e-tag event ID: %s", string(hexVal))
+
+			// Decode hex to binary for filter
+			dst, e := hex.Dec(string(hexVal))
+			if chk.E(e) {
+				log.E.F("HandleDelete: failed to decode event ID %s: %v", string(hexVal), e)
+				continue
+			}
+
 			f := &filter.F{
 				Ids: tag.NewFromBytesSlice(dst),
 			}

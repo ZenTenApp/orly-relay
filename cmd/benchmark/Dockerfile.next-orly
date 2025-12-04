@@ -19,8 +19,11 @@ RUN git clone https://git.nostrdev.com/mleku/next.orly.dev.git . && \
     echo "Building ORLY version: ${LATEST_TAG}" && \
     git checkout "${LATEST_TAG}"
 
-# Download dependencies
-RUN go mod download
+# Remove local replace directives and update to released version, then download dependencies
+RUN sed -i '/^replace .* => \/home/d' go.mod && \
+    sed -i 's/git.mleku.dev\/mleku\/nostr v1.0.7/git.mleku.dev\/mleku\/nostr v1.0.8/' go.mod && \
+    go mod tidy && \
+    go mod download
 
 # Build the relay with CGO disabled (uses purego for crypto)
 # Include debug symbols for profiling

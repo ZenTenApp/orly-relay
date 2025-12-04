@@ -1,3 +1,5 @@
+git.mleku.dev/mleku/nostr v1.0.8 h1:YYREdIxobEqYkzxQ7/5ALACPzLkiHW+CTira+VvSQZk=
+git.mleku.dev/mleku/nostr v1.0.8/go.mod h1:iYTlg2WKJXJ0kcsM6QBGOJ0UDiJidMgL/i64cHyPjZc=
 github.com/BurntSushi/toml v1.5.0 h1:W5quZX/G/csjUnuI8SUYlsHs9M38FC7znL0lIO+DvMg=
 github.com/BurntSushi/toml v1.5.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
 github.com/ImVexed/fasturl v0.0.0-20230304231329-4e41488060f3 h1:ClzzXMDDuUbWfNNZqGeYq4PnYOlwlOVIvSyNaIy0ykg=

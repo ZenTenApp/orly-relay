@@ -55,43 +55,71 @@ func (n *N) buildCypherQuery(f *filter.F, includeDeleteEvents bool) (string, map
 	matchClause := "MATCH (e:Event)"
 
 	// IDs filter - uses exact match or prefix matching
-	if len(f.Ids.T) > 0 {
-		idConditions := make([]string, len(f.Ids.T))
+	// Note: IDs can be either binary (32 bytes) or hex strings (64 chars)
+	// We need to normalize to lowercase hex for consistent Neo4j matching
+	if f.Ids != nil && len(f.Ids.T) > 0 {
+		idConditions := make([]string, 0, len(f.Ids.T))
 		for i, id := range f.Ids.T {
+			if len(id) == 0 {
+				continue // Skip empty IDs
+			}
 			paramName := fmt.Sprintf("id_%d", i)
-			hexID := hex.Enc(id)
+
+			// Normalize to lowercase hex using our utility function
+			// This handles both binary-encoded IDs and hex string IDs (including uppercase)
+			hexID := NormalizePubkeyHex(id)
+			if hexID == "" {
+				continue
+			}
 
 			// Handle prefix matching for partial IDs
-			if len(id) < 32 { // Full event ID is 32 bytes (64 hex chars)
-				idConditions[i] = fmt.Sprintf("e.id STARTS WITH $%s", paramName)
+			// After normalization, check hex length (should be 64 for full ID)
+			if len(hexID) < 64 {
+				idConditions = append(idConditions, fmt.Sprintf("e.id STARTS WITH $%s", paramName))
 			} else {
-				idConditions[i] = fmt.Sprintf("e.id = $%s", paramName)
+				idConditions = append(idConditions, fmt.Sprintf("e.id = $%s", paramName))
 			}
 			params[paramName] = hexID
 		}
-		whereClauses = append(whereClauses, "("+strings.Join(idConditions, " OR ")+")")
+		if len(idConditions) > 0 {
+			whereClauses = append(whereClauses, "("+strings.Join(idConditions, " OR ")+")")
+		}
 	}
 
 	// Authors filter - supports prefix matching for partial pubkeys
-	if len(f.Authors.T) > 0 {
-		authorConditions := make([]string, len(f.Authors.T))
+	// Note: Authors can be either binary (32 bytes) or hex strings (64 chars)
+	// We need to normalize to lowercase hex for consistent Neo4j matching
+	if f.Authors != nil && len(f.Authors.T) > 0 {
+		authorConditions := make([]string, 0, len(f.Authors.T))
 		for i, author := range f.Authors.T {
+			if len(author) == 0 {
+				continue // Skip empty authors
+			}
 			paramName := fmt.Sprintf("author_%d", i)
-			hexAuthor := hex.Enc(author)
+
+			// Normalize to lowercase hex using our utility function
+			// This handles both binary-encoded pubkeys and hex string pubkeys (including uppercase)
+			hexAuthor := NormalizePubkeyHex(author)
+			if hexAuthor == "" {
+				continue
+			}
 
 			// Handle prefix matching for partial pubkeys
-			if len(author) < 32 { // Full pubkey is 32 bytes (64 hex chars)
-				authorConditions[i] = fmt.Sprintf("e.pubkey STARTS WITH $%s", paramName)
+			// After normalization, check hex length (should be 64 for full pubkey)
+			if len(hexAuthor) < 64 {
+				authorConditions = append(authorConditions, fmt.Sprintf("e.pubkey STARTS WITH $%s", paramName))
 			} else {
-				authorConditions[i] = fmt.Sprintf("e.pubkey = $%s", paramName)
+				authorConditions = append(authorConditions, fmt.Sprintf("e.pubkey = $%s", paramName))
 			}
 			params[paramName] = hexAuthor
 		}
-		whereClauses = append(whereClauses, "("+strings.Join(authorConditions, " OR ")+")")
+		if len(authorConditions) > 0 {
+			whereClauses = append(whereClauses, "("+strings.Join(authorConditions, " OR ")+")")
+		}
 	}
 
 	// Kinds filter - matches event types
-	if len(f.Kinds.K) > 0 {
+	if f.Kinds != nil && len(f.Kinds.K) > 0 {
 		kinds := make([]int64, len(f.Kinds.K))
 		for i, k := range f.Kinds.K {
 			kinds[i] = int64(k.K)

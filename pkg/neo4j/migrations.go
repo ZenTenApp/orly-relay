@@ -20,6 +20,11 @@ var migrations = []Migration{
 		Description: "Merge Author nodes into NostrUser nodes",
 		Migrate:     migrateAuthorToNostrUser,
 	},
+	{
+		Version:     "v2",
+		Description: "Clean up binary-encoded pubkeys and event IDs to lowercase hex",
+		Migrate:     migrateBinaryToHex,
+	},
 }
 
 // RunMigrations executes all pending migrations
@@ -193,5 +198,148 @@ func migrateAuthorToNostrUser(ctx context.Context, n *N) error {
 	// Ignore error as constraint may not exist
 
 	n.Logger.Infof("completed Author to NostrUser migration")
+	return nil
+}
+
+// migrateBinaryToHex cleans up any binary-encoded pubkeys and event IDs
+// The nostr library stores e/p tag values in binary format (33 bytes with null terminator),
+// but Neo4j should store them as lowercase hex strings for consistent querying.
+// This migration:
+// 1. Finds NostrUser nodes with invalid (non-hex) pubkeys and deletes them
+// 2. Finds Event nodes with invalid pubkeys/IDs and deletes them
+// 3. Finds Tag nodes (type 'e' or 'p') with invalid values and deletes them
+// 4. Cleans up MENTIONS relationships pointing to invalid NostrUser nodes
+func migrateBinaryToHex(ctx context.Context, n *N) error {
+	// Step 1: Count problematic nodes before cleanup
+	n.Logger.Infof("scanning for binary-encoded values in Neo4j...")
+
+	// Check for NostrUser nodes with invalid pubkeys (not 64 char hex)
+	// A valid hex pubkey is exactly 64 lowercase hex characters
+	countInvalidUsersCypher := `
+		MATCH (u:NostrUser)
+		WHERE size(u.pubkey) <> 64
+		   OR NOT u.pubkey =~ '^[0-9a-f]{64}$'
+		RETURN count(u) AS count
+	`
+	result, err := n.ExecuteRead(ctx, countInvalidUsersCypher, nil)
+	if err != nil {
+		return fmt.Errorf("failed to count invalid NostrUser nodes: %w", err)
+	}
+
+	var invalidUserCount int64
+	if result.Next(ctx) {
+		if count, ok := result.Record().Values[0].(int64); ok {
+			invalidUserCount = count
+		}
+	}
+	n.Logger.Infof("found %d NostrUser nodes with invalid pubkeys", invalidUserCount)
+
+	// Check for Event nodes with invalid pubkeys or IDs
+	countInvalidEventsCypher := `
+		MATCH (e:Event)
+		WHERE (size(e.pubkey) <> 64 OR NOT e.pubkey =~ '^[0-9a-f]{64}$')
+		   OR (size(e.id) <> 64 OR NOT e.id =~ '^[0-9a-f]{64}$')
+		RETURN count(e) AS count
+	`
+	result, err = n.ExecuteRead(ctx, countInvalidEventsCypher, nil)
+	if err != nil {
+		return fmt.Errorf("failed to count invalid Event nodes: %w", err)
+	}
+
+	var invalidEventCount int64
+	if result.Next(ctx) {
+		if count, ok := result.Record().Values[0].(int64); ok {
+			invalidEventCount = count
+		}
+	}
+	n.Logger.Infof("found %d Event nodes with invalid pubkeys or IDs", invalidEventCount)
+
+	// Check for Tag nodes (e/p type) with invalid values
+	countInvalidTagsCypher := `
+		MATCH (t:Tag)
+		WHERE t.type IN ['e', 'p']
+		  AND (size(t.value) <> 64 OR NOT t.value =~ '^[0-9a-f]{64}$')
+		RETURN count(t) AS count
+	`
+	result, err = n.ExecuteRead(ctx, countInvalidTagsCypher, nil)
+	if err != nil {
+		return fmt.Errorf("failed to count invalid Tag nodes: %w", err)
+	}
+
+	var invalidTagCount int64
+	if result.Next(ctx) {
+		if count, ok := result.Record().Values[0].(int64); ok {
+			invalidTagCount = count
+		}
+	}
+	n.Logger.Infof("found %d Tag nodes (e/p type) with invalid values", invalidTagCount)
+
+	// If nothing to clean up, we're done
+	if invalidUserCount == 0 && invalidEventCount == 0 && invalidTagCount == 0 {
+		n.Logger.Infof("no binary-encoded values found, migration complete")
+		return nil
+	}
+
+	// Step 2: Delete invalid NostrUser nodes and their relationships
+	if invalidUserCount > 0 {
+		n.Logger.Infof("deleting %d invalid NostrUser nodes...", invalidUserCount)
+		deleteInvalidUsersCypher := `
+			MATCH (u:NostrUser)
+			WHERE size(u.pubkey) <> 64
+			   OR NOT u.pubkey =~ '^[0-9a-f]{64}$'
+			DETACH DELETE u
+		`
+		_, err = n.ExecuteWrite(ctx, deleteInvalidUsersCypher, nil)
+		if err != nil {
+			return fmt.Errorf("failed to delete invalid NostrUser nodes: %w", err)
+		}
+		n.Logger.Infof("deleted %d invalid NostrUser nodes", invalidUserCount)
+	}
+
+	// Step 3: Delete invalid Event nodes and their relationships
+	if invalidEventCount > 0 {
+		n.Logger.Infof("deleting %d invalid Event nodes...", invalidEventCount)
+		deleteInvalidEventsCypher := `
+			MATCH (e:Event)
+			WHERE (size(e.pubkey) <> 64 OR NOT e.pubkey =~ '^[0-9a-f]{64}$')
+			   OR (size(e.id) <> 64 OR NOT e.id =~ '^[0-9a-f]{64}$')
+			DETACH DELETE e
+		`
+		_, err = n.ExecuteWrite(ctx, deleteInvalidEventsCypher, nil)
+		if err != nil {
+			return fmt.Errorf("failed to delete invalid Event nodes: %w", err)
+		}
+		n.Logger.Infof("deleted %d invalid Event nodes", invalidEventCount)
+	}
+
+	// Step 4: Delete invalid Tag nodes (e/p type) and their relationships
+	if invalidTagCount > 0 {
+		n.Logger.Infof("deleting %d invalid Tag nodes...", invalidTagCount)
+		deleteInvalidTagsCypher := `
+			MATCH (t:Tag)
+			WHERE t.type IN ['e', 'p']
+			  AND (size(t.value) <> 64 OR NOT t.value =~ '^[0-9a-f]{64}$')
+			DETACH DELETE t
+		`
+		_, err = n.ExecuteWrite(ctx, deleteInvalidTagsCypher, nil)
+		if err != nil {
+			return fmt.Errorf("failed to delete invalid Tag nodes: %w", err)
+		}
+		n.Logger.Infof("deleted %d invalid Tag nodes", invalidTagCount)
+	}
+
+	// Step 5: Clean up any orphaned MENTIONS/REFERENCES relationships
+	// These would be relationships pointing to nodes we just deleted
+	cleanupOrphanedCypher := `
+		// Clean up any ProcessedSocialEvent nodes with invalid pubkeys
+		MATCH (p:ProcessedSocialEvent)
+		WHERE size(p.pubkey) <> 64
+		   OR NOT p.pubkey =~ '^[0-9a-f]{64}$'
+		DETACH DELETE p
+	`
+	_, _ = n.ExecuteWrite(ctx, cleanupOrphanedCypher, nil)
+	// Ignore errors - best effort cleanup
+
+	n.Logger.Infof("binary-to-hex migration completed successfully")
 	return nil
 }

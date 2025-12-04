@@ -158,6 +158,14 @@ CREATE (e)-[:AUTHORED_BY]->(a)
 	// This is required because Cypher doesn't allow MATCH after CREATE without WITH
 	needsWithClause := true
 
+	// Collect all e-tags, p-tags, and other tags first so we can generate proper Cypher
+	// Neo4j requires WITH clauses between certain clause types (FOREACH -> MATCH/MERGE)
+	type tagInfo struct {
+		tagType string
+		value   string
+	}
+	var eTags, pTags, otherTags []tagInfo
+
 	// Only process tags if they exist
 	if ev.Tags != nil {
 		for _, tagItem := range *ev.Tags {
@@ -168,30 +176,39 @@ CREATE (e)-[:AUTHORED_BY]->(a)
 			tagType := string(tagItem.T[0])
 
 			switch tagType {
-			case "e": // Event reference - creates REFERENCES relationship
-				// Use ExtractETagValue to handle binary encoding and normalize to lowercase hex
+			case "e": // Event reference
 				tagValue := ExtractETagValue(tagItem)
-				if tagValue == "" {
-					continue // Skip invalid e-tags
+				if tagValue != "" {
+					eTags = append(eTags, tagInfo{"e", tagValue})
 				}
+			case "p": // Pubkey mention
+				tagValue := ExtractPTagValue(tagItem)
+				if tagValue != "" {
+					pTags = append(pTags, tagInfo{"p", tagValue})
+				}
+			default: // Other tags
+				tagValue := string(tagItem.T[1])
+				otherTags = append(otherTags, tagInfo{tagType, tagValue})
+			}
+		}
+	}
 
-				// Create reference to another event (if it exists)
-				paramName := fmt.Sprintf("eTag_%d", eTagIndex)
-				params[paramName] = tagValue
+	// Generate Cypher for e-tags (OPTIONAL MATCH + FOREACH pattern)
+	// These need WITH clause before first one, and WITH after all FOREACHes
+	for i, tag := range eTags {
+		paramName := fmt.Sprintf("eTag_%d", eTagIndex)
+		params[paramName] = tag.value
 
-				// Add WITH clause before first OPTIONAL MATCH only
-				// This is required because Cypher doesn't allow MATCH after CREATE without WITH.
-				// However, you CAN chain multiple OPTIONAL MATCH + FOREACH pairs without
-				// additional WITH clauses between them - Cypher allows OPTIONAL MATCH after FOREACH.
-				if needsWithClause {
-					cypher += `
+		// Add WITH clause before first OPTIONAL MATCH only
+		if needsWithClause {
+			cypher += `
 // Carry forward event and author nodes for tag processing
 WITH e, a
 `
-					needsWithClause = false
-				}
+			needsWithClause = false
+		}
 
-				cypher += fmt.Sprintf(`
+		cypher += fmt.Sprintf(`
 // Reference to event (e-tag)
 OPTIONAL MATCH (ref%d:Event {id: $%s})
 FOREACH (ignoreMe IN CASE WHEN ref%d IS NOT NULL THEN [1] ELSE [] END |
@@ -199,47 +216,64 @@ FOREACH (ignoreMe IN CASE WHEN ref%d IS NOT NULL THEN [1] ELSE [] END |
 )
 `, eTagIndex, paramName, eTagIndex, eTagIndex)
 
-				eTagIndex++
+		eTagIndex++
 
-			case "p": // Pubkey mention - creates MENTIONS relationship
-				// Use ExtractPTagValue to handle binary encoding and normalize to lowercase hex
-				tagValue := ExtractPTagValue(tagItem)
-				if tagValue == "" {
-					continue // Skip invalid p-tags
-				}
+		// After the last e-tag FOREACH, add WITH clause if there are p-tags or other tags
+		if i == len(eTags)-1 && (len(pTags) > 0 || len(otherTags) > 0) {
+			cypher += `
+// Required WITH after FOREACH before MERGE/MATCH
+WITH e, a
+`
+		}
+	}
 
-				// Create mention to another NostrUser
-				paramName := fmt.Sprintf("pTag_%d", pTagIndex)
-				params[paramName] = tagValue
+	// Generate Cypher for p-tags (MERGE pattern)
+	for _, tag := range pTags {
+		paramName := fmt.Sprintf("pTag_%d", pTagIndex)
+		params[paramName] = tag.value
 
-				cypher += fmt.Sprintf(`
+		// If no e-tags were processed, we still need the initial WITH
+		if needsWithClause {
+			cypher += `
+// Carry forward event and author nodes for tag processing
+WITH e, a
+`
+			needsWithClause = false
+		}
+
+		cypher += fmt.Sprintf(`
 // Mention of NostrUser (p-tag)
 MERGE (mentioned%d:NostrUser {pubkey: $%s})
 ON CREATE SET mentioned%d.created_at = timestamp()
 CREATE (e)-[:MENTIONS]->(mentioned%d)
 `, pTagIndex, paramName, pTagIndex, pTagIndex)
 
-				pTagIndex++
+		pTagIndex++
+	}
 
-			default: // Other tags - creates Tag nodes and TAGGED_WITH relationships
-				// For non-e/p tags, use direct string conversion (no binary encoding)
-				tagValue := string(tagItem.T[1])
+	// Generate Cypher for other tags (MERGE pattern)
+	for _, tag := range otherTags {
+		typeParam := fmt.Sprintf("tagType_%d", tagNodeIndex)
+		valueParam := fmt.Sprintf("tagValue_%d", tagNodeIndex)
+		params[typeParam] = tag.tagType
+		params[valueParam] = tag.value
 
-				// Create tag node and relationship
-				typeParam := fmt.Sprintf("tagType_%d", tagNodeIndex)
-				valueParam := fmt.Sprintf("tagValue_%d", tagNodeIndex)
-				params[typeParam] = tagType
-				params[valueParam] = tagValue
+		// If no e-tags or p-tags were processed, we still need the initial WITH
+		if needsWithClause {
+			cypher += `
+// Carry forward event and author nodes for tag processing
+WITH e, a
+`
+			needsWithClause = false
+		}
 
-				cypher += fmt.Sprintf(`
+		cypher += fmt.Sprintf(`
 // Generic tag relationship
 MERGE (tag%d:Tag {type: $%s, value: $%s})
 CREATE (e)-[:TAGGED_WITH]->(tag%d)
 `, tagNodeIndex, typeParam, valueParam, tagNodeIndex)
 
-				tagNodeIndex++
-			}
-		}
+		tagNodeIndex++
 	}
 
 	// Return the created event
