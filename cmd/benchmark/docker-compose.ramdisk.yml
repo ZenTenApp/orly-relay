@@ -13,21 +13,6 @@ services:
     volumes:
       - /dev/shm/benchmark/next-orly-badger:/data
 
-  # Next.orly.dev relay with DGraph
-  next-orly-dgraph:
-    volumes:
-      - /dev/shm/benchmark/next-orly-dgraph:/data
-
-  # DGraph Zero - cluster coordinator
-  dgraph-zero:
-    volumes:
-      - /dev/shm/benchmark/dgraph-zero:/data
-
-  # DGraph Alpha - data node
-  dgraph-alpha:
-    volumes:
-      - /dev/shm/benchmark/dgraph-alpha:/data
-
   # Next.orly.dev relay with Neo4j
   next-orly-neo4j:
     volumes:

@@ -136,17 +136,17 @@ echo "Preparing data directories at ${DATA_BASE}..."
 
 if [ "$USE_RAMDISK" = true ]; then
     # Create ramdisk directories
-    mkdir -p "${DATA_BASE}"/{next-orly-badger,next-orly-dgraph,next-orly-neo4j,dgraph-zero,dgraph-alpha,neo4j,neo4j-logs,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,rely-sqlite,postgres}
-    chmod 777 "${DATA_BASE}"/{next-orly-badger,next-orly-dgraph,next-orly-neo4j,dgraph-zero,dgraph-alpha,neo4j,neo4j-logs,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,rely-sqlite,postgres}
+    mkdir -p "${DATA_BASE}"/{next-orly-badger,next-orly-neo4j,neo4j,neo4j-logs,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,rely-sqlite,postgres}
+    chmod 777 "${DATA_BASE}"/{next-orly-badger,next-orly-neo4j,neo4j,neo4j-logs,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,rely-sqlite,postgres}
 else
     # Create disk directories (relative path)
-    mkdir -p data/{next-orly-badger,next-orly-dgraph,next-orly-neo4j,dgraph-zero,dgraph-alpha,neo4j,neo4j-logs,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,rely-sqlite,postgres}
-    chmod 777 data/{next-orly-badger,next-orly-dgraph,next-orly-neo4j,dgraph-zero,dgraph-alpha,neo4j,neo4j-logs,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,rely-sqlite,postgres}
+    mkdir -p data/{next-orly-badger,next-orly-neo4j,neo4j,neo4j-logs,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,rely-sqlite,postgres}
+    chmod 777 data/{next-orly-badger,next-orly-neo4j,neo4j,neo4j-logs,khatru-sqlite,khatru-badger,relayer-basic,strfry,nostr-rs-relay,rely-sqlite,postgres}
 fi
 
 echo "Building fresh Docker images..."
 # Force rebuild to pick up latest code changes
-$DOCKER_COMPOSE $COMPOSE_FILES build --no-cache benchmark-runner next-orly-badger next-orly-dgraph next-orly-neo4j rely-sqlite
+$DOCKER_COMPOSE $COMPOSE_FILES build --no-cache benchmark-runner next-orly-badger next-orly-neo4j rely-sqlite
 
 echo ""
 echo "Starting benchmark suite..."
