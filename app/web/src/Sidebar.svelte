@@ -70,6 +70,7 @@
         display: flex;
         align-items: center;
         padding: 0.75em;
+        padding-left: 1em;
         background: transparent;
         color: var(--text-color);
         border: none;
@@ -117,5 +118,38 @@
         opacity: 0.7;
         background-color: var(--warning);
         color: var(--text-color);
+    }
+
+    @media (max-width: 1280px) {
+        .sidebar {
+            width: 60px;
+        }
+
+        .tab-label {
+            display: none;
+        }
+
+        .tab-close-icon {
+            display: none;
+        }
+
+        .tab {
+            /* Keep left alignment so icons stay in same position */
+            justify-content: flex-start;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .sidebar {
+            width: 160px;
+        }
+
+        .tab-label {
+            display: block;
+        }
+
+        .tab {
+            justify-content: flex-start;
+        }
     }
 </style>

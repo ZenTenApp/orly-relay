@@ -126,4 +126,16 @@
         border-color: var(--accent-color);
         box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
     }
+
+    @media (max-width: 1280px) {
+        .compose-view {
+            left: 60px;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .compose-view {
+            left: 160px;
+        }
+    }
 </style>

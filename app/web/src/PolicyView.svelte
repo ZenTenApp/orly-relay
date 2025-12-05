@@ -336,6 +336,7 @@
         background: var(--header-bg);
         color: var(--text-color);
         border-radius: 8px;
+        box-sizing: border-box;
     }
 
     .policy-view h2 {

@@ -1,5 +1,8 @@
 node_modules/
 dist/
+public/bundle.js
+public/bundle.js.map
+public/bundle.css
 .vite/
 .tanstack/
 .idea/

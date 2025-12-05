@@ -186,6 +186,7 @@
         background: var(--header-bg);
         color: var(--text-color);
         border-radius: 8px;
+        box-sizing: border-box;
     }
 
     .recovery-tab h3 {

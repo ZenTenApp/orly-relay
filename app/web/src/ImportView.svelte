@@ -72,7 +72,9 @@
         padding: 1em;
         border-radius: 8px;
         margin-bottom: 1.5rem;
-        width: 32em;
+        width: 100%;
+        max-width: 32em;
+        box-sizing: border-box;
     }
 
     .import-section h3 {

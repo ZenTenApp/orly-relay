@@ -1,4 +1,5 @@
 <script>
+    // Svelte component imports
     import LoginModal from "./LoginModal.svelte";
     import ManagedACL from "./ManagedACL.svelte";
     import Header from "./Header.svelte";
@@ -13,7 +14,14 @@
     import SearchResultsView from "./SearchResultsView.svelte";
     import FilterBuilder from "./FilterBuilder.svelte";
     import FilterDisplay from "./FilterDisplay.svelte";
+
+    // Utility imports
     import { buildFilter } from "./helpers.tsx";
+    import { replaceableKinds, kindNames, CACHE_DURATION } from "./constants.js";
+    import { getKindName, truncatePubkey, truncateContent, formatTimestamp, escapeHtml, aboutToHtml, copyToClipboard, showCopyFeedback } from "./utils.js";
+    import * as api from "./api.js";
+
+    // Nostr library imports
     import {
         initializeNostrClient,
         fetchUserProfile,
@@ -73,7 +81,7 @@
     // Global events cache system
     let globalEventsCache = []; // All events cache
     let globalCacheTimestamp = 0;
-    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+    // CACHE_DURATION is imported from constants.js
 
     // Events filter toggle
     let showOnlyMyEvents = false;
@@ -120,213 +128,10 @@
     let recoveryOldestTimestamp = null;
     let recoveryNewestTimestamp = null;
 
-    // Replaceable kinds for the recovery dropdown
-    // Based on NIP-01: kinds 0, 3, and 10000-19999 are replaceable
-    // kinds 30000-39999 are addressable (parameterized replaceable)
-    const replaceableKinds = [
-        // Basic replaceable kinds (0, 3)
-        { value: 0, label: "User Metadata (0)" },
-        { value: 3, label: "Follows (3)" },
+    // replaceableKinds is now imported from constants.js
 
-        // Replaceable range 10000-19999
-        { value: 10000, label: "Mute list (10000)" },
-        { value: 10001, label: "Pin list (10001)" },
-        { value: 10002, label: "Relay List Metadata (10002)" },
-        { value: 10003, label: "Bookmark list (10003)" },
-        { value: 10004, label: "Communities list (10004)" },
-        { value: 10005, label: "Public chats list (10005)" },
-        { value: 10006, label: "Blocked relays list (10006)" },
-        { value: 10007, label: "Search relays list (10007)" },
-        { value: 10009, label: "User groups (10009)" },
-        { value: 10012, label: "Favorite relays list (10012)" },
-        { value: 10013, label: "Private event relay list (10013)" },
-        { value: 10015, label: "Interests list (10015)" },
-        { value: 10019, label: "Nutzap Mint Recommendation (10019)" },
-        { value: 10020, label: "Media follows (10020)" },
-        { value: 10030, label: "User emoji list (10030)" },
-        { value: 10050, label: "Relay list to receive DMs (10050)" },
-        { value: 10051, label: "KeyPackage Relays List (10051)" },
-        { value: 10063, label: "User server list (10063)" },
-        { value: 10096, label: "File storage server list (10096)" },
-        { value: 10166, label: "Relay Monitor Announcement (10166)" },
-        { value: 10312, label: "Room Presence (10312)" },
-        { value: 10377, label: "Proxy Announcement (10377)" },
-        { value: 11111, label: "Transport Method Announcement (11111)" },
-        { value: 13194, label: "Wallet Info (13194)" },
-        { value: 17375, label: "Cashu Wallet Event (17375)" },
-
-        // Addressable range 30000-39999 (parameterized replaceable)
-        { value: 30000, label: "Follow sets (30000)" },
-        { value: 30001, label: "Generic lists (30001)" },
-        { value: 30002, label: "Relay sets (30002)" },
-        { value: 30003, label: "Bookmark sets (30003)" },
-        { value: 30004, label: "Curation sets (30004)" },
-        { value: 30005, label: "Video sets (30005)" },
-        { value: 30007, label: "Kind mute sets (30007)" },
-        { value: 30008, label: "Profile Badges (30008)" },
-        { value: 30009, label: "Badge Definition (30009)" },
-        { value: 30015, label: "Interest sets (30015)" },
-        { value: 30017, label: "Create or update a stall (30017)" },
-        { value: 30018, label: "Create or update a product (30018)" },
-        { value: 30019, label: "Marketplace UI/UX (30019)" },
-        { value: 30020, label: "Product sold as an auction (30020)" },
-        { value: 30023, label: "Long-form Content (30023)" },
-        { value: 30024, label: "Draft Long-form Content (30024)" },
-        { value: 30030, label: "Emoji sets (30030)" },
-        { value: 30040, label: "Curated Publication Index (30040)" },
-        { value: 30041, label: "Curated Publication Content (30041)" },
-        { value: 30063, label: "Release artifact sets (30063)" },
-        { value: 30078, label: "Application-specific Data (30078)" },
-        { value: 30166, label: "Relay Discovery (30166)" },
-        { value: 30267, label: "App curation sets (30267)" },
-        { value: 30311, label: "Live Event (30311)" },
-        { value: 30312, label: "Interactive Room (30312)" },
-        { value: 30313, label: "Conference Event (30313)" },
-        { value: 30315, label: "User Statuses (30315)" },
-        { value: 30388, label: "Slide Set (30388)" },
-        { value: 30402, label: "Classified Listing (30402)" },
-        { value: 30403, label: "Draft Classified Listing (30403)" },
-        { value: 30617, label: "Repository announcements (30617)" },
-        { value: 30618, label: "Repository state announcements (30618)" },
-        { value: 30818, label: "Wiki article (30818)" },
-        { value: 30819, label: "Redirects (30819)" },
-        { value: 31234, label: "Draft Event (31234)" },
-        { value: 31388, label: "Link Set (31388)" },
-        { value: 31890, label: "Feed (31890)" },
-        { value: 31922, label: "Date-Based Calendar Event (31922)" },
-        { value: 31923, label: "Time-Based Calendar Event (31923)" },
-        { value: 31924, label: "Calendar (31924)" },
-        { value: 31925, label: "Calendar Event RSVP (31925)" },
-        { value: 31989, label: "Handler recommendation (31989)" },
-        { value: 31990, label: "Handler information (31990)" },
-        { value: 32267, label: "Software Application (32267)" },
-        { value: 34550, label: "Community Definition (34550)" },
-        { value: 37516, label: "Geocache listing (37516)" },
-        { value: 38172, label: "Cashu Mint Announcement (38172)" },
-        { value: 38173, label: "Fedimint Announcement (38173)" },
-        { value: 38383, label: "Peer-to-peer Order events (38383)" },
-        { value: 39089, label: "Starter packs (39089)" },
-        { value: 39092, label: "Media starter packs (39092)" },
-        { value: 39701, label: "Web bookmarks (39701)" },
-    ];
-
-    // Kind name mapping based on NIP specification
-    // Matches official Nostr event kinds from https://github.com/nostr-protocol/nips
-    const kindNames = {
-        0: "User Metadata",
-        1: "Short Text Note",
-        2: "Recommend Relay",
-        3: "Follows",
-        4: "Encrypted Direct Messages",
-        5: "Event Deletion Request",
-        6: "Repost",
-        7: "Reaction",
-        8: "Badge Award",
-        9: "Chat Message",
-        10: "Group Chat Threaded Reply",
-        11: "Thread",
-        12: "Group Thread Reply",
-        13: "Seal",
-        14: "Direct Message",
-        15: "File Message",
-        16: "Generic Repost",
-        17: "Reaction to a website",
-        20: "Picture",
-        40: "Channel Creation",
-        41: "Channel Metadata",
-        42: "Channel Message",
-        43: "Channel Hide Message",
-        44: "Channel Mute User",
-        1021: "Bid",
-        1022: "Bid Confirmation",
-        1040: "OpenTimestamps",
-        1063: "File Metadata",
-        1311: "Live Chat Message",
-        1971: "Problem Tracker",
-        1984: "Reporting",
-        1985: "Label",
-        4550: "Community Post Approval",
-        5000: "Job Request",
-        5999: "Job Request",
-        6000: "Job Result",
-        6999: "Job Result",
-        7000: "Job Feedback",
-        9041: "Zap Goal",
-        9734: "Zap Request",
-        9735: "Zap",
-        9882: "Highlights",
-        10000: "Mute list",
-        10001: "Pin list",
-        10002: "Relay List Metadata",
-        10003: "Bookmarks list",
-        10004: "Communities list",
-        10005: "Public Chats list",
-        10006: "Blocked Relays list",
-        10007: "Search Relays list",
-        10015: "Interests",
-        10030: "User Emoji list",
-        10050: "DM relays",
-        10096: "File Storage Server List",
-        13194: "Wallet Service Info",
-        21000: "Lightning pub RPC",
-        22242: "Client Authentication",
-        23194: "Wallet Request",
-        23195: "Wallet Response",
-        23196: "Wallet Notification",
-        23197: "Wallet Notification",
-        24133: "Nostr Connect",
-        27235: "HTTP Auth",
-        30000: "Follow sets",
-        30001: "Generic lists",
-        30002: "Relay sets",
-        30003: "Bookmark sets",
-        30004: "Curation sets",
-        30008: "Profile Badges",
-        30009: "Badge Definition",
-        30015: "Interest sets",
-        30017: "Stall Definition",
-        30018: "Product Definition",
-        30019: "Marketplace UI/UX",
-        30020: "Product sold as an auction",
-        30023: "Long-form Content",
-        30024: "Draft Long-form Content",
-        30030: "Emoji sets",
-        30078: "Application-specific Data",
-        30311: "Live Event",
-        30315: "User Statuses",
-        30402: "Classified Listing",
-        30403: "Draft Classified Listing",
-        31922: "Date-Based Calendar Event",
-        31923: "Time-Based Calendar Event",
-        31924: "Calendar",
-        31925: "Calendar Event RSVP",
-        31989: "Handler recommendation",
-        31990: "Handler information",
-        34235: "Video Event Horizontal",
-        34236: "Video Event Vertical",
-        34550: "Community Definition",
-    };
-
-    function getKindName(kind) {
-        return kindNames[kind] || `Kind ${kind}`;
-    }
-
-    function truncatePubkey(pubkey) {
-        if (!pubkey) return "unknown";
-        return pubkey.slice(0, 8) + "..." + pubkey.slice(-8);
-    }
-
-    function truncateContent(content, maxLength = 100) {
-        if (!content) return "";
-        return content.length > maxLength
-            ? content.slice(0, maxLength) + "..."
-            : content;
-    }
-
-    function formatTimestamp(timestamp) {
-        if (!timestamp) return "";
-        return new Date(timestamp * 1000).toLocaleString();
-    }
+    // Helper functions imported from utils.js:
+    // - getKindName, truncatePubkey, truncateContent, formatTimestamp, escapeHtml, copyToClipboard, showCopyFeedback
 
     function toggleEventExpansion(eventId) {
         if (expandedEvents.has(eventId)) {
@@ -338,47 +143,12 @@
     }
 
     async function copyEventToClipboard(eventData, clickEvent) {
-        try {
-            // Create minified JSON (no indentation)
-            const minifiedJson = JSON.stringify(eventData);
-            await navigator.clipboard.writeText(minifiedJson);
-
-            // Show temporary feedback
-            const button = clickEvent.target.closest(".copy-json-btn");
-            if (button) {
-                const originalText = button.textContent;
-                button.textContent = "✅";
-                button.style.backgroundColor = "#4CAF50";
-                setTimeout(() => {
-                    button.textContent = originalText;
-                    button.style.backgroundColor = "";
-                }, 2000);
-            }
-        } catch (error) {
-            console.error("Failed to copy to clipboard:", error);
-            // Fallback for older browsers
-            try {
-                const textArea = document.createElement("textarea");
-                textArea.value = JSON.stringify(eventData);
-                document.body.appendChild(textArea);
-                textArea.select();
-                document.execCommand("copy");
-                document.body.removeChild(textArea);
-
-                const button = clickEvent.target.closest(".copy-json-btn");
-                if (button) {
-                    const originalText = button.textContent;
-                    button.textContent = "✅";
-                    button.style.backgroundColor = "#4CAF50";
-                    setTimeout(() => {
-                        button.textContent = originalText;
-                        button.style.backgroundColor = "";
-                    }, 2000);
-                }
-            } catch (fallbackError) {
-                console.error("Fallback copy also failed:", fallbackError);
-                alert("Failed to copy to clipboard. Please copy manually.");
-            }
+        const minifiedJson = JSON.stringify(eventData);
+        const success = await copyToClipboard(minifiedJson);
+        const button = clickEvent.target.closest(".copy-json-btn");
+        showCopyFeedback(button, success);
+        if (!success) {
+            alert("Failed to copy to clipboard. Please copy manually.");
         }
     }
 
@@ -736,15 +506,7 @@
         }
     }
 
-    // Safely render "about" text: convert double newlines to a single HTML line break
-    function escapeHtml(str) {
-        return String(str)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#39;");
-    }
+    // escapeHtml is imported from utils.js
 
     // Recovery tab functions
     async function loadRecoveryEvents() {
@@ -4329,8 +4091,10 @@
     /* Recovery Tab Styles */
     .recovery-tab {
         padding: 20px;
+        width: 100%;
         max-width: 1200px;
         margin: 0;
+        box-sizing: border-box;
     }
 
     .recovery-tab h3 {

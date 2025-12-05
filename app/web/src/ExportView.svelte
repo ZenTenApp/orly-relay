@@ -57,7 +57,9 @@
         border-radius: 8px;
         padding: 1em;
         margin: 1em;
-        width: 32em;
+        width: 100%;
+        max-width: 32em;
+        box-sizing: border-box;
         background-color: var(--card-bg);
     }
 
@@ -97,7 +99,9 @@
         background-color: var(--card-bg);
         border-radius: 8px;
         border: 1px solid var(--border-color);
-        width: 32em;
+        width: 100%;
+        max-width: 32em;
+        box-sizing: border-box;
     }
 
     .login-prompt p {

@@ -208,6 +208,15 @@ func (s *Server) UserInterface() {
 					origDirector(req)
 					req.Host = target.Host
 				}
+				// Suppress noisy "context canceled" errors from browser navigation
+				s.devProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+					if r.Context().Err() == context.Canceled {
+						// Browser canceled the request - this is normal, don't log it
+						return
+					}
+					log.Printf("proxy error: %v", err)
+					http.Error(w, "Bad Gateway", http.StatusBadGateway)
+				}
 			}
 		}
 	}
@@ -282,6 +291,12 @@ func (s *Server) handleFavicon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If web UI is disabled without a proxy, return 404
+	if s.Config != nil && s.Config.WebDisableEmbedded {
+		http.NotFound(w, r)
+		return
+	}
+
 	// Serve orly-favicon.png as favicon.ico from embedded web app
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 1 day
@@ -299,6 +314,12 @@ func (s *Server) handleLoginInterface(w http.ResponseWriter, r *http.Request) {
 	// In dev mode with proxy configured, forward to dev server
 	if s.devProxy != nil {
 		s.devProxy.ServeHTTP(w, r)
+		return
+	}
+
+	// If web UI is disabled without a proxy, return 404
+	if s.Config != nil && s.Config.WebDisableEmbedded {
+		http.NotFound(w, r)
 		return
 	}
 

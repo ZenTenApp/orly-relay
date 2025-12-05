@@ -9,6 +9,10 @@ import copy from "rollup-plugin-copy";
 
 const production = !process.env.ROLLUP_WATCH;
 
+// In dev mode, output to public/ so sirv can serve it
+// In production, output to dist/ for embedding
+const outputDir = production ? "dist" : "public";
+
 function serve() {
   let server;
 
@@ -36,7 +40,7 @@ export default {
     sourcemap: true,
     format: "iife",
     name: "app",
-    file: "dist/bundle.js",
+    file: `${outputDir}/bundle.js`,
   },
   plugins: [
     svelte({
@@ -73,8 +77,8 @@ export default {
     // instead of npm run dev), minify
     production && terser(),
 
-    // Copy static files from public to dist
-    copy({
+    // Copy static files from public to dist (only in production)
+    production && copy({
       targets: [
         { src: 'public/index.html', dest: 'dist' },
         { src: 'public/global.css', dest: 'dist' },
