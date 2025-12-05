@@ -12,7 +12,6 @@
     import SprocketView from "./SprocketView.svelte";
     import PolicyView from "./PolicyView.svelte";
     import SearchResultsView from "./SearchResultsView.svelte";
-    import FilterBuilder from "./FilterBuilder.svelte";
     import FilterDisplay from "./FilterDisplay.svelte";
 
     // Utility imports
@@ -56,8 +55,8 @@
     let userSigner = null;
     let showSettingsDrawer = false;
     let selectedTab = localStorage.getItem("selectedTab") || "export";
-    let showFilterBuilder = false; // Show advanced filter builder
-    let searchQuery = "";
+    let showFilterBuilder = false; // Show filter builder in events view
+    let eventsViewFilter = {}; // Active filter for events view
     let searchTabs = [];
     let allEvents = [];
     let selectedFile = null;
@@ -1796,27 +1795,8 @@
         showSettingsDrawer = false;
     }
 
-    function toggleSearchMode() {
+    function toggleFilterBuilder() {
         showFilterBuilder = !showFilterBuilder;
-        if (!showFilterBuilder) {
-            searchQuery = "";
-        }
-    }
-
-    function handleSearchKeydown(event) {
-        if (event.key === "Enter" && searchQuery.trim()) {
-            createSimpleSearchTab(searchQuery.trim());
-            searchQuery = "";
-            showFilterBuilder = false;
-        } else if (event.key === "Escape") {
-            showFilterBuilder = false;
-            searchQuery = "";
-        }
-    }
-
-    function createSimpleSearchTab(query) {
-        const filter = buildFilter({ searchText: query, limit: 100 });
-        createSearchTab(filter, `Search: ${query}`);
     }
 
     function createSearchTab(filter, label) {
@@ -1846,7 +1826,8 @@
 
     function handleFilterApply(event) {
         const { searchText, selectedKinds, pubkeys, eventIds, tags, sinceTimestamp, untilTimestamp, limit } = event.detail;
-        
+
+        // Build the filter for the events view
         const filter = buildFilter({
             searchText,
             kinds: selectedKinds,
@@ -1858,22 +1839,15 @@
             limit: limit || 100,
         });
 
-        let label = "Filter";
-        if (searchText) {
-            label = `Search: ${searchText.substring(0, 20)}${searchText.length > 20 ? '...' : ''}`;
-        } else if (selectedKinds.length > 0) {
-            label = `Kinds: ${selectedKinds.slice(0, 3).join(', ')}${selectedKinds.length > 3 ? '...' : ''}`;
-        } else if (pubkeys.length > 0) {
-            label = `Authors: ${pubkeys.length}`;
-        }
-
-        createSearchTab(filter, label);
-        showFilterBuilder = false;
+        // Store the active filter and reload events with it
+        eventsViewFilter = filter;
+        loadAllEvents(true, null);
     }
 
     function handleFilterClear() {
-        // Just close the filter builder
-        showFilterBuilder = false;
+        // Clear the filter and reload all events
+        eventsViewFilter = {};
+        loadAllEvents(true, null);
     }
 
     function handleFilterSweep(searchTabId) {
@@ -2316,10 +2290,14 @@
                 ? Math.floor(Date.now() / 1000)
                 : oldestEventTimestamp;
 
+            // Merge eventsViewFilter with pagination params
+            // eventsViewFilter takes precedence for authors if set, otherwise use the authors param
+            const filterAuthors = eventsViewFilter.authors || authors;
             const events = await fetchAllEvents({
+                ...eventsViewFilter,
                 limit: reset ? 100 : 200,
-                until: untilTimestamp,
-                authors: authors,
+                until: eventsViewFilter.until || untilTimestamp,
+                authors: filterAuthors,
             });
             console.log("Received events:", events.length, "events");
             if (authors && events.length > 0) {
@@ -2674,31 +2652,15 @@
 <!-- Header -->
 <Header
     {isDarkTheme}
-    isSearchMode={showFilterBuilder}
-    bind:searchQuery
     {isLoggedIn}
     {userRole}
     {currentEffectiveRole}
     {userProfile}
     {userPubkey}
-    on:searchKeydown={handleSearchKeydown}
-    on:toggleSearchMode={toggleSearchMode}
     on:toggleTheme={toggleTheme}
     on:openSettingsDrawer={openSettingsDrawer}
     on:openLoginModal={openLoginModal}
 />
-
-<!-- FilterBuilder - shown when search button is clicked -->
-{#if showFilterBuilder}
-    <div class="filter-builder-overlay">
-        <div class="filter-builder-container">
-            <FilterBuilder
-                on:apply={handleFilterApply}
-                on:clear={handleFilterClear}
-            />
-        </div>
-    </div>
-{/if}
 
 <!-- Main Content Area -->
 <div class="app-container" class:dark-theme={isDarkTheme}>
@@ -2742,6 +2704,7 @@
                 {expandedEvents}
                 {isLoadingEvents}
                 {showOnlyMyEvents}
+                {showFilterBuilder}
                 on:scroll={handleScroll}
                 on:toggleEventExpansion={(e) => toggleEventExpansion(e.detail)}
                 on:deleteEvent={(e) => deleteEvent(e.detail)}
@@ -2750,6 +2713,9 @@
                 on:toggleChange={handleToggleChange}
                 on:loadAllEvents={(e) =>
                     loadAllEvents(e.detail.refresh, e.detail.authors)}
+                on:toggleFilterBuilder={toggleFilterBuilder}
+                on:filterApply={handleFilterApply}
+                on:filterClear={handleFilterClear}
             />
         {:else if selectedTab === "compose"}
             <ComposeView
@@ -3272,9 +3238,12 @@
 />
 
 <style>
+    :global(html),
     :global(body) {
         margin: 0;
         padding: 0;
+        overflow: hidden;
+        height: 100%;
         /* Base colors */
         --bg-color: #ddd;
         --header-bg: #eee;
@@ -4299,43 +4268,5 @@
     :global(body.dark-theme) .event-item.old-version {
         background: var(--header-bg);
         border: none;
-    }
-
-    /* Filter Builder Overlay */
-    .filter-builder-overlay {
-        position: fixed;
-        top: 3.5em; /* Below the header */
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 999;
-        display: flex;
-        justify-content: center;
-        align-items: flex-start;
-        overflow-y: auto;
-        padding: 1em;
-    }
-
-    .filter-builder-container {
-        width: 100%;
-        max-width: 900px;
-        background: var(--bg-color);
-        border-radius: 8px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        margin-top: 2em;
-        max-height: calc(100vh - 7em);
-        overflow-y: auto;
-    }
-
-    @media (max-width: 768px) {
-        .filter-builder-overlay {
-            top: 3em;
-        }
-        
-        .filter-builder-container {
-            margin-top: 0;
-            max-height: calc(100vh - 5em);
-        }
     }
 </style>

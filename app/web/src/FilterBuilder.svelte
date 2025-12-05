@@ -1,7 +1,7 @@
 <script>
-    import { createEventDispatcher } from "svelte";
+    import { createEventDispatcher, onDestroy } from "svelte";
     import { KIND_NAMES, isValidPubkey, isValidEventId, isValidTagName, formatDateTimeLocal, parseDateTimeLocal } from "./helpers.tsx";
-    
+
     const dispatch = createEventDispatcher();
 
     // Filter state
@@ -14,6 +14,11 @@
     export let untilTimestamp = null;
     export let limit = null;
 
+    // JSON editor state
+    export let showJsonEditor = false;
+    let jsonEditorValue = "";
+    let jsonError = "";
+
     // UI state
     let showKindsPicker = false;
     let kindSearchQuery = "";
@@ -24,6 +29,93 @@
     let pubkeyError = "";
     let eventIdError = "";
     let tagNameError = "";
+
+    // Debounce timer
+    let debounceTimer = null;
+    const DEBOUNCE_MS = 1000;
+    let initialized = false;
+
+    onDestroy(() => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+    });
+
+    // Build filter object from current state
+    function buildFilterObject() {
+        const filter = {};
+        if (selectedKinds.length > 0) filter.kinds = selectedKinds;
+        if (pubkeys.length > 0) filter.authors = pubkeys;
+        if (eventIds.length > 0) filter.ids = eventIds;
+        if (sinceTimestamp) filter.since = sinceTimestamp;
+        if (untilTimestamp) filter.until = untilTimestamp;
+        if (limit) filter.limit = limit;
+        if (searchText) filter.search = searchText;
+        // Tags
+        tags.forEach(tag => {
+            const tagKey = `#${tag.name}`;
+            if (!filter[tagKey]) filter[tagKey] = [];
+            filter[tagKey].push(tag.value);
+        });
+        return filter;
+    }
+
+    // Update JSON editor when filter state changes
+    $: if (showJsonEditor) {
+        const filter = buildFilterObject();
+        jsonEditorValue = JSON.stringify(filter, null, 2);
+    }
+
+    // Debounced auto-apply when any filter value changes (skip initial mount)
+    $: {
+        // Track all filter values
+        const _ = [searchText, selectedKinds, pubkeys, eventIds, tags, sinceTimestamp, untilTimestamp, limit];
+        if (initialized) {
+            debouncedApply();
+        } else {
+            initialized = true;
+        }
+    }
+
+    function debouncedApply() {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            applyFilters();
+        }, DEBOUNCE_MS);
+    }
+
+    function applyJsonFilter() {
+        try {
+            const parsed = JSON.parse(jsonEditorValue);
+            jsonError = "";
+
+            // Update state from parsed JSON
+            selectedKinds = parsed.kinds || [];
+            pubkeys = parsed.authors || [];
+            eventIds = parsed.ids || [];
+            sinceTimestamp = parsed.since || null;
+            untilTimestamp = parsed.until || null;
+            limit = parsed.limit || null;
+            searchText = parsed.search || "";
+
+            // Extract tags
+            tags = [];
+            Object.keys(parsed).forEach(key => {
+                if (key.startsWith('#') && key.length === 2) {
+                    const tagName = key.slice(1);
+                    const values = Array.isArray(parsed[key]) ? parsed[key] : [parsed[key]];
+                    values.forEach(value => {
+                        tags.push({ name: tagName, value: String(value) });
+                    });
+                }
+            });
+            tags = tags; // trigger reactivity
+
+            // Apply immediately (skip debounce)
+            if (debounceTimer) clearTimeout(debounceTimer);
+            applyFilters();
+        } catch (e) {
+            jsonError = "Invalid JSON: " + e.message;
+        }
+    }
 
     // Get all available kinds as array
     $: availableKinds = Object.entries(KIND_NAMES).map(([kind, name]) => ({
@@ -168,163 +260,163 @@
 </script>
 
 <div class="filter-builder">
-    <!-- Search text input at top -->
-    <div class="filter-section">
-        <label for="search-text">Search Text (NIP-50)</label>
-        <input
-            id="search-text"
-            type="text"
-            bind:value={searchText}
-            placeholder="Search events..."
-            class="filter-input"
-        />
-    </div>
-
-    <!-- Kinds picker -->
-    <div class="filter-section">
-        <label>Event Kinds</label>
-        <button 
-            class="picker-toggle-btn" 
-            on:click={() => showKindsPicker = !showKindsPicker}
-        >
-            {showKindsPicker ? "▼" : "▶"} Select Kinds ({selectedKinds.length} selected)
-        </button>
-        
-        {#if showKindsPicker}
-            <div class="kinds-picker">
+    <div class="filter-content">
+        <div class="filter-grid">
+            <!-- Search text -->
+            <label for="search-text">Search Text (NIP-50)</label>
+            <div class="field-content">
                 <input
+                    id="search-text"
                     type="text"
-                    bind:value={kindSearchQuery}
-                    placeholder="Search kinds..."
-                    class="filter-input kind-search"
+                    bind:value={searchText}
+                    placeholder="Search events..."
+                    class="filter-input"
                 />
-                <div class="kinds-list">
-                    {#each filteredKinds as { kind, name }}
-                        <label class="kind-checkbox">
-                            <input
-                                type="checkbox"
-                                checked={selectedKinds.includes(kind)}
-                                on:change={() => toggleKind(kind)}
-                            />
-                            <span class="kind-number">{kind}</span>
-                            <span class="kind-name">{name}</span>
-                        </label>
+            </div>
+
+        <!-- Kinds picker -->
+        <label>Event Kinds</label>
+        <div class="field-content">
+            <button
+                class="picker-toggle-btn"
+                on:click={() => showKindsPicker = !showKindsPicker}
+            >
+                {showKindsPicker ? "▼" : "▶"} Select Kinds ({selectedKinds.length} selected)
+            </button>
+
+            {#if showKindsPicker}
+                <div class="kinds-picker">
+                    <input
+                        type="text"
+                        bind:value={kindSearchQuery}
+                        placeholder="Search kinds..."
+                        class="filter-input kind-search"
+                    />
+                    <div class="kinds-list">
+                        {#each filteredKinds as { kind, name }}
+                            <label class="kind-checkbox">
+                                <input
+                                    type="checkbox"
+                                    checked={selectedKinds.includes(kind)}
+                                    on:change={() => toggleKind(kind)}
+                                />
+                                <span class="kind-number">{kind}</span>
+                                <span class="kind-name">{name}</span>
+                            </label>
+                        {/each}
+                    </div>
+                </div>
+            {/if}
+
+            {#if selectedKinds.length > 0}
+                <div class="chips-container">
+                    {#each selectedKinds as kind}
+                        <div class="chip">
+                            <span class="chip-text">{kind}: {KIND_NAMES[kind] || `Kind ${kind}`}</span>
+                            <button class="chip-remove" on:click={() => removeKind(kind)}>×</button>
+                        </div>
                     {/each}
                 </div>
-            </div>
-        {/if}
-        
-        <!-- Selected kinds chips -->
-        {#if selectedKinds.length > 0}
-            <div class="chips-container">
-                {#each selectedKinds as kind}
-                    <div class="chip">
-                        <span class="chip-text">{kind}: {KIND_NAMES[kind] || `Kind ${kind}`}</span>
-                        <button class="chip-remove" on:click={() => removeKind(kind)}>×</button>
-                    </div>
-                {/each}
-            </div>
-        {/if}
-    </div>
+            {/if}
+        </div>
 
-    <!-- Authors/Pubkeys -->
-    <div class="filter-section">
+        <!-- Authors/Pubkeys -->
         <label>Authors (Pubkeys)</label>
-        <div class="input-group">
-            <input
-                type="text"
-                bind:value={newPubkey}
-                placeholder="64 character hex pubkey..."
-                class="filter-input"
-                maxlength="64"
-                on:keydown={(e) => e.key === 'Enter' && addPubkey()}
-            />
-            <button class="add-btn" on:click={addPubkey}>Add</button>
-        </div>
-        {#if pubkeyError}
-            <div class="error-message">{pubkeyError}</div>
-        {/if}
-        {#if pubkeys.length > 0}
-            <div class="list-items">
-                {#each pubkeys as pubkey}
-                    <div class="list-item">
-                        <span class="list-item-text">{pubkey}</span>
-                        <button class="list-item-remove" on:click={() => removePubkey(pubkey)}>×</button>
-                    </div>
-                {/each}
+        <div class="field-content">
+            <div class="input-group">
+                <input
+                    type="text"
+                    bind:value={newPubkey}
+                    placeholder="64 character hex pubkey..."
+                    class="filter-input"
+                    maxlength="64"
+                    on:keydown={(e) => e.key === 'Enter' && addPubkey()}
+                />
+                <button class="add-btn" on:click={addPubkey}>Add</button>
             </div>
-        {/if}
-    </div>
+            {#if pubkeyError}
+                <div class="error-message">{pubkeyError}</div>
+            {/if}
+            {#if pubkeys.length > 0}
+                <div class="list-items">
+                    {#each pubkeys as pubkey}
+                        <div class="list-item">
+                            <span class="list-item-text">{pubkey}</span>
+                            <button class="list-item-remove" on:click={() => removePubkey(pubkey)}>×</button>
+                        </div>
+                    {/each}
+                </div>
+            {/if}
+        </div>
 
-    <!-- Event IDs -->
-    <div class="filter-section">
+        <!-- Event IDs -->
         <label>Event IDs</label>
-        <div class="input-group">
-            <input
-                type="text"
-                bind:value={newEventId}
-                placeholder="64 character hex event ID..."
-                class="filter-input"
-                maxlength="64"
-                on:keydown={(e) => e.key === 'Enter' && addEventId()}
-            />
-            <button class="add-btn" on:click={addEventId}>Add</button>
-        </div>
-        {#if eventIdError}
-            <div class="error-message">{eventIdError}</div>
-        {/if}
-        {#if eventIds.length > 0}
-            <div class="list-items">
-                {#each eventIds as eventId}
-                    <div class="list-item">
-                        <span class="list-item-text">{eventId}</span>
-                        <button class="list-item-remove" on:click={() => removeEventId(eventId)}>×</button>
-                    </div>
-                {/each}
+        <div class="field-content">
+            <div class="input-group">
+                <input
+                    type="text"
+                    bind:value={newEventId}
+                    placeholder="64 character hex event ID..."
+                    class="filter-input"
+                    maxlength="64"
+                    on:keydown={(e) => e.key === 'Enter' && addEventId()}
+                />
+                <button class="add-btn" on:click={addEventId}>Add</button>
             </div>
-        {/if}
-    </div>
-
-    <!-- Tags -->
-    <div class="filter-section">
-        <label>Tags (e.g., #e, #p, #a)</label>
-        <div class="tag-input-group">
-            <span class="hash-prefix">#</span>
-            <input
-                type="text"
-                bind:value={newTagName}
-                placeholder="Tag"
-                class="filter-input tag-name-input"
-                maxlength="1"
-            />
-            <input
-                type="text"
-                bind:value={newTagValue}
-                placeholder="Value..."
-                class="filter-input tag-value-input"
-                on:keydown={(e) => e.key === 'Enter' && addTag()}
-            />
-            <button class="add-btn" on:click={addTag}>Add</button>
+            {#if eventIdError}
+                <div class="error-message">{eventIdError}</div>
+            {/if}
+            {#if eventIds.length > 0}
+                <div class="list-items">
+                    {#each eventIds as eventId}
+                        <div class="list-item">
+                            <span class="list-item-text">{eventId}</span>
+                            <button class="list-item-remove" on:click={() => removeEventId(eventId)}>×</button>
+                        </div>
+                    {/each}
+                </div>
+            {/if}
         </div>
-        {#if tagNameError}
-            <div class="error-message">{tagNameError}</div>
-        {/if}
-        {#if tags.length > 0}
-            <div class="list-items">
-                {#each tags as tag, index}
-                    <div class="list-item">
-                        <span class="list-item-text">#{tag.name}: {tag.value}</span>
-                        <button class="list-item-remove" on:click={() => removeTag(index)}>×</button>
-                    </div>
-                {/each}
-            </div>
-        {/if}
-    </div>
 
-    <!-- Since/Until timestamps -->
-    <div class="filter-section timestamps-section">
-        <div class="timestamp-field">
-            <label for="since-timestamp">Since</label>
+        <!-- Tags -->
+        <label>Tags (#e, #p, #a)</label>
+        <div class="field-content">
+            <div class="tag-input-group">
+                <span class="hash-prefix">#</span>
+                <input
+                    type="text"
+                    bind:value={newTagName}
+                    placeholder="Tag"
+                    class="filter-input tag-name-input"
+                    maxlength="1"
+                />
+                <input
+                    type="text"
+                    bind:value={newTagValue}
+                    placeholder="Value..."
+                    class="filter-input tag-value-input"
+                    on:keydown={(e) => e.key === 'Enter' && addTag()}
+                />
+                <button class="add-btn" on:click={addTag}>Add</button>
+            </div>
+            {#if tagNameError}
+                <div class="error-message">{tagNameError}</div>
+            {/if}
+            {#if tags.length > 0}
+                <div class="list-items">
+                    {#each tags as tag, index}
+                        <div class="list-item">
+                            <span class="list-item-text">#{tag.name}: {tag.value}</span>
+                            <button class="list-item-remove" on:click={() => removeTag(index)}>×</button>
+                        </div>
+                    {/each}
+                </div>
+            {/if}
+        </div>
+
+        <!-- Since timestamp -->
+        <label for="since-timestamp">Since</label>
+        <div class="field-content timestamp-field">
             <input
                 id="since-timestamp"
                 type="datetime-local"
@@ -336,9 +428,10 @@
                 <button class="clear-timestamp-btn" on:click={() => sinceTimestamp = null}>×</button>
             {/if}
         </div>
-        
-        <div class="timestamp-field">
-            <label for="until-timestamp">Until</label>
+
+        <!-- Until timestamp -->
+        <label for="until-timestamp">Until</label>
+        <div class="field-content timestamp-field">
             <input
                 id="until-timestamp"
                 type="datetime-local"
@@ -350,25 +443,48 @@
                 <button class="clear-timestamp-btn" on:click={() => untilTimestamp = null}>×</button>
             {/if}
         </div>
-    </div>
 
-    <!-- Limit -->
-    <div class="filter-section">
-        <label for="limit">Limit (optional)</label>
-        <input
-            id="limit"
-            type="number"
-            bind:value={limit}
-            placeholder="Max events to return"
-            class="filter-input"
-            min="1"
-        />
-    </div>
+        <!-- Limit -->
+        <label for="limit">Limit</label>
+        <div class="field-content">
+            <input
+                id="limit"
+                type="number"
+                bind:value={limit}
+                placeholder="Max events to return"
+                class="filter-input"
+                min="1"
+            />
+        </div>
 
-    <!-- Action buttons -->
-    <div class="filter-actions">
-        <button class="apply-btn" on:click={applyFilters}>🔍 Apply Filters</button>
-        <button class="clear-btn" on:click={clearAllFilters}>🧹 Clear All</button>
+        <!-- JSON Editor (shown when toggled) - spans both columns -->
+        {#if showJsonEditor}
+            <div class="json-editor-section">
+                <label for="json-editor">Filter JSON</label>
+                <textarea
+                    id="json-editor"
+                    class="json-editor"
+                    bind:value={jsonEditorValue}
+                    placeholder={'{"kinds": [1], "limit": 100}'}
+                    rows="8"
+                ></textarea>
+                {#if jsonError}
+                    <div class="json-error">{jsonError}</div>
+                {/if}
+                <button class="apply-json-btn" on:click={applyJsonFilter}>Apply JSON</button>
+            </div>
+        {/if}
+        </div>
+    </div>
+    <div class="clear-column">
+        <button class="clear-all-btn" on:click={clearAllFilters} title="Clear all filters">🧹</button>
+        <div class="spacer"></div>
+        <button
+            class="json-toggle-btn"
+            class:active={showJsonEditor}
+            on:click={() => dispatch("toggleJson")}
+            title="Edit filter JSON"
+        >&lt;/&gt;</button>
     </div>
 </div>
 
@@ -377,18 +493,84 @@
         padding: 1em;
         background: var(--bg-color);
         border-bottom: 1px solid var(--border-color);
+        display: flex;
+        gap: 1em;
     }
 
-    .filter-section {
-        margin-bottom: 1.25em;
+    .filter-content {
+        flex: 1;
+        min-width: 0;
     }
 
-    .filter-section label {
-        display: block;
-        margin-bottom: 0.5em;
+    .clear-column {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5em;
+        flex-shrink: 0;
+        width: 2.5em;
+    }
+
+    .clear-column .spacer {
+        flex: 1;
+    }
+
+    .clear-all-btn,
+    .json-toggle-btn {
+        background: var(--secondary);
+        color: var(--text-color);
+        border: none;
+        padding: 0;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1em;
+        transition: filter 0.2s, background-color 0.2s;
+        width: 100%;
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+    }
+
+    .clear-all-btn {
+        background: var(--danger);
+    }
+
+    .clear-all-btn:hover {
+        filter: brightness(1.2);
+    }
+
+    .json-toggle-btn {
+        font-family: monospace;
+        font-weight: 600;
+        background: var(--primary);
+    }
+
+    .json-toggle-btn:hover {
+        background: var(--accent-hover-color);
+    }
+
+    .json-toggle-btn.active {
+        background: var(--accent-hover-color);
+    }
+
+    .filter-grid {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.5em 1em;
+        align-items: start;
+    }
+
+    .filter-grid > label {
         font-weight: 600;
         color: var(--text-color);
         font-size: 0.9em;
+        padding-top: 0.6em;
+        white-space: nowrap;
+    }
+
+    .field-content {
+        min-width: 0;
     }
 
     .filter-input {
@@ -491,14 +673,17 @@
         align-items: center;
         background: var(--primary);
         color: var(--text-color);
-        padding: 0.3em 0.6em;
-        border-radius: 16px;
-        font-size: 0.85em;
-        gap: 0.5em;
+        padding: 0.2em 0.5em;
+        border-radius: 0.5em;
+        font-size: 0.7em;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        gap: 0.4em;
     }
 
     .chip-text {
-        font-weight: 500;
+        line-height: 1;
     }
 
     .chip-remove {
@@ -507,7 +692,7 @@
         color: var(--text-color);
         cursor: pointer;
         padding: 0;
-        font-size: 1.2em;
+        font-size: 1em;
         line-height: 1;
         opacity: 0.8;
         transition: opacity 0.2s;
@@ -610,20 +795,18 @@
         flex: 1;
     }
 
-    .timestamps-section {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1em;
-    }
-
     .timestamp-field {
         position: relative;
+        display: flex;
+        align-items: center;
+        gap: 0.5em;
+    }
+
+    .timestamp-field .filter-input {
+        flex: 1;
     }
 
     .clear-timestamp-btn {
-        position: absolute;
-        right: 0.5em;
-        top: 2em;
         background: var(--danger);
         color: var(--text-color);
         border: none;
@@ -633,56 +816,79 @@
         font-size: 1em;
         line-height: 1;
         transition: background-color 0.2s;
+        flex-shrink: 0;
     }
 
     .clear-timestamp-btn:hover {
         filter: brightness(0.9);
     }
 
-    .filter-actions {
-        display: flex;
-        gap: 1em;
+    .json-editor-section {
+        grid-column: 1 / -1;
+        margin-top: 0.5em;
         padding-top: 1em;
         border-top: 1px solid var(--border-color);
     }
 
-    .apply-btn,
-    .clear-btn {
-        flex: 1;
-        padding: 0.75em 1em;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 1em;
+    .json-editor-section label {
+        display: block;
         font-weight: 600;
-        transition: all 0.2s;
+        color: var(--text-color);
+        font-size: 0.9em;
+        margin-bottom: 0.5em;
     }
 
-    .apply-btn {
+    .json-editor {
+        width: 100%;
+        padding: 0.6em;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: var(--input-bg);
+        color: var(--input-text-color);
+        font-family: monospace;
+        font-size: 0.85em;
+        resize: vertical;
+        box-sizing: border-box;
+    }
+
+    .json-editor:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.15);
+    }
+
+    .json-error {
+        color: var(--danger);
+        font-size: 0.85em;
+        margin-top: 0.25em;
+    }
+
+    .apply-json-btn {
+        margin-top: 0.5em;
         background: var(--primary);
         color: var(--text-color);
+        border: none;
+        padding: 0.5em 1em;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9em;
+        font-weight: 600;
+        transition: background-color 0.2s;
     }
 
-    .apply-btn:hover {
+    .apply-json-btn:hover {
         background: var(--accent-hover-color);
-        transform: translateY(-1px);
-        box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
-    }
-
-    .clear-btn {
-        background: var(--secondary);
-        color: var(--text-color);
-    }
-
-    .clear-btn:hover {
-        background: var(--danger);
-        transform: translateY(-1px);
     }
 
     /* Responsive design */
     @media (max-width: 768px) {
-        .timestamps-section {
+        .filter-grid {
             grid-template-columns: 1fr;
+        }
+
+        .filter-grid > label {
+            padding-top: 0;
+            padding-bottom: 0.25em;
         }
     }
 </style>

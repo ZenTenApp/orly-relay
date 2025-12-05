@@ -1,7 +1,5 @@
 <script>
     export let isDarkTheme = false;
-    export let isSearchMode = false;
-    export let searchQuery = "";
     export let isLoggedIn = false;
     export let userRole = "";
     export let currentEffectiveRole = "";
@@ -11,14 +9,6 @@
     // Event dispatchers
     import { createEventDispatcher } from "svelte";
     const dispatch = createEventDispatcher();
-
-    function handleSearchKeydown(event) {
-        dispatch("searchKeydown", event);
-    }
-
-    function toggleSearchMode() {
-        dispatch("toggleSearchMode");
-    }
 
     function toggleTheme() {
         dispatch("toggleTheme");
@@ -36,30 +26,17 @@
 <header class="main-header" class:dark-theme={isDarkTheme}>
     <div class="header-content">
         <img src="/orly.png" alt="ORLY Logo" class="logo" />
-        {#if isSearchMode}
-            <div class="search-input-container">
-                <input
-                    type="text"
-                    class="search-input"
-                    bind:value={searchQuery}
-                    on:keydown={handleSearchKeydown}
-                    placeholder="Search..."
-                />
-            </div>
-        {:else}
-            <div class="header-title">
-                <span class="app-title">
-                    ORLY? dashboard
-                    {#if isLoggedIn && userRole}
-                        <span class="permission-badge"
-                            >{currentEffectiveRole}</span
-                        >
-                    {/if}
-                </span>
-            </div>
-        {/if}
+        <div class="header-title">
+            <span class="app-title">
+                ORLY? dashboard
+                {#if isLoggedIn && userRole}
+                    <span class="permission-badge"
+                        >{currentEffectiveRole}</span
+                    >
+                {/if}
+            </span>
+        </div>
         <div class="header-buttons">
-            <button class="search-btn" on:click={toggleSearchMode}> 🔍 </button>
             <button class="theme-toggle-btn" on:click={toggleTheme}>
                 {isDarkTheme ? "☀️" : "🌙"}
             </button>
@@ -142,27 +119,6 @@
         letter-spacing: 0.5px;
     }
 
-    .search-input-container {
-        flex: 1;
-        max-width: 400px;
-    }
-
-    .search-input {
-        width: 100%;
-        padding: 0.5em 1em;
-        border: 1px solid var(--border-color);
-        border-radius: 1.5em;
-        background: var(--input-bg);
-        color: var(--input-text-color);
-        font-size: 0.9em;
-    }
-
-    .search-input:focus {
-        outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
-    }
-
     .header-buttons {
         display: flex;
         align-items: center;
@@ -170,7 +126,6 @@
         margin-left: auto;
     }
 
-    .search-btn,
     .theme-toggle-btn,
     .login-btn,
     .user-profile-btn {
@@ -189,7 +144,6 @@
         justify-content: center;
     }
 
-    .search-btn:hover,
     .theme-toggle-btn:hover,
     .login-btn:hover,
     .user-profile-btn:hover {

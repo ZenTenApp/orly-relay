@@ -6,9 +6,14 @@
     export let expandedEvents = new Set();
     export let isLoadingEvents = false;
     export let showOnlyMyEvents = false;
+    export let showFilterBuilder = false;
 
     import { createEventDispatcher } from "svelte";
+    import FilterBuilder from "./FilterBuilder.svelte";
     const dispatch = createEventDispatcher();
+
+    // Local state for JSON editor toggle
+    let showJsonEditor = false;
 
     function handleScroll(event) {
         dispatch("scroll", event);
@@ -32,6 +37,22 @@
 
     function loadAllEvents(refresh, authors) {
         dispatch("loadAllEvents", { refresh, authors });
+    }
+
+    function toggleFilterBuilder() {
+        dispatch("toggleFilterBuilder");
+    }
+
+    function toggleJsonEditor() {
+        showJsonEditor = !showJsonEditor;
+    }
+
+    function handleFilterApply(event) {
+        dispatch("filterApply", event.detail);
+    }
+
+    function handleFilterClear() {
+        dispatch("filterClear");
     }
 
     function truncatePubkey(pubkey) {
@@ -218,49 +239,72 @@
         </div>
     {/if}
     {#if isLoggedIn && (userRole === "read" || userRole === "write" || userRole === "admin" || userRole === "owner")}
-        <div class="events-view-header">
-            <div class="events-view-toggle">
-                <label class="toggle-container">
-                    <input
-                        type="checkbox"
-                        bind:checked={showOnlyMyEvents}
-                        on:change={() => handleToggleChange()}
-                    />
-                    <span class="toggle-slider"></span>
-                    <span class="toggle-label">Only show my events</span>
-                </label>
+        <div class="events-view-footer">
+            <!-- Filter Builder Slide-up Panel -->
+            <div class="filter-panel" class:open={showFilterBuilder}>
+                <FilterBuilder
+                    {showJsonEditor}
+                    on:apply={handleFilterApply}
+                    on:clear={handleFilterClear}
+                    on:toggleJson={toggleJsonEditor}
+                />
             </div>
-            <div class="events-view-buttons">
-                <button
-                    class="refresh-btn"
-                    on:click={() => {
-                        const authors =
-                            showOnlyMyEvents && userPubkey
-                                ? [userPubkey]
-                                : null;
-                        loadAllEvents(false, authors);
-                    }}
-                    disabled={isLoadingEvents}
-                >
-                    🔄 Load More
-                </button>
-                <button
-                    class="reload-btn"
-                    on:click={() => {
-                        const authors =
-                            showOnlyMyEvents && userPubkey
-                                ? [userPubkey]
-                                : null;
-                        loadAllEvents(true, authors);
-                    }}
-                    disabled={isLoadingEvents}
-                >
-                    {#if isLoadingEvents}
-                        <div class="spinner"></div>
-                    {:else}
-                        🔄
-                    {/if}
-                </button>
+            <div class="events-view-header">
+                <div class="events-view-left">
+                    <button
+                        class="filter-btn"
+                        class:active={showFilterBuilder}
+                        on:click={toggleFilterBuilder}
+                        title="Filter events"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                        </svg>
+                    </button>
+                    <div class="events-view-toggle">
+                        <label class="toggle-container">
+                            <input
+                                type="checkbox"
+                                bind:checked={showOnlyMyEvents}
+                                on:change={() => handleToggleChange()}
+                            />
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Only show my events</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="events-view-buttons">
+                    <button
+                        class="refresh-btn"
+                        on:click={() => {
+                            const authors =
+                                showOnlyMyEvents && userPubkey
+                                    ? [userPubkey]
+                                    : null;
+                            loadAllEvents(false, authors);
+                        }}
+                        disabled={isLoadingEvents}
+                    >
+                        🔄 Load More
+                    </button>
+                    <button
+                        class="reload-btn"
+                        on:click={() => {
+                            const authors =
+                                showOnlyMyEvents && userPubkey
+                                    ? [userPubkey]
+                                    : null;
+                            loadAllEvents(true, authors);
+                        }}
+                        disabled={isLoadingEvents}
+                    >
+                        {#if isLoadingEvents}
+                            <div class="spinner"></div>
+                        {:else}
+                            🔄
+                        {/if}
+                    </button>
+                </div>
             </div>
         </div>
     {/if}
@@ -279,6 +323,35 @@
         flex: 1;
         overflow-y: auto;
         padding: 0;
+    }
+
+    /* Custom scrollbar styling */
+    .events-view-content::-webkit-scrollbar {
+        width: 16px;
+        background: var(--bg-color);
+    }
+
+    .events-view-content::-webkit-scrollbar-track {
+        background: var(--bg-color);
+    }
+
+    .events-view-content::-webkit-scrollbar-thumb {
+        background: var(--text-color);
+        border-radius: 9999px;
+        border: 4px solid var(--bg-color);
+    }
+
+    .events-view-content::-webkit-scrollbar-thumb:hover {
+        background: var(--text-color);
+        filter: brightness(1.2);
+    }
+
+    .events-view-content::-webkit-scrollbar-button {
+        background: var(--text-color);
+        height: 8px;
+        border: 4px solid var(--bg-color);
+        border-radius: 9999px;
+        background-clip: padding-box;
     }
 
     .events-view-item {
@@ -490,6 +563,11 @@
         color: var(--text-color);
     }
 
+    .events-view-footer {
+        position: relative;
+        flex-shrink: 0;
+    }
+
     .events-view-header {
         display: flex;
         justify-content: space-between;
@@ -602,5 +680,93 @@
         animation: spin 1s linear infinite;
         margin: 0;
         box-sizing: border-box;
+    }
+
+    .events-view-left {
+        display: flex;
+        align-items: center;
+        gap: 0.75em;
+    }
+
+    .filter-btn {
+        background: var(--primary);
+        color: var(--text-color);
+        border: none;
+        padding: 0.4em;
+        border-radius: 4px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.2s;
+        width: 2.2em;
+        height: 2.2em;
+        box-sizing: border-box;
+    }
+
+    .filter-btn:hover {
+        background: var(--accent-hover-color);
+    }
+
+    .filter-btn.active {
+        background: var(--accent-hover-color);
+    }
+
+    .filter-btn svg {
+        width: 1em;
+        height: 1em;
+    }
+
+    .filter-panel {
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        right: 0;
+        background: var(--bg-color);
+        border-top: 1px solid var(--border-color);
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+        z-index: 100;
+        /* Account for scrollbar width in events-view-content */
+        padding-right: 16px;
+        box-sizing: border-box;
+        /* Flex column-reverse makes content anchor to top and grow downward */
+        display: flex;
+        flex-direction: column-reverse;
+    }
+
+    .filter-panel.open {
+        max-height: 60vh;
+        overflow-y: auto;
+    }
+
+    /* Custom scrollbar for filter panel */
+    .filter-panel::-webkit-scrollbar {
+        width: 16px;
+        background: var(--bg-color);
+    }
+
+    .filter-panel::-webkit-scrollbar-track {
+        background: var(--bg-color);
+    }
+
+    .filter-panel::-webkit-scrollbar-thumb {
+        background: var(--text-color);
+        border-radius: 9999px;
+        border: 4px solid var(--bg-color);
+    }
+
+    .filter-panel::-webkit-scrollbar-thumb:hover {
+        background: var(--text-color);
+        filter: brightness(1.2);
+    }
+
+    .filter-panel::-webkit-scrollbar-button {
+        background: var(--text-color);
+        height: 8px;
+        border: 4px solid var(--bg-color);
+        border-radius: 9999px;
+        background-clip: padding-box;
     }
 </style>
