@@ -850,66 +850,59 @@ func (d *D) ConvertToCompactEventFormat() {
 		return
 	}
 
-	// Second pass: convert in batches
-	const batchSize = 500
-	for i := 0; i < len(migrations); i += batchSize {
-		end := i + batchSize
-		if end > len(migrations) {
-			end = len(migrations)
-		}
-		batch := migrations[i:end]
-
+	// Process each event individually to avoid transaction size limits
+	// Some events (like kind 3 follow lists) can be very large
+	for i, m := range migrations {
 		if err = d.Update(func(txn *badger.Txn) error {
-			for _, m := range batch {
-				// Decode the legacy event
-				ev := new(event.E)
-				if err = ev.UnmarshalBinary(bytes.NewBuffer(m.OldData)); chk.E(err) {
-					log.W.F("migration: failed to decode event serial %d: %v", m.Serial, err)
-					continue
-				}
-
-				// Store SerialEventId mapping
-				if err = d.StoreEventIdSerial(txn, m.Serial, m.EventId); chk.E(err) {
-					log.W.F("migration: failed to store event ID mapping for serial %d: %v", m.Serial, err)
-					continue
-				}
-
-				// Encode in compact format
-				compactData, encErr := MarshalCompactEvent(ev, resolver)
-				if encErr != nil {
-					log.W.F("migration: failed to encode compact event for serial %d: %v", m.Serial, encErr)
-					continue
-				}
-
-				// Store compact event
-				ser := new(types.Uint40)
-				if err = ser.Set(m.Serial); chk.E(err) {
-					continue
-				}
-				cmpKey := new(bytes.Buffer)
-				if err = indexes.CompactEventEnc(ser).MarshalWrite(cmpKey); chk.E(err) {
-					continue
-				}
-				if err = txn.Set(cmpKey.Bytes(), compactData); chk.E(err) {
-					log.W.F("migration: failed to store compact event for serial %d: %v", m.Serial, err)
-					continue
-				}
-
-				// Track savings
-				savedBytes += int64(len(m.OldData) - len(compactData))
-				processedCount++
-
-				// Cache the mappings
-				d.serialCache.CacheEventId(m.Serial, m.EventId)
+			// Decode the legacy event
+			ev := new(event.E)
+			if err = ev.UnmarshalBinary(bytes.NewBuffer(m.OldData)); chk.E(err) {
+				log.W.F("migration: failed to decode event serial %d: %v", m.Serial, err)
+				return nil // Continue with next event
 			}
+
+			// Store SerialEventId mapping
+			if err = d.StoreEventIdSerial(txn, m.Serial, m.EventId); chk.E(err) {
+				log.W.F("migration: failed to store event ID mapping for serial %d: %v", m.Serial, err)
+				return nil // Continue with next event
+			}
+
+			// Encode in compact format
+			compactData, encErr := MarshalCompactEvent(ev, resolver)
+			if encErr != nil {
+				log.W.F("migration: failed to encode compact event for serial %d: %v", m.Serial, encErr)
+				return nil // Continue with next event
+			}
+
+			// Store compact event
+			ser := new(types.Uint40)
+			if err = ser.Set(m.Serial); chk.E(err) {
+				return nil // Continue with next event
+			}
+			cmpKey := new(bytes.Buffer)
+			if err = indexes.CompactEventEnc(ser).MarshalWrite(cmpKey); chk.E(err) {
+				return nil // Continue with next event
+			}
+			if err = txn.Set(cmpKey.Bytes(), compactData); chk.E(err) {
+				log.W.F("migration: failed to store compact event for serial %d: %v", m.Serial, err)
+				return nil // Continue with next event
+			}
+
+			// Track savings
+			savedBytes += int64(len(m.OldData) - len(compactData))
+			processedCount++
+
+			// Cache the mappings
+			d.serialCache.CacheEventId(m.Serial, m.EventId)
 			return nil
 		}); chk.E(err) {
-			log.W.F("batch migration failed: %v", err)
+			log.W.F("migration failed for event %d: %v", m.Serial, err)
 			continue
 		}
 
-		if (i/batchSize)%10 == 0 && i > 0 {
-			log.I.F("migration progress: %d/%d events converted", i, len(migrations))
+		// Log progress every 1000 events
+		if (i+1)%1000 == 0 {
+			log.I.F("migration progress: %d/%d events converted", i+1, len(migrations))
 		}
 	}
 

@@ -12,7 +12,8 @@
       "Write:*",
       "Bash(go build:*)",
       "Bash(go test:*)",
-      "Bash(./scripts/test.sh:*)"
+      "Bash(./scripts/test.sh:*)",
+      "Bash(./scripts/update-embedded-web.sh:*)"
     ],
     "deny": [],
     "ask": []

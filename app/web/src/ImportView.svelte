@@ -3,6 +3,7 @@
     export let currentEffectiveRole = "";
     export let selectedFile = null;
     export let aclMode = "";
+    export let importMessage = "";
 
     import { createEventDispatcher } from "svelte";
     const dispatch = createEventDispatcher();
@@ -34,13 +35,18 @@
                 accept=".jsonl,.txt"
                 on:change={handleFileSelect}
             />
-            <button
-                class="import-btn"
-                on:click={importEvents}
-                disabled={!selectedFile}
-            >
-                Import Events
-            </button>
+            <div class="import-row">
+                <button
+                    class="import-btn"
+                    on:click={importEvents}
+                    disabled={!selectedFile || importMessage === "Uploading..."}
+                >
+                    Import Events
+                </button>
+                {#if importMessage}
+                    <span class="import-message" class:uploading={importMessage === "Uploading..."} class:success={importMessage === "Upload complete"} class:error={importMessage.startsWith("Import failed") || importMessage.startsWith("Admin") || importMessage.startsWith("Please")}>{importMessage}</span>
+                {/if}
+            </div>
         </div>
     {:else if isLoggedIn}
         <div class="permission-denied">
@@ -120,6 +126,30 @@
     .import-btn:disabled {
         background-color: var(--secondary);
         cursor: not-allowed;
+    }
+
+    .import-row {
+        display: flex;
+        align-items: center;
+        gap: 1em;
+    }
+
+    .import-message {
+        font-size: 0.9em;
+        padding: 0.25em 0.5em;
+        border-radius: 0.25em;
+    }
+
+    .import-message.uploading {
+        color: var(--primary);
+    }
+
+    .import-message.success {
+        color: #4caf50;
+    }
+
+    .import-message.error {
+        color: #f44336;
     }
 
     .permission-denied,

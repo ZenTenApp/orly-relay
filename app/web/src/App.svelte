@@ -53,6 +53,7 @@
     let searchTabs = [];
     let allEvents = [];
     let selectedFile = null;
+    let importMessage = ""; // Message shown after import completes
     let expandedEvents = new Set();
     let isLoadingEvents = false;
     let hasMoreEvents = true;
@@ -2356,22 +2357,28 @@
 
     // Import functionality
     function handleFileSelect(event) {
-        selectedFile = event.target.files[0];
+        // event.detail contains the original DOM event from the child component
+        selectedFile = event.detail.target.files[0];
     }
 
     async function importEvents() {
         // Skip login/permission check when ACL is "none" (open relay mode)
         if (aclMode !== "none" && (!isLoggedIn || (userRole !== "admin" && userRole !== "owner"))) {
-            alert("Admin or owner permission required");
+            importMessage = "Admin or owner permission required";
+            setTimeout(() => { importMessage = ""; }, 5000);
             return;
         }
 
         if (!selectedFile) {
-            alert("Please select a file");
+            importMessage = "Please select a file";
+            setTimeout(() => { importMessage = ""; }, 5000);
             return;
         }
 
         try {
+            // Show uploading message
+            importMessage = "Uploading...";
+
             // Build headers - only include auth when ACL is not "none"
             const headers = {};
             if (aclMode !== "none" && isLoggedIn) {
@@ -2396,12 +2403,15 @@
             }
 
             const result = await response.json();
-            alert("Import started successfully");
+            importMessage = "Upload complete";
             selectedFile = null;
             document.getElementById("import-file").value = "";
+            // Clear message after 5 seconds
+            setTimeout(() => { importMessage = ""; }, 5000);
         } catch (error) {
             console.error("Import failed:", error);
-            alert("Import failed: " + error.message);
+            importMessage = "Import failed: " + error.message;
+            setTimeout(() => { importMessage = ""; }, 5000);
         }
     }
 
@@ -2952,6 +2962,7 @@
                 {currentEffectiveRole}
                 {selectedFile}
                 {aclMode}
+                {importMessage}
                 on:fileSelect={handleFileSelect}
                 on:importEvents={importEvents}
                 on:openLoginModal={openLoginModal}
