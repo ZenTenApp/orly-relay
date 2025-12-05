@@ -8,11 +8,11 @@ ORLY is a high-performance Nostr relay written in Go, designed for personal rela
 
 **Key Technologies:**
 - **Language**: Go 1.25.3+
-- **Database**: Badger v4 (embedded) or Neo4j (social graph)
+- **Database**: Badger v4 (embedded), Neo4j (social graph), or WasmDB (IndexedDB for WebAssembly)
 - **Cryptography**: Custom p8k library using purego for secp256k1 operations (no CGO)
 - **Web UI**: Svelte frontend embedded in the binary
 - **WebSocket**: gorilla/websocket for Nostr protocol
-- **Performance**: SIMD-accelerated SHA256 and hex encoding, query result caching with zstd compression
+- **Performance**: SIMD-accelerated SHA256 and hex encoding, optional query result caching with zstd compression
 - **Social Graph**: Neo4j backend with Web of Trust (WoT) extensions for trust metrics
 
 ## Build Commands
@@ -123,6 +123,13 @@ export ORLY_PORT=3334
 ./orly identity
 ```
 
+### Get Version
+```bash
+# Print version and exit
+./orly version
+# Also accepts: -v, --v, -version, --version
+```
+
 ### Common Configuration
 ```bash
 # TLS with Let's Encrypt
@@ -140,7 +147,7 @@ export ORLY_SPROCKET_ENABLED=true
 # Enable policy system
 export ORLY_POLICY_ENABLED=true
 
-# Database backend selection (badger or neo4j)
+# Database backend selection (badger, neo4j, or wasmdb)
 export ORLY_DB_TYPE=badger
 
 # Neo4j configuration (only when ORLY_DB_TYPE=neo4j)
@@ -148,8 +155,9 @@ export ORLY_NEO4J_URI=bolt://localhost:7687
 export ORLY_NEO4J_USER=neo4j
 export ORLY_NEO4J_PASSWORD=password
 
-# Query cache configuration (improves REQ response times)
-export ORLY_QUERY_CACHE_SIZE_MB=512      # Default: 512MB
+# Query cache configuration (disabled by default to reduce memory usage)
+export ORLY_QUERY_CACHE_DISABLED=false   # Set to false to enable caching
+export ORLY_QUERY_CACHE_SIZE_MB=512      # Cache size when enabled
 export ORLY_QUERY_CACHE_MAX_AGE=5m       # Cache expiry time
 
 # Database cache tuning (for Badger backend)
@@ -200,8 +208,9 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
 
 **`pkg/database/`** - Database abstraction layer with multiple backend support
 - `interface.go` - Database interface definition for pluggable backends
-- `factory.go` - Database backend selection (Badger or Neo4j)
-- `database.go` - Badger implementation with cache tuning and query cache
+- `factory.go` - Database backend selection (Badger, Neo4j, or WasmDB)
+- `factory_wasm.go` - WebAssembly-specific factory (build tag: `js && wasm`)
+- `database.go` - Badger implementation with cache tuning and optional query cache
 - `save-event.go` - Event storage with index updates
 - `query-events.go` - Main query execution engine with filter normalization
 - `query-for-*.go` - Specialized query builders for different filter patterns
@@ -210,6 +219,14 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
 - `subscriptions.go` - Active subscription tracking
 - `identity.go` - Relay identity key management
 - `migrations.go` - Database schema migration runner
+
+**`pkg/wasmdb/`** - WebAssembly IndexedDB database backend
+- `wasmdb.go` - Main WasmDB implementation using IndexedDB
+- Uses `aperturerobotics/go-indexeddb` for IndexedDB bindings
+- Replicates Badger's index schema for full query compatibility
+- Object stores map to index prefixes (evt, eid, kc-, pc-, etc.)
+- Range queries use IndexedDB cursors with KeyRange bounds
+- Build tag: `js && wasm`
 
 **`pkg/neo4j/`** - Neo4j graph database backend with social graph support
 - `neo4j.go` - Main database implementation
@@ -274,6 +291,8 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
   - `write_allow` / `write_deny`: Pubkey whitelist/blacklist for writing (write-only)
   - `read_allow` / `read_deny`: Pubkey whitelist/blacklist for reading (read-only)
   - `privileged`: Party-involved access control (read-only)
+  - `read_allow_permissive`: Override kind whitelist for READ access (global rule only)
+  - `write_allow_permissive`: Override kind whitelist for WRITE access (global rule only)
 - See `docs/POLICY_USAGE_GUIDE.md` for configuration examples
 - See `pkg/policy/README.md` for quick reference
 
@@ -300,7 +319,8 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
 **Web UI (`app/web/`):**
 - Svelte-based admin interface
 - Embedded in binary via `go:embed`
-- Features: event browser, sprocket management, policy management, user admin, settings
+- Features: event browser with advanced filtering, sprocket management, policy management, user admin, settings
+- **Event Browser:** Enhanced filter system with kind, author, tag, and time range filters (replaced simple search)
 - **Policy Management Tab:** JSON editor with validation, save publishes kind 12345 event
 
 **Command-line Tools (`cmd/`):**
@@ -328,6 +348,11 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
   - NostrUser nodes with trust metrics (influence, PageRank)
   - FOLLOWS, MUTES, REPORTS relationships for WoT analysis
   - See `pkg/neo4j/WOT_SPEC.md` for full schema specification
+- **WasmDB**: IndexedDB backend for WebAssembly builds
+  - Enables running ORLY in browser environments
+  - Full query compatibility with Badger's index schema
+  - Uses `aperturerobotics/go-indexeddb` for IndexedDB access
+  - Build with `GOOS=js GOARCH=wasm go build`
 - Backend selected via factory pattern in `pkg/database/factory.go`
 - All backends implement the same `Database` interface defined in `pkg/database/interface.go`
 
@@ -599,7 +624,9 @@ sudo journalctl -u orly -f
 
 ## Key Dependencies
 
-- `github.com/dgraph-io/badger/v4` - Embedded database
+- `github.com/dgraph-io/badger/v4` - Embedded database (Badger backend)
+- `github.com/neo4j/neo4j-go-driver/v5` - Neo4j driver (Neo4j backend)
+- `github.com/aperturerobotics/go-indexeddb` - IndexedDB bindings (WasmDB backend)
 - `github.com/gorilla/websocket` - WebSocket server
 - `github.com/minio/sha256-simd` - SIMD SHA256
 - `github.com/templexxx/xhex` - SIMD hex encoding
@@ -686,8 +713,8 @@ Each level has these printer types:
 
 ## Performance Considerations
 
-- **Query Cache**: 512MB query result cache (configurable via `ORLY_QUERY_CACHE_SIZE_MB`) with zstd level 9 compression reduces database load for repeated queries
-- **Filter Normalization**: Filters are normalized before cache lookup, so identical queries with different field ordering produce cache hits
+- **Query Cache**: Optional 512MB query result cache (disabled by default via `ORLY_QUERY_CACHE_DISABLED=true`) with zstd level 9 compression reduces database load for repeated queries; enable with `ORLY_QUERY_CACHE_DISABLED=false`
+- **Filter Normalization**: When query cache is enabled, filters are normalized before cache lookup, so identical queries with different field ordering produce cache hits
 - **Database Caching**: Tune `ORLY_DB_BLOCK_CACHE_MB` and `ORLY_DB_INDEX_CACHE_MB` for workload (Badger backend only)
 - **Query Optimization**: Add indexes for common filter patterns; multiple specialized query builders optimize different filter combinations
 - **Batch Operations**: ID lookups and event fetching use batch operations via `GetSerialsByIds` and `FetchEventsBySerials`
@@ -699,8 +726,9 @@ Each level has these printer types:
 
 ORLY has received several significant performance improvements in recent updates:
 
-### Query Cache System (Latest)
-- 512MB query result cache with zstd level 9 compression
+### Query Cache System
+- Optional 512MB query result cache with zstd level 9 compression (disabled by default to reduce memory usage)
+- Enable with `ORLY_QUERY_CACHE_DISABLED=false`
 - Filter normalization ensures cache hits regardless of filter field ordering
 - Configurable size (`ORLY_QUERY_CACHE_SIZE_MB`) and TTL (`ORLY_QUERY_CACHE_MAX_AGE`)
 - Dramatically reduces database load for repeated queries (common in Nostr clients)
@@ -771,7 +799,7 @@ Files modified:
 3. GitHub Actions workflow builds binaries for multiple platforms
 4. Release created automatically with binaries and checksums
 
-## Recent Features (v0.31.x)
+## Recent Features (v0.34.x)
 
 ### Directory Spider
 The directory spider (`pkg/spider/directory.go`) automatically discovers and syncs metadata from other relays:
@@ -789,11 +817,21 @@ The Neo4j backend (`pkg/neo4j/`) includes Web of Trust (WoT) extensions:
 - **WoT Schema**: See `pkg/neo4j/WOT_SPEC.md` for full specification
 - **Schema Modifications**: See `pkg/neo4j/MODIFYING_SCHEMA.md` for how to update
 
+### WasmDB IndexedDB Backend
+WebAssembly-compatible database backend (`pkg/wasmdb/`):
+- Enables running ORLY in browser environments
+- Uses IndexedDB as storage via `aperturerobotics/go-indexeddb`
+- Full query compatibility with Badger's index schema
+- Object stores map to index prefixes (evt, eid, kc-, pc-, etc.)
+- Range queries use IndexedDB cursors with KeyRange bounds
+- Build with `GOOS=js GOARCH=wasm go build`
+
 ### Policy System Enhancements
 - **Default-Permissive Model**: Read and write are allowed by default unless restrictions are configured
 - **Write-Only Validation**: Size, age, tag validations apply ONLY to writes
 - **Read-Only Filtering**: `read_allow`, `read_follows_whitelist`, `privileged` apply ONLY to reads
 - **Separate Follows Whitelists**: `read_follows_whitelist` and `write_follows_whitelist` for fine-grained control
+- **Permissive Mode Overrides**: `read_allow_permissive` and `write_allow_permissive` (global rule only) override kind whitelist for independent read/write control
 - **Scripts**: Policy scripts execute ONLY for write operations
 - **Reference Documentation**: `docs/POLICY_CONFIGURATION_REFERENCE.md` provides authoritative read vs write applicability
 - See also: `pkg/policy/README.md` for quick reference
@@ -825,6 +863,8 @@ The Neo4j backend (`pkg/neo4j/`) includes Web of Trust (WoT) extensions:
     "read_deny": ["pubkey_hex"],                   // Pubkeys denied from reading
     "read_follows_whitelist": ["pubkey_hex"],      // Pubkeys whose follows can read
     "write_follows_whitelist": ["pubkey_hex"],     // Pubkeys whose follows can write
+    "read_allow_permissive": false,                // Override kind whitelist for reads
+    "write_allow_permissive": false,               // Override kind whitelist for writes
     "script": "/path/to/script.sh"                 // External validation script
   },
   "rules": {
@@ -843,9 +883,11 @@ The Neo4j backend (`pkg/neo4j/`) includes Web of Trust (WoT) extensions:
 | `read_allow` | READ | Only listed pubkeys can read |
 | `read_deny` | READ | Listed pubkeys denied (if no read_allow) |
 | `read_follows_whitelist` | READ | Named pubkeys + their follows can read |
+| `read_allow_permissive` | READ | Overrides kind whitelist for reads (global only) |
 | `write_allow` | WRITE | Only listed pubkeys can write |
 | `write_deny` | WRITE | Listed pubkeys denied (if no write_allow) |
 | `write_follows_whitelist` | WRITE | Named pubkeys + their follows can write |
+| `write_allow_permissive` | WRITE | Overrides kind whitelist for writes (global only) |
 | `privileged` | READ | Only author + p-tag recipients can read |
 
 **Nil Policy Error Handling:**
@@ -877,4 +919,5 @@ Invite-based access control system:
 | `pkg/neo4j/WOT_SPEC.md` | Web of Trust schema specification |
 | `pkg/neo4j/MODIFYING_SCHEMA.md` | How to modify Neo4j schema |
 | `pkg/neo4j/TESTING.md` | Neo4j testing guide |
+| `.claude/skills/cypher/SKILL.md` | Cypher query language skill for Neo4j |
 | `readme.adoc` | Project README with feature overview |
