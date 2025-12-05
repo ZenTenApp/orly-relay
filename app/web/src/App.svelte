@@ -2276,13 +2276,16 @@
 
     // Export functionality
     async function exportEvents(pubkeys = []) {
-        if (!isLoggedIn) {
+        // Skip login check when ACL is "none" (open relay mode)
+        if (aclMode !== "none" && !isLoggedIn) {
             alert("Please log in first");
             return;
         }
 
         // Check permissions for exporting all events using current effective role
+        // Skip permission check when ACL is "none"
         if (
+            aclMode !== "none" &&
             pubkeys.length === 0 &&
             currentEffectiveRole !== "admin" &&
             currentEffectiveRole !== "owner"
@@ -2292,16 +2295,19 @@
         }
 
         try {
-            const authHeader = await createNIP98AuthHeader(
-                "/api/export",
-                "POST",
-            );
+            // Build headers - only include auth when ACL is not "none"
+            const headers = {
+                "Content-Type": "application/json",
+            };
+            if (aclMode !== "none" && isLoggedIn) {
+                headers.Authorization = await createNIP98AuthHeader(
+                    "/api/export",
+                    "POST",
+                );
+            }
             const response = await fetch("/api/export", {
                 method: "POST",
-                headers: {
-                    Authorization: authHeader,
-                    "Content-Type": "application/json",
-                },
+                headers,
                 body: JSON.stringify({ pubkeys }),
             });
 
@@ -2354,7 +2360,8 @@
     }
 
     async function importEvents() {
-        if (!isLoggedIn || (userRole !== "admin" && userRole !== "owner")) {
+        // Skip login/permission check when ACL is "none" (open relay mode)
+        if (aclMode !== "none" && (!isLoggedIn || (userRole !== "admin" && userRole !== "owner"))) {
             alert("Admin or owner permission required");
             return;
         }
@@ -2365,18 +2372,20 @@
         }
 
         try {
-            const authHeader = await createNIP98AuthHeader(
-                "/api/import",
-                "POST",
-            );
+            // Build headers - only include auth when ACL is not "none"
+            const headers = {};
+            if (aclMode !== "none" && isLoggedIn) {
+                headers.Authorization = await createNIP98AuthHeader(
+                    "/api/import",
+                    "POST",
+                );
+            }
             const formData = new FormData();
             formData.append("file", selectedFile);
 
             const response = await fetch("/api/import", {
                 method: "POST",
-                headers: {
-                    Authorization: authHeader,
-                },
+                headers,
                 body: formData,
             });
 
@@ -2932,6 +2941,7 @@
             <ExportView
                 {isLoggedIn}
                 {currentEffectiveRole}
+                {aclMode}
                 on:exportMyEvents={exportMyEvents}
                 on:exportAllEvents={exportAllEvents}
                 on:openLoginModal={openLoginModal}
@@ -2941,6 +2951,7 @@
                 {isLoggedIn}
                 {currentEffectiveRole}
                 {selectedFile}
+                {aclMode}
                 on:fileSelect={handleFileSelect}
                 on:importEvents={importEvents}
                 on:openLoginModal={openLoginModal}

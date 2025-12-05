@@ -105,7 +105,7 @@ func setupE2ETest(t *testing.T) (*Server, *httptest.Server, func()) {
 	}
 
 	// Configure ACL registry
-	acl.Registry.Active.Store(cfg.ACLMode)
+	acl.Registry.SetMode(cfg.ACLMode)
 	if err = acl.Registry.Configure(cfg, db, ctx); err != nil {
 		db.Close()
 		os.RemoveAll(tempDir)

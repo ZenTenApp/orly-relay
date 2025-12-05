@@ -550,25 +550,28 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate NIP-98 authentication
-	valid, pubkey, err := httpauth.CheckAuth(r)
-	if chk.E(err) || !valid {
-		errorMsg := "NIP-98 authentication validation failed"
-		if err != nil {
-			errorMsg = err.Error()
+	// Skip authentication and permission checks when ACL is "none" (open relay mode)
+	if acl.Registry.Active.Load() != "none" {
+		// Validate NIP-98 authentication
+		valid, pubkey, err := httpauth.CheckAuth(r)
+		if chk.E(err) || !valid {
+			errorMsg := "NIP-98 authentication validation failed"
+			if err != nil {
+				errorMsg = err.Error()
+			}
+			http.Error(w, errorMsg, http.StatusUnauthorized)
+			return
 		}
-		http.Error(w, errorMsg, http.StatusUnauthorized)
-		return
-	}
 
-	// Check permissions - require write, admin, or owner level
-	accessLevel := acl.Registry.GetAccessLevel(pubkey, r.RemoteAddr)
-	if accessLevel != "write" && accessLevel != "admin" && accessLevel != "owner" {
-		http.Error(
-			w, "Write, admin, or owner permission required",
-			http.StatusForbidden,
-		)
-		return
+		// Check permissions - require write, admin, or owner level
+		accessLevel := acl.Registry.GetAccessLevel(pubkey, r.RemoteAddr)
+		if accessLevel != "write" && accessLevel != "admin" && accessLevel != "owner" {
+			http.Error(
+				w, "Write, admin, or owner permission required",
+				http.StatusForbidden,
+			)
+			return
+		}
 	}
 
 	// Parse pubkeys from request
@@ -719,24 +722,27 @@ func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate NIP-98 authentication
-	valid, pubkey, err := httpauth.CheckAuth(r)
-	if chk.E(err) || !valid {
-		errorMsg := "NIP-98 authentication validation failed"
-		if err != nil {
-			errorMsg = err.Error()
+	// Skip authentication and permission checks when ACL is "none" (open relay mode)
+	if acl.Registry.Active.Load() != "none" {
+		// Validate NIP-98 authentication
+		valid, pubkey, err := httpauth.CheckAuth(r)
+		if chk.E(err) || !valid {
+			errorMsg := "NIP-98 authentication validation failed"
+			if err != nil {
+				errorMsg = err.Error()
+			}
+			http.Error(w, errorMsg, http.StatusUnauthorized)
+			return
 		}
-		http.Error(w, errorMsg, http.StatusUnauthorized)
-		return
-	}
 
-	// Check permissions - require admin or owner level
-	accessLevel := acl.Registry.GetAccessLevel(pubkey, r.RemoteAddr)
-	if accessLevel != "admin" && accessLevel != "owner" {
-		http.Error(
-			w, "Admin or owner permission required", http.StatusForbidden,
-		)
-		return
+		// Check permissions - require admin or owner level
+		accessLevel := acl.Registry.GetAccessLevel(pubkey, r.RemoteAddr)
+		if accessLevel != "admin" && accessLevel != "owner" {
+			http.Error(
+				w, "Admin or owner permission required", http.StatusForbidden,
+			)
+			return
+		}
 	}
 
 	ct := r.Header.Get("Content-Type")

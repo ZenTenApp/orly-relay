@@ -54,7 +54,7 @@ func setupTestListener(t *testing.T) (*Listener, *database.D, func()) {
 	}
 
 	// Configure ACL registry
-	acl.Registry.Active.Store(cfg.ACLMode)
+	acl.Registry.SetMode(cfg.ACLMode)
 	if err = acl.Registry.Configure(cfg, db, ctx); err != nil {
 		db.Close()
 		os.RemoveAll(tempDir)
@@ -378,7 +378,7 @@ func TestHandleNIP43InviteRequest_ValidRequest(t *testing.T) {
 	// Add admin to config and reconfigure ACL
 	adminHex := hex.Enc(adminPubkey)
 	listener.Server.Config.Admins = []string{adminHex}
-	acl.Registry.Active.Store("none")
+	acl.Registry.SetMode("none")
 	if err = acl.Registry.Configure(listener.Server.Config, listener.Server.DB, listener.ctx); err != nil {
 		t.Fatalf("failed to reconfigure ACL: %v", err)
 	}

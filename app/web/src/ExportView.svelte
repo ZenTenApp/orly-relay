@@ -1,9 +1,14 @@
 <script>
     export let isLoggedIn = false;
     export let currentEffectiveRole = "";
+    export let aclMode = "";
 
     import { createEventDispatcher } from "svelte";
     const dispatch = createEventDispatcher();
+
+    // When ACL is "none", allow access without login
+    $: canAccess = aclMode === "none" || isLoggedIn;
+    $: canExportAll = aclMode === "none" || currentEffectiveRole === "admin" || currentEffectiveRole === "owner";
 
     function exportMyEvents() {
         dispatch("exportMyEvents");
@@ -18,15 +23,17 @@
     }
 </script>
 
-{#if isLoggedIn}
-    <div class="export-section">
-        <h3>Export My Events</h3>
-        <p>Download your personal events as a JSONL file.</p>
-        <button class="export-btn" on:click={exportMyEvents}>
-            📤 Export My Events
-        </button>
-    </div>
-    {#if currentEffectiveRole === "admin" || currentEffectiveRole === "owner"}
+{#if canAccess}
+    {#if isLoggedIn}
+        <div class="export-section">
+            <h3>Export My Events</h3>
+            <p>Download your personal events as a JSONL file.</p>
+            <button class="export-btn" on:click={exportMyEvents}>
+                📤 Export My Events
+            </button>
+        </div>
+    {/if}
+    {#if canExportAll}
         <div class="export-section">
             <h3>Export All Events</h3>
             <p>

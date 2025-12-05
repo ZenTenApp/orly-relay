@@ -330,7 +330,7 @@ func main() {
 		os.Exit(1)
 	}
 	log.I.F("%s database initialized successfully", cfg.DBType)
-	acl.Registry.Active.Store(cfg.ACLMode)
+	acl.Registry.SetMode(cfg.ACLMode)
 	if err = acl.Registry.Configure(cfg, db, ctx); chk.E(err) {
 		os.Exit(1)
 	}
@@ -444,6 +444,7 @@ func makeDatabaseConfig(cfg *config.C) *database.DatabaseConfig {
 	dataDir, logLevel,
 		blockCacheMB, indexCacheMB, queryCacheSizeMB,
 		queryCacheMaxAge,
+		queryCacheDisabled,
 		serialCachePubkeys, serialCacheEventIds,
 		zstdLevel,
 		neo4jURI, neo4jUser, neo4jPassword := cfg.GetDatabaseConfigValues()
@@ -455,6 +456,7 @@ func makeDatabaseConfig(cfg *config.C) *database.DatabaseConfig {
 		IndexCacheMB:        indexCacheMB,
 		QueryCacheSizeMB:    queryCacheSizeMB,
 		QueryCacheMaxAge:    queryCacheMaxAge,
+		QueryCacheDisabled:  queryCacheDisabled,
 		SerialCachePubkeys:  serialCachePubkeys,
 		SerialCacheEventIds: serialCacheEventIds,
 		ZSTDLevel:           zstdLevel,

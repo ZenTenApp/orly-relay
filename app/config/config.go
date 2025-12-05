@@ -91,9 +91,10 @@ type C struct {
 	NIP43InviteExpiry     time.Duration `env:"ORLY_NIP43_INVITE_EXPIRY" default:"24h" usage:"how long invite codes remain valid"`
 
 	// Database configuration
-	DBType           string `env:"ORLY_DB_TYPE" default:"badger" usage:"database backend to use: badger or neo4j"`
-	QueryCacheSizeMB int    `env:"ORLY_QUERY_CACHE_SIZE_MB" default:"512" usage:"query cache size in MB (caches database query results for faster REQ responses)"`
-	QueryCacheMaxAge   string `env:"ORLY_QUERY_CACHE_MAX_AGE" default:"5m" usage:"maximum age for cached query results (e.g., 5m, 10m, 1h)"`
+	DBType              string `env:"ORLY_DB_TYPE" default:"badger" usage:"database backend to use: badger or neo4j"`
+	QueryCacheDisabled  bool   `env:"ORLY_QUERY_CACHE_DISABLED" default:"true" usage:"disable query cache to reduce memory usage (trades memory for query performance)"`
+	QueryCacheSizeMB    int    `env:"ORLY_QUERY_CACHE_SIZE_MB" default:"512" usage:"query cache size in MB (caches database query results for faster REQ responses)"`
+	QueryCacheMaxAge    string `env:"ORLY_QUERY_CACHE_MAX_AGE" default:"5m" usage:"maximum age for cached query results (e.g., 5m, 10m, 1h)"`
 
 	// Neo4j configuration (only used when ORLY_DB_TYPE=neo4j)
 	Neo4jURI      string `env:"ORLY_NEO4J_URI" default:"bolt://localhost:7687" usage:"Neo4j bolt URI (only used when ORLY_DB_TYPE=neo4j)"`
@@ -410,6 +411,7 @@ func (cfg *C) GetDatabaseConfigValues() (
 	dataDir, logLevel string,
 	blockCacheMB, indexCacheMB, queryCacheSizeMB int,
 	queryCacheMaxAge time.Duration,
+	queryCacheDisabled bool,
 	serialCachePubkeys, serialCacheEventIds int,
 	zstdLevel int,
 	neo4jURI, neo4jUser, neo4jPassword string,
@@ -425,6 +427,7 @@ func (cfg *C) GetDatabaseConfigValues() (
 	return cfg.DataDir, cfg.DBLogLevel,
 		cfg.DBBlockCacheMB, cfg.DBIndexCacheMB, cfg.QueryCacheSizeMB,
 		queryCacheMaxAge,
+		cfg.QueryCacheDisabled,
 		cfg.SerialCachePubkeys, cfg.SerialCacheEventIds,
 		cfg.DBZSTDLevel,
 		cfg.Neo4jURI, cfg.Neo4jUser, cfg.Neo4jPassword

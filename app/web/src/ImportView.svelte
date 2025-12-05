@@ -2,9 +2,13 @@
     export let isLoggedIn = false;
     export let currentEffectiveRole = "";
     export let selectedFile = null;
+    export let aclMode = "";
 
     import { createEventDispatcher } from "svelte";
     const dispatch = createEventDispatcher();
+
+    // When ACL is "none", allow access without login
+    $: canImport = aclMode === "none" || (isLoggedIn && (currentEffectiveRole === "admin" || currentEffectiveRole === "owner"));
 
     function handleFileSelect(event) {
         dispatch("fileSelect", event);
@@ -20,7 +24,7 @@
 </script>
 
 <div class="import-section">
-    {#if isLoggedIn && (currentEffectiveRole === "admin" || currentEffectiveRole === "owner")}
+    {#if canImport}
         <h3>Import Events</h3>
         <p>Upload a JSONL file to import events into the database.</p>
         <div class="recovery-controls-card">
@@ -42,7 +46,7 @@
         <div class="permission-denied">
             <h3 class="recovery-header">Import Events</h3>
             <p class="recovery-description">
-                ❌ Admin or owner permission required for import functionality.
+                Admin or owner permission required for import functionality.
             </p>
         </div>
     {:else}

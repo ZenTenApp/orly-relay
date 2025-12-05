@@ -120,7 +120,7 @@ func Start(cfg *config.C, opts *Options) (relay *Relay, err error) {
 	}
 
 	// Configure ACL
-	acl.Registry.Active.Store(cfg.ACLMode)
+	acl.Registry.SetMode(cfg.ACLMode)
 	if err = acl.Registry.Configure(cfg, relay.db, relay.ctx); chk.E(err) {
 		return
 	}

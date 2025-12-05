@@ -14,6 +14,7 @@ import (
 	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/database/indexes"
 	"next.orly.dev/pkg/database/indexes/types"
+	"next.orly.dev/pkg/mode"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
@@ -177,13 +178,16 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 	}
 
 	// Check if the event has been deleted before allowing resubmission
-	if err = d.CheckForDeleted(ev, nil); err != nil {
-		// log.I.F(
-		// 	"SaveEvent: rejecting resubmission of deleted event ID=%s: %v",
-		// 	hex.Enc(ev.ID), err,
-		// )
-		err = fmt.Errorf("blocked: %s", err.Error())
-		return
+	// Skip deletion check when ACL is "none" (open relay mode)
+	if !mode.IsOpen() {
+		if err = d.CheckForDeleted(ev, nil); err != nil {
+			// log.I.F(
+			// 	"SaveEvent: rejecting resubmission of deleted event ID=%s: %v",
+			// 	hex.Enc(ev.ID), err,
+			// )
+			err = fmt.Errorf("blocked: %s", err.Error())
+			return
+		}
 	}
 	// check for replacement - only validate, don't delete old events
 	if kind.IsReplaceable(ev.Kind) || kind.IsParameterizedReplaceable(ev.Kind) {

@@ -3,10 +3,18 @@ package acl
 import (
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	acliface "next.orly.dev/pkg/interfaces/acl"
+	"next.orly.dev/pkg/mode"
 	"next.orly.dev/pkg/utils/atomic"
 )
 
 var Registry = &S{}
+
+// SetMode sets the active ACL mode and syncs it to the mode package for
+// packages that need to check the mode without importing acl (to avoid cycles).
+func (s *S) SetMode(m string) {
+	s.Active.Store(m)
+	mode.ACLMode.Store(m)
+}
 
 type S struct {
 	ACL    []acliface.I

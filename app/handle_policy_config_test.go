@@ -88,7 +88,7 @@ func setupPolicyTestListener(t *testing.T, policyAdminHex string) (*Listener, *d
 	}
 
 	// Configure ACL registry
-	acl.Registry.Active.Store(cfg.ACLMode)
+	acl.Registry.SetMode(cfg.ACLMode)
 	if err = acl.Registry.Configure(cfg, db, ctx); err != nil {
 		db.Close()
 		os.RemoveAll(tempDir)

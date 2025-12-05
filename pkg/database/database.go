@@ -106,6 +106,12 @@ func NewWithConfig(
 
 	queryCacheSize := int64(queryCacheSizeMB * 1024 * 1024)
 
+	// Create query cache only if not disabled
+	var qc *querycache.EventCache
+	if !cfg.QueryCacheDisabled {
+		qc = querycache.NewEventCache(queryCacheSize, queryCacheMaxAge)
+	}
+
 	d = &D{
 		ctx:         ctx,
 		cancel:      cancel,
@@ -114,7 +120,7 @@ func NewWithConfig(
 		DB:          nil,
 		seq:         nil,
 		ready:       make(chan struct{}),
-		queryCache:  querycache.NewEventCache(queryCacheSize, queryCacheMaxAge),
+		queryCache:  qc,
 		serialCache: NewSerialCache(serialCachePubkeys, serialCacheEventIds),
 	}
 

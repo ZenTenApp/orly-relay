@@ -656,15 +656,18 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 		return
 	} else {
 		// check if the event was deleted
-		// Combine admins and owners for deletion checking
-		adminOwners := append(l.Admins, l.Owners...)
-		if err = l.DB.CheckForDeleted(env.E, adminOwners); err != nil {
-			if strings.HasPrefix(err.Error(), "blocked:") {
-				errStr := err.Error()[len("blocked: "):len(err.Error())]
-				if err = Ok.Error(
-					l, env, errStr,
-				); chk.E(err) {
-					return
+		// Skip deletion check when ACL is "none" (open relay mode)
+		if acl.Registry.Active.Load() != "none" {
+			// Combine admins and owners for deletion checking
+			adminOwners := append(l.Admins, l.Owners...)
+			if err = l.DB.CheckForDeleted(env.E, adminOwners); err != nil {
+				if strings.HasPrefix(err.Error(), "blocked:") {
+					errStr := err.Error()[len("blocked: "):len(err.Error())]
+					if err = Ok.Error(
+						l, env, errStr,
+					); chk.E(err) {
+						return
+					}
 				}
 			}
 		}

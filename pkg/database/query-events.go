@@ -13,6 +13,7 @@ import (
 	"lol.mleku.dev/log"
 	"github.com/minio/sha256-simd"
 	"next.orly.dev/pkg/database/indexes/types"
+	"next.orly.dev/pkg/mode"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
@@ -102,7 +103,8 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 			}
 
 			// check for an expiration tag and delete after returning the result
-			if CheckExpiration(ev) {
+			// Skip expiration check when ACL is "none" (open relay mode)
+			if !mode.IsOpen() && CheckExpiration(ev) {
 				log.T.F(
 					"QueryEvents: id=%s filtered out due to expiration", idHex,
 				)
@@ -112,9 +114,12 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 			}
 
 			// skip events that have been deleted by a proper deletion event
-			if derr := d.CheckForDeleted(ev, nil); derr != nil {
-				log.T.F("QueryEvents: id=%s filtered out due to deletion: %v", idHex, derr)
-				continue
+			// Skip deletion check when ACL is "none" (open relay mode)
+			if !mode.IsOpen() {
+				if derr := d.CheckForDeleted(ev, nil); derr != nil {
+					log.T.F("QueryEvents: id=%s filtered out due to deletion: %v", idHex, derr)
+					continue
+				}
 			}
 
 			// Add the event to the results
@@ -210,13 +215,15 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 			}
 
 			// check for an expiration tag and delete after returning the result
-			if CheckExpiration(ev) {
+			// Skip expiration check when ACL is "none" (open relay mode)
+			if !mode.IsOpen() && CheckExpiration(ev) {
 				expDeletes = append(expDeletes, ser)
 				expEvs = append(expEvs, ev)
 				continue
 			}
 			// Process deletion events to build our deletion maps
-			if ev.Kind == kind.Deletion.K {
+			// Skip deletion processing when ACL is "none" (open relay mode)
+			if !mode.IsOpen() && ev.Kind == kind.Deletion.K {
 				// Check for 'e' tags that directly reference event IDs
 				eTags := ev.Tags.GetAll([]byte("e"))
 				for _, eTag := range eTags {
@@ -433,8 +440,10 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 				}
 			}
 			// Check if this specific event has been deleted
+			// Skip deletion checks when ACL is "none" (open relay mode)
+			aclActive := !mode.IsOpen()
 			eventIdHex := hex.Enc(ev.ID)
-			if deletedEventIds[eventIdHex] {
+			if aclActive && deletedEventIds[eventIdHex] {
 				// Skip this event if it has been specifically deleted
 				continue
 			}
@@ -446,7 +455,7 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 				// deletion Only skip this event if it has been deleted by
 				// kind/pubkey and is not in the filter AND there isn't a newer
 				// event with the same kind/pubkey
-				if deletionsByKindPubkey[key] && !isIdInFilter {
+				if aclActive && deletionsByKindPubkey[key] && !isIdInFilter {
 					// This replaceable event has been deleted, skip it
 					continue
 				} else if wantMultipleVersions {
@@ -475,11 +484,14 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 				}
 
 				// Check if this event has been deleted via an a-tag
-				if deletionMap, exists := deletionsByKindPubkeyDTag[key]; exists {
-					// If there is a deletion timestamp and this event is older than the deletion,
-					// and this event is not specifically requested by ID, skip it
-					if delTs, ok := deletionMap[dValue]; ok && ev.CreatedAt < delTs && !isIdInFilter {
-						continue
+				// Skip deletion check when ACL is "none" (open relay mode)
+				if aclActive {
+					if deletionMap, exists := deletionsByKindPubkeyDTag[key]; exists {
+						// If there is a deletion timestamp and this event is older than the deletion,
+						// and this event is not specifically requested by ID, skip it
+						if delTs, ok := deletionMap[dValue]; ok && ev.CreatedAt < delTs && !isIdInFilter {
+							continue
+						}
 					}
 				}
 
