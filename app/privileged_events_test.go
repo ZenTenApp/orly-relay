@@ -404,6 +404,82 @@ func TestPrivilegedEventEdgeCases(t *testing.T) {
 	}
 }
 
+// TestPrivilegedEventsWithACLNone tests that privileged events are accessible
+// to anyone when ACL mode is set to "none" (open relay)
+func TestPrivilegedEventsWithACLNone(t *testing.T) {
+	authorPubkey := []byte("author-pubkey-12345")
+	recipientPubkey := []byte("recipient-pubkey-67")
+	unauthorizedPubkey := []byte("unauthorized-pubkey")
+
+	// Create a privileged event (encrypted DM)
+	privilegedEvent := createTestEvent(
+		"event-id-1",
+		hex.Enc(authorPubkey),
+		"private message",
+		kind.EncryptedDirectMessage.K,
+		createPTag(hex.Enc(recipientPubkey)),
+	)
+
+	tests := []struct {
+		name         string
+		authedPubkey []byte
+		aclMode      string
+		accessLevel  string
+		shouldAllow  bool
+		description  string
+	}{
+		{
+			name:         "ACL none - unauthorized user can see privileged event",
+			authedPubkey: unauthorizedPubkey,
+			aclMode:      "none",
+			accessLevel:  "write", // default for ACL=none
+			shouldAllow:  true,
+			description:  "When ACL is 'none', privileged events should be visible to anyone",
+		},
+		{
+			name:         "ACL none - unauthenticated user can see privileged event",
+			authedPubkey: nil,
+			aclMode:      "none",
+			accessLevel:  "write", // default for ACL=none
+			shouldAllow:  true,
+			description:  "When ACL is 'none', even unauthenticated users can see privileged events",
+		},
+		{
+			name:         "ACL managed - unauthorized user cannot see privileged event",
+			authedPubkey: unauthorizedPubkey,
+			aclMode:      "managed",
+			accessLevel:  "write",
+			shouldAllow:  false,
+			description:  "When ACL is 'managed', unauthorized users cannot see privileged events",
+		},
+		{
+			name:         "ACL follows - unauthorized user cannot see privileged event",
+			authedPubkey: unauthorizedPubkey,
+			aclMode:      "follows",
+			accessLevel:  "write",
+			shouldAllow:  false,
+			description:  "When ACL is 'follows', unauthorized users cannot see privileged events",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			events := event.S{privilegedEvent}
+			filtered := testPrivilegedEventFiltering(events, tt.authedPubkey, tt.aclMode, tt.accessLevel)
+
+			if tt.shouldAllow {
+				if len(filtered) != 1 {
+					t.Errorf("%s: Expected event to be allowed, but it was filtered out. %s", tt.name, tt.description)
+				}
+			} else {
+				if len(filtered) != 0 {
+					t.Errorf("%s: Expected event to be filtered out, but it was allowed. %s", tt.name, tt.description)
+				}
+			}
+		})
+	}
+}
+
 func TestPrivilegedEventPolicyIntegration(t *testing.T) {
 	// Test that the policy system also correctly handles privileged events
 	// This tests the policy.go implementation

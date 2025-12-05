@@ -439,10 +439,12 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 			// Event has private tag and user is authorized - continue to privileged check
 		}
 
-		// Always filter privileged events based on kind, regardless of ACLMode
+		// Filter privileged events based on kind when ACL is active
+		// When ACL is "none", skip privileged filtering to allow open access
 		// Privileged events should only be sent to users who are authenticated and
 		// are either the event author or listed in p tags
-		if kind.IsPrivileged(ev.Kind) && accessLevel != "admin" { // admins can see all events
+		aclActive := acl.Registry.Active.Load() != "none"
+		if kind.IsPrivileged(ev.Kind) && aclActive && accessLevel != "admin" { // admins can see all events
 			log.T.C(
 				func() string {
 					return fmt.Sprintf(
