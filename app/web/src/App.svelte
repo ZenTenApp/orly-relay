@@ -1663,6 +1663,10 @@
         if (tab.id === "sprocket" && !sprocketEnabled) {
             return false;
         }
+        // Hide policy tab if not enabled
+        if (tab.id === "policy" && !policyEnabled) {
+            return false;
+        }
         // Hide managed ACL tab if not in managed mode
         if (tab.id === "managed-acl" && aclMode !== "managed") {
             return false;

@@ -559,14 +559,22 @@
         background: var(--primary);
         color: var(--text-color);
         border: none;
-        padding: 0.5em 1em;
+        padding: 0.4em 1em;
         border-radius: 4px;
         cursor: pointer;
         font-size: 0.9em;
         transition: background-color 0.2s;
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: 0.25em;
+        box-sizing: border-box;
+        line-height: 1;
+    }
+
+    .reload-btn {
+        width: 2.5em;
+        padding: 0.4em;
     }
 
     .refresh-btn:hover:not(:disabled),
@@ -578,5 +586,21 @@
     .reload-btn:disabled {
         background: var(--secondary);
         cursor: not-allowed;
+        padding: 0.4em 1em;
+    }
+
+    .reload-btn:disabled {
+        padding: 0.4em;
+    }
+
+    .reload-btn .spinner {
+        width: 0.8em;
+        height: 0.8em;
+        border: 1.5px solid var(--text-color);
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0;
+        box-sizing: border-box;
     }
 </style>

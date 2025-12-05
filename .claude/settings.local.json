@@ -14,7 +14,8 @@
       "Bash(go test:*)",
       "Bash(./scripts/test.sh:*)",
       "Bash(./scripts/update-embedded-web.sh:*)",
-      "Bash(bun run build:*)"
+      "Bash(bun run build:*)",
+      "Bash(bun update:*)"
     ],
     "deny": [],
     "ask": []
