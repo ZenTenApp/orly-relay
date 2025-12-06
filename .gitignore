@@ -79,6 +79,7 @@ cmd/benchmark/data
 !*.svelte
 !.github/**
 !.github/workflows/**
+!.claude/**
 !app/web/dist/**
 !app/web/dist/*.js
 !app/web/dist/*.js.map

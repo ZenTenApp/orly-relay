@@ -15,7 +15,10 @@
       "Bash(./scripts/test.sh:*)",
       "Bash(./scripts/update-embedded-web.sh:*)",
       "Bash(bun run build:*)",
-      "Bash(bun update:*)"
+      "Bash(bun update:*)",
+      "Bash(cat:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
