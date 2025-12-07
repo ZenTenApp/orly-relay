@@ -1,8 +1,10 @@
+//go:build integration
+// +build integration
+
 package neo4j
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"git.mleku.dev/mleku/nostr/encoders/event"
@@ -14,27 +16,17 @@ import (
 	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 )
 
+// All tests in this file use the shared testDB instance from testmain_test.go
+// to avoid Neo4j authentication rate limiting from too many connections.
+
 func TestDeleteEvent(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -55,12 +47,12 @@ func TestDeleteEvent(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, ev); err != nil {
+	if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 		t.Fatalf("Failed to save event: %v", err)
 	}
 
 	// Verify event exists
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Ids: tag.NewFromBytesSlice(ev.ID),
 	})
 	if err != nil {
@@ -71,12 +63,12 @@ func TestDeleteEvent(t *testing.T) {
 	}
 
 	// Delete the event
-	if err := db.DeleteEvent(ctx, ev.ID[:]); err != nil {
+	if err := testDB.DeleteEvent(ctx, ev.ID[:]); err != nil {
 		t.Fatalf("Failed to delete event: %v", err)
 	}
 
 	// Verify event is deleted
-	evs, err = db.QueryEvents(ctx, &filter.F{
+	evs, err = testDB.QueryEvents(ctx, &filter.F{
 		Ids: tag.NewFromBytesSlice(ev.ID),
 	})
 	if err != nil {
@@ -90,26 +82,13 @@ func TestDeleteEvent(t *testing.T) {
 }
 
 func TestDeleteEventBySerial(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -130,23 +109,23 @@ func TestDeleteEventBySerial(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, ev); err != nil {
+	if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 		t.Fatalf("Failed to save event: %v", err)
 	}
 
 	// Get serial
-	serial, err := db.GetSerialById(ev.ID[:])
+	serial, err := testDB.GetSerialById(ev.ID[:])
 	if err != nil {
 		t.Fatalf("Failed to get serial: %v", err)
 	}
 
 	// Delete by serial
-	if err := db.DeleteEventBySerial(ctx, serial, ev); err != nil {
+	if err := testDB.DeleteEventBySerial(ctx, serial, ev); err != nil {
 		t.Fatalf("Failed to delete event by serial: %v", err)
 	}
 
 	// Verify event is deleted
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Ids: tag.NewFromBytesSlice(ev.ID),
 	})
 	if err != nil {
@@ -160,26 +139,13 @@ func TestDeleteEventBySerial(t *testing.T) {
 }
 
 func TestProcessDelete_AuthorCanDeleteOwnEvent(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -200,7 +166,7 @@ func TestProcessDelete_AuthorCanDeleteOwnEvent(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, originalEvent); err != nil {
+	if _, err := testDB.SaveEvent(ctx, originalEvent); err != nil {
 		t.Fatalf("Failed to save event: %v", err)
 	}
 
@@ -219,12 +185,12 @@ func TestProcessDelete_AuthorCanDeleteOwnEvent(t *testing.T) {
 	}
 
 	// Process deletion (no admins)
-	if err := db.ProcessDelete(deleteEvent, nil); err != nil {
+	if err := testDB.ProcessDelete(deleteEvent, nil); err != nil {
 		t.Fatalf("Failed to process delete: %v", err)
 	}
 
 	// Verify original event is deleted
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Ids: tag.NewFromBytesSlice(originalEvent.ID),
 	})
 	if err != nil {
@@ -238,26 +204,13 @@ func TestProcessDelete_AuthorCanDeleteOwnEvent(t *testing.T) {
 }
 
 func TestProcessDelete_OtherUserCannotDelete(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	alice, _ := p8k.New()
 	alice.Generate()
@@ -276,7 +229,7 @@ func TestProcessDelete_OtherUserCannotDelete(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, aliceEvent); err != nil {
+	if _, err := testDB.SaveEvent(ctx, aliceEvent); err != nil {
 		t.Fatalf("Failed to save event: %v", err)
 	}
 
@@ -294,10 +247,10 @@ func TestProcessDelete_OtherUserCannotDelete(t *testing.T) {
 	}
 
 	// Process deletion (Bob is not an admin)
-	_ = db.ProcessDelete(deleteEvent, nil)
+	_ = testDB.ProcessDelete(deleteEvent, nil)
 
 	// Verify Alice's event still exists
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Ids: tag.NewFromBytesSlice(aliceEvent.ID),
 	})
 	if err != nil {
@@ -311,26 +264,13 @@ func TestProcessDelete_OtherUserCannotDelete(t *testing.T) {
 }
 
 func TestProcessDelete_AdminCanDeleteAnyEvent(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	alice, _ := p8k.New()
 	alice.Generate()
@@ -349,7 +289,7 @@ func TestProcessDelete_AdminCanDeleteAnyEvent(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, aliceEvent); err != nil {
+	if _, err := testDB.SaveEvent(ctx, aliceEvent); err != nil {
 		t.Fatalf("Failed to save event: %v", err)
 	}
 
@@ -368,12 +308,12 @@ func TestProcessDelete_AdminCanDeleteAnyEvent(t *testing.T) {
 
 	// Process deletion with admin pubkey
 	adminPubkeys := [][]byte{admin.Pub()}
-	if err := db.ProcessDelete(deleteEvent, adminPubkeys); err != nil {
+	if err := testDB.ProcessDelete(deleteEvent, adminPubkeys); err != nil {
 		t.Fatalf("Failed to process delete: %v", err)
 	}
 
 	// Verify Alice's event is deleted
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Ids: tag.NewFromBytesSlice(aliceEvent.ID),
 	})
 	if err != nil {
@@ -387,26 +327,13 @@ func TestProcessDelete_AdminCanDeleteAnyEvent(t *testing.T) {
 }
 
 func TestCheckForDeleted(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -427,12 +354,12 @@ func TestCheckForDeleted(t *testing.T) {
 		t.Fatalf("Failed to sign target event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, targetEvent); err != nil {
+	if _, err := testDB.SaveEvent(ctx, targetEvent); err != nil {
 		t.Fatalf("Failed to save target event: %v", err)
 	}
 
 	// Check that event is not deleted (no deletion event exists)
-	err = db.CheckForDeleted(targetEvent, nil)
+	err = testDB.CheckForDeleted(targetEvent, nil)
 	if err != nil {
 		t.Fatalf("Expected no error for non-deleted event, got: %v", err)
 	}
@@ -450,12 +377,12 @@ func TestCheckForDeleted(t *testing.T) {
 		t.Fatalf("Failed to sign delete event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, deleteEvent); err != nil {
+	if _, err := testDB.SaveEvent(ctx, deleteEvent); err != nil {
 		t.Fatalf("Failed to save delete event: %v", err)
 	}
 
 	// Now check should return error (event has been deleted)
-	err = db.CheckForDeleted(targetEvent, nil)
+	err = testDB.CheckForDeleted(targetEvent, nil)
 	if err == nil {
 		t.Fatal("Expected error for deleted event")
 	}
@@ -464,26 +391,13 @@ func TestCheckForDeleted(t *testing.T) {
 }
 
 func TestReplaceableEventDeletion(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -504,12 +418,12 @@ func TestReplaceableEventDeletion(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, profileEvent); err != nil {
+	if _, err := testDB.SaveEvent(ctx, profileEvent); err != nil {
 		t.Fatalf("Failed to save event: %v", err)
 	}
 
 	// Verify event exists
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Kinds:   kind.NewS(kind.New(0)),
 		Authors: tag.NewFromBytesSlice(signer.Pub()),
 	})
@@ -531,12 +445,12 @@ func TestReplaceableEventDeletion(t *testing.T) {
 		t.Fatalf("Failed to sign newer event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, newerProfileEvent); err != nil {
+	if _, err := testDB.SaveEvent(ctx, newerProfileEvent); err != nil {
 		t.Fatalf("Failed to save newer event: %v", err)
 	}
 
 	// Query should return only the newer event
-	evs, err = db.QueryEvents(ctx, &filter.F{
+	evs, err = testDB.QueryEvents(ctx, &filter.F{
 		Kinds:   kind.NewS(kind.New(0)),
 		Authors: tag.NewFromBytesSlice(signer.Pub()),
 	})

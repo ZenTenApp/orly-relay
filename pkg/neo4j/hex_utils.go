@@ -31,16 +31,23 @@ func IsBinaryEncoded(val []byte) bool {
 // NormalizePubkeyHex ensures a pubkey/event ID is in lowercase hex format.
 // It handles:
 // - Binary-encoded values (33 bytes with null terminator) -> converts to lowercase hex
+// - Raw binary values (32 bytes) -> converts to lowercase hex
 // - Uppercase hex strings -> converts to lowercase
 // - Already lowercase hex -> returns as-is
 //
 // This should be used for all pubkeys and event IDs before storing in Neo4j
 // to prevent duplicate nodes due to case differences.
 func NormalizePubkeyHex(val []byte) string {
-	// Handle binary-encoded values from the nostr library
+	// Handle binary-encoded values from the nostr library (33 bytes with null terminator)
 	if IsBinaryEncoded(val) {
 		// Convert binary to lowercase hex
 		return hex.Enc(val[:HashLen])
+	}
+
+	// Handle raw binary values (32 bytes) - common when passing ev.ID or ev.Pubkey directly
+	if len(val) == HashLen {
+		// Convert binary to lowercase hex
+		return hex.Enc(val)
 	}
 
 	// Handle hex strings (may be uppercase from external sources)

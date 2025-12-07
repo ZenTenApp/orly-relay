@@ -1,8 +1,9 @@
+//go:build integration
+// +build integration
+
 package neo4j
 
 import (
-	"context"
-	"os"
 	"testing"
 
 	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
@@ -12,37 +13,25 @@ import (
 // RemoveSubscription, ClearSubscriptions) is handled at the app layer, not the
 // database layer. Tests for those methods have been removed.
 
+// All tests in this file use the shared testDB instance from testmain_test.go
+// to avoid Neo4j authentication rate limiting from too many connections.
+
 func TestMarkers_SetGetDelete(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	cleanTestDatabase()
 
 	// Set a marker
 	key := "test-marker"
 	value := []byte("test-value-123")
-	if err := db.SetMarker(key, value); err != nil {
+	if err := testDB.SetMarker(key, value); err != nil {
 		t.Fatalf("Failed to set marker: %v", err)
 	}
 
 	// Get the marker
-	retrieved, err := db.GetMarker(key)
+	retrieved, err := testDB.GetMarker(key)
 	if err != nil {
 		t.Fatalf("Failed to get marker: %v", err)
 	}
@@ -52,11 +41,11 @@ func TestMarkers_SetGetDelete(t *testing.T) {
 
 	// Update the marker
 	newValue := []byte("updated-value")
-	if err := db.SetMarker(key, newValue); err != nil {
+	if err := testDB.SetMarker(key, newValue); err != nil {
 		t.Fatalf("Failed to update marker: %v", err)
 	}
 
-	retrieved, err = db.GetMarker(key)
+	retrieved, err = testDB.GetMarker(key)
 	if err != nil {
 		t.Fatalf("Failed to get updated marker: %v", err)
 	}
@@ -65,12 +54,12 @@ func TestMarkers_SetGetDelete(t *testing.T) {
 	}
 
 	// Delete the marker
-	if err := db.DeleteMarker(key); err != nil {
+	if err := testDB.DeleteMarker(key); err != nil {
 		t.Fatalf("Failed to delete marker: %v", err)
 	}
 
 	// Verify marker is deleted
-	_, err = db.GetMarker(key)
+	_, err = testDB.GetMarker(key)
 	if err == nil {
 		t.Fatal("Expected error when getting deleted marker")
 	}
@@ -79,25 +68,12 @@ func TestMarkers_SetGetDelete(t *testing.T) {
 }
 
 func TestMarkers_GetNonExistent(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	// Try to get non-existent marker
-	_, err = db.GetMarker("non-existent-marker")
+	// Try to get non-existent marker (don't wipe - just test non-existent key)
+	_, err := testDB.GetMarker("non-existent-marker-unique-12345")
 	if err == nil {
 		t.Fatal("Expected error when getting non-existent marker")
 	}
@@ -106,35 +82,18 @@ func TestMarkers_GetNonExistent(t *testing.T) {
 }
 
 func TestSerial_GetNextSerial(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
 	// Get first serial
-	serial1, err := db.getNextSerial()
+	serial1, err := testDB.getNextSerial()
 	if err != nil {
 		t.Fatalf("Failed to get first serial: %v", err)
 	}
 
 	// Get second serial
-	serial2, err := db.getNextSerial()
+	serial2, err := testDB.getNextSerial()
 	if err != nil {
 		t.Fatalf("Failed to get second serial: %v", err)
 	}
@@ -147,7 +106,7 @@ func TestSerial_GetNextSerial(t *testing.T) {
 	// Get multiple more serials and verify they're all unique and increasing
 	var serials []uint64
 	for i := 0; i < 10; i++ {
-		s, err := db.getNextSerial()
+		s, err := testDB.getNextSerial()
 		if err != nil {
 			t.Fatalf("Failed to get serial %d: %v", i, err)
 		}
@@ -164,53 +123,28 @@ func TestSerial_GetNextSerial(t *testing.T) {
 }
 
 func TestDatabaseReady(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
+	// Database should already be ready (testDB is initialized in TestMain)
+	select {
+	case <-testDB.Ready():
+		t.Logf("✓ Database ready signal works correctly")
+	default:
+		t.Fatal("Expected database to be ready")
 	}
-	defer db.Close()
-
-	// Wait for ready
-	<-db.Ready()
-
-	// Database should be ready now
-	t.Logf("✓ Database ready signal works correctly")
 }
 
 func TestIdentity(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	// Wipe to ensure clean state
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	cleanTestDatabase()
 
 	// Get identity (creates if not exists)
-	secret1, err := db.GetOrCreateRelayIdentitySecret()
+	secret1, err := testDB.GetOrCreateRelayIdentitySecret()
 	if err != nil {
 		t.Fatalf("Failed to get identity: %v", err)
 	}
@@ -219,7 +153,7 @@ func TestIdentity(t *testing.T) {
 	}
 
 	// Get identity again (should return same one)
-	secret2, err := db.GetOrCreateRelayIdentitySecret()
+	secret2, err := testDB.GetOrCreateRelayIdentitySecret()
 	if err != nil {
 		t.Fatalf("Failed to get identity second time: %v", err)
 	}
@@ -241,38 +175,25 @@ func TestIdentity(t *testing.T) {
 }
 
 func TestWipe(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
 
 	signer, _ := p8k.New()
 	signer.Generate()
 
 	// Add some data
-	if err := db.AddNIP43Member(signer.Pub(), "test"); err != nil {
+	if err := testDB.AddNIP43Member(signer.Pub(), "test"); err != nil {
 		t.Fatalf("Failed to add member: %v", err)
 	}
 
 	// Wipe the database
-	if err := db.Wipe(); err != nil {
+	if err := testDB.Wipe(); err != nil {
 		t.Fatalf("Failed to wipe database: %v", err)
 	}
 
 	// Verify data is gone
-	isMember, _ := db.IsNIP43Member(signer.Pub())
+	isMember, _ := testDB.IsNIP43Member(signer.Pub())
 	if isMember {
 		t.Fatal("Expected data to be wiped")
 	}

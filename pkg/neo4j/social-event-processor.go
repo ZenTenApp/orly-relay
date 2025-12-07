@@ -95,7 +95,7 @@ func (p *SocialEventProcessor) processProfileMetadata(ctx context.Context, ev *e
 		return fmt.Errorf("failed to update profile: %w", err)
 	}
 
-	p.db.Logger.Infof("updated profile for user %s", pubkey[:16])
+	p.db.Logger.Infof("updated profile for user %s", safePrefix(pubkey, 16))
 	return nil
 }
 
@@ -113,7 +113,7 @@ func (p *SocialEventProcessor) processContactList(ctx context.Context, ev *event
 	// 2. Reject if this event is older than existing
 	if existingEvent != nil && existingEvent.CreatedAt >= ev.CreatedAt {
 		p.db.Logger.Infof("rejecting older contact list event %s (existing: %s)",
-			eventID[:16], existingEvent.EventID[:16])
+			safePrefix(eventID, 16), safePrefix(existingEvent.EventID, 16))
 		return nil // Not an error, just skip
 	}
 
@@ -150,7 +150,7 @@ func (p *SocialEventProcessor) processContactList(ctx context.Context, ev *event
 	}
 
 	p.db.Logger.Infof("processed contact list: author=%s, event=%s, added=%d, removed=%d, total=%d",
-		authorPubkey[:16], eventID[:16], len(added), len(removed), len(newFollows))
+		safePrefix(authorPubkey, 16), safePrefix(eventID, 16), len(added), len(removed), len(newFollows))
 
 	return nil
 }
@@ -168,7 +168,7 @@ func (p *SocialEventProcessor) processMuteList(ctx context.Context, ev *event.E)
 
 	// Reject if older
 	if existingEvent != nil && existingEvent.CreatedAt >= ev.CreatedAt {
-		p.db.Logger.Infof("rejecting older mute list event %s", eventID[:16])
+		p.db.Logger.Infof("rejecting older mute list event %s", safePrefix(eventID, 16))
 		return nil
 	}
 
@@ -205,7 +205,7 @@ func (p *SocialEventProcessor) processMuteList(ctx context.Context, ev *event.E)
 	}
 
 	p.db.Logger.Infof("processed mute list: author=%s, event=%s, added=%d, removed=%d",
-		authorPubkey[:16], eventID[:16], len(added), len(removed))
+		safePrefix(authorPubkey, 16), safePrefix(eventID, 16), len(added), len(removed))
 
 	return nil
 }
@@ -232,7 +232,7 @@ func (p *SocialEventProcessor) processReport(ctx context.Context, ev *event.E) e
 	}
 
 	if reportedPubkey == "" {
-		p.db.Logger.Warningf("report event %s has no p-tag, skipping", eventID[:16])
+		p.db.Logger.Warningf("report event %s has no p-tag, skipping", safePrefix(eventID, 16))
 		return nil
 	}
 
@@ -280,7 +280,7 @@ func (p *SocialEventProcessor) processReport(ctx context.Context, ev *event.E) e
 	}
 
 	p.db.Logger.Infof("processed report: reporter=%s, reported=%s, type=%s",
-		reporterPubkey[:16], reportedPubkey[:16], reportType)
+		safePrefix(reporterPubkey, 16), safePrefix(reportedPubkey, 16), reportType)
 
 	return nil
 }
@@ -298,15 +298,17 @@ type UpdateContactListParams struct {
 
 // updateContactListGraph performs atomic graph update for contact list changes
 func (p *SocialEventProcessor) updateContactListGraph(ctx context.Context, params UpdateContactListParams) error {
-	// Note: WITH is required between CREATE and MERGE in Cypher
-	cypher := `
-		// Mark old event as superseded (if exists)
-		OPTIONAL MATCH (old:ProcessedSocialEvent {event_id: $old_event_id})
-		SET old.superseded_by = $new_event_id
+	// We need to break this into separate operations because Neo4j's UNWIND
+	// produces zero rows for empty arrays, which stops query execution.
+	// Also, complex query chains with OPTIONAL MATCH can have issues.
 
-		// Create new event tracking node
-		// WITH required after OPTIONAL MATCH + SET before CREATE
-		WITH old
+	// Step 1: Create the ProcessedSocialEvent and NostrUser nodes
+	createCypher := `
+		// Get or create author node first
+		MERGE (author:NostrUser {pubkey: $author_pubkey})
+		ON CREATE SET author.created_at = timestamp()
+
+		// Create new ProcessedSocialEvent tracking node
 		CREATE (new:ProcessedSocialEvent {
 			event_id: $new_event_id,
 			event_kind: 3,
@@ -317,54 +319,107 @@ func (p *SocialEventProcessor) updateContactListGraph(ctx context.Context, param
 			superseded_by: null
 		})
 
-		// WITH required to transition from CREATE to MERGE
-		WITH new
-
-		// Get or create author node
-		MERGE (author:NostrUser {pubkey: $author_pubkey})
-
-		// Update unchanged FOLLOWS relationships to point to new event
-		// (so they remain visible when filtering by non-superseded events)
-		WITH author
-		OPTIONAL MATCH (author)-[unchanged:FOLLOWS]->(followed:NostrUser)
-		WHERE unchanged.created_by_event = $old_event_id
-		  AND NOT followed.pubkey IN $removed_follows
-		SET unchanged.created_by_event = $new_event_id,
-		    unchanged.created_at = $created_at
-
-		// Remove old FOLLOWS relationships for removed follows
-		WITH author
-		OPTIONAL MATCH (author)-[old_follows:FOLLOWS]->(followed:NostrUser)
-		WHERE old_follows.created_by_event = $old_event_id
-		  AND followed.pubkey IN $removed_follows
-		DELETE old_follows
-
-		// Create new FOLLOWS relationships for added follows
-		WITH author
-		UNWIND $added_follows AS followed_pubkey
-		MERGE (followed:NostrUser {pubkey: followed_pubkey})
-		MERGE (author)-[new_follows:FOLLOWS]->(followed)
-		ON CREATE SET
-			new_follows.created_by_event = $new_event_id,
-			new_follows.created_at = $created_at,
-			new_follows.relay_received_at = timestamp()
-		ON MATCH SET
-			new_follows.created_by_event = $new_event_id,
-			new_follows.created_at = $created_at
+		RETURN author.pubkey AS author_pubkey
 	`
 
-	cypherParams := map[string]any{
-		"author_pubkey":   params.AuthorPubkey,
-		"new_event_id":    params.NewEventID,
-		"old_event_id":    params.OldEventID,
-		"created_at":      params.CreatedAt,
-		"total_follows":   params.TotalFollows,
-		"added_follows":   params.AddedFollows,
-		"removed_follows": params.RemovedFollows,
+	createParams := map[string]any{
+		"author_pubkey": params.AuthorPubkey,
+		"new_event_id":  params.NewEventID,
+		"created_at":    params.CreatedAt,
+		"total_follows": params.TotalFollows,
 	}
 
-	_, err := p.db.ExecuteWrite(ctx, cypher, cypherParams)
-	return err
+	_, err := p.db.ExecuteWrite(ctx, createCypher, createParams)
+	if err != nil {
+		return fmt.Errorf("failed to create ProcessedSocialEvent: %w", err)
+	}
+
+	// Step 2: Mark old event as superseded (if it exists)
+	if params.OldEventID != "" {
+		supersedeCypher := `
+			MATCH (old:ProcessedSocialEvent {event_id: $old_event_id})
+			SET old.superseded_by = $new_event_id
+		`
+		supersedeParams := map[string]any{
+			"old_event_id": params.OldEventID,
+			"new_event_id": params.NewEventID,
+		}
+		// Ignore errors - old event may not exist
+		p.db.ExecuteWrite(ctx, supersedeCypher, supersedeParams)
+
+		// Step 3: Update unchanged FOLLOWS to point to new event
+		// Always update relationships that aren't being removed
+		updateCypher := `
+			MATCH (author:NostrUser {pubkey: $author_pubkey})-[f:FOLLOWS]->(followed:NostrUser)
+			WHERE f.created_by_event = $old_event_id
+			  AND NOT followed.pubkey IN $removed_follows
+			SET f.created_by_event = $new_event_id,
+			    f.created_at = $created_at
+		`
+		updateParams := map[string]any{
+			"author_pubkey":   params.AuthorPubkey,
+			"old_event_id":    params.OldEventID,
+			"new_event_id":    params.NewEventID,
+			"created_at":      params.CreatedAt,
+			"removed_follows": params.RemovedFollows,
+		}
+		p.db.ExecuteWrite(ctx, updateCypher, updateParams)
+
+		// Step 4: Remove FOLLOWS for removed follows
+		if len(params.RemovedFollows) > 0 {
+			removeCypher := `
+				MATCH (author:NostrUser {pubkey: $author_pubkey})-[f:FOLLOWS]->(followed:NostrUser)
+				WHERE f.created_by_event = $old_event_id
+				  AND followed.pubkey IN $removed_follows
+				DELETE f
+			`
+			removeParams := map[string]any{
+				"author_pubkey":   params.AuthorPubkey,
+				"old_event_id":    params.OldEventID,
+				"removed_follows": params.RemovedFollows,
+			}
+			p.db.ExecuteWrite(ctx, removeCypher, removeParams)
+		}
+	}
+
+	// Step 5: Create new FOLLOWS relationships for added follows
+	// Process in batches to avoid memory issues
+	const batchSize = 500
+	for i := 0; i < len(params.AddedFollows); i += batchSize {
+		end := i + batchSize
+		if end > len(params.AddedFollows) {
+			end = len(params.AddedFollows)
+		}
+		batch := params.AddedFollows[i:end]
+
+		followsCypher := `
+			MATCH (author:NostrUser {pubkey: $author_pubkey})
+			UNWIND $added_follows AS followed_pubkey
+			MERGE (followed:NostrUser {pubkey: followed_pubkey})
+			ON CREATE SET followed.created_at = timestamp()
+			MERGE (author)-[f:FOLLOWS]->(followed)
+			ON CREATE SET
+				f.created_by_event = $new_event_id,
+				f.created_at = $created_at,
+				f.relay_received_at = timestamp()
+			ON MATCH SET
+				f.created_by_event = $new_event_id,
+				f.created_at = $created_at
+		`
+
+		followsParams := map[string]any{
+			"author_pubkey": params.AuthorPubkey,
+			"new_event_id":  params.NewEventID,
+			"created_at":    params.CreatedAt,
+			"added_follows": batch,
+		}
+
+		if _, err := p.db.ExecuteWrite(ctx, followsCypher, followsParams); err != nil {
+			return fmt.Errorf("failed to create FOLLOWS batch %d-%d: %w", i, end, err)
+		}
+	}
+
+	return nil
 }
 
 // UpdateMuteListParams holds parameters for mute list graph update
@@ -380,15 +435,16 @@ type UpdateMuteListParams struct {
 
 // updateMuteListGraph performs atomic graph update for mute list changes
 func (p *SocialEventProcessor) updateMuteListGraph(ctx context.Context, params UpdateMuteListParams) error {
-	// Note: WITH is required between CREATE and MERGE in Cypher
-	cypher := `
-		// Mark old event as superseded (if exists)
-		OPTIONAL MATCH (old:ProcessedSocialEvent {event_id: $old_event_id})
-		SET old.superseded_by = $new_event_id
+	// We need to break this into separate operations because Neo4j's UNWIND
+	// produces zero rows for empty arrays, which stops query execution.
 
-		// Create new event tracking node
-		// WITH required after OPTIONAL MATCH + SET before CREATE
-		WITH old
+	// Step 1: Create the ProcessedSocialEvent and NostrUser nodes
+	createCypher := `
+		// Get or create author node first
+		MERGE (author:NostrUser {pubkey: $author_pubkey})
+		ON CREATE SET author.created_at = timestamp()
+
+		// Create new ProcessedSocialEvent tracking node
 		CREATE (new:ProcessedSocialEvent {
 			event_id: $new_event_id,
 			event_kind: 10000,
@@ -399,53 +455,106 @@ func (p *SocialEventProcessor) updateMuteListGraph(ctx context.Context, params U
 			superseded_by: null
 		})
 
-		// WITH required to transition from CREATE to MERGE
-		WITH new
-
-		// Get or create author node
-		MERGE (author:NostrUser {pubkey: $author_pubkey})
-
-		// Update unchanged MUTES relationships to point to new event
-		WITH author
-		OPTIONAL MATCH (author)-[unchanged:MUTES]->(muted:NostrUser)
-		WHERE unchanged.created_by_event = $old_event_id
-		  AND NOT muted.pubkey IN $removed_mutes
-		SET unchanged.created_by_event = $new_event_id,
-		    unchanged.created_at = $created_at
-
-		// Remove old MUTES relationships
-		WITH author
-		OPTIONAL MATCH (author)-[old_mutes:MUTES]->(muted:NostrUser)
-		WHERE old_mutes.created_by_event = $old_event_id
-		  AND muted.pubkey IN $removed_mutes
-		DELETE old_mutes
-
-		// Create new MUTES relationships
-		WITH author
-		UNWIND $added_mutes AS muted_pubkey
-		MERGE (muted:NostrUser {pubkey: muted_pubkey})
-		MERGE (author)-[new_mutes:MUTES]->(muted)
-		ON CREATE SET
-			new_mutes.created_by_event = $new_event_id,
-			new_mutes.created_at = $created_at,
-			new_mutes.relay_received_at = timestamp()
-		ON MATCH SET
-			new_mutes.created_by_event = $new_event_id,
-			new_mutes.created_at = $created_at
+		RETURN author.pubkey AS author_pubkey
 	`
 
-	cypherParams := map[string]any{
-		"author_pubkey":  params.AuthorPubkey,
-		"new_event_id":   params.NewEventID,
-		"old_event_id":   params.OldEventID,
-		"created_at":     params.CreatedAt,
-		"total_mutes":    params.TotalMutes,
-		"added_mutes":    params.AddedMutes,
-		"removed_mutes":  params.RemovedMutes,
+	createParams := map[string]any{
+		"author_pubkey": params.AuthorPubkey,
+		"new_event_id":  params.NewEventID,
+		"created_at":    params.CreatedAt,
+		"total_mutes":   params.TotalMutes,
 	}
 
-	_, err := p.db.ExecuteWrite(ctx, cypher, cypherParams)
-	return err
+	_, err := p.db.ExecuteWrite(ctx, createCypher, createParams)
+	if err != nil {
+		return fmt.Errorf("failed to create ProcessedSocialEvent: %w", err)
+	}
+
+	// Step 2: Mark old event as superseded (if it exists)
+	if params.OldEventID != "" {
+		supersedeCypher := `
+			MATCH (old:ProcessedSocialEvent {event_id: $old_event_id})
+			SET old.superseded_by = $new_event_id
+		`
+		supersedeParams := map[string]any{
+			"old_event_id": params.OldEventID,
+			"new_event_id": params.NewEventID,
+		}
+		p.db.ExecuteWrite(ctx, supersedeCypher, supersedeParams)
+
+		// Step 3: Update unchanged MUTES to point to new event
+		// Always update relationships that aren't being removed
+		updateCypher := `
+			MATCH (author:NostrUser {pubkey: $author_pubkey})-[m:MUTES]->(muted:NostrUser)
+			WHERE m.created_by_event = $old_event_id
+			  AND NOT muted.pubkey IN $removed_mutes
+			SET m.created_by_event = $new_event_id,
+			    m.created_at = $created_at
+		`
+		updateParams := map[string]any{
+			"author_pubkey": params.AuthorPubkey,
+			"old_event_id":  params.OldEventID,
+			"new_event_id":  params.NewEventID,
+			"created_at":    params.CreatedAt,
+			"removed_mutes": params.RemovedMutes,
+		}
+		p.db.ExecuteWrite(ctx, updateCypher, updateParams)
+
+		// Step 4: Remove MUTES for removed mutes
+		if len(params.RemovedMutes) > 0 {
+			removeCypher := `
+				MATCH (author:NostrUser {pubkey: $author_pubkey})-[m:MUTES]->(muted:NostrUser)
+				WHERE m.created_by_event = $old_event_id
+				  AND muted.pubkey IN $removed_mutes
+				DELETE m
+			`
+			removeParams := map[string]any{
+				"author_pubkey": params.AuthorPubkey,
+				"old_event_id":  params.OldEventID,
+				"removed_mutes": params.RemovedMutes,
+			}
+			p.db.ExecuteWrite(ctx, removeCypher, removeParams)
+		}
+	}
+
+	// Step 5: Create new MUTES relationships for added mutes
+	// Process in batches to avoid memory issues
+	const batchSize = 500
+	for i := 0; i < len(params.AddedMutes); i += batchSize {
+		end := i + batchSize
+		if end > len(params.AddedMutes) {
+			end = len(params.AddedMutes)
+		}
+		batch := params.AddedMutes[i:end]
+
+		mutesCypher := `
+			MATCH (author:NostrUser {pubkey: $author_pubkey})
+			UNWIND $added_mutes AS muted_pubkey
+			MERGE (muted:NostrUser {pubkey: muted_pubkey})
+			ON CREATE SET muted.created_at = timestamp()
+			MERGE (author)-[m:MUTES]->(muted)
+			ON CREATE SET
+				m.created_by_event = $new_event_id,
+				m.created_at = $created_at,
+				m.relay_received_at = timestamp()
+			ON MATCH SET
+				m.created_by_event = $new_event_id,
+				m.created_at = $created_at
+		`
+
+		mutesParams := map[string]any{
+			"author_pubkey": params.AuthorPubkey,
+			"new_event_id":  params.NewEventID,
+			"created_at":    params.CreatedAt,
+			"added_mutes":   batch,
+		}
+
+		if _, err := p.db.ExecuteWrite(ctx, mutesCypher, mutesParams); err != nil {
+			return fmt.Errorf("failed to create MUTES batch %d-%d: %w", i, end, err)
+		}
+	}
+
+	return nil
 }
 
 // getLatestSocialEvent retrieves the most recent non-superseded event of a given kind for a pubkey

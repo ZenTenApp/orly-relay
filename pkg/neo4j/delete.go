@@ -84,7 +84,7 @@ LIMIT 1000`
 		deleteParams := map[string]any{"id": idStr}
 
 		if _, err := n.ExecuteWrite(ctx, deleteCypher, deleteParams); err != nil {
-			n.Logger.Warningf("failed to delete expired event %s: %v", idStr[:16], err)
+			n.Logger.Warningf("failed to delete expired event %s: %v", safePrefix(idStr, 16), err)
 			continue
 		}
 
@@ -117,7 +117,7 @@ func (n *N) ProcessDelete(ev *event.E, admins [][]byte) error {
 
 	// Check if author is an admin
 	for _, adminPk := range admins {
-		if string(ev.Pubkey[:]) == string(adminPk) {
+		if string(ev.Pubkey) == string(adminPk) {
 			isAdmin = true
 			break
 		}
@@ -157,7 +157,7 @@ func (n *N) ProcessDelete(ev *event.E, admins [][]byte) error {
 						}
 
 						// Check if deletion is allowed (same author or admin)
-						canDelete := isAdmin || string(ev.Pubkey[:]) == string(pubkey)
+						canDelete := isAdmin || string(ev.Pubkey) == string(pubkey)
 						if canDelete {
 							// Delete the event
 							if err := n.DeleteEvent(ctx, eventID); err != nil {

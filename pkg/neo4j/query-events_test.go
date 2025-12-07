@@ -1,8 +1,10 @@
+//go:build integration
+// +build integration
+
 package neo4j
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"git.mleku.dev/mleku/nostr/encoders/event"
@@ -14,37 +16,11 @@ import (
 	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 )
 
-// setupTestDatabase creates a fresh Neo4j database connection for testing
-func setupTestDatabase(t *testing.T) (*N, context.Context, context.CancelFunc) {
-	t.Helper()
+// All tests in this file use the shared testDB instance from testmain_test.go
+// to avoid Neo4j authentication rate limiting from too many connections.
 
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		cancel()
-		t.Fatalf("Failed to create database: %v", err)
-	}
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		db.Close()
-		cancel()
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
-
-	return db, ctx, cancel
-}
-
-// createTestSigner creates a new signer for test events
-func createTestSigner(t *testing.T) *p8k.Signer {
+// createTestSignerLocal creates a new signer for test events
+func createTestSignerLocal(t *testing.T) *p8k.Signer {
 	t.Helper()
 
 	signer, err := p8k.New()
@@ -57,8 +33,8 @@ func createTestSigner(t *testing.T) *p8k.Signer {
 	return signer
 }
 
-// createAndSaveEvent creates a signed event and saves it to the database
-func createAndSaveEvent(t *testing.T, ctx context.Context, db *N, signer *p8k.Signer, k uint16, content string, tags *tag.S, ts int64) *event.E {
+// createAndSaveEventLocal creates a signed event and saves it to the database
+func createAndSaveEventLocal(t *testing.T, ctx context.Context, signer *p8k.Signer, k uint16, content string, tags *tag.S, ts int64) *event.E {
 	t.Helper()
 
 	ev := event.New()
@@ -72,7 +48,7 @@ func createAndSaveEvent(t *testing.T, ctx context.Context, db *N, signer *p8k.Si
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, ev); err != nil {
+	if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 		t.Fatalf("Failed to save event: %v", err)
 	}
 
@@ -80,17 +56,20 @@ func createAndSaveEvent(t *testing.T, ctx context.Context, db *N, signer *p8k.Si
 }
 
 func TestQueryEventsByID(t *testing.T) {
-	db, ctx, cancel := setupTestDatabase(t)
-	defer db.Close()
-	defer cancel()
+	if testDB == nil {
+		t.Skip("Neo4j not available")
+	}
 
-	signer := createTestSigner(t)
+	cleanTestDatabase()
+
+	ctx := context.Background()
+	signer := createTestSignerLocal(t)
 
 	// Create and save a test event
-	ev := createAndSaveEvent(t, ctx, db, signer, 1, "Test event for ID query", nil, timestamp.Now().V)
+	ev := createAndSaveEventLocal(t, ctx, signer, 1, "Test event for ID query", nil, timestamp.Now().V)
 
 	// Query by ID
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Ids: tag.NewFromBytesSlice(ev.ID),
 	})
 	if err != nil {
@@ -110,21 +89,24 @@ func TestQueryEventsByID(t *testing.T) {
 }
 
 func TestQueryEventsByKind(t *testing.T) {
-	db, ctx, cancel := setupTestDatabase(t)
-	defer db.Close()
-	defer cancel()
+	if testDB == nil {
+		t.Skip("Neo4j not available")
+	}
 
-	signer := createTestSigner(t)
+	cleanTestDatabase()
+
+	ctx := context.Background()
+	signer := createTestSignerLocal(t)
 	baseTs := timestamp.Now().V
 
 	// Create events of different kinds
-	createAndSaveEvent(t, ctx, db, signer, 1, "Kind 1 event A", nil, baseTs)
-	createAndSaveEvent(t, ctx, db, signer, 1, "Kind 1 event B", nil, baseTs+1)
-	createAndSaveEvent(t, ctx, db, signer, 7, "Kind 7 reaction", nil, baseTs+2)
-	createAndSaveEvent(t, ctx, db, signer, 30023, "Kind 30023 article", nil, baseTs+3)
+	createAndSaveEventLocal(t, ctx, signer, 1, "Kind 1 event A", nil, baseTs)
+	createAndSaveEventLocal(t, ctx, signer, 1, "Kind 1 event B", nil, baseTs+1)
+	createAndSaveEventLocal(t, ctx, signer, 7, "Kind 7 reaction", nil, baseTs+2)
+	createAndSaveEventLocal(t, ctx, signer, 30023, "Kind 30023 article", nil, baseTs+3)
 
 	// Query for kind 1
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Kinds: kind.NewS(kind.New(1)),
 	})
 	if err != nil {
@@ -145,21 +127,24 @@ func TestQueryEventsByKind(t *testing.T) {
 }
 
 func TestQueryEventsByAuthor(t *testing.T) {
-	db, ctx, cancel := setupTestDatabase(t)
-	defer db.Close()
-	defer cancel()
+	if testDB == nil {
+		t.Skip("Neo4j not available")
+	}
 
-	alice := createTestSigner(t)
-	bob := createTestSigner(t)
+	cleanTestDatabase()
+
+	ctx := context.Background()
+	alice := createTestSignerLocal(t)
+	bob := createTestSignerLocal(t)
 	baseTs := timestamp.Now().V
 
 	// Create events from different authors
-	createAndSaveEvent(t, ctx, db, alice, 1, "Alice's event 1", nil, baseTs)
-	createAndSaveEvent(t, ctx, db, alice, 1, "Alice's event 2", nil, baseTs+1)
-	createAndSaveEvent(t, ctx, db, bob, 1, "Bob's event", nil, baseTs+2)
+	createAndSaveEventLocal(t, ctx, alice, 1, "Alice's event 1", nil, baseTs)
+	createAndSaveEventLocal(t, ctx, alice, 1, "Alice's event 2", nil, baseTs+1)
+	createAndSaveEventLocal(t, ctx, bob, 1, "Bob's event", nil, baseTs+2)
 
 	// Query for Alice's events
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Authors: tag.NewFromBytesSlice(alice.Pub()),
 	})
 	if err != nil {
@@ -181,21 +166,24 @@ func TestQueryEventsByAuthor(t *testing.T) {
 }
 
 func TestQueryEventsByTimeRange(t *testing.T) {
-	db, ctx, cancel := setupTestDatabase(t)
-	defer db.Close()
-	defer cancel()
+	if testDB == nil {
+		t.Skip("Neo4j not available")
+	}
 
-	signer := createTestSigner(t)
+	cleanTestDatabase()
+
+	ctx := context.Background()
+	signer := createTestSignerLocal(t)
 	baseTs := timestamp.Now().V
 
 	// Create events at different times
-	createAndSaveEvent(t, ctx, db, signer, 1, "Old event", nil, baseTs-7200)   // 2 hours ago
-	createAndSaveEvent(t, ctx, db, signer, 1, "Recent event", nil, baseTs-1800) // 30 min ago
-	createAndSaveEvent(t, ctx, db, signer, 1, "Current event", nil, baseTs)
+	createAndSaveEventLocal(t, ctx, signer, 1, "Old event", nil, baseTs-7200)    // 2 hours ago
+	createAndSaveEventLocal(t, ctx, signer, 1, "Recent event", nil, baseTs-1800) // 30 min ago
+	createAndSaveEventLocal(t, ctx, signer, 1, "Current event", nil, baseTs)
 
 	// Query for events in the last hour
 	since := &timestamp.T{V: baseTs - 3600}
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Since: since,
 	})
 	if err != nil {
@@ -216,23 +204,26 @@ func TestQueryEventsByTimeRange(t *testing.T) {
 }
 
 func TestQueryEventsByTag(t *testing.T) {
-	db, ctx, cancel := setupTestDatabase(t)
-	defer db.Close()
-	defer cancel()
+	if testDB == nil {
+		t.Skip("Neo4j not available")
+	}
 
-	signer := createTestSigner(t)
+	cleanTestDatabase()
+
+	ctx := context.Background()
+	signer := createTestSignerLocal(t)
 	baseTs := timestamp.Now().V
 
 	// Create events with tags
-	createAndSaveEvent(t, ctx, db, signer, 1, "Bitcoin post",
+	createAndSaveEventLocal(t, ctx, signer, 1, "Bitcoin post",
 		tag.NewS(tag.NewFromAny("t", "bitcoin")), baseTs)
-	createAndSaveEvent(t, ctx, db, signer, 1, "Nostr post",
+	createAndSaveEventLocal(t, ctx, signer, 1, "Nostr post",
 		tag.NewS(tag.NewFromAny("t", "nostr")), baseTs+1)
-	createAndSaveEvent(t, ctx, db, signer, 1, "Bitcoin and Nostr post",
+	createAndSaveEventLocal(t, ctx, signer, 1, "Bitcoin and Nostr post",
 		tag.NewS(tag.NewFromAny("t", "bitcoin"), tag.NewFromAny("t", "nostr")), baseTs+2)
 
 	// Query for bitcoin tagged events
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Tags: tag.NewS(tag.NewFromAny("t", "bitcoin")),
 	})
 	if err != nil {
@@ -247,21 +238,24 @@ func TestQueryEventsByTag(t *testing.T) {
 }
 
 func TestQueryEventsByKindAndAuthor(t *testing.T) {
-	db, ctx, cancel := setupTestDatabase(t)
-	defer db.Close()
-	defer cancel()
+	if testDB == nil {
+		t.Skip("Neo4j not available")
+	}
 
-	alice := createTestSigner(t)
-	bob := createTestSigner(t)
+	cleanTestDatabase()
+
+	ctx := context.Background()
+	alice := createTestSignerLocal(t)
+	bob := createTestSignerLocal(t)
 	baseTs := timestamp.Now().V
 
 	// Create events
-	createAndSaveEvent(t, ctx, db, alice, 1, "Alice note", nil, baseTs)
-	createAndSaveEvent(t, ctx, db, alice, 7, "Alice reaction", nil, baseTs+1)
-	createAndSaveEvent(t, ctx, db, bob, 1, "Bob note", nil, baseTs+2)
+	createAndSaveEventLocal(t, ctx, alice, 1, "Alice note", nil, baseTs)
+	createAndSaveEventLocal(t, ctx, alice, 7, "Alice reaction", nil, baseTs+1)
+	createAndSaveEventLocal(t, ctx, bob, 1, "Bob note", nil, baseTs+2)
 
 	// Query for Alice's kind 1 events
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Kinds:   kind.NewS(kind.New(1)),
 		Authors: tag.NewFromBytesSlice(alice.Pub()),
 	})
@@ -277,21 +271,24 @@ func TestQueryEventsByKindAndAuthor(t *testing.T) {
 }
 
 func TestQueryEventsWithLimit(t *testing.T) {
-	db, ctx, cancel := setupTestDatabase(t)
-	defer db.Close()
-	defer cancel()
+	if testDB == nil {
+		t.Skip("Neo4j not available")
+	}
 
-	signer := createTestSigner(t)
+	cleanTestDatabase()
+
+	ctx := context.Background()
+	signer := createTestSignerLocal(t)
 	baseTs := timestamp.Now().V
 
 	// Create many events
 	for i := 0; i < 20; i++ {
-		createAndSaveEvent(t, ctx, db, signer, 1, "Event", nil, baseTs+int64(i))
+		createAndSaveEventLocal(t, ctx, signer, 1, "Event", nil, baseTs+int64(i))
 	}
 
 	// Query with limit
 	limit := uint(5)
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Kinds: kind.NewS(kind.New(1)),
 		Limit: &limit,
 	})
@@ -307,20 +304,23 @@ func TestQueryEventsWithLimit(t *testing.T) {
 }
 
 func TestQueryEventsOrderByCreatedAt(t *testing.T) {
-	db, ctx, cancel := setupTestDatabase(t)
-	defer db.Close()
-	defer cancel()
+	if testDB == nil {
+		t.Skip("Neo4j not available")
+	}
 
-	signer := createTestSigner(t)
+	cleanTestDatabase()
+
+	ctx := context.Background()
+	signer := createTestSignerLocal(t)
 	baseTs := timestamp.Now().V
 
 	// Create events at different times
-	createAndSaveEvent(t, ctx, db, signer, 1, "First", nil, baseTs)
-	createAndSaveEvent(t, ctx, db, signer, 1, "Second", nil, baseTs+100)
-	createAndSaveEvent(t, ctx, db, signer, 1, "Third", nil, baseTs+200)
+	createAndSaveEventLocal(t, ctx, signer, 1, "First", nil, baseTs)
+	createAndSaveEventLocal(t, ctx, signer, 1, "Second", nil, baseTs+100)
+	createAndSaveEventLocal(t, ctx, signer, 1, "Third", nil, baseTs+200)
 
 	// Query and verify order (should be descending by created_at)
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Kinds: kind.NewS(kind.New(1)),
 	})
 	if err != nil {
@@ -343,12 +343,16 @@ func TestQueryEventsOrderByCreatedAt(t *testing.T) {
 }
 
 func TestQueryEventsEmpty(t *testing.T) {
-	db, ctx, cancel := setupTestDatabase(t)
-	defer db.Close()
-	defer cancel()
+	if testDB == nil {
+		t.Skip("Neo4j not available")
+	}
+
+	cleanTestDatabase()
+
+	ctx := context.Background()
 
 	// Query for non-existent kind
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Kinds: kind.NewS(kind.New(99999)),
 	})
 	if err != nil {
@@ -363,20 +367,23 @@ func TestQueryEventsEmpty(t *testing.T) {
 }
 
 func TestQueryEventsMultipleKinds(t *testing.T) {
-	db, ctx, cancel := setupTestDatabase(t)
-	defer db.Close()
-	defer cancel()
+	if testDB == nil {
+		t.Skip("Neo4j not available")
+	}
 
-	signer := createTestSigner(t)
+	cleanTestDatabase()
+
+	ctx := context.Background()
+	signer := createTestSignerLocal(t)
 	baseTs := timestamp.Now().V
 
 	// Create events of different kinds
-	createAndSaveEvent(t, ctx, db, signer, 1, "Note", nil, baseTs)
-	createAndSaveEvent(t, ctx, db, signer, 7, "Reaction", nil, baseTs+1)
-	createAndSaveEvent(t, ctx, db, signer, 30023, "Article", nil, baseTs+2)
+	createAndSaveEventLocal(t, ctx, signer, 1, "Note", nil, baseTs)
+	createAndSaveEventLocal(t, ctx, signer, 7, "Reaction", nil, baseTs+1)
+	createAndSaveEventLocal(t, ctx, signer, 30023, "Article", nil, baseTs+2)
 
 	// Query for multiple kinds
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Kinds: kind.NewS(kind.New(1), kind.New(7)),
 	})
 	if err != nil {
@@ -391,24 +398,27 @@ func TestQueryEventsMultipleKinds(t *testing.T) {
 }
 
 func TestQueryEventsMultipleAuthors(t *testing.T) {
-	db, ctx, cancel := setupTestDatabase(t)
-	defer db.Close()
-	defer cancel()
+	if testDB == nil {
+		t.Skip("Neo4j not available")
+	}
 
-	alice := createTestSigner(t)
-	bob := createTestSigner(t)
-	charlie := createTestSigner(t)
+	cleanTestDatabase()
+
+	ctx := context.Background()
+	alice := createTestSignerLocal(t)
+	bob := createTestSignerLocal(t)
+	charlie := createTestSignerLocal(t)
 	baseTs := timestamp.Now().V
 
 	// Create events from different authors
-	createAndSaveEvent(t, ctx, db, alice, 1, "Alice", nil, baseTs)
-	createAndSaveEvent(t, ctx, db, bob, 1, "Bob", nil, baseTs+1)
-	createAndSaveEvent(t, ctx, db, charlie, 1, "Charlie", nil, baseTs+2)
+	createAndSaveEventLocal(t, ctx, alice, 1, "Alice", nil, baseTs)
+	createAndSaveEventLocal(t, ctx, bob, 1, "Bob", nil, baseTs+1)
+	createAndSaveEventLocal(t, ctx, charlie, 1, "Charlie", nil, baseTs+2)
 
 	// Query for Alice and Bob's events
 	authors := tag.NewFromBytesSlice(alice.Pub(), bob.Pub())
 
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Authors: authors,
 	})
 	if err != nil {
@@ -423,20 +433,23 @@ func TestQueryEventsMultipleAuthors(t *testing.T) {
 }
 
 func TestCountEvents(t *testing.T) {
-	db, ctx, cancel := setupTestDatabase(t)
-	defer db.Close()
-	defer cancel()
+	if testDB == nil {
+		t.Skip("Neo4j not available")
+	}
 
-	signer := createTestSigner(t)
+	cleanTestDatabase()
+
+	ctx := context.Background()
+	signer := createTestSignerLocal(t)
 	baseTs := timestamp.Now().V
 
 	// Create events
 	for i := 0; i < 5; i++ {
-		createAndSaveEvent(t, ctx, db, signer, 1, "Event", nil, baseTs+int64(i))
+		createAndSaveEventLocal(t, ctx, signer, 1, "Event", nil, baseTs+int64(i))
 	}
 
 	// Count events
-	count, _, err := db.CountEvents(ctx, &filter.F{
+	count, _, err := testDB.CountEvents(ctx, &filter.F{
 		Kinds: kind.NewS(kind.New(1)),
 	})
 	if err != nil {

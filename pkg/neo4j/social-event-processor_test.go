@@ -1,9 +1,11 @@
+//go:build integration
+// +build integration
+
 package neo4j
 
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 
 	"git.mleku.dev/mleku/nostr/encoders/event"
@@ -14,31 +16,16 @@ import (
 )
 
 // TestSocialEventProcessor tests the social event processor with kinds 0, 3, 1984, 10000
+// Uses the shared testDB instance from testmain_test.go to avoid auth rate limiting
 func TestSocialEventProcessor(t *testing.T) {
-	// Skip if Neo4j is not available
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	// Create test database
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := context.Background()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	// Wait for database to be ready
-	<-db.Ready()
-
-	// Wipe database to ensure clean state for tests
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	// Clean database for this test
+	cleanTestDatabase()
 
 	// Generate test keypairs
 	alice := generateTestKeypair(t, "alice")
@@ -52,36 +39,36 @@ func TestSocialEventProcessor(t *testing.T) {
 	baseTimestamp := timestamp.Now().V
 
 	t.Run("Kind0_ProfileMetadata", func(t *testing.T) {
-		testProfileMetadata(t, ctx, db, alice, baseTimestamp)
+		testProfileMetadata(t, ctx, testDB, alice, baseTimestamp)
 	})
 
 	t.Run("Kind3_ContactList_Initial", func(t *testing.T) {
-		testContactListInitial(t, ctx, db, alice, bob, charlie, baseTimestamp+1)
+		testContactListInitial(t, ctx, testDB, alice, bob, charlie, baseTimestamp+1)
 	})
 
 	t.Run("Kind3_ContactList_Update_AddFollow", func(t *testing.T) {
-		testContactListUpdate(t, ctx, db, alice, bob, charlie, dave, baseTimestamp+2)
+		testContactListUpdate(t, ctx, testDB, alice, bob, charlie, dave, baseTimestamp+2)
 	})
 
 	t.Run("Kind3_ContactList_Update_RemoveFollow", func(t *testing.T) {
-		testContactListRemove(t, ctx, db, alice, bob, charlie, dave, baseTimestamp+3)
+		testContactListRemove(t, ctx, testDB, alice, bob, charlie, dave, baseTimestamp+3)
 	})
 
 	t.Run("Kind3_ContactList_OlderEventRejected", func(t *testing.T) {
 		// Use timestamp BEFORE the initial contact list to test rejection
-		testContactListOlderRejected(t, ctx, db, alice, bob, baseTimestamp)
+		testContactListOlderRejected(t, ctx, testDB, alice, bob, baseTimestamp)
 	})
 
 	t.Run("Kind10000_MuteList", func(t *testing.T) {
-		testMuteList(t, ctx, db, alice, eve)
+		testMuteList(t, ctx, testDB, alice, eve)
 	})
 
 	t.Run("Kind1984_Reports", func(t *testing.T) {
-		testReports(t, ctx, db, alice, bob, eve)
+		testReports(t, ctx, testDB, alice, bob, eve)
 	})
 
 	t.Run("VerifyGraphState", func(t *testing.T) {
-		verifyFinalGraphState(t, ctx, db, alice, bob, charlie, dave, eve)
+		verifyFinalGraphState(t, ctx, testDB, alice, bob, charlie, dave, eve)
 	})
 }
 

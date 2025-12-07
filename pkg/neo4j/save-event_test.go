@@ -3,7 +3,6 @@ package neo4j
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -14,167 +13,9 @@ import (
 	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 )
 
-// TestCypherQueryGeneration_WithClause is a unit test that validates the WITH clause fix
-// without requiring a Neo4j instance. This test verifies the generated Cypher string
-// has correct syntax for different tag combinations.
-func TestCypherQueryGeneration_WithClause(t *testing.T) {
-	// Create a mock N struct - we only need it to call buildEventCreationCypher
-	// No actual Neo4j connection is needed for this unit test
-	n := &N{}
-
-	// Generate test keypair
-	signer, err := p8k.New()
-	if err != nil {
-		t.Fatalf("Failed to create signer: %v", err)
-	}
-	if err := signer.Generate(); err != nil {
-		t.Fatalf("Failed to generate keypair: %v", err)
-	}
-
-	tests := []struct {
-		name               string
-		tags               *tag.S
-		expectWithClause   bool
-		expectOptionalMatch bool
-		description        string
-	}{
-		{
-			name:               "NoTags",
-			tags:               nil,
-			expectWithClause:   false,
-			expectOptionalMatch: false,
-			description:        "Event without tags",
-		},
-		{
-			name: "OnlyPTags_NoWithNeeded",
-			tags: tag.NewS(
-				tag.NewFromAny("p", "0000000000000000000000000000000000000000000000000000000000000001"),
-				tag.NewFromAny("p", "0000000000000000000000000000000000000000000000000000000000000002"),
-			),
-			expectWithClause:   false,
-			expectOptionalMatch: false,
-			description:        "p-tags use MERGE (not OPTIONAL MATCH), no WITH needed",
-		},
-		{
-			name: "OnlyETags_WithRequired",
-			tags: tag.NewS(
-				tag.NewFromAny("e", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-				tag.NewFromAny("e", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
-			),
-			expectWithClause:   true,
-			expectOptionalMatch: true,
-			description:        "e-tags use OPTIONAL MATCH which requires WITH clause after CREATE",
-		},
-		{
-			name: "ETagBeforePTag",
-			tags: tag.NewS(
-				tag.NewFromAny("e", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
-				tag.NewFromAny("p", "0000000000000000000000000000000000000000000000000000000000000003"),
-			),
-			expectWithClause:   true,
-			expectOptionalMatch: true,
-			description:        "e-tag appearing first triggers WITH clause",
-		},
-		{
-			name: "PTagBeforeETag",
-			tags: tag.NewS(
-				tag.NewFromAny("p", "0000000000000000000000000000000000000000000000000000000000000004"),
-				tag.NewFromAny("e", "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"),
-			),
-			expectWithClause:   true,
-			expectOptionalMatch: true,
-			description:        "WITH clause needed even when p-tag comes before e-tag",
-		},
-		{
-			name: "GenericTagsBeforeETag",
-			tags: tag.NewS(
-				tag.NewFromAny("t", "nostr"),
-				tag.NewFromAny("r", "https://example.com"),
-				tag.NewFromAny("e", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
-			),
-			expectWithClause:   true,
-			expectOptionalMatch: true,
-			description:        "WITH clause needed when e-tag follows generic tags",
-		},
-		{
-			name: "OnlyGenericTags",
-			tags: tag.NewS(
-				tag.NewFromAny("t", "bitcoin"),
-				tag.NewFromAny("d", "identifier"),
-				tag.NewFromAny("r", "wss://relay.example.com"),
-			),
-			expectWithClause:   false,
-			expectOptionalMatch: false,
-			description:        "Generic tags use MERGE, no WITH needed",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create test event
-			ev := event.New()
-			ev.Pubkey = signer.Pub()
-			ev.CreatedAt = timestamp.Now().V
-			ev.Kind = 1
-			ev.Content = []byte(fmt.Sprintf("Test content for %s", tt.name))
-			ev.Tags = tt.tags
-
-			if err := ev.Sign(signer); err != nil {
-				t.Fatalf("Failed to sign event: %v", err)
-			}
-
-			// Generate Cypher query
-			cypher, params := n.buildEventCreationCypher(ev, 12345)
-
-			// Validate WITH clause presence
-			hasWithClause := strings.Contains(cypher, "WITH e, a")
-			if tt.expectWithClause && !hasWithClause {
-				t.Errorf("%s: expected WITH clause but none found in Cypher:\n%s", tt.description, cypher)
-			}
-			if !tt.expectWithClause && hasWithClause {
-				t.Errorf("%s: unexpected WITH clause in Cypher:\n%s", tt.description, cypher)
-			}
-
-			// Validate OPTIONAL MATCH presence
-			hasOptionalMatch := strings.Contains(cypher, "OPTIONAL MATCH")
-			if tt.expectOptionalMatch && !hasOptionalMatch {
-				t.Errorf("%s: expected OPTIONAL MATCH but none found", tt.description)
-			}
-			if !tt.expectOptionalMatch && hasOptionalMatch {
-				t.Errorf("%s: unexpected OPTIONAL MATCH found", tt.description)
-			}
-
-			// Validate WITH clause comes BEFORE first OPTIONAL MATCH (if both present)
-			if hasWithClause && hasOptionalMatch {
-				withIndex := strings.Index(cypher, "WITH e, a")
-				optionalIndex := strings.Index(cypher, "OPTIONAL MATCH")
-				if withIndex > optionalIndex {
-					t.Errorf("%s: WITH clause must come BEFORE OPTIONAL MATCH.\nWITH at %d, OPTIONAL MATCH at %d\nCypher:\n%s",
-						tt.description, withIndex, optionalIndex, cypher)
-				}
-			}
-
-			// Validate parameters are set
-			if params == nil {
-				t.Error("params should not be nil")
-			}
-
-			// Validate basic required params exist
-			if _, ok := params["eventId"]; !ok {
-				t.Error("params should contain eventId")
-			}
-			if _, ok := params["serial"]; !ok {
-				t.Error("params should contain serial")
-			}
-
-			t.Logf("✓ %s: WITH=%v, OPTIONAL_MATCH=%v", tt.name, hasWithClause, hasOptionalMatch)
-		})
-	}
-}
-
-// TestCypherQueryGeneration_MultipleETags verifies WITH clause is added exactly once
-// even with multiple e-tags.
-func TestCypherQueryGeneration_MultipleETags(t *testing.T) {
+// TestBuildBaseEventCypher verifies the base event creation query generates correct Cypher.
+// The new architecture separates event creation from tag processing to avoid stack overflow.
+func TestBuildBaseEventCypher(t *testing.T) {
 	n := &N{}
 
 	signer, err := p8k.New()
@@ -185,216 +26,45 @@ func TestCypherQueryGeneration_MultipleETags(t *testing.T) {
 		t.Fatalf("Failed to generate keypair: %v", err)
 	}
 
-	// Create event with many e-tags
-	manyETags := tag.NewS()
-	for i := 0; i < 10; i++ {
-		manyETags.Append(tag.NewFromAny("e", fmt.Sprintf("%064x", i)))
-	}
-
-	ev := event.New()
-	ev.Pubkey = signer.Pub()
-	ev.CreatedAt = timestamp.Now().V
-	ev.Kind = 1
-	ev.Content = []byte("Event with many e-tags")
-	ev.Tags = manyETags
-
-	if err := ev.Sign(signer); err != nil {
-		t.Fatalf("Failed to sign event: %v", err)
-	}
-
-	cypher, _ := n.buildEventCreationCypher(ev, 1)
-
-	// Count WITH clauses - should be exactly 1
-	withCount := strings.Count(cypher, "WITH e, a")
-	if withCount != 1 {
-		t.Errorf("Expected exactly 1 WITH clause, found %d\nCypher:\n%s", withCount, cypher)
-	}
-
-	// Count OPTIONAL MATCH - should match number of e-tags
-	optionalMatchCount := strings.Count(cypher, "OPTIONAL MATCH")
-	if optionalMatchCount != 10 {
-		t.Errorf("Expected 10 OPTIONAL MATCH statements (one per e-tag), found %d", optionalMatchCount)
-	}
-
-	// Count FOREACH (which wraps the conditional relationship creation)
-	foreachCount := strings.Count(cypher, "FOREACH")
-	if foreachCount != 10 {
-		t.Errorf("Expected 10 FOREACH blocks, found %d", foreachCount)
-	}
-
-	t.Logf("✓ WITH clause added once, followed by %d OPTIONAL MATCH + FOREACH pairs", optionalMatchCount)
-}
-
-// TestCypherQueryGeneration_CriticalBugScenario reproduces the exact bug scenario
-// that was fixed: CREATE followed by OPTIONAL MATCH without WITH clause.
-func TestCypherQueryGeneration_CriticalBugScenario(t *testing.T) {
-	n := &N{}
-
-	signer, err := p8k.New()
-	if err != nil {
-		t.Fatalf("Failed to create signer: %v", err)
-	}
-	if err := signer.Generate(); err != nil {
-		t.Fatalf("Failed to generate keypair: %v", err)
-	}
-
-	// This is the exact scenario that caused the bug:
-	// An event with just one e-tag should have:
-	// 1. CREATE clause for the event
-	// 2. WITH clause to carry forward variables
-	// 3. OPTIONAL MATCH for the referenced event
-	ev := event.New()
-	ev.Pubkey = signer.Pub()
-	ev.CreatedAt = timestamp.Now().V
-	ev.Kind = 1
-	ev.Content = []byte("Reply to an event")
-	ev.Tags = tag.NewS(
-		tag.NewFromAny("e", "1234567890123456789012345678901234567890123456789012345678901234"),
-	)
-
-	if err := ev.Sign(signer); err != nil {
-		t.Fatalf("Failed to sign event: %v", err)
-	}
-
-	cypher, _ := n.buildEventCreationCypher(ev, 1)
-
-	// The critical validation: WITH must appear between CREATE and OPTIONAL MATCH
-	createIndex := strings.Index(cypher, "CREATE (e)-[:AUTHORED_BY]->(a)")
-	withIndex := strings.Index(cypher, "WITH e, a")
-	optionalMatchIndex := strings.Index(cypher, "OPTIONAL MATCH")
-
-	if createIndex == -1 {
-		t.Fatal("CREATE clause not found in Cypher")
-	}
-	if withIndex == -1 {
-		t.Fatal("WITH clause not found in Cypher - THIS IS THE BUG!")
-	}
-	if optionalMatchIndex == -1 {
-		t.Fatal("OPTIONAL MATCH not found in Cypher")
-	}
-
-	// Validate order: CREATE < WITH < OPTIONAL MATCH
-	if !(createIndex < withIndex && withIndex < optionalMatchIndex) {
-		t.Errorf("Invalid clause ordering. Expected: CREATE (%d) < WITH (%d) < OPTIONAL MATCH (%d)\nCypher:\n%s",
-			createIndex, withIndex, optionalMatchIndex, cypher)
-	}
-
-	t.Log("✓ Critical bug scenario validated: WITH clause correctly placed between CREATE and OPTIONAL MATCH")
-}
-
-// TestBuildEventCreationCypher_WithClause validates the WITH clause fix for Cypher queries.
-// The bug was that OPTIONAL MATCH cannot directly follow CREATE in Cypher - a WITH clause
-// is required to carry forward bound variables (e, a) from the CREATE to the MATCH.
-func TestBuildEventCreationCypher_WithClause(t *testing.T) {
-	// Skip if Neo4j is not available
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
-	}
-
-	// Create test database
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	// Wait for database to be ready
-	<-db.Ready()
-
-	// Wipe database to ensure clean state
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
-
-	// Generate test keypair
-	signer, err := p8k.New()
-	if err != nil {
-		t.Fatalf("Failed to create signer: %v", err)
-	}
-	if err := signer.Generate(); err != nil {
-		t.Fatalf("Failed to generate keypair: %v", err)
-	}
-
-	// Test cases for different tag combinations
 	tests := []struct {
 		name        string
 		tags        *tag.S
-		wantWithClause bool
 		description string
 	}{
 		{
 			name:        "NoTags",
 			tags:        nil,
-			wantWithClause: false,
-			description: "Event without tags should not have WITH clause",
+			description: "Event without tags",
 		},
 		{
-			name: "OnlyPTags",
+			name: "WithPTags",
 			tags: tag.NewS(
 				tag.NewFromAny("p", "0000000000000000000000000000000000000000000000000000000000000001"),
 				tag.NewFromAny("p", "0000000000000000000000000000000000000000000000000000000000000002"),
 			),
-			wantWithClause: false,
-			description: "Event with only p-tags (MERGE) should not have WITH clause",
+			description: "Event with p-tags (stored in tags JSON, relationships added separately)",
 		},
 		{
-			name: "OnlyETags",
+			name: "WithETags",
 			tags: tag.NewS(
 				tag.NewFromAny("e", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
 				tag.NewFromAny("e", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 			),
-			wantWithClause: true,
-			description: "Event with e-tags (OPTIONAL MATCH) MUST have WITH clause",
-		},
-		{
-			name: "ETagFirst",
-			tags: tag.NewS(
-				tag.NewFromAny("e", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
-				tag.NewFromAny("p", "0000000000000000000000000000000000000000000000000000000000000003"),
-			),
-			wantWithClause: true,
-			description: "Event with e-tag first MUST have WITH clause before OPTIONAL MATCH",
-		},
-		{
-			name: "PTagFirst",
-			tags: tag.NewS(
-				tag.NewFromAny("p", "0000000000000000000000000000000000000000000000000000000000000004"),
-				tag.NewFromAny("e", "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"),
-			),
-			wantWithClause: true,
-			description: "Event with p-tag first still needs WITH clause before e-tag's OPTIONAL MATCH",
+			description: "Event with e-tags (stored in tags JSON, relationships added separately)",
 		},
 		{
 			name: "MixedTags",
 			tags: tag.NewS(
 				tag.NewFromAny("t", "nostr"),
-				tag.NewFromAny("e", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
-				tag.NewFromAny("p", "0000000000000000000000000000000000000000000000000000000000000005"),
-				tag.NewFromAny("r", "https://example.com"),
+				tag.NewFromAny("e", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
+				tag.NewFromAny("p", "0000000000000000000000000000000000000000000000000000000000000003"),
 			),
-			wantWithClause: true,
-			description: "Mixed tags with e-tag requires WITH clause",
-		},
-		{
-			name: "OnlyGenericTags",
-			tags: tag.NewS(
-				tag.NewFromAny("t", "bitcoin"),
-				tag.NewFromAny("r", "wss://relay.example.com"),
-				tag.NewFromAny("d", "identifier"),
-			),
-			wantWithClause: false,
-			description: "Generic tags (MERGE) don't require WITH clause",
+			description: "Event with mixed tags",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create event
 			ev := event.New()
 			ev.Pubkey = signer.Pub()
 			ev.CreatedAt = timestamp.Now().V
@@ -406,24 +76,75 @@ func TestBuildEventCreationCypher_WithClause(t *testing.T) {
 				t.Fatalf("Failed to sign event: %v", err)
 			}
 
-			// Build Cypher query
-			cypher, params := db.buildEventCreationCypher(ev, 1)
+			cypher, params := n.buildBaseEventCypher(ev, 12345)
 
-			// Check if WITH clause is present
-			hasWithClause := strings.Contains(cypher, "WITH e, a")
-
-			if tt.wantWithClause && !hasWithClause {
-				t.Errorf("%s: expected WITH clause but none found.\nCypher:\n%s", tt.description, cypher)
+			// Base event Cypher should NOT contain tag relationship clauses
+			// (tags are added separately via addTagsInBatches)
+			if strings.Contains(cypher, "OPTIONAL MATCH") {
+				t.Errorf("%s: buildBaseEventCypher should NOT contain OPTIONAL MATCH", tt.description)
 			}
-			if !tt.wantWithClause && hasWithClause {
-				t.Errorf("%s: unexpected WITH clause found.\nCypher:\n%s", tt.description, cypher)
+			if strings.Contains(cypher, "UNWIND") {
+				t.Errorf("%s: buildBaseEventCypher should NOT contain UNWIND", tt.description)
+			}
+			if strings.Contains(cypher, ":REFERENCES") {
+				t.Errorf("%s: buildBaseEventCypher should NOT contain :REFERENCES", tt.description)
+			}
+			if strings.Contains(cypher, ":MENTIONS") {
+				t.Errorf("%s: buildBaseEventCypher should NOT contain :MENTIONS", tt.description)
+			}
+			if strings.Contains(cypher, ":TAGGED_WITH") {
+				t.Errorf("%s: buildBaseEventCypher should NOT contain :TAGGED_WITH", tt.description)
 			}
 
-			// Verify Cypher syntax by executing it against Neo4j
-			// This is the key test - invalid Cypher will fail here
-			_, err := db.ExecuteWrite(ctx, cypher, params)
-			if err != nil {
-				t.Errorf("%s: Cypher query failed (invalid syntax): %v\nCypher:\n%s", tt.description, err, cypher)
+			// Should contain basic event creation elements
+			if !strings.Contains(cypher, "CREATE (e:Event") {
+				t.Errorf("%s: should CREATE Event node", tt.description)
+			}
+			if !strings.Contains(cypher, "MERGE (a:NostrUser") {
+				t.Errorf("%s: should MERGE NostrUser node", tt.description)
+			}
+			if !strings.Contains(cypher, ":AUTHORED_BY") {
+				t.Errorf("%s: should create AUTHORED_BY relationship", tt.description)
+			}
+
+			// Should have tags serialized in params
+			if _, ok := params["tags"]; !ok {
+				t.Errorf("%s: params should contain serialized tags", tt.description)
+			}
+
+			// Validate params have required fields
+			requiredParams := []string{"eventId", "serial", "kind", "createdAt", "content", "sig", "pubkey", "tags", "expiration"}
+			for _, p := range requiredParams {
+				if _, ok := params[p]; !ok {
+					t.Errorf("%s: missing required param: %s", tt.description, p)
+				}
+			}
+
+			t.Logf("✓ %s: base event Cypher is clean (no tag relationships)", tt.name)
+		})
+	}
+}
+
+// TestSafePrefix validates the safePrefix helper function
+func TestSafePrefix(t *testing.T) {
+	tests := []struct {
+		input    string
+		n        int
+		expected string
+	}{
+		{"hello world", 5, "hello"},
+		{"hi", 5, "hi"},
+		{"", 5, ""},
+		{"1234567890", 10, "1234567890"},
+		{"1234567890", 11, "1234567890"},
+		{"0123456789abcdef", 8, "01234567"},
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%q[:%d]", tt.input, tt.n), func(t *testing.T) {
+			result := safePrefix(tt.input, tt.n)
+			if result != tt.expected {
+				t.Errorf("safePrefix(%q, %d) = %q; want %q", tt.input, tt.n, result, tt.expected)
 			}
 		})
 	}
@@ -431,27 +152,16 @@ func TestBuildEventCreationCypher_WithClause(t *testing.T) {
 
 // TestSaveEvent_ETagReference tests that events with e-tags are saved correctly
 // and the REFERENCES relationships are created when the referenced event exists.
+// Uses shared testDB from testmain_test.go to avoid auth rate limiting.
 func TestSaveEvent_ETagReference(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := context.Background()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	// Clean up before test
+	cleanTestDatabase()
 
 	// Generate keypairs
 	alice, err := p8k.New()
@@ -482,7 +192,7 @@ func TestSaveEvent_ETagReference(t *testing.T) {
 	}
 
 	// Save root event
-	exists, err := db.SaveEvent(ctx, rootEvent)
+	exists, err := testDB.SaveEvent(ctx, rootEvent)
 	if err != nil {
 		t.Fatalf("Failed to save root event: %v", err)
 	}
@@ -507,8 +217,8 @@ func TestSaveEvent_ETagReference(t *testing.T) {
 		t.Fatalf("Failed to sign reply event: %v", err)
 	}
 
-	// Save reply event - this exercises the WITH clause fix
-	exists, err = db.SaveEvent(ctx, replyEvent)
+	// Save reply event - this exercises the batched tag creation
+	exists, err = testDB.SaveEvent(ctx, replyEvent)
 	if err != nil {
 		t.Fatalf("Failed to save reply event: %v", err)
 	}
@@ -526,7 +236,7 @@ func TestSaveEvent_ETagReference(t *testing.T) {
 		"rootId":  rootEventID,
 	}
 
-	result, err := db.ExecuteRead(ctx, cypher, params)
+	result, err := testDB.ExecuteRead(ctx, cypher, params)
 	if err != nil {
 		t.Fatalf("Failed to query REFERENCES relationship: %v", err)
 	}
@@ -550,7 +260,7 @@ func TestSaveEvent_ETagReference(t *testing.T) {
 		"authorPubkey": hex.Enc(alice.Pub()),
 	}
 
-	mentionsResult, err := db.ExecuteRead(ctx, mentionsCypher, mentionsParams)
+	mentionsResult, err := testDB.ExecuteRead(ctx, mentionsCypher, mentionsParams)
 	if err != nil {
 		t.Fatalf("Failed to query MENTIONS relationship: %v", err)
 	}
@@ -563,28 +273,17 @@ func TestSaveEvent_ETagReference(t *testing.T) {
 }
 
 // TestSaveEvent_ETagMissingReference tests that e-tags to non-existent events
-// don't create broken relationships (OPTIONAL MATCH handles this gracefully).
+// don't create broken relationships (batched processing handles this gracefully).
+// Uses shared testDB from testmain_test.go to avoid auth rate limiting.
 func TestSaveEvent_ETagMissingReference(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := context.Background()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	// Clean up before test
+	cleanTestDatabase()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -610,8 +309,8 @@ func TestSaveEvent_ETagMissingReference(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	// Save should succeed (OPTIONAL MATCH handles missing reference)
-	exists, err := db.SaveEvent(ctx, ev)
+	// Save should succeed (batched e-tag processing handles missing reference)
+	exists, err := testDB.SaveEvent(ctx, ev)
 	if err != nil {
 		t.Fatalf("Failed to save event with missing reference: %v", err)
 	}
@@ -623,7 +322,7 @@ func TestSaveEvent_ETagMissingReference(t *testing.T) {
 	checkCypher := "MATCH (e:Event {id: $id}) RETURN e.id AS id"
 	checkParams := map[string]any{"id": hex.Enc(ev.ID[:])}
 
-	result, err := db.ExecuteRead(ctx, checkCypher, checkParams)
+	result, err := testDB.ExecuteRead(ctx, checkCypher, checkParams)
 	if err != nil {
 		t.Fatalf("Failed to check event: %v", err)
 	}
@@ -639,7 +338,7 @@ func TestSaveEvent_ETagMissingReference(t *testing.T) {
 	`
 	refParams := map[string]any{"eventId": hex.Enc(ev.ID[:])}
 
-	refResult, err := db.ExecuteRead(ctx, refCypher, refParams)
+	refResult, err := testDB.ExecuteRead(ctx, refCypher, refParams)
 	if err != nil {
 		t.Fatalf("Failed to check references: %v", err)
 	}
@@ -655,27 +354,16 @@ func TestSaveEvent_ETagMissingReference(t *testing.T) {
 }
 
 // TestSaveEvent_MultipleETags tests events with multiple e-tags.
+// Uses shared testDB from testmain_test.go to avoid auth rate limiting.
 func TestSaveEvent_MultipleETags(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := context.Background()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	// Clean up before test
+	cleanTestDatabase()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -698,7 +386,7 @@ func TestSaveEvent_MultipleETags(t *testing.T) {
 			t.Fatalf("Failed to sign event %d: %v", i, err)
 		}
 
-		if _, err := db.SaveEvent(ctx, ev); err != nil {
+		if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 			t.Fatalf("Failed to save event %d: %v", i, err)
 		}
 
@@ -721,8 +409,8 @@ func TestSaveEvent_MultipleETags(t *testing.T) {
 		t.Fatalf("Failed to sign reply event: %v", err)
 	}
 
-	// Save reply event - tests multiple OPTIONAL MATCH statements after WITH
-	exists, err := db.SaveEvent(ctx, replyEvent)
+	// Save reply event - tests batched e-tag creation
+	exists, err := testDB.SaveEvent(ctx, replyEvent)
 	if err != nil {
 		t.Fatalf("Failed to save multi-reference event: %v", err)
 	}
@@ -737,7 +425,7 @@ func TestSaveEvent_MultipleETags(t *testing.T) {
 	`
 	params := map[string]any{"replyId": hex.Enc(replyEvent.ID[:])}
 
-	result, err := db.ExecuteRead(ctx, cypher, params)
+	result, err := testDB.ExecuteRead(ctx, cypher, params)
 	if err != nil {
 		t.Fatalf("Failed to query REFERENCES relationships: %v", err)
 	}
@@ -761,25 +449,18 @@ func TestSaveEvent_MultipleETags(t *testing.T) {
 	t.Logf("✓ All %d REFERENCES relationships created successfully", len(referencedIDs))
 }
 
-// TestBuildEventCreationCypher_CypherSyntaxValidation validates the generated Cypher
-// is syntactically correct for all edge cases.
-func TestBuildEventCreationCypher_CypherSyntaxValidation(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+// TestSaveEvent_LargePTagBatch tests that events with many p-tags are saved correctly
+// using batched processing to avoid Neo4j stack overflow.
+// Uses shared testDB from testmain_test.go to avoid auth rate limiting.
+func TestSaveEvent_LargePTagBatch(t *testing.T) {
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := context.Background()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
+	// Clean up before test
+	cleanTestDatabase()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -789,36 +470,52 @@ func TestBuildEventCreationCypher_CypherSyntaxValidation(t *testing.T) {
 		t.Fatalf("Failed to generate keypair: %v", err)
 	}
 
-	// Test many e-tags to ensure WITH clause is added only once
-	manyETags := tag.NewS()
-	for i := 0; i < 10; i++ {
-		manyETags.Append(tag.NewFromAny("e", fmt.Sprintf("%064x", i)))
+	// Create event with many p-tags (enough to require multiple batches)
+	// With tagBatchSize = 500, this will require 2 batches
+	numTags := 600
+	manyPTags := tag.NewS()
+	for i := 0; i < numTags; i++ {
+		manyPTags.Append(tag.NewFromAny("p", fmt.Sprintf("%064x", i)))
 	}
 
 	ev := event.New()
 	ev.Pubkey = signer.Pub()
 	ev.CreatedAt = timestamp.Now().V
-	ev.Kind = 1
-	ev.Content = []byte("Event with many e-tags")
-	ev.Tags = manyETags
+	ev.Kind = 3 // Contact list
+	ev.Content = []byte("")
+	ev.Tags = manyPTags
 
 	if err := ev.Sign(signer); err != nil {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	cypher, _ := db.buildEventCreationCypher(ev, 1)
-
-	// Count occurrences of WITH clause - should be exactly 1
-	withCount := strings.Count(cypher, "WITH e, a")
-	if withCount != 1 {
-		t.Errorf("Expected exactly 1 WITH clause, found %d\nCypher:\n%s", withCount, cypher)
+	// This should succeed with batched processing
+	exists, err := testDB.SaveEvent(ctx, ev)
+	if err != nil {
+		t.Fatalf("Failed to save event with %d p-tags: %v", numTags, err)
+	}
+	if exists {
+		t.Fatal("Event should not exist yet")
 	}
 
-	// Count OPTIONAL MATCH statements - should equal number of e-tags
-	optionalMatchCount := strings.Count(cypher, "OPTIONAL MATCH")
-	if optionalMatchCount != 10 {
-		t.Errorf("Expected 10 OPTIONAL MATCH statements, found %d", optionalMatchCount)
+	// Verify all MENTIONS relationships were created
+	countCypher := `
+		MATCH (e:Event {id: $eventId})-[:MENTIONS]->(u:NostrUser)
+		RETURN count(u) AS mentionCount
+	`
+	countParams := map[string]any{"eventId": hex.Enc(ev.ID[:])}
+
+	result, err := testDB.ExecuteRead(ctx, countCypher, countParams)
+	if err != nil {
+		t.Fatalf("Failed to count MENTIONS: %v", err)
 	}
 
-	t.Logf("✓ WITH clause correctly added once, followed by %d OPTIONAL MATCH statements", optionalMatchCount)
+	if result.Next(ctx) {
+		count := result.Record().Values[0].(int64)
+		if count != int64(numTags) {
+			t.Errorf("Expected %d MENTIONS relationships, got %d", numTags, count)
+		} else {
+			t.Logf("✓ All %d MENTIONS relationships created via batched processing", count)
+		}
+	}
 }

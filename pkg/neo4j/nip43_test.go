@@ -1,8 +1,9 @@
+//go:build integration
+// +build integration
+
 package neo4j
 
 import (
-	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -10,27 +11,15 @@ import (
 	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 )
 
+// All tests in this file use the shared testDB instance from testmain_test.go
+// to avoid Neo4j authentication rate limiting from too many connections.
+
 func TestNIP43_AddAndRemoveMember(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	cleanTestDatabase()
 
 	signer, _ := p8k.New()
 	signer.Generate()
@@ -38,12 +27,12 @@ func TestNIP43_AddAndRemoveMember(t *testing.T) {
 
 	// Add member
 	inviteCode := "test-invite-123"
-	if err := db.AddNIP43Member(pubkey, inviteCode); err != nil {
+	if err := testDB.AddNIP43Member(pubkey, inviteCode); err != nil {
 		t.Fatalf("Failed to add NIP-43 member: %v", err)
 	}
 
 	// Check membership
-	isMember, err := db.IsNIP43Member(pubkey)
+	isMember, err := testDB.IsNIP43Member(pubkey)
 	if err != nil {
 		t.Fatalf("Failed to check membership: %v", err)
 	}
@@ -52,7 +41,7 @@ func TestNIP43_AddAndRemoveMember(t *testing.T) {
 	}
 
 	// Get membership details
-	membership, err := db.GetNIP43Membership(pubkey)
+	membership, err := testDB.GetNIP43Membership(pubkey)
 	if err != nil {
 		t.Fatalf("Failed to get membership: %v", err)
 	}
@@ -61,12 +50,12 @@ func TestNIP43_AddAndRemoveMember(t *testing.T) {
 	}
 
 	// Remove member
-	if err := db.RemoveNIP43Member(pubkey); err != nil {
+	if err := testDB.RemoveNIP43Member(pubkey); err != nil {
 		t.Fatalf("Failed to remove member: %v", err)
 	}
 
 	// Verify no longer a member
-	isMember, _ = db.IsNIP43Member(pubkey)
+	isMember, _ = testDB.IsNIP43Member(pubkey)
 	if isMember {
 		t.Fatal("Expected pubkey to not be a member after removal")
 	}
@@ -75,26 +64,11 @@ func TestNIP43_AddAndRemoveMember(t *testing.T) {
 }
 
 func TestNIP43_GetAllMembers(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	cleanTestDatabase()
 
 	// Add multiple members
 	var pubkeys [][]byte
@@ -104,13 +78,13 @@ func TestNIP43_GetAllMembers(t *testing.T) {
 		pubkey := signer.Pub()
 		pubkeys = append(pubkeys, pubkey)
 
-		if err := db.AddNIP43Member(pubkey, "invite"+string(rune('A'+i))); err != nil {
+		if err := testDB.AddNIP43Member(pubkey, "invite"+string(rune('A'+i))); err != nil {
 			t.Fatalf("Failed to add member %d: %v", i, err)
 		}
 	}
 
 	// Get all members
-	members, err := db.GetAllNIP43Members()
+	members, err := testDB.GetAllNIP43Members()
 	if err != nil {
 		t.Fatalf("Failed to get all members: %v", err)
 	}
@@ -135,36 +109,21 @@ func TestNIP43_GetAllMembers(t *testing.T) {
 }
 
 func TestNIP43_InviteCode(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	cleanTestDatabase()
 
 	// Store valid invite code (expires in 1 hour)
 	validCode := "valid-code-123"
 	expiresAt := time.Now().Add(1 * time.Hour)
-	if err := db.StoreInviteCode(validCode, expiresAt); err != nil {
+	if err := testDB.StoreInviteCode(validCode, expiresAt); err != nil {
 		t.Fatalf("Failed to store invite code: %v", err)
 	}
 
 	// Validate the code
-	isValid, err := db.ValidateInviteCode(validCode)
+	isValid, err := testDB.ValidateInviteCode(validCode)
 	if err != nil {
 		t.Fatalf("Failed to validate invite code: %v", err)
 	}
@@ -173,7 +132,7 @@ func TestNIP43_InviteCode(t *testing.T) {
 	}
 
 	// Test non-existent code
-	isValid, err = db.ValidateInviteCode("non-existent-code")
+	isValid, err = testDB.ValidateInviteCode("non-existent-code")
 	if err != nil {
 		t.Fatalf("Failed to validate non-existent code: %v", err)
 	}
@@ -182,12 +141,12 @@ func TestNIP43_InviteCode(t *testing.T) {
 	}
 
 	// Delete the invite code
-	if err := db.DeleteInviteCode(validCode); err != nil {
+	if err := testDB.DeleteInviteCode(validCode); err != nil {
 		t.Fatalf("Failed to delete invite code: %v", err)
 	}
 
 	// Verify code is no longer valid
-	isValid, _ = db.ValidateInviteCode(validCode)
+	isValid, _ = testDB.ValidateInviteCode(validCode)
 	if isValid {
 		t.Fatal("Expected deleted code to be invalid")
 	}
@@ -196,36 +155,21 @@ func TestNIP43_InviteCode(t *testing.T) {
 }
 
 func TestNIP43_ExpiredInviteCode(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	cleanTestDatabase()
 
 	// Store expired invite code (expired 1 hour ago)
 	expiredCode := "expired-code-123"
 	expiresAt := time.Now().Add(-1 * time.Hour)
-	if err := db.StoreInviteCode(expiredCode, expiresAt); err != nil {
+	if err := testDB.StoreInviteCode(expiredCode, expiresAt); err != nil {
 		t.Fatalf("Failed to store expired invite code: %v", err)
 	}
 
 	// Validate should return false for expired code
-	isValid, err := db.ValidateInviteCode(expiredCode)
+	isValid, err := testDB.ValidateInviteCode(expiredCode)
 	if err != nil {
 		t.Fatalf("Failed to validate expired code: %v", err)
 	}
@@ -237,49 +181,34 @@ func TestNIP43_ExpiredInviteCode(t *testing.T) {
 }
 
 func TestNIP43_DuplicateMember(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	cleanTestDatabase()
 
 	signer, _ := p8k.New()
 	signer.Generate()
 	pubkey := signer.Pub()
 
 	// Add member first time
-	if err := db.AddNIP43Member(pubkey, "invite1"); err != nil {
+	if err := testDB.AddNIP43Member(pubkey, "invite1"); err != nil {
 		t.Fatalf("Failed to add member: %v", err)
 	}
 
 	// Add same member again (should not error, just update)
-	if err := db.AddNIP43Member(pubkey, "invite2"); err != nil {
+	if err := testDB.AddNIP43Member(pubkey, "invite2"); err != nil {
 		t.Fatalf("Failed to re-add member: %v", err)
 	}
 
 	// Check membership still exists
-	isMember, _ := db.IsNIP43Member(pubkey)
+	isMember, _ := testDB.IsNIP43Member(pubkey)
 	if !isMember {
 		t.Fatal("Expected pubkey to still be a member")
 	}
 
 	// Get all members should have only 1 entry
-	members, _ := db.GetAllNIP43Members()
+	members, _ := testDB.GetAllNIP43Members()
 	if len(members) != 1 {
 		t.Fatalf("Expected 1 member, got %d", len(members))
 	}
@@ -288,26 +217,11 @@ func TestNIP43_DuplicateMember(t *testing.T) {
 }
 
 func TestNIP43_MembershipPersistence(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	cleanTestDatabase()
 
 	signer, _ := p8k.New()
 	signer.Generate()
@@ -315,12 +229,12 @@ func TestNIP43_MembershipPersistence(t *testing.T) {
 
 	// Add member
 	inviteCode := "persistence-test"
-	if err := db.AddNIP43Member(pubkey, inviteCode); err != nil {
+	if err := testDB.AddNIP43Member(pubkey, inviteCode); err != nil {
 		t.Fatalf("Failed to add member: %v", err)
 	}
 
 	// Get membership and verify all fields
-	membership, err := db.GetNIP43Membership(pubkey)
+	membership, err := testDB.GetNIP43Membership(pubkey)
 	if err != nil {
 		t.Fatalf("Failed to get membership: %v", err)
 	}

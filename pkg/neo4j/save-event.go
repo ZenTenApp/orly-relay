@@ -16,12 +16,19 @@ func parseInt64(s string) (int64, error) {
 	return strconv.ParseInt(s, 10, 64)
 }
 
+// tagBatchSize is the maximum number of tags to process in a single transaction
+// This prevents Neo4j stack overflow errors with events that have thousands of tags
+const tagBatchSize = 500
+
 // SaveEvent stores a Nostr event in the Neo4j database.
 // It creates event nodes and relationships for authors, tags, and references.
 // This method leverages Neo4j's graph capabilities to model Nostr's social graph naturally.
 //
 // For social graph events (kinds 0, 3, 1984, 10000), it additionally processes them
 // to maintain NostrUser nodes and FOLLOWS/MUTES/REPORTS relationships with event traceability.
+//
+// To prevent Neo4j stack overflow errors with events containing thousands of tags,
+// tags are processed in batches using UNWIND instead of generating inline Cypher.
 func (n *N) SaveEvent(c context.Context, ev *event.E) (exists bool, err error) {
 	eventID := hex.Enc(ev.ID[:])
 
@@ -42,7 +49,7 @@ func (n *N) SaveEvent(c context.Context, ev *event.E) (exists bool, err error) {
 		if ev.Kind == 0 || ev.Kind == 3 || ev.Kind == 1984 || ev.Kind == 10000 {
 			processor := NewSocialEventProcessor(n)
 			if err := processor.ProcessSocialEvent(c, ev); err != nil {
-				n.Logger.Warningf("failed to reprocess social event %s: %v", eventID[:16], err)
+				n.Logger.Warningf("failed to reprocess social event %s: %v", safePrefix(eventID, 16), err)
 				// Don't fail the whole save, social processing is supplementary
 			}
 		}
@@ -55,12 +62,18 @@ func (n *N) SaveEvent(c context.Context, ev *event.E) (exists bool, err error) {
 		return false, fmt.Errorf("failed to get serial number: %w", err)
 	}
 
-	// Build and execute Cypher query to create event with all relationships
-	// This creates Event and Author nodes for NIP-01 query support
-	cypher, params := n.buildEventCreationCypher(ev, serial)
-
+	// Step 1: Create base event with author (small, fixed-size query)
+	cypher, params := n.buildBaseEventCypher(ev, serial)
 	if _, err = n.ExecuteWrite(c, cypher, params); err != nil {
 		return false, fmt.Errorf("failed to save event: %w", err)
+	}
+
+	// Step 2: Process tags in batches to avoid stack overflow
+	if ev.Tags != nil {
+		if err := n.addTagsInBatches(c, eventID, ev); err != nil {
+			// Log but don't fail - base event is saved, tags are supplementary for queries
+			n.Logger.Errorf("failed to add tags for event %s: %v", safePrefix(eventID, 16), err)
+		}
 	}
 
 	// Process social graph events (kinds 0, 3, 1984, 10000)
@@ -72,7 +85,7 @@ func (n *N) SaveEvent(c context.Context, ev *event.E) (exists bool, err error) {
 			// Log error but don't fail the whole save
 			// NIP-01 queries will still work even if social processing fails
 			n.Logger.Errorf("failed to process social event kind %d, event %s: %v",
-				ev.Kind, eventID[:16], err)
+				ev.Kind, safePrefix(eventID, 16), err)
 			// Consider: should we fail here or continue?
 			// For now, continue - social graph is supplementary to base relay
 		}
@@ -81,13 +94,20 @@ func (n *N) SaveEvent(c context.Context, ev *event.E) (exists bool, err error) {
 	return false, nil
 }
 
-// buildEventCreationCypher constructs a Cypher query to create an event node with all relationships
-// This is a single atomic operation that creates:
+// safePrefix returns up to n characters from a string, handling short strings gracefully
+func safePrefix(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}
+
+// buildBaseEventCypher constructs a Cypher query to create just the base event node and author.
+// Tags are added separately in batches to prevent stack overflow with large tag sets.
+// This creates:
 // - Event node with all properties
 // - NostrUser node and AUTHORED_BY relationship (unified author + WoT node)
-// - Tag nodes and TAGGED_WITH relationships
-// - Reference relationships (REFERENCES for 'e' tags, MENTIONS for 'p' tags)
-func (n *N) buildEventCreationCypher(ev *event.E, serial uint64) (string, map[string]any) {
+func (n *N) buildBaseEventCypher(ev *event.E, serial uint64) (string, map[string]any) {
 	params := make(map[string]any)
 
 	// Event properties
@@ -123,7 +143,7 @@ func (n *N) buildEventCreationCypher(ev *event.E, serial uint64) (string, map[st
 	}
 	params["tags"] = string(tagsJSON)
 
-	// Start building the Cypher query
+	// Build Cypher query - just event + author, no tags (tags added in batches)
 	// Use MERGE to ensure idempotency for NostrUser nodes
 	// NostrUser serves both NIP-01 author tracking and WoT social graph
 	cypher := `
@@ -146,141 +166,178 @@ CREATE (e:Event {
 
 // Link event to author
 CREATE (e)-[:AUTHORED_BY]->(a)
-`
 
-	// Process tags to create relationships
-	// Different tag types create different relationship patterns
-	tagNodeIndex := 0
-	eTagIndex := 0
-	pTagIndex := 0
-
-	// Track if we need to add WITH clause before OPTIONAL MATCH
-	// This is required because Cypher doesn't allow MATCH after CREATE without WITH
-	needsWithClause := true
-
-	// Collect all e-tags, p-tags, and other tags first so we can generate proper Cypher
-	// Neo4j requires WITH clauses between certain clause types (FOREACH -> MATCH/MERGE)
-	type tagInfo struct {
-		tagType string
-		value   string
-	}
-	var eTags, pTags, otherTags []tagInfo
-
-	// Only process tags if they exist
-	if ev.Tags != nil {
-		for _, tagItem := range *ev.Tags {
-			if len(tagItem.T) < 2 {
-				continue
-			}
-
-			tagType := string(tagItem.T[0])
-
-			switch tagType {
-			case "e": // Event reference
-				tagValue := ExtractETagValue(tagItem)
-				if tagValue != "" {
-					eTags = append(eTags, tagInfo{"e", tagValue})
-				}
-			case "p": // Pubkey mention
-				tagValue := ExtractPTagValue(tagItem)
-				if tagValue != "" {
-					pTags = append(pTags, tagInfo{"p", tagValue})
-				}
-			default: // Other tags
-				tagValue := string(tagItem.T[1])
-				otherTags = append(otherTags, tagInfo{tagType, tagValue})
-			}
-		}
-	}
-
-	// Generate Cypher for e-tags (OPTIONAL MATCH + FOREACH pattern)
-	// These need WITH clause before first one, and WITH after all FOREACHes
-	for i, tag := range eTags {
-		paramName := fmt.Sprintf("eTag_%d", eTagIndex)
-		params[paramName] = tag.value
-
-		// Add WITH clause before first OPTIONAL MATCH only
-		if needsWithClause {
-			cypher += `
-// Carry forward event and author nodes for tag processing
-WITH e, a
-`
-			needsWithClause = false
-		}
-
-		cypher += fmt.Sprintf(`
-// Reference to event (e-tag)
-OPTIONAL MATCH (ref%d:Event {id: $%s})
-FOREACH (ignoreMe IN CASE WHEN ref%d IS NOT NULL THEN [1] ELSE [] END |
-  CREATE (e)-[:REFERENCES]->(ref%d)
-)
-`, eTagIndex, paramName, eTagIndex, eTagIndex)
-
-		eTagIndex++
-
-		// After the last e-tag FOREACH, add WITH clause if there are p-tags or other tags
-		if i == len(eTags)-1 && (len(pTags) > 0 || len(otherTags) > 0) {
-			cypher += `
-// Required WITH after FOREACH before MERGE/MATCH
-WITH e, a
-`
-		}
-	}
-
-	// Generate Cypher for p-tags (MERGE pattern)
-	for _, tag := range pTags {
-		paramName := fmt.Sprintf("pTag_%d", pTagIndex)
-		params[paramName] = tag.value
-
-		// If no e-tags were processed, we still need the initial WITH
-		if needsWithClause {
-			cypher += `
-// Carry forward event and author nodes for tag processing
-WITH e, a
-`
-			needsWithClause = false
-		}
-
-		cypher += fmt.Sprintf(`
-// Mention of NostrUser (p-tag)
-MERGE (mentioned%d:NostrUser {pubkey: $%s})
-ON CREATE SET mentioned%d.created_at = timestamp()
-CREATE (e)-[:MENTIONS]->(mentioned%d)
-`, pTagIndex, paramName, pTagIndex, pTagIndex)
-
-		pTagIndex++
-	}
-
-	// Generate Cypher for other tags (MERGE pattern)
-	for _, tag := range otherTags {
-		typeParam := fmt.Sprintf("tagType_%d", tagNodeIndex)
-		valueParam := fmt.Sprintf("tagValue_%d", tagNodeIndex)
-		params[typeParam] = tag.tagType
-		params[valueParam] = tag.value
-
-		// If no e-tags or p-tags were processed, we still need the initial WITH
-		if needsWithClause {
-			cypher += `
-// Carry forward event and author nodes for tag processing
-WITH e, a
-`
-			needsWithClause = false
-		}
-
-		cypher += fmt.Sprintf(`
-// Generic tag relationship
-MERGE (tag%d:Tag {type: $%s, value: $%s})
-CREATE (e)-[:TAGGED_WITH]->(tag%d)
-`, tagNodeIndex, typeParam, valueParam, tagNodeIndex)
-
-		tagNodeIndex++
-	}
-
-	// Return the created event
-	cypher += `
 RETURN e.id AS id`
 
 	return cypher, params
+}
+
+// tagTypeValue represents a generic tag with type and value for batch processing
+type tagTypeValue struct {
+	Type  string
+	Value string
+}
+
+// addTagsInBatches processes event tags in batches using UNWIND to prevent Neo4j stack overflow.
+// This handles e-tags (event references), p-tags (pubkey mentions), and other tags separately.
+func (n *N) addTagsInBatches(c context.Context, eventID string, ev *event.E) error {
+	if ev.Tags == nil {
+		return nil
+	}
+
+	// Collect tags by type
+	var eTags, pTags []string
+	var otherTags []tagTypeValue
+
+	for _, tagItem := range *ev.Tags {
+		if len(tagItem.T) < 2 {
+			continue
+		}
+
+		tagType := string(tagItem.T[0])
+
+		switch tagType {
+		case "e": // Event reference
+			tagValue := ExtractETagValue(tagItem)
+			if tagValue != "" {
+				eTags = append(eTags, tagValue)
+			}
+		case "p": // Pubkey mention
+			tagValue := ExtractPTagValue(tagItem)
+			if tagValue != "" {
+				pTags = append(pTags, tagValue)
+			}
+		default: // Other tags
+			tagValue := string(tagItem.T[1])
+			otherTags = append(otherTags, tagTypeValue{Type: tagType, Value: tagValue})
+		}
+	}
+
+	// Add p-tags in batches (creates MENTIONS relationships)
+	if len(pTags) > 0 {
+		if err := n.addPTagsInBatches(c, eventID, pTags); err != nil {
+			return fmt.Errorf("failed to add p-tags: %w", err)
+		}
+	}
+
+	// Add e-tags in batches (creates REFERENCES relationships)
+	if len(eTags) > 0 {
+		if err := n.addETagsInBatches(c, eventID, eTags); err != nil {
+			return fmt.Errorf("failed to add e-tags: %w", err)
+		}
+	}
+
+	// Add other tags in batches (creates TAGGED_WITH relationships)
+	if len(otherTags) > 0 {
+		if err := n.addOtherTagsInBatches(c, eventID, otherTags); err != nil {
+			return fmt.Errorf("failed to add other tags: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// addPTagsInBatches adds p-tag (pubkey mention) relationships using UNWIND for efficiency.
+// Creates NostrUser nodes for mentioned pubkeys and MENTIONS relationships.
+func (n *N) addPTagsInBatches(c context.Context, eventID string, pTags []string) error {
+	// Process in batches to avoid memory issues
+	for i := 0; i < len(pTags); i += tagBatchSize {
+		end := i + tagBatchSize
+		if end > len(pTags) {
+			end = len(pTags)
+		}
+		batch := pTags[i:end]
+
+		// Use UNWIND to process multiple p-tags in a single query
+		cypher := `
+MATCH (e:Event {id: $eventId})
+UNWIND $pubkeys AS pubkey
+MERGE (u:NostrUser {pubkey: pubkey})
+ON CREATE SET u.created_at = timestamp()
+CREATE (e)-[:MENTIONS]->(u)`
+
+		params := map[string]any{
+			"eventId": eventID,
+			"pubkeys": batch,
+		}
+
+		if _, err := n.ExecuteWrite(c, cypher, params); err != nil {
+			return fmt.Errorf("batch %d-%d: %w", i, end, err)
+		}
+	}
+
+	return nil
+}
+
+// addETagsInBatches adds e-tag (event reference) relationships using UNWIND for efficiency.
+// Only creates REFERENCES relationships if the referenced event exists.
+func (n *N) addETagsInBatches(c context.Context, eventID string, eTags []string) error {
+	// Process in batches to avoid memory issues
+	for i := 0; i < len(eTags); i += tagBatchSize {
+		end := i + tagBatchSize
+		if end > len(eTags) {
+			end = len(eTags)
+		}
+		batch := eTags[i:end]
+
+		// Use UNWIND to process multiple e-tags in a single query
+		// OPTIONAL MATCH ensures we only create relationships if referenced event exists
+		cypher := `
+MATCH (e:Event {id: $eventId})
+UNWIND $eventIds AS refId
+OPTIONAL MATCH (ref:Event {id: refId})
+WITH e, ref
+WHERE ref IS NOT NULL
+CREATE (e)-[:REFERENCES]->(ref)`
+
+		params := map[string]any{
+			"eventId":  eventID,
+			"eventIds": batch,
+		}
+
+		if _, err := n.ExecuteWrite(c, cypher, params); err != nil {
+			return fmt.Errorf("batch %d-%d: %w", i, end, err)
+		}
+	}
+
+	return nil
+}
+
+// addOtherTagsInBatches adds generic tag relationships using UNWIND for efficiency.
+// Creates Tag nodes with type and value, and TAGGED_WITH relationships.
+func (n *N) addOtherTagsInBatches(c context.Context, eventID string, tags []tagTypeValue) error {
+	// Process in batches to avoid memory issues
+	for i := 0; i < len(tags); i += tagBatchSize {
+		end := i + tagBatchSize
+		if end > len(tags) {
+			end = len(tags)
+		}
+		batch := tags[i:end]
+
+		// Convert to map slice for Neo4j parameter passing
+		tagMaps := make([]map[string]string, len(batch))
+		for j, t := range batch {
+			tagMaps[j] = map[string]string{"type": t.Type, "value": t.Value}
+		}
+
+		// Use UNWIND to process multiple tags in a single query
+		cypher := `
+MATCH (e:Event {id: $eventId})
+UNWIND $tags AS tag
+MERGE (t:Tag {type: tag.type, value: tag.value})
+CREATE (e)-[:TAGGED_WITH]->(t)`
+
+		params := map[string]any{
+			"eventId": eventID,
+			"tags":    tagMaps,
+		}
+
+		if _, err := n.ExecuteWrite(c, cypher, params); err != nil {
+			return fmt.Errorf("batch %d-%d: %w", i, end, err)
+		}
+	}
+
+	return nil
 }
 
 // GetSerialsFromFilter returns event serials matching a filter

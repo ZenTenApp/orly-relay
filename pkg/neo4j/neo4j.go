@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"lol.mleku.dev"
@@ -17,6 +19,16 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"next.orly.dev/pkg/utils/apputil"
 )
+
+// maxConcurrentQueries limits the number of concurrent Neo4j queries to prevent
+// authentication rate limiting and connection exhaustion
+const maxConcurrentQueries = 10
+
+// maxRetryAttempts is the maximum number of times to retry a query on rate limit
+const maxRetryAttempts = 3
+
+// retryBaseDelay is the base delay for exponential backoff
+const retryBaseDelay = 500 * time.Millisecond
 
 // N implements the database.Database interface using Neo4j as the storage backend
 type N struct {
@@ -34,6 +46,9 @@ type N struct {
 	neo4jPassword string
 
 	ready chan struct{} // Closed when database is ready to serve requests
+
+	// querySem limits concurrent queries to prevent rate limiting
+	querySem chan struct{}
 }
 
 // Ensure N implements database.Database interface at compile time
@@ -112,6 +127,7 @@ func NewWithConfig(
 		neo4jUser:     neo4jUser,
 		neo4jPassword: neo4jPassword,
 		ready:         make(chan struct{}),
+		querySem:      make(chan struct{}, maxConcurrentQueries),
 	}
 
 	// Ensure the data directory exists
@@ -199,42 +215,139 @@ func (n *N) initNeo4jClient() error {
 }
 
 
-// ExecuteRead executes a read query against Neo4j
+// isRateLimitError checks if an error is due to authentication rate limiting
+func isRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "AuthenticationRateLimit") ||
+		strings.Contains(errStr, "Too many failed authentication attempts")
+}
+
+// acquireQuerySlot acquires a slot from the query semaphore
+func (n *N) acquireQuerySlot(ctx context.Context) error {
+	select {
+	case n.querySem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// releaseQuerySlot releases a slot back to the query semaphore
+func (n *N) releaseQuerySlot() {
+	<-n.querySem
+}
+
+// ExecuteRead executes a read query against Neo4j with rate limiting and retry
 // Returns a collected result that can be iterated after the session closes
 func (n *N) ExecuteRead(ctx context.Context, cypher string, params map[string]any) (*CollectedResult, error) {
-	session := n.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
-	defer session.Close(ctx)
+	// Acquire semaphore slot to limit concurrent queries
+	if err := n.acquireQuerySlot(ctx); err != nil {
+		return nil, fmt.Errorf("failed to acquire query slot: %w", err)
+	}
+	defer n.releaseQuerySlot()
 
-	result, err := session.Run(ctx, cypher, params)
-	if err != nil {
-		return nil, fmt.Errorf("neo4j read query failed: %w", err)
+	var lastErr error
+	for attempt := 0; attempt < maxRetryAttempts; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff
+			delay := retryBaseDelay * time.Duration(1<<uint(attempt-1))
+			n.Logger.Warningf("retrying read query after %v (attempt %d/%d)", delay, attempt+1, maxRetryAttempts)
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+
+		session := n.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+		result, err := session.Run(ctx, cypher, params)
+		if err != nil {
+			session.Close(ctx)
+			lastErr = err
+			if isRateLimitError(err) {
+				continue // Retry on rate limit
+			}
+			return nil, fmt.Errorf("neo4j read query failed: %w", err)
+		}
+
+		// Collect all records before the session closes
+		// (Neo4j results are lazy and need an open session for iteration)
+		records, err := result.Collect(ctx)
+		session.Close(ctx)
+		if err != nil {
+			lastErr = err
+			if isRateLimitError(err) {
+				continue // Retry on rate limit
+			}
+			return nil, fmt.Errorf("neo4j result collect failed: %w", err)
+		}
+
+		return &CollectedResult{records: records, index: -1}, nil
 	}
 
-	// Collect all records before the session closes
-	// (Neo4j results are lazy and need an open session for iteration)
-	records, err := result.Collect(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("neo4j result collect failed: %w", err)
-	}
-
-	return &CollectedResult{records: records, index: -1}, nil
+	return nil, fmt.Errorf("neo4j read query failed after %d attempts: %w", maxRetryAttempts, lastErr)
 }
 
-// ExecuteWrite executes a write query against Neo4j
+// ExecuteWrite executes a write query against Neo4j with rate limiting and retry
 func (n *N) ExecuteWrite(ctx context.Context, cypher string, params map[string]any) (neo4j.ResultWithContext, error) {
-	session := n.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-	defer session.Close(ctx)
+	// Acquire semaphore slot to limit concurrent queries
+	if err := n.acquireQuerySlot(ctx); err != nil {
+		return nil, fmt.Errorf("failed to acquire query slot: %w", err)
+	}
+	defer n.releaseQuerySlot()
 
-	result, err := session.Run(ctx, cypher, params)
-	if err != nil {
-		return nil, fmt.Errorf("neo4j write query failed: %w", err)
+	var lastErr error
+	for attempt := 0; attempt < maxRetryAttempts; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff
+			delay := retryBaseDelay * time.Duration(1<<uint(attempt-1))
+			n.Logger.Warningf("retrying write query after %v (attempt %d/%d)", delay, attempt+1, maxRetryAttempts)
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+
+		session := n.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+		result, err := session.Run(ctx, cypher, params)
+		if err != nil {
+			session.Close(ctx)
+			lastErr = err
+			if isRateLimitError(err) {
+				continue // Retry on rate limit
+			}
+			return nil, fmt.Errorf("neo4j write query failed: %w", err)
+		}
+
+		// Consume the result to ensure the query completes before closing session
+		_, err = result.Consume(ctx)
+		session.Close(ctx)
+		if err != nil {
+			lastErr = err
+			if isRateLimitError(err) {
+				continue // Retry on rate limit
+			}
+			return nil, fmt.Errorf("neo4j write consume failed: %w", err)
+		}
+
+		return result, nil
 	}
 
-	return result, nil
+	return nil, fmt.Errorf("neo4j write query failed after %d attempts: %w", maxRetryAttempts, lastErr)
 }
 
-// ExecuteWriteTransaction executes a transactional write operation
+// ExecuteWriteTransaction executes a transactional write operation with rate limiting
 func (n *N) ExecuteWriteTransaction(ctx context.Context, work func(tx neo4j.ManagedTransaction) (any, error)) (any, error) {
+	// Acquire semaphore slot to limit concurrent queries
+	if err := n.acquireQuerySlot(ctx); err != nil {
+		return nil, fmt.Errorf("failed to acquire query slot: %w", err)
+	}
+	defer n.releaseQuerySlot()
+
 	session := n.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 

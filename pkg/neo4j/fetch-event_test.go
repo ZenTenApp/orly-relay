@@ -1,8 +1,10 @@
+//go:build integration
+// +build integration
+
 package neo4j
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"git.mleku.dev/mleku/nostr/encoders/event"
@@ -14,27 +16,17 @@ import (
 	"next.orly.dev/pkg/database/indexes/types"
 )
 
+// All tests in this file use the shared testDB instance from testmain_test.go
+// to avoid Neo4j authentication rate limiting from too many connections.
+
 func TestFetchEventBySerial(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -55,18 +47,18 @@ func TestFetchEventBySerial(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, ev); err != nil {
+	if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 		t.Fatalf("Failed to save event: %v", err)
 	}
 
 	// Get the serial for this event
-	serial, err := db.GetSerialById(ev.ID[:])
+	serial, err := testDB.GetSerialById(ev.ID[:])
 	if err != nil {
 		t.Fatalf("Failed to get serial by ID: %v", err)
 	}
 
 	// Fetch event by serial
-	fetchedEvent, err := db.FetchEventBySerial(serial)
+	fetchedEvent, err := testDB.FetchEventBySerial(serial)
 	if err != nil {
 		t.Fatalf("Failed to fetch event by serial: %v", err)
 	}
@@ -98,28 +90,15 @@ func TestFetchEventBySerial(t *testing.T) {
 }
 
 func TestFetchEventBySerial_NonExistent(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
 
 	// Try to fetch with non-existent serial
 	nonExistentSerial := &types.Uint40{}
 	nonExistentSerial.Set(0xFFFFFFFFFF) // Max value
 
-	_, err = db.FetchEventBySerial(nonExistentSerial)
+	_, err := testDB.FetchEventBySerial(nonExistentSerial)
 	if err == nil {
 		t.Fatal("Expected error for non-existent serial")
 	}
@@ -128,26 +107,13 @@ func TestFetchEventBySerial_NonExistent(t *testing.T) {
 }
 
 func TestFetchEventsBySerials(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -172,11 +138,11 @@ func TestFetchEventsBySerials(t *testing.T) {
 			t.Fatalf("Failed to sign event: %v", err)
 		}
 
-		if _, err := db.SaveEvent(ctx, ev); err != nil {
+		if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 			t.Fatalf("Failed to save event: %v", err)
 		}
 
-		serial, err := db.GetSerialById(ev.ID[:])
+		serial, err := testDB.GetSerialById(ev.ID[:])
 		if err != nil {
 			t.Fatalf("Failed to get serial: %v", err)
 		}
@@ -186,7 +152,7 @@ func TestFetchEventsBySerials(t *testing.T) {
 	}
 
 	// Fetch all events by serials
-	events, err := db.FetchEventsBySerials(serials)
+	events, err := testDB.FetchEventsBySerials(serials)
 	if err != nil {
 		t.Fatalf("Failed to fetch events by serials: %v", err)
 	}
@@ -210,26 +176,13 @@ func TestFetchEventsBySerials(t *testing.T) {
 }
 
 func TestGetSerialById(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -250,12 +203,12 @@ func TestGetSerialById(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, ev); err != nil {
+	if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 		t.Fatalf("Failed to save event: %v", err)
 	}
 
 	// Get serial by ID
-	serial, err := db.GetSerialById(ev.ID[:])
+	serial, err := testDB.GetSerialById(ev.ID[:])
 	if err != nil {
 		t.Fatalf("Failed to get serial by ID: %v", err)
 	}
@@ -272,27 +225,14 @@ func TestGetSerialById(t *testing.T) {
 }
 
 func TestGetSerialById_NonExistent(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
 
 	// Try to get serial for non-existent event
 	fakeID, _ := hex.Dec("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 
-	_, err = db.GetSerialById(fakeID)
+	_, err := testDB.GetSerialById(fakeID)
 	if err == nil {
 		t.Fatal("Expected error for non-existent event ID")
 	}
@@ -301,26 +241,13 @@ func TestGetSerialById_NonExistent(t *testing.T) {
 }
 
 func TestGetSerialsByIds(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -343,7 +270,7 @@ func TestGetSerialsByIds(t *testing.T) {
 			t.Fatalf("Failed to sign event: %v", err)
 		}
 
-		if _, err := db.SaveEvent(ctx, ev); err != nil {
+		if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 			t.Fatalf("Failed to save event: %v", err)
 		}
 
@@ -352,7 +279,7 @@ func TestGetSerialsByIds(t *testing.T) {
 	}
 
 	// Get serials by IDs
-	serials, err := db.GetSerialsByIds(ids)
+	serials, err := testDB.GetSerialsByIds(ids)
 	if err != nil {
 		t.Fatalf("Failed to get serials by IDs: %v", err)
 	}
@@ -365,26 +292,13 @@ func TestGetSerialsByIds(t *testing.T) {
 }
 
 func TestGetFullIdPubkeyBySerial(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -405,18 +319,18 @@ func TestGetFullIdPubkeyBySerial(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, ev); err != nil {
+	if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 		t.Fatalf("Failed to save event: %v", err)
 	}
 
 	// Get serial
-	serial, err := db.GetSerialById(ev.ID[:])
+	serial, err := testDB.GetSerialById(ev.ID[:])
 	if err != nil {
 		t.Fatalf("Failed to get serial: %v", err)
 	}
 
 	// Get full ID and pubkey
-	idPkTs, err := db.GetFullIdPubkeyBySerial(serial)
+	idPkTs, err := testDB.GetFullIdPubkeyBySerial(serial)
 	if err != nil {
 		t.Fatalf("Failed to get full ID and pubkey: %v", err)
 	}
@@ -441,26 +355,13 @@ func TestGetFullIdPubkeyBySerial(t *testing.T) {
 }
 
 func TestQueryForSerials(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -482,13 +383,13 @@ func TestQueryForSerials(t *testing.T) {
 			t.Fatalf("Failed to sign event: %v", err)
 		}
 
-		if _, err := db.SaveEvent(ctx, ev); err != nil {
+		if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 			t.Fatalf("Failed to save event: %v", err)
 		}
 	}
 
 	// Query for serials
-	serials, err := db.QueryForSerials(ctx, &filter.F{
+	serials, err := testDB.QueryForSerials(ctx, &filter.F{
 		Authors: tag.NewFromBytesSlice(signer.Pub()),
 	})
 	if err != nil {

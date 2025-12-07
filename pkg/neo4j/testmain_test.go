@@ -69,13 +69,15 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// cleanTestDatabase removes all nodes and relationships
+// cleanTestDatabase removes all nodes and relationships, then re-initializes
 func cleanTestDatabase() {
 	ctx := context.Background()
 	// Delete all nodes and relationships
 	_, _ = testDB.ExecuteWrite(ctx, "MATCH (n) DETACH DELETE n", nil)
-	// Clear migration markers so migrations can run fresh
-	_, _ = testDB.ExecuteWrite(ctx, "MATCH (m:Migration) DELETE m", nil)
+	// Re-apply schema (constraints and indexes)
+	_ = testDB.applySchema(ctx)
+	// Re-initialize serial counter
+	_ = testDB.initSerialCounter()
 }
 
 // setupTestEvent creates a test event directly in Neo4j for testing queries

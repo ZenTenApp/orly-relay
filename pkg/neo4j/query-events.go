@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
@@ -190,6 +191,16 @@ func (n *N) buildCypherQuery(f *filter.F, includeDeleteEvents bool) (string, map
 	// Exclude delete events unless requested
 	if !includeDeleteEvents {
 		whereClauses = append(whereClauses, "e.kind <> 5")
+	}
+
+	// Filter out expired events (NIP-40) unless querying by explicit IDs
+	// Events with expiration > 0 that have passed are hidden from results
+	// EXCEPT when the query includes specific event IDs (allowing explicit lookup)
+	hasExplicitIds := f.Ids != nil && len(f.Ids.T) > 0
+	if !hasExplicitIds {
+		params["now"] = time.Now().Unix()
+		// Show events where either: no expiration (expiration = 0) OR expiration hasn't passed yet
+		whereClauses = append(whereClauses, "(e.expiration = 0 OR e.expiration > $now)")
 	}
 
 	// Build WHERE clause

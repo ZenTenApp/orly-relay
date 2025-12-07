@@ -1,10 +1,12 @@
+//go:build integration
+// +build integration
+
 package neo4j
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"os"
 	"testing"
 	"time"
 
@@ -17,27 +19,17 @@ import (
 	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 )
 
+// All tests in this file use the shared testDB instance from testmain_test.go
+// to avoid Neo4j authentication rate limiting from too many connections.
+
 func TestExpiration_SaveEventWithExpiration(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -61,12 +53,12 @@ func TestExpiration_SaveEventWithExpiration(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, ev); err != nil {
+	if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 		t.Fatalf("Failed to save event: %v", err)
 	}
 
 	// Query the event to verify it was saved
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Ids: tag.NewFromBytesSlice(ev.ID),
 	})
 	if err != nil {
@@ -81,26 +73,13 @@ func TestExpiration_SaveEventWithExpiration(t *testing.T) {
 }
 
 func TestExpiration_DeleteExpiredEvents(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -124,7 +103,7 @@ func TestExpiration_DeleteExpiredEvents(t *testing.T) {
 		t.Fatalf("Failed to sign expired event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, expiredEv); err != nil {
+	if _, err := testDB.SaveEvent(ctx, expiredEv); err != nil {
 		t.Fatalf("Failed to save expired event: %v", err)
 	}
 
@@ -142,7 +121,7 @@ func TestExpiration_DeleteExpiredEvents(t *testing.T) {
 		t.Fatalf("Failed to sign valid event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, validEv); err != nil {
+	if _, err := testDB.SaveEvent(ctx, validEv); err != nil {
 		t.Fatalf("Failed to save valid event: %v", err)
 	}
 
@@ -157,12 +136,12 @@ func TestExpiration_DeleteExpiredEvents(t *testing.T) {
 		t.Fatalf("Failed to sign permanent event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, permanentEv); err != nil {
+	if _, err := testDB.SaveEvent(ctx, permanentEv); err != nil {
 		t.Fatalf("Failed to save permanent event: %v", err)
 	}
 
 	// Verify all 3 events exist
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Authors: tag.NewFromBytesSlice(signer.Pub()),
 	})
 	if err != nil {
@@ -173,10 +152,10 @@ func TestExpiration_DeleteExpiredEvents(t *testing.T) {
 	}
 
 	// Run DeleteExpired
-	db.DeleteExpired()
+	testDB.DeleteExpired()
 
 	// Verify only expired event was deleted
-	evs, err = db.QueryEvents(ctx, &filter.F{
+	evs, err = testDB.QueryEvents(ctx, &filter.F{
 		Authors: tag.NewFromBytesSlice(signer.Pub()),
 	})
 	if err != nil {
@@ -210,26 +189,13 @@ func TestExpiration_DeleteExpiredEvents(t *testing.T) {
 }
 
 func TestExpiration_NoExpirationTag(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -250,15 +216,15 @@ func TestExpiration_NoExpirationTag(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	if _, err := db.SaveEvent(ctx, ev); err != nil {
+	if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 		t.Fatalf("Failed to save event: %v", err)
 	}
 
 	// Run DeleteExpired - event should not be deleted
-	db.DeleteExpired()
+	testDB.DeleteExpired()
 
 	// Verify event still exists
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Ids: tag.NewFromBytesSlice(ev.ID),
 	})
 	if err != nil {
@@ -273,26 +239,13 @@ func TestExpiration_NoExpirationTag(t *testing.T) {
 }
 
 func TestExport_AllEvents(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, err := p8k.New()
 	if err != nil {
@@ -315,14 +268,14 @@ func TestExport_AllEvents(t *testing.T) {
 			t.Fatalf("Failed to sign event: %v", err)
 		}
 
-		if _, err := db.SaveEvent(ctx, ev); err != nil {
+		if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 			t.Fatalf("Failed to save event: %v", err)
 		}
 	}
 
 	// Export all events
 	var buf bytes.Buffer
-	db.Export(ctx, &buf)
+	testDB.Export(ctx, &buf)
 
 	// Parse the exported JSONL
 	lines := bytes.Split(buf.Bytes(), []byte("\n"))
@@ -346,26 +299,13 @@ func TestExport_AllEvents(t *testing.T) {
 }
 
 func TestExport_FilterByPubkey(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	// Create two signers
 	alice, _ := p8k.New()
@@ -388,7 +328,7 @@ func TestExport_FilterByPubkey(t *testing.T) {
 			t.Fatalf("Failed to sign event: %v", err)
 		}
 
-		if _, err := db.SaveEvent(ctx, ev); err != nil {
+		if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 			t.Fatalf("Failed to save event: %v", err)
 		}
 	}
@@ -405,14 +345,14 @@ func TestExport_FilterByPubkey(t *testing.T) {
 			t.Fatalf("Failed to sign event: %v", err)
 		}
 
-		if _, err := db.SaveEvent(ctx, ev); err != nil {
+		if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 			t.Fatalf("Failed to save event: %v", err)
 		}
 	}
 
 	// Export only Alice's events
 	var buf bytes.Buffer
-	db.Export(ctx, &buf, alice.Pub())
+	testDB.Export(ctx, &buf, alice.Pub())
 
 	// Parse the exported JSONL
 	lines := bytes.Split(buf.Bytes(), []byte("\n"))
@@ -440,30 +380,17 @@ func TestExport_FilterByPubkey(t *testing.T) {
 }
 
 func TestExport_Empty(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	// Export from empty database
 	var buf bytes.Buffer
-	db.Export(ctx, &buf)
+	testDB.Export(ctx, &buf)
 
 	// Should be empty or just whitespace
 	content := bytes.TrimSpace(buf.Bytes())
@@ -475,26 +402,13 @@ func TestExport_Empty(t *testing.T) {
 }
 
 func TestImportExport_RoundTrip(t *testing.T) {
-	neo4jURI := os.Getenv("ORLY_NEO4J_URI")
-	if neo4jURI == "" {
-		t.Skip("Skipping Neo4j test: ORLY_NEO4J_URI not set")
+	if testDB == nil {
+		t.Skip("Neo4j not available")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cleanTestDatabase()
 
-	tempDir := t.TempDir()
-	db, err := New(ctx, cancel, tempDir, "debug")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	<-db.Ready()
-
-	if err := db.Wipe(); err != nil {
-		t.Fatalf("Failed to wipe database: %v", err)
-	}
+	ctx := context.Background()
 
 	signer, _ := p8k.New()
 	signer.Generate()
@@ -513,7 +427,7 @@ func TestImportExport_RoundTrip(t *testing.T) {
 			t.Fatalf("Failed to sign event: %v", err)
 		}
 
-		if _, err := db.SaveEvent(ctx, ev); err != nil {
+		if _, err := testDB.SaveEvent(ctx, ev); err != nil {
 			t.Fatalf("Failed to save event: %v", err)
 		}
 		originalEvents[i] = ev
@@ -521,15 +435,15 @@ func TestImportExport_RoundTrip(t *testing.T) {
 
 	// Export events
 	var buf bytes.Buffer
-	db.Export(ctx, &buf)
+	testDB.Export(ctx, &buf)
 
 	// Wipe database
-	if err := db.Wipe(); err != nil {
+	if err := testDB.Wipe(); err != nil {
 		t.Fatalf("Failed to wipe database: %v", err)
 	}
 
 	// Verify database is empty
-	evs, err := db.QueryEvents(ctx, &filter.F{
+	evs, err := testDB.QueryEvents(ctx, &filter.F{
 		Kinds: kind.NewS(kind.New(1)),
 	})
 	if err != nil {
@@ -540,10 +454,10 @@ func TestImportExport_RoundTrip(t *testing.T) {
 	}
 
 	// Import events
-	db.Import(bytes.NewReader(buf.Bytes()))
+	testDB.Import(bytes.NewReader(buf.Bytes()))
 
 	// Verify events were restored
-	evs, err = db.QueryEvents(ctx, &filter.F{
+	evs, err = testDB.QueryEvents(ctx, &filter.F{
 		Authors: tag.NewFromBytesSlice(signer.Pub()),
 	})
 	if err != nil {
