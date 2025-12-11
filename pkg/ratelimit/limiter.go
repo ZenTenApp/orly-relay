@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"next.orly.dev/pkg/interfaces/loadmonitor"
+	pidif "next.orly.dev/pkg/interfaces/pid"
+	"next.orly.dev/pkg/pid"
 )
 
 // OperationType distinguishes between read and write operations
@@ -129,9 +131,9 @@ type Limiter struct {
 	config  Config
 	monitor loadmonitor.Monitor
 
-	// PID controllers for reads and writes
-	writePID *PIDController
-	readPID  *PIDController
+	// PID controllers for reads and writes (using generic pid.Controller)
+	writePID pidif.Controller
+	readPID  pidif.Controller
 
 	// Cached metrics (updated periodically)
 	metricsLock    sync.RWMutex
@@ -164,22 +166,30 @@ func NewLimiter(config Config, monitor loadmonitor.Monitor) *Limiter {
 		stopped: make(chan struct{}),
 	}
 
-	// Create PID controllers with configured gains
-	l.writePID = NewPIDController(
-		config.WriteKp, config.WriteKi, config.WriteKd,
-		config.WriteSetpoint,
-		0.2, // Strong filtering for writes
-		-2.0, float64(config.MaxWriteDelayMs)/1000.0*2, // Anti-windup limits
-		0, float64(config.MaxWriteDelayMs)/1000.0,
-	)
+	// Create PID controllers with configured gains using the generic pid package
+	l.writePID = pid.New(pidif.Tuning{
+		Kp:                    config.WriteKp,
+		Ki:                    config.WriteKi,
+		Kd:                    config.WriteKd,
+		Setpoint:              config.WriteSetpoint,
+		DerivativeFilterAlpha: 0.2, // Strong filtering for writes
+		IntegralMin:           -2.0,
+		IntegralMax:           float64(config.MaxWriteDelayMs) / 1000.0 * 2, // Anti-windup limits
+		OutputMin:             0,
+		OutputMax:             float64(config.MaxWriteDelayMs) / 1000.0,
+	})
 
-	l.readPID = NewPIDController(
-		config.ReadKp, config.ReadKi, config.ReadKd,
-		config.ReadSetpoint,
-		0.15, // Very strong filtering for reads
-		-1.0, float64(config.MaxReadDelayMs)/1000.0*2,
-		0, float64(config.MaxReadDelayMs)/1000.0,
-	)
+	l.readPID = pid.New(pidif.Tuning{
+		Kp:                    config.ReadKp,
+		Ki:                    config.ReadKi,
+		Kd:                    config.ReadKd,
+		Setpoint:              config.ReadSetpoint,
+		DerivativeFilterAlpha: 0.15, // Very strong filtering for reads
+		IntegralMin:           -1.0,
+		IntegralMax:           float64(config.MaxReadDelayMs) / 1000.0 * 2,
+		OutputMin:             0,
+		OutputMax:             float64(config.MaxReadDelayMs) / 1000.0,
+	})
 
 	// Set memory target on monitor
 	if monitor != nil && config.TargetMemoryMB > 0 {
@@ -293,13 +303,15 @@ func (l *Limiter) ComputeDelay(opType OperationType) time.Duration {
 	var delaySec float64
 	switch opType {
 	case Write:
-		delaySec = l.writePID.Update(pv)
+		out := l.writePID.UpdateValue(pv)
+		delaySec = out.Value()
 		if delaySec > 0 {
 			l.writeThrottles.Add(1)
 			l.totalWriteDelayMs.Add(int64(delaySec * 1000))
 		}
 	case Read:
-		delaySec = l.readPID.Update(pv)
+		out := l.readPID.UpdateValue(pv)
+		delaySec = out.Value()
 		if delaySec > 0 {
 			l.readThrottles.Add(1)
 			l.totalReadDelayMs.Add(int64(delaySec * 1000))
@@ -351,26 +363,34 @@ func (l *Limiter) GetStats() Stats {
 	metrics := l.currentMetrics
 	l.metricsLock.RUnlock()
 
-	wIntegral, wPrevErr, wPrevFiltered := l.writePID.GetState()
-	rIntegral, rPrevErr, rPrevFiltered := l.readPID.GetState()
-
-	return Stats{
+	stats := Stats{
 		WriteThrottles:    l.writeThrottles.Load(),
 		ReadThrottles:     l.readThrottles.Load(),
 		TotalWriteDelayMs: l.totalWriteDelayMs.Load(),
 		TotalReadDelayMs:  l.totalReadDelayMs.Load(),
 		CurrentMetrics:    metrics,
-		WritePIDState: PIDState{
-			Integral:          wIntegral,
-			PrevError:         wPrevErr,
-			PrevFilteredError: wPrevFiltered,
-		},
-		ReadPIDState: PIDState{
-			Integral:          rIntegral,
-			PrevError:         rPrevErr,
-			PrevFilteredError: rPrevFiltered,
-		},
 	}
+
+	// Type assert to concrete pid.Controller to access State() method
+	// This is for monitoring/debugging only
+	if wCtrl, ok := l.writePID.(*pid.Controller); ok {
+		integral, prevErr, prevFiltered, _ := wCtrl.State()
+		stats.WritePIDState = PIDState{
+			Integral:          integral,
+			PrevError:         prevErr,
+			PrevFilteredError: prevFiltered,
+		}
+	}
+	if rCtrl, ok := l.readPID.(*pid.Controller); ok {
+		integral, prevErr, prevFiltered, _ := rCtrl.State()
+		stats.ReadPIDState = PIDState{
+			Integral:          integral,
+			PrevError:         prevErr,
+			PrevFilteredError: prevFiltered,
+		}
+	}
+
+	return stats
 }
 
 // Reset clears all PID controller state and statistics.
@@ -393,14 +413,19 @@ func (l *Limiter) IsEnabled() bool {
 func (l *Limiter) UpdateConfig(config Config) {
 	l.config = config
 
-	// Update PID controllers
+	// Update PID controllers - use interface methods for setpoint and gains
 	l.writePID.SetSetpoint(config.WriteSetpoint)
 	l.writePID.SetGains(config.WriteKp, config.WriteKi, config.WriteKd)
-	l.writePID.OutputMax = float64(config.MaxWriteDelayMs) / 1000.0
+	// Type assert to set output limits (not part of base interface)
+	if wCtrl, ok := l.writePID.(*pid.Controller); ok {
+		wCtrl.SetOutputLimits(0, float64(config.MaxWriteDelayMs)/1000.0)
+	}
 
 	l.readPID.SetSetpoint(config.ReadSetpoint)
 	l.readPID.SetGains(config.ReadKp, config.ReadKi, config.ReadKd)
-	l.readPID.OutputMax = float64(config.MaxReadDelayMs) / 1000.0
+	if rCtrl, ok := l.readPID.(*pid.Controller); ok {
+		rCtrl.SetOutputLimits(0, float64(config.MaxReadDelayMs)/1000.0)
+	}
 
 	// Update memory target
 	if l.monitor != nil && config.TargetMemoryMB > 0 {
