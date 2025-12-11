@@ -102,8 +102,22 @@ type C struct {
 	Neo4jPassword string `env:"ORLY_NEO4J_PASSWORD" default:"password" usage:"Neo4j authentication password (only used when ORLY_DB_TYPE=neo4j)"`
 
 	// Advanced database tuning
-	SerialCachePubkeys     int `env:"ORLY_SERIAL_CACHE_PUBKEYS" default:"100000" usage:"max pubkeys to cache for compact event storage (default: 100000, ~3.2MB memory)"`
-	SerialCacheEventIds    int `env:"ORLY_SERIAL_CACHE_EVENT_IDS" default:"500000" usage:"max event IDs to cache for compact event storage (default: 500000, ~16MB memory)"`
+	SerialCachePubkeys  int `env:"ORLY_SERIAL_CACHE_PUBKEYS" default:"100000" usage:"max pubkeys to cache for compact event storage (default: 100000, ~3.2MB memory)"`
+	SerialCacheEventIds int `env:"ORLY_SERIAL_CACHE_EVENT_IDS" default:"500000" usage:"max event IDs to cache for compact event storage (default: 500000, ~16MB memory)"`
+
+	// Adaptive rate limiting (PID-controlled)
+	RateLimitEnabled     bool    `env:"ORLY_RATE_LIMIT_ENABLED" default:"false" usage:"enable adaptive PID-controlled rate limiting for database operations"`
+	RateLimitTargetMB    int     `env:"ORLY_RATE_LIMIT_TARGET_MB" default:"1500" usage:"target memory limit in MB for rate limiting (default: 1500 = 1.5GB)"`
+	RateLimitWriteKp     float64 `env:"ORLY_RATE_LIMIT_WRITE_KP" default:"0.5" usage:"PID proportional gain for write operations"`
+	RateLimitWriteKi     float64 `env:"ORLY_RATE_LIMIT_WRITE_KI" default:"0.1" usage:"PID integral gain for write operations"`
+	RateLimitWriteKd     float64 `env:"ORLY_RATE_LIMIT_WRITE_KD" default:"0.05" usage:"PID derivative gain for write operations (filtered)"`
+	RateLimitReadKp      float64 `env:"ORLY_RATE_LIMIT_READ_KP" default:"0.3" usage:"PID proportional gain for read operations"`
+	RateLimitReadKi      float64 `env:"ORLY_RATE_LIMIT_READ_KI" default:"0.05" usage:"PID integral gain for read operations"`
+	RateLimitReadKd      float64 `env:"ORLY_RATE_LIMIT_READ_KD" default:"0.02" usage:"PID derivative gain for read operations (filtered)"`
+	RateLimitMaxWriteMs  int     `env:"ORLY_RATE_LIMIT_MAX_WRITE_MS" default:"1000" usage:"maximum delay for write operations in milliseconds"`
+	RateLimitMaxReadMs   int     `env:"ORLY_RATE_LIMIT_MAX_READ_MS" default:"500" usage:"maximum delay for read operations in milliseconds"`
+	RateLimitWriteTarget float64 `env:"ORLY_RATE_LIMIT_WRITE_TARGET" default:"0.85" usage:"PID setpoint for writes (throttle when load exceeds this, 0.0-1.0)"`
+	RateLimitReadTarget  float64 `env:"ORLY_RATE_LIMIT_READ_TARGET" default:"0.90" usage:"PID setpoint for reads (throttle when load exceeds this, 0.0-1.0)"`
 
 	// TLS configuration
 	TLSDomains []string `env:"ORLY_TLS_DOMAINS" usage:"comma-separated list of domains to respond to for TLS"`
@@ -431,4 +445,23 @@ func (cfg *C) GetDatabaseConfigValues() (
 		cfg.SerialCachePubkeys, cfg.SerialCacheEventIds,
 		cfg.DBZSTDLevel,
 		cfg.Neo4jURI, cfg.Neo4jUser, cfg.Neo4jPassword
+}
+
+// GetRateLimitConfigValues returns the rate limiting configuration values.
+// This avoids circular imports with pkg/ratelimit while allowing main.go to construct
+// a ratelimit.Config with the correct type.
+func (cfg *C) GetRateLimitConfigValues() (
+	enabled bool,
+	targetMB int,
+	writeKp, writeKi, writeKd float64,
+	readKp, readKi, readKd float64,
+	maxWriteMs, maxReadMs int,
+	writeTarget, readTarget float64,
+) {
+	return cfg.RateLimitEnabled,
+		cfg.RateLimitTargetMB,
+		cfg.RateLimitWriteKp, cfg.RateLimitWriteKi, cfg.RateLimitWriteKd,
+		cfg.RateLimitReadKp, cfg.RateLimitReadKi, cfg.RateLimitReadKd,
+		cfg.RateLimitMaxWriteMs, cfg.RateLimitMaxReadMs,
+		cfg.RateLimitWriteTarget, cfg.RateLimitReadTarget
 }

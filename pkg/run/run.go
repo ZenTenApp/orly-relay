@@ -16,6 +16,7 @@ import (
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/acl"
 	"next.orly.dev/pkg/database"
+	"next.orly.dev/pkg/ratelimit"
 )
 
 // Options configures relay startup behavior.
@@ -126,8 +127,11 @@ func Start(cfg *config.C, opts *Options) (relay *Relay, err error) {
 	}
 	acl.Registry.Syncer()
 
+	// Create rate limiter (disabled for test relay instances)
+	limiter := ratelimit.NewDisabledLimiter()
+
 	// Start the relay
-	relay.quit = app.Run(relay.ctx, cfg, relay.db)
+	relay.quit = app.Run(relay.ctx, cfg, relay.db, limiter)
 
 	return
 }

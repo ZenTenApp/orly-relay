@@ -23,6 +23,7 @@ import (
 	"next.orly.dev/pkg/database"
 	_ "next.orly.dev/pkg/neo4j" // Import to register neo4j factory
 	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/utils/interrupt"
 	"next.orly.dev/pkg/version"
 )
@@ -336,6 +337,37 @@ func main() {
 	}
 	acl.Registry.Syncer()
 
+	// Create rate limiter if enabled
+	var limiter *ratelimit.Limiter
+	rateLimitEnabled, targetMB,
+		writeKp, writeKi, writeKd,
+		readKp, readKi, readKd,
+		maxWriteMs, maxReadMs,
+		writeTarget, readTarget := cfg.GetRateLimitConfigValues()
+
+	if rateLimitEnabled {
+		rlConfig := ratelimit.NewConfigFromValues(
+			rateLimitEnabled, targetMB,
+			writeKp, writeKi, writeKd,
+			readKp, readKi, readKd,
+			maxWriteMs, maxReadMs,
+			writeTarget, readTarget,
+		)
+
+		// Create appropriate monitor based on database type
+		if badgerDB, ok := db.(*database.D); ok {
+			limiter = ratelimit.NewBadgerLimiter(rlConfig, badgerDB.DB)
+			log.I.F("rate limiter configured for Badger backend (target: %dMB)", targetMB)
+		} else {
+			// For Neo4j or other backends, create a disabled limiter for now
+			// Neo4j monitor requires access to the querySem which is internal
+			limiter = ratelimit.NewDisabledLimiter()
+			log.I.F("rate limiter disabled for non-Badger backend")
+		}
+	} else {
+		limiter = ratelimit.NewDisabledLimiter()
+	}
+
 	// Start HTTP pprof server if enabled
 	if cfg.PprofHTTP {
 		pprofAddr := fmt.Sprintf("%s:%d", cfg.Listen, 6060)
@@ -413,7 +445,7 @@ func main() {
 		}()
 	}
 
-	quit := app.Run(ctx, cfg, db)
+	quit := app.Run(ctx, cfg, db, limiter)
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 	for {

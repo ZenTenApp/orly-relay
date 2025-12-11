@@ -29,6 +29,7 @@ import (
 	"next.orly.dev/pkg/protocol/graph"
 	"next.orly.dev/pkg/protocol/nip43"
 	"next.orly.dev/pkg/protocol/publish"
+	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/spider"
 	dsync "next.orly.dev/pkg/sync"
 )
@@ -64,6 +65,7 @@ type Server struct {
 	blossomServer     *blossom.Server
 	InviteManager     *nip43.InviteManager
 	graphExecutor     *graph.Executor
+	rateLimiter       *ratelimit.Limiter
 	cfg               *config.C
 	db                database.Database // Changed from *database.D to interface
 }

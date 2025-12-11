@@ -21,12 +21,13 @@ import (
 	"next.orly.dev/pkg/protocol/graph"
 	"next.orly.dev/pkg/protocol/nip43"
 	"next.orly.dev/pkg/protocol/publish"
+	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/spider"
 	dsync "next.orly.dev/pkg/sync"
 )
 
 func Run(
-	ctx context.Context, cfg *config.C, db database.Database,
+	ctx context.Context, cfg *config.C, db database.Database, limiter *ratelimit.Limiter,
 ) (quit chan struct{}) {
 	quit = make(chan struct{})
 	var once sync.Once
@@ -64,14 +65,15 @@ func Run(
 	}
 	// start listener
 	l := &Server{
-		Ctx:        ctx,
-		Config:     cfg,
-		DB:         db,
-		publishers: publish.New(NewPublisher(ctx)),
-		Admins:     adminKeys,
-		Owners:     ownerKeys,
-		cfg:        cfg,
-		db:         db,
+		Ctx:         ctx,
+		Config:      cfg,
+		DB:          db,
+		publishers:  publish.New(NewPublisher(ctx)),
+		Admins:      adminKeys,
+		Owners:      ownerKeys,
+		rateLimiter: limiter,
+		cfg:         cfg,
+		db:          db,
 	}
 
 	// Initialize NIP-43 invite manager if enabled
@@ -360,6 +362,12 @@ func Run(
 		}
 	}
 
+	// Start rate limiter if enabled
+	if limiter != nil && limiter.IsEnabled() {
+		limiter.Start()
+		log.I.F("adaptive rate limiter started")
+	}
+
 	// Wait for database to be ready before accepting requests
 	log.I.F("waiting for database warmup to complete...")
 	<-db.Ready()
@@ -455,6 +463,12 @@ func Run(
 		if l.directorySpider != nil {
 			l.directorySpider.Stop()
 			log.I.F("directory spider stopped")
+		}
+
+		// Stop rate limiter if running
+		if l.rateLimiter != nil && l.rateLimiter.IsEnabled() {
+			l.rateLimiter.Stop()
+			log.I.F("rate limiter stopped")
 		}
 
 		// Create shutdown context with timeout
