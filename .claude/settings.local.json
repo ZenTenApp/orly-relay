@@ -82,7 +82,9 @@
       "Bash(update-desktop-database:*)",
       "Bash(CGO_ENABLED=0 go build:*)",
       "Bash(CGO_ENABLED=0 go test:*)",
-      "Bash(git submodule:*)"
+      "Bash(git submodule:*)",
+      "WebFetch(domain:neo4j.com)",
+      "Bash(git reset:*)"
     ],
     "deny": [],
     "ask": []
