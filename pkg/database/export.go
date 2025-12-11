@@ -6,9 +6,11 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"time"
 
 	"github.com/dgraph-io/badger/v4"
 	"lol.mleku.dev/chk"
+	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/database/indexes"
 	"next.orly.dev/pkg/database/indexes/types"
 	"git.mleku.dev/mleku/nostr/encoders/event"
@@ -21,6 +23,14 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 	var err error
 	evB := make([]byte, 0, units.Mb)
 	evBuf := bytes.NewBuffer(evB)
+
+	// Performance tracking
+	startTime := time.Now()
+	var eventCount, bytesWritten int64
+	lastLogTime := startTime
+	const logInterval = 5 * time.Second
+
+	log.I.F("export: starting export operation")
 
 	// Create resolver for compact event decoding
 	resolver := NewDatabaseSerialResolver(d, d.serialCache)
@@ -86,7 +96,8 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 					}
 
 					// Serialize the event to JSON and write it to the output
-					if _, err = w.Write(ev.Serialize()); chk.E(err) {
+					data := ev.Serialize()
+					if _, err = w.Write(data); chk.E(err) {
 						ev.Free()
 						return
 					}
@@ -94,7 +105,19 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 						ev.Free()
 						return
 					}
+					bytesWritten += int64(len(data) + 1)
+					eventCount++
 					ev.Free()
+
+					// Progress logging every logInterval
+					if time.Since(lastLogTime) >= logInterval {
+						elapsed := time.Since(startTime)
+						eventsPerSec := float64(eventCount) / elapsed.Seconds()
+						mbPerSec := float64(bytesWritten) / elapsed.Seconds() / 1024 / 1024
+						log.I.F("export: progress %d events, %.2f MB written, %.0f events/sec, %.2f MB/sec",
+							eventCount, float64(bytesWritten)/1024/1024, eventsPerSec, mbPerSec)
+						lastLogTime = time.Now()
+					}
 				}
 				it.Close()
 
@@ -133,7 +156,8 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 					}
 
 					// Serialize the event to JSON and write it to the output
-					if _, err = w.Write(ev.Serialize()); chk.E(err) {
+					data := ev.Serialize()
+					if _, err = w.Write(data); chk.E(err) {
 						ev.Free()
 						return
 					}
@@ -141,7 +165,19 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 						ev.Free()
 						return
 					}
+					bytesWritten += int64(len(data) + 1)
+					eventCount++
 					ev.Free()
+
+					// Progress logging every logInterval
+					if time.Since(lastLogTime) >= logInterval {
+						elapsed := time.Since(startTime)
+						eventsPerSec := float64(eventCount) / elapsed.Seconds()
+						mbPerSec := float64(bytesWritten) / elapsed.Seconds() / 1024 / 1024
+						log.I.F("export: progress %d events, %.2f MB written, %.0f events/sec, %.2f MB/sec",
+							eventCount, float64(bytesWritten)/1024/1024, eventsPerSec, mbPerSec)
+						lastLogTime = time.Now()
+					}
 				}
 
 				return
@@ -149,8 +185,16 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 		); err != nil {
 			return
 		}
+
+		// Final export summary
+		elapsed := time.Since(startTime)
+		eventsPerSec := float64(eventCount) / elapsed.Seconds()
+		mbPerSec := float64(bytesWritten) / elapsed.Seconds() / 1024 / 1024
+		log.I.F("export: completed - %d events, %.2f MB in %v (%.0f events/sec, %.2f MB/sec)",
+			eventCount, float64(bytesWritten)/1024/1024, elapsed.Round(time.Millisecond), eventsPerSec, mbPerSec)
 	} else {
 		// Export events for specific pubkeys
+		log.I.F("export: exporting events for %d pubkeys", len(pubkeys))
 		for _, pubkey := range pubkeys {
 			if err = d.View(
 				func(txn *badger.Txn) (err error) {
@@ -187,7 +231,8 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 						}
 
 						// Serialize the event to JSON and write it to the output
-						if _, err = w.Write(ev.Serialize()); chk.E(err) {
+						data := ev.Serialize()
+						if _, err = w.Write(data); chk.E(err) {
 							ev.Free()
 							continue
 						}
@@ -195,7 +240,19 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 							ev.Free()
 							continue
 						}
+						bytesWritten += int64(len(data) + 1)
+						eventCount++
 						ev.Free()
+
+						// Progress logging every logInterval
+						if time.Since(lastLogTime) >= logInterval {
+							elapsed := time.Since(startTime)
+							eventsPerSec := float64(eventCount) / elapsed.Seconds()
+							mbPerSec := float64(bytesWritten) / elapsed.Seconds() / 1024 / 1024
+							log.I.F("export: progress %d events, %.2f MB written, %.0f events/sec, %.2f MB/sec",
+								eventCount, float64(bytesWritten)/1024/1024, eventsPerSec, mbPerSec)
+							lastLogTime = time.Now()
+						}
 					}
 					return
 				},
@@ -203,5 +260,12 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 				return
 			}
 		}
+
+		// Final export summary for pubkey export
+		elapsed := time.Since(startTime)
+		eventsPerSec := float64(eventCount) / elapsed.Seconds()
+		mbPerSec := float64(bytesWritten) / elapsed.Seconds() / 1024 / 1024
+		log.I.F("export: completed - %d events, %.2f MB in %v (%.0f events/sec, %.2f MB/sec)",
+			eventCount, float64(bytesWritten)/1024/1024, elapsed.Round(time.Millisecond), eventsPerSec, mbPerSec)
 	}
 }
