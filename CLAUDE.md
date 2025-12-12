@@ -901,6 +901,18 @@ WebAssembly-compatible database backend (`pkg/wasmdb/`):
 - `ORLY_AUTH_REQUIRED=true`: Require authentication for ALL requests
 - `ORLY_AUTH_TO_WRITE=true`: Require authentication only for writes (allow anonymous reads)
 
+### NIP-42 AUTH Protocol (IMPORTANT for Client Developers)
+Per NIP-42, this relay always responds to AUTH messages with an OK message:
+- **Clients MUST wait for the OK response** after sending AUTH before publishing events
+- An OK with `true` confirms the relay has stored the authenticated pubkey
+- An OK with `false` indicates authentication failed - clients should:
+  1. Alert the user that authentication failed
+  2. Assume the relay will reject subsequent events requiring auth
+  3. Check the reason field for error details
+- If no OK is received within a reasonable timeout, assume connection issues
+
+Implementation: `app/handle-auth.go`
+
 ### NIP-43 Relay Access Metadata
 Invite-based access control system:
 - `ORLY_NIP43_ENABLED=true`: Enable invite system

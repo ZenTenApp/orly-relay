@@ -150,9 +150,19 @@ Event kind `7` for reactions:
 
 #### NIP-42: Authentication
 Client authentication to relays:
-- AUTH message from relay
-- Client responds with event kind `22242`
+- AUTH message from relay (challenge)
+- Client responds with event kind `22242` signed auth event
 - Proves key ownership
+
+**CRITICAL: Clients MUST wait for OK response after AUTH**
+- Relays MUST respond to AUTH with an OK message (same as EVENT)
+- An OK with `true` confirms the relay has stored the authenticated pubkey
+- An OK with `false` indicates authentication failed:
+  1. **Alert the user** that authentication failed
+  2. **Assume the relay will reject** subsequent events requiring auth
+  3. Check the `reason` field for error details (e.g., "error: failed to parse auth event")
+- Do NOT send events requiring authentication until OK `true` is received
+- If no OK is received within timeout, assume connection issues and retry or alert user
 
 #### NIP-50: Search
 Query filter extension for full-text search:

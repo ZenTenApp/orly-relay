@@ -5,13 +5,25 @@ import (
 	"lol.mleku.dev/log"
 	"git.mleku.dev/mleku/nostr/encoders/envelopes/authenvelope"
 	"git.mleku.dev/mleku/nostr/encoders/envelopes/okenvelope"
+	"git.mleku.dev/mleku/nostr/encoders/reason"
 	"git.mleku.dev/mleku/nostr/protocol/auth"
 )
+
+// zeroEventID is used for OK responses when we cannot parse the event ID
+var zeroEventID = make([]byte, 32)
 
 func (l *Listener) HandleAuth(b []byte) (err error) {
 	var rem []byte
 	env := authenvelope.NewResponse()
 	if rem, err = env.Unmarshal(b); chk.E(err) {
+		// NIP-42: AUTH messages MUST be answered with an OK message
+		// For parse failures, use zero event ID
+		log.E.F("%s AUTH unmarshal failed: %v", l.remote, err)
+		if writeErr := okenvelope.NewFrom(
+			zeroEventID, false, reason.Error.F("failed to parse auth event: %s", err),
+		).Write(l); chk.E(writeErr) {
+			return writeErr
+		}
 		return
 	}
 	defer func() {

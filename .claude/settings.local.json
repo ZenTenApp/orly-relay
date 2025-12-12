@@ -1,4 +1,5 @@
 {
+"MAX_THINKING_TOKENS": "8000",
   "permissions": {
     "allow": [
       "Bash:*",
