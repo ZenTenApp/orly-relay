@@ -111,7 +111,9 @@
       "Bash(fi)",
       "Bash(xargs:*)",
       "Bash(for i in 1 2 3 4 5)",
-      "Bash(do)"
+      "Bash(do)",
+      "WebFetch(domain:vermaden.wordpress.com)",
+      "WebFetch(domain:eylenburg.github.io)"
     ],
     "deny": [],
     "ask": []
