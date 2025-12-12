@@ -125,6 +125,11 @@ func (d *D) processJSONLEventsWithPolicy(ctx context.Context, rr io.Reader, poli
 			log.D.F("policy allowed event %x during sync import", ev.ID)
 		}
 
+		// Apply rate limiting before write operation if limiter is configured
+		if d.rateLimiter != nil && d.rateLimiter.IsEnabled() {
+			d.rateLimiter.Wait(ctx, WriteOpType)
+		}
+
 		if _, err := d.SaveEvent(ctx, ev); err != nil {
 			// return the pooled buffer on error paths too
 			ev.Free()

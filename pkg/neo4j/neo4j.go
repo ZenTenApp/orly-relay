@@ -447,3 +447,18 @@ func (n *N) CacheEvents(f *filter.F, events event.S) {}
 
 // InvalidateQueryCache invalidates the query cache (not implemented for Neo4j)
 func (n *N) InvalidateQueryCache() {}
+
+// Driver returns the Neo4j driver for use in rate limiting.
+func (n *N) Driver() neo4j.DriverWithContext {
+	return n.driver
+}
+
+// QuerySem returns the query semaphore for use in rate limiting.
+func (n *N) QuerySem() chan struct{} {
+	return n.querySem
+}
+
+// MaxConcurrentQueries returns the maximum concurrent query limit.
+func (n *N) MaxConcurrentQueries() int {
+	return cap(n.querySem)
+}

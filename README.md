@@ -6,9 +6,22 @@
 [![Documentation](https://img.shields.io/badge/godoc-documentation-blue.svg)](https://pkg.go.dev/next.orly.dev)
 [![Support this project](https://img.shields.io/badge/donate-geyser_crowdfunding_project_page-orange.svg)](https://geyser.fund/project/orly)
 
-zap me: ¡mlekudev@getalby.com
+zap me: ï¿½mlekudev@getalby.com
 
 follow me on [nostr](https://jumble.social/users/npub1fjqqy4a93z5zsjwsfxqhc2764kvykfdyttvldkkkdera8dr78vhsmmleku)
+
+## âš ï¸ System Requirements
+
+> **IMPORTANT: ORLY requires a minimum of 500MB of free memory to operate.**
+>
+> The relay uses adaptive PID-controlled rate limiting to manage memory pressure. By default, it will:
+> - Auto-detect available system memory at startup
+> - Target 66% of available memory, capped at 1.5GB for optimal performance
+> - **Fail to start** if less than 500MB is available
+>
+> You can override the memory target with `ORLY_RATE_LIMIT_TARGET_MB` (e.g., `ORLY_RATE_LIMIT_TARGET_MB=2000` for 2GB).
+>
+> To disable rate limiting (not recommended): `ORLY_RATE_LIMIT_ENABLED=false`
 
 ## About
 
@@ -152,8 +165,8 @@ The relay will:
 If you're running behind a reverse proxy or tunnel (e.g., Caddy, nginx, Cloudflare Tunnel), the setup is the same. The relay listens locally and your reverse proxy forwards traffic to it:
 
 ```
-Browser ’ Reverse Proxy ’ ORLY (port 3334) ’ Dev Server (port 8080)
-                              “
+Browser ï¿½ Reverse Proxy ï¿½ ORLY (port 3334) ï¿½ Dev Server (port 8080)
+                              ï¿½
                          WebSocket/API
 ```
 

@@ -3,22 +3,31 @@
 package ratelimit
 
 import (
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
+	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/interfaces/loadmonitor"
 )
 
 // BadgerMonitor implements loadmonitor.Monitor for the Badger database.
-// It collects metrics from Badger's LSM tree, caches, and Go runtime.
+// It collects metrics from Badger's LSM tree, caches, and actual process memory.
+// It also implements CompactableMonitor and EmergencyModeMonitor interfaces.
 type BadgerMonitor struct {
 	db *badger.DB
 
 	// Target memory for pressure calculation
 	targetMemoryBytes atomic.Uint64
+
+	// Emergency mode configuration
+	emergencyThreshold atomic.Uint64 // stored as threshold * 1000 (e.g., 1500 = 1.5)
+	emergencyModeUntil atomic.Int64  // Unix nano when forced emergency mode ends
+	inEmergencyMode    atomic.Bool
+
+	// Compaction state
+	isCompacting atomic.Bool
 
 	// Latency tracking with exponential moving average
 	queryLatencyNs atomic.Int64
@@ -37,8 +46,10 @@ type BadgerMonitor struct {
 	interval time.Duration
 }
 
-// Compile-time check that BadgerMonitor implements loadmonitor.Monitor
+// Compile-time checks for interface implementation
 var _ loadmonitor.Monitor = (*BadgerMonitor)(nil)
+var _ loadmonitor.CompactableMonitor = (*BadgerMonitor)(nil)
+var _ loadmonitor.EmergencyModeMonitor = (*BadgerMonitor)(nil)
 
 // NewBadgerMonitor creates a new Badger load monitor.
 // The updateInterval controls how often metrics are collected (default 100ms).
@@ -58,7 +69,71 @@ func NewBadgerMonitor(db *badger.DB, updateInterval time.Duration) *BadgerMonito
 	// Set a default target (1.5GB)
 	m.targetMemoryBytes.Store(1500 * 1024 * 1024)
 
+	// Default emergency threshold: 150% of target
+	m.emergencyThreshold.Store(1500)
+
 	return m
+}
+
+// SetEmergencyThreshold sets the memory threshold above which emergency mode is triggered.
+// threshold is a fraction, e.g., 1.5 = 150% of target memory.
+func (m *BadgerMonitor) SetEmergencyThreshold(threshold float64) {
+	m.emergencyThreshold.Store(uint64(threshold * 1000))
+}
+
+// GetEmergencyThreshold returns the current emergency threshold as a fraction.
+func (m *BadgerMonitor) GetEmergencyThreshold() float64 {
+	return float64(m.emergencyThreshold.Load()) / 1000.0
+}
+
+// ForceEmergencyMode manually triggers emergency mode for a duration.
+func (m *BadgerMonitor) ForceEmergencyMode(duration time.Duration) {
+	m.emergencyModeUntil.Store(time.Now().Add(duration).UnixNano())
+	m.inEmergencyMode.Store(true)
+	log.W.F("⚠️  emergency mode forced for %v", duration)
+}
+
+// TriggerCompaction initiates a Badger Flatten operation to compact all levels.
+// This should be called when memory pressure is high and the database needs to
+// reclaim space. It runs synchronously and may take significant time.
+func (m *BadgerMonitor) TriggerCompaction() error {
+	if m.db == nil || m.db.IsClosed() {
+		return nil
+	}
+
+	if m.isCompacting.Load() {
+		log.D.Ln("compaction already in progress, skipping")
+		return nil
+	}
+
+	m.isCompacting.Store(true)
+	defer m.isCompacting.Store(false)
+
+	log.I.Ln("🗜️  triggering Badger compaction (Flatten)")
+	start := time.Now()
+
+	// Flatten with 4 workers (matches NumCompactors default)
+	err := m.db.Flatten(4)
+	if err != nil {
+		log.E.F("compaction failed: %v", err)
+		return err
+	}
+
+	// Also run value log GC to reclaim space
+	for {
+		err := m.db.RunValueLogGC(0.5)
+		if err != nil {
+			break // No more GC needed
+		}
+	}
+
+	log.I.F("🗜️  compaction completed in %v", time.Since(start))
+	return nil
+}
+
+// IsCompacting returns true if a compaction is currently in progress.
+func (m *BadgerMonitor) IsCompacting() bool {
+	return m.isCompacting.Load()
 }
 
 // GetMetrics returns the current load metrics.
@@ -140,7 +215,7 @@ func (m *BadgerMonitor) collectLoop() {
 	}
 }
 
-// updateMetrics collects current metrics from Badger and runtime.
+// updateMetrics collects current metrics from Badger and actual process memory.
 func (m *BadgerMonitor) updateMetrics() {
 	if m.db == nil || m.db.IsClosed() {
 		return
@@ -150,16 +225,39 @@ func (m *BadgerMonitor) updateMetrics() {
 		Timestamp: time.Now(),
 	}
 
-	// Calculate memory pressure from Go runtime
-	var memStats runtime.MemStats
-	runtime.ReadMemStats(&memStats)
+	// Use RSS-based memory pressure (actual physical memory, not Go runtime)
+	procMem := ReadProcessMemoryStats()
+	physicalMemBytes := procMem.PhysicalMemoryBytes()
+	metrics.PhysicalMemoryMB = physicalMemBytes / (1024 * 1024)
 
 	targetBytes := m.targetMemoryBytes.Load()
 	if targetBytes > 0 {
-		// Use HeapAlloc as primary memory metric
-		// This represents the actual live heap objects
-		metrics.MemoryPressure = float64(memStats.HeapAlloc) / float64(targetBytes)
+		// Use actual physical memory (RSS - shared) for pressure calculation
+		metrics.MemoryPressure = float64(physicalMemBytes) / float64(targetBytes)
 	}
+
+	// Check emergency mode
+	emergencyThreshold := float64(m.emergencyThreshold.Load()) / 1000.0
+	forcedUntil := m.emergencyModeUntil.Load()
+	now := time.Now().UnixNano()
+
+	if forcedUntil > now {
+		// Still in forced emergency mode
+		metrics.InEmergencyMode = true
+	} else if metrics.MemoryPressure >= emergencyThreshold {
+		// Memory pressure exceeds emergency threshold
+		metrics.InEmergencyMode = true
+		if !m.inEmergencyMode.Load() {
+			log.W.F("⚠️  entering emergency mode: memory pressure %.1f%% >= threshold %.1f%%",
+				metrics.MemoryPressure*100, emergencyThreshold*100)
+		}
+	} else {
+		if m.inEmergencyMode.Load() {
+			log.I.F("✅ exiting emergency mode: memory pressure %.1f%% < threshold %.1f%%",
+				metrics.MemoryPressure*100, emergencyThreshold*100)
+		}
+	}
+	m.inEmergencyMode.Store(metrics.InEmergencyMode)
 
 	// Get Badger LSM tree information for write load
 	levels := m.db.Levels()
@@ -190,6 +288,9 @@ func (m *BadgerMonitor) updateMetrics() {
 	if compactionLoad > 1.0 {
 		compactionLoad = 1.0
 	}
+
+	// Mark compaction as pending if score is high
+	metrics.CompactionPending = maxScore > 1.5 || l0Tables > 10
 
 	// Blend: 60% L0 (immediate backpressure), 40% compaction score
 	metrics.WriteLoad = 0.6*l0Load + 0.4*compactionLoad

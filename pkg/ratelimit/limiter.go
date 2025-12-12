@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/interfaces/loadmonitor"
 	pidif "next.orly.dev/pkg/interfaces/pid"
 	"next.orly.dev/pkg/pid"
@@ -74,25 +75,47 @@ type Config struct {
 	// The remaining weight is given to the load metric.
 	// Default: 0.7 (70% memory, 30% load)
 	MemoryWeight float64
+
+	// EmergencyThreshold is the memory pressure level (fraction of target) that triggers emergency mode.
+	// Default: 1.167 (116.7% = target + 1/6th)
+	// When exceeded, writes are aggressively throttled until memory drops below RecoveryThreshold.
+	EmergencyThreshold float64
+
+	// RecoveryThreshold is the memory pressure level below which we exit emergency mode.
+	// Default: 0.833 (83.3% = target - 1/6th)
+	// Hysteresis prevents rapid oscillation between normal and emergency modes.
+	RecoveryThreshold float64
+
+	// EmergencyMaxDelayMs is the maximum delay for writes during emergency mode.
+	// Default: 5000 (5 seconds) - much longer than normal MaxWriteDelayMs
+	EmergencyMaxDelayMs int
+
+	// CompactionCheckInterval controls how often to check if compaction should be triggered.
+	// Default: 10 seconds
+	CompactionCheckInterval time.Duration
 }
 
 // DefaultConfig returns a default configuration for the rate limiter.
 func DefaultConfig() Config {
 	return Config{
-		Enabled:              true,
-		TargetMemoryMB:       1500, // 1.5GB target
-		WriteSetpoint:        0.85,
-		ReadSetpoint:         0.90,
-		WriteKp:              0.5,
-		WriteKi:              0.1,
-		WriteKd:              0.05,
-		ReadKp:               0.3,
-		ReadKi:               0.05,
-		ReadKd:               0.02,
-		MaxWriteDelayMs:      1000, // 1 second max
-		MaxReadDelayMs:       500,  // 500ms max
-		MetricUpdateInterval: 100 * time.Millisecond,
-		MemoryWeight:         0.7,
+		Enabled:                 true,
+		TargetMemoryMB:          1500, // 1.5GB target
+		WriteSetpoint:           0.85,
+		ReadSetpoint:            0.90,
+		WriteKp:                 0.5,
+		WriteKi:                 0.1,
+		WriteKd:                 0.05,
+		ReadKp:                  0.3,
+		ReadKi:                  0.05,
+		ReadKd:                  0.02,
+		MaxWriteDelayMs:         1000, // 1 second max
+		MaxReadDelayMs:          500,  // 500ms max
+		MetricUpdateInterval:    100 * time.Millisecond,
+		MemoryWeight:            0.7,
+		EmergencyThreshold:      1.167, // Target + 1/6th (~1.75GB for 1.5GB target)
+		RecoveryThreshold:       0.833, // Target - 1/6th (~1.25GB for 1.5GB target)
+		EmergencyMaxDelayMs:     5000,  // 5 seconds max in emergency mode
+		CompactionCheckInterval: 10 * time.Second,
 	}
 }
 
@@ -105,22 +128,39 @@ func NewConfigFromValues(
 	readKp, readKi, readKd float64,
 	maxWriteMs, maxReadMs int,
 	writeTarget, readTarget float64,
+	emergencyThreshold, recoveryThreshold float64,
+	emergencyMaxMs int,
 ) Config {
+	// Apply defaults for zero values
+	if emergencyThreshold == 0 {
+		emergencyThreshold = 1.167 // Target + 1/6th
+	}
+	if recoveryThreshold == 0 {
+		recoveryThreshold = 0.833 // Target - 1/6th
+	}
+	if emergencyMaxMs == 0 {
+		emergencyMaxMs = 5000 // 5 seconds
+	}
+
 	return Config{
-		Enabled:              enabled,
-		TargetMemoryMB:       targetMB,
-		WriteSetpoint:        writeTarget,
-		ReadSetpoint:         readTarget,
-		WriteKp:              writeKp,
-		WriteKi:              writeKi,
-		WriteKd:              writeKd,
-		ReadKp:               readKp,
-		ReadKi:               readKi,
-		ReadKd:               readKd,
-		MaxWriteDelayMs:      maxWriteMs,
-		MaxReadDelayMs:       maxReadMs,
-		MetricUpdateInterval: 100 * time.Millisecond,
-		MemoryWeight:         0.7,
+		Enabled:                 enabled,
+		TargetMemoryMB:          targetMB,
+		WriteSetpoint:           writeTarget,
+		ReadSetpoint:            readTarget,
+		WriteKp:                 writeKp,
+		WriteKi:                 writeKi,
+		WriteKd:                 writeKd,
+		ReadKp:                  readKp,
+		ReadKi:                  readKi,
+		ReadKd:                  readKd,
+		MaxWriteDelayMs:         maxWriteMs,
+		MaxReadDelayMs:          maxReadMs,
+		MetricUpdateInterval:    100 * time.Millisecond,
+		MemoryWeight:            0.7,
+		EmergencyThreshold:      emergencyThreshold,
+		RecoveryThreshold:       recoveryThreshold,
+		EmergencyMaxDelayMs:     emergencyMaxMs,
+		CompactionCheckInterval: 10 * time.Second,
 	}
 }
 
@@ -139,11 +179,17 @@ type Limiter struct {
 	metricsLock    sync.RWMutex
 	currentMetrics loadmonitor.Metrics
 
+	// Emergency mode tracking with hysteresis
+	inEmergencyMode     atomic.Bool
+	lastEmergencyCheck  atomic.Int64 // Unix nano timestamp
+	compactionTriggered atomic.Bool
+
 	// Statistics
 	totalWriteDelayMs atomic.Int64
 	totalReadDelayMs  atomic.Int64
 	writeThrottles    atomic.Int64
 	readThrottles     atomic.Int64
+	emergencyEvents   atomic.Int64
 
 	// Lifecycle
 	ctx       context.Context
@@ -157,6 +203,20 @@ type Limiter struct {
 // If monitor is nil, the limiter will be disabled.
 func NewLimiter(config Config, monitor loadmonitor.Monitor) *Limiter {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	// Apply defaults for zero values
+	if config.EmergencyThreshold == 0 {
+		config.EmergencyThreshold = 1.167 // Target + 1/6th
+	}
+	if config.RecoveryThreshold == 0 {
+		config.RecoveryThreshold = 0.833 // Target - 1/6th
+	}
+	if config.EmergencyMaxDelayMs == 0 {
+		config.EmergencyMaxDelayMs = 5000 // 5 seconds
+	}
+	if config.CompactionCheckInterval == 0 {
+		config.CompactionCheckInterval = 10 * time.Second
+	}
 
 	l := &Limiter{
 		config:  config,
@@ -194,6 +254,11 @@ func NewLimiter(config Config, monitor loadmonitor.Monitor) *Limiter {
 	// Set memory target on monitor
 	if monitor != nil && config.TargetMemoryMB > 0 {
 		monitor.SetMemoryTarget(uint64(config.TargetMemoryMB) * 1024 * 1024)
+	}
+
+	// Configure emergency threshold if monitor supports it
+	if emMon, ok := monitor.(loadmonitor.EmergencyModeMonitor); ok {
+		emMon.SetEmergencyThreshold(config.EmergencyThreshold)
 	}
 
 	return l
@@ -255,12 +320,13 @@ func (l *Limiter) Stopped() <-chan struct{} {
 // Wait blocks until the rate limiter permits the operation to proceed.
 // It returns the delay that was applied, or 0 if no delay was needed.
 // If the context is cancelled, it returns immediately.
-func (l *Limiter) Wait(ctx context.Context, opType OperationType) time.Duration {
+// opType accepts int for interface compatibility (0=Read, 1=Write)
+func (l *Limiter) Wait(ctx context.Context, opType int) time.Duration {
 	if !l.config.Enabled || l.monitor == nil {
 		return 0
 	}
 
-	delay := l.ComputeDelay(opType)
+	delay := l.ComputeDelay(OperationType(opType))
 	if delay <= 0 {
 		return 0
 	}
@@ -286,6 +352,9 @@ func (l *Limiter) ComputeDelay(opType OperationType) time.Duration {
 	metrics := l.currentMetrics
 	l.metricsLock.RUnlock()
 
+	// Check emergency mode with hysteresis
+	inEmergency := l.checkEmergencyMode(metrics.MemoryPressure)
+
 	// Compute process variable as weighted combination of memory and load
 	var loadMetric float64
 	switch opType {
@@ -305,6 +374,34 @@ func (l *Limiter) ComputeDelay(opType OperationType) time.Duration {
 	case Write:
 		out := l.writePID.UpdateValue(pv)
 		delaySec = out.Value()
+
+		// In emergency mode, apply progressive throttling for writes
+		if inEmergency {
+			// Calculate how far above recovery threshold we are
+			// At emergency threshold, add 1x normal delay
+			// For every additional 10% above emergency, double the delay
+			excessPressure := metrics.MemoryPressure - l.config.RecoveryThreshold
+			if excessPressure > 0 {
+				// Progressive multiplier: starts at 2x, doubles every 10% excess
+				multiplier := 2.0
+				for excess := excessPressure; excess > 0.1; excess -= 0.1 {
+					multiplier *= 2
+				}
+
+				emergencyDelaySec := delaySec * multiplier
+				maxEmergencySec := float64(l.config.EmergencyMaxDelayMs) / 1000.0
+
+				if emergencyDelaySec > maxEmergencySec {
+					emergencyDelaySec = maxEmergencySec
+				}
+				// Minimum emergency delay of 100ms to allow other operations
+				if emergencyDelaySec < 0.1 {
+					emergencyDelaySec = 0.1
+				}
+				delaySec = emergencyDelaySec
+			}
+		}
+
 		if delaySec > 0 {
 			l.writeThrottles.Add(1)
 			l.totalWriteDelayMs.Add(int64(delaySec * 1000))
@@ -323,6 +420,68 @@ func (l *Limiter) ComputeDelay(opType OperationType) time.Duration {
 	}
 
 	return time.Duration(delaySec * float64(time.Second))
+}
+
+// checkEmergencyMode implements hysteresis-based emergency mode detection.
+// Enters emergency mode when memory pressure >= EmergencyThreshold.
+// Exits emergency mode when memory pressure <= RecoveryThreshold.
+func (l *Limiter) checkEmergencyMode(memoryPressure float64) bool {
+	wasInEmergency := l.inEmergencyMode.Load()
+
+	if wasInEmergency {
+		// To exit, must drop below recovery threshold
+		if memoryPressure <= l.config.RecoveryThreshold {
+			l.inEmergencyMode.Store(false)
+			log.I.F("✅ exiting emergency mode: memory %.1f%% <= recovery threshold %.1f%%",
+				memoryPressure*100, l.config.RecoveryThreshold*100)
+			return false
+		}
+		return true
+	}
+
+	// To enter, must exceed emergency threshold
+	if memoryPressure >= l.config.EmergencyThreshold {
+		l.inEmergencyMode.Store(true)
+		l.emergencyEvents.Add(1)
+		log.W.F("⚠️  entering emergency mode: memory %.1f%% >= threshold %.1f%%",
+			memoryPressure*100, l.config.EmergencyThreshold*100)
+
+		// Trigger compaction if supported
+		l.triggerCompactionIfNeeded()
+		return true
+	}
+
+	return false
+}
+
+// triggerCompactionIfNeeded triggers database compaction if the monitor supports it
+// and compaction isn't already in progress.
+func (l *Limiter) triggerCompactionIfNeeded() {
+	if l.compactionTriggered.Load() {
+		return // Already triggered
+	}
+
+	compactMon, ok := l.monitor.(loadmonitor.CompactableMonitor)
+	if !ok {
+		return // Monitor doesn't support compaction
+	}
+
+	if compactMon.IsCompacting() {
+		return // Already compacting
+	}
+
+	l.compactionTriggered.Store(true)
+	go func() {
+		defer l.compactionTriggered.Store(false)
+		if err := compactMon.TriggerCompaction(); err != nil {
+			log.E.F("compaction failed: %v", err)
+		}
+	}()
+}
+
+// InEmergencyMode returns true if the limiter is currently in emergency mode.
+func (l *Limiter) InEmergencyMode() bool {
+	return l.inEmergencyMode.Load()
 }
 
 // RecordLatency records an operation latency for the monitor.
@@ -345,6 +504,8 @@ type Stats struct {
 	ReadThrottles     int64
 	TotalWriteDelayMs int64
 	TotalReadDelayMs  int64
+	EmergencyEvents   int64
+	InEmergencyMode   bool
 	CurrentMetrics    loadmonitor.Metrics
 	WritePIDState     PIDState
 	ReadPIDState      PIDState
@@ -368,6 +529,8 @@ func (l *Limiter) GetStats() Stats {
 		ReadThrottles:     l.readThrottles.Load(),
 		TotalWriteDelayMs: l.totalWriteDelayMs.Load(),
 		TotalReadDelayMs:  l.totalReadDelayMs.Load(),
+		EmergencyEvents:   l.emergencyEvents.Load(),
+		InEmergencyMode:   l.inEmergencyMode.Load(),
 		CurrentMetrics:    metrics,
 	}
 

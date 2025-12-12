@@ -18,6 +18,7 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/encoders/reason"
 	"next.orly.dev/pkg/protocol/nip43"
+	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/utils"
 )
 
@@ -608,6 +609,10 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 			env.E.Pubkey,
 		)
 		log.I.F("delete event pubkey hex: %s", hex.Enc(env.E.Pubkey))
+		// Apply rate limiting before write operation
+		if l.rateLimiter != nil && l.rateLimiter.IsEnabled() {
+			l.rateLimiter.Wait(saveCtx, int(ratelimit.Write))
+		}
 		if _, err = l.DB.SaveEvent(saveCtx, env.E); err != nil {
 			log.E.F("failed to save delete event %0x: %v", env.E.ID, err)
 			if strings.HasPrefix(err.Error(), "blocked:") {
@@ -675,6 +680,10 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 	// store the event - use a separate context to prevent cancellation issues
 	saveCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	// Apply rate limiting before write operation
+	if l.rateLimiter != nil && l.rateLimiter.IsEnabled() {
+		l.rateLimiter.Wait(saveCtx, int(ratelimit.Write))
+	}
 	// log.I.F("saving event %0x, %s", env.E.ID, env.E.Serialize())
 	if _, err = l.DB.SaveEvent(saveCtx, env.E); err != nil {
 		if strings.HasPrefix(err.Error(), "blocked:") {

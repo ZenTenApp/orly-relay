@@ -20,6 +20,15 @@ import (
 	"git.mleku.dev/mleku/nostr/utils/units"
 )
 
+// RateLimiterInterface defines the minimal interface for rate limiting during import
+type RateLimiterInterface interface {
+	IsEnabled() bool
+	Wait(ctx context.Context, opType int) time.Duration
+}
+
+// WriteOpType is the operation type constant for write operations
+const WriteOpType = 1
+
 // D implements the Database interface using Badger as the storage backend
 type D struct {
 	ctx     context.Context
@@ -35,6 +44,14 @@ type D struct {
 	// Serial cache for compact event storage
 	// Caches pubkey and event ID serial mappings for fast compact event decoding
 	serialCache *SerialCache
+
+	// Rate limiter for controlling memory pressure during bulk operations
+	rateLimiter RateLimiterInterface
+}
+
+// SetRateLimiter sets the rate limiter for controlling memory during import/export
+func (d *D) SetRateLimiter(limiter RateLimiterInterface) {
+	d.rateLimiter = limiter
 }
 
 // Ensure D implements Database interface at compile time

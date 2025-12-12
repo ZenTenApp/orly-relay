@@ -2,20 +2,25 @@ package ratelimit
 
 import (
 	"context"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/interfaces/loadmonitor"
 )
 
 // Neo4jMonitor implements loadmonitor.Monitor for Neo4j database.
 // Since Neo4j driver doesn't expose detailed metrics, we track:
-// - Memory pressure via Go runtime
+// - Memory pressure via actual RSS (not Go runtime)
 // - Query concurrency via the semaphore
 // - Latency via recording
+//
+// This monitor implements aggressive memory-based limiting:
+// When memory exceeds the target, it applies 50% more aggressive throttling.
+// It rechecks every 10 seconds and doubles the throttling multiplier until
+// memory returns under target.
 type Neo4jMonitor struct {
 	driver   neo4j.DriverWithContext
 	querySem chan struct{} // Reference to the query semaphore
@@ -23,14 +28,24 @@ type Neo4jMonitor struct {
 	// Target memory for pressure calculation
 	targetMemoryBytes atomic.Uint64
 
+	// Emergency mode configuration
+	emergencyThreshold atomic.Uint64 // stored as threshold * 1000 (e.g., 1500 = 1.5)
+	emergencyModeUntil atomic.Int64  // Unix nano when forced emergency mode ends
+	inEmergencyMode    atomic.Bool
+
+	// Aggressive throttling multiplier for Neo4j
+	// Starts at 1.5 (50% more aggressive), doubles every 10 seconds while over limit
+	throttleMultiplier atomic.Uint64 // stored as multiplier * 100 (e.g., 150 = 1.5x)
+	lastThrottleCheck  atomic.Int64  // Unix nano timestamp
+
 	// Latency tracking with exponential moving average
 	queryLatencyNs atomic.Int64
 	writeLatencyNs atomic.Int64
 	latencyAlpha   float64 // EMA coefficient (default 0.1)
 
 	// Concurrency tracking
-	activeReads  atomic.Int32
-	activeWrites atomic.Int32
+	activeReads    atomic.Int32
+	activeWrites   atomic.Int32
 	maxConcurrency int
 
 	// Cached metrics (updated by background goroutine)
@@ -43,8 +58,12 @@ type Neo4jMonitor struct {
 	interval time.Duration
 }
 
-// Compile-time check that Neo4jMonitor implements loadmonitor.Monitor
+// Compile-time checks for interface implementation
 var _ loadmonitor.Monitor = (*Neo4jMonitor)(nil)
+var _ loadmonitor.EmergencyModeMonitor = (*Neo4jMonitor)(nil)
+
+// ThrottleCheckInterval is how often to recheck memory and adjust throttling
+const ThrottleCheckInterval = 10 * time.Second
 
 // NewNeo4jMonitor creates a new Neo4j load monitor.
 // The querySem should be the same semaphore used for limiting concurrent queries.
@@ -75,7 +94,38 @@ func NewNeo4jMonitor(
 	// Set a default target (1.5GB)
 	m.targetMemoryBytes.Store(1500 * 1024 * 1024)
 
+	// Default emergency threshold: 100% of target (same as target for Neo4j)
+	m.emergencyThreshold.Store(1000)
+
+	// Start with 1.0x multiplier (no throttling)
+	m.throttleMultiplier.Store(100)
+
 	return m
+}
+
+// SetEmergencyThreshold sets the memory threshold above which emergency mode is triggered.
+// threshold is a fraction, e.g., 1.0 = 100% of target memory.
+func (m *Neo4jMonitor) SetEmergencyThreshold(threshold float64) {
+	m.emergencyThreshold.Store(uint64(threshold * 1000))
+}
+
+// GetEmergencyThreshold returns the current emergency threshold as a fraction.
+func (m *Neo4jMonitor) GetEmergencyThreshold() float64 {
+	return float64(m.emergencyThreshold.Load()) / 1000.0
+}
+
+// ForceEmergencyMode manually triggers emergency mode for a duration.
+func (m *Neo4jMonitor) ForceEmergencyMode(duration time.Duration) {
+	m.emergencyModeUntil.Store(time.Now().Add(duration).UnixNano())
+	m.inEmergencyMode.Store(true)
+	m.throttleMultiplier.Store(150) // Start at 1.5x
+	log.W.F("⚠️  Neo4j emergency mode forced for %v", duration)
+}
+
+// GetThrottleMultiplier returns the current throttle multiplier.
+// Returns a value >= 1.0, where 1.0 = no extra throttling, 1.5 = 50% more aggressive, etc.
+func (m *Neo4jMonitor) GetThrottleMultiplier() float64 {
+	return float64(m.throttleMultiplier.Load()) / 100.0
 }
 
 // GetMetrics returns the current load metrics.
@@ -157,21 +207,26 @@ func (m *Neo4jMonitor) collectLoop() {
 	}
 }
 
-// updateMetrics collects current metrics.
+// updateMetrics collects current metrics and manages aggressive throttling.
 func (m *Neo4jMonitor) updateMetrics() {
 	metrics := loadmonitor.Metrics{
 		Timestamp: time.Now(),
 	}
 
-	// Calculate memory pressure from Go runtime
-	var memStats runtime.MemStats
-	runtime.ReadMemStats(&memStats)
+	// Use RSS-based memory pressure (actual physical memory, not Go runtime)
+	procMem := ReadProcessMemoryStats()
+	physicalMemBytes := procMem.PhysicalMemoryBytes()
+	metrics.PhysicalMemoryMB = physicalMemBytes / (1024 * 1024)
 
 	targetBytes := m.targetMemoryBytes.Load()
 	if targetBytes > 0 {
-		// Use HeapAlloc as primary memory metric
-		metrics.MemoryPressure = float64(memStats.HeapAlloc) / float64(targetBytes)
+		// Use actual physical memory (RSS - shared) for pressure calculation
+		metrics.MemoryPressure = float64(physicalMemBytes) / float64(targetBytes)
 	}
+
+	// Check and update emergency mode with aggressive throttling
+	m.updateEmergencyMode(metrics.MemoryPressure)
+	metrics.InEmergencyMode = m.inEmergencyMode.Load()
 
 	// Calculate load from semaphore usage
 	// querySem is a buffered channel - count how many slots are taken
@@ -184,6 +239,20 @@ func (m *Neo4jMonitor) updateMetrics() {
 		// Both read and write use the same semaphore
 		metrics.WriteLoad = concurrencyLoad
 		metrics.ReadLoad = concurrencyLoad
+	}
+
+	// Apply throttle multiplier to loads when in emergency mode
+	// This makes the PID controller think load is higher, causing more throttling
+	if metrics.InEmergencyMode {
+		multiplier := m.GetThrottleMultiplier()
+		metrics.WriteLoad = metrics.WriteLoad * multiplier
+		if metrics.WriteLoad > 1.0 {
+			metrics.WriteLoad = 1.0
+		}
+		metrics.ReadLoad = metrics.ReadLoad * multiplier
+		if metrics.ReadLoad > 1.0 {
+			metrics.ReadLoad = 1.0
+		}
 	}
 
 	// Add latency-based load adjustment
@@ -219,6 +288,60 @@ func (m *Neo4jMonitor) updateMetrics() {
 	m.metricsLock.Lock()
 	m.cachedMetrics = metrics
 	m.metricsLock.Unlock()
+}
+
+// updateEmergencyMode manages the emergency mode state and throttle multiplier.
+// When memory exceeds the target:
+// - Enters emergency mode with 1.5x throttle multiplier (50% more aggressive)
+// - Every 10 seconds while still over limit, doubles the multiplier
+// - When memory returns under target, resets to normal
+func (m *Neo4jMonitor) updateEmergencyMode(memoryPressure float64) {
+	threshold := float64(m.emergencyThreshold.Load()) / 1000.0
+	forcedUntil := m.emergencyModeUntil.Load()
+	now := time.Now().UnixNano()
+
+	// Check if in forced emergency mode
+	if forcedUntil > now {
+		return // Stay in forced mode
+	}
+
+	// Check if memory exceeds threshold
+	if memoryPressure >= threshold {
+		if !m.inEmergencyMode.Load() {
+			// Entering emergency mode - start at 1.5x (50% more aggressive)
+			m.inEmergencyMode.Store(true)
+			m.throttleMultiplier.Store(150)
+			m.lastThrottleCheck.Store(now)
+			log.W.F("⚠️  Neo4j entering emergency mode: memory %.1f%% >= threshold %.1f%%, throttle 1.5x",
+				memoryPressure*100, threshold*100)
+			return
+		}
+
+		// Already in emergency mode - check if it's time to double throttling
+		lastCheck := m.lastThrottleCheck.Load()
+		elapsed := time.Duration(now - lastCheck)
+
+		if elapsed >= ThrottleCheckInterval {
+			// Double the throttle multiplier
+			currentMult := m.throttleMultiplier.Load()
+			newMult := currentMult * 2
+			if newMult > 1600 { // Cap at 16x to prevent overflow
+				newMult = 1600
+			}
+			m.throttleMultiplier.Store(newMult)
+			m.lastThrottleCheck.Store(now)
+			log.W.F("⚠️  Neo4j still over memory limit: %.1f%%, doubling throttle to %.1fx",
+				memoryPressure*100, float64(newMult)/100.0)
+		}
+	} else {
+		// Memory is under threshold
+		if m.inEmergencyMode.Load() {
+			m.inEmergencyMode.Store(false)
+			m.throttleMultiplier.Store(100) // Reset to 1.0x
+			log.I.F("✅ Neo4j exiting emergency mode: memory %.1f%% < threshold %.1f%%",
+				memoryPressure*100, threshold*100)
+		}
+	}
 }
 
 // IncrementActiveReads tracks an active read operation.

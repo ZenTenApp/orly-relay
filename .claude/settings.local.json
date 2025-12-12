@@ -1,5 +1,4 @@
 {
-"MAX_THINKING_TOKENS": "8000",
   "permissions": {
     "allow": [
       "Bash:*",
@@ -85,10 +84,38 @@
       "Bash(CGO_ENABLED=0 go test:*)",
       "Bash(git submodule:*)",
       "WebFetch(domain:neo4j.com)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(go get:*)",
+      "Bash(export ORLY_DATA_DIR=/tmp/orly-badger-test )",
+      "Bash(ORLY_PORT=10547:*)",
+      "Bash(ORLY_ACL_MODE=none:*)",
+      "Bash(ORLY_LOG_LEVEL=info:*)",
+      "Bash(ORLY_HEALTH_PORT=8080:*)",
+      "Bash(ORLY_ENABLE_SHUTDOWN=true:*)",
+      "Bash(timeout 5 ./orly:*)",
+      "Bash(# Test with a small subset first echo \"\"Testing with first 10000 lines...\"\" head -10000 ~/src/git.nostrdev.com/wot_reference.jsonl ls -lh /tmp/test_subset.jsonl curl -s -X POST -F \"\"file=@/tmp/test_subset.jsonl\"\" http://localhost:10547/api/import echo \"\"\"\" echo \"\"Test completed\"\" # Check relay logs sleep 5 tail -50 /tmp/claude/tasks/bd99a21.output)",
+      "Bash(# Check if import is still running curl -s http://localhost:8080/healthz && echo \"\" - relay is healthy\"\" # Check relay memory echo \"\"Relay memory:\"\" ps -p 20580 -o rss=,vsz=,pmem=)",
+      "Skill(cypher)",
+      "Bash(git tag:*)",
+      "Bash(git push:*)",
+      "Bash(kill:*)",
+      "Bash(pkill:*)",
+      "Bash(pkill -f \"curl.*import\")",
+      "Bash(CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build:*)",
+      "Bash(CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build:*)",
+      "Bash(CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build:*)",
+      "Bash(__NEW_LINE__ echo \"\")",
+      "Bash(# Check if Neo4j is running echo \"\"Checking Neo4j status...\"\" docker compose ps)",
+      "Bash(pgrep:*)",
+      "Bash(docker stats:*)",
+      "Bash(fi)",
+      "Bash(xargs:*)",
+      "Bash(for i in 1 2 3 4 5)",
+      "Bash(do)"
     ],
     "deny": [],
     "ask": []
   },
-  "outputStyle": "Default"
+  "outputStyle": "Default",
+  "MAX_THINKING_TOKENS": "8000"
 }

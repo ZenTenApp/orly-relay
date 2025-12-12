@@ -21,7 +21,7 @@ import (
 	"next.orly.dev/pkg/acl"
 	"git.mleku.dev/mleku/nostr/crypto/keys"
 	"next.orly.dev/pkg/database"
-	_ "next.orly.dev/pkg/neo4j" // Import to register neo4j factory
+	neo4jdb "next.orly.dev/pkg/neo4j" // Import for neo4j factory and type
 	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/utils/interrupt"
@@ -343,26 +343,72 @@ func main() {
 		writeKp, writeKi, writeKd,
 		readKp, readKi, readKd,
 		maxWriteMs, maxReadMs,
-		writeTarget, readTarget := cfg.GetRateLimitConfigValues()
+		writeTarget, readTarget,
+		emergencyThreshold, recoveryThreshold,
+		emergencyMaxMs := cfg.GetRateLimitConfigValues()
 
 	if rateLimitEnabled {
+		// Auto-detect memory target if set to 0 (default)
+		if targetMB == 0 {
+			var memErr error
+			targetMB, memErr = ratelimit.CalculateTargetMemoryMB(targetMB)
+			if memErr != nil {
+				log.F.F("FATAL: %v", memErr)
+				log.F.F("There is not enough memory to run this relay in this environment.")
+				log.F.F("Available: %dMB, Required minimum: %dMB",
+					ratelimit.DetectAvailableMemoryMB(), ratelimit.MinimumMemoryMB)
+				os.Exit(1)
+			}
+			stats := ratelimit.GetMemoryStats(targetMB)
+			// Calculate what 66% would be to determine if we hit the cap
+			calculated66 := int(float64(stats.AvailableMB) * ratelimit.AutoDetectMemoryFraction)
+			if calculated66 > ratelimit.DefaultMaxMemoryMB {
+				log.I.F("memory auto-detected: total=%dMB, available=%dMB, target=%dMB (capped at default max, 66%% would be %dMB)",
+					stats.TotalMB, stats.AvailableMB, targetMB, calculated66)
+			} else {
+				log.I.F("memory auto-detected: total=%dMB, available=%dMB, target=%dMB (66%% of available)",
+					stats.TotalMB, stats.AvailableMB, targetMB)
+			}
+		} else {
+			// Validate explicitly configured target
+			_, memErr := ratelimit.CalculateTargetMemoryMB(targetMB)
+			if memErr != nil {
+				log.F.F("FATAL: %v", memErr)
+				log.F.F("Configured target memory %dMB is below minimum required %dMB.",
+					targetMB, ratelimit.MinimumMemoryMB)
+				os.Exit(1)
+			}
+		}
+
 		rlConfig := ratelimit.NewConfigFromValues(
 			rateLimitEnabled, targetMB,
 			writeKp, writeKi, writeKd,
 			readKp, readKi, readKd,
 			maxWriteMs, maxReadMs,
 			writeTarget, readTarget,
+			emergencyThreshold, recoveryThreshold,
+			emergencyMaxMs,
 		)
 
 		// Create appropriate monitor based on database type
 		if badgerDB, ok := db.(*database.D); ok {
 			limiter = ratelimit.NewBadgerLimiter(rlConfig, badgerDB.DB)
+			// Set the rate limiter on the database for import operations
+			badgerDB.SetRateLimiter(limiter)
 			log.I.F("rate limiter configured for Badger backend (target: %dMB)", targetMB)
+		} else if n4jDB, ok := db.(*neo4jdb.N); ok {
+			// Create Neo4j rate limiter with access to driver and querySem
+			limiter = ratelimit.NewNeo4jLimiter(
+				rlConfig,
+				n4jDB.Driver(),
+				n4jDB.QuerySem(),
+				n4jDB.MaxConcurrentQueries(),
+			)
+			log.I.F("rate limiter configured for Neo4j backend (target: %dMB)", targetMB)
 		} else {
-			// For Neo4j or other backends, create a disabled limiter for now
-			// Neo4j monitor requires access to the querySem which is internal
+			// For other backends, create a disabled limiter
 			limiter = ratelimit.NewDisabledLimiter()
-			log.I.F("rate limiter disabled for non-Badger backend")
+			log.I.F("rate limiter disabled for unknown backend")
 		}
 	} else {
 		limiter = ratelimit.NewDisabledLimiter()

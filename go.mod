@@ -14,6 +14,7 @@ require (
 	github.com/minio/sha256-simd v1.0.1
 	github.com/nbd-wtf/go-nostr v0.52.0
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
+	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
 	github.com/pkg/profile v1.7.0
 	github.com/sosodev/duration v1.3.1
 	github.com/stretchr/testify v1.11.1

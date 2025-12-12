@@ -30,6 +30,17 @@ type Metrics struct {
 
 	// Timestamp is when these metrics were collected.
 	Timestamp time.Time
+
+	// InEmergencyMode indicates that memory pressure is critical
+	// and aggressive throttling should be applied.
+	InEmergencyMode bool
+
+	// CompactionPending indicates that the database needs compaction
+	// and writes should be throttled to allow it to catch up.
+	CompactionPending bool
+
+	// PhysicalMemoryMB is the actual physical memory (RSS - shared) in MB
+	PhysicalMemoryMB uint64
 }
 
 // Monitor defines the interface for database load monitoring.
@@ -55,4 +66,34 @@ type Monitor interface {
 
 	// Stop halts background metric collection.
 	Stop()
+}
+
+// CompactableMonitor extends Monitor with compaction-triggering capability.
+// Implemented by database backends that support manual compaction (e.g., Badger).
+type CompactableMonitor interface {
+	Monitor
+
+	// TriggerCompaction initiates a database compaction operation.
+	// This may take significant time; callers should run this in a goroutine.
+	// Returns an error if compaction fails or is not supported.
+	TriggerCompaction() error
+
+	// IsCompacting returns true if a compaction is currently in progress.
+	IsCompacting() bool
+}
+
+// EmergencyModeMonitor extends Monitor with emergency mode detection.
+// Implemented by monitors that can detect critical memory pressure.
+type EmergencyModeMonitor interface {
+	Monitor
+
+	// SetEmergencyThreshold sets the memory threshold (as a fraction, e.g., 1.5 = 150% of target)
+	// above which emergency mode is triggered.
+	SetEmergencyThreshold(threshold float64)
+
+	// GetEmergencyThreshold returns the current emergency threshold.
+	GetEmergencyThreshold() float64
+
+	// ForceEmergencyMode manually triggers emergency mode for a duration.
+	ForceEmergencyMode(duration time.Duration)
 }
