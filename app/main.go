@@ -17,6 +17,7 @@ import (
 	"git.mleku.dev/mleku/nostr/crypto/keys"
 	"next.orly.dev/pkg/database"
 	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
+	"next.orly.dev/pkg/neo4j"
 	"next.orly.dev/pkg/policy"
 	"next.orly.dev/pkg/protocol/graph"
 	"next.orly.dev/pkg/protocol/nip43"
@@ -123,7 +124,7 @@ func Run(
 		}
 	}
 
-	// Initialize graph query executor (only for Badger backend)
+	// Initialize graph query executor (Badger backend)
 	if badgerDB, ok := db.(*database.D); ok {
 		// Get relay identity key for signing graph query responses
 		relaySecretKey, err := badgerDB.GetOrCreateRelayIdentitySecret()
@@ -135,7 +136,24 @@ func Run(
 			if l.graphExecutor, err = graph.NewExecutor(graphAdapter, relaySecretKey); err != nil {
 				log.E.F("failed to create graph executor: %v", err)
 			} else {
-				log.I.F("graph query executor initialized")
+				log.I.F("graph query executor initialized (Badger backend)")
+			}
+		}
+	}
+
+	// Initialize graph query executor (Neo4j backend)
+	if neo4jDB, ok := db.(*neo4j.N); ok {
+		// Get relay identity key for signing graph query responses
+		relaySecretKey, err := neo4jDB.GetOrCreateRelayIdentitySecret()
+		if err != nil {
+			log.E.F("failed to get relay identity key for graph executor: %v", err)
+		} else {
+			// Create the graph adapter and executor
+			graphAdapter := neo4j.NewGraphAdapter(neo4jDB)
+			if l.graphExecutor, err = graph.NewExecutor(graphAdapter, relaySecretKey); err != nil {
+				log.E.F("failed to create graph executor: %v", err)
+			} else {
+				log.I.F("graph query executor initialized (Neo4j backend)")
 			}
 		}
 	}
