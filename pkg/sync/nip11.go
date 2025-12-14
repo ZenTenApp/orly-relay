@@ -69,8 +69,11 @@ func (c *NIP11Cache) Get(ctx context.Context, relayURL string) (*relayinfo.T, er
 
 // fetchNIP11 fetches relay information document from a given URL
 func (c *NIP11Cache) fetchNIP11(ctx context.Context, relayURL string) (*relayinfo.T, error) {
-	// Construct NIP-11 URL
+	// Convert WebSocket URL to HTTP URL for NIP-11 fetch
+	// wss:// -> https://, ws:// -> http://
 	nip11URL := relayURL
+	nip11URL = strings.Replace(nip11URL, "wss://", "https://", 1)
+	nip11URL = strings.Replace(nip11URL, "ws://", "http://", 1)
 	if !strings.HasSuffix(nip11URL, "/") {
 		nip11URL += "/"
 	}
