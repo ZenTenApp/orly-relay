@@ -113,7 +113,10 @@
       "Bash(for i in 1 2 3 4 5)",
       "Bash(do)",
       "WebFetch(domain:vermaden.wordpress.com)",
-      "WebFetch(domain:eylenburg.github.io)"
+      "WebFetch(domain:eylenburg.github.io)",
+      "Bash(go run -exec '' -c 'package main; import \"\"git.mleku.dev/mleku/nostr/utils/normalize\"\"; import \"\"fmt\"\"; func main() { fmt.Println(string(normalize.URL([]byte(\"\"relay.example.com:3334\"\")))); fmt.Println(string(normalize.URL([]byte(\"\"relay.example.com:443\"\")))); fmt.Println(string(normalize.URL([]byte(\"\"ws://relay.example.com:3334\"\")))); fmt.Println(string(normalize.URL([]byte(\"\"wss://relay.example.com:3334\"\")))) }')",
+      "Bash(go run:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nFix NIP-11 fetch URL scheme conversion for non-proxied relays\n\n- Convert wss:// to https:// and ws:// to http:// before fetching NIP-11\n  documents, fixing failures for users not using HTTPS upgrade proxies\n- The fetchNIP11 function was using WebSocket URLs directly for HTTP\n  requests, causing scheme mismatch errors\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []
