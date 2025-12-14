@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://git.mleku.dev/mleku/next.orly.dev
+    about: Check the repository documentation before opening an issue
+  - name: Nostr Protocol (NIPs)
+    url: https://github.com/nostr-protocol/nips
+    about: For questions about Nostr protocol specifications

@@ -1,0 +1,118 @@
+name: Bug Report
+about: Report a bug or unexpected behavior in ORLY relay
+title: "[BUG] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Bug Report Guidelines
+
+        Thank you for taking the time to report a bug. Please fill out the form below to help us understand and reproduce the issue.
+
+        **Before submitting:**
+        - Search [existing issues](https://git.mleku.dev/mleku/next.orly.dev/issues) to avoid duplicates
+        - Check the [documentation](https://git.mleku.dev/mleku/next.orly.dev) for configuration guidance
+        - Ensure you're running a recent version of ORLY
+
+  - type: input
+    id: version
+    attributes:
+      label: ORLY Version
+      description: Run `./orly version` to get the version
+      placeholder: "v0.35.4"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database Backend
+      description: Which database backend are you using?
+      options:
+        - Badger (default)
+        - Neo4j
+        - WasmDB
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of the bug
+      placeholder: Describe what happened and what you expected to happen
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the behavior
+      placeholder: |
+        1. Start relay with `./orly`
+        2. Connect with client X
+        3. Perform action Y
+        4. Observe error Z
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: |
+        Include relevant log output. Set `ORLY_LOG_LEVEL=debug` or `trace` for more detail.
+        This will be automatically formatted as code.
+      render: shell
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: |
+        Relevant environment variables or configuration (redact sensitive values).
+        This will be automatically formatted as code.
+      render: shell
+      placeholder: |
+        ORLY_ACL_MODE=follows
+        ORLY_POLICY_ENABLED=true
+        ORLY_DB_TYPE=badger
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Go version, etc.
+      placeholder: |
+        OS: Linux 6.8.0
+        Go: 1.25.3
+        Architecture: amd64
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context, screenshots, or information that might help
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues and this is not a duplicate
+          required: true
+        - label: I have included version information
+          required: true
+        - label: I have included steps to reproduce the issue
+          required: true

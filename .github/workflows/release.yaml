@@ -1,0 +1,154 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            platform: linux-amd64
+            ext: ""
+            lib: libsecp256k1.so
+          - goos: linux
+            goarch: arm64
+            platform: linux-arm64
+            ext: ""
+            lib: libsecp256k1.so
+          - goos: darwin
+            goarch: amd64
+            platform: darwin-amd64
+            ext: ""
+            lib: libsecp256k1.dylib
+          - goos: darwin
+            goarch: arm64
+            platform: darwin-arm64
+            ext: ""
+            lib: libsecp256k1.dylib
+          - goos: windows
+            goarch: amd64
+            platform: windows-amd64
+            ext: ".exe"
+            lib: libsecp256k1.dll
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> $GITHUB_PATH
+
+      - name: Build Web UI
+        run: |
+          cd app/web
+          $HOME/.bun/bin/bun install
+          $HOME/.bun/bin/bun run build
+
+      - name: Get version
+        id: version
+        run: echo "version=$(cat pkg/version/version)" >> $GITHUB_OUTPUT
+
+      - name: Build binary
+        env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          OUTPUT="orly-${VERSION}-${{ matrix.platform }}${{ matrix.ext }}"
+          go build -ldflags "-s -w -X main.version=${VERSION}" -o ${OUTPUT} .
+          sha256sum ${OUTPUT} > ${OUTPUT}.sha256
+
+      - name: Download runtime library
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          LIB="${{ matrix.lib }}"
+          wget -q "https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/${LIB}" -O "${LIB}" || true
+          if [ -f "${LIB}" ]; then
+            sha256sum "${LIB}" > "${LIB}.sha256"
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: orly-${{ matrix.platform }}
+          path: |
+            orly-*
+            libsecp256k1*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: echo "version=$(cat pkg/version/version)" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create combined checksums
+        run: |
+          cd artifacts
+          cat *.sha256 | sort -k2 > SHA256SUMS.txt
+          rm -f *.sha256
+
+      - name: List release files
+        run: ls -la artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ORLY ${{ steps.version.outputs.version }}
+          body: |
+            ## ORLY ${{ steps.version.outputs.version }}
+
+            ### Downloads
+
+            Download the appropriate binary for your platform. The `libsecp256k1` library is optional but recommended for better cryptographic performance.
+
+            ### Installation
+
+            1. Download the binary for your platform
+            2. (Optional) Download the corresponding `libsecp256k1` library
+            3. Place both files in the same directory
+            4. Make the binary executable: `chmod +x orly-*`
+            5. Run: `./orly-*-linux-amd64` (or your platform's binary)
+
+            ### Verify Downloads
+
+            ```bash
+            sha256sum -c SHA256SUMS.txt
+            ```
+
+            ### Configuration
+
+            See the [repository documentation](https://git.mleku.dev/mleku/next.orly.dev) for configuration options.
+          files: |
+            artifacts/*
+          draft: false
+          prerelease: false

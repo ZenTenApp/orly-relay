@@ -1,0 +1,118 @@
+name: Feature Request
+about: Suggest a new feature or enhancement for ORLY relay
+title: "[FEATURE] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Feature Request Guidelines
+
+        Thank you for suggesting a feature. Please provide as much detail as possible to help us understand your proposal.
+
+        **Before submitting:**
+        - Search [existing issues](https://git.mleku.dev/mleku/next.orly.dev/issues) to avoid duplicates
+        - Check if this is covered by an existing [NIP](https://github.com/nostr-protocol/nips)
+        - Review the [documentation](https://git.mleku.dev/mleku/next.orly.dev) for current capabilities
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Feature Category
+      description: What area of ORLY does this feature relate to?
+      options:
+        - Protocol (NIP implementation)
+        - Database / Storage
+        - Performance / Optimization
+        - Policy / Access Control
+        - Web UI / Admin Interface
+        - Deployment / Operations
+        - API / Integration
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: |
+        What problem does this feature solve? Is this related to a frustration you have?
+        A clear problem statement helps us understand the motivation.
+      placeholder: "I'm always frustrated when..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: |
+        Describe the solution you'd like. Be specific about expected behavior.
+      placeholder: "I would like ORLY to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: |
+        Describe any alternative solutions or workarounds you've considered.
+      placeholder: "I've tried X but it doesn't work because..."
+
+  - type: input
+    id: nip
+    attributes:
+      label: Related NIP
+      description: If this relates to a Nostr Implementation Possibility, provide the NIP number
+      placeholder: "NIP-XX"
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Scope of Impact
+      description: How significant is this feature?
+      options:
+        - Minor enhancement (small quality-of-life improvement)
+        - Moderate feature (adds useful capability)
+        - Major feature (significant new functionality)
+        - Breaking change (requires migration or config changes)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Willingness to Contribute
+      description: Would you be willing to help implement this feature?
+      options:
+        - "Yes, I can submit a PR"
+        - "Yes, I can help with testing"
+        - "No, but I can provide more details"
+        - "No"
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: |
+        Any other context, mockups, examples, or references that help explain the feature.
+
+        For protocol features, include example event structures or message flows if applicable.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues and this is not a duplicate
+          required: true
+        - label: I have described the problem this feature solves
+          required: true
+        - label: I have checked if this relates to an existing NIP
+          required: false
