@@ -96,7 +96,7 @@ func TestBugReproduction_WithPolicyManager(t *testing.T) {
 
 	// Create policy with manager (enabled)
 	ctx := context.Background()
-	policy := NewWithManager(ctx, "ORLY", true)
+	policy := NewWithManager(ctx, "ORLY", true, "")
 
 	// Load policy from file
 	if err := policy.LoadFromFile(policyPath); err != nil {

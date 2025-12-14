@@ -3,9 +3,7 @@ package app
 import (
 	"bytes"
 	"fmt"
-	"path/filepath"
 
-	"github.com/adrg/xdg"
 	"lol.mleku.dev/log"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
@@ -76,8 +74,8 @@ func (l *Listener) HandlePolicyConfigUpdate(ev *event.E) error {
 
 	log.I.F("policy config validation passed")
 
-	// Get config path for saving
-	configPath := filepath.Join(xdg.ConfigHome, l.Config.AppName, "policy.json")
+	// Get config path for saving (uses custom path if set, otherwise default)
+	configPath := l.policyManager.ConfigPath()
 
 	// 3. Pause ALL message processing (lock mutex)
 	// Note: We need to release the RLock first (which caller holds), then acquire exclusive Lock

@@ -825,7 +825,7 @@ func TestNewWithManager(t *testing.T) {
 	// Test with disabled policy (doesn't require policy.json file)
 	t.Run("disabled policy", func(t *testing.T) {
 		enabled := false
-		policy := NewWithManager(ctx, appName, enabled)
+		policy := NewWithManager(ctx, appName, enabled, "")
 
 		if policy == nil {
 			t.Fatal("Expected policy but got nil")

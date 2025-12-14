@@ -514,10 +514,17 @@ type PolicyManager struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	configDir  string
+	configPath string // Path to policy.json file
 	scriptPath string // Default script path for backward compatibility
 	enabled    bool
 	mutex      sync.RWMutex
 	runners    map[string]*ScriptRunner // Map of script path -> runner
+}
+
+// ConfigPath returns the path to the policy configuration file.
+// This is used by hot-reload handlers to know where to save updated policy.
+func (pm *PolicyManager) ConfigPath() string {
+	return pm.configPath
 }
 
 // P represents a complete policy configuration for a Nostr relay.
@@ -695,6 +702,15 @@ func (p *P) IsEnabled() bool {
 	return p != nil && p.manager != nil && p.manager.IsEnabled()
 }
 
+// ConfigPath returns the path to the policy configuration file.
+// Delegates to the internal PolicyManager.
+func (p *P) ConfigPath() string {
+	if p == nil || p.manager == nil {
+		return ""
+	}
+	return p.manager.ConfigPath()
+}
+
 // getDefaultPolicyAction returns true if the default policy is "allow", false if "deny"
 func (p *P) getDefaultPolicyAction() (allowed bool) {
 	switch p.DefaultPolicy {
@@ -711,10 +727,29 @@ func (p *P) getDefaultPolicyAction() (allowed bool) {
 // NewWithManager creates a new policy with a policy manager for script execution.
 // It initializes the policy manager, loads configuration from files, and starts
 // background processes for script management and periodic health checks.
-func NewWithManager(ctx context.Context, appName string, enabled bool) *P {
+//
+// The customPolicyPath parameter allows overriding the default policy file location.
+// If empty, uses the default path: $HOME/.config/{appName}/policy.json
+// If provided, it MUST be an absolute path (starting with /) or the function will panic.
+func NewWithManager(ctx context.Context, appName string, enabled bool, customPolicyPath string) *P {
 	configDir := filepath.Join(xdg.ConfigHome, appName)
 	scriptPath := filepath.Join(configDir, "policy.sh")
-	configPath := filepath.Join(configDir, "policy.json")
+
+	// Determine the policy config path
+	var configPath string
+	if customPolicyPath != "" {
+		// Validate that custom path is absolute
+		if !filepath.IsAbs(customPolicyPath) {
+			panic(fmt.Sprintf("FATAL: ORLY_POLICY_PATH must be an ABSOLUTE path (starting with /), got: %q", customPolicyPath))
+		}
+		configPath = customPolicyPath
+		// Update configDir to match the custom path's directory for script resolution
+		configDir = filepath.Dir(customPolicyPath)
+		scriptPath = filepath.Join(configDir, "policy.sh")
+		log.I.F("using custom policy path: %s", configPath)
+	} else {
+		configPath = filepath.Join(configDir, "policy.json")
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -722,6 +757,7 @@ func NewWithManager(ctx context.Context, appName string, enabled bool) *P {
 		ctx:        ctx,
 		cancel:     cancel,
 		configDir:  configDir,
+		configPath: configPath,
 		scriptPath: scriptPath,
 		enabled:    enabled,
 		runners:    make(map[string]*ScriptRunner),

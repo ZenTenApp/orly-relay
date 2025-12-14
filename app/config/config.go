@@ -82,7 +82,8 @@ type C struct {
 	DirectorySpiderInterval time.Duration `env:"ORLY_DIRECTORY_SPIDER_INTERVAL" default:"24h" usage:"how often to run directory spider"`
 	DirectorySpiderMaxHops  int           `env:"ORLY_DIRECTORY_SPIDER_HOPS" default:"3" usage:"maximum hops for relay discovery from seed users"`
 
-	PolicyEnabled bool `env:"ORLY_POLICY_ENABLED" default:"false" usage:"enable policy-based event processing (configuration found in $HOME/.config/ORLY/policy.json)"`
+	PolicyEnabled bool   `env:"ORLY_POLICY_ENABLED" default:"false" usage:"enable policy-based event processing (default config: $HOME/.config/ORLY/policy.json)"`
+	PolicyPath    string `env:"ORLY_POLICY_PATH" usage:"ABSOLUTE path to policy configuration file (MUST start with /); overrides default location; relative paths are rejected"`
 
 	// NIP-43 Relay Access Metadata and Requests
 	NIP43Enabled          bool          `env:"ORLY_NIP43_ENABLED" default:"false" usage:"enable NIP-43 relay access metadata and invite system"`

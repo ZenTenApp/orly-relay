@@ -1,5 +1,7 @@
 # next.orly.dev
 
+---
+
 ![orly.dev](./docs/orly.png)
 
 ![Version v0.24.1](https://img.shields.io/badge/version-v0.24.1-blue.svg)
@@ -9,6 +11,19 @@
 zap me: �mlekudev@getalby.com
 
 follow me on [nostr](https://jumble.social/users/npub1fjqqy4a93z5zsjwsfxqhc2764kvykfdyttvldkkkdera8dr78vhsmmleku)
+
+## ⚠️ Bug Reports & Feature Requests
+
+**Bug reports and feature requests that do not follow the protocol will not be accepted.**
+
+Before submitting any issue, you must read and follow [BUG_REPORTS_AND_FEATURE_REQUEST_PROTOCOL.md](./BUG_REPORTS_AND_FEATURE_REQUEST_PROTOCOL.md).
+
+Requirements:
+- **Bug reports**: Include environment details, reproduction steps, expected/actual behavior, and logs
+- **Feature requests**: Include problem statement, proposed solution, and use cases
+- **Both**: Search existing issues first, verify with latest version, provide minimal reproduction
+
+Issues missing required information will be closed without review.
 
 ## ⚠️ System Requirements
 
@@ -217,7 +232,12 @@ ORLY includes a comprehensive policy system for fine-grained control over event 
 
 ```bash
 export ORLY_POLICY_ENABLED=true
-# Create policy file at ~/.config/ORLY/policy.json
+# Default policy file: ~/.config/ORLY/policy.json
+
+# OPTIONAL: Use a custom policy file location
+# WARNING: ORLY_POLICY_PATH MUST be an ABSOLUTE path (starting with /)
+# Relative paths will be REJECTED and the relay will fail to start
+export ORLY_POLICY_PATH=/etc/orly/policy.json
 ```
 
 For detailed configuration and examples, see the [Policy Usage Guide](docs/POLICY_USAGE_GUIDE.md).

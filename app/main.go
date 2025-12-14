@@ -87,7 +87,7 @@ func Run(
 	l.sprocketManager = NewSprocketManager(ctx, cfg.AppName, cfg.SprocketEnabled)
 
 	// Initialize policy manager
-	l.policyManager = policy.NewWithManager(ctx, cfg.AppName, cfg.PolicyEnabled)
+	l.policyManager = policy.NewWithManager(ctx, cfg.AppName, cfg.PolicyEnabled, cfg.PolicyPath)
 
 	// Merge policy-defined owners with environment-defined owners
 	// This allows cloud deployments to add owners via policy.json when env vars cannot be modified

@@ -74,7 +74,7 @@ func setupPolicyTestListener(t *testing.T, policyAdminHex string) (*Listener, *d
 	}
 
 	// Create policy manager - now config file exists at XDG path
-	policyManager := policy.NewWithManager(ctx, cfg.AppName, cfg.PolicyEnabled)
+	policyManager := policy.NewWithManager(ctx, cfg.AppName, cfg.PolicyEnabled, "")
 
 	server := &Server{
 		Ctx:             ctx,

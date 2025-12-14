@@ -147,6 +147,10 @@ export ORLY_SPROCKET_ENABLED=true
 # Enable policy system
 export ORLY_POLICY_ENABLED=true
 
+# Custom policy file path (MUST be ABSOLUTE path starting with /)
+# Default: ~/.config/ORLY/policy.json (or ~/.config/{ORLY_APP_NAME}/policy.json)
+# export ORLY_POLICY_PATH=/etc/orly/policy.json
+
 # Database backend selection (badger, neo4j, or wasmdb)
 export ORLY_DB_TYPE=badger
 
@@ -270,7 +274,8 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
 - `none.go` - Open relay (no restrictions)
 
 **`pkg/policy/`** - Event filtering and validation policies
-- Policy configuration loaded from `~/.config/ORLY/policy.json`
+- Policy configuration loaded from `~/.config/ORLY/policy.json` by default
+- Custom path via `ORLY_POLICY_PATH` (MUST be absolute path starting with `/`)
 - Per-kind size limits, age restrictions, custom scripts
 - **Write-Only Validation**: Size, age, tag, and expiry validations apply ONLY to write operations
 - **Read-Only Filtering**: `read_allow`, `read_deny`, `privileged` apply ONLY to read operations

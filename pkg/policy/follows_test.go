@@ -31,7 +31,7 @@ func setupTestPolicy(t *testing.T, appName string) (*P, func()) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
-	policy := NewWithManager(ctx, appName, true)
+	policy := NewWithManager(ctx, appName, true, "")
 	if policy == nil {
 		cancel()
 		os.RemoveAll(configDir)
