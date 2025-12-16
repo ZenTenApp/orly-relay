@@ -117,6 +117,7 @@
 
     // Compose tab state
     let composeEventJson = "";
+    let composePublishError = "";
 
     // Recovery tab state
     let recoverySelectedKind = null;
@@ -2562,31 +2563,42 @@
     }
 
     async function publishEvent() {
+        // Clear any previous errors
+        composePublishError = "";
+
         try {
             if (!composeEventJson.trim()) {
-                alert("Please enter an event to publish");
+                composePublishError = "Please enter an event to publish";
                 return;
             }
 
             if (!isLoggedIn) {
-                alert("Please log in to publish events");
+                composePublishError = "Please log in to publish events";
                 return;
             }
 
             if (!userSigner) {
-                alert(
-                    "No signer available. Please log in with a valid authentication method.",
-                );
+                composePublishError = "No signer available. Please log in with a valid authentication method.";
                 return;
             }
 
-            const event = JSON.parse(composeEventJson);
+            let event;
+            try {
+                event = JSON.parse(composeEventJson);
+            } catch (parseError) {
+                composePublishError = `Invalid JSON: ${parseError.message}`;
+                return;
+            }
 
             // Validate that the event has required fields
             if (!event.id || !event.sig) {
-                alert(
-                    'Event must be signed before publishing. Please click "Sign" first.',
-                );
+                composePublishError = 'Event must be signed before publishing. Please click "Sign" first.';
+                return;
+            }
+
+            // Pre-check: validate user has write permission
+            if (userRole === "read") {
+                composePublishError = `Permission denied: Your current role is "${userRole}" which does not allow publishing events. Contact a relay administrator to upgrade your permissions.`;
                 return;
             }
 
@@ -2602,18 +2614,70 @@
             );
 
             if (result.success) {
+                composePublishError = "";
                 alert("Event published successfully to ORLY relay!");
                 // Optionally clear the editor after successful publish
                 // composeEventJson = '';
             } else {
-                alert(
-                    `Event publishing failed: ${result.reason || "Unknown error"}`,
-                );
+                // Parse the error reason and provide helpful guidance
+                const reason = result.reason || "Unknown error";
+                composePublishError = formatPublishError(reason, event.kind);
             }
         } catch (error) {
             console.error("Error publishing event:", error);
-            alert("Error publishing event: " + error.message);
+            const errorMsg = error.message || "Unknown error";
+            composePublishError = formatPublishError(errorMsg, null);
         }
+    }
+
+    // Helper function to format publish errors with helpful guidance
+    function formatPublishError(reason, eventKind) {
+        const lowerReason = reason.toLowerCase();
+
+        // Check for policy-related errors
+        if (lowerReason.includes("policy") || lowerReason.includes("blocked") || lowerReason.includes("denied")) {
+            let msg = `Policy Error: ${reason}`;
+            if (eventKind !== null) {
+                msg += `\n\nKind ${eventKind} may be restricted by the relay's policy configuration.`;
+            }
+            if (policyEnabled) {
+                msg += "\n\nThe relay has policy enforcement enabled. Contact a relay administrator to allow this event kind or adjust your permissions.";
+            }
+            return msg;
+        }
+
+        // Check for permission/auth errors
+        if (lowerReason.includes("auth") || lowerReason.includes("permission") || lowerReason.includes("unauthorized")) {
+            return `Permission Error: ${reason}\n\nYour current permissions may not allow publishing this type of event. Current role: ${userRole || "unknown"}. Contact a relay administrator to upgrade your permissions.`;
+        }
+
+        // Check for kind-specific restrictions
+        if (lowerReason.includes("kind") || lowerReason.includes("not allowed") || lowerReason.includes("restricted")) {
+            let msg = `Event Type Error: ${reason}`;
+            if (eventKind !== null) {
+                msg += `\n\nKind ${eventKind} is not currently allowed on this relay.`;
+            }
+            msg += "\n\nThe relay administrator may need to update the policy configuration to allow this event kind.";
+            return msg;
+        }
+
+        // Check for rate limiting
+        if (lowerReason.includes("rate") || lowerReason.includes("limit") || lowerReason.includes("too many")) {
+            return `Rate Limit Error: ${reason}\n\nPlease wait a moment before trying again.`;
+        }
+
+        // Check for size limits
+        if (lowerReason.includes("size") || lowerReason.includes("too large") || lowerReason.includes("content")) {
+            return `Size Limit Error: ${reason}\n\nThe event may exceed the relay's size limits. Try reducing the content length.`;
+        }
+
+        // Default error message
+        return `Publishing failed: ${reason}`;
+    }
+
+    // Clear the compose publish error
+    function clearComposeError() {
+        composePublishError = "";
     }
 
     // Persist selected tab to local storage
@@ -2720,9 +2784,14 @@
         {:else if selectedTab === "compose"}
             <ComposeView
                 bind:composeEventJson
+                {userPubkey}
+                {userRole}
+                {policyEnabled}
+                publishError={composePublishError}
                 on:reformatJson={reformatJson}
                 on:signEvent={signEvent}
                 on:publishEvent={publishEvent}
+                on:clearError={clearComposeError}
             />
         {:else if selectedTab === "managed-acl"}
             <div class="managed-acl-view">

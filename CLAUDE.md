@@ -334,6 +334,11 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
 - Features: event browser with advanced filtering, sprocket management, policy management, user admin, settings
 - **Event Browser:** Enhanced filter system with kind, author, tag, and time range filters (replaced simple search)
 - **Policy Management Tab:** JSON editor with validation, save publishes kind 12345 event
+- **Compose Tab with Event Templates:** Generate pre-filled event templates for all 140+ Nostr event kinds
+  - `eventKinds.js` - Comprehensive database of event kinds from NIPs with templates
+  - `EventTemplateSelector.svelte` - Scrolling modal with search and category filtering
+  - Category filters: All, Regular, Replaceable, Ephemeral, Addressable, Social, Messaging, Lists, Marketplace, Lightning, Media, Git, Calendar, Groups
+  - Permission-aware error messages explaining policy/role restrictions when publishing fails
 
 **Command-line Tools (`cmd/`):**
 - `relay-tester/` - Nostr protocol compliance testing
@@ -816,7 +821,7 @@ Files modified:
 3. GitHub Actions workflow builds binaries for multiple platforms
 4. Release created automatically with binaries and checksums
 
-## Recent Features (v0.34.x)
+## Recent Features (v0.34.x - v0.36.x)
 
 ### Directory Spider
 The directory spider (`pkg/spider/directory.go`) automatically discovers and syncs metadata from other relays:
@@ -859,6 +864,22 @@ WebAssembly-compatible database backend (`pkg/wasmdb/`):
 - **Scripts**: Policy scripts execute ONLY for write operations
 - **Reference Documentation**: `docs/POLICY_CONFIGURATION_REFERENCE.md` provides authoritative read vs write applicability
 - See also: `pkg/policy/README.md` for quick reference
+
+### Web UI Event Templates (v0.36.x)
+The Compose tab now includes a comprehensive event template generator:
+- **140+ Event Kinds**: Complete database of Nostr event kinds from the NIPs repository
+- **Template Generator**: Click "Generate Template" to open searchable modal with all event types
+- **Category Filtering**: Filter by Regular, Replaceable, Ephemeral, Addressable, or domain-specific categories (Social, Messaging, Lists, Marketplace, Lightning, Media, Git, Calendar, Groups)
+- **Search**: Find events by name, description, kind number, or NIP reference
+- **Pre-filled Templates**: Each kind includes proper tag structure and example content
+- **Permission-Aware Errors**: When publishing fails, error messages explain:
+  - Policy restrictions (kind blocked, content limits)
+  - Permission issues (user role insufficient)
+  - Guidance on how to resolve (contact admin, policy config)
+- **Key Files**:
+  - `app/web/src/eventKinds.js` - Event kinds database with templates
+  - `app/web/src/EventTemplateSelector.svelte` - Template selection modal
+  - `app/web/src/ComposeView.svelte` - Updated compose interface
 
 ### Policy JSON Configuration Quick Reference
 
@@ -956,4 +977,6 @@ Invite-based access control system:
 | `pkg/neo4j/MODIFYING_SCHEMA.md` | How to modify Neo4j schema |
 | `pkg/neo4j/TESTING.md` | Neo4j testing guide |
 | `.claude/skills/cypher/SKILL.md` | Cypher query language skill for Neo4j |
+| `app/web/src/eventKinds.js` | Comprehensive Nostr event kinds database (140+ kinds with templates) |
+| `docs/WEB_UI_EVENT_TEMPLATES.md` | Web UI event template generator documentation |
 | `readme.adoc` | Project README with feature overview |

@@ -1,8 +1,16 @@
 <script>
     export let composeEventJson = "";
+    export let userPubkey = "";
+    export let userRole = "";
+    export let policyEnabled = false;
+    export let publishError = "";
 
     import { createEventDispatcher } from "svelte";
+    import EventTemplateSelector from "./EventTemplateSelector.svelte";
+
     const dispatch = createEventDispatcher();
+
+    let isTemplateSelectorOpen = false;
 
     function reformatJson() {
         dispatch("reformatJson");
@@ -15,10 +23,32 @@
     function publishEvent() {
         dispatch("publishEvent");
     }
+
+    function openTemplateSelector() {
+        isTemplateSelectorOpen = true;
+    }
+
+    function handleTemplateSelect(event) {
+        const { kind, template } = event.detail;
+        composeEventJson = JSON.stringify(template, null, 2);
+        dispatch("templateSelected", { kind, template });
+    }
+
+    function handleTemplateSelectorClose() {
+        isTemplateSelectorOpen = false;
+    }
+
+    function clearError() {
+        publishError = "";
+        dispatch("clearError");
+    }
 </script>
 
 <div class="compose-view">
     <div class="compose-header">
+        <button class="compose-btn template-btn" on:click={openTemplateSelector}
+            >Generate Template</button
+        >
         <button class="compose-btn reformat-btn" on:click={reformatJson}
             >Reformat</button
         >
@@ -27,15 +57,33 @@
             >Publish</button
         >
     </div>
+
+    {#if publishError}
+        <div class="error-banner">
+            <div class="error-content">
+                <span class="error-icon">&#9888;</span>
+                <span class="error-message">{publishError}</span>
+            </div>
+            <button class="error-dismiss" on:click={clearError}>&times;</button>
+        </div>
+    {/if}
+
     <div class="compose-editor">
         <textarea
             bind:value={composeEventJson}
             class="compose-textarea"
-            placeholder="Enter your Nostr event JSON here..."
+            placeholder="Enter your Nostr event JSON here, or click 'Generate Template' to start with a template..."
             spellcheck="false"
         ></textarea>
     </div>
 </div>
+
+<EventTemplateSelector
+    bind:isOpen={isTemplateSelectorOpen}
+    {userPubkey}
+    on:select={handleTemplateSelect}
+    on:close={handleTemplateSelectorClose}
+/>
 
 <style>
     .compose-view {
@@ -71,6 +119,16 @@
         background: var(--button-hover-bg);
     }
 
+    .template-btn {
+        background: var(--primary);
+        color: var(--text-color);
+    }
+
+    .template-btn:hover {
+        background: var(--primary);
+        filter: brightness(0.9);
+    }
+
     .reformat-btn {
         background: var(--info);
         color: var(--text-color);
@@ -99,6 +157,53 @@
     .publish-btn:hover {
         background: var(--success);
         filter: brightness(0.9);
+    }
+
+    .error-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.75em 1em;
+        margin: 0 0.5em;
+        background: #f8d7da;
+        border: 1px solid #f5c6cb;
+        border-radius: 0.25rem;
+        color: #721c24;
+    }
+
+    :global(.dark-theme) .error-banner {
+        background: #4a1c24;
+        border-color: #6a2c34;
+        color: #f8d7da;
+    }
+
+    .error-content {
+        display: flex;
+        align-items: center;
+        gap: 0.5em;
+    }
+
+    .error-icon {
+        font-size: 1.2em;
+    }
+
+    .error-message {
+        font-size: 0.9rem;
+        line-height: 1.4;
+    }
+
+    .error-dismiss {
+        background: none;
+        border: none;
+        font-size: 1.25rem;
+        cursor: pointer;
+        color: inherit;
+        padding: 0 0.25em;
+        opacity: 0.7;
+    }
+
+    .error-dismiss:hover {
+        opacity: 1;
     }
 
     .compose-editor {
@@ -136,6 +241,15 @@
     @media (max-width: 640px) {
         .compose-view {
             left: 160px;
+        }
+
+        .compose-header {
+            flex-wrap: wrap;
+        }
+
+        .compose-btn {
+            flex: 1;
+            min-width: calc(50% - 0.5em);
         }
     }
 </style>
