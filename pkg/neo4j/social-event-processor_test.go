@@ -737,3 +737,264 @@ func BenchmarkDiffComputation(b *testing.B) {
 		_, _ = diffStringSlices(old, new)
 	}
 }
+
+// TestReportDeduplication tests that duplicate REPORTS are deduplicated
+func TestReportDeduplication(t *testing.T) {
+	if testDB == nil {
+		t.Skip("Neo4j not available")
+	}
+
+	ctx := context.Background()
+
+	t.Run("DeduplicateSameType", func(t *testing.T) {
+		// Clean database for this subtest
+		cleanTestDatabase()
+
+		reporter := generateTestKeypair(t, "reporter")
+		reported := generateTestKeypair(t, "reported")
+
+		reporterPubkey := hex.Enc(reporter.pubkey[:])
+		reportedPubkey := hex.Enc(reported.pubkey[:])
+
+		// Create first report (older timestamp)
+		ev1 := event.New()
+		ev1.Pubkey = reporter.pubkey
+		ev1.CreatedAt = 1000
+		ev1.Kind = 1984
+		ev1.Tags = tag.NewS(
+			tag.NewFromAny("p", reportedPubkey, "impersonation"),
+		)
+		ev1.Content = []byte("First report")
+
+		if err := ev1.Sign(reporter.signer); err != nil {
+			t.Fatalf("Failed to sign first event: %v", err)
+		}
+
+		if _, err := testDB.SaveEvent(ctx, ev1); err != nil {
+			t.Fatalf("Failed to save first report: %v", err)
+		}
+
+		// Create second report (newer timestamp, same type)
+		ev2 := event.New()
+		ev2.Pubkey = reporter.pubkey
+		ev2.CreatedAt = 2000 // Newer timestamp
+		ev2.Kind = 1984
+		ev2.Tags = tag.NewS(
+			tag.NewFromAny("p", reportedPubkey, "impersonation"),
+		)
+		ev2.Content = []byte("Second report")
+
+		if err := ev2.Sign(reporter.signer); err != nil {
+			t.Fatalf("Failed to sign second event: %v", err)
+		}
+
+		if _, err := testDB.SaveEvent(ctx, ev2); err != nil {
+			t.Fatalf("Failed to save second report: %v", err)
+		}
+
+		// Verify only ONE REPORTS relationship exists
+		cypher := `
+			MATCH (r:NostrUser {pubkey: $reporter})-[rel:REPORTS]->(d:NostrUser {pubkey: $reported})
+			RETURN count(rel) AS count, rel.created_at AS created_at, rel.created_by_event AS event_id
+		`
+		params := map[string]any{
+			"reporter": reporterPubkey,
+			"reported": reportedPubkey,
+		}
+
+		result, err := testDB.ExecuteRead(ctx, cypher, params)
+		if err != nil {
+			t.Fatalf("Failed to query REPORTS: %v", err)
+		}
+
+		if !result.Next(ctx) {
+			t.Fatal("No REPORTS relationship found")
+		}
+
+		record := result.Record()
+		count := record.Values[0].(int64)
+		createdAt := record.Values[1].(int64)
+		eventID := record.Values[2].(string)
+
+		if count != 1 {
+			t.Errorf("Expected 1 REPORTS relationship, got %d", count)
+		}
+
+		// Verify the relationship has the newer event's data
+		if createdAt != 2000 {
+			t.Errorf("Expected created_at=2000 (newer), got %d", createdAt)
+		}
+
+		ev2ID := hex.Enc(ev2.ID[:])
+		if eventID != ev2ID {
+			t.Errorf("Expected event_id=%s, got %s", ev2ID, eventID)
+		}
+
+		t.Log("✓ Duplicate reports correctly deduplicated to single relationship with newest data")
+	})
+
+	t.Run("DifferentTypesAllowed", func(t *testing.T) {
+		// Clean database for this subtest
+		cleanTestDatabase()
+
+		reporter := generateTestKeypair(t, "reporter2")
+		reported := generateTestKeypair(t, "reported2")
+
+		reporterPubkey := hex.Enc(reporter.pubkey[:])
+		reportedPubkey := hex.Enc(reported.pubkey[:])
+
+		// Report for impersonation
+		ev1 := event.New()
+		ev1.Pubkey = reporter.pubkey
+		ev1.CreatedAt = 1000
+		ev1.Kind = 1984
+		ev1.Tags = tag.NewS(
+			tag.NewFromAny("p", reportedPubkey, "impersonation"),
+		)
+
+		if err := ev1.Sign(reporter.signer); err != nil {
+			t.Fatalf("Failed to sign event: %v", err)
+		}
+
+		if _, err := testDB.SaveEvent(ctx, ev1); err != nil {
+			t.Fatalf("Failed to save report: %v", err)
+		}
+
+		// Report for spam (different type)
+		ev2 := event.New()
+		ev2.Pubkey = reporter.pubkey
+		ev2.CreatedAt = 2000
+		ev2.Kind = 1984
+		ev2.Tags = tag.NewS(
+			tag.NewFromAny("p", reportedPubkey, "spam"),
+		)
+
+		if err := ev2.Sign(reporter.signer); err != nil {
+			t.Fatalf("Failed to sign event: %v", err)
+		}
+
+		if _, err := testDB.SaveEvent(ctx, ev2); err != nil {
+			t.Fatalf("Failed to save report: %v", err)
+		}
+
+		// Verify TWO REPORTS relationships exist (different types)
+		cypher := `
+			MATCH (r:NostrUser {pubkey: $reporter})-[rel:REPORTS]->(d:NostrUser {pubkey: $reported})
+			RETURN rel.report_type AS type ORDER BY type
+		`
+		params := map[string]any{
+			"reporter": reporterPubkey,
+			"reported": reportedPubkey,
+		}
+
+		result, err := testDB.ExecuteRead(ctx, cypher, params)
+		if err != nil {
+			t.Fatalf("Failed to query REPORTS: %v", err)
+		}
+
+		var types []string
+		for result.Next(ctx) {
+			types = append(types, result.Record().Values[0].(string))
+		}
+
+		if len(types) != 2 {
+			t.Errorf("Expected 2 REPORTS relationships, got %d", len(types))
+		}
+
+		if len(types) >= 2 && (types[0] != "impersonation" || types[1] != "spam") {
+			t.Errorf("Expected [impersonation, spam], got %v", types)
+		}
+
+		t.Log("✓ Different report types correctly create separate relationships")
+	})
+
+	t.Run("SupersededEventTracking", func(t *testing.T) {
+		// Clean database for this subtest
+		cleanTestDatabase()
+
+		reporter := generateTestKeypair(t, "reporter3")
+		reported := generateTestKeypair(t, "reported3")
+
+		reporterPubkey := hex.Enc(reporter.pubkey[:])
+		reportedPubkey := hex.Enc(reported.pubkey[:])
+
+		// Create first report
+		ev1 := event.New()
+		ev1.Pubkey = reporter.pubkey
+		ev1.CreatedAt = 1000
+		ev1.Kind = 1984
+		ev1.Tags = tag.NewS(
+			tag.NewFromAny("p", reportedPubkey, "spam"),
+		)
+
+		if err := ev1.Sign(reporter.signer); err != nil {
+			t.Fatalf("Failed to sign first event: %v", err)
+		}
+
+		if _, err := testDB.SaveEvent(ctx, ev1); err != nil {
+			t.Fatalf("Failed to save first report: %v", err)
+		}
+
+		ev1ID := hex.Enc(ev1.ID[:])
+
+		// Create second report (supersedes first)
+		ev2 := event.New()
+		ev2.Pubkey = reporter.pubkey
+		ev2.CreatedAt = 2000
+		ev2.Kind = 1984
+		ev2.Tags = tag.NewS(
+			tag.NewFromAny("p", reportedPubkey, "spam"),
+		)
+
+		if err := ev2.Sign(reporter.signer); err != nil {
+			t.Fatalf("Failed to sign second event: %v", err)
+		}
+
+		if _, err := testDB.SaveEvent(ctx, ev2); err != nil {
+			t.Fatalf("Failed to save second report: %v", err)
+		}
+
+		ev2ID := hex.Enc(ev2.ID[:])
+
+		// Verify first ProcessedSocialEvent is superseded
+		cypher := `
+			MATCH (evt:ProcessedSocialEvent {event_id: $event_id, event_kind: 1984})
+			RETURN evt.superseded_by AS superseded_by
+		`
+		params := map[string]any{"event_id": ev1ID}
+
+		result, err := testDB.ExecuteRead(ctx, cypher, params)
+		if err != nil {
+			t.Fatalf("Failed to query ProcessedSocialEvent: %v", err)
+		}
+
+		if !result.Next(ctx) {
+			t.Fatal("First ProcessedSocialEvent not found")
+		}
+
+		supersededBy := result.Record().Values[0]
+		if supersededBy == nil {
+			t.Error("Expected first event to be superseded, but superseded_by is null")
+		} else if supersededBy.(string) != ev2ID {
+			t.Errorf("Expected superseded_by=%s, got %v", ev2ID, supersededBy)
+		}
+
+		// Verify second ProcessedSocialEvent is NOT superseded
+		params = map[string]any{"event_id": ev2ID}
+		result, err = testDB.ExecuteRead(ctx, cypher, params)
+		if err != nil {
+			t.Fatalf("Failed to query second ProcessedSocialEvent: %v", err)
+		}
+
+		if !result.Next(ctx) {
+			t.Fatal("Second ProcessedSocialEvent not found")
+		}
+
+		supersededBy = result.Record().Values[0]
+		if supersededBy != nil {
+			t.Errorf("Expected second event not to be superseded, but superseded_by=%v", supersededBy)
+		}
+
+		t.Log("✓ ProcessedSocialEvent correctly tracks superseded events")
+	})
+}

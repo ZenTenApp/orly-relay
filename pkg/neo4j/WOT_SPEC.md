@@ -185,11 +185,18 @@ Represents a report filed against a user (derived from kind 1984 events).
 
 **Direction:** `(reporter:NostrUser)-[:REPORTS]->(reported:NostrUser)`
 
-**Properties:**
-- `reportType` (string) - NIP-56 report type (impersonation, spam, illegal, malware, nsfw, etc.)
-- `timestamp` (integer) - When the report was filed
+**Deduplication:** Only one REPORTS relationship exists per (reporter, reported, report_type) combination.
+Multiple reports of the same type from the same user to the same target update the existing
+relationship with the most recent event's data. This prevents double-counting in GrapeRank
+calculations while maintaining audit trails via ProcessedSocialEvent nodes.
 
-**Source:** Created from kind 1984 (reporting) events
+**Properties:**
+- `report_type` (string) - NIP-56 report type (impersonation, spam, illegal, malware, nsfw, etc.)
+- `created_at` (integer) - Timestamp of the most recent report event
+- `created_by_event` (string) - Event ID of the most recent report
+- `relay_received_at` (integer) - When the relay first received any report of this type
+
+**Source:** Created/updated from kind 1984 (reporting) events
 
 #### 4. WOT_METRICS_CARDS
 
@@ -221,7 +228,7 @@ The WoT model processes the following Nostr event kinds:
 |------|------|---------|--------------|
 | 0 | Profile Metadata | User profile information | Update NostrUser properties (npub, name, etc.) |
 | 3 | Contact List | Follow list | Create/update FOLLOWS relationships |
-| 1984 | Reporting | Report users/content | Create REPORTS relationships with reportType |
+| 1984 | Reporting | Report users/content | Create/update REPORTS relationships (deduplicated by report_type) |
 | 10000 | Mute List | Mute list | Create/update MUTES relationships |
 | 30382 | Trusted Assertion (NIP-85) | Published trust metrics | Create/update NostrUserWotMetricsCard nodes |
 

@@ -30,6 +30,11 @@ var migrations = []Migration{
 		Description: "Convert direct REFERENCES/MENTIONS relationships to Tag-based model",
 		Migrate:     migrateToTagBasedReferences,
 	},
+	{
+		Version:     "v4",
+		Description: "Deduplicate REPORTS relationships by (reporter, reported, report_type)",
+		Migrate:     migrateDeduplicateReports,
+	},
 }
 
 // RunMigrations executes all pending migrations
@@ -490,5 +495,103 @@ func migrateToTagBasedReferences(ctx context.Context, n *N) error {
 	}
 
 	n.Logger.Infof("Tag-based references migration completed successfully")
+	return nil
+}
+
+// migrateDeduplicateReports removes duplicate REPORTS relationships
+// Prior to this migration, processReport() used CREATE which allowed multiple
+// REPORTS relationships with the same report_type between the same two users.
+// This migration keeps only the most recent report (by created_at) for each
+// (reporter, reported, report_type) combination.
+func migrateDeduplicateReports(ctx context.Context, n *N) error {
+	// Step 1: Count duplicate REPORTS relationships
+	// Duplicates are defined as multiple REPORTS with the same (reporter, reported, report_type)
+	countDuplicatesCypher := `
+		MATCH (reporter:NostrUser)-[r:REPORTS]->(reported:NostrUser)
+		WITH reporter, reported, r.report_type AS type, collect(r) AS rels
+		WHERE size(rels) > 1
+		RETURN sum(size(rels) - 1) AS duplicate_count
+	`
+	result, err := n.ExecuteRead(ctx, countDuplicatesCypher, nil)
+	if err != nil {
+		return fmt.Errorf("failed to count duplicate REPORTS: %w", err)
+	}
+
+	var duplicateCount int64
+	if result.Next(ctx) {
+		if count, ok := result.Record().Values[0].(int64); ok {
+			duplicateCount = count
+		}
+	}
+
+	if duplicateCount == 0 {
+		n.Logger.Infof("no duplicate REPORTS relationships found, migration complete")
+		return nil
+	}
+
+	n.Logger.Infof("found %d duplicate REPORTS relationships to remove", duplicateCount)
+
+	// Step 2: Delete duplicate REPORTS, keeping the one with the highest created_at
+	// This query:
+	// 1. Groups REPORTS by (reporter, reported, report_type)
+	// 2. Finds the maximum created_at for each group
+	// 3. Deletes all relationships in the group except the newest one
+	deleteDuplicatesCypher := `
+		MATCH (reporter:NostrUser)-[r:REPORTS]->(reported:NostrUser)
+		WITH reporter, reported, r.report_type AS type,
+		     collect(r) AS rels, max(r.created_at) AS maxCreatedAt
+		WHERE size(rels) > 1
+		UNWIND rels AS rel
+		WITH rel, maxCreatedAt
+		WHERE rel.created_at < maxCreatedAt
+		DELETE rel
+		RETURN count(*) AS deleted
+	`
+
+	writeResult, err := n.ExecuteWrite(ctx, deleteDuplicatesCypher, nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete duplicate REPORTS: %w", err)
+	}
+
+	var deletedCount int64
+	if writeResult.Next(ctx) {
+		if count, ok := writeResult.Record().Values[0].(int64); ok {
+			deletedCount = count
+		}
+	}
+
+	n.Logger.Infof("deleted %d duplicate REPORTS relationships", deletedCount)
+
+	// Step 3: Mark superseded ProcessedSocialEvent nodes for deleted reports
+	// Find ProcessedSocialEvent nodes (kind 1984) whose event IDs are no longer
+	// referenced by any REPORTS relationship's created_by_event
+	markSupersededCypher := `
+		MATCH (evt:ProcessedSocialEvent {event_kind: 1984})
+		WHERE evt.superseded_by IS NULL
+		  AND NOT EXISTS {
+		      MATCH ()-[r:REPORTS]->()
+		      WHERE r.created_by_event = evt.event_id
+		  }
+		SET evt.superseded_by = 'migration_v4_dedupe'
+		RETURN count(evt) AS superseded
+	`
+
+	markResult, err := n.ExecuteWrite(ctx, markSupersededCypher, nil)
+	if err != nil {
+		// Non-fatal - just log warning
+		n.Logger.Warningf("failed to mark superseded ProcessedSocialEvent nodes: %v", err)
+	} else {
+		var supersededCount int64
+		if markResult.Next(ctx) {
+			if count, ok := markResult.Record().Values[0].(int64); ok {
+				supersededCount = count
+			}
+		}
+		if supersededCount > 0 {
+			n.Logger.Infof("marked %d ProcessedSocialEvent nodes as superseded", supersededCount)
+		}
+	}
+
+	n.Logger.Infof("REPORTS deduplication migration completed successfully")
 	return nil
 }
