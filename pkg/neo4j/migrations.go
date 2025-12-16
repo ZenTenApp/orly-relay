@@ -25,6 +25,11 @@ var migrations = []Migration{
 		Description: "Clean up binary-encoded pubkeys and event IDs to lowercase hex",
 		Migrate:     migrateBinaryToHex,
 	},
+	{
+		Version:     "v3",
+		Description: "Convert direct REFERENCES/MENTIONS relationships to Tag-based model",
+		Migrate:     migrateToTagBasedReferences,
+	},
 }
 
 // RunMigrations executes all pending migrations
@@ -341,5 +346,149 @@ func migrateBinaryToHex(ctx context.Context, n *N) error {
 	// Ignore errors - best effort cleanup
 
 	n.Logger.Infof("binary-to-hex migration completed successfully")
+	return nil
+}
+
+// migrateToTagBasedReferences converts direct REFERENCES and MENTIONS relationships
+// to the new Tag-based model where:
+// - Event-[:REFERENCES]->Event becomes Event-[:TAGGED_WITH]->Tag-[:REFERENCES]->Event
+// - Event-[:MENTIONS]->NostrUser becomes Event-[:TAGGED_WITH]->Tag-[:REFERENCES]->NostrUser
+//
+// This enables unified tag querying via #e and #p filters while maintaining graph traversal.
+func migrateToTagBasedReferences(ctx context.Context, n *N) error {
+	// Step 1: Count existing direct REFERENCES relationships (Event->Event)
+	countRefCypher := `
+		MATCH (source:Event)-[r:REFERENCES]->(target:Event)
+		RETURN count(r) AS count
+	`
+	result, err := n.ExecuteRead(ctx, countRefCypher, nil)
+	if err != nil {
+		return fmt.Errorf("failed to count REFERENCES relationships: %w", err)
+	}
+
+	var refCount int64
+	if result.Next(ctx) {
+		if count, ok := result.Record().Values[0].(int64); ok {
+			refCount = count
+		}
+	}
+	n.Logger.Infof("found %d direct Event-[:REFERENCES]->Event relationships to migrate", refCount)
+
+	// Step 2: Count existing direct MENTIONS relationships (Event->NostrUser)
+	countMentionsCypher := `
+		MATCH (source:Event)-[r:MENTIONS]->(target:NostrUser)
+		RETURN count(r) AS count
+	`
+	result, err = n.ExecuteRead(ctx, countMentionsCypher, nil)
+	if err != nil {
+		return fmt.Errorf("failed to count MENTIONS relationships: %w", err)
+	}
+
+	var mentionsCount int64
+	if result.Next(ctx) {
+		if count, ok := result.Record().Values[0].(int64); ok {
+			mentionsCount = count
+		}
+	}
+	n.Logger.Infof("found %d direct Event-[:MENTIONS]->NostrUser relationships to migrate", mentionsCount)
+
+	// If nothing to migrate, we're done
+	if refCount == 0 && mentionsCount == 0 {
+		n.Logger.Infof("no direct relationships to migrate, migration complete")
+		return nil
+	}
+
+	// Step 3: Migrate REFERENCES relationships to Tag-based model
+	// Process in batches to avoid memory issues with large datasets
+	if refCount > 0 {
+		n.Logger.Infof("migrating %d REFERENCES relationships to Tag-based model...", refCount)
+
+		// This query:
+		// 1. Finds Event->Event REFERENCES relationships
+		// 2. Creates/merges Tag node with type='e' and value=target event ID
+		// 3. Creates TAGGED_WITH from source Event to Tag
+		// 4. Creates REFERENCES from Tag to target Event
+		// 5. Deletes the old direct REFERENCES relationship
+		migrateRefCypher := `
+			MATCH (source:Event)-[r:REFERENCES]->(target:Event)
+			WITH source, r, target LIMIT 1000
+			MERGE (t:Tag {type: 'e', value: target.id})
+			CREATE (source)-[:TAGGED_WITH]->(t)
+			MERGE (t)-[:REFERENCES]->(target)
+			DELETE r
+			RETURN count(r) AS migrated
+		`
+
+		// Run migration in batches until no more relationships exist
+		totalMigrated := int64(0)
+		for {
+			result, err := n.ExecuteWrite(ctx, migrateRefCypher, nil)
+			if err != nil {
+				return fmt.Errorf("failed to migrate REFERENCES batch: %w", err)
+			}
+
+			var batchMigrated int64
+			if result.Next(ctx) {
+				if count, ok := result.Record().Values[0].(int64); ok {
+					batchMigrated = count
+				}
+			}
+
+			if batchMigrated == 0 {
+				break
+			}
+			totalMigrated += batchMigrated
+			n.Logger.Infof("migrated %d REFERENCES relationships (total: %d)", batchMigrated, totalMigrated)
+		}
+
+		n.Logger.Infof("completed migrating %d REFERENCES relationships", totalMigrated)
+	}
+
+	// Step 4: Migrate MENTIONS relationships to Tag-based model
+	if mentionsCount > 0 {
+		n.Logger.Infof("migrating %d MENTIONS relationships to Tag-based model...", mentionsCount)
+
+		// This query:
+		// 1. Finds Event->NostrUser MENTIONS relationships
+		// 2. Creates/merges Tag node with type='p' and value=target pubkey
+		// 3. Creates TAGGED_WITH from source Event to Tag
+		// 4. Creates REFERENCES from Tag to target NostrUser
+		// 5. Deletes the old direct MENTIONS relationship
+		migrateMentionsCypher := `
+			MATCH (source:Event)-[r:MENTIONS]->(target:NostrUser)
+			WITH source, r, target LIMIT 1000
+			MERGE (t:Tag {type: 'p', value: target.pubkey})
+			CREATE (source)-[:TAGGED_WITH]->(t)
+			MERGE (t)-[:REFERENCES]->(target)
+			DELETE r
+			RETURN count(r) AS migrated
+		`
+
+		// Run migration in batches until no more relationships exist
+		totalMigrated := int64(0)
+		for {
+			result, err := n.ExecuteWrite(ctx, migrateMentionsCypher, nil)
+			if err != nil {
+				return fmt.Errorf("failed to migrate MENTIONS batch: %w", err)
+			}
+
+			var batchMigrated int64
+			if result.Next(ctx) {
+				if count, ok := result.Record().Values[0].(int64); ok {
+					batchMigrated = count
+				}
+			}
+
+			if batchMigrated == 0 {
+				break
+			}
+			totalMigrated += batchMigrated
+			n.Logger.Infof("migrated %d MENTIONS relationships (total: %d)", batchMigrated, totalMigrated)
+		}
+
+		n.Logger.Infof("completed migrating %d MENTIONS relationships", totalMigrated)
+	}
+
+	n.Logger.Infof("Tag-based references migration completed successfully")
 	return nil
 }

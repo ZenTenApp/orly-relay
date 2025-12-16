@@ -235,11 +235,18 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
 **`pkg/neo4j/`** - Neo4j graph database backend with social graph support
 - `neo4j.go` - Main database implementation
 - `schema.go` - Graph schema and index definitions (includes WoT extensions)
+- `migrations.go` - Database schema migrations (v1: base, v2: WoT, v3: Tag-based e/p)
 - `query-events.go` - REQ filter to Cypher translation
-- `save-event.go` - Event storage with relationship creation
+- `save-event.go` - Event storage with Tag-based relationship creation
+- `delete.go` - Event deletion (NIP-09) with Tag traversal for deletion detection
 - `social-event-processor.go` - Processes kinds 0, 3, 1984, 10000 for social graph
+- `hex_utils.go` - Helpers for binary-to-hex tag value extraction
 - `WOT_SPEC.md` - Web of Trust data model specification (NostrUser nodes, trust metrics)
 - `MODIFYING_SCHEMA.md` - Guide for schema modifications
+- **Tests:**
+  - `tag_model_test.go` - Tag-based e/p model and filter query tests
+  - `save-event_test.go` - Event storage and relationship tests
+  - `social-event-processor_test.go` - Social graph event processing tests
 
 **`pkg/protocol/`** - Nostr protocol implementation
 - `ws/` - WebSocket message framing and parsing
@@ -349,6 +356,11 @@ export ORLY_AUTH_TO_WRITE=false          # Require auth only for writes
 - Supports multiple backends via `ORLY_DB_TYPE` environment variable
 - **Badger** (default): Embedded key-value store with custom indexing, ideal for single-instance deployments
 - **Neo4j**: Graph database with social graph and Web of Trust (WoT) extensions
+  - **Tag-Based e/p Model**: All tags stored through intermediate Tag nodes
+    - `Event-[:TAGGED_WITH]->Tag{type:'e'}-[:REFERENCES]->Event` for e-tags
+    - `Event-[:TAGGED_WITH]->Tag{type:'p'}-[:REFERENCES]->NostrUser` for p-tags
+    - Enables unified querying: `#e` and `#p` filter queries work correctly
+    - Automatic migration from direct REFERENCES/MENTIONS (v3 migration)
   - Processes kinds 0 (profile), 3 (contacts), 1984 (reports), 10000 (mute list) for social graph
   - NostrUser nodes with trust metrics (influence, PageRank)
   - FOLLOWS, MUTES, REPORTS relationships for WoT analysis
@@ -816,11 +828,18 @@ The directory spider (`pkg/spider/directory.go`) automatically discovers and syn
 
 ### Neo4j Social Graph Backend
 The Neo4j backend (`pkg/neo4j/`) includes Web of Trust (WoT) extensions:
+- **Tag-Based e/p Model**: All tags (including e/p) stored through intermediate Tag nodes
+  - `Event-[:TAGGED_WITH]->Tag{type:'e'}-[:REFERENCES]->Event`
+  - `Event-[:TAGGED_WITH]->Tag{type:'p'}-[:REFERENCES]->NostrUser`
+  - Enables unified tag querying (`#e` and `#p` filter queries now work)
+  - v3 migration automatically converts existing direct REFERENCES/MENTIONS
 - **Social Event Processor**: Handles kinds 0, 3, 1984, 10000 for social graph management
 - **NostrUser nodes**: Store profile data and trust metrics (influence, PageRank)
 - **Relationships**: FOLLOWS, MUTES, REPORTS for social graph analysis
+- **Deletion Detection**: `CheckForDeleted()` uses Tag traversal for kind 5 event checks
 - **WoT Schema**: See `pkg/neo4j/WOT_SPEC.md` for full specification
 - **Schema Modifications**: See `pkg/neo4j/MODIFYING_SCHEMA.md` for how to update
+- **Comprehensive Tests**: `tag_model_test.go` covers Tag-based model, filter queries, migrations
 
 ### WasmDB IndexedDB Backend
 WebAssembly-compatible database backend (`pkg/wasmdb/`):

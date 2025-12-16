@@ -125,6 +125,40 @@ Legacy node label that is redundant with SetOfNostrUserWotMetricsCards. Should b
 
 ### Relationship Types
 
+#### Tag-Based References (e and p tags)
+
+The Neo4j backend uses a unified Tag-based model for `e` and `p` tags, enabling consistent tag querying while maintaining graph traversal capabilities.
+
+**E-tags (Event References):**
+```
+(Event)-[:TAGGED_WITH]->(Tag {type: 'e', value: <event_id>})-[:REFERENCES]->(Event)
+```
+
+**P-tags (Pubkey Mentions):**
+```
+(Event)-[:TAGGED_WITH]->(Tag {type: 'p', value: <pubkey>})-[:REFERENCES]->(NostrUser)
+```
+
+This model provides:
+- Unified tag querying via `#e` and `#p` filters (same as other tags)
+- Graph traversal from events to referenced events/users
+- Consistent indexing through existing Tag node indexes
+
+**Query Examples:**
+```cypher
+-- Find all events that reference a specific event
+MATCH (e:Event)-[:TAGGED_WITH]->(t:Tag {type: 'e', value: $eventId})-[:REFERENCES]->(ref:Event)
+RETURN e
+
+-- Find all events that mention a specific pubkey
+MATCH (e:Event)-[:TAGGED_WITH]->(t:Tag {type: 'p', value: $pubkey})-[:REFERENCES]->(u:NostrUser)
+RETURN e
+
+-- Count references to an event (thread replies)
+MATCH (t:Tag {type: 'e', value: $eventId})<-[:TAGGED_WITH]-(e:Event)
+RETURN count(e) AS replyCount
+```
+
 #### 1. FOLLOWS
 
 Represents a follow relationship between users (derived from kind 3 events).
@@ -247,8 +281,9 @@ Comprehensive implementation with additional features:
   - `IS_A_REACTION_TO` (kind 7 reactions)
   - `IS_A_RESPONSE_TO` (kind 1 replies)
   - `IS_A_REPOST_OF` (kind 6, kind 16 reposts)
-  - `P_TAGGED` (p-tag mentions from events to users)
-  - `E_TAGGED` (e-tag references from events to events)
+  - Tag-based references (see "Tag-Based References" section above):
+    - `Event-[:TAGGED_WITH]->Tag{type:'p'}-[:REFERENCES]->NostrUser` (p-tag mentions)
+    - `Event-[:TAGGED_WITH]->Tag{type:'e'}-[:REFERENCES]->Event` (e-tag references)
 - NostrRelay, CashuMint nodes for ecosystem mapping
 - Enhanced GrapeRank incorporating zaps, replies, reactions
 

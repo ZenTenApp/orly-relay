@@ -35,10 +35,12 @@ export ORLY_NEO4J_PASSWORD=password
 ## Features
 
 - **Graph-Native Storage**: Events, authors, and tags stored as nodes and relationships
+- **Unified Tag Model**: All tags (including e/p tags) stored as Tag nodes with REFERENCES relationships
 - **Efficient Queries**: Leverages Neo4j's native graph traversal for tag and social graph queries
 - **Cypher Query Language**: Powerful, expressive query language for complex filters
 - **Automatic Indexing**: Unique constraints and indexes for optimal performance
 - **Relationship Queries**: Native support for event references, mentions, and tags
+- **Automatic Migrations**: Schema migrations run automatically on startup
 - **Web of Trust (WoT) Extensions**: Optional support for trust metrics, social graph analysis, and content filtering (see [WOT_SPEC.md](./WOT_SPEC.md))
 
 ## Architecture
@@ -49,6 +51,23 @@ See [docs/NEO4J_BACKEND.md](../../docs/NEO4J_BACKEND.md) for comprehensive docum
 - Performance tuning
 - Development guide
 - Comparison with other backends
+
+### Tag-Based e/p Model
+
+All tags, including `e` (event references) and `p` (pubkey mentions), are stored through intermediate Tag nodes:
+
+```
+Event -[:TAGGED_WITH]-> Tag{type:'e',value:eventId} -[:REFERENCES]-> Event
+Event -[:TAGGED_WITH]-> Tag{type:'p',value:pubkey} -[:REFERENCES]-> NostrUser
+Event -[:TAGGED_WITH]-> Tag{type:'t',value:topic}  (no REFERENCES for regular tags)
+```
+
+**Benefits:**
+- Unified tag querying: `#e` and `#p` filter queries work correctly
+- Consistent data model: All tags use the same TAGGED_WITH pattern
+- Graph traversal: Can traverse from events through tags to referenced entities
+
+**Migration:** Existing databases with direct `REFERENCES`/`MENTIONS` relationships are automatically migrated at startup via v3 migration.
 
 ### Web of Trust (WoT) Extensions
 
@@ -96,6 +115,8 @@ This package includes schema support for Web of Trust trust metrics computation:
 
 ### Tests
 - `social-event-processor_test.go` - Comprehensive tests for kinds 0, 3, 1984, 10000
+- `tag_model_test.go` - Tag-based e/p model tests and filter query tests
+- `save-event_test.go` - Event storage and relationship tests
 
 ## Testing
 
@@ -166,11 +187,25 @@ MATCH (e:Event)-[:TAGGED_WITH]->(t:Tag {type: "t", value: "bitcoin"})
 RETURN e
 ```
 
+### Event reference query (e-tags)
+```cypher
+MATCH (e:Event)-[:TAGGED_WITH]->(t:Tag {type: "e"})-[:REFERENCES]->(ref:Event)
+WHERE e.id = "abc123..."
+RETURN e, ref
+```
+
+### Mentions query (p-tags)
+```cypher
+MATCH (e:Event)-[:TAGGED_WITH]->(t:Tag {type: "p"})-[:REFERENCES]->(u:NostrUser)
+WHERE e.id = "abc123..."
+RETURN e, u
+```
+
 ### Social graph query
 ```cypher
 MATCH (author:NostrUser {pubkey: "abc123..."})
 <-[:AUTHORED_BY]-(e:Event)
--[:MENTIONS]->(mentioned:NostrUser)
+-[:TAGGED_WITH]->(:Tag {type: "p"})-[:REFERENCES]->(mentioned:NostrUser)
 RETURN author, e, mentioned
 ```
 

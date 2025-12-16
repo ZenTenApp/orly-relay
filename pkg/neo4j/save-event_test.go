@@ -151,7 +151,7 @@ func TestSafePrefix(t *testing.T) {
 }
 
 // TestSaveEvent_ETagReference tests that events with e-tags are saved correctly
-// and the REFERENCES relationships are created when the referenced event exists.
+// using the Tag-based model: Event-[:TAGGED_WITH]->Tag-[:REFERENCES]->Event.
 // Uses shared testDB from testmain_test.go to avoid auth rate limiting.
 func TestSaveEvent_ETagReference(t *testing.T) {
 	if testDB == nil {
@@ -226,10 +226,10 @@ func TestSaveEvent_ETagReference(t *testing.T) {
 		t.Fatal("Reply event should not exist yet")
 	}
 
-	// Verify REFERENCES relationship was created
+	// Verify Tag-based e-tag model: Event-[:TAGGED_WITH]->Tag{type:'e'}-[:REFERENCES]->Event
 	cypher := `
-		MATCH (reply:Event {id: $replyId})-[:REFERENCES]->(root:Event {id: $rootId})
-		RETURN reply.id AS replyId, root.id AS rootId
+		MATCH (reply:Event {id: $replyId})-[:TAGGED_WITH]->(t:Tag {type: 'e', value: $rootId})-[:REFERENCES]->(root:Event {id: $rootId})
+		RETURN reply.id AS replyId, t.value AS tagValue, root.id AS rootId
 	`
 	params := map[string]any{
 		"replyId": hex.Enc(replyEvent.ID[:]),
@@ -238,42 +238,43 @@ func TestSaveEvent_ETagReference(t *testing.T) {
 
 	result, err := testDB.ExecuteRead(ctx, cypher, params)
 	if err != nil {
-		t.Fatalf("Failed to query REFERENCES relationship: %v", err)
+		t.Fatalf("Failed to query Tag-based REFERENCES: %v", err)
 	}
 
 	if !result.Next(ctx) {
-		t.Error("Expected REFERENCES relationship between reply and root events")
+		t.Error("Expected Tag-based REFERENCES relationship between reply and root events")
 	} else {
 		record := result.Record()
 		returnedReplyId := record.Values[0].(string)
-		returnedRootId := record.Values[1].(string)
-		t.Logf("✓ REFERENCES relationship verified: %s -> %s", returnedReplyId[:8], returnedRootId[:8])
+		tagValue := record.Values[1].(string)
+		returnedRootId := record.Values[2].(string)
+		t.Logf("✓ Tag-based REFERENCES verified: Event(%s) -> Tag{e:%s} -> Event(%s)", returnedReplyId[:8], tagValue[:8], returnedRootId[:8])
 	}
 
-	// Verify MENTIONS relationship was also created for the p-tag
-	mentionsCypher := `
-		MATCH (reply:Event {id: $replyId})-[:MENTIONS]->(author:NostrUser {pubkey: $authorPubkey})
-		RETURN author.pubkey AS pubkey
+	// Verify Tag-based p-tag model: Event-[:TAGGED_WITH]->Tag{type:'p'}-[:REFERENCES]->NostrUser
+	pTagCypher := `
+		MATCH (reply:Event {id: $replyId})-[:TAGGED_WITH]->(t:Tag {type: 'p', value: $authorPubkey})-[:REFERENCES]->(author:NostrUser {pubkey: $authorPubkey})
+		RETURN author.pubkey AS pubkey, t.value AS tagValue
 	`
-	mentionsParams := map[string]any{
+	pTagParams := map[string]any{
 		"replyId":      hex.Enc(replyEvent.ID[:]),
 		"authorPubkey": hex.Enc(alice.Pub()),
 	}
 
-	mentionsResult, err := testDB.ExecuteRead(ctx, mentionsCypher, mentionsParams)
+	pTagResult, err := testDB.ExecuteRead(ctx, pTagCypher, pTagParams)
 	if err != nil {
-		t.Fatalf("Failed to query MENTIONS relationship: %v", err)
+		t.Fatalf("Failed to query Tag-based p-tag: %v", err)
 	}
 
-	if !mentionsResult.Next(ctx) {
-		t.Error("Expected MENTIONS relationship for p-tag")
+	if !pTagResult.Next(ctx) {
+		t.Error("Expected Tag-based p-tag relationship")
 	} else {
-		t.Logf("✓ MENTIONS relationship verified")
+		t.Logf("✓ Tag-based p-tag relationship verified")
 	}
 }
 
 // TestSaveEvent_ETagMissingReference tests that e-tags to non-existent events
-// don't create broken relationships (batched processing handles this gracefully).
+// create Tag nodes but don't create REFERENCES relationships to missing events.
 // Uses shared testDB from testmain_test.go to avoid auth rate limiting.
 func TestSaveEvent_ETagMissingReference(t *testing.T) {
 	if testDB == nil {
@@ -331,29 +332,50 @@ func TestSaveEvent_ETagMissingReference(t *testing.T) {
 		t.Error("Event should have been saved despite missing reference")
 	}
 
-	// Verify no REFERENCES relationship was created (as the target doesn't exist)
+	// Verify Tag node was created with TAGGED_WITH relationship
+	tagCypher := `
+		MATCH (e:Event {id: $eventId})-[:TAGGED_WITH]->(t:Tag {type: 'e', value: $refId})
+		RETURN t.value AS tagValue
+	`
+	tagParams := map[string]any{
+		"eventId": hex.Enc(ev.ID[:]),
+		"refId":   nonExistentEventID,
+	}
+
+	tagResult, err := testDB.ExecuteRead(ctx, tagCypher, tagParams)
+	if err != nil {
+		t.Fatalf("Failed to check Tag node: %v", err)
+	}
+
+	if !tagResult.Next(ctx) {
+		t.Error("Expected Tag node to be created for e-tag even when target doesn't exist")
+	} else {
+		t.Logf("✓ Tag node created for missing reference")
+	}
+
+	// Verify no REFERENCES relationship was created from Tag (as the target Event doesn't exist)
 	refCypher := `
-		MATCH (e:Event {id: $eventId})-[:REFERENCES]->(ref:Event)
+		MATCH (t:Tag {type: 'e', value: $refId})-[:REFERENCES]->(ref:Event)
 		RETURN count(ref) AS refCount
 	`
-	refParams := map[string]any{"eventId": hex.Enc(ev.ID[:])}
+	refParams := map[string]any{"refId": nonExistentEventID}
 
 	refResult, err := testDB.ExecuteRead(ctx, refCypher, refParams)
 	if err != nil {
-		t.Fatalf("Failed to check references: %v", err)
+		t.Fatalf("Failed to check REFERENCES from Tag: %v", err)
 	}
 
 	if refResult.Next(ctx) {
 		count := refResult.Record().Values[0].(int64)
 		if count > 0 {
-			t.Errorf("Expected no REFERENCES relationship for non-existent event, got %d", count)
+			t.Errorf("Expected no REFERENCES from Tag for non-existent event, got %d", count)
 		} else {
-			t.Logf("✓ Correctly handled missing reference (no relationship created)")
+			t.Logf("✓ Correctly handled missing reference (no REFERENCES from Tag)")
 		}
 	}
 }
 
-// TestSaveEvent_MultipleETags tests events with multiple e-tags.
+// TestSaveEvent_MultipleETags tests events with multiple e-tags using Tag-based model.
 // Uses shared testDB from testmain_test.go to avoid auth rate limiting.
 func TestSaveEvent_MultipleETags(t *testing.T) {
 	if testDB == nil {
@@ -409,7 +431,7 @@ func TestSaveEvent_MultipleETags(t *testing.T) {
 		t.Fatalf("Failed to sign reply event: %v", err)
 	}
 
-	// Save reply event - tests batched e-tag creation
+	// Save reply event - tests batched e-tag creation with Tag nodes
 	exists, err := testDB.SaveEvent(ctx, replyEvent)
 	if err != nil {
 		t.Fatalf("Failed to save multi-reference event: %v", err)
@@ -418,16 +440,17 @@ func TestSaveEvent_MultipleETags(t *testing.T) {
 		t.Fatal("Reply event should not exist yet")
 	}
 
-	// Verify all REFERENCES relationships were created
+	// Verify all Tag-based REFERENCES relationships were created
+	// Event-[:TAGGED_WITH]->Tag{type:'e'}-[:REFERENCES]->Event
 	cypher := `
-		MATCH (reply:Event {id: $replyId})-[:REFERENCES]->(ref:Event)
+		MATCH (reply:Event {id: $replyId})-[:TAGGED_WITH]->(t:Tag {type: 'e'})-[:REFERENCES]->(ref:Event)
 		RETURN ref.id AS refId
 	`
 	params := map[string]any{"replyId": hex.Enc(replyEvent.ID[:])}
 
 	result, err := testDB.ExecuteRead(ctx, cypher, params)
 	if err != nil {
-		t.Fatalf("Failed to query REFERENCES relationships: %v", err)
+		t.Fatalf("Failed to query Tag-based REFERENCES: %v", err)
 	}
 
 	referencedIDs := make(map[string]bool)
@@ -437,20 +460,20 @@ func TestSaveEvent_MultipleETags(t *testing.T) {
 	}
 
 	if len(referencedIDs) != 3 {
-		t.Errorf("Expected 3 REFERENCES relationships, got %d", len(referencedIDs))
+		t.Errorf("Expected 3 Tag-based REFERENCES, got %d", len(referencedIDs))
 	}
 
 	for i, id := range eventIDs {
 		if !referencedIDs[id] {
-			t.Errorf("Missing REFERENCES relationship to event %d (%s)", i, id[:8])
+			t.Errorf("Missing Tag-based REFERENCES to event %d (%s)", i, id[:8])
 		}
 	}
 
-	t.Logf("✓ All %d REFERENCES relationships created successfully", len(referencedIDs))
+	t.Logf("✓ All %d Tag-based REFERENCES created successfully", len(referencedIDs))
 }
 
 // TestSaveEvent_LargePTagBatch tests that events with many p-tags are saved correctly
-// using batched processing to avoid Neo4j stack overflow.
+// using batched Tag-based processing to avoid Neo4j stack overflow.
 // Uses shared testDB from testmain_test.go to avoid auth rate limiting.
 func TestSaveEvent_LargePTagBatch(t *testing.T) {
 	if testDB == nil {
@@ -498,24 +521,45 @@ func TestSaveEvent_LargePTagBatch(t *testing.T) {
 		t.Fatal("Event should not exist yet")
 	}
 
-	// Verify all MENTIONS relationships were created
-	countCypher := `
-		MATCH (e:Event {id: $eventId})-[:MENTIONS]->(u:NostrUser)
-		RETURN count(u) AS mentionCount
+	// Verify all Tag nodes were created with TAGGED_WITH relationships
+	tagCountCypher := `
+		MATCH (e:Event {id: $eventId})-[:TAGGED_WITH]->(t:Tag {type: 'p'})
+		RETURN count(t) AS tagCount
 	`
-	countParams := map[string]any{"eventId": hex.Enc(ev.ID[:])}
+	tagCountParams := map[string]any{"eventId": hex.Enc(ev.ID[:])}
 
-	result, err := testDB.ExecuteRead(ctx, countCypher, countParams)
+	tagResult, err := testDB.ExecuteRead(ctx, tagCountCypher, tagCountParams)
 	if err != nil {
-		t.Fatalf("Failed to count MENTIONS: %v", err)
+		t.Fatalf("Failed to count p-tag Tag nodes: %v", err)
 	}
 
-	if result.Next(ctx) {
-		count := result.Record().Values[0].(int64)
+	if tagResult.Next(ctx) {
+		count := tagResult.Record().Values[0].(int64)
 		if count != int64(numTags) {
-			t.Errorf("Expected %d MENTIONS relationships, got %d", numTags, count)
+			t.Errorf("Expected %d Tag nodes, got %d", numTags, count)
 		} else {
-			t.Logf("✓ All %d MENTIONS relationships created via batched processing", count)
+			t.Logf("✓ All %d p-tag Tag nodes created via batched processing", count)
+		}
+	}
+
+	// Verify all REFERENCES relationships to NostrUser were created
+	refCountCypher := `
+		MATCH (e:Event {id: $eventId})-[:TAGGED_WITH]->(t:Tag {type: 'p'})-[:REFERENCES]->(u:NostrUser)
+		RETURN count(u) AS refCount
+	`
+	refCountParams := map[string]any{"eventId": hex.Enc(ev.ID[:])}
+
+	refResult, err := testDB.ExecuteRead(ctx, refCountCypher, refCountParams)
+	if err != nil {
+		t.Fatalf("Failed to count Tag-based REFERENCES to NostrUser: %v", err)
+	}
+
+	if refResult.Next(ctx) {
+		count := refResult.Record().Values[0].(int64)
+		if count != int64(numTags) {
+			t.Errorf("Expected %d REFERENCES to NostrUser, got %d", numTags, count)
+		} else {
+			t.Logf("✓ All %d Tag-based REFERENCES to NostrUser created via batched processing", count)
 		}
 	}
 }

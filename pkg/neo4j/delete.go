@@ -175,14 +175,15 @@ func (n *N) ProcessDelete(ev *event.E, admins [][]byte) error {
 
 // CheckForDeleted checks if an event has been deleted
 func (n *N) CheckForDeleted(ev *event.E, admins [][]byte) error {
-	// Query for kind 5 events that reference this event
+	// Query for kind 5 events that reference this event via Tag nodes
 	ctx := context.Background()
 	idStr := hex.Enc(ev.ID[:])
 
 	// Build cypher query to find deletion events
+	// Traverses through Tag nodes: Event-[:TAGGED_WITH]->Tag-[:REFERENCES]->Event
 	cypher := `
 MATCH (target:Event {id: $targetId})
-MATCH (delete:Event {kind: 5})-[:REFERENCES]->(target)
+MATCH (delete:Event {kind: 5})-[:TAGGED_WITH]->(t:Tag {type: 'e'})-[:REFERENCES]->(target)
 WHERE delete.pubkey = $pubkey OR delete.pubkey IN $admins
 RETURN delete.id AS id
 LIMIT 1`

@@ -238,7 +238,8 @@ func (n *N) addTagsInBatches(c context.Context, eventID string, ev *event.E) err
 }
 
 // addPTagsInBatches adds p-tag (pubkey mention) relationships using UNWIND for efficiency.
-// Creates NostrUser nodes for mentioned pubkeys and MENTIONS relationships.
+// Creates Tag nodes with type='p' and REFERENCES relationships to NostrUser nodes.
+// This enables unified tag querying via #p filters while maintaining the social graph.
 func (n *N) addPTagsInBatches(c context.Context, eventID string, pTags []string) error {
 	// Process in batches to avoid memory issues
 	for i := 0; i < len(pTags); i += tagBatchSize {
@@ -249,12 +250,17 @@ func (n *N) addPTagsInBatches(c context.Context, eventID string, pTags []string)
 		batch := pTags[i:end]
 
 		// Use UNWIND to process multiple p-tags in a single query
+		// Creates Tag nodes as intermediaries, enabling unified #p filter queries
+		// Tag-[:REFERENCES]->NostrUser allows graph traversal from tag to user
 		cypher := `
 MATCH (e:Event {id: $eventId})
 UNWIND $pubkeys AS pubkey
+MERGE (t:Tag {type: 'p', value: pubkey})
+CREATE (e)-[:TAGGED_WITH]->(t)
+WITH t, pubkey
 MERGE (u:NostrUser {pubkey: pubkey})
 ON CREATE SET u.created_at = timestamp()
-CREATE (e)-[:MENTIONS]->(u)`
+MERGE (t)-[:REFERENCES]->(u)`
 
 		params := map[string]any{
 			"eventId": eventID,
@@ -270,7 +276,8 @@ CREATE (e)-[:MENTIONS]->(u)`
 }
 
 // addETagsInBatches adds e-tag (event reference) relationships using UNWIND for efficiency.
-// Only creates REFERENCES relationships if the referenced event exists.
+// Creates Tag nodes with type='e' and REFERENCES relationships to Event nodes (if they exist).
+// This enables unified tag querying via #e filters while maintaining event graph structure.
 func (n *N) addETagsInBatches(c context.Context, eventID string, eTags []string) error {
 	// Process in batches to avoid memory issues
 	for i := 0; i < len(eTags); i += tagBatchSize {
@@ -281,14 +288,18 @@ func (n *N) addETagsInBatches(c context.Context, eventID string, eTags []string)
 		batch := eTags[i:end]
 
 		// Use UNWIND to process multiple e-tags in a single query
-		// OPTIONAL MATCH ensures we only create relationships if referenced event exists
+		// Creates Tag nodes as intermediaries, enabling unified #e filter queries
+		// Tag-[:REFERENCES]->Event allows graph traversal from tag to referenced event
+		// OPTIONAL MATCH ensures we only create REFERENCES if referenced event exists
 		cypher := `
 MATCH (e:Event {id: $eventId})
 UNWIND $eventIds AS refId
+MERGE (t:Tag {type: 'e', value: refId})
+CREATE (e)-[:TAGGED_WITH]->(t)
+WITH t, refId
 OPTIONAL MATCH (ref:Event {id: refId})
-WITH e, ref
 WHERE ref IS NOT NULL
-CREATE (e)-[:REFERENCES]->(ref)`
+MERGE (t)-[:REFERENCES]->(ref)`
 
 		params := map[string]any{
 			"eventId":  eventID,
