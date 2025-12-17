@@ -10,10 +10,6 @@
     import { createEventDispatcher } from "svelte";
     const dispatch = createEventDispatcher();
 
-    function toggleTheme() {
-        dispatch("toggleTheme");
-    }
-
     function openSettingsDrawer() {
         dispatch("openSettingsDrawer");
     }
@@ -37,9 +33,6 @@
             </span>
         </div>
         <div class="header-buttons">
-            <button class="theme-toggle-btn" on:click={toggleTheme}>
-                {isDarkTheme ? "☀️" : "🌙"}
-            </button>
             {#if isLoggedIn}
                 <button class="user-profile-btn" on:click={openSettingsDrawer}>
                     {#if userProfile?.picture}
@@ -126,7 +119,6 @@
         margin-left: auto;
     }
 
-    .theme-toggle-btn,
     .login-btn,
     .user-profile-btn {
         background: transparent;
@@ -144,7 +136,6 @@
         justify-content: center;
     }
 
-    .theme-toggle-btn:hover,
     .login-btn:hover,
     .user-profile-btn:hover {
         background: var(--card-bg);

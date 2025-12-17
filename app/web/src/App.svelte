@@ -818,13 +818,19 @@
         ? escapeHtml(userProfile.about).replace(/\n{2,}/g, "<br>")
         : "";
 
-    // Load theme preference from localStorage on component initialization
-    if (typeof localStorage !== "undefined") {
-        const savedTheme = localStorage.getItem("isDarkTheme");
-        if (savedTheme !== null) {
-            isDarkTheme = JSON.parse(savedTheme);
-        }
+    // Detect system theme preference and listen for changes
+    if (typeof window !== "undefined" && window.matchMedia) {
+        const darkModeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+        isDarkTheme = darkModeQuery.matches;
 
+        // Listen for system theme changes
+        darkModeQuery.addEventListener("change", (e) => {
+            isDarkTheme = e.matches;
+        });
+    }
+
+    // Load state from localStorage
+    if (typeof localStorage !== "undefined") {
         // Check for existing authentication
         const storedAuthMethod = localStorage.getItem("nostr_auth_method");
         const storedPubkey = localStorage.getItem("nostr_pubkey");
@@ -1715,14 +1721,6 @@
         }
 
         savePersistentState();
-    }
-
-    function toggleTheme() {
-        isDarkTheme = !isDarkTheme;
-        // Save theme preference to localStorage
-        if (typeof localStorage !== "undefined") {
-            localStorage.setItem("isDarkTheme", JSON.stringify(isDarkTheme));
-        }
     }
 
     function openLoginModal() {
@@ -2726,7 +2724,6 @@
     {currentEffectiveRole}
     {userProfile}
     {userPubkey}
-    on:toggleTheme={toggleTheme}
     on:openSettingsDrawer={openSettingsDrawer}
     on:openLoginModal={openLoginModal}
 />
