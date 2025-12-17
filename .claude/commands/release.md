@@ -42,7 +42,12 @@ If no argument provided, default to `patch`.
    git push gitea main --tags
    ```
 
-10. **Report completion** with the new version and commit hash
+10. **Deploy to VPS** by running:
+    ```
+    ssh 10.0.0.1 'cd ~/src/next.orly.dev/;git stash;git pull origin main;./scripts/update-embedded-web.sh;sudo systemctl restart orly'
+    ```
+
+11. **Report completion** with the new version and commit hash
 
 ## Important:
 - Do NOT push to github remote (only origin and gitea)
