@@ -236,7 +236,8 @@
             console.log("Delete event tags:", signedDeleteEvent.tags);
 
             // Publish to the ORLY relay using WebSocket authentication
-            const relayUrl = `wss://${window.location.host}`;
+            const wsProtocol = window.location.protocol.startsWith('https') ? 'wss:' : 'ws:';
+            const relayUrl = `${wsProtocol}//${window.location.host}/`;
 
             try {
                 const result = await publishEventWithAuth(
@@ -381,7 +382,8 @@
             } else {
                 // Admin/owner deleting someone else's event - only publish to local relay
                 // We need to publish only to the local relay, not external ones
-                const localRelayUrl = `wss://${window.location.host}/`;
+                const wsProto = window.location.protocol.startsWith('https') ? 'wss:' : 'ws:';
+                const localRelayUrl = `${wsProto}//${window.location.host}/`;
 
                 // Create a modified client that only connects to the local relay
                 const localClient = new NostrClient();
@@ -636,7 +638,8 @@
         }
 
         try {
-            const localRelayUrl = `wss://${window.location.host}/`;
+            const wsProto = window.location.protocol.startsWith('https') ? 'wss:' : 'ws:';
+            const localRelayUrl = `${wsProto}//${window.location.host}/`;
             console.log(
                 "Reposting event to local relay:",
                 localRelayUrl,
@@ -698,7 +701,8 @@
         try {
             // Get user's write relays
             const writeRelays = await getUserWriteRelays();
-            const localRelayUrl = `wss://${window.location.host}/`;
+            const wsProto = window.location.protocol.startsWith('https') ? 'wss:' : 'ws:';
+            const localRelayUrl = `${wsProto}//${window.location.host}/`;
 
             // Always include local relay
             const allRelays = [
@@ -2603,7 +2607,8 @@
             }
 
             // Publish to the ORLY relay using WebSocket (same address as current page)
-            const relayUrl = `wss://${window.location.host}`;
+            const wsProtocol = window.location.protocol.startsWith('https') ? 'wss:' : 'ws:';
+            const relayUrl = `${wsProtocol}//${window.location.host}/`;
 
             // Use the authentication module to publish the event
             const result = await publishEventWithAuth(

@@ -1,8 +1,10 @@
 // Default Nostr relays for searching
+// Use startsWith to avoid minifier optimization issues
+const wsProtocol = window.location.protocol.startsWith('https') ? 'wss:' : 'ws:';
 export const DEFAULT_RELAYS = [
   // Use the local relay WebSocket endpoint
   // Automatically use ws:// for http:// and wss:// for https://
-  `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/`,
+  `${wsProtocol}//${window.location.host}/`,
 ];
 
 // Replaceable kinds for the recovery dropdown
