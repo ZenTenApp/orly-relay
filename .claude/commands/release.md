@@ -21,33 +21,39 @@ If no argument provided, default to `patch`.
 
 3. **Update the version file** (`pkg/version/version`) with the new version
 
-4. **Review changes** using `git status` and `git diff --stat HEAD`
+4. **Rebuild the embedded web UI** by running:
+   ```
+   ./scripts/update-embedded-web.sh
+   ```
+   This ensures the latest web UI changes are included in the release.
 
-5. **Compose a commit message** following this format:
+5. **Review changes** using `git status` and `git diff --stat HEAD`
+
+6. **Compose a commit message** following this format:
    - First line: 72 chars max, imperative mood summary
    - Blank line
    - Bullet points describing each significant change
    - "Files modified:" section listing affected files
    - Footer with Claude Code attribution
 
-6. **Stage all changes** with `git add -A`
+7. **Stage all changes** with `git add -A`
 
-7. **Create the commit** with the composed message
+8. **Create the commit** with the composed message
 
-8. **Create a git tag** with the new version (e.g., `v0.36.0`)
+9. **Create a git tag** with the new version (e.g., `v0.36.0`)
 
-9. **Push to remotes** (origin and gitea) with tags:
-   ```
-   git push origin main --tags
-   git push gitea main --tags
-   ```
-
-10. **Deploy to VPS** by running:
+10. **Push to remotes** (origin and gitea) with tags:
     ```
-    ssh 10.0.0.1 'cd ~/src/next.orly.dev/;git stash;git pull origin main;./scripts/update-embedded-web.sh;sudo systemctl restart orly'
+    git push origin main --tags
+    git push gitea main --tags
     ```
 
-11. **Report completion** with the new version and commit hash
+11. **Deploy to VPS** by running:
+    ```
+    ssh 10.0.0.1 'cd ~/src/next.orly.dev && git stash && git pull origin main && export PATH=$PATH:~/go/bin && CGO_ENABLED=0 go build -o orly && sudo systemctl restart orly && ./orly version'
+    ```
+
+12. **Report completion** with the new version and commit hash
 
 ## Important:
 - Do NOT push to github remote (only origin and gitea)
