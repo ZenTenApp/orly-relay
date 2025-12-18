@@ -45,7 +45,7 @@
                         <div class="user-avatar-placeholder">👤</div>
                     {/if}
                     <span class="user-name">
-                        {userProfile?.name || userPubkey.slice(0, 8) + "..."}
+                        {userProfile?.name || userPubkey}
                     </span>
                 </button>
             {:else}
@@ -64,32 +64,35 @@
         top: 0;
         left: 0;
         right: 0;
+        height: 3em;
         background: var(--header-bg);
         border: 0;
         z-index: 1000;
         display: flex;
-        align-items: space-between;
-        padding: 0.25em;
+        align-items: stretch;
+        padding: 0 0.25em;
     }
 
     .header-content {
         display: flex;
-        align-items: center;
+        align-items: stretch;
         width: 100%;
         padding: 0;
         margin: 0;
     }
 
     .logo {
-        height: 2em;
+        height: 2.5em;
         width: auto;
         flex-shrink: 0;
+        align-self: center;
     }
 
     .header-title {
         flex: 1;
         display: flex;
         align-items: center;
+        align-self: center;
     }
 
     .app-title {
@@ -114,8 +117,8 @@
 
     .header-buttons {
         display: flex;
-        align-items: center;
-        height: 100%;
+        align-items: stretch;
+        align-self: stretch;
         margin-left: auto;
     }
 
@@ -124,15 +127,14 @@
         background: transparent;
         color: var(--button-text);
         border: 0;
-        height: 100%;
         cursor: pointer;
         font-size: 1em;
         transition: background-color 0.2s;
         flex-shrink: 0;
         padding: 0.5em;
         margin: 0;
-        display: block;
-        align-items: center;
+        display: flex !important;
+        align-items: center !important;
         justify-content: center;
     }
 
@@ -144,32 +146,40 @@
     .user-profile-btn {
         gap: 0.5em;
         justify-content: flex-start;
-        padding: 0 0.75em;
+        padding: 0 0.5em;
     }
 
     .user-avatar {
-        width: 1.5em;
-        height: 1.5em;
+        height: 2.5em;
+        width: 2.5em;
         border-radius: 50%;
         object-fit: cover;
+        flex-shrink: 0;
+        align-self: center;
+        vertical-align: middle;
     }
 
     .user-avatar-placeholder {
-        width: 1.5em;
-        height: 1.5em;
+        height: 2.5em;
+        width: 2.5em;
         border-radius: 50%;
         background: var(--bg-color);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 0.8em;
+        font-size: 1.2em;
+        flex-shrink: 0;
+        align-self: center;
     }
 
     .user-name {
         font-weight: 500;
-        max-width: 120px;
-        overflow: hidden;
-        text-overflow: ellipsis;
         white-space: nowrap;
+        line-height: 1;
+        align-self: center;
+        max-width: none !important;
+        overflow: visible !important;
+        text-overflow: unset !important;
+        width: auto !important;
     }
 </style>

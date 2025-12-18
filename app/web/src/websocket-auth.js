@@ -175,32 +175,42 @@ export class NostrWebSocketAuth {
                     const [messageType, eventId, success, reason] = data;
                     
                     if (messageType === 'OK' && eventId === event.id) {
-                        clearTimeout(timeout);
-                        this.ws.onmessage = originalOnMessage;
-                        
                         if (success) {
+                            clearTimeout(timeout);
+                            this.ws.onmessage = originalOnMessage;
                             console.log('Event published successfully:', eventId);
                             resolve({ success: true, eventId, reason });
                         } else {
                             console.error('Event publish failed:', reason);
-                            
+
                             // Check if authentication is required
                             if (reason && reason.includes('auth-required')) {
-                                console.log('Authentication required, attempting to authenticate...');
-                                try {
-                                    await this.authenticate();
-                                    // Re-send the event after authentication
-                                    const retryMessage = ["EVENT", event];
-                                    this.ws.send(JSON.stringify(retryMessage));
-                                    // Don't resolve yet, wait for the retry response
-                                    return;
-                                } catch (authError) {
-                                    reject(new Error(`Authentication failed: ${authError.message}`));
-                                    return;
-                                }
+                                console.log('Authentication required, waiting for AUTH challenge...');
+                                // Don't restore original handler yet - we need to receive the AUTH challenge
+                                // The AUTH message will be handled by the else branch below
+                                return;
                             }
-                            
+
+                            clearTimeout(timeout);
+                            this.ws.onmessage = originalOnMessage;
                             reject(new Error(`Publish failed: ${reason}`));
+                        }
+                    } else if (messageType === 'AUTH') {
+                        // Handle AUTH challenge during publish flow
+                        this.challenge = data[1];
+                        console.log('Received AUTH challenge during publish:', this.challenge);
+
+                        try {
+                            await this.authenticate();
+                            console.log('Authentication successful, retrying event publish...');
+                            // Re-send the event after authentication
+                            const retryMessage = ["EVENT", event];
+                            this.ws.send(JSON.stringify(retryMessage));
+                            // Don't resolve yet, wait for the retry response
+                        } catch (authError) {
+                            clearTimeout(timeout);
+                            this.ws.onmessage = originalOnMessage;
+                            reject(new Error(`Authentication failed: ${authError.message}`));
                         }
                     } else {
                         // Handle other messages normally

@@ -47,7 +47,7 @@
     .sidebar {
         position: fixed;
         left: 0;
-        top: 2.5em;
+        top: 3em;
         width: 200px;
         bottom: 0;
         background: var(--sidebar-bg);

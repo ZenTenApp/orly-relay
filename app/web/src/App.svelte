@@ -3466,7 +3466,7 @@
     .main-content {
         position: fixed;
         left: 200px;
-        top: 2.5em;
+        top: 3em;
         right: 0;
         bottom: 0;
         padding: 0;
