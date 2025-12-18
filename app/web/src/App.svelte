@@ -3633,21 +3633,23 @@
         align-items: baseline;
         gap: 8px;
         z-index: 1;
+        background: var(--bg-color);
+        padding: 0.2em 0.5em;
+        border-radius: 0.5em;
+        width: fit-content;
     }
 
     .profile-username {
         margin: 0;
         font-size: 1.1rem;
-        color: var(--text-color); /* contrasting over banner */
-        text-shadow: 0 3px 6px rgba(255, 255, 255, 1);
+        color: var(--text-color);
     }
 
     .profile-nip05-inline {
         font-size: 0.85rem;
-        color: var(--text-color); /* subtle but contrasting */
+        color: var(--text-color);
         font-family: monospace;
         opacity: 0.95;
-        text-shadow: 0 3px 6px rgba(255, 255, 255, 1);
     }
 
     /* About box below with overlap space for avatar */
@@ -4096,6 +4098,10 @@
             bottom: 6px;
             right: 8px;
             gap: 6px;
+            background: var(--bg-color);
+            padding: 0.2em 0.5em;
+            border-radius: 0.5em;
+            width: fit-content;
         }
 
         .profile-username {

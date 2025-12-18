@@ -3,8 +3,25 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
 
     <title>ORLY?</title>
+
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      html, body {
+        background-color: #fff;
+        color: #000;
+      }
+      @media (prefers-color-scheme: dark) {
+        html, body {
+          background-color: #000;
+          color: #fff;
+        }
+      }
+    </style>
 
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="stylesheet" href="/global.css" />
