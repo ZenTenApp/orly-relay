@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "fetch-kinds": "node scripts/fetch-kinds.js",
+    "prebuild": "npm run fetch-kinds",
     "build": "rollup -c",
     "dev": "rollup -c -w",
     "start": "sirv public --no-clear --single"
