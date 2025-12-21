@@ -4,6 +4,13 @@
  * Run: node scripts/fetch-kinds.js
  */
 
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { writeFileSync } from 'fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const KINDS_URL = 'https://git.mleku.dev/mleku/nostr/raw/branch/main/encoders/kind/kinds.json';
 
 async function fetchKinds() {
@@ -199,11 +206,9 @@ async function main() {
     const js = generateJS(kinds, data);
 
     // Write to src/eventKinds.js
-    const fs = await import('fs');
-    const path = await import('path');
-    const outPath = path.join(import.meta.dirname, '..', 'src', 'eventKinds.js');
+    const outPath = join(__dirname, '..', 'src', 'eventKinds.js');
 
-    fs.writeFileSync(outPath, js);
+    writeFileSync(outPath, js);
     console.log(`Generated ${outPath} with ${kinds.length} kinds`);
   } catch (error) {
     console.error('Error:', error.message);
