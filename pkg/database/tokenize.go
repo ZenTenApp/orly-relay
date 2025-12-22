@@ -1,3 +1,5 @@
+//go:build !(js && wasm)
+
 package database
 
 import (
@@ -65,7 +67,9 @@ func TokenHashes(content []byte) [][]byte {
 				r2, size2 = utf8DecodeRuneInString(s[i:])
 			}
 			if unicode.IsLetter(r2) || unicode.IsNumber(r2) {
-				runes = append(runes, unicode.ToLower(r2))
+				// Normalize decorative unicode (small caps, fraktur) to ASCII
+				// before lowercasing for consistent indexing
+				runes = append(runes, unicode.ToLower(normalizeRune(r2)))
 				i += size2
 				continue
 			}
@@ -142,18 +146,39 @@ func allAlphaNum(s string) bool {
 
 func isWordStart(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) }
 
-// Minimal utf8 rune decode without importing utf8 to avoid extra deps elsewhere
+// utf8DecodeRuneInString decodes the first UTF-8 rune from s.
+// Returns the rune and the number of bytes consumed.
 func utf8DecodeRuneInString(s string) (r rune, size int) {
-	// Fallback to standard library if available; however, using basic decoding
-	for i := 1; i <= 4 && i <= len(s); i++ {
-		r, size = rune(s[0]), 1
-		if r < 0x80 {
-			return r, 1
-		}
-		// Use stdlib for correctness
-		return []rune(s[:i])[0], len(string([]rune(s[:i])[0]))
+	if len(s) == 0 {
+		return 0, 0
 	}
-	return rune(s[0]), 1
+	// ASCII fast path
+	b := s[0]
+	if b < 0x80 {
+		return rune(b), 1
+	}
+	// Multi-byte: determine expected length from first byte
+	var expectedLen int
+	switch {
+	case b&0xE0 == 0xC0: // 110xxxxx - 2 bytes
+		expectedLen = 2
+	case b&0xF0 == 0xE0: // 1110xxxx - 3 bytes
+		expectedLen = 3
+	case b&0xF8 == 0xF0: // 11110xxx - 4 bytes
+		expectedLen = 4
+	default:
+		// Invalid UTF-8 start byte
+		return 0xFFFD, 1
+	}
+	if len(s) < expectedLen {
+		return 0xFFFD, 1
+	}
+	// Decode using Go's built-in rune conversion (simple and correct)
+	runes := []rune(s[:expectedLen])
+	if len(runes) == 0 {
+		return 0xFFFD, 1
+	}
+	return runes[0], expectedLen
 }
 
 // isHex64 returns true if s is exactly 64 hex characters (0-9, a-f)

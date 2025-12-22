@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	currentVersion uint32 = 6
+	currentVersion uint32 = 7
 )
 
 func (d *D) RunMigrations() {
@@ -106,6 +106,14 @@ func (d *D) RunMigrations() {
 		d.ConvertToCompactEventFormat()
 		// bump to version 6
 		_ = d.writeVersionTag(6)
+	}
+	if dbVersion < 7 {
+		log.I.F("migrating to version 7...")
+		// Rebuild word indexes with unicode normalization (small caps, fraktur → ASCII)
+		// This consolidates duplicate indexes from decorative unicode text
+		d.RebuildWordIndexesWithNormalization()
+		// bump to version 7
+		_ = d.writeVersionTag(7)
 	}
 }
 
@@ -1017,4 +1025,57 @@ func (d *D) CleanupLegacyEventStorage() {
 
 	log.I.F("legacy storage cleanup complete: removed %d evt entries, %d sev entries, reclaimed approximately %d bytes (%.2f MB)",
 		cleanedEvt, cleanedSev, bytesReclaimed, float64(bytesReclaimed)/(1024.0*1024.0))
+}
+
+// RebuildWordIndexesWithNormalization rebuilds all word indexes with unicode
+// normalization applied. This migration:
+// 1. Deletes all existing word indexes (wrd prefix)
+// 2. Re-tokenizes all events with normalizeRune() applied
+// 3. Creates new consolidated indexes where decorative unicode maps to ASCII
+//
+// After this migration, "ᴅᴇᴀᴛʜ" (small caps) and "𝔇𝔢𝔞𝔱𝔥" (fraktur) will index
+// the same as "death", eliminating duplicate entries and enabling proper search.
+func (d *D) RebuildWordIndexesWithNormalization() {
+	log.I.F("rebuilding word indexes with unicode normalization...")
+	var err error
+
+	// Step 1: Delete all existing word indexes
+	var deletedCount int
+	if err = d.Update(func(txn *badger.Txn) error {
+		wrdPrf := new(bytes.Buffer)
+		if err = indexes.WordEnc(nil, nil).MarshalWrite(wrdPrf); chk.E(err) {
+			return err
+		}
+
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = wrdPrf.Bytes()
+		opts.PrefetchValues = false // Keys only for deletion
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		// Collect keys to delete (can't delete during iteration)
+		var keysToDelete [][]byte
+		for it.Rewind(); it.Valid(); it.Next() {
+			keysToDelete = append(keysToDelete, it.Item().KeyCopy(nil))
+		}
+
+		for _, key := range keysToDelete {
+			if err = txn.Delete(key); err == nil {
+				deletedCount++
+			}
+		}
+		return nil
+	}); chk.E(err) {
+		log.W.F("failed to delete old word indexes: %v", err)
+		return
+	}
+
+	log.I.F("deleted %d old word index entries", deletedCount)
+
+	// Step 2: Rebuild word indexes from all events
+	// Reuse the existing UpdateWordIndexes logic which now uses normalizeRune
+	d.UpdateWordIndexes()
+
+	log.I.F("word index rebuild with unicode normalization complete")
 }
