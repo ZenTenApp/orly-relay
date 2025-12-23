@@ -339,11 +339,11 @@ func TestGetFullIdPubkeyBySerial(t *testing.T) {
 		t.Fatal("Expected non-nil result")
 	}
 
-	if hex.Enc(idPkTs.Id) != hex.Enc(ev.ID[:]) {
+	if idPkTs.IDHex() != hex.Enc(ev.ID[:]) {
 		t.Fatalf("ID mismatch")
 	}
 
-	if hex.Enc(idPkTs.Pub) != hex.Enc(ev.Pubkey[:]) {
+	if idPkTs.PubHex() != hex.Enc(ev.Pubkey[:]) {
 		t.Fatalf("Pubkey mismatch")
 	}
 

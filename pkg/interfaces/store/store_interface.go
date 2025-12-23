@@ -15,6 +15,7 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
+	ntypes "git.mleku.dev/mleku/nostr/types"
 )
 
 // I am a type for a persistence layer for nostr events handled by a relay.
@@ -60,11 +61,95 @@ type Accountant interface {
 	EventCount() (count uint64, err error)
 }
 
+// IdPkTs holds event reference data with slice fields for backward compatibility.
+// For new code preferring stack-allocated, copy-on-assignment semantics,
+// use the IDFixed() and PubFixed() methods or convert to EventRef.
 type IdPkTs struct {
 	Id  []byte
 	Pub []byte
 	Ts  int64
 	Ser uint64
+}
+
+// IDFixed returns the event ID as a fixed-size array (stack-allocated, copied on assignment).
+func (i *IdPkTs) IDFixed() ntypes.EventID {
+	return ntypes.EventIDFromBytes(i.Id)
+}
+
+// PubFixed returns the pubkey as a fixed-size array (stack-allocated, copied on assignment).
+func (i *IdPkTs) PubFixed() ntypes.Pubkey {
+	return ntypes.PubkeyFromBytes(i.Pub)
+}
+
+// IDHex returns the event ID as a lowercase hex string.
+func (i *IdPkTs) IDHex() string {
+	return ntypes.EventIDFromBytes(i.Id).Hex()
+}
+
+// PubHex returns the pubkey as a lowercase hex string.
+func (i *IdPkTs) PubHex() string {
+	return ntypes.PubkeyFromBytes(i.Pub).Hex()
+}
+
+// ToEventRef converts IdPkTs to an EventRef (fully stack-allocated).
+func (i *IdPkTs) ToEventRef() EventRef {
+	return NewEventRef(i.Id, i.Pub, i.Ts, i.Ser)
+}
+
+// EventRef is a stack-friendly event reference using fixed-size arrays.
+// Total size: 80 bytes (32+32+8+8), fits in a cache line, copies stay on stack.
+// Use this type when you need safe, immutable event references.
+type EventRef struct {
+	id  ntypes.EventID // 32 bytes
+	pub ntypes.Pubkey  // 32 bytes
+	ts  int64          // 8 bytes
+	ser uint64         // 8 bytes
+}
+
+// NewEventRef creates an EventRef from byte slices.
+// The slices are copied into fixed-size arrays.
+func NewEventRef(id, pub []byte, ts int64, ser uint64) EventRef {
+	return EventRef{
+		id:  ntypes.EventIDFromBytes(id),
+		pub: ntypes.PubkeyFromBytes(pub),
+		ts:  ts,
+		ser: ser,
+	}
+}
+
+// ID returns the event ID (copy, stays on stack).
+func (r EventRef) ID() ntypes.EventID { return r.id }
+
+// Pub returns the pubkey (copy, stays on stack).
+func (r EventRef) Pub() ntypes.Pubkey { return r.pub }
+
+// Ts returns the timestamp.
+func (r EventRef) Ts() int64 { return r.ts }
+
+// Ser returns the serial number.
+func (r EventRef) Ser() uint64 { return r.ser }
+
+// IDHex returns the event ID as lowercase hex.
+func (r EventRef) IDHex() string { return r.id.Hex() }
+
+// PubHex returns the pubkey as lowercase hex.
+func (r EventRef) PubHex() string { return r.pub.Hex() }
+
+// IDSlice returns a slice view of the ID (shares memory, use carefully).
+func (r *EventRef) IDSlice() []byte { return r.id.Bytes() }
+
+// PubSlice returns a slice view of the pubkey (shares memory, use carefully).
+func (r *EventRef) PubSlice() []byte { return r.pub.Bytes() }
+
+// ToIdPkTs converts EventRef to IdPkTs for backward compatibility.
+// Note: This allocates new slices.
+func (r EventRef) ToIdPkTs() *IdPkTs {
+	return &IdPkTs{
+		Id:  r.id.Copy(),
+		Pub: r.pub.Copy(),
+		Ts:  r.ts,
+		Ser: r.ser,
+	}
 }
 
 type Querier interface {

@@ -120,7 +120,7 @@ func TestBinaryTagFilterRegression(t *testing.T) {
 		// Verify we got the correct event
 		found := false
 		for _, r := range results {
-			if hex.Enc(r.Id) == testEventIdHex {
+			if r.IDHex() == testEventIdHex {
 				found = true
 				break
 			}
@@ -156,7 +156,7 @@ func TestBinaryTagFilterRegression(t *testing.T) {
 		// Verify we got the correct event
 		found := false
 		for _, r := range results {
-			if hex.Enc(r.Id) == testEventIdHex {
+			if r.IDHex() == testEventIdHex {
 				found = true
 				break
 			}
@@ -192,7 +192,7 @@ func TestBinaryTagFilterRegression(t *testing.T) {
 		// Verify we got the correct event
 		found := false
 		for _, r := range results {
-			if hex.Enc(r.Id) == testEventIdHex {
+			if r.IDHex() == testEventIdHex {
 				found = true
 				break
 			}
@@ -229,7 +229,7 @@ func TestBinaryTagFilterRegression(t *testing.T) {
 		// Verify we got the correct event
 		found := false
 		for _, r := range results {
-			if hex.Enc(r.Id) == testEventIdHex {
+			if r.IDHex() == testEventIdHex {
 				found = true
 				break
 			}
