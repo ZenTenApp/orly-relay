@@ -141,10 +141,12 @@ func (s *Server) Handler() http.Handler {
 // setCORSHeaders sets CORS headers as required by BUD-01
 func (s *Server) setCORSHeaders(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, PUT, DELETE")
-	w.Header().Set("Access-Control-Allow-Headers", "Authorization, *")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, PUT, DELETE, OPTIONS")
+	// Include all headers used by Blossom clients (BUD-01, BUD-06)
+	// Include both cases for maximum compatibility with various clients
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, authorization, Content-Type, content-type, X-SHA-256, x-sha-256, X-Content-Length, x-content-length, X-Content-Type, x-content-type, Accept, accept")
+	w.Header().Set("Access-Control-Expose-Headers", "X-Reason, Content-Length, Content-Type, Accept-Ranges")
 	w.Header().Set("Access-Control-Max-Age", "86400")
-	w.Header().Set("Access-Control-Allow-Credentials", "true")
 	w.Header().Set("Vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers")
 }
 
@@ -198,10 +200,12 @@ func (s *Server) checkACL(
 	return actual >= required
 }
 
+// BaseURLKey is the context key for the base URL (exported for use by app handler)
+type BaseURLKey struct{}
+
 // getBaseURL returns the base URL, preferring request context if available
 func (s *Server) getBaseURL(r *http.Request) string {
-	type baseURLKey struct{}
-	if baseURL := r.Context().Value(baseURLKey{}); baseURL != nil {
+	if baseURL := r.Context().Value(BaseURLKey{}); baseURL != nil {
 		if url, ok := baseURL.(string); ok && url != "" {
 			return url
 		}

@@ -226,6 +226,10 @@ func WriteRangeResponse(
 
 // BuildBlobURL builds a blob URL with optional extension
 func BuildBlobURL(baseURL, sha256Hex, ext string) string {
+	// Ensure baseURL ends with /
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
 	url := baseURL + sha256Hex
 	if ext != "" {
 		url += ext

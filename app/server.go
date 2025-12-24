@@ -100,12 +100,33 @@ func (s *Server) isIPBlacklisted(remote string) bool {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// CORS headers should be handled by the reverse proxy (Caddy/nginx)
-	// to avoid duplicate headers. If running without a reverse proxy,
-	// uncomment the CORS configuration below or configure via environment variable.
+	// Check if this is a blossom-related path (needs CORS headers)
+	path := r.URL.Path
+	isBlossomPath := path == "/upload" || path == "/media" ||
+		path == "/mirror" || path == "/report" ||
+		strings.HasPrefix(path, "/list/") ||
+		strings.HasPrefix(path, "/blossom/") ||
+		(len(path) == 65 && path[0] == '/') // /<sha256> blob downloads
 
-	// Handle preflight OPTIONS requests
-	if r.Method == "OPTIONS" {
+	// Set CORS headers for all blossom-related requests
+	if isBlossomPath {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, authorization, Content-Type, content-type, X-SHA-256, x-sha-256, X-Content-Length, x-content-length, X-Content-Type, x-content-type, Accept, accept")
+		w.Header().Set("Access-Control-Expose-Headers", "X-Reason, Content-Length, Content-Type, Accept-Ranges")
+		w.Header().Set("Access-Control-Max-Age", "86400")
+
+		// Handle preflight OPTIONS requests for blossom paths
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+	} else if r.Method == "OPTIONS" {
+		// Handle OPTIONS for non-blossom paths
+		if s.mux != nil {
+			s.mux.ServeHTTP(w, r)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -140,6 +161,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ServiceURL(req *http.Request) (url string) {
+	// Use configured RelayURL if available
+	if s.Config != nil && s.Config.RelayURL != "" {
+		relayURL := strings.TrimSuffix(s.Config.RelayURL, "/")
+		// Ensure it has a protocol
+		if !strings.HasPrefix(relayURL, "http://") && !strings.HasPrefix(relayURL, "https://") {
+			relayURL = "http://" + relayURL
+		}
+		return relayURL
+	}
+
 	proto := req.Header.Get("X-Forwarded-Proto")
 	if proto == "" {
 		if req.TLS != nil {
@@ -271,8 +302,15 @@ func (s *Server) UserInterface() {
 
 	// Blossom blob storage API endpoint
 	if s.blossomServer != nil {
+		// Primary routes under /blossom/
 		s.mux.HandleFunc("/blossom/", s.blossomHandler)
-		log.Printf("Blossom blob storage API enabled at /blossom")
+		// Root-level routes for clients that expect blossom at root (like Jumble)
+		s.mux.HandleFunc("/upload", s.blossomRootHandler)
+		s.mux.HandleFunc("/list/", s.blossomRootHandler)
+		s.mux.HandleFunc("/media", s.blossomRootHandler)
+		s.mux.HandleFunc("/mirror", s.blossomRootHandler)
+		s.mux.HandleFunc("/report", s.blossomRootHandler)
+		log.Printf("Blossom blob storage API enabled at /blossom and root")
 	} else {
 		log.Printf("WARNING: Blossom server is nil, routes not registered")
 	}

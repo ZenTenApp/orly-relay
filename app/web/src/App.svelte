@@ -11,6 +11,7 @@
     import RecoveryView from "./RecoveryView.svelte";
     import SprocketView from "./SprocketView.svelte";
     import PolicyView from "./PolicyView.svelte";
+    import BlossomView from "./BlossomView.svelte";
     import SearchResultsView from "./SearchResultsView.svelte";
     import FilterDisplay from "./FilterDisplay.svelte";
 
@@ -1640,6 +1641,7 @@
         { id: "export", icon: "📤", label: "Export" },
         { id: "import", icon: "💾", label: "Import", requiresAdmin: true },
         { id: "events", icon: "📡", label: "Events" },
+        { id: "blossom", icon: "🌸", label: "Blossom" },
         { id: "compose", icon: "✏️", label: "Compose", requiresWrite: true },
         { id: "recovery", icon: "🔄", label: "Recovery" },
         {
@@ -2782,6 +2784,14 @@
                 on:toggleFilterBuilder={toggleFilterBuilder}
                 on:filterApply={handleFilterApply}
                 on:filterClear={handleFilterClear}
+            />
+        {:else if selectedTab === "blossom"}
+            <BlossomView
+                {isLoggedIn}
+                {userPubkey}
+                {userSigner}
+                {currentEffectiveRole}
+                on:openLoginModal={openLoginModal}
             />
         {:else if selectedTab === "compose"}
             <ComposeView

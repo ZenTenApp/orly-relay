@@ -42,12 +42,23 @@ func (s *Server) blossomHandler(w http.ResponseWriter, r *http.Request) {
 	if !strings.HasPrefix(r.URL.Path, "/") {
 		r.URL.Path = "/" + r.URL.Path
 	}
-	
+
 	// Set baseURL in request context for blossom server to use
+	// Use the exported key type from the blossom package
 	baseURL := s.ServiceURL(r) + "/blossom"
-	type baseURLKey struct{}
-	r = r.WithContext(context.WithValue(r.Context(), baseURLKey{}, baseURL))
-	
+	r = r.WithContext(context.WithValue(r.Context(), blossom.BaseURLKey{}, baseURL))
+
+	s.blossomServer.Handler().ServeHTTP(w, r)
+}
+
+// blossomRootHandler handles blossom requests at root level (for clients like Jumble)
+// Note: Even though requests come to root-level paths like /upload, we return URLs
+// with /blossom prefix because that's where the blob download handlers are registered.
+func (s *Server) blossomRootHandler(w http.ResponseWriter, r *http.Request) {
+	// Set baseURL with /blossom prefix so returned blob URLs point to working handlers
+	baseURL := s.ServiceURL(r) + "/blossom"
+	r = r.WithContext(context.WithValue(r.Context(), blossom.BaseURLKey{}, baseURL))
+
 	s.blossomServer.Handler().ServeHTTP(w, r)
 }
 
