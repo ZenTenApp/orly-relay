@@ -154,33 +154,51 @@ jobs:
             exit 1
           fi
 
-          # Install tea CLI for Gitea
-          cd /tmp
-          wget -q https://dl.gitea.com/tea/0.9.2/tea-0.9.2-linux-amd64 -O tea
-          chmod +x tea
-
-          # Configure tea with the repository's Gitea instance
-          # Remove existing login if present, then add new one
-          ./tea login delete runner 2>/dev/null || true
-          ./tea login add \
-            --name runner \
-            --url ${GITHUB_SERVER_URL} \
-            --token "${GITEA_TOKEN}"
-
-          # Verify login works
-          ./tea login list
-
-          # Create release with assets
+          # Use Gitea API directly (more reliable than tea CLI)
           cd ${GITHUB_WORKSPACE}
-          echo "Creating release with assets..."
-          /tmp/tea release create \
-            --repo ${REPO_OWNER}/${REPO_NAME} \
-            --tag ${VERSION} \
-            --title "Release ${VERSION}" \
-            --note "Automated release ${VERSION}" \
-            --asset release-binaries/orly-${VERSION#v}-linux-amd64 \
-            --asset release-binaries/libsecp256k1-linux-amd64.so \
-            --asset release-binaries/SHA256SUMS.txt
 
-          echo "Release ${VERSION} created successfully!"
+          API_URL="${GITHUB_SERVER_URL}/api/v1"
+
+          echo "Creating release via Gitea API..."
+          echo "API URL: ${API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/releases"
+
+          # Create the release
+          RELEASE_RESPONSE=$(curl -s -X POST \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\": \"${VERSION}\", \"name\": \"Release ${VERSION}\", \"body\": \"Automated release ${VERSION}\"}" \
+            "${API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/releases")
+
+          echo "Release response: ${RELEASE_RESPONSE}"
+
+          # Extract release ID
+          RELEASE_ID=$(echo "${RELEASE_RESPONSE}" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+
+          if [ -z "${RELEASE_ID}" ]; then
+            echo "ERROR: Failed to create release or extract release ID"
+            echo "Full response: ${RELEASE_RESPONSE}"
+            exit 1
+          fi
+
+          echo "Release created with ID: ${RELEASE_ID}"
+
+          # Upload assets
+          for ASSET in release-binaries/orly-${VERSION#v}-linux-amd64 release-binaries/libsecp256k1-linux-amd64.so release-binaries/SHA256SUMS.txt; do
+            FILENAME=$(basename "${ASSET}")
+            echo "Uploading ${FILENAME}..."
+
+            UPLOAD_RESPONSE=$(curl -s -X POST \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              -F "attachment=@${ASSET}" \
+              "${API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/releases/${RELEASE_ID}/assets?name=${FILENAME}")
+
+            echo "Upload response for ${FILENAME}: ${UPLOAD_RESPONSE}"
+          done
+
+          echo "Release ${VERSION} created successfully with all assets!"
+
+          # Verify release exists
+          VERIFY=$(curl -s -H "Authorization: token ${GITEA_TOKEN}" \
+            "${API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${VERSION}")
+          echo "Verification: ${VERIFY}" | head -c 500
 
