@@ -116,8 +116,16 @@ jobs:
         env:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
+          set -e  # Exit on any error
           export PATH=/usr/local/go/bin:$PATH
           cd ${GITHUB_WORKSPACE}
+
+          # Validate GITEA_TOKEN is set
+          if [ -z "${GITEA_TOKEN}" ]; then
+            echo "ERROR: GITEA_TOKEN secret is not set!"
+            echo "Please configure the GITEA_TOKEN secret in repository settings."
+            exit 1
+          fi
 
           VERSION=${GITHUB_REF_NAME}
           REPO_OWNER=$(echo ${GITHUB_REPOSITORY} | cut -d'/' -f1)
@@ -125,19 +133,32 @@ jobs:
 
           echo "Creating release for ${REPO_OWNER}/${REPO_NAME} version ${VERSION}"
 
+          # Verify release binaries exist
+          if [ ! -f "release-binaries/orly-${VERSION#v}-linux-amd64" ]; then
+            echo "ERROR: Release binary not found!"
+            ls -la release-binaries/ || echo "release-binaries directory does not exist"
+            exit 1
+          fi
+
           # Install tea CLI for Gitea
           cd /tmp
           wget -q https://dl.gitea.com/tea/0.9.2/tea-0.9.2-linux-amd64 -O tea
           chmod +x tea
 
           # Configure tea with the repository's Gitea instance
+          # Remove existing login if present, then add new one
+          ./tea login delete runner 2>/dev/null || true
           ./tea login add \
             --name runner \
             --url ${GITHUB_SERVER_URL} \
-            --token "${GITEA_TOKEN}" || echo "Login may already exist"
+            --token "${GITEA_TOKEN}"
+
+          # Verify login works
+          ./tea login list
 
           # Create release with assets
           cd ${GITHUB_WORKSPACE}
+          echo "Creating release with assets..."
           /tmp/tea release create \
             --repo ${REPO_OWNER}/${REPO_NAME} \
             --tag ${VERSION} \
@@ -145,6 +166,7 @@ jobs:
             --note "Automated release ${VERSION}" \
             --asset release-binaries/orly-${VERSION#v}-linux-amd64 \
             --asset release-binaries/libsecp256k1-linux-amd64.so \
-            --asset release-binaries/SHA256SUMS.txt \
-            || echo "Release may already exist, updating..."
+            --asset release-binaries/SHA256SUMS.txt
+
+          echo "Release ${VERSION} created successfully!"
 
