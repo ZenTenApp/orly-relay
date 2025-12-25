@@ -159,10 +159,10 @@
     function getMimeIcon(mimeType) {
         const category = getMimeCategory(mimeType);
         switch (category) {
-            case "image": return "";
-            case "video": return "";
-            case "audio": return "";
-            default: return "";
+            case "image": return "🖼️";
+            case "video": return "🎬";
+            case "audio": return "🎵";
+            default: return "📄";
         }
     }
 
@@ -464,6 +464,7 @@
 
         {#if !isAdminView && !selectedAdminUser}
             <div class="upload-section">
+                <span class="upload-label">Upload new files</span>
                 <input
                     type="file"
                     multiple
@@ -471,9 +472,6 @@
                     on:change={handleFileSelect}
                     class="file-input-hidden"
                 />
-                <button class="select-btn" on:click={triggerFileInput} disabled={isUploading}>
-                    Select Files
-                </button>
                 {#if selectedFiles.length > 0}
                     <span class="selected-count">{selectedFiles.length} file(s) selected</span>
                     <button
@@ -484,6 +482,9 @@
                         {isUploading ? uploadProgress : "Upload"}
                     </button>
                 {/if}
+                <button class="select-btn" on:click={triggerFileInput} disabled={isUploading}>
+                    Select Files
+                </button>
             </div>
         {/if}
 
@@ -552,12 +553,19 @@
                             role="button"
                             tabindex="0"
                         >
-                            <div class="blob-icon">
-                                {getMimeIcon(blob.type)}
+                            <div class="blob-thumbnail">
+                                {#if getMimeCategory(blob.type) === "image"}
+                                    <img src={getBlobUrl(blob)} alt="" class="thumbnail-img" />
+                                {:else if getMimeCategory(blob.type) === "video"}
+                                    <video src={getBlobUrl(blob)} class="thumbnail-video" muted preload="metadata"></video>
+                                {:else}
+                                    <span class="thumbnail-icon">{getMimeIcon(blob.type)}</span>
+                                {/if}
                             </div>
                             <div class="blob-info">
                                 <div class="blob-hash" title={blob.sha256}>
-                                    {truncateHash(blob.sha256)}
+                                    <span class="hash-full">{blob.sha256}</span>
+                                    <span class="hash-truncated">{truncateHash(blob.sha256)}</span>
                                 </div>
                                 <div class="blob-meta">
                                     <span class="blob-size">{formatSize(blob.size)}</span>
@@ -678,7 +686,7 @@
 <style>
     .blossom-view {
         padding: 1em;
-        max-width: 900px;
+        width: 100%;
     }
 
     .header-section {
@@ -777,6 +785,12 @@
         flex-wrap: wrap;
     }
 
+    .upload-label {
+        color: var(--text-color);
+        font-size: 0.95em;
+        flex: 1;
+    }
+
     .file-input-hidden {
         display: none;
     }
@@ -861,10 +875,27 @@
         background-color: var(--sidebar-bg);
     }
 
-    .blob-icon {
+    .blob-thumbnail {
+        width: 48px;
+        height: 48px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--bg-color);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .thumbnail-img,
+    .thumbnail-video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .thumbnail-icon {
         font-size: 1.5em;
-        width: 2em;
-        text-align: center;
     }
 
     .blob-info {
@@ -876,6 +907,14 @@
         font-family: monospace;
         font-size: 0.9em;
         color: var(--text-color);
+    }
+
+    .hash-full {
+        display: inline;
+    }
+
+    .hash-truncated {
+        display: none;
     }
 
     .blob-meta {
@@ -1263,6 +1302,16 @@
         color: var(--text-color);
     }
 
+    @media (max-width: 720px) {
+        .hash-full {
+            display: none;
+        }
+
+        .hash-truncated {
+            display: inline;
+        }
+    }
+
     @media (max-width: 600px) {
         .blob-item {
             flex-wrap: wrap;
@@ -1271,7 +1320,7 @@
         .blob-date {
             width: 100%;
             margin-top: 0.5em;
-            padding-left: 3em;
+            padding-left: 3.5em;
         }
 
         .modal-footer {
