@@ -17,12 +17,15 @@ type BufferedWriter struct {
 }
 
 // Log format regex patterns
-// lol library format: "2024/01/15 10:30:45 file.go:123 [INF] message"
-// or similar variations
-var logPattern = regexp.MustCompile(`^(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+([^\s:]+):(\d+)\s+\[([A-Z]{3})\]\s+(.*)$`)
+// lol library format: "1703500000000000ℹ️ message /path/to/file.go:123"
+// - Unix microseconds timestamp
+// - Level emoji (☠️, 🚨, ⚠️, ℹ️, 🔎, 👻)
+// - Message
+// - File:line location
+var lolPattern = regexp.MustCompile(`^(\d{16})([☠️🚨⚠️ℹ️🔎👻]+)\s*(.*?)\s+([^\s]+:\d+)$`)
 
-// Simple format: "[level] message"
-var simplePattern = regexp.MustCompile(`^\[([A-Z]{3})\]\s+(.*)$`)
+// Simpler pattern for when emoji detection fails - just capture timestamp and rest
+var simplePattern = regexp.MustCompile(`^(\d{13,16})\s*(.*)$`)
 
 // NewBufferedWriter creates a new BufferedWriter
 func NewBufferedWriter(original io.Writer, buffer *Buffer) *BufferedWriter {
@@ -64,6 +67,16 @@ func (w *BufferedWriter) Write(p []byte) (n int, err error) {
 	return
 }
 
+// emojiToLevel maps lol library level emojis to level strings
+var emojiToLevel = map[string]string{
+	"☠️":  "FTL",
+	"🚨":  "ERR",
+	"⚠️":  "WRN",
+	"ℹ️":  "INF",
+	"🔎":  "DBG",
+	"👻":  "TRC",
+}
+
 // parseLine parses a log line into a LogEntry
 func (w *BufferedWriter) parseLine(line string) LogEntry {
 	entry := LogEntry{
@@ -72,47 +85,64 @@ func (w *BufferedWriter) parseLine(line string) LogEntry {
 		Level:     "INF",
 	}
 
-	// Try full pattern first
-	if matches := logPattern.FindStringSubmatch(line); matches != nil {
-		// Parse timestamp
-		if t, err := time.Parse("2006/01/02 15:04:05", matches[1]); err == nil {
-			entry.Timestamp = t
-		} else if t, err := time.Parse("2006/01/02 15:04:05.000", matches[1]); err == nil {
-			entry.Timestamp = t
-		}
-
-		entry.File = matches[2]
-		if lineNum, err := strconv.Atoi(matches[3]); err == nil {
-			entry.Line = lineNum
-		}
-		entry.Level = matches[4]
-		entry.Message = matches[5]
-		return entry
-	}
-
-	// Try simple pattern
-	if matches := simplePattern.FindStringSubmatch(line); matches != nil {
-		entry.Level = matches[1]
-		entry.Message = matches[2]
-		return entry
-	}
-
-	// Detect level from common prefixes
 	line = strings.TrimSpace(line)
-	if strings.HasPrefix(line, "TRC") || strings.HasPrefix(line, "[TRC]") {
-		entry.Level = "TRC"
-	} else if strings.HasPrefix(line, "DBG") || strings.HasPrefix(line, "[DBG]") {
-		entry.Level = "DBG"
-	} else if strings.HasPrefix(line, "INF") || strings.HasPrefix(line, "[INF]") {
-		entry.Level = "INF"
-	} else if strings.HasPrefix(line, "WRN") || strings.HasPrefix(line, "[WRN]") {
-		entry.Level = "WRN"
-	} else if strings.HasPrefix(line, "ERR") || strings.HasPrefix(line, "[ERR]") {
-		entry.Level = "ERR"
-	} else if strings.HasPrefix(line, "FTL") || strings.HasPrefix(line, "[FTL]") {
-		entry.Level = "FTL"
+	if line == "" {
+		return entry
 	}
 
+	// Try lol pattern first: "1703500000000000ℹ️ message /path/to/file.go:123"
+	if matches := lolPattern.FindStringSubmatch(line); matches != nil {
+		// Parse Unix microseconds timestamp
+		if usec, err := strconv.ParseInt(matches[1], 10, 64); err == nil {
+			entry.Timestamp = time.UnixMicro(usec)
+		}
+
+		// Map emoji to level
+		if level, ok := emojiToLevel[matches[2]]; ok {
+			entry.Level = level
+		}
+
+		entry.Message = strings.TrimSpace(matches[3])
+
+		// Parse file:line
+		loc := matches[4]
+		if idx := strings.LastIndex(loc, ":"); idx > 0 {
+			entry.File = loc[:idx]
+			if lineNum, err := strconv.Atoi(loc[idx+1:]); err == nil {
+				entry.Line = lineNum
+			}
+		}
+		return entry
+	}
+
+	// Try simple pattern - just grab timestamp and rest as message
+	if matches := simplePattern.FindStringSubmatch(line); matches != nil {
+		if usec, err := strconv.ParseInt(matches[1], 10, 64); err == nil {
+			// Could be microseconds or milliseconds
+			if len(matches[1]) >= 16 {
+				entry.Timestamp = time.UnixMicro(usec)
+			} else {
+				entry.Timestamp = time.UnixMilli(usec)
+			}
+		}
+		rest := strings.TrimSpace(matches[2])
+
+		// Try to detect level from emoji in the rest
+		for emoji, level := range emojiToLevel {
+			if strings.HasPrefix(rest, emoji) {
+				entry.Level = level
+				rest = strings.TrimPrefix(rest, emoji)
+				rest = strings.TrimSpace(rest)
+				break
+			}
+		}
+
+		entry.Message = rest
+		return entry
+	}
+
+	// Fallback: just store the whole line as message
+	entry.Message = line
 	return entry
 }
 
