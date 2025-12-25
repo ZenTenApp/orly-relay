@@ -4,7 +4,6 @@ package database
 
 import (
 	"errors"
-	"sync"
 
 	"github.com/dgraph-io/badger/v4"
 	"lol.mleku.dev/chk"
@@ -16,156 +15,114 @@ import (
 // SerialCache provides LRU caching for pubkey and event ID serial lookups.
 // This is critical for compact event decoding performance since every event
 // requires looking up the author pubkey and potentially multiple tag references.
+//
+// The cache uses LRU eviction and starts empty, growing on demand up to the
+// configured limits. This provides better memory efficiency than pre-allocation
+// and better hit rates than random eviction.
 type SerialCache struct {
 	// Pubkey serial -> full pubkey (for decoding)
-	pubkeyBySerial     map[uint64][]byte
-	pubkeyBySerialLock sync.RWMutex
+	pubkeyBySerial *LRUCache[uint64, []byte]
 
-	// Pubkey hash -> serial (for encoding)
-	serialByPubkeyHash     map[string]uint64
-	serialByPubkeyHashLock sync.RWMutex
+	// Pubkey bytes -> serial (for encoding)
+	// Uses [32]byte as key since []byte isn't comparable
+	serialByPubkey *LRUCache[[32]byte, uint64]
 
 	// Event serial -> full event ID (for decoding)
-	eventIdBySerial     map[uint64][]byte
-	eventIdBySerialLock sync.RWMutex
+	eventIdBySerial *LRUCache[uint64, []byte]
 
-	// Event ID hash -> serial (for encoding)
-	serialByEventIdHash     map[string]uint64
-	serialByEventIdHashLock sync.RWMutex
+	// Event ID bytes -> serial (for encoding)
+	serialByEventId *LRUCache[[32]byte, uint64]
 
-	// Maximum cache sizes
+	// Limits (for stats reporting)
 	maxPubkeys  int
 	maxEventIds int
 }
 
-// NewSerialCache creates a new serial cache with the specified sizes.
+// NewSerialCache creates a new serial cache with the specified maximum sizes.
+// The cache starts empty and grows on demand up to these limits.
 func NewSerialCache(maxPubkeys, maxEventIds int) *SerialCache {
 	if maxPubkeys <= 0 {
-		maxPubkeys = 100000 // Default 100k pubkeys (~3.2MB)
+		maxPubkeys = 100000 // Default 100k pubkeys
 	}
 	if maxEventIds <= 0 {
-		maxEventIds = 500000 // Default 500k event IDs (~16MB)
+		maxEventIds = 500000 // Default 500k event IDs
 	}
 	return &SerialCache{
-		pubkeyBySerial:      make(map[uint64][]byte, maxPubkeys),
-		serialByPubkeyHash:  make(map[string]uint64, maxPubkeys),
-		eventIdBySerial:     make(map[uint64][]byte, maxEventIds),
-		serialByEventIdHash: make(map[string]uint64, maxEventIds),
-		maxPubkeys:          maxPubkeys,
-		maxEventIds:         maxEventIds,
+		pubkeyBySerial:  NewLRUCache[uint64, []byte](maxPubkeys),
+		serialByPubkey:  NewLRUCache[[32]byte, uint64](maxPubkeys),
+		eventIdBySerial: NewLRUCache[uint64, []byte](maxEventIds),
+		serialByEventId: NewLRUCache[[32]byte, uint64](maxEventIds),
+		maxPubkeys:      maxPubkeys,
+		maxEventIds:     maxEventIds,
 	}
 }
 
-// CachePubkey adds a pubkey to the cache.
+// CachePubkey adds a pubkey to the cache in both directions.
 func (c *SerialCache) CachePubkey(serial uint64, pubkey []byte) {
 	if len(pubkey) != 32 {
 		return
 	}
 
-	// Cache serial -> pubkey
-	c.pubkeyBySerialLock.Lock()
-	if len(c.pubkeyBySerial) >= c.maxPubkeys {
-		// Simple eviction: clear half the cache
-		// A proper LRU would be better but this is simpler
-		count := 0
-		for k := range c.pubkeyBySerial {
-			delete(c.pubkeyBySerial, k)
-			count++
-			if count >= c.maxPubkeys/2 {
-				break
-			}
-		}
-	}
+	// Copy pubkey to avoid referencing external slice
 	pk := make([]byte, 32)
 	copy(pk, pubkey)
-	c.pubkeyBySerial[serial] = pk
-	c.pubkeyBySerialLock.Unlock()
 
-	// Cache pubkey hash -> serial
-	c.serialByPubkeyHashLock.Lock()
-	if len(c.serialByPubkeyHash) >= c.maxPubkeys {
-		count := 0
-		for k := range c.serialByPubkeyHash {
-			delete(c.serialByPubkeyHash, k)
-			count++
-			if count >= c.maxPubkeys/2 {
-				break
-			}
-		}
-	}
-	c.serialByPubkeyHash[string(pubkey)] = serial
-	c.serialByPubkeyHashLock.Unlock()
+	// Cache serial -> pubkey (for decoding)
+	c.pubkeyBySerial.Put(serial, pk)
+
+	// Cache pubkey -> serial (for encoding)
+	var key [32]byte
+	copy(key[:], pubkey)
+	c.serialByPubkey.Put(key, serial)
 }
 
 // GetPubkeyBySerial returns the pubkey for a serial from cache.
 func (c *SerialCache) GetPubkeyBySerial(serial uint64) (pubkey []byte, found bool) {
-	c.pubkeyBySerialLock.RLock()
-	pubkey, found = c.pubkeyBySerial[serial]
-	c.pubkeyBySerialLock.RUnlock()
-	return
+	return c.pubkeyBySerial.Get(serial)
 }
 
 // GetSerialByPubkey returns the serial for a pubkey from cache.
 func (c *SerialCache) GetSerialByPubkey(pubkey []byte) (serial uint64, found bool) {
-	c.serialByPubkeyHashLock.RLock()
-	serial, found = c.serialByPubkeyHash[string(pubkey)]
-	c.serialByPubkeyHashLock.RUnlock()
-	return
+	if len(pubkey) != 32 {
+		return 0, false
+	}
+	var key [32]byte
+	copy(key[:], pubkey)
+	return c.serialByPubkey.Get(key)
 }
 
-// CacheEventId adds an event ID to the cache.
+// CacheEventId adds an event ID to the cache in both directions.
 func (c *SerialCache) CacheEventId(serial uint64, eventId []byte) {
 	if len(eventId) != 32 {
 		return
 	}
 
-	// Cache serial -> event ID
-	c.eventIdBySerialLock.Lock()
-	if len(c.eventIdBySerial) >= c.maxEventIds {
-		count := 0
-		for k := range c.eventIdBySerial {
-			delete(c.eventIdBySerial, k)
-			count++
-			if count >= c.maxEventIds/2 {
-				break
-			}
-		}
-	}
+	// Copy event ID to avoid referencing external slice
 	eid := make([]byte, 32)
 	copy(eid, eventId)
-	c.eventIdBySerial[serial] = eid
-	c.eventIdBySerialLock.Unlock()
 
-	// Cache event ID hash -> serial
-	c.serialByEventIdHashLock.Lock()
-	if len(c.serialByEventIdHash) >= c.maxEventIds {
-		count := 0
-		for k := range c.serialByEventIdHash {
-			delete(c.serialByEventIdHash, k)
-			count++
-			if count >= c.maxEventIds/2 {
-				break
-			}
-		}
-	}
-	c.serialByEventIdHash[string(eventId)] = serial
-	c.serialByEventIdHashLock.Unlock()
+	// Cache serial -> event ID (for decoding)
+	c.eventIdBySerial.Put(serial, eid)
+
+	// Cache event ID -> serial (for encoding)
+	var key [32]byte
+	copy(key[:], eventId)
+	c.serialByEventId.Put(key, serial)
 }
 
 // GetEventIdBySerial returns the event ID for a serial from cache.
 func (c *SerialCache) GetEventIdBySerial(serial uint64) (eventId []byte, found bool) {
-	c.eventIdBySerialLock.RLock()
-	eventId, found = c.eventIdBySerial[serial]
-	c.eventIdBySerialLock.RUnlock()
-	return
+	return c.eventIdBySerial.Get(serial)
 }
 
 // GetSerialByEventId returns the serial for an event ID from cache.
 func (c *SerialCache) GetSerialByEventId(eventId []byte) (serial uint64, found bool) {
-	c.serialByEventIdHashLock.RLock()
-	serial, found = c.serialByEventIdHash[string(eventId)]
-	c.serialByEventIdHashLock.RUnlock()
-	return
+	if len(eventId) != 32 {
+		return 0, false
+	}
+	var key [32]byte
+	copy(key[:], eventId)
+	return c.serialByEventId.Get(key)
 }
 
 // DatabaseSerialResolver implements SerialResolver using the database and cache.
@@ -330,40 +287,37 @@ func (d *D) StoreEventIdSerial(txn *badger.Txn, serial uint64, eventId []byte) e
 
 // SerialCacheStats holds statistics about the serial cache.
 type SerialCacheStats struct {
-	PubkeysCached       int // Number of pubkeys currently cached
-	PubkeysMaxSize      int // Maximum pubkey cache size
-	EventIdsCached      int // Number of event IDs currently cached
-	EventIdsMaxSize     int // Maximum event ID cache size
-	PubkeyMemoryBytes   int // Estimated memory usage for pubkey cache
-	EventIdMemoryBytes  int // Estimated memory usage for event ID cache
-	TotalMemoryBytes    int // Total estimated memory usage
+	PubkeysCached      int // Number of pubkeys currently cached
+	PubkeysMaxSize     int // Maximum pubkey cache size
+	EventIdsCached     int // Number of event IDs currently cached
+	EventIdsMaxSize    int // Maximum event ID cache size
+	PubkeyMemoryBytes  int // Estimated memory usage for pubkey cache
+	EventIdMemoryBytes int // Estimated memory usage for event ID cache
+	TotalMemoryBytes   int // Total estimated memory usage
 }
 
 // Stats returns statistics about the serial cache.
 func (c *SerialCache) Stats() SerialCacheStats {
-	c.pubkeyBySerialLock.RLock()
-	pubkeysCached := len(c.pubkeyBySerial)
-	c.pubkeyBySerialLock.RUnlock()
-
-	c.eventIdBySerialLock.RLock()
-	eventIdsCached := len(c.eventIdBySerial)
-	c.eventIdBySerialLock.RUnlock()
+	pubkeysCached := c.pubkeyBySerial.Len()
+	eventIdsCached := c.eventIdBySerial.Len()
 
 	// Memory estimation:
-	// - Each pubkey entry: 8 bytes (uint64 key) + 32 bytes (pubkey value) = 40 bytes
-	// - Each event ID entry: 8 bytes (uint64 key) + 32 bytes (event ID value) = 40 bytes
-	// - Map overhead is roughly 2x the entry size for buckets
-	pubkeyMemory := pubkeysCached * 40 * 2
-	eventIdMemory := eventIdsCached * 40 * 2
+	// Each entry has: key + value + list.Element overhead + map entry overhead
+	// - Pubkey by serial: 8 (key) + 32 (value) + ~80 (list) + ~16 (map) ≈ 136 bytes
+	// - Serial by pubkey: 32 (key) + 8 (value) + ~80 (list) + ~16 (map) ≈ 136 bytes
+	// Total per pubkey (both directions): ~272 bytes
+	// Similarly for event IDs: ~272 bytes per entry (both directions)
+	pubkeyMemory := pubkeysCached * 272
+	eventIdMemory := eventIdsCached * 272
 
 	return SerialCacheStats{
-		PubkeysCached:       pubkeysCached,
-		PubkeysMaxSize:      c.maxPubkeys,
-		EventIdsCached:      eventIdsCached,
-		EventIdsMaxSize:     c.maxEventIds,
-		PubkeyMemoryBytes:   pubkeyMemory,
-		EventIdMemoryBytes:  eventIdMemory,
-		TotalMemoryBytes:    pubkeyMemory + eventIdMemory,
+		PubkeysCached:      pubkeysCached,
+		PubkeysMaxSize:     c.maxPubkeys,
+		EventIdsCached:     eventIdsCached,
+		EventIdsMaxSize:    c.maxEventIds,
+		PubkeyMemoryBytes:  pubkeyMemory,
+		EventIdMemoryBytes: eventIdMemory,
+		TotalMemoryBytes:   pubkeyMemory + eventIdMemory,
 	}
 }
 
