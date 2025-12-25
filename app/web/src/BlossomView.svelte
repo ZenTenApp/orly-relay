@@ -524,7 +524,8 @@
                                     {userStat.profile?.name || truncateNpub(hexToNpub(userStat.pubkey))}
                                 </div>
                                 <div class="user-npub" title={userStat.pubkey}>
-                                    {truncateNpub(hexToNpub(userStat.pubkey))}
+                                    <span class="npub-full">{hexToNpub(userStat.pubkey)}</span>
+                                    <span class="npub-truncated">{truncateNpub(hexToNpub(userStat.pubkey))}</span>
                                 </div>
                             </div>
                             <div class="user-stats">
@@ -858,6 +859,7 @@
         display: flex;
         flex-direction: column;
         gap: 0.5em;
+        width: 100%;
     }
 
     .blob-item {
@@ -957,6 +959,7 @@
         display: flex;
         flex-direction: column;
         gap: 0.5em;
+        width: 100%;
     }
 
     .user-stat-item {
@@ -1007,8 +1010,14 @@
         font-size: 0.8em;
         color: var(--text-color);
         opacity: 0.6;
-        overflow: hidden;
-        text-overflow: ellipsis;
+    }
+
+    .npub-full {
+        display: inline;
+    }
+
+    .npub-truncated {
+        display: none;
     }
 
     .user-stats {
@@ -1308,6 +1317,14 @@
         }
 
         .hash-truncated {
+            display: inline;
+        }
+
+        .npub-full {
+            display: none;
+        }
+
+        .npub-truncated {
             display: inline;
         }
     }
