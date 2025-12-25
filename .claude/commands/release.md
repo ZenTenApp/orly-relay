@@ -50,7 +50,7 @@ If no argument provided, default to `patch`.
 
 11. **Deploy to VPS** by running:
     ```
-    ssh 10.0.0.1 'cd ~/src/next.orly.dev && git stash && git pull origin main && export PATH=$PATH:~/go/bin && CGO_ENABLED=0 go build -o orly && sudo systemctl restart orly && ./orly version'
+    ssh 10.0.0.1 'cd ~/src/next.orly.dev && git stash && git pull origin main && export PATH=$PATH:~/go/bin && CGO_ENABLED=0 go build -o ~/.local/bin/next.orly.dev && sudo systemctl restart orly && ~/.local/bin/next.orly.dev version'
     ```
 
 12. **Report completion** with the new version and commit hash
