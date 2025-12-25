@@ -76,7 +76,8 @@
             };
 
             const signedEvent = await signer.signEvent(authEvent);
-            return btoa(JSON.stringify(signedEvent));
+            // Use URL-safe base64 encoding
+            return btoa(JSON.stringify(signedEvent)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
         } catch (err) {
             console.error("Error creating Blossom auth:", err);
             return null;
