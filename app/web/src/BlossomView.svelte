@@ -37,6 +37,7 @@
 
     $: canAccess = isLoggedIn && userPubkey;
     $: isAdmin = currentEffectiveRole === "admin" || currentEffectiveRole === "owner";
+    $: console.log("BlossomView role:", currentEffectiveRole, "isAdmin:", isAdmin);
 
     // Track if we've loaded once to prevent repeated loads
     let hasLoadedOnce = false;
@@ -430,6 +431,7 @@
 
 {#if canAccess}
     <div class="blossom-view">
+        <!-- DEBUG: role={currentEffectiveRole} isAdmin={isAdmin} -->
         <div class="header-section">
             {#if selectedAdminUser}
                 <button class="back-btn" on:click={exitUserView}>
