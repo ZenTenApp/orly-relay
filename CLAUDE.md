@@ -21,6 +21,17 @@ go test -v -run TestName ./pkg/package
 # Web UI dev (hot reload)
 ORLY_WEB_DISABLE=true ORLY_WEB_DEV_PROXY_URL=http://localhost:5173 ./orly &
 cd app/web && bun run dev
+
+# NIP-98 HTTP debugging (build: go build -o nurl ./cmd/nurl)
+NOSTR_SECRET_KEY=nsec1... ./nurl https://relay.example.com/api/logs
+NOSTR_SECRET_KEY=nsec1... ./nurl https://relay.example.com/api/logs/clear
+./nurl help  # Show usage
+
+# Vanity npub generator (build: go build -o vainstr ./cmd/vainstr)
+./vainstr mleku end      # Find npub ending with "mleku"
+./vainstr orly begin     # Find npub starting with "orly" (after npub1)
+./vainstr foo contain    # Find npub containing "foo"
+./vainstr --threads 4 xyz end  # Use 4 threads
 ```
 
 ## Key Environment Variables
