@@ -1,5 +1,7 @@
 <script>
     import { createEventDispatcher, onMount } from "svelte";
+    import { npubEncode } from "nostr-tools/nip19";
+    import { fetchUserProfile } from "./nostr.js";
 
     export let isLoggedIn = false;
     export let userPubkey = "";
@@ -26,7 +28,15 @@
     const MAX_ZOOM = 4;
     const ZOOM_STEP = 0.25;
 
+    // Admin view state
+    let isAdminView = false;
+    let adminUserStats = [];
+    let isLoadingAdmin = false;
+    let selectedAdminUser = null;
+    let selectedUserBlobs = [];
+
     $: canAccess = isLoggedIn && userPubkey;
+    $: isAdmin = currentEffectiveRole === "admin" || currentEffectiveRole === "owner";
 
     // Track if we've loaded once to prevent repeated loads
     let hasLoadedOnce = false;
@@ -299,6 +309,121 @@
             error = `Failed to upload: ${failed.map(f => f.name).join(", ")}`;
         }
     }
+
+    // Admin functions
+    function hexToNpub(pubkeyHex) {
+        try {
+            return npubEncode(pubkeyHex);
+        } catch (e) {
+            return truncateHash(pubkeyHex);
+        }
+    }
+
+    function truncateNpub(npub) {
+        if (!npub) return "";
+        return `${npub.slice(0, 12)}...${npub.slice(-8)}`;
+    }
+
+    async function fetchAdminUserStats() {
+        isLoadingAdmin = true;
+        error = "";
+
+        try {
+            const url = `${window.location.origin}/blossom/admin/users`;
+            const authHeader = await createBlossomAuth(userSigner, "admin");
+            const response = await fetch(url, {
+                headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to load user stats: ${response.statusText}`);
+            }
+
+            adminUserStats = await response.json();
+
+            // Fetch profiles for each user (non-blocking)
+            for (const stat of adminUserStats) {
+                fetchUserProfile(stat.pubkey).then(profile => {
+                    stat.profile = profile || { name: "", picture: "" };
+                    adminUserStats = adminUserStats; // trigger reactivity
+                }).catch(() => {
+                    stat.profile = { name: "", picture: "" };
+                });
+            }
+        } catch (err) {
+            console.error("Error fetching admin user stats:", err);
+            error = err.message || "Failed to load user stats";
+        } finally {
+            isLoadingAdmin = false;
+        }
+    }
+
+    async function loadUserBlobs(pubkeyHex) {
+        isLoading = true;
+        error = "";
+
+        try {
+            const url = `${window.location.origin}/blossom/list/${pubkeyHex}`;
+            const authHeader = await createBlossomAuth(userSigner, "list");
+            const response = await fetch(url, {
+                headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to load user blobs: ${response.statusText}`);
+            }
+
+            selectedUserBlobs = await response.json();
+            selectedUserBlobs.sort((a, b) => (b.uploaded || 0) - (a.uploaded || 0));
+        } catch (err) {
+            console.error("Error loading user blobs:", err);
+            error = err.message || "Failed to load user blobs";
+        } finally {
+            isLoading = false;
+        }
+    }
+
+    function enterAdminView() {
+        isAdminView = true;
+        fetchAdminUserStats();
+    }
+
+    function exitAdminView() {
+        isAdminView = false;
+        adminUserStats = [];
+        selectedAdminUser = null;
+        selectedUserBlobs = [];
+    }
+
+    async function selectUser(userStat) {
+        selectedAdminUser = {
+            pubkey: userStat.pubkey,
+            profile: userStat.profile
+        };
+        await loadUserBlobs(userStat.pubkey);
+    }
+
+    function exitUserView() {
+        selectedAdminUser = null;
+        selectedUserBlobs = [];
+    }
+
+    function handleRefresh() {
+        if (selectedAdminUser) {
+            loadUserBlobs(selectedAdminUser.pubkey);
+        } else if (isAdminView) {
+            fetchAdminUserStats();
+        } else {
+            loadBlobs();
+        }
+    }
+
+    function getDisplayBlobs() {
+        if (selectedAdminUser) {
+            return selectedUserBlobs;
+        }
+        return blobs;
+    }
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -306,34 +431,61 @@
 {#if canAccess}
     <div class="blossom-view">
         <div class="header-section">
-            <h3>Blossom Media Storage</h3>
-            <button class="refresh-btn" on:click={loadBlobs} disabled={isLoading}>
-                {isLoading ? "Loading..." : "Refresh"}
-            </button>
+            {#if selectedAdminUser}
+                <button class="back-btn" on:click={exitUserView}>
+                    &larr; Back
+                </button>
+                <h3 class="user-header">
+                    {#if selectedAdminUser.profile?.picture}
+                        <img src={selectedAdminUser.profile.picture} alt="" class="header-avatar" />
+                    {/if}
+                    {selectedAdminUser.profile?.name || truncateNpub(hexToNpub(selectedAdminUser.pubkey))}
+                </h3>
+            {:else if isAdminView}
+                <button class="back-btn" on:click={exitAdminView}>
+                    &larr; Back
+                </button>
+                <h3>All Users Storage</h3>
+            {:else}
+                <h3>Blossom Media Storage</h3>
+            {/if}
+
+            <div class="header-buttons">
+                {#if isAdmin && !isAdminView && !selectedAdminUser}
+                    <button class="admin-btn" on:click={enterAdminView} disabled={isLoading}>
+                        Admin
+                    </button>
+                {/if}
+                <button class="refresh-btn" on:click={handleRefresh} disabled={isLoading || isLoadingAdmin}>
+                    {isLoading || isLoadingAdmin ? "Loading..." : "Refresh"}
+                </button>
+            </div>
         </div>
 
-        <div class="upload-section">
-            <input
-                type="file"
-                multiple
-                bind:this={fileInput}
-                on:change={handleFileSelect}
-                class="file-input-hidden"
-            />
-            <button class="select-btn" on:click={triggerFileInput} disabled={isUploading}>
-                Select Files
-            </button>
-            {#if selectedFiles.length > 0}
-                <span class="selected-count">{selectedFiles.length} file(s) selected</span>
-                <button
-                    class="upload-btn"
-                    on:click={uploadFiles}
-                    disabled={isUploading}
-                >
-                    {isUploading ? uploadProgress : "Upload"}
+        {#if !isAdminView && !selectedAdminUser}
+            <div class="upload-section">
+                <input
+                    type="file"
+                    multiple
+                    bind:this={fileInput}
+                    on:change={handleFileSelect}
+                    class="file-input-hidden"
+                />
+                <button class="select-btn" on:click={triggerFileInput} disabled={isUploading}>
+                    Select Files
                 </button>
-            {/if}
-        </div>
+                {#if selectedFiles.length > 0}
+                    <span class="selected-count">{selectedFiles.length} file(s) selected</span>
+                    <button
+                        class="upload-btn"
+                        on:click={uploadFiles}
+                        disabled={isUploading}
+                    >
+                        {isUploading ? uploadProgress : "Upload"}
+                    </button>
+                {/if}
+            </div>
+        {/if}
 
         {#if error}
             <div class="error-message">
@@ -341,47 +493,91 @@
             </div>
         {/if}
 
-        {#if isLoading && blobs.length === 0}
-            <div class="loading">Loading blobs...</div>
-        {:else if blobs.length === 0}
-            <div class="empty-state">
-                <p>No files found in your Blossom storage.</p>
-            </div>
-        {:else}
-            <div class="blob-list">
-                {#each blobs as blob}
-                    <div
-                        class="blob-item"
-                        on:click={() => openModal(blob)}
-                        on:keypress={(e) => e.key === "Enter" && openModal(blob)}
-                        role="button"
-                        tabindex="0"
-                    >
-                        <div class="blob-icon">
-                            {getMimeIcon(blob.type)}
-                        </div>
-                        <div class="blob-info">
-                            <div class="blob-hash" title={blob.sha256}>
-                                {truncateHash(blob.sha256)}
-                            </div>
-                            <div class="blob-meta">
-                                <span class="blob-size">{formatSize(blob.size)}</span>
-                                <span class="blob-type">{blob.type || "unknown"}</span>
-                            </div>
-                        </div>
-                        <div class="blob-date">
-                            {formatDate(blob.uploaded)}
-                        </div>
-                        <button
-                            class="delete-btn"
-                            on:click|stopPropagation={() => deleteBlob(blob)}
-                            title="Delete"
+        {#if isAdminView && !selectedAdminUser}
+            <!-- Admin users list view -->
+            {#if isLoadingAdmin}
+                <div class="loading">Loading user statistics...</div>
+            {:else if adminUserStats.length === 0}
+                <div class="empty-state">
+                    <p>No users have uploaded files yet.</p>
+                </div>
+            {:else}
+                <div class="admin-users-list">
+                    {#each adminUserStats as userStat}
+                        <div
+                            class="user-stat-item"
+                            on:click={() => selectUser(userStat)}
+                            on:keypress={(e) => e.key === "Enter" && selectUser(userStat)}
+                            role="button"
+                            tabindex="0"
                         >
-                            X
-                        </button>
-                    </div>
-                {/each}
-            </div>
+                            <div class="user-avatar-container">
+                                {#if userStat.profile?.picture}
+                                    <img src={userStat.profile.picture} alt="" class="user-avatar" />
+                                {:else}
+                                    <div class="user-avatar-placeholder"></div>
+                                {/if}
+                            </div>
+                            <div class="user-info">
+                                <div class="user-name">
+                                    {userStat.profile?.name || truncateNpub(hexToNpub(userStat.pubkey))}
+                                </div>
+                                <div class="user-npub" title={userStat.pubkey}>
+                                    {truncateNpub(hexToNpub(userStat.pubkey))}
+                                </div>
+                            </div>
+                            <div class="user-stats">
+                                <span class="blob-count">{userStat.blob_count} files</span>
+                                <span class="total-size">{formatSize(userStat.total_size_bytes)}</span>
+                            </div>
+                        </div>
+                    {/each}
+                </div>
+            {/if}
+        {:else}
+            <!-- Normal blob list view (own files or selected user's files) -->
+            {#if isLoading && getDisplayBlobs().length === 0}
+                <div class="loading">Loading blobs...</div>
+            {:else if getDisplayBlobs().length === 0}
+                <div class="empty-state">
+                    <p>{selectedAdminUser ? "No files found for this user." : "No files found in your Blossom storage."}</p>
+                </div>
+            {:else}
+                <div class="blob-list">
+                    {#each getDisplayBlobs() as blob}
+                        <div
+                            class="blob-item"
+                            on:click={() => openModal(blob)}
+                            on:keypress={(e) => e.key === "Enter" && openModal(blob)}
+                            role="button"
+                            tabindex="0"
+                        >
+                            <div class="blob-icon">
+                                {getMimeIcon(blob.type)}
+                            </div>
+                            <div class="blob-info">
+                                <div class="blob-hash" title={blob.sha256}>
+                                    {truncateHash(blob.sha256)}
+                                </div>
+                                <div class="blob-meta">
+                                    <span class="blob-size">{formatSize(blob.size)}</span>
+                                    <span class="blob-type">{blob.type || "unknown"}</span>
+                                </div>
+                            </div>
+                            <div class="blob-date">
+                                {formatDate(blob.uploaded)}
+                            </div>
+                            <button
+                                class="delete-btn"
+                                on:click|stopPropagation={() => deleteBlob(blob)}
+                                title="Delete"
+                            >
+                                X
+                            </button>
+                        </div>
+                    {/each}
+                </div>
+            {/if}
         {/if}
     </div>
 {:else}
@@ -495,6 +691,60 @@
     .header-section h3 {
         margin: 0;
         color: var(--text-color);
+        flex: 1;
+    }
+
+    .header-buttons {
+        display: flex;
+        align-items: center;
+        gap: 0.5em;
+    }
+
+    .back-btn {
+        background: transparent;
+        border: 1px solid var(--border-color);
+        color: var(--text-color);
+        padding: 0.5em 1em;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9em;
+        margin-right: 0.5em;
+    }
+
+    .back-btn:hover {
+        background-color: var(--sidebar-bg);
+    }
+
+    .admin-btn {
+        background-color: var(--primary);
+        color: var(--text-color);
+        border: none;
+        padding: 0.5em 1em;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9em;
+    }
+
+    .admin-btn:hover:not(:disabled) {
+        background-color: var(--accent-hover-color);
+    }
+
+    .admin-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .user-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5em;
+    }
+
+    .header-avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        object-fit: cover;
     }
 
     .refresh-btn {
@@ -661,6 +911,79 @@
     .delete-btn:hover {
         background-color: var(--warning);
         color: var(--text-color);
+    }
+
+    /* Admin users list styles */
+    .admin-users-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5em;
+    }
+
+    .user-stat-item {
+        display: flex;
+        align-items: center;
+        gap: 1em;
+        padding: 0.75em 1em;
+        background-color: var(--card-bg);
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .user-stat-item:hover {
+        background-color: var(--sidebar-bg);
+    }
+
+    .user-avatar-container {
+        flex-shrink: 0;
+    }
+
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .user-avatar-placeholder {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: var(--border-color);
+    }
+
+    .user-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .user-name {
+        font-weight: 500;
+        color: var(--text-color);
+    }
+
+    .user-npub {
+        font-family: monospace;
+        font-size: 0.8em;
+        color: var(--text-color);
+        opacity: 0.6;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .user-stats {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.25em;
+    }
+
+    .user-stats .blob-count,
+    .user-stats .total-size {
+        font-size: 0.85em;
+        color: var(--text-color);
+        opacity: 0.7;
     }
 
     .login-prompt {

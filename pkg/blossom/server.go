@@ -108,6 +108,14 @@ func (s *Server) Handler() http.Handler {
 			s.handleReport(w, r)
 			return
 
+		case path == "admin/users":
+			if r.Method == http.MethodGet {
+				s.handleAdminListUsers(w, r)
+				return
+			}
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+
 		case strings.HasPrefix(path, "list/"):
 			if r.Method == http.MethodGet {
 				s.handleListBlobs(w, r)

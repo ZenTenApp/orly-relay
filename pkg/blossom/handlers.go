@@ -474,6 +474,42 @@ func (s *Server) handleListBlobs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleAdminListUsers handles GET /admin/users requests (admin only)
+func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
+	// Authorization required
+	authEv, err := ValidateAuthEvent(r, "admin", nil)
+	if err != nil {
+		s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+	if authEv == nil {
+		s.setErrorResponse(w, http.StatusUnauthorized, "authorization required")
+		return
+	}
+
+	// Check admin ACL
+	remoteAddr := s.getRemoteAddr(r)
+	if !s.checkACL(authEv.Pubkey, remoteAddr, "admin") {
+		s.setErrorResponse(w, http.StatusForbidden, "admin access required")
+		return
+	}
+
+	// Get all user stats
+	stats, err := s.storage.ListAllUserStats()
+	if err != nil {
+		log.E.F("error listing user stats: %v", err)
+		s.setErrorResponse(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	// Return JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err = json.NewEncoder(w).Encode(stats); err != nil {
+		log.E.F("error encoding response: %v", err)
+	}
+}
+
 // handleDeleteBlob handles DELETE /<sha256> requests (BUD-02)
 func (s *Server) handleDeleteBlob(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/")

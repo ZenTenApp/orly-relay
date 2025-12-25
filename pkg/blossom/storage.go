@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/dgraph-io/badger/v4"
 	"lol.mleku.dev/chk"
@@ -450,6 +452,76 @@ func (s *Storage) GetBlobMetadata(sha256Hash []byte) (metadata *BlobMetadata, er
 	}); chk.E(err) {
 		return
 	}
+
+	return
+}
+
+// UserBlobStats represents storage statistics for a single user
+type UserBlobStats struct {
+	PubkeyHex      string `json:"pubkey"`
+	BlobCount      int64  `json:"blob_count"`
+	TotalSizeBytes int64  `json:"total_size_bytes"`
+}
+
+// ListAllUserStats returns storage statistics for all users who have uploaded blobs
+func (s *Storage) ListAllUserStats() (stats []*UserBlobStats, err error) {
+	statsMap := make(map[string]*UserBlobStats)
+
+	if err = s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = []byte(prefixBlobIndex)
+		opts.PrefetchValues = false
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			key := string(it.Item().Key())
+			// Key format: blob:index:<pubkey-hex>:<sha256-hex>
+			remainder := key[len(prefixBlobIndex):]
+			parts := strings.SplitN(remainder, ":", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			pubkeyHex := parts[0]
+			sha256Hex := parts[1]
+
+			// Get or create stats entry
+			stat, ok := statsMap[pubkeyHex]
+			if !ok {
+				stat = &UserBlobStats{PubkeyHex: pubkeyHex}
+				statsMap[pubkeyHex] = stat
+			}
+			stat.BlobCount++
+
+			// Get blob size from metadata
+			metaKey := prefixBlobMeta + sha256Hex
+			metaItem, errGet := txn.Get([]byte(metaKey))
+			if errGet != nil {
+				continue
+			}
+			metaItem.Value(func(val []byte) error {
+				metadata, errDeser := DeserializeBlobMetadata(val)
+				if errDeser == nil {
+					stat.TotalSizeBytes += metadata.Size
+				}
+				return nil
+			})
+		}
+		return nil
+	}); chk.E(err) {
+		return
+	}
+
+	// Convert map to slice
+	stats = make([]*UserBlobStats, 0, len(statsMap))
+	for _, stat := range statsMap {
+		stats = append(stats, stat)
+	}
+
+	// Sort by total size descending
+	sort.Slice(stats, func(i, j int) bool {
+		return stats[i].TotalSizeBytes > stats[j].TotalSizeBytes
+	})
 
 	return
 }
