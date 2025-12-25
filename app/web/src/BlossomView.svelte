@@ -686,7 +686,7 @@
 <style>
     .blossom-view {
         padding: 1em;
-        width: 100%;
+        box-sizing: border-box;
     }
 
     .header-section {
