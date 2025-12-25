@@ -431,7 +431,9 @@
 
 {#if canAccess}
     <div class="blossom-view">
-        <!-- DEBUG: role={currentEffectiveRole} isAdmin={isAdmin} -->
+        <div style="background: red; color: white; padding: 4px; font-size: 12px;">
+            DEBUG: role="{currentEffectiveRole}" isAdmin={isAdmin}
+        </div>
         <div class="header-section">
             {#if selectedAdminUser}
                 <button class="back-btn" on:click={exitUserView}>
