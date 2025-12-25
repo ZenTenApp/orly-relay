@@ -19,6 +19,10 @@ import (
 	"next.orly.dev/pkg/acl"
 	"next.orly.dev/pkg/blossom"
 	"next.orly.dev/pkg/database"
+	"next.orly.dev/pkg/event/authorization"
+	"next.orly.dev/pkg/event/processing"
+	"next.orly.dev/pkg/event/routing"
+	"next.orly.dev/pkg/event/validation"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
@@ -68,6 +72,12 @@ type Server struct {
 	rateLimiter       *ratelimit.Limiter
 	cfg               *config.C
 	db                database.Database // Changed from *database.D to interface
+
+	// Domain services for event handling
+	eventValidator   *validation.Service
+	eventAuthorizer  *authorization.Service
+	eventRouter      *routing.DefaultRouter
+	eventProcessor   *processing.Service
 }
 
 // isIPBlacklisted checks if an IP address is blacklisted using the managed ACL system
@@ -1208,6 +1218,224 @@ func (s *Server) updatePeerAdminACL(peerPubkey []byte) {
 			}
 		}
 	}
+}
+
+// =============================================================================
+// Event Service Initialization
+// =============================================================================
+
+// InitEventServices initializes the domain services for event handling.
+// This should be called after the Server is created but before accepting connections.
+func (s *Server) InitEventServices() {
+	// Initialize validation service
+	s.eventValidator = validation.NewWithConfig(&validation.Config{
+		MaxFutureSeconds: 3600, // 1 hour
+	})
+
+	// Initialize authorization service
+	authCfg := &authorization.Config{
+		AuthRequired: s.Config.AuthRequired,
+		AuthToWrite:  s.Config.AuthToWrite,
+		Admins:       s.Admins,
+		Owners:       s.Owners,
+	}
+	s.eventAuthorizer = authorization.New(
+		authCfg,
+		s.wrapAuthACLRegistry(),
+		s.wrapAuthPolicyManager(),
+		s.wrapAuthSyncManager(),
+	)
+
+	// Initialize router with handlers for special event kinds
+	s.eventRouter = routing.New()
+
+	// Register ephemeral event handler (kinds 20000-29999)
+	s.eventRouter.RegisterKindCheck(
+		"ephemeral",
+		routing.IsEphemeral,
+		routing.MakeEphemeralHandler(s.publishers),
+	)
+
+	// Initialize processing service
+	procCfg := &processing.Config{
+		Admins:       s.Admins,
+		Owners:       s.Owners,
+		WriteTimeout: 30 * time.Second,
+	}
+	s.eventProcessor = processing.New(procCfg, s.wrapDB(), s.publishers)
+
+	// Wire up optional dependencies to processing service
+	if s.rateLimiter != nil {
+		s.eventProcessor.SetRateLimiter(s.wrapRateLimiter())
+	}
+	if s.syncManager != nil {
+		s.eventProcessor.SetSyncManager(s.wrapSyncManager())
+	}
+	if s.relayGroupMgr != nil {
+		s.eventProcessor.SetRelayGroupManager(s.wrapRelayGroupManager())
+	}
+	if s.clusterManager != nil {
+		s.eventProcessor.SetClusterManager(s.wrapClusterManager())
+	}
+	s.eventProcessor.SetACLRegistry(s.wrapACLRegistry())
+}
+
+// Database wrapper for processing.Database interface
+type processingDBWrapper struct {
+	db database.Database
+}
+
+func (s *Server) wrapDB() processing.Database {
+	return &processingDBWrapper{db: s.DB}
+}
+
+func (w *processingDBWrapper) SaveEvent(ctx context.Context, ev *event.E) (exists bool, err error) {
+	return w.db.SaveEvent(ctx, ev)
+}
+
+func (w *processingDBWrapper) CheckForDeleted(ev *event.E, adminOwners [][]byte) error {
+	return w.db.CheckForDeleted(ev, adminOwners)
+}
+
+// RateLimiter wrapper for processing.RateLimiter interface
+type processingRateLimiterWrapper struct {
+	rl *ratelimit.Limiter
+}
+
+func (s *Server) wrapRateLimiter() processing.RateLimiter {
+	return &processingRateLimiterWrapper{rl: s.rateLimiter}
+}
+
+func (w *processingRateLimiterWrapper) IsEnabled() bool {
+	return w.rl.IsEnabled()
+}
+
+func (w *processingRateLimiterWrapper) Wait(ctx context.Context, opType int) error {
+	w.rl.Wait(ctx, opType)
+	return nil
+}
+
+// SyncManager wrapper for processing.SyncManager interface
+type processingSyncManagerWrapper struct {
+	sm *dsync.Manager
+}
+
+func (s *Server) wrapSyncManager() processing.SyncManager {
+	return &processingSyncManagerWrapper{sm: s.syncManager}
+}
+
+func (w *processingSyncManagerWrapper) UpdateSerial() {
+	w.sm.UpdateSerial()
+}
+
+// RelayGroupManager wrapper for processing.RelayGroupManager interface
+type processingRelayGroupManagerWrapper struct {
+	rgm *dsync.RelayGroupManager
+}
+
+func (s *Server) wrapRelayGroupManager() processing.RelayGroupManager {
+	return &processingRelayGroupManagerWrapper{rgm: s.relayGroupMgr}
+}
+
+func (w *processingRelayGroupManagerWrapper) ValidateRelayGroupEvent(ev *event.E) error {
+	return w.rgm.ValidateRelayGroupEvent(ev)
+}
+
+func (w *processingRelayGroupManagerWrapper) HandleRelayGroupEvent(ev *event.E, syncMgr any) {
+	if sm, ok := syncMgr.(*dsync.Manager); ok {
+		w.rgm.HandleRelayGroupEvent(ev, sm)
+	}
+}
+
+// ClusterManager wrapper for processing.ClusterManager interface
+type processingClusterManagerWrapper struct {
+	cm *dsync.ClusterManager
+}
+
+func (s *Server) wrapClusterManager() processing.ClusterManager {
+	return &processingClusterManagerWrapper{cm: s.clusterManager}
+}
+
+func (w *processingClusterManagerWrapper) HandleMembershipEvent(ev *event.E) error {
+	return w.cm.HandleMembershipEvent(ev)
+}
+
+// ACLRegistry wrapper for processing.ACLRegistry interface
+type processingACLRegistryWrapper struct{}
+
+func (s *Server) wrapACLRegistry() processing.ACLRegistry {
+	return &processingACLRegistryWrapper{}
+}
+
+func (w *processingACLRegistryWrapper) Configure(cfg ...any) error {
+	return acl.Registry.Configure(cfg...)
+}
+
+func (w *processingACLRegistryWrapper) Active() string {
+	return acl.Registry.Active.Load()
+}
+
+// =============================================================================
+// Authorization Service Wrappers
+// =============================================================================
+
+// ACLRegistry wrapper for authorization.ACLRegistry interface
+type authACLRegistryWrapper struct{}
+
+func (s *Server) wrapAuthACLRegistry() authorization.ACLRegistry {
+	return &authACLRegistryWrapper{}
+}
+
+func (w *authACLRegistryWrapper) GetAccessLevel(pub []byte, address string) string {
+	return acl.Registry.GetAccessLevel(pub, address)
+}
+
+func (w *authACLRegistryWrapper) CheckPolicy(ev *event.E) (bool, error) {
+	return acl.Registry.CheckPolicy(ev)
+}
+
+func (w *authACLRegistryWrapper) Active() string {
+	return acl.Registry.Active.Load()
+}
+
+// PolicyManager wrapper for authorization.PolicyManager interface
+type authPolicyManagerWrapper struct {
+	pm *policy.P
+}
+
+func (s *Server) wrapAuthPolicyManager() authorization.PolicyManager {
+	if s.policyManager == nil {
+		return nil
+	}
+	return &authPolicyManagerWrapper{pm: s.policyManager}
+}
+
+func (w *authPolicyManagerWrapper) IsEnabled() bool {
+	return w.pm.IsEnabled()
+}
+
+func (w *authPolicyManagerWrapper) CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error) {
+	return w.pm.CheckPolicy(action, ev, pubkey, remote)
+}
+
+// SyncManager wrapper for authorization.SyncManager interface
+type authSyncManagerWrapper struct {
+	sm *dsync.Manager
+}
+
+func (s *Server) wrapAuthSyncManager() authorization.SyncManager {
+	if s.syncManager == nil {
+		return nil
+	}
+	return &authSyncManagerWrapper{sm: s.syncManager}
+}
+
+func (w *authSyncManagerWrapper) GetPeers() []string {
+	return w.sm.GetPeers()
+}
+
+func (w *authSyncManagerWrapper) IsAuthorizedPeer(url, pubkey string) bool {
+	return w.sm.IsAuthorizedPeer(url, pubkey)
 }
 
 // =============================================================================

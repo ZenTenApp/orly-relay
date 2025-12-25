@@ -131,6 +131,10 @@ func TestEventPubkeyGraph(t *testing.T) {
 	eventSig := make([]byte, 64)
 	eventSig[0] = 1
 
+	// Create a valid e-tag event ID (32 bytes = 64 hex chars)
+	eTagEventID := make([]byte, 32)
+	eTagEventID[0] = 0xAB
+
 	ev := &event.E{
 		ID:        eventID,
 		Pubkey:    authorPubkey,
@@ -141,7 +145,7 @@ func TestEventPubkeyGraph(t *testing.T) {
 		Tags: tag.NewS(
 			tag.NewFromAny("p", hex.Enc(pTagPubkey1)),
 			tag.NewFromAny("p", hex.Enc(pTagPubkey2)),
-			tag.NewFromAny("e", "someeventid"),
+			tag.NewFromAny("e", hex.Enc(eTagEventID)),
 		),
 	}
 

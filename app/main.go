@@ -330,6 +330,9 @@ func Run(
 		log.I.F("Non-Badger backend detected (type: %T), Blossom server not available", db)
 	}
 
+	// Initialize event domain services (validation, routing, processing)
+	l.InitEventServices()
+
 	// Initialize the user interface (registers routes)
 	l.UserInterface()
 

@@ -2,17 +2,16 @@ package database
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
-	"lol.mleku.dev/chk"
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"git.mleku.dev/mleku/nostr/encoders/timestamp"
+	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"lol.mleku.dev/chk"
 	"next.orly.dev/pkg/utils"
 )
 
@@ -20,10 +19,9 @@ import (
 // replaceable events with the same pubkey, kind, and d-tag exist, only the newest one
 // is returned in query results.
 func TestMultipleParameterizedReplaceableEvents(t *testing.T) {
-	db, _, ctx, cancel, tempDir := setupTestDB(t)
-	defer os.RemoveAll(tempDir) // Clean up after the test
-	defer cancel()
-	defer db.Close()
+	// Needs fresh database (modifies data)
+	db, ctx, cleanup := setupFreshTestDB(t)
+	defer cleanup()
 
 	sign := p8k.MustNew()
 	if err := sign.Generate(); chk.E(err) {

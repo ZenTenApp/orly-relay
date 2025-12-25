@@ -1,104 +1,33 @@
 package database
 
 import (
-	"bufio"
-	"bytes"
-	"context"
-	"os"
-	"sort"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/event/examples"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"git.mleku.dev/mleku/nostr/encoders/timestamp"
-	"lol.mleku.dev/chk"
-	"next.orly.dev/pkg/interfaces/store"
 	"next.orly.dev/pkg/utils"
 )
 
 func TestQueryForIds(t *testing.T) {
-	// Create a temporary directory for the database
-	tempDir, err := os.MkdirTemp("", "test-db-*")
-	if err != nil {
-		t.Fatalf("Failed to create temporary directory: %v", err)
-	}
-	defer os.RemoveAll(tempDir) // Clean up after the test
+	// Use shared database (read-only test)
+	db, ctx := GetSharedDB(t)
+	events := GetSharedEvents(t)
 
-	// Create a context and cancel function for the database
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Initialize the database
-	db, err := New(ctx, cancel, tempDir, "info")
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
-
-	// Create a scanner to read events from examples.Cache
-	scanner := bufio.NewScanner(bytes.NewBuffer(examples.Cache))
-	scanner.Buffer(make([]byte, 0, 1_000_000_000), 1_000_000_000)
-
-	// Count the number of events processed
-	eventCount := 0
-
-	var events []*event.E
-
-	// First, collect all events from examples.Cache
-	for scanner.Scan() {
-		chk.E(scanner.Err())
-		b := scanner.Bytes()
-		ev := event.New()
-
-		// Unmarshal the event
-		if _, err = ev.Unmarshal(b); chk.E(err) {
-			ev.Free()
-			t.Fatal(err)
-		}
-
-		events = append(events, ev)
+	if len(events) < 2 {
+		t.Fatalf("Need at least 2 saved events, got %d", len(events))
 	}
 
-	// Check for scanner errors
-	if err = scanner.Err(); err != nil {
-		t.Fatalf("Scanner error: %v", err)
-	}
-
-	// Sort events by CreatedAt to ensure addressable events are processed in chronological order
-	sort.Slice(events, func(i, j int) bool {
-		return events[i].CreatedAt < events[j].CreatedAt
-	})
-
-	// Count the number of events processed
-	eventCount = 0
-	skippedCount := 0
-	var savedEvents []*event.E
-
-	// Now process each event in chronological order
-	for _, ev := range events {
-		// Save the event to the database
-		if _, err = db.SaveEvent(ctx, ev); err != nil {
-			// Skip events that fail validation (e.g., kind 3 without p tags)
-			skippedCount++
-			continue
-		}
-
-		savedEvents = append(savedEvents, ev)
-		eventCount++
-	}
-
-	t.Logf("Successfully saved %d events to the database (skipped %d invalid events)", eventCount, skippedCount)
-	events = savedEvents // Use saved events for the rest of the test
-
-	var idTsPk []*store.IdPkTs
-	idTsPk, err = db.QueryForIds(
+	idTsPk, err := db.QueryForIds(
 		ctx, &filter.F{
 			Authors: tag.NewFromBytesSlice(events[1].Pubkey),
 		},
 	)
+	if err != nil {
+		t.Fatalf("Failed to query for authors: %v", err)
+	}
+
 	if len(idTsPk) < 1 {
 		t.Fatalf(
 			"got unexpected number of results, expect at least 1, got %d",
@@ -168,26 +97,12 @@ func TestQueryForIds(t *testing.T) {
 
 	// Test querying by tag
 	// Find an event with tags to use for testing
-	var testEvent *event.E
-	for _, ev := range events {
-		if ev.Tags != nil && ev.Tags.Len() > 0 {
-			// Find a tag with at least 2 elements and first element of length 1
-			for _, tg := range *ev.Tags {
-				if tg.Len() >= 2 && len(tg.Key()) == 1 {
-					testEvent = ev
-					break
-				}
-			}
-			if testEvent != nil {
-				break
-			}
-		}
-	}
+	var testTag *tag.T
+	var testEventForTag = findEventWithTag(events)
 
-	if testEvent != nil {
+	if testEventForTag != nil {
 		// Get the first tag with at least 2 elements and first element of length 1
-		var testTag *tag.T
-		for _, tg := range *testEvent.Tags {
+		for _, tg := range *testEventForTag.Tags {
 			if tg.Len() >= 2 && len(tg.Key()) == 1 {
 				testTag = tg
 				break
@@ -296,7 +211,7 @@ func TestQueryForIds(t *testing.T) {
 		// Test querying by kind and tag
 		idTsPk, err = db.QueryForIds(
 			ctx, &filter.F{
-				Kinds: kind.NewS(kind.New(testEvent.Kind)),
+				Kinds: kind.NewS(kind.New(testEventForTag.Kind)),
 				Tags:  tagsFilter,
 			},
 		)
@@ -316,10 +231,10 @@ func TestQueryForIds(t *testing.T) {
 			for _, ev := range events {
 				if utils.FastEqual(result.Id, ev.ID) {
 					found = true
-					if ev.Kind != testEvent.Kind {
+					if ev.Kind != testEventForTag.Kind {
 						t.Fatalf(
 							"result %d has incorrect kind, got %d, expected %d",
-							i, ev.Kind, testEvent.Kind,
+							i, ev.Kind, testEventForTag.Kind,
 						)
 					}
 
@@ -356,8 +271,8 @@ func TestQueryForIds(t *testing.T) {
 		// Test querying by kind, author, and tag
 		idTsPk, err = db.QueryForIds(
 			ctx, &filter.F{
-				Kinds:   kind.NewS(kind.New(testEvent.Kind)),
-				Authors: tag.NewFromBytesSlice(testEvent.Pubkey),
+				Kinds:   kind.NewS(kind.New(testEventForTag.Kind)),
+				Authors: tag.NewFromBytesSlice(testEventForTag.Pubkey),
 				Tags:    tagsFilter,
 			},
 		)
@@ -377,17 +292,17 @@ func TestQueryForIds(t *testing.T) {
 			for _, ev := range events {
 				if utils.FastEqual(result.Id, ev.ID) {
 					found = true
-					if ev.Kind != testEvent.Kind {
+					if ev.Kind != testEventForTag.Kind {
 						t.Fatalf(
 							"result %d has incorrect kind, got %d, expected %d",
-							i, ev.Kind, testEvent.Kind,
+							i, ev.Kind, testEventForTag.Kind,
 						)
 					}
 
-					if !utils.FastEqual(ev.Pubkey, testEvent.Pubkey) {
+					if !utils.FastEqual(ev.Pubkey, testEventForTag.Pubkey) {
 						t.Fatalf(
 							"result %d has incorrect author, got %x, expected %x",
-							i, ev.Pubkey, testEvent.Pubkey,
+							i, ev.Pubkey, testEventForTag.Pubkey,
 						)
 					}
 
@@ -424,7 +339,7 @@ func TestQueryForIds(t *testing.T) {
 		// Test querying by author and tag
 		idTsPk, err = db.QueryForIds(
 			ctx, &filter.F{
-				Authors: tag.NewFromBytesSlice(testEvent.Pubkey),
+				Authors: tag.NewFromBytesSlice(testEventForTag.Pubkey),
 				Tags:    tagsFilter,
 			},
 		)
@@ -445,10 +360,10 @@ func TestQueryForIds(t *testing.T) {
 				if utils.FastEqual(result.Id, ev.ID) {
 					found = true
 
-					if !utils.FastEqual(ev.Pubkey, testEvent.Pubkey) {
+					if !utils.FastEqual(ev.Pubkey, testEventForTag.Pubkey) {
 						t.Fatalf(
 							"result %d has incorrect author, got %x, expected %x",
-							i, ev.Pubkey, testEvent.Pubkey,
+							i, ev.Pubkey, testEventForTag.Pubkey,
 						)
 					}
 

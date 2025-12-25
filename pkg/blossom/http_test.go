@@ -611,7 +611,7 @@ func TestBlobURLBuilding(t *testing.T) {
 	ext := ".pdf"
 
 	url := BuildBlobURL(baseURL, sha256Hex, ext)
-	expected := baseURL + sha256Hex + ext
+	expected := baseURL + "/" + sha256Hex + ext
 
 	if url != expected {
 		t.Errorf("Expected %s, got %s", expected, url)
@@ -619,7 +619,7 @@ func TestBlobURLBuilding(t *testing.T) {
 
 	// Test without extension
 	url2 := BuildBlobURL(baseURL, sha256Hex, "")
-	expected2 := baseURL + sha256Hex
+	expected2 := baseURL + "/" + sha256Hex
 
 	if url2 != expected2 {
 		t.Errorf("Expected %s, got %s", expected2, url2)
