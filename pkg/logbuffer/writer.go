@@ -136,3 +136,4 @@ func SetCurrentLevel(level string) string {
 	}
 	return currentLevel
 }
+

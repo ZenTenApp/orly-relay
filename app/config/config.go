@@ -24,6 +24,7 @@ import (
 	"go-simpler.org/env"
 	lol "lol.mleku.dev"
 	"lol.mleku.dev/chk"
+	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/logbuffer"
 	"next.orly.dev/pkg/version"
 )
@@ -185,6 +186,15 @@ func New() (cfg *C, err error) {
 		logbuffer.Init(cfg.LogBufferSize)
 		logbuffer.SetCurrentLevel(cfg.LogLevel)
 		lol.Writer = logbuffer.NewBufferedWriter(lol.Writer, logbuffer.GlobalBuffer)
+		// Reinitialize the loggers to use the new wrapped Writer
+		// The lol.Main logger is initialized in init() with os.Stderr directly,
+		// so we need to recreate it with the new Writer
+		l, c, e := lol.New(lol.Writer, 2)
+		lol.Main.Log = l
+		lol.Main.Check = c
+		lol.Main.Errorf = e
+		// Also update the log package convenience variables
+		log.F, log.E, log.W, log.I, log.D, log.T = l.F, l.E, l.W, l.I, l.D, l.T
 	}
 	lol.SetLogLevel(cfg.LogLevel)
 	return
