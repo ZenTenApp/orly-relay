@@ -116,6 +116,9 @@
     // ACL mode
     let aclMode = "";
 
+    // Relay version
+    let relayVersion = "";
+
     // Compose tab state
     let composeEventJson = "";
     let composePublishError = "";
@@ -859,6 +862,9 @@
 
         // Load policy configuration
         loadPolicyConfig();
+
+        // Load relay version
+        fetchRelayVersion();
     }
 
     function savePersistentState() {
@@ -2020,6 +2026,17 @@
         }
     }
 
+    async function fetchRelayVersion() {
+        try {
+            const info = await api.fetchRelayInfo();
+            if (info && info.version) {
+                relayVersion = info.version;
+            }
+        } catch (error) {
+            console.error("Error fetching relay version:", error);
+        }
+    }
+
     // Export functionality
     async function exportEvents(pubkeys = []) {
         // Skip login check when ACL is "none" (open relay mode)
@@ -2737,6 +2754,7 @@
         {isDarkTheme}
         {tabs}
         {selectedTab}
+        version={relayVersion}
         on:selectTab={(e) => selectTab(e.detail)}
         on:closeSearchTab={(e) => closeSearchTab(e.detail)}
     />

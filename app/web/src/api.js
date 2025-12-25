@@ -319,6 +319,28 @@ export async function fetchPolicyFollows(signer, pubkey) {
     return data.follows || [];
 }
 
+// ==================== Relay Info API ====================
+
+/**
+ * Fetch relay info document (NIP-11)
+ * @returns {Promise<object>} Relay info including version
+ */
+export async function fetchRelayInfo() {
+    try {
+        const response = await fetch(window.location.origin, {
+            headers: {
+                Accept: "application/nostr+json",
+            },
+        });
+        if (response.ok) {
+            return await response.json();
+        }
+    } catch (error) {
+        console.error("Error fetching relay info:", error);
+    }
+    return null;
+}
+
 // ==================== Export/Import API ====================
 
 /**
