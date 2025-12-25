@@ -24,6 +24,7 @@ import (
 	"go-simpler.org/env"
 	lol "lol.mleku.dev"
 	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/logbuffer"
 	"next.orly.dev/pkg/version"
 )
 
@@ -43,6 +44,7 @@ type C struct {
 	DBIndexCacheMB      int           `env:"ORLY_DB_INDEX_CACHE_MB" default:"256" usage:"Badger index cache size in MB (improves index lookup performance)"`
 	DBZSTDLevel         int           `env:"ORLY_DB_ZSTD_LEVEL" default:"1" usage:"Badger ZSTD compression level (1=fast/500MB/s, 3=default, 9=best ratio, 0=disable)"`
 	LogToStdout         bool          `env:"ORLY_LOG_TO_STDOUT" default:"false" usage:"log to stdout instead of stderr"`
+	LogBufferSize       int           `env:"ORLY_LOG_BUFFER_SIZE" default:"10000" usage:"number of log entries to keep in memory for web UI viewing (0 disables)"`
 	Pprof               string        `env:"ORLY_PPROF" usage:"enable pprof in modes: cpu,memory,allocation,heap,block,goroutine,threadcreate,mutex"`
 	PprofPath           string        `env:"ORLY_PPROF_PATH" usage:"optional directory to write pprof profiles into (inside container); default is temporary dir"`
 	PprofHTTP           bool          `env:"ORLY_PPROF_HTTP" default:"false" usage:"if true, expose net/http/pprof on port 6060"`
@@ -177,6 +179,12 @@ func New() (cfg *C, err error) {
 	}
 	if cfg.LogToStdout {
 		lol.Writer = os.Stdout
+	}
+	// Initialize log buffer for web UI viewing
+	if cfg.LogBufferSize > 0 {
+		logbuffer.Init(cfg.LogBufferSize)
+		logbuffer.SetCurrentLevel(cfg.LogLevel)
+		lol.Writer = logbuffer.NewBufferedWriter(lol.Writer, logbuffer.GlobalBuffer)
 	}
 	lol.SetLogLevel(cfg.LogLevel)
 	return

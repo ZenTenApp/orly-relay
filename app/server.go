@@ -302,6 +302,10 @@ func (s *Server) UserInterface() {
 	s.mux.HandleFunc("/api/nip86", s.handleNIP86Management)
 	// ACL mode endpoint
 	s.mux.HandleFunc("/api/acl-mode", s.handleACLMode)
+	// Log viewer endpoints (owner only)
+	s.mux.HandleFunc("/api/logs", s.handleGetLogs)
+	s.mux.HandleFunc("/api/logs/clear", s.handleClearLogs)
+	s.mux.HandleFunc("/api/logs/level", s.handleLogLevel)
 
 	// Sync endpoints for distributed synchronization
 	if s.syncManager != nil {

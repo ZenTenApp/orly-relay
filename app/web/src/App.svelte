@@ -12,6 +12,7 @@
     import SprocketView from "./SprocketView.svelte";
     import PolicyView from "./PolicyView.svelte";
     import BlossomView from "./BlossomView.svelte";
+    import LogView from "./LogView.svelte";
     import SearchResultsView from "./SearchResultsView.svelte";
     import FilterDisplay from "./FilterDisplay.svelte";
 
@@ -1658,6 +1659,7 @@
         },
         { id: "sprocket", icon: "⚙️", label: "Sprocket", requiresOwner: true },
         { id: "policy", icon: "📜", label: "Policy", requiresOwner: true },
+        { id: "logs", icon: "📋", label: "Logs", requiresOwner: true },
     ];
 
     // Filter tabs based on current effective role (including view-as setting)
@@ -2898,6 +2900,13 @@
                 on:addPolicyAdmin={addPolicyAdmin}
                 on:removePolicyAdmin={removePolicyAdmin}
                 on:refreshFollows={refreshFollows}
+                on:openLoginModal={openLoginModal}
+            />
+        {:else if selectedTab === "logs"}
+            <LogView
+                {isLoggedIn}
+                {userRole}
+                {userSigner}
                 on:openLoginModal={openLoginModal}
             />
         {:else if selectedTab === "recovery"}

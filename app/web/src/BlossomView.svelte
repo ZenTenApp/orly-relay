@@ -457,7 +457,7 @@
                     </button>
                 {/if}
                 <button class="refresh-btn" on:click={handleRefresh} disabled={isLoading || isLoadingAdmin}>
-                    {isLoading || isLoadingAdmin ? "Loading..." : "Refresh"}
+                    🔄 {isLoading || isLoadingAdmin ? "Loading..." : "Refresh"}
                 </button>
             </div>
         </div>
