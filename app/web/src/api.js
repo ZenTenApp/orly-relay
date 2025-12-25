@@ -30,8 +30,8 @@ export async function createNIP98Auth(signer, pubkey, method, url) {
 
         // Sign using the signer
         const signedEvent = await signer.signEvent(authEvent);
-        // Use URL-safe base64 encoding
-        return btoa(JSON.stringify(signedEvent)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        // Use URL-safe base64 encoding (replace + with -, / with _)
+        return btoa(JSON.stringify(signedEvent)).replace(/\+/g, '-').replace(/\//g, '_');
     } catch (error) {
         console.error("Error creating NIP-98 auth:", error);
         return null;
