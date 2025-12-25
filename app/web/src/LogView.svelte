@@ -94,8 +94,9 @@
         }
 
         try {
-            const authHeader = await createAuthHeader("GET", "/api/logs");
-            const url = `${window.location.origin}/api/logs?offset=${offset}&limit=${LIMIT}`;
+            const path = `/api/logs?offset=${offset}&limit=${LIMIT}`;
+            const authHeader = await createAuthHeader("GET", path);
+            const url = `${window.location.origin}${path}`;
             const response = await fetch(url, {
                 headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
             });
