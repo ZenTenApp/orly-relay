@@ -4,21 +4,22 @@ import (
 	"bytes"
 
 	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/database/bufpool"
 	"next.orly.dev/pkg/database/indexes"
 	. "next.orly.dev/pkg/database/indexes/types"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 )
 
-// appendIndexBytes marshals an index to a byte slice and appends it to the idxs slice
-func appendIndexBytes(idxs *[][]byte, idx *indexes.T) (err error) {
-	buf := new(bytes.Buffer)
+// appendIndexBytes marshals an index to a byte slice and appends it to the idxs slice.
+// It reuses the provided buffer (resetting it first) to avoid allocations.
+func appendIndexBytes(idxs *[][]byte, idx *indexes.T, buf *bytes.Buffer) (err error) {
+	buf.Reset()
 	// Marshal the index to the buffer
 	if err = idx.MarshalWrite(buf); chk.E(err) {
 		return
 	}
-	// Copy the buffer's bytes to a new byte slice
-	// Append the byte slice to the idxs slice
-	*idxs = append(*idxs, buf.Bytes())
+	// Copy the buffer's bytes to a new byte slice and append
+	*idxs = append(*idxs, bufpool.CopyBytes(buf))
 	return
 }
 
@@ -28,6 +29,10 @@ func appendIndexBytes(idxs *[][]byte, idx *indexes.T) (err error) {
 func GetIndexesForEvent(ev *event.E, serial uint64) (
 	idxs [][]byte, err error,
 ) {
+	// Get a reusable buffer for all index serializations
+	buf := bufpool.GetSmall()
+	defer bufpool.PutSmall(buf)
+
 	defer func() {
 		if chk.E(err) {
 			idxs = nil
@@ -44,7 +49,7 @@ func GetIndexesForEvent(ev *event.E, serial uint64) (
 		return
 	}
 	idIndex := indexes.IdEnc(idHash, ser)
-	if err = appendIndexBytes(&idxs, idIndex); chk.E(err) {
+	if err = appendIndexBytes(&idxs, idIndex, buf); chk.E(err) {
 		return
 	}
 	// FullIdPubkey index
@@ -61,17 +66,17 @@ func GetIndexesForEvent(ev *event.E, serial uint64) (
 	idPubkeyIndex := indexes.FullIdPubkeyEnc(
 		ser, fullID, pubHash, createdAt,
 	)
-	if err = appendIndexBytes(&idxs, idPubkeyIndex); chk.E(err) {
+	if err = appendIndexBytes(&idxs, idPubkeyIndex, buf); chk.E(err) {
 		return
 	}
 	// CreatedAt index
 	createdAtIndex := indexes.CreatedAtEnc(createdAt, ser)
-	if err = appendIndexBytes(&idxs, createdAtIndex); chk.E(err) {
+	if err = appendIndexBytes(&idxs, createdAtIndex, buf); chk.E(err) {
 		return
 	}
 	// PubkeyCreatedAt index
 	pubkeyIndex := indexes.PubkeyEnc(pubHash, createdAt, ser)
-	if err = appendIndexBytes(&idxs, pubkeyIndex); chk.E(err) {
+	if err = appendIndexBytes(&idxs, pubkeyIndex, buf); chk.E(err) {
 		return
 	}
 	// Process tags for tag-related indexes
@@ -101,7 +106,7 @@ func GetIndexesForEvent(ev *event.E, serial uint64) (
 					key, valueHash, pubHash, createdAt, ser,
 				)
 				if err = appendIndexBytes(
-					&idxs, pubkeyTagIndex,
+					&idxs, pubkeyTagIndex, buf,
 				); chk.E(err) {
 					return
 				}
@@ -110,7 +115,7 @@ func GetIndexesForEvent(ev *event.E, serial uint64) (
 					key, valueHash, createdAt, ser,
 				)
 				if err = appendIndexBytes(
-					&idxs, tagIndex,
+					&idxs, tagIndex, buf,
 				); chk.E(err) {
 					return
 				}
@@ -122,7 +127,7 @@ func GetIndexesForEvent(ev *event.E, serial uint64) (
 					key, valueHash, kind, createdAt, ser,
 				)
 				if err = appendIndexBytes(
-					&idxs, kindTagIndex,
+					&idxs, kindTagIndex, buf,
 				); chk.E(err) {
 					return
 				}
@@ -131,7 +136,7 @@ func GetIndexesForEvent(ev *event.E, serial uint64) (
 					key, valueHash, kind, pubHash, createdAt, ser,
 				)
 				if err = appendIndexBytes(
-					&idxs, kindPubkeyTagIndex,
+					&idxs, kindPubkeyTagIndex, buf,
 				); chk.E(err) {
 					return
 				}
@@ -142,7 +147,7 @@ func GetIndexesForEvent(ev *event.E, serial uint64) (
 	kind.Set(uint16(ev.Kind))
 	// Kind index
 	kindIndex := indexes.KindEnc(kind, createdAt, ser)
-	if err = appendIndexBytes(&idxs, kindIndex); chk.E(err) {
+	if err = appendIndexBytes(&idxs, kindIndex, buf); chk.E(err) {
 		return
 	}
 	// KindPubkey index
@@ -150,7 +155,7 @@ func GetIndexesForEvent(ev *event.E, serial uint64) (
 	kindPubkeyIndex := indexes.KindPubkeyEnc(
 		kind, pubHash, createdAt, ser,
 	)
-	if err = appendIndexBytes(&idxs, kindPubkeyIndex); chk.E(err) {
+	if err = appendIndexBytes(&idxs, kindPubkeyIndex, buf); chk.E(err) {
 		return
 	}
 
@@ -160,7 +165,7 @@ func GetIndexesForEvent(ev *event.E, serial uint64) (
 			w := new(Word)
 			w.FromWord(h) // 8-byte truncated hash
 			wIdx := indexes.WordEnc(w, ser)
-			if err = appendIndexBytes(&idxs, wIdx); chk.E(err) {
+			if err = appendIndexBytes(&idxs, wIdx, buf); chk.E(err) {
 				return
 			}
 		}
@@ -176,7 +181,7 @@ func GetIndexesForEvent(ev *event.E, serial uint64) (
 					w := new(Word)
 					w.FromWord(h)
 					wIdx := indexes.WordEnc(w, ser)
-					if err = appendIndexBytes(&idxs, wIdx); chk.E(err) {
+					if err = appendIndexBytes(&idxs, wIdx, buf); chk.E(err) {
 						return
 					}
 				}

@@ -35,8 +35,8 @@ func (p *Letter) MarshalWrite(w io.Writer) (err error) {
 }
 
 func (p *Letter) UnmarshalRead(r io.Reader) (err error) {
-	val := make([]byte, 1)
-	if _, err = r.Read(val); chk.E(err) {
+	var val [1]byte // Fixed array avoids heap escape
+	if _, err = r.Read(val[:]); chk.E(err) {
 		return
 	}
 	p.val = val[0]

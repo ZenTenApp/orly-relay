@@ -86,6 +86,12 @@ whitelist:
 	})
 
 	defer conn.Close()
+	// Determine handler semaphore size from config
+	handlerSemSize := s.Config.MaxHandlersPerConnection
+	if handlerSemSize <= 0 {
+		handlerSemSize = 100 // Default if not configured
+	}
+
 	listener := &Listener{
 		ctx:            ctx,
 		cancel:         cancel,
@@ -98,6 +104,7 @@ whitelist:
 		writeDone:      make(chan struct{}),
 		messageQueue:   make(chan messageRequest, 100), // Buffered channel for message processing
 		processingDone: make(chan struct{}),
+		handlerSem:     make(chan struct{}, handlerSemSize), // Limits concurrent handlers
 		subscriptions:  make(map[string]context.CancelFunc),
 	}
 

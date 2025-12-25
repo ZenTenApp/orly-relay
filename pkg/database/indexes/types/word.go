@@ -37,12 +37,12 @@ func (w *Word) MarshalWrite(wr io.Writer) (err error) {
 // UnmarshalRead reads the word from the reader, stopping at the zero-byte marker
 func (w *Word) UnmarshalRead(r io.Reader) error {
 	buf := new(bytes.Buffer)
-	tmp := make([]byte, 1)
+	var tmp [1]byte // Fixed array avoids heap escape
 	foundEndMarker := false
 
 	// Read bytes until the zero byte is encountered
 	for {
-		n, err := r.Read(tmp)
+		n, err := r.Read(tmp[:])
 		if n > 0 {
 			if tmp[0] == 0x00 { // Stop on encountering the zero-byte marker
 				foundEndMarker = true

@@ -3,7 +3,6 @@
 package database
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 	"github.com/dgraph-io/badger/v4"
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/database/bufpool"
 	"next.orly.dev/pkg/database/indexes"
 	"next.orly.dev/pkg/database/indexes/types"
 	"next.orly.dev/pkg/mode"
@@ -277,14 +277,15 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 
 	// Calculate legacy size for comparison (for metrics tracking)
 	// We marshal to get accurate size comparison
-	legacyBuf := new(bytes.Buffer)
+	legacyBuf := bufpool.GetMedium()
+	defer bufpool.PutMedium(legacyBuf)
 	ev.MarshalBinary(legacyBuf)
 	legacySize := legacyBuf.Len()
 
 	if compactErr != nil {
 		// Fall back to legacy format if compact encoding fails
 		log.W.F("SaveEvent: compact encoding failed, using legacy format: %v", compactErr)
-		compactData = legacyBuf.Bytes()
+		compactData = bufpool.CopyBytes(legacyBuf)
 	} else {
 		// Track storage savings
 		TrackCompactSaving(legacySize, len(compactData))
@@ -322,19 +323,26 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 			// Format: cmp|serial|compact_event_data
 			// This is the only storage format - legacy evt/sev/aev/rev prefixes
 			// are handled by migration and no longer written for new events
-			cmpKeyBuf := new(bytes.Buffer)
+			cmpKeyBuf := bufpool.GetSmall()
 			if err = indexes.CompactEventEnc(ser).MarshalWrite(cmpKeyBuf); chk.E(err) {
+				bufpool.PutSmall(cmpKeyBuf)
 				return
 			}
-			if err = txn.Set(cmpKeyBuf.Bytes(), compactData); chk.E(err) {
+			if err = txn.Set(bufpool.CopyBytes(cmpKeyBuf), compactData); chk.E(err) {
+				bufpool.PutSmall(cmpKeyBuf)
 				return
 			}
+			bufpool.PutSmall(cmpKeyBuf)
 
 			// Create graph edges between event and all related pubkeys
 			// This creates bidirectional edges: event->pubkey and pubkey->event
 			// Include the event kind and direction for efficient graph queries
 			eventKind := new(types.Uint16)
 			eventKind.Set(ev.Kind)
+
+			// Reuse a single buffer for graph edge keys (reset between uses)
+			graphKeyBuf := bufpool.GetSmall()
+			defer bufpool.PutSmall(graphKeyBuf)
 
 			for _, pkInfo := range pubkeysForGraph {
 				// Determine direction for forward edge (event -> pubkey perspective)
@@ -353,23 +361,20 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 				}
 
 				// Create event -> pubkey edge (with kind and direction)
-				epgKeyBuf := new(bytes.Buffer)
-				if err = indexes.EventPubkeyGraphEnc(ser, pkInfo.serial, eventKind, directionForward).MarshalWrite(epgKeyBuf); chk.E(err) {
+				graphKeyBuf.Reset()
+				if err = indexes.EventPubkeyGraphEnc(ser, pkInfo.serial, eventKind, directionForward).MarshalWrite(graphKeyBuf); chk.E(err) {
 					return
 				}
-				// Make a copy of the key bytes to avoid buffer reuse issues in txn
-				epgKey := make([]byte, epgKeyBuf.Len())
-				copy(epgKey, epgKeyBuf.Bytes())
-				if err = txn.Set(epgKey, nil); chk.E(err) {
+				if err = txn.Set(bufpool.CopyBytes(graphKeyBuf), nil); chk.E(err) {
 					return
 				}
 
 				// Create pubkey -> event edge (reverse, with kind and direction for filtering)
-				pegKeyBuf := new(bytes.Buffer)
-				if err = indexes.PubkeyEventGraphEnc(pkInfo.serial, eventKind, directionReverse, ser).MarshalWrite(pegKeyBuf); chk.E(err) {
+				graphKeyBuf.Reset()
+				if err = indexes.PubkeyEventGraphEnc(pkInfo.serial, eventKind, directionReverse, ser).MarshalWrite(graphKeyBuf); chk.E(err) {
 					return
 				}
-				if err = txn.Set(pegKeyBuf.Bytes(), nil); chk.E(err) {
+				if err = txn.Set(bufpool.CopyBytes(graphKeyBuf), nil); chk.E(err) {
 					return
 				}
 			}
@@ -397,25 +402,22 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 					// Create forward edge: source event -> target event (outbound e-tag)
 					directionOut := new(types.Letter)
 					directionOut.Set(types.EdgeDirectionETagOut)
-					eegKeyBuf := new(bytes.Buffer)
-					if err = indexes.EventEventGraphEnc(ser, targetSerial, eventKind, directionOut).MarshalWrite(eegKeyBuf); chk.E(err) {
+					graphKeyBuf.Reset()
+					if err = indexes.EventEventGraphEnc(ser, targetSerial, eventKind, directionOut).MarshalWrite(graphKeyBuf); chk.E(err) {
 						return
 					}
-					// Make a copy of the key bytes to avoid buffer reuse issues in txn
-					eegKey := make([]byte, eegKeyBuf.Len())
-					copy(eegKey, eegKeyBuf.Bytes())
-					if err = txn.Set(eegKey, nil); chk.E(err) {
+					if err = txn.Set(bufpool.CopyBytes(graphKeyBuf), nil); chk.E(err) {
 						return
 					}
 
 					// Create reverse edge: target event -> source event (inbound e-tag)
 					directionIn := new(types.Letter)
 					directionIn.Set(types.EdgeDirectionETagIn)
-					geeKeyBuf := new(bytes.Buffer)
-					if err = indexes.GraphEventEventEnc(targetSerial, eventKind, directionIn, ser).MarshalWrite(geeKeyBuf); chk.E(err) {
+					graphKeyBuf.Reset()
+					if err = indexes.GraphEventEventEnc(targetSerial, eventKind, directionIn, ser).MarshalWrite(graphKeyBuf); chk.E(err) {
 						return
 					}
-					if err = txn.Set(geeKeyBuf.Bytes(), nil); chk.E(err) {
+					if err = txn.Set(bufpool.CopyBytes(graphKeyBuf), nil); chk.E(err) {
 						return
 					}
 				}

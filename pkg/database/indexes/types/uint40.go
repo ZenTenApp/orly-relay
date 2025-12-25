@@ -46,23 +46,23 @@ func (c *Uint40) MarshalWrite(w io.Writer) (err error) {
 	if c.value > MaxUint40 {
 		return errors.New("value exceeds 40-bit range")
 	}
-	// Buffer for the 5 bytes
-	buf := make([]byte, 5)
+	// Fixed array avoids heap escape
+	var buf [5]byte
 	// Write the upper 5 bytes (ignoring the most significant 3 bytes of uint64)
 	buf[0] = byte((c.value >> 32) & 0xFF) // Most significant byte
 	buf[1] = byte((c.value >> 24) & 0xFF)
 	buf[2] = byte((c.value >> 16) & 0xFF)
 	buf[3] = byte((c.value >> 8) & 0xFF)
 	buf[4] = byte(c.value & 0xFF) // Least significant byte
-	_, err = w.Write(buf)
+	_, err = w.Write(buf[:])
 	return err
 }
 
 // UnmarshalRead reads 5 bytes from the provided reader and decodes it into a 40-bit unsigned integer.
 func (c *Uint40) UnmarshalRead(r io.Reader) (err error) {
-	// Buffer for the 5 bytes
-	buf := make([]byte, 5)
-	_, err = r.Read(buf)
+	// Fixed array avoids heap escape
+	var buf [5]byte
+	_, err = r.Read(buf[:])
 	if chk.E(err) {
 		return err
 	}
@@ -81,8 +81,9 @@ type Uint40s []*Uint40
 // Union computes the union of the current Uint40s slice with another Uint40s slice. The result
 // contains all unique elements from both slices.
 func (s Uint40s) Union(other Uint40s) Uint40s {
-	valueMap := make(map[uint64]bool)
-	var result Uint40s
+	totalCap := len(s) + len(other)
+	valueMap := make(map[uint64]bool, totalCap)
+	result := make(Uint40s, 0, totalCap) // Pre-allocate for worst case
 
 	// Add elements from the current Uint40s slice to the result
 	for _, item := range s {
@@ -108,8 +109,13 @@ func (s Uint40s) Union(other Uint40s) Uint40s {
 // Intersection computes the intersection of the current Uint40s slice with another Uint40s
 // slice. The result contains only the elements that exist in both slices.
 func (s Uint40s) Intersection(other Uint40s) Uint40s {
-	valueMap := make(map[uint64]bool)
-	var result Uint40s
+	// Result can be at most the size of the smaller slice
+	smallerLen := len(s)
+	if len(other) < smallerLen {
+		smallerLen = len(other)
+	}
+	valueMap := make(map[uint64]bool, len(other))
+	result := make(Uint40s, 0, smallerLen) // Pre-allocate for worst case
 
 	// Add all elements from the other Uint40s slice to the map
 	for _, item := range other {
@@ -131,8 +137,8 @@ func (s Uint40s) Intersection(other Uint40s) Uint40s {
 // The result contains only the elements that are in the current slice but not in the other
 // slice.
 func (s Uint40s) Difference(other Uint40s) Uint40s {
-	valueMap := make(map[uint64]bool)
-	var result Uint40s
+	valueMap := make(map[uint64]bool, len(other))
+	result := make(Uint40s, 0, len(s)) // Pre-allocate for worst case (no overlap)
 
 	// Mark all elements in the other Uint40s slice
 	for _, item := range other {

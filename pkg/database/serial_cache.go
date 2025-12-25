@@ -3,12 +3,12 @@
 package database
 
 import (
-	"bytes"
 	"errors"
 	"sync"
 
 	"github.com/dgraph-io/badger/v4"
 	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/database/bufpool"
 	"next.orly.dev/pkg/database/indexes"
 	"next.orly.dev/pkg/database/indexes/types"
 )
@@ -281,7 +281,8 @@ func (r *DatabaseSerialResolver) GetEventIdBySerial(serial uint64) (eventId []by
 // GetEventIdBySerial looks up an event ID by its serial number.
 // Uses the SerialEventId index (sei prefix).
 func (d *D) GetEventIdBySerial(ser *types.Uint40) (eventId []byte, err error) {
-	keyBuf := new(bytes.Buffer)
+	keyBuf := bufpool.GetSmall()
+	defer bufpool.PutSmall(keyBuf)
 	if err = indexes.SerialEventIdEnc(ser).MarshalWrite(keyBuf); chk.E(err) {
 		return nil, err
 	}
@@ -318,12 +319,13 @@ func (d *D) StoreEventIdSerial(txn *badger.Txn, serial uint64, eventId []byte) e
 		return err
 	}
 
-	keyBuf := new(bytes.Buffer)
+	keyBuf := bufpool.GetSmall()
+	defer bufpool.PutSmall(keyBuf)
 	if err := indexes.SerialEventIdEnc(ser).MarshalWrite(keyBuf); chk.E(err) {
 		return err
 	}
 
-	return txn.Set(keyBuf.Bytes(), eventId)
+	return txn.Set(bufpool.CopyBytes(keyBuf), eventId)
 }
 
 // SerialCacheStats holds statistics about the serial cache.

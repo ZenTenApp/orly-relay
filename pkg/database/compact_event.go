@@ -13,6 +13,7 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"git.mleku.dev/mleku/nostr/encoders/varint"
 	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/database/bufpool"
 )
 
 // CompactEventFormat defines the binary format for compact event storage.
@@ -72,7 +73,8 @@ type SerialResolver interface {
 // MarshalCompactEvent encodes an event using compact serial references.
 // The resolver is used to look up/create serial mappings for pubkeys and event IDs.
 func MarshalCompactEvent(ev *event.E, resolver SerialResolver) (data []byte, err error) {
-	buf := new(bytes.Buffer)
+	buf := bufpool.GetMedium()
+	defer bufpool.PutMedium(buf)
 
 	// Version byte
 	buf.WriteByte(CompactFormatVersion)
@@ -109,7 +111,8 @@ func MarshalCompactEvent(ev *event.E, resolver SerialResolver) (data []byte, err
 	// Signature (64 bytes)
 	buf.Write(ev.Sig)
 
-	return buf.Bytes(), nil
+	// Copy bytes before returning buffer to pool
+	return bufpool.CopyBytes(buf), nil
 }
 
 // encodeCompactTag encodes a single tag with serial references for e/p tags.
@@ -221,8 +224,8 @@ func writeUint40(w io.Writer, value uint64) {
 
 // readUint40 reads a 5-byte big-endian unsigned integer.
 func readUint40(r io.Reader) (value uint64, err error) {
-	buf := make([]byte, 5)
-	if _, err = io.ReadFull(r, buf); err != nil {
+	var buf [5]byte // Fixed array avoids heap escape
+	if _, err = io.ReadFull(r, buf[:]); err != nil {
 		return 0, err
 	}
 	value = (uint64(buf[0]) << 32) |
@@ -331,9 +334,9 @@ func decodeCompactTag(r io.Reader, resolver SerialResolver) (t *tag.T, err error
 
 // decodeTagElement decodes a single tag element from compact format.
 func decodeTagElement(r io.Reader, resolver SerialResolver) (elem []byte, err error) {
-	// Read type flag
-	typeBuf := make([]byte, 1)
-	if _, err = io.ReadFull(r, typeBuf); err != nil {
+	// Read type flag (fixed array avoids heap escape)
+	var typeBuf [1]byte
+	if _, err = io.ReadFull(r, typeBuf[:]); err != nil {
 		return nil, err
 	}
 	typeFlag := typeBuf[0]

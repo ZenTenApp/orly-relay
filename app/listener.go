@@ -39,6 +39,7 @@ type Listener struct {
 	messageQueue     chan messageRequest // Buffered channel for message processing
 	processingDone   chan struct{}       // Closed when message processor exits
 	handlerWg        sync.WaitGroup      // Tracks spawned message handler goroutines
+	handlerSem       chan struct{}       // Limits concurrent message handlers per connection
 	authProcessing   sync.RWMutex        // Ensures AUTH completes before other messages check authentication
 	// Flow control counters (atomic for concurrent access)
 	droppedMessages  atomic.Int64 // Messages dropped due to full queue
@@ -240,9 +241,20 @@ func (l *Listener) messageProcessor() {
 				// Not AUTH - unlock immediately and process concurrently
 				// The next message can now be dequeued (possibly another non-AUTH to process concurrently)
 				l.authProcessing.Unlock()
+
+				// Acquire semaphore to limit concurrent handlers (blocking with context awareness)
+				select {
+				case l.handlerSem <- struct{}{}:
+					// Semaphore acquired
+				case <-l.ctx.Done():
+					return
+				}
 				l.handlerWg.Add(1)
 				go func(data []byte, remote string) {
-					defer l.handlerWg.Done()
+					defer func() {
+						<-l.handlerSem // Release semaphore
+						l.handlerWg.Done()
+					}()
 					l.HandleMessage(data, remote)
 				}(req.data, req.remote)
 			}
