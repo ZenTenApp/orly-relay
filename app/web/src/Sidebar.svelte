@@ -44,9 +44,11 @@
     </div>
     {#if version}
         <a href="https://next.orly.dev" target="_blank" rel="noopener noreferrer" class="version-link">
-            <svg class="gitea-icon" viewBox="0 0 640 640" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                <path d="M395.9 484.2l-126.9-61c-12.5-6-17.9-21.2-11.8-33.8l61-126.9c6-12.5 21.2-17.9 33.8-11.8 17.2 8.3 27.1 13 27.1 13l-.1-51.6s-.1-30.3 21.7-32.1c-.1 0 74-3 74-3s30.1-1.5 32.1 22.4c0 0 3.9 74.6 3.9 74.6s1.2 22.8-23.2 30c0 0-13.6 3.9-20.6 6-13.6 4.1-26.1-9-24.6-24.6l3.5-42.9-31.3 66.5-31.4 65.2c-4.2 8.7-1.1 18.8 7 24.2l32.9 21.1c11 7 .2 18.2-7.7 37.1l-19.4 48.6z"/>
-                <path d="M286.1 499.2l127-60.9c12.5-6 17.9-21.3 11.9-33.8l-61-126.9c-6-12.5-21.2-17.9-33.8-11.9-17.2 8.3-27.1 13-27.1 13l.1-51.6s.1-30.3-21.7-32.1c.1 0-74-3-74-3s-30.1-1.5-32.1 22.4c0 0-3.9 74.6-3.9 74.6s-1.2 22.8 23.2 30.1c0 0 13.6 3.9 20.6 5.9 13.6 4.1 26.1-9 24.6-24.6l-3.5-42.9 31.3 66.5 31.4 65.2c4.2 8.8 1 18.8-7 24.2l-32.9 21.1c-11 7.1-.2 18.3 7.7 37.1l19.2 48.6z"/>
+            <svg class="version-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <!-- Mug body -->
+                <path d="M5 6h12v2h1.5c1.38 0 2.5 1.12 2.5 2.5v1c0 1.38-1.12 2.5-2.5 2.5H17v1c0 1.66-1.34 3-3 3H8c-1.66 0-3-1.34-3-3V6zm12 6h1.5c.28 0 .5-.22.5-.5v-1c0-.28-.22-.5-.5-.5H17v2z"/>
+                <!-- Leaf on mug -->
+                <path d="M9 9c1.5 0 3 .5 3 2.5S10.5 14 9 14c0-1.5.5-3.5 2-4.5" stroke="currentColor" stroke-width="1" fill="none"/>
             </svg>
             <span class="version-text">v{version}</span>
         </a>
@@ -172,20 +174,22 @@
         align-items: center;
         gap: 0.5rem;
         padding: 0.75em 1em;
-        color: var(--muted-foreground);
+        color: var(--text-color);
         text-decoration: none;
         font-size: 0.8em;
-        transition: color 0.2s;
+        transition: background-color 0.2s, color 0.2s;
+        background: transparent;
     }
 
     .version-link:hover {
-        color: var(--text-color);
+        background-color: var(--bg-color);
     }
 
-    .gitea-icon {
+    .version-icon {
         width: 1.2em;
         height: 1.2em;
         flex-shrink: 0;
+        color: #4a9c5d;
     }
 
     .version-text {
