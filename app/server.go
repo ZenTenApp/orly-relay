@@ -33,9 +33,11 @@ import (
 	"next.orly.dev/pkg/protocol/graph"
 	"next.orly.dev/pkg/protocol/nip43"
 	"next.orly.dev/pkg/protocol/publish"
+	"next.orly.dev/pkg/bunker"
 	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/spider"
 	dsync "next.orly.dev/pkg/sync"
+	"next.orly.dev/pkg/wireguard"
 )
 
 type Server struct {
@@ -78,6 +80,11 @@ type Server struct {
 	eventAuthorizer  *authorization.Service
 	eventRouter      *routing.DefaultRouter
 	eventProcessor   *processing.Service
+
+	// WireGuard VPN and NIP-46 Bunker
+	wireguardServer *wireguard.Server
+	bunkerServer    *bunker.Server
+	subnetPool      *wireguard.SubnetPool
 }
 
 // isIPBlacklisted checks if an IP address is blacklisted using the managed ACL system
@@ -335,6 +342,14 @@ func (s *Server) UserInterface() {
 		s.mux.HandleFunc("/cluster/events", s.clusterManager.HandleEventsRange)
 		log.Printf("Cluster replication API enabled at /cluster")
 	}
+
+	// WireGuard VPN and Bunker API endpoints
+	// These are always registered but will return errors if not enabled
+	s.mux.HandleFunc("/api/wireguard/config", s.handleWireGuardConfig)
+	s.mux.HandleFunc("/api/wireguard/regenerate", s.handleWireGuardRegenerate)
+	s.mux.HandleFunc("/api/wireguard/status", s.handleWireGuardStatus)
+	s.mux.HandleFunc("/api/wireguard/audit", s.handleWireGuardAudit)
+	s.mux.HandleFunc("/api/bunker/url", s.handleBunkerURL)
 }
 
 // handleFavicon serves orly-favicon.png as favicon.ico

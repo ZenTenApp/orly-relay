@@ -133,6 +133,16 @@ type C struct {
 	TLSDomains []string `env:"ORLY_TLS_DOMAINS" usage:"comma-separated list of domains to respond to for TLS"`
 	Certs      []string `env:"ORLY_CERTS" usage:"comma-separated list of paths to certificate root names (e.g., /path/to/cert will load /path/to/cert.pem and /path/to/cert.key)"`
 
+	// WireGuard VPN configuration (for secure bunker access)
+	WGEnabled  bool   `env:"ORLY_WG_ENABLED" default:"false" usage:"enable embedded WireGuard VPN server for private bunker access"`
+	WGPort     int    `env:"ORLY_WG_PORT" default:"51820" usage:"UDP port for WireGuard VPN server"`
+	WGEndpoint string `env:"ORLY_WG_ENDPOINT" usage:"public IP/domain for WireGuard endpoint (required if WG enabled)"`
+	WGNetwork  string `env:"ORLY_WG_NETWORK" default:"10.73.0.0/16" usage:"WireGuard internal network CIDR"`
+
+	// NIP-46 Bunker configuration (remote signing service)
+	BunkerEnabled bool `env:"ORLY_BUNKER_ENABLED" default:"false" usage:"enable NIP-46 bunker signing service (requires WireGuard)"`
+	BunkerPort    int  `env:"ORLY_BUNKER_PORT" default:"3335" usage:"internal port for bunker WebSocket (only accessible via WireGuard)"`
+
 	// Cluster replication configuration
 	ClusterPropagatePrivilegedEvents bool `env:"ORLY_CLUSTER_PROPAGATE_PRIVILEGED_EVENTS" default:"true" usage:"propagate privileged events (DMs, gift wraps, etc.) to relay peers for replication"`
 
@@ -493,4 +503,23 @@ func (cfg *C) GetRateLimitConfigValues() (
 		cfg.RateLimitWriteTarget, cfg.RateLimitReadTarget,
 		cfg.RateLimitEmergencyThreshold, cfg.RateLimitRecoveryThreshold,
 		cfg.RateLimitEmergencyMaxMs
+}
+
+// GetWireGuardConfigValues returns the WireGuard VPN configuration values.
+// This avoids circular imports with pkg/wireguard while allowing main.go to construct
+// the WireGuard server configuration.
+func (cfg *C) GetWireGuardConfigValues() (
+	enabled bool,
+	port int,
+	endpoint string,
+	network string,
+	bunkerEnabled bool,
+	bunkerPort int,
+) {
+	return cfg.WGEnabled,
+		cfg.WGPort,
+		cfg.WGEndpoint,
+		cfg.WGNetwork,
+		cfg.BunkerEnabled,
+		cfg.BunkerPort
 }

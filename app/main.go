@@ -22,9 +22,13 @@ import (
 	"next.orly.dev/pkg/protocol/graph"
 	"next.orly.dev/pkg/protocol/nip43"
 	"next.orly.dev/pkg/protocol/publish"
+	"next.orly.dev/pkg/bunker"
 	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/spider"
 	dsync "next.orly.dev/pkg/sync"
+	"next.orly.dev/pkg/wireguard"
+
+	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 )
 
 func Run(
@@ -330,6 +334,101 @@ func Run(
 		log.I.F("Non-Badger backend detected (type: %T), Blossom server not available", db)
 	}
 
+	// Initialize WireGuard VPN and NIP-46 Bunker (only for Badger backend)
+	// Requires ACL mode 'follows' or 'managed' - no point for open relays
+	if badgerDB, ok := db.(*database.D); ok && cfg.WGEnabled && cfg.ACLMode != "none" {
+		if cfg.WGEndpoint == "" {
+			log.E.F("WireGuard enabled but ORLY_WG_ENDPOINT not set - skipping")
+		} else {
+			// Get or create the subnet pool (restores seed and allocations from DB)
+			subnetPool, err := badgerDB.GetOrCreateSubnetPool(cfg.WGNetwork)
+			if err != nil {
+				log.E.F("failed to create subnet pool: %v", err)
+			} else {
+				l.subnetPool = subnetPool
+
+				// Get or create WireGuard server key
+				wgServerKey, err := badgerDB.GetOrCreateWireGuardServerKey()
+				if err != nil {
+					log.E.F("failed to get WireGuard server key: %v", err)
+				} else {
+					// Create WireGuard server
+					wgConfig := &wireguard.Config{
+						Port:       cfg.WGPort,
+						Endpoint:   cfg.WGEndpoint,
+						PrivateKey: wgServerKey,
+						Network:    cfg.WGNetwork,
+						ServerIP:   "10.73.0.1",
+					}
+
+					l.wireguardServer, err = wireguard.New(wgConfig)
+					if err != nil {
+						log.E.F("failed to create WireGuard server: %v", err)
+					} else {
+						if err = l.wireguardServer.Start(); err != nil {
+							log.E.F("failed to start WireGuard server: %v", err)
+						} else {
+							log.I.F("WireGuard VPN server started on UDP port %d", cfg.WGPort)
+
+							// Load existing peers from database and add to server
+							peers, err := badgerDB.GetAllWireGuardPeers()
+							if err != nil {
+								log.W.F("failed to load existing WireGuard peers: %v", err)
+							} else {
+								for _, peer := range peers {
+									// Derive client IP from sequence
+									subnet := subnetPool.SubnetForSequence(peer.Sequence)
+									clientIP := subnet.ClientIP.String()
+									if err := l.wireguardServer.AddPeer(peer.NostrPubkey, peer.WGPublicKey, clientIP); err != nil {
+										log.W.F("failed to add existing peer: %v", err)
+									}
+								}
+								if len(peers) > 0 {
+									log.I.F("loaded %d existing WireGuard peers", len(peers))
+								}
+							}
+
+						// Initialize bunker if enabled
+						if cfg.BunkerEnabled {
+							// Get relay identity for signing
+							relaySecretKey, err := badgerDB.GetOrCreateRelayIdentitySecret()
+							if err != nil {
+								log.E.F("failed to get relay identity for bunker: %v", err)
+							} else {
+								// Create signer from secret key
+								relaySigner, sigErr := p8k.New()
+								if sigErr != nil {
+									log.E.F("failed to create signer for bunker: %v", sigErr)
+								} else if sigErr = relaySigner.InitSec(relaySecretKey); sigErr != nil {
+									log.E.F("failed to init signer for bunker: %v", sigErr)
+								} else {
+								relayPubkey := relaySigner.Pub()
+
+								bunkerConfig := &bunker.Config{
+									RelaySigner: relaySigner,
+									RelayPubkey: relayPubkey[:],
+									Netstack:    l.wireguardServer.GetNetstack(),
+									ListenAddr:  fmt.Sprintf("10.73.0.1:%d", cfg.BunkerPort),
+								}
+
+								l.bunkerServer = bunker.New(bunkerConfig)
+								if err = l.bunkerServer.Start(); err != nil {
+									log.E.F("failed to start bunker server: %v", err)
+								} else {
+									log.I.F("NIP-46 bunker server started on 10.73.0.1:%d (WireGuard only)", cfg.BunkerPort)
+								}
+								}
+							}
+						}
+						}
+					}
+				}
+			}
+		}
+	} else if cfg.WGEnabled && cfg.ACLMode == "none" {
+		log.I.F("WireGuard disabled: requires ACL mode 'follows' or 'managed' (currently: 'none')")
+	}
+
 	// Initialize event domain services (validation, routing, processing)
 	l.InitEventServices()
 
@@ -490,6 +589,18 @@ func Run(
 		if l.rateLimiter != nil && l.rateLimiter.IsEnabled() {
 			l.rateLimiter.Stop()
 			log.I.F("rate limiter stopped")
+		}
+
+		// Stop bunker server if running
+		if l.bunkerServer != nil {
+			l.bunkerServer.Stop()
+			log.I.F("bunker server stopped")
+		}
+
+		// Stop WireGuard server if running
+		if l.wireguardServer != nil {
+			l.wireguardServer.Stop()
+			log.I.F("WireGuard server stopped")
 		}
 
 		// Create shutdown context with timeout

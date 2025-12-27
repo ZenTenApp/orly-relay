@@ -391,3 +391,98 @@ export async function importEvents(signer, pubkey, file) {
     if (!response.ok) throw new Error(`Import failed: ${response.statusText}`);
     return await response.json();
 }
+
+// ==================== WireGuard/Bunker API ====================
+
+/**
+ * Fetch WireGuard status
+ * @returns {Promise<object>} WireGuard status
+ */
+export async function fetchWireGuardStatus() {
+    try {
+        const response = await fetch(`${window.location.origin}/api/wireguard/status`);
+        if (response.ok) {
+            return await response.json();
+        }
+    } catch (error) {
+        console.error("Error fetching WireGuard status:", error);
+    }
+    return { wireguard_enabled: false, bunker_enabled: false, available: false };
+}
+
+/**
+ * Get WireGuard configuration for the authenticated user
+ * @param {object} signer - The signer instance
+ * @param {string} pubkey - User's pubkey
+ * @returns {Promise<object>} WireGuard config
+ */
+export async function getWireGuardConfig(signer, pubkey) {
+    const url = `${window.location.origin}/api/wireguard/config`;
+    const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
+    const response = await fetch(url, {
+        headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+    });
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || `Failed to get WireGuard config: ${response.statusText}`);
+    }
+    return await response.json();
+}
+
+/**
+ * Regenerate WireGuard keypair for the authenticated user
+ * @param {object} signer - The signer instance
+ * @param {string} pubkey - User's pubkey
+ * @returns {Promise<object>} Regeneration result
+ */
+export async function regenerateWireGuard(signer, pubkey) {
+    const url = `${window.location.origin}/api/wireguard/regenerate`;
+    const authHeader = await createNIP98Auth(signer, pubkey, "POST", url);
+    const response = await fetch(url, {
+        method: "POST",
+        headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+    });
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || `Failed to regenerate WireGuard: ${response.statusText}`);
+    }
+    return await response.json();
+}
+
+/**
+ * Get Bunker URL for the authenticated user
+ * @param {object} signer - The signer instance
+ * @param {string} pubkey - User's pubkey
+ * @returns {Promise<object>} Bunker URL info
+ */
+export async function getBunkerURL(signer, pubkey) {
+    const url = `${window.location.origin}/api/bunker/url`;
+    const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
+    const response = await fetch(url, {
+        headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+    });
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || `Failed to get bunker URL: ${response.statusText}`);
+    }
+    return await response.json();
+}
+
+/**
+ * Get WireGuard audit log (revoked keys and access attempts)
+ * @param {object} signer - The signer instance
+ * @param {string} pubkey - User's pubkey
+ * @returns {Promise<object>} Audit data with revoked_keys and access_logs
+ */
+export async function getWireGuardAudit(signer, pubkey) {
+    const url = `${window.location.origin}/api/wireguard/audit`;
+    const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
+    const response = await fetch(url, {
+        headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+    });
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || `Failed to get audit log: ${response.statusText}`);
+    }
+    return await response.json();
+}

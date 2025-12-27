@@ -12,6 +12,7 @@
     import SprocketView from "./SprocketView.svelte";
     import PolicyView from "./PolicyView.svelte";
     import BlossomView from "./BlossomView.svelte";
+    import BunkerView from "./BunkerView.svelte";
     import LogView from "./LogView.svelte";
     import SearchResultsView from "./SearchResultsView.svelte";
     import FilterDisplay from "./FilterDisplay.svelte";
@@ -1649,6 +1650,7 @@
         { id: "import", icon: "💾", label: "Import", requiresAdmin: true },
         { id: "events", icon: "📡", label: "Events" },
         { id: "blossom", icon: "🌸", label: "Blossom" },
+        { id: "bunker", icon: "🔐", label: "Bunker", requiresWrite: true },
         { id: "compose", icon: "✏️", label: "Compose", requiresWrite: true },
         { id: "recovery", icon: "🔄", label: "Recovery" },
         {
@@ -2807,6 +2809,14 @@
             />
         {:else if selectedTab === "blossom"}
             <BlossomView
+                {isLoggedIn}
+                {userPubkey}
+                {userSigner}
+                {currentEffectiveRole}
+                on:openLoginModal={openLoginModal}
+            />
+        {:else if selectedTab === "bunker"}
+            <BunkerView
                 {isLoggedIn}
                 {userPubkey}
                 {userSigner}
