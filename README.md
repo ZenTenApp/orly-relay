@@ -618,3 +618,18 @@ pt, err := hex.Dec(string(pTag.ValueHex()))
 // WRONG: Value() may return binary bytes, not hex
 pt, err := hex.Dec(string(pTag.Value()))  // Will fail for binary-encoded tags!
 ```
+
+### Release Process
+
+The `/release` command pushes to multiple git remotes. To push to git.mleku.dev with the dedicated SSH key, ensure the `gitmlekudev` key is configured:
+
+```bash
+# SSH key should be at ~/.ssh/gitmlekudev
+# The release command uses GIT_SSH_COMMAND to specify this key:
+GIT_SSH_COMMAND="ssh -i ~/.ssh/gitmlekudev" git push ssh://mleku@git.mleku.dev:2222/mleku/next.orly.dev.git main --tags
+```
+
+Remotes pushed during release:
+- `origin` - Primary remote
+- `gitea` - Gitea mirror
+- `git.mleku.dev` - Using `gitmlekudev` SSH key

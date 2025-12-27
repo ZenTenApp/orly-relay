@@ -42,10 +42,11 @@ If no argument provided, default to `patch`.
 
 9. **Create a git tag** with the new version (e.g., `v0.36.0`)
 
-10. **Push to remotes** (origin and gitea) with tags:
+10. **Push to remotes** (origin, gitea, and git.mleku.dev) with tags:
     ```
     git push origin main --tags
     git push gitea main --tags
+    GIT_SSH_COMMAND="ssh -i ~/.ssh/gitmlekudev" git push ssh://mleku@git.mleku.dev:2222/mleku/next.orly.dev.git main --tags
     ```
 
 11. **Deploy to VPS** by running:
