@@ -12,6 +12,7 @@ import (
 	"lol.mleku.dev/log"
 	"git.mleku.dev/mleku/nostr/encoders/envelopes/authenvelope"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/cashu/token"
 	"next.orly.dev/pkg/protocol/publish"
 	"git.mleku.dev/mleku/nostr/utils/units"
 )
@@ -55,6 +56,12 @@ func (s *Server) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 whitelist:
+	// Extract and verify Cashu access token if verifier is configured
+	var cashuToken *token.Token
+	if s.CashuVerifier != nil {
+		cashuToken = s.extractWebSocketToken(r, remote)
+	}
+
 	// Create an independent context for this connection
 	// This context will be cancelled when the connection closes or server shuts down
 	ctx, cancel := context.WithCancel(s.Ctx)
@@ -99,6 +106,7 @@ whitelist:
 		conn:           conn,
 		remote:         remote,
 		req:            r,
+		cashuToken:     cashuToken, // Verified Cashu access token (nil if none provided)
 		startTime:      time.Now(),
 		writeChan:      make(chan publish.WriteRequest, 100), // Buffered channel for writes
 		writeDone:      make(chan struct{}),
@@ -290,4 +298,55 @@ func (s *Server) Pinger(
 			}
 		}
 	}
+}
+
+// extractWebSocketToken extracts and verifies a Cashu access token from a WebSocket upgrade request.
+// Checks query param first (for browser WebSocket clients), then headers.
+// Returns nil if no token is provided or if token verification fails.
+func (s *Server) extractWebSocketToken(r *http.Request, remote string) *token.Token {
+	// Try query param first (WebSocket clients often can't set custom headers)
+	tokenStr := r.URL.Query().Get("token")
+
+	// Try X-Cashu-Token header
+	if tokenStr == "" {
+		tokenStr = r.Header.Get("X-Cashu-Token")
+	}
+
+	// Try Authorization: Cashu scheme
+	if tokenStr == "" {
+		auth := r.Header.Get("Authorization")
+		if strings.HasPrefix(auth, "Cashu ") {
+			tokenStr = strings.TrimPrefix(auth, "Cashu ")
+		}
+	}
+
+	// No token provided - this is fine, connection proceeds without token
+	if tokenStr == "" {
+		return nil
+	}
+
+	// Parse the token
+	tok, err := token.Parse(tokenStr)
+	if err != nil {
+		log.W.F("ws %s: invalid Cashu token format: %v", remote, err)
+		return nil
+	}
+
+	// Verify token - accept both "relay" and "nip46" scopes for WebSocket connections
+	// NIP-46 connections are also WebSocket-based
+	ctx := context.Background()
+	if err := s.CashuVerifier.Verify(ctx, tok, remote); err != nil {
+		log.W.F("ws %s: Cashu token verification failed: %v", remote, err)
+		return nil
+	}
+
+	// Check scope - allow "relay" or "nip46"
+	if tok.Scope != token.ScopeRelay && tok.Scope != token.ScopeNIP46 {
+		log.W.F("ws %s: Cashu token has invalid scope %q for WebSocket", remote, tok.Scope)
+		return nil
+	}
+
+	log.D.F("ws %s: verified Cashu token with scope %q, expires %v",
+		remote, tok.Scope, tok.ExpiresAt())
+	return tok
 }

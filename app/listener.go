@@ -13,6 +13,7 @@ import (
 	"lol.mleku.dev/errorf"
 	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/acl"
+	"next.orly.dev/pkg/cashu/token"
 	"next.orly.dev/pkg/database"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
@@ -30,6 +31,7 @@ type Listener struct {
 	req              *http.Request
 	challenge        atomicutils.Bytes
 	authedPubkey     atomicutils.Bytes
+	cashuToken       *token.Token // Verified Cashu access token for this connection (nil if no token)
 	startTime        time.Time
 	isBlacklisted    bool      // Marker to identify blacklisted IPs
 	blacklistTimeout time.Time // When to timeout blacklisted connections

@@ -486,3 +486,17 @@ export async function getWireGuardAudit(signer, pubkey) {
     }
     return await response.json();
 }
+
+/**
+ * Get Bunker connection info (public endpoint)
+ * @returns {Promise<object>} Bunker info including relay URL, ACL mode, and CAT status
+ */
+export async function getBunkerInfo() {
+    const url = `${window.location.origin}/api/bunker/info`;
+    const response = await fetch(url);
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || `Failed to get bunker info: ${response.statusText}`);
+    }
+    return await response.json();
+}

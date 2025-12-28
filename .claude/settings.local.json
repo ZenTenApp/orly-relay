@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "/home/mleku/smesh",
+      "/home/mleku/Tourmaline"
+    ]
   },
   "outputStyle": "Default",
   "MAX_THINKING_TOKENS": "8000"

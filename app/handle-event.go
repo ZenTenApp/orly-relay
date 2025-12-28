@@ -131,6 +131,15 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 		return
 	}
 
+	// Check Cashu token kind permissions if a token was provided
+	if l.cashuToken != nil && !l.cashuToken.IsKindPermitted(int(env.E.Kind)) {
+		log.W.F("HandleEvent: rejecting event kind %d - not permitted by Cashu token", env.E.Kind)
+		if err = Ok.Error(l, env, "event kind not permitted by access token"); chk.E(err) {
+			return
+		}
+		return
+	}
+
 	// Handle NIP-43 special events before ACL checks
 	switch env.E.Kind {
 	case nip43.KindJoinRequest:

@@ -356,6 +356,7 @@ func (s *Server) UserInterface() {
 	s.mux.HandleFunc("/api/wireguard/status", s.handleWireGuardStatus)
 	s.mux.HandleFunc("/api/wireguard/audit", s.handleWireGuardAudit)
 	s.mux.HandleFunc("/api/bunker/url", s.handleBunkerURL)
+	s.mux.HandleFunc("/api/bunker/info", s.handleBunkerInfo)
 
 	// Cashu access token endpoints (NIP-XX)
 	s.mux.HandleFunc("/cashu/mint", s.handleCashuMint)
