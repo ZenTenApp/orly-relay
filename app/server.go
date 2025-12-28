@@ -34,6 +34,8 @@ import (
 	"next.orly.dev/pkg/protocol/nip43"
 	"next.orly.dev/pkg/protocol/publish"
 	"next.orly.dev/pkg/bunker"
+	"next.orly.dev/pkg/cashu/issuer"
+	"next.orly.dev/pkg/cashu/verifier"
 	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/spider"
 	dsync "next.orly.dev/pkg/sync"
@@ -85,6 +87,10 @@ type Server struct {
 	wireguardServer *wireguard.Server
 	bunkerServer    *bunker.Server
 	subnetPool      *wireguard.SubnetPool
+
+	// Cashu access token system (NIP-XX)
+	CashuIssuer   *issuer.Issuer
+	CashuVerifier *verifier.Verifier
 }
 
 // isIPBlacklisted checks if an IP address is blacklisted using the managed ACL system
@@ -350,6 +356,14 @@ func (s *Server) UserInterface() {
 	s.mux.HandleFunc("/api/wireguard/status", s.handleWireGuardStatus)
 	s.mux.HandleFunc("/api/wireguard/audit", s.handleWireGuardAudit)
 	s.mux.HandleFunc("/api/bunker/url", s.handleBunkerURL)
+
+	// Cashu access token endpoints (NIP-XX)
+	s.mux.HandleFunc("/cashu/mint", s.handleCashuMint)
+	s.mux.HandleFunc("/cashu/keysets", s.handleCashuKeysets)
+	s.mux.HandleFunc("/cashu/info", s.handleCashuInfo)
+	if s.CashuIssuer != nil {
+		log.Printf("Cashu access token API enabled at /cashu")
+	}
 }
 
 // handleFavicon serves orly-favicon.png as favicon.ico

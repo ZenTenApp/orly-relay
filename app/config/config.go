@@ -143,6 +143,14 @@ type C struct {
 	BunkerEnabled bool `env:"ORLY_BUNKER_ENABLED" default:"false" usage:"enable NIP-46 bunker signing service (requires WireGuard)"`
 	BunkerPort    int  `env:"ORLY_BUNKER_PORT" default:"3335" usage:"internal port for bunker WebSocket (only accessible via WireGuard)"`
 
+	// Cashu access token configuration (NIP-XX)
+	CashuEnabled     bool   `env:"ORLY_CASHU_ENABLED" default:"false" usage:"enable Cashu blind signature tokens for access control"`
+	CashuTokenTTL    string `env:"ORLY_CASHU_TOKEN_TTL" default:"168h" usage:"token validity duration (default: 1 week)"`
+	CashuKeysetTTL   string `env:"ORLY_CASHU_KEYSET_TTL" default:"168h" usage:"keyset active signing period (default: 1 week)"`
+	CashuVerifyTTL   string `env:"ORLY_CASHU_VERIFY_TTL" default:"504h" usage:"keyset verification period (default: 3 weeks)"`
+	CashuScopes      string `env:"ORLY_CASHU_SCOPES" default:"relay,nip46" usage:"comma-separated list of allowed token scopes"`
+	CashuReauthorize bool   `env:"ORLY_CASHU_REAUTHORIZE" default:"true" usage:"re-check ACL on each token verification for stateless revocation"`
+
 	// Cluster replication configuration
 	ClusterPropagatePrivilegedEvents bool `env:"ORLY_CLUSTER_PROPAGATE_PRIVILEGED_EVENTS" default:"true" usage:"propagate privileged events (DMs, gift wraps, etc.) to relay peers for replication"`
 
@@ -522,4 +530,55 @@ func (cfg *C) GetWireGuardConfigValues() (
 		cfg.WGNetwork,
 		cfg.BunkerEnabled,
 		cfg.BunkerPort
+}
+
+// GetCashuConfigValues returns the Cashu access token configuration values.
+// This avoids circular imports with pkg/cashu while allowing main.go to construct
+// the Cashu issuer/verifier configuration.
+func (cfg *C) GetCashuConfigValues() (
+	enabled bool,
+	tokenTTL time.Duration,
+	keysetTTL time.Duration,
+	verifyTTL time.Duration,
+	scopes []string,
+	reauthorize bool,
+) {
+	// Parse token TTL
+	tokenTTL = 168 * time.Hour // Default: 1 week
+	if cfg.CashuTokenTTL != "" {
+		if d, err := time.ParseDuration(cfg.CashuTokenTTL); err == nil {
+			tokenTTL = d
+		}
+	}
+
+	// Parse keyset TTL
+	keysetTTL = 168 * time.Hour // Default: 1 week
+	if cfg.CashuKeysetTTL != "" {
+		if d, err := time.ParseDuration(cfg.CashuKeysetTTL); err == nil {
+			keysetTTL = d
+		}
+	}
+
+	// Parse verify TTL
+	verifyTTL = 504 * time.Hour // Default: 3 weeks
+	if cfg.CashuVerifyTTL != "" {
+		if d, err := time.ParseDuration(cfg.CashuVerifyTTL); err == nil {
+			verifyTTL = d
+		}
+	}
+
+	// Parse scopes
+	if cfg.CashuScopes != "" {
+		scopes = strings.Split(cfg.CashuScopes, ",")
+		for i := range scopes {
+			scopes[i] = strings.TrimSpace(scopes[i])
+		}
+	}
+
+	return cfg.CashuEnabled,
+		tokenTTL,
+		keysetTTL,
+		verifyTTL,
+		scopes,
+		cfg.CashuReauthorize
 }
