@@ -6,6 +6,7 @@ import (
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/acl"
+	"next.orly.dev/pkg/cashu/token"
 	"next.orly.dev/pkg/event/routing"
 	"git.mleku.dev/mleku/nostr/encoders/envelopes/authenvelope"
 	"git.mleku.dev/mleku/nostr/encoders/envelopes/eventenvelope"
@@ -138,6 +139,26 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 			return
 		}
 		return
+	}
+
+	// Require Cashu token for NIP-46 events when Cashu is enabled and ACL is active
+	const kindNIP46 = 24133
+	if env.E.Kind == kindNIP46 && l.CashuVerifier != nil && l.Config.ACLMode != "none" {
+		if l.cashuToken == nil {
+			log.W.F("HandleEvent: rejecting NIP-46 event - Cashu access token required")
+			if err = Ok.Error(l, env, "restricted: NIP-46 requires Cashu access token"); chk.E(err) {
+				return
+			}
+			return
+		}
+		// Also verify the token has NIP-46 scope
+		if l.cashuToken.Scope != token.ScopeNIP46 && l.cashuToken.Scope != token.ScopeRelay {
+			log.W.F("HandleEvent: rejecting NIP-46 event - token scope %q not valid for NIP-46", l.cashuToken.Scope)
+			if err = Ok.Error(l, env, "restricted: access token scope not valid for NIP-46"); chk.E(err) {
+				return
+			}
+			return
+		}
 	}
 
 	// Handle NIP-43 special events before ACL checks
