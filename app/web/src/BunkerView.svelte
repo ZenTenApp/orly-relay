@@ -28,8 +28,110 @@
     let isServiceActive = false;
     let isStartingService = false;
     let connectedClients = [];
-    let catToken = null;
-    let catTokenEncoded = "";
+    let serviceCatToken = null;  // Token for ORLY's own relay connection
+
+    // Client tokens list - each device gets its own token
+    let clientTokens = [];  // [{id, name, token, encoded, createdAt, isEditing}]
+    let selectedTokenId = null;  // Currently selected token for the QR code
+
+    // Two-word name generator
+    const adjectives = ["brave", "calm", "clever", "cosmic", "cozy", "daring", "eager", "fancy", "gentle", "happy", "jolly", "keen", "lively", "merry", "nimble", "peppy", "quick", "rustic", "shiny", "swift", "tender", "vivid", "witty", "zesty"];
+    const nouns = ["badger", "bunny", "coral", "dolphin", "falcon", "gecko", "heron", "iguana", "jaguar", "koala", "lemur", "mango", "narwhal", "otter", "panda", "quail", "rabbit", "salmon", "turtle", "urchin", "viper", "walrus", "yak", "zebra"];
+
+    function generateTokenName() {
+        const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+        const noun = nouns[Math.floor(Math.random() * nouns.length)];
+        return `${adj}-${noun}`;
+    }
+
+    function generateTokenId() {
+        return crypto.randomUUID().split('-')[0];
+    }
+
+    // Add a new client token
+    async function addClientToken(mintInfo, signHttpAuth) {
+        const token = await requestToken(
+            mintInfo.mintUrl,
+            TokenScope.NIP46,
+            hexToBytes(userPubkey),
+            signHttpAuth,
+            [24133]
+        );
+        const encoded = encodeToken(token);
+        const id = generateTokenId();
+        const newToken = {
+            id,
+            name: generateTokenName(),
+            token,
+            encoded,
+            createdAt: Date.now(),
+            isExpanded: false
+        };
+        clientTokens = [...clientTokens, newToken];
+        // Select the new token if none selected
+        if (!selectedTokenId) {
+            selectedTokenId = id;
+        }
+        console.log(`Client token "${newToken.name}" created, expires:`, new Date(token.expiry * 1000).toISOString());
+        return newToken;
+    }
+
+    // Add a new token (called from UI)
+    async function handleAddToken() {
+        if (!bunkerInfo?.cashu_enabled) return;
+
+        try {
+            const mintInfo = await getMintInfo(bunkerInfo.relay_url);
+            if (!mintInfo) return;
+
+            const signHttpAuth = async (url, method) => {
+                const header = await createNIP98Auth(userSigner, userPubkey, method, url);
+                return `Nostr ${header}`;
+            };
+
+            await addClientToken(mintInfo, signHttpAuth);
+            // Regenerate QR for newly selected token
+            await generateQRCodes();
+        } catch (err) {
+            console.error("Failed to add token:", err);
+            error = err.message || "Failed to add token";
+        }
+    }
+
+    // Revoke/remove a client token
+    function revokeToken(tokenId) {
+        clientTokens = clientTokens.filter(t => t.id !== tokenId);
+        // If we removed the selected token, select another
+        if (selectedTokenId === tokenId) {
+            selectedTokenId = clientTokens.length > 0 ? clientTokens[0].id : null;
+        }
+        generateQRCodes();
+    }
+
+    // Toggle token details expansion
+    function toggleTokenExpand(tokenId) {
+        clientTokens = clientTokens.map(t =>
+            t.id === tokenId ? { ...t, isExpanded: !t.isExpanded } : t
+        );
+    }
+
+    // Update token name
+    function updateTokenName(tokenId, newName) {
+        clientTokens = clientTokens.map(t =>
+            t.id === tokenId ? { ...t, name: newName } : t
+        );
+    }
+
+    // Generate QR code for a specific token
+    async function generateTokenQR(token) {
+        if (!bunkerInfo || !userPubkey) return null;
+        const url = `bunker://${userPubkey}?relay=${encodeURIComponent(bunkerInfo.relay_url)}${bunkerSecret ? `&secret=${bunkerSecret}` : ''}&cat=${token.encoded}`;
+        return await QRCode.toDataURL(url, {
+            width: 200,
+            margin: 2,
+            color: { dark: "#000000", light: "#ffffff" }
+        });
+    }
 
     $: canAccess = isLoggedIn && userPubkey && (
         currentEffectiveRole === "write" ||
@@ -38,8 +140,10 @@
     );
 
     // Generate bunker URLs when bunkerInfo and userPubkey are available
-    $: clientBunkerURL = bunkerInfo && userPubkey ?
-        `bunker://${userPubkey}?relay=${encodeURIComponent(bunkerInfo.relay_url)}${bunkerSecret ? `&secret=${bunkerSecret}` : ''}${catTokenEncoded ? `&cat=${catTokenEncoded}` : ''}` : "";
+    // Get selected token for the bunker URL
+    $: selectedToken = clientTokens.find(t => t.id === selectedTokenId);
+    $: clientBunkerURL = bunkerInfo && userPubkey && selectedToken ?
+        `bunker://${userPubkey}?relay=${encodeURIComponent(bunkerInfo.relay_url)}${bunkerSecret ? `&secret=${bunkerSecret}` : ''}&cat=${selectedToken.encoded}` : "";
 
     $: signerBunkerURL = bunkerInfo ?
         `nostr+connect://${bunkerInfo.relay_url}` : "";
@@ -68,9 +172,9 @@
         error = "";
 
         try {
-            // Check if CAT is required and mint one
+            // Check if CAT is required and mint tokens
             if (bunkerInfo.cashu_enabled) {
-                console.log("CAT required, minting token...");
+                console.log("CAT required, minting tokens...");
                 const mintInfo = await getMintInfo(bunkerInfo.relay_url);
                 if (mintInfo) {
                     // Create NIP-98 auth function
@@ -79,16 +183,18 @@
                         return `Nostr ${header}`;
                     };
 
-                    // Request NIP-46 scoped token
-                    catToken = await requestToken(
+                    // 1. Token for ORLY's BunkerService relay connection
+                    serviceCatToken = await requestToken(
                         mintInfo.mintUrl,
                         TokenScope.NIP46,
                         hexToBytes(userPubkey),
                         signHttpAuth,
                         [24133]
                     );
-                    catTokenEncoded = encodeToken(catToken);
-                    console.log("CAT token acquired, expires:", new Date(catToken.expiry * 1000).toISOString());
+                    console.log("Service CAT token acquired, expires:", new Date(serviceCatToken.expiry * 1000).toISOString());
+
+                    // 2. Create first client token
+                    await addClientToken(mintInfo, signHttpAuth);
                 }
             }
 
@@ -104,9 +210,9 @@
                 bunkerService.addAllowedSecret(bunkerSecret);
             }
 
-            // Set CAT token if available
-            if (catToken) {
-                bunkerService.setCatToken(catToken);
+            // Set CAT token for service connection
+            if (serviceCatToken) {
+                bunkerService.setCatToken(serviceCatToken);
             }
 
             // Set up callbacks
@@ -149,8 +255,9 @@
         }
         isServiceActive = false;
         connectedClients = [];
-        catToken = null;
-        catTokenEncoded = "";
+        serviceCatToken = null;
+        clientTokens = [];
+        selectedTokenId = null;
         // Regenerate QR codes without CAT token
         generateQRCodes();
     }
@@ -299,52 +406,99 @@
                         </div>
                     {/if}
 
-                    {#if catToken}
-                        <div class="cat-info">
-                            <span class="cat-badge">CAT Token Active</span>
-                            <span class="cat-expiry">Expires: {new Date(catToken.expiry * 1000).toLocaleString()}</span>
-                        </div>
-                    {/if}
                 {/if}
             </div>
 
-            <div class="qr-sections">
-                <!-- Client QR Code -->
-                <section class="qr-section">
-                    <h4>Bunker URL for Client Apps</h4>
-                    <p class="section-desc">
-                        {#if isServiceActive}
-                            Scan or copy this URL in your Nostr client (e.g., Smesh) to connect:
-                        {:else}
-                            Start the bunker service above to generate a connection URL.
-                        {/if}
-                    </p>
+            <!-- Client Tokens Table -->
+            {#if isServiceActive && clientTokens.length > 0}
+                <div class="tokens-section">
+                    <div class="tokens-header">
+                        <h4>Client Tokens</h4>
+                        <button class="add-token-btn" on:click={handleAddToken}>+ Add Token</button>
+                    </div>
+                    <p class="tokens-desc">Each device/app gets its own token. Tokens can be individually revoked.</p>
 
-                    <div
-                        class="qr-container clickable"
-                        on:click={() => copyToClipboard(clientBunkerURL, "client")}
-                        on:keypress={(e) => e.key === 'Enter' && copyToClipboard(clientBunkerURL, "client")}
-                        role="button"
-                        tabindex="0"
-                        title="Click to copy bunker URL"
-                    >
-                        {#if clientQrDataUrl}
-                            <img src={clientQrDataUrl} alt="Client Bunker QR Code" class="qr-code" />
-                            <div class="qr-overlay" class:visible={copiedItem === "client"}>
-                                Copied!
+                    <div class="tokens-table">
+                        {#each clientTokens as tokenEntry (tokenEntry.id)}
+                            <div class="token-row" class:expanded={tokenEntry.isExpanded}>
+                                <div class="token-main" on:click={() => toggleTokenExpand(tokenEntry.id)} on:keypress={(e) => e.key === 'Enter' && toggleTokenExpand(tokenEntry.id)} role="button" tabindex="0">
+                                    <span class="expand-icon">{tokenEntry.isExpanded ? '▼' : '▶'}</span>
+                                    <input
+                                        type="text"
+                                        class="token-name-input"
+                                        value={tokenEntry.name}
+                                        on:input={(e) => updateTokenName(tokenEntry.id, e.target.value)}
+                                        on:click|stopPropagation
+                                        placeholder="Token name"
+                                    />
+                                    <span class="token-created">
+                                        {new Date(tokenEntry.createdAt).toLocaleDateString()}
+                                    </span>
+                                    <span class="token-expiry">
+                                        Expires: {new Date(tokenEntry.token.expiry * 1000).toLocaleDateString()}
+                                    </span>
+                                    <button
+                                        class="revoke-btn"
+                                        on:click|stopPropagation={() => revokeToken(tokenEntry.id)}
+                                        title="Revoke this token"
+                                    >
+                                        Revoke
+                                    </button>
+                                </div>
+
+                                {#if tokenEntry.isExpanded}
+                                    <div class="token-details">
+                                        {#await generateTokenQR(tokenEntry)}
+                                            <div class="qr-placeholder small">Loading QR...</div>
+                                        {:then qrDataUrl}
+                                            <div class="token-detail-content">
+                                                <div
+                                                    class="qr-container small clickable"
+                                                    on:click={() => {
+                                                        const url = `bunker://${userPubkey}?relay=${encodeURIComponent(bunkerInfo.relay_url)}${bunkerSecret ? `&secret=${bunkerSecret}` : ''}&cat=${tokenEntry.encoded}`;
+                                                        copyToClipboard(url, tokenEntry.id);
+                                                    }}
+                                                    on:keypress={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            const url = `bunker://${userPubkey}?relay=${encodeURIComponent(bunkerInfo.relay_url)}${bunkerSecret ? `&secret=${bunkerSecret}` : ''}&cat=${tokenEntry.encoded}`;
+                                                            copyToClipboard(url, tokenEntry.id);
+                                                        }
+                                                    }}
+                                                    role="button"
+                                                    tabindex="0"
+                                                    title="Click to copy bunker URL"
+                                                >
+                                                    <img src={qrDataUrl} alt="Token QR Code" class="qr-code small" />
+                                                    <div class="qr-overlay" class:visible={copiedItem === tokenEntry.id}>
+                                                        Copied!
+                                                    </div>
+                                                </div>
+                                                <div class="token-info">
+                                                    <div class="info-item">
+                                                        <span class="label">Created:</span>
+                                                        <span>{new Date(tokenEntry.createdAt).toLocaleString()}</span>
+                                                    </div>
+                                                    <div class="info-item">
+                                                        <span class="label">Expires:</span>
+                                                        <span>{new Date(tokenEntry.token.expiry * 1000).toLocaleString()}</span>
+                                                    </div>
+                                                    <div class="info-item url-item">
+                                                        <span class="label">Bunker URL:</span>
+                                                        <code class="bunker-url small">{`bunker://${userPubkey}?relay=${encodeURIComponent(bunkerInfo.relay_url)}${bunkerSecret ? `&secret=${bunkerSecret}` : ''}&cat=${tokenEntry.encoded}`}</code>
+                                                    </div>
+                                                    <div class="copy-hint">Click QR code to copy URL</div>
+                                                </div>
+                                            </div>
+                                        {:catch}
+                                            <div class="error-message">Failed to generate QR</div>
+                                        {/await}
+                                    </div>
+                                {/if}
                             </div>
-                        {:else}
-                            <div class="qr-placeholder">Generating QR...</div>
-                        {/if}
+                        {/each}
                     </div>
-
-                    <div class="url-display">
-                        <code class="bunker-url">{clientBunkerURL}</code>
-                    </div>
-                    <div class="copy-hint">Click QR code to copy</div>
-                </section>
-
-            </div>
+                </div>
+            {/if}
 
             <!-- Connection Info -->
             <div class="connection-info">
@@ -821,6 +975,187 @@
         background-color: var(--accent-hover-color);
     }
 
+    /* Token table styles */
+    .tokens-section {
+        background-color: var(--card-bg);
+        padding: 1.25em;
+        border-radius: 8px;
+        margin-bottom: 1.5em;
+    }
+
+    .tokens-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5em;
+    }
+
+    .tokens-header h4 {
+        margin: 0;
+        color: var(--text-color);
+    }
+
+    .tokens-desc {
+        margin: 0 0 1em 0;
+        font-size: 0.9em;
+        color: var(--text-color);
+        opacity: 0.7;
+    }
+
+    .add-token-btn {
+        background-color: var(--primary);
+        color: var(--text-color);
+        border: none;
+        padding: 0.4em 0.8em;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.85em;
+    }
+
+    .add-token-btn:hover {
+        background-color: var(--accent-hover-color);
+    }
+
+    .tokens-table {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5em;
+    }
+
+    .token-row {
+        background-color: var(--bg-color);
+        border-radius: 6px;
+        overflow: hidden;
+    }
+
+    .token-row.expanded {
+        border: 1px solid var(--border-color);
+    }
+
+    .token-main {
+        display: flex;
+        align-items: center;
+        gap: 0.75em;
+        padding: 0.75em;
+        cursor: pointer;
+        transition: background-color 0.15s;
+    }
+
+    .token-main:hover {
+        background-color: var(--card-bg);
+    }
+
+    .expand-icon {
+        font-size: 0.7em;
+        color: var(--text-color);
+        opacity: 0.6;
+        width: 1em;
+    }
+
+    .token-name-input {
+        flex: 1;
+        min-width: 100px;
+        max-width: 180px;
+        background-color: transparent;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 0.3em 0.5em;
+        font-size: 0.95em;
+        font-weight: 500;
+        color: var(--text-color);
+    }
+
+    .token-name-input:hover {
+        border-color: var(--border-color);
+    }
+
+    .token-name-input:focus {
+        outline: none;
+        border-color: var(--primary);
+        background-color: var(--card-bg);
+    }
+
+    .token-created, .token-expiry {
+        font-size: 0.8em;
+        color: var(--text-color);
+        opacity: 0.7;
+    }
+
+    .token-expiry {
+        margin-left: auto;
+    }
+
+    .revoke-btn {
+        background-color: #ef4444;
+        color: white;
+        border: none;
+        padding: 0.3em 0.6em;
+        border-radius: 4px;
+        font-size: 0.8em;
+        cursor: pointer;
+    }
+
+    .revoke-btn:hover {
+        background-color: #dc2626;
+    }
+
+    .token-details {
+        padding: 1em;
+        border-top: 1px solid var(--border-color);
+        background-color: var(--card-bg);
+    }
+
+    .token-detail-content {
+        display: flex;
+        gap: 1.5em;
+        align-items: flex-start;
+    }
+
+    .qr-container.small {
+        flex-shrink: 0;
+    }
+
+    .qr-code.small {
+        width: 150px;
+        height: 150px;
+    }
+
+    .qr-placeholder.small {
+        width: 150px;
+        height: 150px;
+        font-size: 0.85em;
+    }
+
+    .token-info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5em;
+    }
+
+    .info-item {
+        display: flex;
+        gap: 0.5em;
+        font-size: 0.9em;
+    }
+
+    .info-item .label {
+        color: var(--text-color);
+        opacity: 0.7;
+        min-width: 70px;
+    }
+
+    .info-item.url-item {
+        flex-direction: column;
+        gap: 0.25em;
+    }
+
+    .bunker-url.small {
+        font-size: 0.7em;
+        padding: 0.5em;
+        word-break: break-all;
+    }
+
     @media (max-width: 600px) {
         .qr-sections {
             grid-template-columns: 1fr;
@@ -833,6 +1168,43 @@
         .info-row {
             flex-direction: column;
             align-items: flex-start;
+        }
+
+        .token-main {
+            flex-wrap: wrap;
+            gap: 0.5em;
+        }
+
+        .token-name-input {
+            order: 1;
+            flex: 1 1 100%;
+            max-width: none;
+        }
+
+        .expand-icon {
+            order: 0;
+        }
+
+        .token-created {
+            order: 2;
+        }
+
+        .token-expiry {
+            order: 3;
+            margin-left: 0;
+        }
+
+        .revoke-btn {
+            order: 4;
+        }
+
+        .token-detail-content {
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .token-info {
+            width: 100%;
         }
     }
 </style>
