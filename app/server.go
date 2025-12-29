@@ -284,7 +284,7 @@ func (s *Server) UserInterface() {
 		s.challengeMutex.Unlock()
 	}
 
-	// Serve favicon.ico by serving orly-favicon.png
+	// Serve favicon.ico by serving favicon.png
 	s.mux.HandleFunc("/favicon.ico", s.handleFavicon)
 
 	// Serve the main login interface (and static assets) or proxy in dev mode
@@ -367,7 +367,7 @@ func (s *Server) UserInterface() {
 	}
 }
 
-// handleFavicon serves orly-favicon.png as favicon.ico
+// handleFavicon serves favicon.png as favicon.ico
 func (s *Server) handleFavicon(w http.ResponseWriter, r *http.Request) {
 	// In dev mode with proxy configured, forward to dev server
 	if s.devProxy != nil {
@@ -381,14 +381,14 @@ func (s *Server) handleFavicon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Serve orly-favicon.png as favicon.ico from embedded web app
+	// Serve favicon.png as favicon.ico from embedded web app
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 1 day
 
-	// Create a request for orly-favicon.png and serve it
+	// Create a request for favicon.png and serve it
 	faviconReq := &http.Request{
 		Method: "GET",
-		URL:    &url.URL{Path: "/orly-favicon.png"},
+		URL:    &url.URL{Path: "/favicon.png"},
 	}
 	ServeEmbeddedWeb(w, faviconReq)
 }

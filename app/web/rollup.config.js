@@ -84,7 +84,6 @@ export default {
         { src: 'public/global.css', dest: 'dist' },
         { src: 'public/favicon.png', dest: 'dist' },
         { src: 'public/orly.png', dest: 'dist' },
-        { src: 'public/orly-favicon.png', dest: 'dist' },
         { src: 'public/manifest.json', dest: 'dist' },
         { src: 'public/sw.js', dest: 'dist' },
         { src: 'public/icon-192.png', dest: 'dist' },
