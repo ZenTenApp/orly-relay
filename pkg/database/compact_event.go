@@ -355,7 +355,7 @@ func decodeTagElement(r io.Reader, resolver SerialResolver) (elem []byte, err er
 		return elem, nil
 
 	case TagElementPubkeySerial:
-		// Pubkey serial: 5 bytes -> lookup full pubkey -> return as 32-byte binary
+		// Pubkey serial: 5 bytes -> lookup full pubkey -> return as 33-byte binary
 		serial, err := readUint40(r)
 		if err != nil {
 			return nil, err
@@ -364,11 +364,14 @@ func decodeTagElement(r io.Reader, resolver SerialResolver) (elem []byte, err er
 		if err != nil {
 			return nil, err
 		}
-		// Return as 32-byte binary (nostr library optimized format)
-		return pubkey, nil
+		// Return as 33-byte binary (32 bytes + null terminator) for tag.Marshal detection
+		result := make([]byte, 33)
+		copy(result, pubkey)
+		result[32] = 0 // null terminator
+		return result, nil
 
 	case TagElementEventSerial:
-		// Event serial: 5 bytes -> lookup full event ID -> return as 32-byte binary
+		// Event serial: 5 bytes -> lookup full event ID -> return as 33-byte binary
 		serial, err := readUint40(r)
 		if err != nil {
 			return nil, err
@@ -377,15 +380,20 @@ func decodeTagElement(r io.Reader, resolver SerialResolver) (elem []byte, err er
 		if err != nil {
 			return nil, err
 		}
-		// Return as 32-byte binary
-		return eventId, nil
+		// Return as 33-byte binary (32 bytes + null terminator) for tag.Marshal detection
+		result := make([]byte, 33)
+		copy(result, eventId)
+		result[32] = 0 // null terminator
+		return result, nil
 
 	case TagElementEventIdFull:
 		// Full event ID: 32 bytes (for unknown/forward references)
-		elem = make([]byte, 32)
-		if _, err = io.ReadFull(r, elem); err != nil {
+		// Return as 33-byte binary (32 bytes + null terminator) for tag.Marshal detection
+		elem = make([]byte, 33)
+		if _, err = io.ReadFull(r, elem[:32]); err != nil {
 			return nil, err
 		}
+		elem[32] = 0 // null terminator
 		return elem, nil
 
 	default:
