@@ -1,11 +1,15 @@
 <script>
-    import { createEventDispatcher, onMount } from "svelte";
+    import { createEventDispatcher, onMount, onDestroy } from "svelte";
     import QRCode from "qrcode";
-    import { getBunkerInfo } from "./api.js";
+    import { getBunkerInfo, createNIP98Auth } from "./api.js";
+    import { BunkerService } from "./bunker-service.js";
+    import { requestToken, encodeToken, TokenScope, getMintInfo } from "./cashu-client.js";
+    import { hexToBytes } from "@noble/hashes/utils";
 
     export let isLoggedIn = false;
     export let userPubkey = "";
     export let userSigner = null;
+    export let userPrivkey = null; // User's private key for signing
     export let currentEffectiveRole = "";
 
     const dispatch = createEventDispatcher();
@@ -19,6 +23,14 @@
     let copiedItem = "";
     let bunkerSecret = "";
 
+    // Bunker service state
+    let bunkerService = null;
+    let isServiceActive = false;
+    let isStartingService = false;
+    let connectedClients = [];
+    let catToken = null;
+    let catTokenEncoded = "";
+
     $: canAccess = isLoggedIn && userPubkey && (
         currentEffectiveRole === "write" ||
         currentEffectiveRole === "admin" ||
@@ -27,7 +39,7 @@
 
     // Generate bunker URLs when bunkerInfo and userPubkey are available
     $: clientBunkerURL = bunkerInfo && userPubkey ?
-        `bunker://${userPubkey}?relay=${encodeURIComponent(bunkerInfo.relay_url)}${bunkerSecret ? `&secret=${bunkerSecret}` : ''}` : "";
+        `bunker://${userPubkey}?relay=${encodeURIComponent(bunkerInfo.relay_url)}${bunkerSecret ? `&secret=${bunkerSecret}` : ''}${catTokenEncoded ? `&cat=${catTokenEncoded}` : ''}` : "";
 
     $: signerBunkerURL = bunkerInfo ?
         `nostr+connect://${bunkerInfo.relay_url}` : "";
@@ -35,6 +47,113 @@
     onMount(async () => {
         await loadBunkerInfo();
     });
+
+    onDestroy(() => {
+        // Stop bunker service on component unmount
+        if (bunkerService) {
+            bunkerService.disconnect();
+            bunkerService = null;
+            isServiceActive = false;
+        }
+    });
+
+    // Start the bunker service
+    async function startBunkerService() {
+        if (!userPrivkey || !userPubkey || !bunkerInfo) {
+            error = "Missing private key or bunker info";
+            return;
+        }
+
+        isStartingService = true;
+        error = "";
+
+        try {
+            // Check if CAT is required and mint one
+            if (bunkerInfo.cashu_enabled) {
+                console.log("CAT required, minting token...");
+                const mintInfo = await getMintInfo(bunkerInfo.relay_url);
+                if (mintInfo) {
+                    // Create NIP-98 auth function
+                    const signHttpAuth = async (url, method) => {
+                        const header = await createNIP98Auth(userSigner, userPubkey, method, url);
+                        return `Nostr ${header}`;
+                    };
+
+                    // Request NIP-46 scoped token
+                    catToken = await requestToken(
+                        mintInfo.mintUrl,
+                        TokenScope.NIP46,
+                        hexToBytes(userPubkey),
+                        signHttpAuth,
+                        [24133]
+                    );
+                    catTokenEncoded = encodeToken(catToken);
+                    console.log("CAT token acquired, expires:", new Date(catToken.expiry * 1000).toISOString());
+                }
+            }
+
+            // Create and start bunker service
+            bunkerService = new BunkerService(
+                bunkerInfo.relay_url,
+                userPubkey,
+                userPrivkey
+            );
+
+            // Add the current secret
+            if (bunkerSecret) {
+                bunkerService.addAllowedSecret(bunkerSecret);
+            }
+
+            // Set CAT token if available
+            if (catToken) {
+                bunkerService.setCatToken(catToken);
+            }
+
+            // Set up callbacks
+            bunkerService.onClientConnected = (pubkey) => {
+                connectedClients = bunkerService.getConnectedClients();
+            };
+
+            bunkerService.onStatusChange = (status) => {
+                isServiceActive = status === 'connected';
+                if (status === 'disconnected') {
+                    connectedClients = [];
+                }
+            };
+
+            // Connect to relay
+            await bunkerService.connect();
+            isServiceActive = true;
+
+            // Regenerate QR codes with CAT token
+            await generateQRCodes();
+
+            console.log("Bunker service started successfully");
+        } catch (err) {
+            console.error("Failed to start bunker service:", err);
+            error = err.message || "Failed to start bunker service";
+            bunkerService = null;
+            isServiceActive = false;
+            catToken = null;
+            catTokenEncoded = "";
+        } finally {
+            isStartingService = false;
+        }
+    }
+
+    // Stop the bunker service
+    function stopBunkerService() {
+        if (bunkerService) {
+            bunkerService.disconnect();
+            bunkerService = null;
+        }
+        isServiceActive = false;
+        connectedClients = [];
+        catToken = null;
+        catTokenEncoded = "";
+        // Regenerate QR codes without CAT token
+        generateQRCodes();
+    }
 
     async function loadBunkerInfo() {
         isLoading = true;
@@ -137,15 +256,69 @@
             <div class="loading">Loading bunker information...</div>
         {:else if bunkerInfo}
             <div class="instructions">
-                <p><strong>How it works:</strong> Both your signing app (Amber) and your client app connect to this relay.
-                The relay acts as a secure middleman for NIP-46 remote signing.</p>
+                <p><strong>How it works:</strong> Start the bunker service to allow remote apps (like Smesh) to request signatures from your ORLY account.
+                Share the QR code or bunker URL with your client app.</p>
+            </div>
+
+            <!-- Service Control -->
+            <div class="service-control">
+                <div class="service-header">
+                    <h4>Bunker Service</h4>
+                    <div class="service-status" class:active={isServiceActive}>
+                        <span class="status-dot"></span>
+                        {isServiceActive ? 'Active' : 'Inactive'}
+                    </div>
+                </div>
+
+                {#if !userPrivkey}
+                    <div class="no-privkey-warning">
+                        Bunker service requires nsec login. Please log in with your private key to enable remote signing.
+                    </div>
+                {:else}
+                    <div class="service-actions">
+                        {#if isServiceActive}
+                            <button class="stop-btn" on:click={stopBunkerService}>
+                                Stop Service
+                            </button>
+                        {:else}
+                            <button class="start-btn" on:click={startBunkerService} disabled={isStartingService}>
+                                {isStartingService ? 'Starting...' : 'Start Service'}
+                            </button>
+                        {/if}
+                    </div>
+
+                    {#if isServiceActive && connectedClients.length > 0}
+                        <div class="connected-clients">
+                            <h5>Connected Clients ({connectedClients.length})</h5>
+                            {#each connectedClients as client}
+                                <div class="client-entry">
+                                    <code>{client.pubkey.substring(0, 16)}...</code>
+                                    <span class="client-time">Connected {new Date(client.connectedAt).toLocaleTimeString()}</span>
+                                </div>
+                            {/each}
+                        </div>
+                    {/if}
+
+                    {#if catToken}
+                        <div class="cat-info">
+                            <span class="cat-badge">CAT Token Active</span>
+                            <span class="cat-expiry">Expires: {new Date(catToken.expiry * 1000).toLocaleString()}</span>
+                        </div>
+                    {/if}
+                {/if}
             </div>
 
             <div class="qr-sections">
                 <!-- Client QR Code -->
                 <section class="qr-section">
-                    <h4>For Client App</h4>
-                    <p class="section-desc">Scan with your Nostr client to request signatures from Amber:</p>
+                    <h4>Bunker URL for Client Apps</h4>
+                    <p class="section-desc">
+                        {#if isServiceActive}
+                            Scan or copy this URL in your Nostr client (e.g., Smesh) to connect:
+                        {:else}
+                            Start the bunker service above to generate a connection URL.
+                        {/if}
+                    </p>
 
                     <div
                         class="qr-container clickable"
@@ -171,34 +344,6 @@
                     <div class="copy-hint">Click QR code to copy</div>
                 </section>
 
-                <!-- Signer QR Code (Amber) -->
-                <section class="qr-section">
-                    <h4>For Signer (Amber)</h4>
-                    <p class="section-desc">Scan with <a href="https://github.com/greenart7c3/Amber" target="_blank" rel="noopener noreferrer">Amber</a> to connect as a signer:</p>
-
-                    <div
-                        class="qr-container clickable"
-                        on:click={() => copyToClipboard(signerBunkerURL, "signer")}
-                        on:keypress={(e) => e.key === 'Enter' && copyToClipboard(signerBunkerURL, "signer")}
-                        role="button"
-                        tabindex="0"
-                        title="Click to copy connection URL"
-                    >
-                        {#if signerQrDataUrl}
-                            <img src={signerQrDataUrl} alt="Signer Connection QR Code" class="qr-code" />
-                            <div class="qr-overlay" class:visible={copiedItem === "signer"}>
-                                Copied!
-                            </div>
-                        {:else}
-                            <div class="qr-placeholder">Generating QR...</div>
-                        {/if}
-                    </div>
-
-                    <div class="url-display">
-                        <code class="bunker-url">{signerBunkerURL}</code>
-                    </div>
-                    <div class="copy-hint">Click QR code to copy</div>
-                </section>
             </div>
 
             <!-- Connection Info -->
@@ -221,23 +366,6 @@
                     <button class="copy-btn" on:click={regenerateSecret}>Regenerate</button>
                 </div>
             </div>
-
-            <!-- Amber links -->
-            <section class="amber-section">
-                <h4>Get Amber (NIP-46 Signer)</h4>
-                <p class="section-desc">Amber is an Android app for secure remote signing:</p>
-
-                <div class="client-links">
-                    <a href="https://play.google.com/store/apps/details?id=com.greenart7c3.nostrsigner" target="_blank" rel="noopener noreferrer" class="client-link">
-                        <span class="client-icon">Amber</span>
-                        <span class="client-store">Google Play</span>
-                    </a>
-                    <a href="https://github.com/greenart7c3/Amber/releases" target="_blank" rel="noopener noreferrer" class="client-link">
-                        <span class="client-icon">Amber</span>
-                        <span class="client-store">GitHub APK</span>
-                    </a>
-                </div>
-            </section>
         {/if}
     </div>
 {:else if isLoggedIn}
@@ -328,6 +456,152 @@
         color: var(--text-color);
     }
 
+    /* Service Control Styles */
+    .service-control {
+        background-color: var(--card-bg);
+        padding: 1.25em;
+        border-radius: 8px;
+        margin-bottom: 1.5em;
+    }
+
+    .service-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1em;
+    }
+
+    .service-header h4 {
+        margin: 0;
+        color: var(--text-color);
+    }
+
+    .service-status {
+        display: flex;
+        align-items: center;
+        gap: 0.5em;
+        font-size: 0.9em;
+        color: var(--text-color);
+        opacity: 0.7;
+    }
+
+    .service-status.active {
+        opacity: 1;
+        color: #4ade80;
+    }
+
+    .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: #6b7280;
+    }
+
+    .service-status.active .status-dot {
+        background-color: #4ade80;
+        box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+    }
+
+    .service-actions {
+        margin-bottom: 1em;
+    }
+
+    .start-btn, .stop-btn {
+        padding: 0.75em 1.5em;
+        border: none;
+        border-radius: 6px;
+        font-size: 1em;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .start-btn {
+        background-color: #4ade80;
+        color: #0a0a0a;
+    }
+
+    .start-btn:hover:not(:disabled) {
+        background-color: #22c55e;
+    }
+
+    .start-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .stop-btn {
+        background-color: #ef4444;
+        color: white;
+    }
+
+    .stop-btn:hover {
+        background-color: #dc2626;
+    }
+
+    .no-privkey-warning {
+        background-color: rgba(255, 193, 7, 0.15);
+        border: 1px solid rgba(255, 193, 7, 0.5);
+        color: var(--text-color);
+        padding: 0.75em 1em;
+        border-radius: 4px;
+        font-size: 0.95em;
+    }
+
+    .connected-clients {
+        margin-top: 1em;
+        padding-top: 1em;
+        border-top: 1px solid var(--border-color);
+    }
+
+    .connected-clients h5 {
+        margin: 0 0 0.5em 0;
+        color: var(--text-color);
+        font-size: 0.9em;
+    }
+
+    .client-entry {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5em;
+        background-color: var(--bg-color);
+        border-radius: 4px;
+        margin-bottom: 0.5em;
+    }
+
+    .client-entry code {
+        font-size: 0.85em;
+    }
+
+    .client-time {
+        font-size: 0.8em;
+        opacity: 0.7;
+    }
+
+    .cat-info {
+        display: flex;
+        align-items: center;
+        gap: 1em;
+        margin-top: 1em;
+        padding-top: 1em;
+        border-top: 1px solid var(--border-color);
+    }
+
+    .cat-badge {
+        background-color: rgba(74, 222, 128, 0.2);
+        color: #4ade80;
+        padding: 0.25em 0.75em;
+        border-radius: 4px;
+        font-size: 0.85em;
+        font-weight: 500;
+    }
+
+    .cat-expiry {
+        font-size: 0.85em;
+        opacity: 0.7;
+    }
+
     .qr-sections {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -351,10 +625,6 @@
         color: var(--text-color);
         opacity: 0.8;
         font-size: 0.95em;
-    }
-
-    .section-desc a {
-        color: var(--primary);
     }
 
     .qr-container {
@@ -497,52 +767,6 @@
         background-color: var(--accent-hover-color);
     }
 
-    .amber-section {
-        background-color: var(--card-bg);
-        padding: 1.25em;
-        border-radius: 8px;
-    }
-
-    .amber-section h4 {
-        margin: 0 0 0.5em 0;
-        color: var(--text-color);
-    }
-
-    .client-links {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.75em;
-    }
-
-    .client-link {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 0.75em 1em;
-        background-color: var(--bg-color);
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        text-decoration: none;
-        color: var(--text-color);
-        transition: border-color 0.2s, background-color 0.2s;
-        min-width: 100px;
-    }
-
-    .client-link:hover {
-        border-color: var(--primary);
-        background-color: var(--sidebar-bg);
-    }
-
-    .client-icon {
-        font-weight: 500;
-        margin-bottom: 0.25em;
-    }
-
-    .client-store {
-        font-size: 0.8em;
-        opacity: 0.7;
-    }
-
     .unavailable-message, .access-denied {
         text-align: center;
         padding: 2em;
@@ -600,14 +824,6 @@
     @media (max-width: 600px) {
         .qr-sections {
             grid-template-columns: 1fr;
-        }
-
-        .client-links {
-            flex-direction: column;
-        }
-
-        .client-link {
-            width: 100%;
         }
 
         .bunker-url {

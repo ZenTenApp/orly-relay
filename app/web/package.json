@@ -22,6 +22,8 @@
     "svelte": "^3.55.0"
   },
   "dependencies": {
+    "@noble/curves": "^1.4.0",
+    "@noble/hashes": "^1.4.0",
     "applesauce-core": "^4.4.2",
     "applesauce-signers": "^4.2.0",
     "hash-wasm": "^4.12.0",

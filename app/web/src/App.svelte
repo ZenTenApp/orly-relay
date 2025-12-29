@@ -56,6 +56,7 @@
     let userProfile = null;
     let userRole = "";
     let userSigner = null;
+    let userPrivkey = null; // User's private key for bunker service (only set for nsec login)
     let showSettingsDrawer = false;
     let selectedTab = localStorage.getItem("selectedTab") || "export";
     let showFilterBuilder = false; // Show filter builder in events view
@@ -1749,6 +1750,13 @@
         userSigner = signer;
         showLoginModal = false;
 
+        // Store private key for bunker service (only for nsec login)
+        if (method === "nsec" && privateKey) {
+            userPrivkey = privateKey;
+        } else {
+            userPrivkey = null;
+        }
+
         // Initialize Nostr client and fetch profile
         try {
             await initializeNostrClient();
@@ -1781,6 +1789,7 @@
         userProfile = null;
         userRole = "";
         userSigner = null;
+        userPrivkey = null;
         showSettingsDrawer = false;
 
         // Clear events
@@ -2820,6 +2829,7 @@
                 {isLoggedIn}
                 {userPubkey}
                 {userSigner}
+                {userPrivkey}
                 {currentEffectiveRole}
                 on:openLoginModal={openLoginModal}
             />
