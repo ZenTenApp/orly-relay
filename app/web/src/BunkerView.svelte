@@ -163,6 +163,12 @@
 
     // Start the bunker service
     async function startBunkerService() {
+        // Prevent starting if already active or starting
+        if (isServiceActive || isStartingService) {
+            console.log("Service already active or starting, ignoring");
+            return;
+        }
+
         if (!userPrivkey || !userPubkey || !bunkerInfo) {
             error = "Missing private key or bunker info";
             return;
@@ -221,7 +227,10 @@
             };
 
             bunkerService.onStatusChange = (status) => {
+                console.log("[BunkerView] Service status changed:", status);
                 isServiceActive = status === 'connected';
+                // Don't clear tokens on disconnect - they're still valid
+                // Just clear the connected clients list
                 if (status === 'disconnected') {
                     connectedClients = [];
                 }
@@ -240,8 +249,9 @@
             error = err.message || "Failed to start bunker service";
             bunkerService = null;
             isServiceActive = false;
-            catToken = null;
-            catTokenEncoded = "";
+            serviceCatToken = null;
+            clientTokens = [];
+            selectedTokenId = null;
         } finally {
             isStartingService = false;
         }
@@ -409,8 +419,8 @@
                 {/if}
             </div>
 
-            <!-- Client Tokens Table -->
-            {#if isServiceActive && clientTokens.length > 0}
+            <!-- Client Tokens Table - show if tokens exist, even if temporarily disconnected -->
+            {#if clientTokens.length > 0}
                 <div class="tokens-section">
                     <div class="tokens-header">
                         <h4>Client Tokens</h4>
