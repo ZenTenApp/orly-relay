@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
 
 	"git.mleku.dev/mleku/nostr/httpauth"
@@ -35,13 +34,24 @@ type CashuMintResponse struct {
 func (s *Server) handleCashuMint(w http.ResponseWriter, r *http.Request) {
 	// Check if Cashu is enabled
 	if s.CashuIssuer == nil {
+		log.W.F("Cashu mint request but issuer not initialized")
 		http.Error(w, "Cashu tokens not enabled", http.StatusNotImplemented)
 		return
 	}
 
 	// Require NIP-98 authentication
 	valid, pubkey, err := httpauth.CheckAuth(r)
-	if chk.E(err) || !valid {
+	if err != nil {
+		authHeader := r.Header.Get("Authorization")
+		if len(authHeader) > 100 {
+			authHeader = authHeader[:100] + "..."
+		}
+		log.W.F("Cashu mint NIP-98 auth error: %v (valid=%v, authHeader=%q)", err, valid, authHeader)
+		http.Error(w, "NIP-98 authentication required", http.StatusUnauthorized)
+		return
+	}
+	if !valid {
+		log.W.F("Cashu mint NIP-98 auth invalid signature")
 		http.Error(w, "NIP-98 authentication required", http.StatusUnauthorized)
 		return
 	}

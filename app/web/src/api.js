@@ -12,7 +12,7 @@
  */
 export async function createNIP98Auth(signer, pubkey, method, url) {
     if (!signer || !pubkey) {
-        console.log("No signer or pubkey available");
+        console.log("createNIP98Auth: No signer or pubkey available", { hasSigner: !!signer, hasPubkey: !!pubkey });
         return null;
     }
 
@@ -23,17 +23,30 @@ export async function createNIP98Auth(signer, pubkey, method, url) {
             created_at: Math.floor(Date.now() / 1000),
             tags: [
                 ["u", url],
-                ["method", method],
+                ["method", method.toUpperCase()],
             ],
             content: "",
         };
 
+        console.log("createNIP98Auth: Signing event for", method, url);
+
         // Sign using the signer
         const signedEvent = await signer.signEvent(authEvent);
+        console.log("createNIP98Auth: Signed event:", {
+            id: signedEvent.id,
+            pubkey: signedEvent.pubkey,
+            kind: signedEvent.kind,
+            created_at: signedEvent.created_at,
+            tags: signedEvent.tags,
+            hasSig: !!signedEvent.sig
+        });
+
         // Use URL-safe base64 encoding (replace + with -, / with _)
-        return btoa(JSON.stringify(signedEvent)).replace(/\+/g, '-').replace(/\//g, '_');
+        const json = JSON.stringify(signedEvent);
+        const base64 = btoa(json).replace(/\+/g, '-').replace(/\//g, '_');
+        return base64;
     } catch (error) {
-        console.error("Error creating NIP-98 auth:", error);
+        console.error("createNIP98Auth: Error:", error);
         return null;
     }
 }
