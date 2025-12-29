@@ -320,6 +320,67 @@ func (p *P) removeSubscriber(ws *websocket.Conn) {
 	delete(p.WriteChans, ws)
 }
 
+// HasActiveNIP46Signer checks if there's an active subscription for kind 24133
+// where the given pubkey is involved (either as author filter or in #p tag filter).
+// This is used to authenticate clients by proving a signer is connected for that pubkey.
+func (p *P) HasActiveNIP46Signer(signerPubkey []byte) bool {
+	const kindNIP46 = 24133
+	p.Mx.RLock()
+	defer p.Mx.RUnlock()
+
+	for _, subs := range p.Map {
+		for _, sub := range subs {
+			if sub.S == nil {
+				continue
+			}
+			for _, f := range *sub.S {
+				if f == nil || f.Kinds == nil {
+					continue
+				}
+				// Check if filter is for kind 24133
+				hasNIP46Kind := false
+				for _, k := range f.Kinds.K {
+					if k.K == kindNIP46 {
+						hasNIP46Kind = true
+						break
+					}
+				}
+				if !hasNIP46Kind {
+					continue
+				}
+				// Check if the signer pubkey matches the #p tag filter
+				if f.Tags != nil {
+					pTag := f.Tags.GetFirst([]byte("p"))
+					if pTag != nil && pTag.Len() >= 2 {
+						for i := 1; i < pTag.Len(); i++ {
+							tagValue := pTag.T[i]
+							// Compare - handle both binary and hex formats
+							if len(tagValue) == 32 && len(signerPubkey) == 32 {
+								if utils.FastEqual(tagValue, signerPubkey) {
+									return true
+								}
+							} else if len(tagValue) == 64 && len(signerPubkey) == 32 {
+								// tagValue is hex, signerPubkey is binary
+								if string(tagValue) == hex.Enc(signerPubkey) {
+									return true
+								}
+							} else if len(tagValue) == 32 && len(signerPubkey) == 64 {
+								// tagValue is binary, signerPubkey is hex
+								if hex.Enc(tagValue) == string(signerPubkey) {
+									return true
+								}
+							} else if utils.FastEqual(tagValue, signerPubkey) {
+								return true
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
 // canSeePrivateEvent checks if the authenticated user can see an event with a private tag
 func (p *P) canSeePrivateEvent(
 	authedPubkey, privatePubkey []byte, remote string,

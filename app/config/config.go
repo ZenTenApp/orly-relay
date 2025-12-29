@@ -105,6 +105,12 @@ type C struct {
 	Neo4jUser     string `env:"ORLY_NEO4J_USER" default:"neo4j" usage:"Neo4j authentication username (only used when ORLY_DB_TYPE=neo4j)"`
 	Neo4jPassword string `env:"ORLY_NEO4J_PASSWORD" default:"password" usage:"Neo4j authentication password (only used when ORLY_DB_TYPE=neo4j)"`
 
+	// Neo4j driver tuning (memory and connection management)
+	Neo4jMaxConnPoolSize   int `env:"ORLY_NEO4J_MAX_CONN_POOL" default:"25" usage:"max Neo4j connection pool size (driver default: 100, lower reduces memory)"`
+	Neo4jFetchSize         int `env:"ORLY_NEO4J_FETCH_SIZE" default:"1000" usage:"max records per fetch batch (prevents memory overflow, -1=fetch all)"`
+	Neo4jMaxTxRetrySeconds int `env:"ORLY_NEO4J_MAX_TX_RETRY_SEC" default:"30" usage:"max seconds for retryable transaction attempts"`
+	Neo4jQueryResultLimit  int `env:"ORLY_NEO4J_QUERY_RESULT_LIMIT" default:"10000" usage:"max results returned per query (prevents unbounded memory usage, 0=unlimited)"`
+
 	// Advanced database tuning
 	SerialCachePubkeys  int `env:"ORLY_SERIAL_CACHE_PUBKEYS" default:"100000" usage:"max pubkeys to cache for compact event storage (default: 100000, ~3.2MB memory)"`
 	SerialCacheEventIds int `env:"ORLY_SERIAL_CACHE_EVENT_IDS" default:"500000" usage:"max event IDs to cache for compact event storage (default: 500000, ~16MB memory)"`
@@ -472,6 +478,7 @@ func (cfg *C) GetDatabaseConfigValues() (
 	serialCachePubkeys, serialCacheEventIds int,
 	zstdLevel int,
 	neo4jURI, neo4jUser, neo4jPassword string,
+	neo4jMaxConnPoolSize, neo4jFetchSize, neo4jMaxTxRetrySeconds, neo4jQueryResultLimit int,
 ) {
 	// Parse query cache max age from string to duration
 	queryCacheMaxAge = 5 * time.Minute // Default
@@ -487,7 +494,8 @@ func (cfg *C) GetDatabaseConfigValues() (
 		cfg.QueryCacheDisabled,
 		cfg.SerialCachePubkeys, cfg.SerialCacheEventIds,
 		cfg.DBZSTDLevel,
-		cfg.Neo4jURI, cfg.Neo4jUser, cfg.Neo4jPassword
+		cfg.Neo4jURI, cfg.Neo4jUser, cfg.Neo4jPassword,
+		cfg.Neo4jMaxConnPoolSize, cfg.Neo4jFetchSize, cfg.Neo4jMaxTxRetrySeconds, cfg.Neo4jQueryResultLimit
 }
 
 // GetRateLimitConfigValues returns the rate limiting configuration values.

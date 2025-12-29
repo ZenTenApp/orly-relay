@@ -20,9 +20,14 @@ import (
 	"next.orly.dev/pkg/utils/apputil"
 )
 
-// maxConcurrentQueries limits the number of concurrent Neo4j queries to prevent
-// authentication rate limiting and connection exhaustion
-const maxConcurrentQueries = 10
+// Default configuration values (used when config values are 0 or not set)
+const (
+	defaultMaxConcurrentQueries = 10
+	defaultMaxConnPoolSize      = 25
+	defaultFetchSize            = 1000
+	defaultMaxTxRetrySeconds    = 30
+	defaultQueryResultLimit     = 10000
+)
 
 // maxRetryAttempts is the maximum number of times to retry a query on rate limit
 const maxRetryAttempts = 3
@@ -44,6 +49,12 @@ type N struct {
 	neo4jURI      string
 	neo4jUser     string
 	neo4jPassword string
+
+	// Driver tuning options
+	maxConnPoolSize   int // max connections in pool
+	fetchSize         int // records per fetch batch
+	maxTxRetryTime    time.Duration
+	queryResultLimit  int // max results per query (0=unlimited)
 
 	ready chan struct{} // Closed when database is ready to serve requests
 
@@ -118,16 +129,38 @@ func NewWithConfig(
 		neo4jPassword = "password"
 	}
 
+	// Apply defaults for driver tuning options
+	maxConnPoolSize := cfg.Neo4jMaxConnPoolSize
+	if maxConnPoolSize <= 0 {
+		maxConnPoolSize = defaultMaxConnPoolSize
+	}
+	fetchSize := cfg.Neo4jFetchSize
+	if fetchSize == 0 {
+		fetchSize = defaultFetchSize
+	}
+	maxTxRetrySeconds := cfg.Neo4jMaxTxRetrySeconds
+	if maxTxRetrySeconds <= 0 {
+		maxTxRetrySeconds = defaultMaxTxRetrySeconds
+	}
+	queryResultLimit := cfg.Neo4jQueryResultLimit
+	if queryResultLimit == 0 {
+		queryResultLimit = defaultQueryResultLimit
+	}
+
 	n = &N{
-		ctx:           ctx,
-		cancel:        cancel,
-		dataDir:       cfg.DataDir,
-		Logger:        NewLogger(lol.GetLogLevel(cfg.LogLevel), cfg.DataDir),
-		neo4jURI:      neo4jURI,
-		neo4jUser:     neo4jUser,
-		neo4jPassword: neo4jPassword,
-		ready:         make(chan struct{}),
-		querySem:      make(chan struct{}, maxConcurrentQueries),
+		ctx:              ctx,
+		cancel:           cancel,
+		dataDir:          cfg.DataDir,
+		Logger:           NewLogger(lol.GetLogLevel(cfg.LogLevel), cfg.DataDir),
+		neo4jURI:         neo4jURI,
+		neo4jUser:        neo4jUser,
+		neo4jPassword:    neo4jPassword,
+		maxConnPoolSize:  maxConnPoolSize,
+		fetchSize:        fetchSize,
+		maxTxRetryTime:   time.Duration(maxTxRetrySeconds) * time.Second,
+		queryResultLimit: queryResultLimit,
+		ready:            make(chan struct{}),
+		querySem:         make(chan struct{}, defaultMaxConcurrentQueries),
 	}
 
 	// Ensure the data directory exists
@@ -191,12 +224,24 @@ func New(
 
 // initNeo4jClient establishes connection to Neo4j server
 func (n *N) initNeo4jClient() error {
-	n.Logger.Infof("connecting to neo4j at %s", n.neo4jURI)
+	n.Logger.Infof("connecting to neo4j at %s (pool=%d, fetch=%d, txRetry=%v)",
+		n.neo4jURI, n.maxConnPoolSize, n.fetchSize, n.maxTxRetryTime)
 
-	// Create Neo4j driver
+	// Create Neo4j driver with tuned configuration
 	driver, err := neo4j.NewDriverWithContext(
 		n.neo4jURI,
 		neo4j.BasicAuth(n.neo4jUser, n.neo4jPassword, ""),
+		func(config *neo4j.Config) {
+			// Limit connection pool size to reduce memory usage
+			config.MaxConnectionPoolSize = n.maxConnPoolSize
+
+			// Set fetch size to batch records and prevent memory overflow
+			// -1 means fetch all (driver default), positive value limits batch size
+			config.FetchSize = n.fetchSize
+
+			// Set max transaction retry time
+			config.MaxTransactionRetryTime = n.maxTxRetryTime
+		},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create neo4j driver: %w", err)
@@ -461,4 +506,20 @@ func (n *N) QuerySem() chan struct{} {
 // MaxConcurrentQueries returns the maximum concurrent query limit.
 func (n *N) MaxConcurrentQueries() int {
 	return cap(n.querySem)
+}
+
+// QueryResultLimit returns the configured maximum results per query.
+// Returns 0 if unlimited (no limit applied).
+func (n *N) QueryResultLimit() int {
+	return n.queryResultLimit
+}
+
+// FetchSize returns the configured fetch batch size.
+func (n *N) FetchSize() int {
+	return n.fetchSize
+}
+
+// MaxConnPoolSize returns the configured connection pool size.
+func (n *N) MaxConnPoolSize() int {
+	return n.maxConnPoolSize
 }

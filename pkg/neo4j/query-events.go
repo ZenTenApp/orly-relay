@@ -223,10 +223,25 @@ RETURN e.id AS id,
 	// Add ordering (most recent first)
 	orderClause := " ORDER BY e.created_at DESC"
 
-	// Add limit if specified
+	// Add limit - use the smaller of requested limit and configured max limit
+	// This prevents unbounded queries that could exhaust memory
 	limitClause := ""
+	requestedLimit := 0
 	if f.Limit != nil && *f.Limit > 0 {
-		params["limit"] = *f.Limit
+		requestedLimit = int(*f.Limit)
+	}
+
+	// Apply the configured query result limit as a safety cap
+	// If queryResultLimit is 0 (unlimited), only use the requested limit
+	effectiveLimit := requestedLimit
+	if n.queryResultLimit > 0 {
+		if effectiveLimit == 0 || effectiveLimit > n.queryResultLimit {
+			effectiveLimit = n.queryResultLimit
+		}
+	}
+
+	if effectiveLimit > 0 {
+		params["limit"] = effectiveLimit
 		limitClause = " LIMIT $limit"
 	}
 
@@ -358,11 +373,16 @@ func (n *N) QueryForSerials(c context.Context, f *filter.F) (
 		return nil, fmt.Errorf("invalid query structure")
 	}
 
-	// Rebuild query with serial-only return
+	// Rebuild query with serial-only return, preserving ORDER BY and LIMIT
 	cypher = cypherParts[0] + returnClause
-	if strings.Contains(cypherParts[1], "ORDER BY") {
-		orderPart := " ORDER BY" + strings.Split(cypherParts[1], "ORDER BY")[1]
-		cypher += orderPart
+	remainder := cypherParts[1]
+	if strings.Contains(remainder, "ORDER BY") {
+		orderAndLimit := " ORDER BY" + strings.Split(remainder, "ORDER BY")[1]
+		cypher += orderAndLimit
+	} else if strings.Contains(remainder, "LIMIT") {
+		// No ORDER BY but has LIMIT
+		limitPart := " LIMIT" + strings.Split(remainder, "LIMIT")[1]
+		cypher += limitPart
 	}
 
 	result, err := n.ExecuteRead(c, cypher, params)
@@ -417,10 +437,16 @@ func (n *N) QueryForIds(c context.Context, f *filter.F) (
 		return nil, fmt.Errorf("invalid query structure")
 	}
 
+	// Rebuild query preserving ORDER BY and LIMIT
 	cypher = cypherParts[0] + returnClause
-	if strings.Contains(cypherParts[1], "ORDER BY") {
-		orderPart := " ORDER BY" + strings.Split(cypherParts[1], "ORDER BY")[1]
-		cypher += orderPart
+	remainder := cypherParts[1]
+	if strings.Contains(remainder, "ORDER BY") {
+		orderAndLimit := " ORDER BY" + strings.Split(remainder, "ORDER BY")[1]
+		cypher += orderAndLimit
+	} else if strings.Contains(remainder, "LIMIT") {
+		// No ORDER BY but has LIMIT
+		limitPart := " LIMIT" + strings.Split(remainder, "LIMIT")[1]
+		cypher += limitPart
 	}
 
 	result, err := n.ExecuteRead(c, cypher, params)

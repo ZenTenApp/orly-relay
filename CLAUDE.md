@@ -46,6 +46,14 @@ NOSTR_SECRET_KEY=nsec1... ./nurl https://relay.example.com/api/logs/clear
 | `ORLY_TLS_DOMAINS` | | Let's Encrypt domains |
 | `ORLY_AUTH_TO_WRITE` | false | Require auth for writes |
 
+**Neo4j Memory Tuning** (only when `ORLY_DB_TYPE=neo4j`):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ORLY_NEO4J_MAX_CONN_POOL` | 25 | Max connections (lower = less memory) |
+| `ORLY_NEO4J_FETCH_SIZE` | 1000 | Records per batch (-1=all) |
+| `ORLY_NEO4J_QUERY_RESULT_LIMIT` | 10000 | Max results per query (0=unlimited) |
+
 See `./orly help` for all options. **All env vars MUST be defined in `app/config/config.go`**.
 
 ## Architecture

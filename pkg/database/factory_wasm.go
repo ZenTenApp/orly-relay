@@ -31,6 +31,12 @@ type DatabaseConfig struct {
 	Neo4jURI      string // ORLY_NEO4J_URI
 	Neo4jUser     string // ORLY_NEO4J_USER
 	Neo4jPassword string // ORLY_NEO4J_PASSWORD
+
+	// Neo4j driver tuning (memory and connection management)
+	Neo4jMaxConnPoolSize   int // ORLY_NEO4J_MAX_CONN_POOL - max connection pool size (default: 25)
+	Neo4jFetchSize         int // ORLY_NEO4J_FETCH_SIZE - max records per fetch batch (default: 1000)
+	Neo4jMaxTxRetrySeconds int // ORLY_NEO4J_MAX_TX_RETRY_SEC - max transaction retry time (default: 30)
+	Neo4jQueryResultLimit  int // ORLY_NEO4J_QUERY_RESULT_LIMIT - max results per query (default: 10000, 0=unlimited)
 }
 
 // NewDatabase creates a database instance based on the specified type.

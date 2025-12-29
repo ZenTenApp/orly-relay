@@ -24,6 +24,11 @@ type WriteChanSetter interface {
 	GetWriteChan(*websocket.Conn) (chan WriteRequest, bool)
 }
 
+// NIP46SignerChecker defines the interface for checking active NIP-46 signers
+type NIP46SignerChecker interface {
+	HasActiveNIP46Signer(signerPubkey []byte) bool
+}
+
 // S is the control structure for the subscription management scheme.
 type S struct {
 	publisher.Publishers

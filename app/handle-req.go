@@ -27,6 +27,7 @@ import (
 	"next.orly.dev/pkg/policy"
 	"next.orly.dev/pkg/protocol/graph"
 	"next.orly.dev/pkg/protocol/nip43"
+	"next.orly.dev/pkg/protocol/publish"
 	"git.mleku.dev/mleku/nostr/utils/normalize"
 	"git.mleku.dev/mleku/nostr/utils/pointers"
 )
@@ -52,6 +53,51 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 			)
 		},
 	)
+
+	// NIP-46 signer-based authentication:
+	// If client is not authenticated and requests kind 24133 with exactly one #p tag,
+	// check if there's an active signer subscription for that pubkey.
+	// If so, authenticate the client as that pubkey.
+	const kindNIP46 = 24133
+	if len(l.authedPubkey.Load()) == 0 && len(*env.Filters) == 1 {
+		f := (*env.Filters)[0]
+		if f != nil && f.Kinds != nil && f.Kinds.Len() == 1 {
+			isNIP46Kind := false
+			for _, k := range f.Kinds.K {
+				if k.K == kindNIP46 {
+					isNIP46Kind = true
+					break
+				}
+			}
+			if isNIP46Kind && f.Tags != nil {
+				pTag := f.Tags.GetFirst([]byte("p"))
+				// Must have exactly one pubkey in the #p tag
+				if pTag != nil && pTag.Len() == 2 {
+					signerPubkey := pTag.Value()
+					// Convert to binary if hex
+					var signerPubkeyBin []byte
+					if len(signerPubkey) == 64 {
+						signerPubkeyBin, _ = hexenc.Dec(string(signerPubkey))
+					} else if len(signerPubkey) == 32 {
+						signerPubkeyBin = signerPubkey
+					}
+					if len(signerPubkeyBin) == 32 {
+						// Check if there's an active signer for this pubkey
+						if socketPub := l.publishers.GetSocketPublisher(); socketPub != nil {
+							if checker, ok := socketPub.(publish.NIP46SignerChecker); ok {
+								if checker.HasActiveNIP46Signer(signerPubkeyBin) {
+									log.I.F("NIP-46 auth: client %s authenticated via active signer %s",
+										l.remote, hexenc.Enc(signerPubkeyBin))
+									l.authedPubkey.Store(signerPubkeyBin)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// send a challenge to the client to auth if an ACL is active, auth is required, or AuthToWrite is enabled
 	if len(l.authedPubkey.Load()) == 0 && (acl.Registry.Active.Load() != "none" || l.Config.AuthRequired || l.Config.AuthToWrite) {
 		if err = authenvelope.NewChallengeWith(l.challenge.Load()).

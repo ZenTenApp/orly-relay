@@ -194,6 +194,12 @@ ORLY_DB_TYPE="neo4j"
 
 # Data Directory (for Badger metadata storage)
 ORLY_DATA_DIR="~/.local/share/ORLY"
+
+# Neo4j Driver Tuning (Memory Management)
+ORLY_NEO4J_MAX_CONN_POOL=25       # Max connections (default: 25, driver default: 100)
+ORLY_NEO4J_FETCH_SIZE=1000        # Records per fetch batch (default: 1000, -1=all)
+ORLY_NEO4J_MAX_TX_RETRY_SEC=30    # Max transaction retry time in seconds
+ORLY_NEO4J_QUERY_RESULT_LIMIT=10000  # Max results per query (0=unlimited)
 ```
 
 ### Example Docker Compose Setup
@@ -209,6 +215,15 @@ services:
     environment:
       - NEO4J_AUTH=neo4j/password
       - NEO4J_PLUGINS=["apoc"]
+      # Memory tuning for production
+      - NEO4J_server_memory_heap_initial__size=512m
+      - NEO4J_server_memory_heap_max__size=1g
+      - NEO4J_server_memory_pagecache_size=512m
+      # Transaction memory limits (prevent runaway queries)
+      - NEO4J_dbms_memory_transaction_total__max=256m
+      - NEO4J_dbms_memory_transaction_max=64m
+      # Query timeout
+      - NEO4J_dbms_transaction_timeout=30s
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs
@@ -222,6 +237,10 @@ services:
       - ORLY_NEO4J_URI=bolt://neo4j:7687
       - ORLY_NEO4J_USER=neo4j
       - ORLY_NEO4J_PASSWORD=password
+      # Driver tuning for memory management
+      - ORLY_NEO4J_MAX_CONN_POOL=25
+      - ORLY_NEO4J_FETCH_SIZE=1000
+      - ORLY_NEO4J_QUERY_RESULT_LIMIT=10000
     depends_on:
       - neo4j
 
@@ -248,15 +267,127 @@ volumes:
    - Composite: kind + created_at
    - Tag type + value
 
-2. **Cache Configuration**: Configure Neo4j's page cache and heap size:
-```conf
-# neo4j.conf
-dbms.memory.heap.initial_size=2G
-dbms.memory.heap.max_size=4G
-dbms.memory.pagecache.size=4G
+2. **Cache Configuration**: Configure Neo4j's page cache and heap size (see Memory Tuning below)
+
+3. **Query Limits**: The relay automatically enforces `ORLY_NEO4J_QUERY_RESULT_LIMIT` (default: 10000) to prevent unbounded queries from exhausting memory
+
+## Memory Tuning
+
+Neo4j runs as a separate process (typically in Docker), so memory management involves both the relay driver settings and Neo4j server configuration.
+
+### Understanding Memory Layers
+
+1. **ORLY Relay Process** (~35MB RSS typical)
+   - Go driver connection pool
+   - Query result buffering
+   - Controlled by `ORLY_NEO4J_*` environment variables
+
+2. **Neo4j Server Process** (512MB-4GB+ depending on data)
+   - JVM heap for Java objects
+   - Page cache for graph data
+   - Transaction memory for query execution
+   - Controlled by `NEO4J_*` environment variables
+
+### Relay Driver Tuning (ORLY side)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ORLY_NEO4J_MAX_CONN_POOL` | 25 | Max connections in pool. Lower = less memory, but may bottleneck under high load. Driver default is 100. |
+| `ORLY_NEO4J_FETCH_SIZE` | 1000 | Records fetched per batch. Lower = less memory per query, more round trips. Set to -1 for all (risky). |
+| `ORLY_NEO4J_MAX_TX_RETRY_SEC` | 30 | Max seconds to retry failed transactions. |
+| `ORLY_NEO4J_QUERY_RESULT_LIMIT` | 10000 | Hard cap on results per query. Prevents unbounded queries. Set to 0 for unlimited (not recommended). |
+
+**Recommended settings for memory-constrained environments:**
+```bash
+ORLY_NEO4J_MAX_CONN_POOL=10
+ORLY_NEO4J_FETCH_SIZE=500
+ORLY_NEO4J_QUERY_RESULT_LIMIT=5000
 ```
 
-3. **Query Limits**: Always use LIMIT in queries to prevent memory exhaustion
+### Neo4j Server Tuning (Docker/neo4j.conf)
+
+**JVM Heap Memory** - For Java objects and query processing:
+```bash
+# Docker environment variables
+NEO4J_server_memory_heap_initial__size=512m
+NEO4J_server_memory_heap_max__size=1g
+
+# neo4j.conf equivalent
+server.memory.heap.initial_size=512m
+server.memory.heap.max_size=1g
+```
+
+**Page Cache** - For caching graph data from disk:
+```bash
+# Docker
+NEO4J_server_memory_pagecache_size=512m
+
+# neo4j.conf
+server.memory.pagecache.size=512m
+```
+
+**Transaction Memory Limits** - Prevent runaway queries:
+```bash
+# Docker
+NEO4J_dbms_memory_transaction_total__max=256m   # Global limit across all transactions
+NEO4J_dbms_memory_transaction_max=64m           # Per-transaction limit
+
+# neo4j.conf
+dbms.memory.transaction.total.max=256m
+db.memory.transaction.max=64m
+```
+
+**Query Timeout** - Kill long-running queries:
+```bash
+# Docker
+NEO4J_dbms_transaction_timeout=30s
+
+# neo4j.conf
+dbms.transaction.timeout=30s
+```
+
+### Memory Sizing Guidelines
+
+| Deployment Size | Heap | Page Cache | Total Neo4j | ORLY Pool |
+|-----------------|------|------------|-------------|-----------|
+| Development | 512m | 256m | ~1GB | 10 |
+| Small relay (<100k events) | 1g | 512m | ~2GB | 25 |
+| Medium relay (<1M events) | 2g | 1g | ~4GB | 50 |
+| Large relay (>1M events) | 4g | 2g | ~8GB | 100 |
+
+**Formula for Page Cache:**
+```
+Page Cache = Data Size on Disk × 1.2
+```
+
+Use `neo4j-admin server memory-recommendation` inside the container to get tailored recommendations.
+
+### Monitoring Memory Usage
+
+**Check Neo4j memory from relay logs:**
+```bash
+# Driver config is logged at startup
+grep "connecting to neo4j" /path/to/orly.log
+# Output: connecting to neo4j at bolt://... (pool=25, fetch=1000, txRetry=30s)
+```
+
+**Check Neo4j server memory:**
+```bash
+# Inside Neo4j container
+docker exec neo4j neo4j-admin server memory-recommendation
+
+# Or query via Cypher
+CALL dbms.listPools() YIELD pool, heapMemoryUsed, heapMemoryUsedBytes
+RETURN pool, heapMemoryUsed
+```
+
+**Monitor transaction memory:**
+```cypher
+CALL dbms.listTransactions()
+YIELD transactionId, currentQuery, allocatedBytes
+RETURN transactionId, currentQuery, allocatedBytes
+ORDER BY allocatedBytes DESC
+```
 
 ## Implementation Details
 
