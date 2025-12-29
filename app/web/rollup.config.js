@@ -34,7 +34,8 @@ function serve() {
   };
 }
 
-export default {
+// Main app bundle
+const mainConfig = {
   input: "src/main.js",
   output: {
     sourcemap: true,
@@ -95,3 +96,23 @@ export default {
     clearScreen: false,
   },
 };
+
+// Bunker worker bundle (runs in Web Worker context)
+const workerConfig = {
+  input: "src/bunker-worker.js",
+  output: {
+    sourcemap: true,
+    format: "iife",
+    name: "bunkerWorker",
+    file: `${outputDir}/bunker-worker.js`,
+  },
+  plugins: [
+    resolve({
+      browser: true,
+    }),
+    commonjs(),
+    production && terser(),
+  ],
+};
+
+export default [mainConfig, workerConfig];

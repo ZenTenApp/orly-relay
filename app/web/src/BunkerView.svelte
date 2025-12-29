@@ -1,20 +1,32 @@
 <script>
-    import { createEventDispatcher, onMount, onDestroy } from "svelte";
+    import { createEventDispatcher, onMount } from "svelte";
     import QRCode from "qrcode";
     import { getBunkerInfo, createNIP98Auth } from "./api.js";
-    import { BunkerService } from "./bunker-service.js";
     import { requestToken, encodeToken, TokenScope, getMintInfo } from "./cashu-client.js";
-    import { hexToBytes } from "@noble/hashes/utils";
+    import { hexToBytes, bytesToHex } from "@noble/hashes/utils";
+    import {
+        bunkerServiceActive,
+        bunkerServiceCatToken,
+        bunkerClientTokens,
+        bunkerSelectedTokenId,
+        bunkerConnectedClients,
+        configureBunkerWorker,
+        connectBunkerWorker,
+        disconnectBunkerWorker,
+        addBunkerSecret,
+        requestBunkerStatus,
+        resetBunkerState
+    } from "./stores.js";
 
     export let isLoggedIn = false;
     export let userPubkey = "";
     export let userSigner = null;
-    export let userPrivkey = null; // User's private key for signing
+    export let userPrivkey = null; // User's private key for signing (Uint8Array)
     export let currentEffectiveRole = "";
 
     const dispatch = createEventDispatcher();
 
-    // State
+    // Local UI state
     let bunkerInfo = null;
     let isLoading = false;
     let error = "";
@@ -22,17 +34,13 @@
     let signerQrDataUrl = "";
     let copiedItem = "";
     let bunkerSecret = "";
-
-    // Bunker service state
-    let bunkerService = null;
-    let isServiceActive = false;
     let isStartingService = false;
-    let connectedClients = [];
-    let serviceCatToken = null;  // Token for ORLY's own relay connection
 
-    // Client tokens list - each device gets its own token
-    let clientTokens = [];  // [{id, name, token, encoded, createdAt, isEditing}]
-    let selectedTokenId = null;  // Currently selected token for the QR code
+    // Subscribe to global bunker stores
+    $: isServiceActive = $bunkerServiceActive;
+    $: clientTokens = $bunkerClientTokens;
+    $: selectedTokenId = $bunkerSelectedTokenId;
+    $: connectedClients = $bunkerConnectedClients;
 
     // Two-word name generator
     const adjectives = ["brave", "calm", "clever", "cosmic", "cozy", "daring", "eager", "fancy", "gentle", "happy", "jolly", "keen", "lively", "merry", "nimble", "peppy", "quick", "rustic", "shiny", "swift", "tender", "vivid", "witty", "zesty"];
@@ -67,10 +75,10 @@
             createdAt: Date.now(),
             isExpanded: false
         };
-        clientTokens = [...clientTokens, newToken];
+        bunkerClientTokens.update(tokens => [...tokens, newToken]);
         // Select the new token if none selected
-        if (!selectedTokenId) {
-            selectedTokenId = id;
+        if (!$bunkerSelectedTokenId) {
+            bunkerSelectedTokenId.set(id);
         }
         console.log(`Client token "${newToken.name}" created, expires:`, new Date(token.expiry * 1000).toISOString());
         return newToken;
@@ -150,18 +158,13 @@
 
     onMount(async () => {
         await loadBunkerInfo();
+        // Request current status from worker (in case it's already running)
+        requestBunkerStatus();
     });
 
-    onDestroy(() => {
-        // Stop bunker service on component unmount
-        if (bunkerService) {
-            bunkerService.disconnect();
-            bunkerService = null;
-            isServiceActive = false;
-        }
-    });
+    // Note: No onDestroy cleanup - worker persists across component mounts
 
-    // Start the bunker service
+    // Start the bunker service (via Web Worker)
     async function startBunkerService() {
         // Prevent starting if already active or starting
         if (isServiceActive || isStartingService) {
@@ -178,6 +181,8 @@
         error = "";
 
         try {
+            let serviceCatTokenEncoded = null;
+
             // Check if CAT is required and mint tokens
             if (bunkerInfo.cashu_enabled) {
                 console.log("CAT required, minting tokens...");
@@ -189,14 +194,16 @@
                         return `Nostr ${header}`;
                     };
 
-                    // 1. Token for ORLY's BunkerService relay connection
-                    serviceCatToken = await requestToken(
+                    // 1. Token for worker's relay connection
+                    const serviceCatToken = await requestToken(
                         mintInfo.mintUrl,
                         TokenScope.NIP46,
                         hexToBytes(userPubkey),
                         signHttpAuth,
                         [24133]
                     );
+                    serviceCatTokenEncoded = encodeToken(serviceCatToken);
+                    bunkerServiceCatToken.set(serviceCatToken);
                     console.log("Service CAT token acquired, expires:", new Date(serviceCatToken.expiry * 1000).toISOString());
 
                     // 2. Create first client token
@@ -204,70 +211,35 @@
                 }
             }
 
-            // Create and start bunker service
-            bunkerService = new BunkerService(
-                bunkerInfo.relay_url,
+            // Configure the worker with user credentials
+            const privkeyHex = userPrivkey instanceof Uint8Array ? bytesToHex(userPrivkey) : userPrivkey;
+            configureBunkerWorker({
                 userPubkey,
-                userPrivkey
-            );
+                userPrivkey: privkeyHex,
+                relayUrl: bunkerInfo.relay_url,
+                catTokenEncoded: serviceCatTokenEncoded,
+                secrets: bunkerSecret ? [bunkerSecret] : []
+            });
 
-            // Add the current secret
-            if (bunkerSecret) {
-                bunkerService.addAllowedSecret(bunkerSecret);
-            }
-
-            // Set CAT token for service connection
-            if (serviceCatToken) {
-                bunkerService.setCatToken(serviceCatToken);
-            }
-
-            // Set up callbacks
-            bunkerService.onClientConnected = (pubkey) => {
-                connectedClients = bunkerService.getConnectedClients();
-            };
-
-            bunkerService.onStatusChange = (status) => {
-                console.log("[BunkerView] Service status changed:", status);
-                isServiceActive = status === 'connected';
-                // Don't clear tokens on disconnect - they're still valid
-                // Just clear the connected clients list
-                if (status === 'disconnected') {
-                    connectedClients = [];
-                }
-            };
-
-            // Connect to relay
-            await bunkerService.connect();
-            isServiceActive = true;
+            // Connect the worker
+            connectBunkerWorker();
 
             // Regenerate QR codes with CAT token
             await generateQRCodes();
 
-            console.log("Bunker service started successfully");
+            console.log("Bunker worker started successfully");
         } catch (err) {
             console.error("Failed to start bunker service:", err);
             error = err.message || "Failed to start bunker service";
-            bunkerService = null;
-            isServiceActive = false;
-            serviceCatToken = null;
-            clientTokens = [];
-            selectedTokenId = null;
+            resetBunkerState();
         } finally {
             isStartingService = false;
         }
     }
 
-    // Stop the bunker service
+    // Stop the bunker service (via Web Worker)
     function stopBunkerService() {
-        if (bunkerService) {
-            bunkerService.disconnect();
-            bunkerService = null;
-        }
-        isServiceActive = false;
-        connectedClients = [];
-        serviceCatToken = null;
-        clientTokens = [];
-        selectedTokenId = null;
+        resetBunkerState();
         // Regenerate QR codes without CAT token
         generateQRCodes();
     }
