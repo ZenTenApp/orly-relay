@@ -168,22 +168,27 @@ func Run(
 
 	// Initialize Cashu access token system when ACL is active
 	if cfg.ACLMode != "none" {
-		// Create keyset manager with memory store (keys are regenerated each restart)
-		keysetStore := keyset.NewMemoryStore()
-		keysetManager := keyset.NewManager(keysetStore, keyset.DefaultActiveWindow, keyset.DefaultVerifyWindow)
-
-		// Initialize keyset manager (creates initial keyset)
-		if err := keysetManager.Init(); err != nil {
-			log.E.F("failed to initialize Cashu keyset manager: %v", err)
+		// Create keyset manager with file-based store (keysets persist across restarts)
+		keysetPath := filepath.Join(cfg.DataDir, "cashu-keysets.json")
+		keysetStore, err := keyset.NewFileStore(keysetPath)
+		if err != nil {
+			log.E.F("failed to create Cashu keyset store at %s: %v", keysetPath, err)
 		} else {
-			// Create issuer with permissive checker (ACL handles authorization)
-			issuerCfg := issuer.DefaultConfig()
-			l.CashuIssuer = issuer.New(keysetManager, cashuiface.AllowAllChecker{}, issuerCfg)
+			keysetManager := keyset.NewManager(keysetStore, keyset.DefaultActiveWindow, keyset.DefaultVerifyWindow)
 
-			// Create verifier for validating tokens
-			l.CashuVerifier = verifier.New(keysetManager, cashuiface.AllowAllChecker{}, verifier.DefaultConfig())
+			// Initialize keyset manager (loads existing keysets or creates new one)
+			if err := keysetManager.Init(); err != nil {
+				log.E.F("failed to initialize Cashu keyset manager: %v", err)
+			} else {
+				// Create issuer with permissive checker (ACL handles authorization)
+				issuerCfg := issuer.DefaultConfig()
+				l.CashuIssuer = issuer.New(keysetManager, cashuiface.AllowAllChecker{}, issuerCfg)
 
-			log.I.F("Cashu access token system enabled (ACL mode: %s)", cfg.ACLMode)
+				// Create verifier for validating tokens
+				l.CashuVerifier = verifier.New(keysetManager, cashuiface.AllowAllChecker{}, verifier.DefaultConfig())
+
+				log.I.F("Cashu access token system enabled (ACL mode: %s, keysets: %s)", cfg.ACLMode, keysetPath)
+			}
 		}
 	}
 
