@@ -23,6 +23,10 @@ import (
 	"next.orly.dev/pkg/protocol/nip43"
 	"next.orly.dev/pkg/protocol/publish"
 	"next.orly.dev/pkg/bunker"
+	"next.orly.dev/pkg/cashu/issuer"
+	"next.orly.dev/pkg/cashu/keyset"
+	"next.orly.dev/pkg/cashu/verifier"
+	cashuiface "next.orly.dev/pkg/interfaces/cashu"
 	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/spider"
 	dsync "next.orly.dev/pkg/sync"
@@ -159,6 +163,27 @@ func Run(
 			} else {
 				log.I.F("graph query executor initialized (Neo4j backend)")
 			}
+		}
+	}
+
+	// Initialize Cashu access token system when ACL is active
+	if cfg.ACLMode != "none" {
+		// Create keyset manager with memory store (keys are regenerated each restart)
+		keysetStore := keyset.NewMemoryStore()
+		keysetManager := keyset.NewManager(keysetStore, keyset.DefaultActiveWindow, keyset.DefaultVerifyWindow)
+
+		// Initialize keyset manager (creates initial keyset)
+		if err := keysetManager.Init(); err != nil {
+			log.E.F("failed to initialize Cashu keyset manager: %v", err)
+		} else {
+			// Create issuer with permissive checker (ACL handles authorization)
+			issuerCfg := issuer.DefaultConfig()
+			l.CashuIssuer = issuer.New(keysetManager, cashuiface.AllowAllChecker{}, issuerCfg)
+
+			// Create verifier for validating tokens
+			l.CashuVerifier = verifier.New(keysetManager, cashuiface.AllowAllChecker{}, verifier.DefaultConfig())
+
+			log.I.F("Cashu access token system enabled (ACL mode: %s)", cfg.ACLMode)
 		}
 	}
 
