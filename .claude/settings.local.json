@@ -5,7 +5,8 @@
     "ask": [],
     "additionalDirectories": [
       "/home/mleku/smesh",
-      "/home/mleku/Tourmaline"
+      "/home/mleku/Tourmaline",
+      "/home/mleku/Amber"
     ]
   },
   "outputStyle": "Default",

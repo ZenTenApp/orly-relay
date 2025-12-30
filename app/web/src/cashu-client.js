@@ -1,7 +1,7 @@
 /**
  * Cashu Token Client
  *
- * Manages Cashu access tokens for bunker authentication.
+ * Manages Cashu access tokens for relay authentication.
  * Handles token issuance using blind signature protocol.
  *
  * Token flow:
@@ -20,7 +20,6 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 // Token scopes matching ORLY's token.Scope
 export const TokenScope = {
     RELAY: 'relay',
-    NIP46: 'nip46',
     BLOSSOM: 'blossom',
     API: 'api'
 };
@@ -168,7 +167,7 @@ export function decodeToken(encoded) {
 /**
  * Request a new token from the mint.
  * @param {string} mintUrl - The mint URL (e.g., https://relay.example.com)
- * @param {string} scope - Token scope (relay, nip46, blossom, api)
+ * @param {string} scope - Token scope (relay, blossom, api)
  * @param {Uint8Array} userPubkey - User's public key (32 bytes)
  * @param {Function} signHttpAuth - Function to create NIP-98 auth header
  * @param {number[]} [kinds] - Permitted event kinds

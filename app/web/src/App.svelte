@@ -12,7 +12,6 @@
     import SprocketView from "./SprocketView.svelte";
     import PolicyView from "./PolicyView.svelte";
     import BlossomView from "./BlossomView.svelte";
-    import BunkerView from "./BunkerView.svelte";
     import LogView from "./LogView.svelte";
     import SearchResultsView from "./SearchResultsView.svelte";
     import FilterDisplay from "./FilterDisplay.svelte";
@@ -56,7 +55,6 @@
     let userProfile = null;
     let userRole = "";
     let userSigner = null;
-    let userPrivkey = null; // User's private key for bunker service (only set for nsec login)
     let showSettingsDrawer = false;
     let selectedTab = localStorage.getItem("selectedTab") || "export";
     let showFilterBuilder = false; // Show filter builder in events view
@@ -1651,7 +1649,6 @@
         { id: "import", icon: "💾", label: "Import", requiresAdmin: true },
         { id: "events", icon: "📡", label: "Events" },
         { id: "blossom", icon: "🌸", label: "Blossom" },
-        { id: "bunker", icon: "🔐", label: "Bunker", requiresWrite: true },
         { id: "compose", icon: "✏️", label: "Compose", requiresWrite: true },
         { id: "recovery", icon: "🔄", label: "Recovery" },
         {
@@ -1749,13 +1746,6 @@
         authMethod = method;
         userSigner = signer;
         showLoginModal = false;
-
-        // Store private key for bunker service (only for nsec login)
-        if (method === "nsec" && privateKey) {
-            userPrivkey = privateKey;
-        } else {
-            userPrivkey = null;
-        }
 
         // Initialize Nostr client and fetch profile
         try {
@@ -2821,15 +2811,6 @@
                 {isLoggedIn}
                 {userPubkey}
                 {userSigner}
-                {currentEffectiveRole}
-                on:openLoginModal={openLoginModal}
-            />
-        {:else if selectedTab === "bunker"}
-            <BunkerView
-                {isLoggedIn}
-                {userPubkey}
-                {userSigner}
-                {userPrivkey}
                 {currentEffectiveRole}
                 on:openLoginModal={openLoginModal}
             />

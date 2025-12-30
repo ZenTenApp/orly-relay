@@ -405,7 +405,7 @@ export async function importEvents(signer, pubkey, file) {
     return await response.json();
 }
 
-// ==================== WireGuard/Bunker API ====================
+// ==================== WireGuard API ====================
 
 /**
  * Fetch WireGuard status
@@ -462,24 +462,6 @@ export async function regenerateWireGuard(signer, pubkey) {
     return await response.json();
 }
 
-/**
- * Get Bunker URL for the authenticated user
- * @param {object} signer - The signer instance
- * @param {string} pubkey - User's pubkey
- * @returns {Promise<object>} Bunker URL info
- */
-export async function getBunkerURL(signer, pubkey) {
-    const url = `${window.location.origin}/api/bunker/url`;
-    const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
-    const response = await fetch(url, {
-        headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
-    });
-    if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error || `Failed to get bunker URL: ${response.statusText}`);
-    }
-    return await response.json();
-}
 
 /**
  * Get WireGuard audit log (revoked keys and access attempts)
@@ -500,16 +482,3 @@ export async function getWireGuardAudit(signer, pubkey) {
     return await response.json();
 }
 
-/**
- * Get Bunker connection info (public endpoint)
- * @returns {Promise<object>} Bunker info including relay URL, ACL mode, and CAT status
- */
-export async function getBunkerInfo() {
-    const url = `${window.location.origin}/api/bunker/info`;
-    const response = await fetch(url);
-    if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error || `Failed to get bunker info: ${response.statusText}`);
-    }
-    return await response.json();
-}
