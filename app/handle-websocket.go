@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -99,15 +100,17 @@ whitelist:
 		handlerSemSize = 100 // Default if not configured
 	}
 
+	now := time.Now()
 	listener := &Listener{
 		ctx:            ctx,
 		cancel:         cancel,
 		Server:         s,
 		conn:           conn,
 		remote:         remote,
+		connectionID:   fmt.Sprintf("%s-%d", remote, now.UnixNano()), // Unique connection ID for access tracking
 		req:            r,
 		cashuToken:     cashuToken, // Verified Cashu access token (nil if none provided)
-		startTime:      time.Now(),
+		startTime:      now,
 		writeChan:      make(chan publish.WriteRequest, 100), // Buffered channel for writes
 		writeDone:      make(chan struct{}),
 		messageQueue:   make(chan messageRequest, 100), // Buffered channel for message processing

@@ -160,6 +160,18 @@ type C struct {
 	// Cluster replication configuration
 	ClusterPropagatePrivilegedEvents bool `env:"ORLY_CLUSTER_PROPAGATE_PRIVILEGED_EVENTS" default:"true" usage:"propagate privileged events (DMs, gift wraps, etc.) to relay peers for replication"`
 
+	// Archive relay configuration (query augmentation from authoritative archives)
+	ArchiveEnabled     bool     `env:"ORLY_ARCHIVE_ENABLED" default:"false" usage:"enable archive relay query augmentation (fetch from archives, cache locally)"`
+	ArchiveRelays      []string `env:"ORLY_ARCHIVE_RELAYS" default:"wss://archive.orly.dev/" usage:"comma-separated list of archive relay URLs for query augmentation"`
+	ArchiveTimeoutSec  int      `env:"ORLY_ARCHIVE_TIMEOUT_SEC" default:"30" usage:"timeout in seconds for archive relay queries"`
+	ArchiveCacheTTLHrs int      `env:"ORLY_ARCHIVE_CACHE_TTL_HRS" default:"24" usage:"hours to cache query fingerprints to avoid repeated archive requests"`
+
+	// Storage management configuration (access-based garbage collection)
+	MaxStorageBytes int64 `env:"ORLY_MAX_STORAGE_BYTES" default:"0" usage:"maximum storage in bytes (0=auto-detect 80%% of filesystem)"`
+	GCEnabled       bool  `env:"ORLY_GC_ENABLED" default:"true" usage:"enable continuous garbage collection based on access patterns"`
+	GCIntervalSec   int   `env:"ORLY_GC_INTERVAL_SEC" default:"60" usage:"seconds between GC runs when storage exceeds limit"`
+	GCBatchSize     int   `env:"ORLY_GC_BATCH_SIZE" default:"1000" usage:"number of events to consider per GC run"`
+
 	// ServeMode is set programmatically by the 'serve' subcommand to grant full owner
 	// access to all users (no env tag - internal use only)
 	ServeMode bool
@@ -589,4 +601,34 @@ func (cfg *C) GetCashuConfigValues() (
 		verifyTTL,
 		scopes,
 		cfg.CashuReauthorize
+}
+
+// GetArchiveConfigValues returns the archive relay configuration values.
+// This avoids circular imports with pkg/archive while allowing main.go to construct
+// the archive manager configuration.
+func (cfg *C) GetArchiveConfigValues() (
+	enabled bool,
+	relays []string,
+	timeoutSec int,
+	cacheTTLHrs int,
+) {
+	return cfg.ArchiveEnabled,
+		cfg.ArchiveRelays,
+		cfg.ArchiveTimeoutSec,
+		cfg.ArchiveCacheTTLHrs
+}
+
+// GetStorageConfigValues returns the storage management configuration values.
+// This avoids circular imports with pkg/storage while allowing main.go to construct
+// the garbage collector and access tracker configuration.
+func (cfg *C) GetStorageConfigValues() (
+	maxStorageBytes int64,
+	gcEnabled bool,
+	gcIntervalSec int,
+	gcBatchSize int,
+) {
+	return cfg.MaxStorageBytes,
+		cfg.GCEnabled,
+		cfg.GCIntervalSec,
+		cfg.GCBatchSize
 }

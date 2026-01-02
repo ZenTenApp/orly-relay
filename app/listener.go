@@ -28,6 +28,7 @@ type Listener struct {
 	ctx              context.Context
 	cancel           context.CancelFunc // Cancel function for this listener's context
 	remote           string
+	connectionID     string // Unique identifier for this connection (for access tracking)
 	req              *http.Request
 	challenge        atomicutils.Bytes
 	authedPubkey     atomicutils.Bytes
@@ -109,6 +110,29 @@ func (l *Listener) Write(p []byte) (n int, err error) {
 	case <-time.After(DefaultWriteTimeout):
 		log.E.F("ws->%s write channel timeout", l.remote)
 		return 0, errorf.E("write channel timeout")
+	}
+}
+
+// SendEvent sends an event to the client. Implements archive.EventDeliveryChannel.
+func (l *Listener) SendEvent(ev *event.E) error {
+	if ev == nil {
+		return nil
+	}
+	// Serialize the event as an EVENT envelope
+	data := ev.Serialize()
+	// Use Write to send
+	_, err := l.Write(data)
+	return err
+}
+
+// IsConnected returns whether the client connection is still active.
+// Implements archive.EventDeliveryChannel.
+func (l *Listener) IsConnected() bool {
+	select {
+	case <-l.ctx.Done():
+		return false
+	default:
+		return l.conn != nil
 	}
 }
 

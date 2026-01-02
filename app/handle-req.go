@@ -690,6 +690,31 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		Write(l); chk.E(err) {
 		return
 	}
+
+	// Record access for returned events (for GC access-based ranking)
+	if l.accessTracker != nil && len(events) > 0 {
+		go func(evts event.S, connID string) {
+			for _, ev := range evts {
+				if ser, err := l.DB.GetSerialById(ev.ID); err == nil && ser != nil {
+					l.accessTracker.RecordAccess(ser.Get(), connID)
+				}
+			}
+		}(events, l.connectionID)
+	}
+
+	// Trigger archive relay query if enabled (background fetch + stream results)
+	if l.archiveManager != nil && l.archiveManager.IsEnabled() && len(*env.Filters) > 0 {
+		// Use first filter for archive query
+		f := (*env.Filters)[0]
+		go l.archiveManager.QueryArchive(
+			string(env.Subscription),
+			l.connectionID,
+			f,
+			seen,
+			l, // implements EventDeliveryChannel
+		)
+	}
+
 	// if the query was for just Ids, we know there can't be any more results,
 	// so cancel the subscription.
 	cancel := true

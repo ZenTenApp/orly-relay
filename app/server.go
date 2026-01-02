@@ -38,8 +38,10 @@ import (
 	"next.orly.dev/pkg/cashu/verifier"
 	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/spider"
+	"next.orly.dev/pkg/storage"
 	dsync "next.orly.dev/pkg/sync"
 	"next.orly.dev/pkg/wireguard"
+	"next.orly.dev/pkg/archive"
 )
 
 type Server struct {
@@ -91,6 +93,11 @@ type Server struct {
 	// Cashu access token system (NIP-XX)
 	CashuIssuer   *issuer.Issuer
 	CashuVerifier *verifier.Verifier
+
+	// Archive relay and storage management
+	archiveManager   *archive.Manager
+	accessTracker    *storage.AccessTracker
+	garbageCollector *storage.GarbageCollector
 }
 
 // isIPBlacklisted checks if an IP address is blacklisted using the managed ACL system

@@ -278,6 +278,17 @@ func (w *RelySQLiteWrapper) EventIdsBySerial(start uint64, count int) (evs []uin
 	return nil, fmt.Errorf("not implemented")
 }
 
+// Access tracking stubs (not needed for benchmarking)
+func (w *RelySQLiteWrapper) RecordEventAccess(serial uint64, connectionID string) error {
+	return nil // No-op for benchmarking
+}
+func (w *RelySQLiteWrapper) GetEventAccessInfo(serial uint64) (lastAccess int64, accessCount uint32, err error) {
+	return 0, 0, nil
+}
+func (w *RelySQLiteWrapper) GetLeastAccessedEvents(limit int, minAgeSec int64) (serials []uint64, err error) {
+	return nil, nil
+}
+
 // Helper function to check if a kind is replaceable
 func isReplaceableKind(kind int) bool {
 	return (kind >= 10000 && kind < 20000) || kind == 0 || kind == 3

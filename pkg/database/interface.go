@@ -104,6 +104,16 @@ type Database interface {
 	CacheEvents(f *filter.F, events event.S)
 	InvalidateQueryCache()
 
+	// Access tracking for storage management (garbage collection based on access patterns)
+	// RecordEventAccess records an access to an event by a connection.
+	// The connectionID is used to deduplicate accesses from the same connection.
+	RecordEventAccess(serial uint64, connectionID string) error
+	// GetEventAccessInfo returns the last access time and access count for an event.
+	GetEventAccessInfo(serial uint64) (lastAccess int64, accessCount uint32, err error)
+	// GetLeastAccessedEvents returns event serials sorted by coldness (oldest/lowest access).
+	// limit: max events to return, minAgeSec: minimum age in seconds since last access.
+	GetLeastAccessedEvents(limit int, minAgeSec int64) (serials []uint64, err error)
+
 	// Utility methods
 	EventIdsBySerial(start uint64, count int) (evs []uint64, err error)
 }

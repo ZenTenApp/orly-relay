@@ -29,8 +29,10 @@ import (
 	cashuiface "next.orly.dev/pkg/interfaces/cashu"
 	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/spider"
+	"next.orly.dev/pkg/storage"
 	dsync "next.orly.dev/pkg/sync"
 	"next.orly.dev/pkg/wireguard"
+	"next.orly.dev/pkg/archive"
 
 	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 )
@@ -512,6 +514,40 @@ func Run(
 		}
 	}
 
+	// Initialize access tracker for storage management (only for Badger backend)
+	if badgerDB, ok := db.(*database.D); ok {
+		l.accessTracker = storage.NewAccessTracker(badgerDB, 100000) // 100k dedup cache
+		l.accessTracker.Start()
+		log.I.F("access tracker initialized")
+
+		// Initialize garbage collector if enabled
+		maxBytes, gcEnabled, gcIntervalSec, gcBatchSize := cfg.GetStorageConfigValues()
+		if gcEnabled {
+			gcCfg := storage.GCConfig{
+				MaxStorageBytes: maxBytes,
+				Interval:        time.Duration(gcIntervalSec) * time.Second,
+				BatchSize:       gcBatchSize,
+				MinAgeSec:       3600, // Minimum 1 hour before eviction
+			}
+			l.garbageCollector = storage.NewGarbageCollector(ctx, badgerDB, l.accessTracker, gcCfg)
+			l.garbageCollector.Start()
+			log.I.F("garbage collector started (interval: %ds, batch: %d)", gcIntervalSec, gcBatchSize)
+		}
+	}
+
+	// Initialize archive relay manager if enabled
+	archiveEnabled, archiveRelays, archiveTimeoutSec, archiveCacheTTLHrs := cfg.GetArchiveConfigValues()
+	if archiveEnabled && len(archiveRelays) > 0 {
+		archiveCfg := archive.Config{
+			Enabled:     true,
+			Relays:      archiveRelays,
+			TimeoutSec:  archiveTimeoutSec,
+			CacheTTLHrs: archiveCacheTTLHrs,
+		}
+		l.archiveManager = archive.New(ctx, db, archiveCfg)
+		log.I.F("archive relay manager initialized with %d relays", len(archiveRelays))
+	}
+
 	// Start rate limiter if enabled
 	if limiter != nil && limiter.IsEnabled() {
 		limiter.Start()
@@ -619,6 +655,24 @@ func Run(
 		if l.rateLimiter != nil && l.rateLimiter.IsEnabled() {
 			l.rateLimiter.Stop()
 			log.I.F("rate limiter stopped")
+		}
+
+		// Stop archive manager if running
+		if l.archiveManager != nil {
+			l.archiveManager.Stop()
+			log.I.F("archive manager stopped")
+		}
+
+		// Stop garbage collector if running
+		if l.garbageCollector != nil {
+			l.garbageCollector.Stop()
+			log.I.F("garbage collector stopped")
+		}
+
+		// Stop access tracker if running
+		if l.accessTracker != nil {
+			l.accessTracker.Stop()
+			log.I.F("access tracker stopped")
 		}
 
 		// Stop bunker server if running
