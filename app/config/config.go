@@ -149,11 +149,12 @@ type C struct {
 	BunkerEnabled bool `env:"ORLY_BUNKER_ENABLED" default:"false" usage:"enable NIP-46 bunker signing service (requires WireGuard)"`
 	BunkerPort    int  `env:"ORLY_BUNKER_PORT" default:"3335" usage:"internal port for bunker WebSocket (only accessible via WireGuard)"`
 
-	// Tor hidden service configuration
-	TorEnabled      bool   `env:"ORLY_TOR_ENABLED" default:"false" usage:"enable Tor hidden service integration (requires external Tor daemon)"`
-	TorPort         int    `env:"ORLY_TOR_PORT" default:"3336" usage:"internal port that Tor forwards .onion traffic to"`
-	TorHSDir        string `env:"ORLY_TOR_HS_DIR" usage:"Tor HiddenServiceDir path to read .onion hostname (e.g., /var/lib/tor/orly-relay)"`
-	TorOnionAddress string `env:"ORLY_TOR_ONION_ADDRESS" usage:"manual .onion address override (optional, auto-detected from TorHSDir if empty)"`
+	// Tor hidden service configuration (subprocess mode - runs tor binary automatically)
+	TorEnabled  bool   `env:"ORLY_TOR_ENABLED" default:"true" usage:"enable Tor hidden service (spawns tor subprocess; disable with false if tor not installed)"`
+	TorPort     int    `env:"ORLY_TOR_PORT" default:"3336" usage:"internal port for Tor hidden service traffic"`
+	TorDataDir  string `env:"ORLY_TOR_DATA_DIR" usage:"Tor data directory (default: $ORLY_DATA_DIR/tor)"`
+	TorBinary   string `env:"ORLY_TOR_BINARY" default:"tor" usage:"path to tor binary (default: search in PATH)"`
+	TorSOCKS    int    `env:"ORLY_TOR_SOCKS" default:"0" usage:"SOCKS port for outbound Tor connections (0=disabled)"`
 
 	// Cashu access token configuration (NIP-XX)
 	CashuEnabled     bool   `env:"ORLY_CASHU_ENABLED" default:"false" usage:"enable Cashu blind signature tokens for access control"`
@@ -645,11 +646,17 @@ func (cfg *C) GetStorageConfigValues() (
 func (cfg *C) GetTorConfigValues() (
 	enabled bool,
 	port int,
-	hsDir string,
-	onionAddress string,
+	dataDir string,
+	binary string,
+	socksPort int,
 ) {
+	dataDir = cfg.TorDataDir
+	if dataDir == "" {
+		dataDir = filepath.Join(cfg.DataDir, "tor")
+	}
 	return cfg.TorEnabled,
 		cfg.TorPort,
-		cfg.TorHSDir,
-		cfg.TorOnionAddress
+		dataDir,
+		cfg.TorBinary,
+		cfg.TorSOCKS
 }

@@ -1,13 +1,19 @@
 // Package tor provides Tor hidden service integration for the ORLY relay.
-// It manages a listener on a dedicated port that receives traffic forwarded
-// from the Tor daemon, and exposes the .onion address for NIP-11 integration.
+// It spawns a tor subprocess with automatic configuration and manages
+// the hidden service lifecycle.
 package tor
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,25 +22,32 @@ import (
 	"lol.mleku.dev/log"
 )
 
-// Config holds Tor hidden service configuration.
+// Config holds Tor subprocess configuration.
 type Config struct {
-	// Port is the internal port that Tor forwards .onion traffic to
+	// Port is the internal port for the hidden service
 	Port int
-	// HSDir is the Tor HiddenServiceDir path to read .onion hostname from
-	HSDir string
-	// OnionAddress is an optional manual override for the .onion address
-	OnionAddress string
+	// DataDir is the directory for Tor data (torrc, keys, hostname, etc.)
+	DataDir string
+	// Binary is the path to the tor executable
+	Binary string
+	// SOCKSPort is the port for outbound SOCKS connections (0 = disabled)
+	SOCKSPort int
 	// Handler is the HTTP handler to serve (typically the main relay handler)
 	Handler http.Handler
 }
 
-// Service manages the Tor hidden service listener.
+// Service manages the Tor subprocess and hidden service listener.
 type Service struct {
 	cfg      *Config
 	listener net.Listener
 	server   *http.Server
 
-	// onionAddress is the detected or configured .onion address
+	// Tor subprocess
+	cmd    *exec.Cmd
+	stdout io.ReadCloser
+	stderr io.ReadCloser
+
+	// onionAddress is the detected .onion address
 	onionAddress string
 
 	// hostname watcher
@@ -47,9 +60,27 @@ type Service struct {
 }
 
 // New creates a new Tor service with the given configuration.
+// Returns an error if the tor binary is not found.
 func New(cfg *Config) (*Service, error) {
 	if cfg.Port == 0 {
 		cfg.Port = 3336
+	}
+
+	// Find tor binary
+	binary := cfg.Binary
+	if binary == "" {
+		binary = "tor"
+	}
+
+	torPath, err := exec.LookPath(binary)
+	if err != nil {
+		return nil, fmt.Errorf("tor binary not found: %w (install tor or set ORLY_TOR_ENABLED=false)", err)
+	}
+	cfg.Binary = torPath
+
+	// Ensure data directory exists
+	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
+		return nil, fmt.Errorf("failed to create Tor data directory: %w", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -60,43 +91,117 @@ func New(cfg *Config) (*Service, error) {
 		cancel: cancel,
 	}
 
-	// If manual address provided, use it
-	if cfg.OnionAddress != "" {
-		s.onionAddress = cfg.OnionAddress
-		log.I.F("using configured .onion address: %s", s.onionAddress)
-	}
-
 	return s, nil
 }
 
-// Start initializes the Tor listener and hostname watcher.
+// generateTorrc creates the torrc configuration file.
+func (s *Service) generateTorrc() (string, error) {
+	torrcPath := filepath.Join(s.cfg.DataDir, "torrc")
+	hsDir := filepath.Join(s.cfg.DataDir, "hidden_service")
+
+	// Ensure hidden service directory exists with correct permissions
+	if err := os.MkdirAll(hsDir, 0700); err != nil {
+		return "", fmt.Errorf("failed to create hidden service directory: %w", err)
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# ORLY Tor hidden service configuration\n")
+	sb.WriteString("# Auto-generated - do not edit\n\n")
+
+	// Data directory
+	sb.WriteString(fmt.Sprintf("DataDirectory %s/data\n", s.cfg.DataDir))
+
+	// Hidden service configuration
+	sb.WriteString(fmt.Sprintf("HiddenServiceDir %s\n", hsDir))
+	sb.WriteString(fmt.Sprintf("HiddenServicePort 80 127.0.0.1:%d\n", s.cfg.Port))
+
+	// Optional SOCKS port for outbound connections
+	if s.cfg.SOCKSPort > 0 {
+		sb.WriteString(fmt.Sprintf("SocksPort %d\n", s.cfg.SOCKSPort))
+	} else {
+		sb.WriteString("SocksPort 0\n")
+	}
+
+	// Disable unused features to reduce resource usage
+	sb.WriteString("ControlPort 0\n")
+	sb.WriteString("Log notice stdout\n")
+
+	// Write torrc
+	if err := os.WriteFile(torrcPath, []byte(sb.String()), 0600); err != nil {
+		return "", fmt.Errorf("failed to write torrc: %w", err)
+	}
+
+	// Create data subdirectory
+	if err := os.MkdirAll(filepath.Join(s.cfg.DataDir, "data"), 0700); err != nil {
+		return "", fmt.Errorf("failed to create Tor data subdirectory: %w", err)
+	}
+
+	return torrcPath, nil
+}
+
+// Start spawns the Tor subprocess and initializes the listener.
 func (s *Service) Start() error {
-	// Start hostname watcher if HSDir is configured
-	if s.cfg.HSDir != "" {
-		s.hostnameWatcher = NewHostnameWatcher(s.cfg.HSDir)
-		s.hostnameWatcher.OnChange(func(addr string) {
+	// Generate torrc
+	torrcPath, err := s.generateTorrc()
+	if err != nil {
+		return err
+	}
+
+	log.I.F("starting Tor subprocess with config: %s", torrcPath)
+
+	// Start tor subprocess
+	s.cmd = exec.CommandContext(s.ctx, s.cfg.Binary, "-f", torrcPath)
+
+	// Capture stdout/stderr for logging
+	s.stdout, err = s.cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to get Tor stdout: %w", err)
+	}
+	s.stderr, err = s.cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to get Tor stderr: %w", err)
+	}
+
+	if err := s.cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start Tor: %w", err)
+	}
+
+	log.I.F("Tor subprocess started (PID %d)", s.cmd.Process.Pid)
+
+	// Log Tor output
+	s.wg.Add(2)
+	go s.logOutput("tor", s.stdout)
+	go s.logOutput("tor", s.stderr)
+
+	// Monitor subprocess
+	s.wg.Add(1)
+	go s.monitorProcess()
+
+	// Start hostname watcher
+	hsDir := filepath.Join(s.cfg.DataDir, "hidden_service")
+	s.hostnameWatcher = NewHostnameWatcher(hsDir)
+	s.hostnameWatcher.OnChange(func(addr string) {
+		s.mu.Lock()
+		s.onionAddress = addr
+		s.mu.Unlock()
+		log.I.F("Tor hidden service address: %s", addr)
+	})
+	if err := s.hostnameWatcher.Start(); err != nil {
+		log.W.F("failed to start hostname watcher: %v", err)
+	} else {
+		// Get initial address
+		if addr := s.hostnameWatcher.Address(); addr != "" {
 			s.mu.Lock()
 			s.onionAddress = addr
 			s.mu.Unlock()
-			log.I.F("detected .onion address: %s", addr)
-		})
-		if err := s.hostnameWatcher.Start(); err != nil {
-			log.W.F("failed to start hostname watcher: %v", err)
-		} else {
-			// Get initial address
-			if addr := s.hostnameWatcher.Address(); addr != "" {
-				s.mu.Lock()
-				s.onionAddress = addr
-				s.mu.Unlock()
-			}
 		}
 	}
 
-	// Create listener
+	// Create listener for the hidden service port
 	addr := fmt.Sprintf("127.0.0.1:%d", s.cfg.Port)
-	var err error
 	s.listener, err = net.Listen("tcp", addr)
 	if chk.E(err) {
+		s.Stop()
 		return fmt.Errorf("failed to listen on %s: %w", addr, err)
 	}
 
@@ -112,13 +217,47 @@ func (s *Service) Start() error {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		log.I.F("Tor listener started on %s", addr)
+		log.I.F("Tor hidden service listener started on %s", addr)
 		if err := s.server.Serve(s.listener); err != nil && err != http.ErrServerClosed {
 			log.E.F("Tor server error: %v", err)
 		}
 	}()
 
 	return nil
+}
+
+// logOutput reads from a pipe and logs each line.
+func (s *Service) logOutput(prefix string, r io.ReadCloser) {
+	defer s.wg.Done()
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Filter out common noise
+		if strings.Contains(line, "Bootstrapped") {
+			log.I.F("[%s] %s", prefix, line)
+		} else if strings.Contains(line, "[warn]") || strings.Contains(line, "[err]") {
+			log.W.F("[%s] %s", prefix, line)
+		} else {
+			log.D.F("[%s] %s", prefix, line)
+		}
+	}
+}
+
+// monitorProcess watches the Tor subprocess and logs when it exits.
+func (s *Service) monitorProcess() {
+	defer s.wg.Done()
+	err := s.cmd.Wait()
+	if err != nil {
+		select {
+		case <-s.ctx.Done():
+			// Expected shutdown
+			log.D.F("Tor subprocess exited (shutdown)")
+		default:
+			log.E.F("Tor subprocess exited unexpectedly: %v", err)
+		}
+	} else {
+		log.I.F("Tor subprocess exited cleanly")
+	}
 }
 
 // Stop gracefully shuts down the Tor service.
@@ -135,7 +274,7 @@ func (s *Service) Stop() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := s.server.Shutdown(ctx); chk.E(err) {
-			return err
+			// Continue shutdown anyway
 		}
 	}
 
@@ -144,12 +283,33 @@ func (s *Service) Stop() error {
 		s.listener.Close()
 	}
 
+	// Terminate Tor subprocess
+	if s.cmd != nil && s.cmd.Process != nil {
+		log.D.F("sending SIGTERM to Tor subprocess (PID %d)", s.cmd.Process.Pid)
+		s.cmd.Process.Signal(os.Interrupt)
+
+		// Give it a few seconds to exit gracefully
+		done := make(chan struct{})
+		go func() {
+			s.cmd.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			log.D.F("Tor subprocess exited gracefully")
+		case <-time.After(5 * time.Second):
+			log.W.F("Tor subprocess did not exit, killing")
+			s.cmd.Process.Kill()
+		}
+	}
+
 	s.wg.Wait()
 	log.I.F("Tor service stopped")
 	return nil
 }
 
-// OnionAddress returns the current .onion address (without .onion suffix).
+// OnionAddress returns the current .onion address.
 func (s *Service) OnionAddress() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -172,7 +332,7 @@ func (s *Service) OnionWSAddress() string {
 
 // IsRunning returns whether the Tor service is currently running.
 func (s *Service) IsRunning() bool {
-	return s.listener != nil
+	return s.listener != nil && s.cmd != nil && s.cmd.Process != nil
 }
 
 // Upgrader returns a WebSocket upgrader configured for Tor connections.
@@ -185,4 +345,14 @@ func (s *Service) Upgrader() *websocket.Upgrader {
 			return true // Allow all origins for Tor
 		},
 	}
+}
+
+// DataDir returns the Tor data directory path.
+func (s *Service) DataDir() string {
+	return s.cfg.DataDir
+}
+
+// HiddenServiceDir returns the hidden service directory path.
+func (s *Service) HiddenServiceDir() string {
+	return filepath.Join(s.cfg.DataDir, "hidden_service")
 }

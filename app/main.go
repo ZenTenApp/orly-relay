@@ -549,22 +549,24 @@ func Run(
 		log.I.F("archive relay manager initialized with %d relays", len(archiveRelays))
 	}
 
-	// Initialize Tor hidden service if enabled
-	torEnabled, torPort, torHSDir, torOnionAddr := cfg.GetTorConfigValues()
+	// Initialize Tor hidden service if enabled (spawns tor subprocess)
+	torEnabled, torPort, torDataDir, torBinary, torSOCKSPort := cfg.GetTorConfigValues()
 	if torEnabled {
 		torCfg := &tor.Config{
-			Port:         torPort,
-			HSDir:        torHSDir,
-			OnionAddress: torOnionAddr,
-			Handler:      l,
+			Port:      torPort,
+			DataDir:   torDataDir,
+			Binary:    torBinary,
+			SOCKSPort: torSOCKSPort,
+			Handler:   l,
 		}
 		var err error
 		l.torService, err = tor.New(torCfg)
 		if err != nil {
-			log.W.F("failed to create Tor service: %v", err)
+			log.W.F("Tor disabled: %v", err)
 		} else {
 			if err = l.torService.Start(); err != nil {
 				log.W.F("failed to start Tor service: %v", err)
+				l.torService = nil
 			} else {
 				if addr := l.torService.OnionWSAddress(); addr != "" {
 					log.I.F("Tor hidden service listening on port %d, address: %s", torPort, addr)
