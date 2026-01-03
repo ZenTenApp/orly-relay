@@ -42,6 +42,7 @@ import (
 	dsync "next.orly.dev/pkg/sync"
 	"next.orly.dev/pkg/wireguard"
 	"next.orly.dev/pkg/archive"
+	"next.orly.dev/pkg/tor"
 )
 
 type Server struct {
@@ -98,6 +99,9 @@ type Server struct {
 	archiveManager   *archive.Manager
 	accessTracker    *storage.AccessTracker
 	garbageCollector *storage.GarbageCollector
+
+	// Tor hidden service
+	torService *tor.Service
 }
 
 // isIPBlacklisted checks if an IP address is blacklisted using the managed ACL system

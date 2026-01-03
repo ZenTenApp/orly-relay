@@ -15,6 +15,13 @@ import (
 	"next.orly.dev/pkg/version"
 )
 
+// ExtendedRelayInfo extends the standard NIP-11 relay info with additional fields.
+// The Addresses field contains alternative WebSocket URLs for the relay (e.g., .onion).
+type ExtendedRelayInfo struct {
+	*relayinfo.T
+	Addresses []string `json:"addresses,omitempty"`
+}
+
 // HandleRelayInfo generates and returns a relay information document in JSON
 // format based on the server's configuration and supported NIPs.
 //
@@ -138,6 +145,32 @@ func (s *Server) HandleRelayInfo(w http.ResponseWriter, r *http.Request) {
 		},
 		Icon: icon,
 	}
-	if err := json.NewEncoder(w).Encode(info); chk.E(err) {
+
+	// Build addresses list from config and Tor service
+	var addresses []string
+
+	// Add configured relay addresses
+	if len(s.Config.RelayAddresses) > 0 {
+		addresses = append(addresses, s.Config.RelayAddresses...)
+	}
+
+	// Add Tor hidden service address if available
+	if s.torService != nil {
+		if onionAddr := s.torService.OnionWSAddress(); onionAddr != "" {
+			addresses = append(addresses, onionAddr)
+		}
+	}
+
+	// Return extended info if we have addresses, otherwise standard info
+	if len(addresses) > 0 {
+		extInfo := &ExtendedRelayInfo{
+			T:         info,
+			Addresses: addresses,
+		}
+		if err := json.NewEncoder(w).Encode(extInfo); chk.E(err) {
+		}
+	} else {
+		if err := json.NewEncoder(w).Encode(info); chk.E(err) {
+		}
 	}
 }

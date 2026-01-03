@@ -1,0 +1,73 @@
+# ORLY Relay with Tor Hidden Service - Systemd Unit
+#
+# This is an example systemd unit for running ORLY with Tor support.
+# Copy and customize for your deployment.
+#
+# Installation:
+#   1. Copy to /etc/systemd/system/orly-tor.service
+#   2. Edit paths and environment variables as needed
+#   3. sudo systemctl daemon-reload
+#   4. sudo systemctl enable orly-tor
+#   5. sudo systemctl start orly-tor
+#
+# Prerequisites:
+#   - Tor daemon running (systemctl enable tor && systemctl start tor)
+#   - Hidden service configured (run scripts/tor-setup.sh)
+
+[Unit]
+Description=ORLY Nostr Relay with Tor Hidden Service
+Documentation=https://git.mleku.dev/mleku/orly
+After=network.target tor.service
+Requires=tor.service
+Wants=tor.service
+
+[Service]
+Type=simple
+User=orly
+Group=orly
+
+# Working directory
+WorkingDirectory=/opt/orly
+
+# Main relay binary
+ExecStart=/opt/orly/orly
+
+# Environment configuration
+# Core settings
+Environment=ORLY_PORT=3334
+Environment=ORLY_DATA_DIR=/var/lib/orly
+Environment=ORLY_LOG_LEVEL=info
+
+# Tor hidden service settings
+Environment=ORLY_TOR_ENABLED=true
+Environment=ORLY_TOR_PORT=3336
+Environment=ORLY_TOR_HS_DIR=/var/lib/tor/orly-relay
+
+# ACL mode (choose one: none, follows, managed)
+Environment=ORLY_ACL_MODE=none
+
+# TLS (optional - uncomment and configure for production)
+# Environment=ORLY_TLS_DOMAINS=relay.example.com
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
+# Restart policy
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/orly
+PrivateTmp=yes
+
+# Allow reading Tor hidden service directory
+# Note: The Tor user must grant read access to the orly user
+# Option 1: Add orly user to debian-tor group
+# Option 2: Use ACLs: setfacl -R -m u:orly:rx /var/lib/tor/orly-relay
+
+[Install]
+WantedBy=multi-user.target

@@ -1,7 +1,7 @@
 import { SimplePool } from 'nostr-tools/pool';
 import { EventStore } from 'applesauce-core';
 import { PrivateKeySigner } from 'applesauce-signers';
-import { DEFAULT_RELAYS } from "./constants.js";
+import { DEFAULT_RELAYS, FALLBACK_RELAYS } from "./constants.js";
 
 // Nostr client wrapper using nostr-tools
 class NostrClient {
@@ -450,65 +450,115 @@ export async function fetchUserProfile(pubkey) {
     console.warn("Failed to load cached profile", e);
   }
 
-  // 2) Fetch profile from relays
+  const filters = [{
+    kinds: [0],
+    authors: [pubkey],
+    limit: 1
+  }];
+
+  // 2) Fetch profile from local relay first
   try {
-    const filters = [{
-      kinds: [0],
-      authors: [pubkey],
-      limit: 1
-    }];
-    
     const events = await fetchEvents(filters, { timeout: 10000 });
-    
+
     if (events.length > 0) {
       const profileEvent = events[0];
-      console.log("Profile fetched:", profileEvent);
-      
-      // Cache the event
-      await putEvent(profileEvent);
-      
-      // Publish the profile event to the local relay
-      try {
-        console.log("Publishing profile event to local relay:", profileEvent.id);
-        await nostrClient.publish(profileEvent);
-        console.log("Profile event successfully saved to local relay");
-      } catch (publishError) {
-        console.warn("Failed to publish profile to local relay:", publishError);
-        // Don't fail the whole operation if publishing fails
-      }
-      
-      // Parse profile data
-      const profile = parseProfileFromEvent(profileEvent);
-      
-      // Notify listeners that an updated profile is available
-      try {
-        if (typeof window !== "undefined" && window.dispatchEvent) {
-          window.dispatchEvent(
-            new CustomEvent("profile-updated", {
-              detail: { pubkey, profile, event: profileEvent },
-            }),
-          );
-        }
-      } catch (e) {
-        console.warn("Failed to dispatch profile-updated event", e);
-      }
-      
-      return profile;
-    } else {
-      // No profile found - create a default profile for new users
-      console.log("No profile found for pubkey, creating default:", pubkey);
-      return await createDefaultProfile(pubkey);
+      console.log("Profile fetched from local relay:", profileEvent);
+      return processProfileEvent(profileEvent, pubkey);
     }
   } catch (error) {
-    console.error("Failed to fetch profile:", error);
-    // Try to create default profile on error too
-    try {
-      return await createDefaultProfile(pubkey);
-    } catch (e) {
-      console.error("Failed to create default profile:", e);
-      return null;
-    }
+    console.warn("Failed to fetch profile from local relay:", error);
   }
+
+  // 3) Try fallback relays if local relay doesn't have the profile
+  console.log("Profile not found on local relay, trying fallback relays:", FALLBACK_RELAYS);
+  try {
+    const profileEvent = await fetchProfileFromFallbackRelays(pubkey, filters);
+    if (profileEvent) {
+      return processProfileEvent(profileEvent, pubkey);
+    }
+  } catch (error) {
+    console.warn("Failed to fetch profile from fallback relays:", error);
+  }
+
+  // 4) No profile found anywhere - create a default profile for new users
+  console.log("No profile found for pubkey, creating default:", pubkey);
+  try {
+    return await createDefaultProfile(pubkey);
+  } catch (e) {
+    console.error("Failed to create default profile:", e);
+    return null;
+  }
+}
+
+// Helper to fetch profile from fallback relays
+async function fetchProfileFromFallbackRelays(pubkey, filters) {
+  return new Promise((resolve) => {
+    const events = [];
+    const timeoutId = setTimeout(() => {
+      sub.close();
+      // Return the most recent profile event
+      if (events.length > 0) {
+        events.sort((a, b) => b.created_at - a.created_at);
+        resolve(events[0]);
+      } else {
+        resolve(null);
+      }
+    }, 5000);
+
+    const sub = nostrClient.pool.subscribeMany(
+      FALLBACK_RELAYS,
+      filters,
+      {
+        onevent(event) {
+          console.log("Profile event received from fallback relay:", event.id?.substring(0, 8));
+          events.push(event);
+        },
+        oneose() {
+          clearTimeout(timeoutId);
+          sub.close();
+          if (events.length > 0) {
+            events.sort((a, b) => b.created_at - a.created_at);
+            resolve(events[0]);
+          } else {
+            resolve(null);
+          }
+        }
+      }
+    );
+  });
+}
+
+// Helper to process and cache a profile event
+async function processProfileEvent(profileEvent, pubkey) {
+  // Cache the event
+  await putEvent(profileEvent);
+
+  // Publish the profile event to the local relay
+  try {
+    console.log("Publishing profile event to local relay:", profileEvent.id);
+    await nostrClient.publish(profileEvent);
+    console.log("Profile event successfully saved to local relay");
+  } catch (publishError) {
+    console.warn("Failed to publish profile to local relay:", publishError);
+  }
+
+  // Parse profile data
+  const profile = parseProfileFromEvent(profileEvent);
+
+  // Notify listeners that an updated profile is available
+  try {
+    if (typeof window !== "undefined" && window.dispatchEvent) {
+      window.dispatchEvent(
+        new CustomEvent("profile-updated", {
+          detail: { pubkey, profile, event: profileEvent },
+        }),
+      );
+    }
+  } catch (e) {
+    console.warn("Failed to dispatch profile-updated event", e);
+  }
+
+  return profile;
 }
 
 /**

@@ -33,6 +33,7 @@ import (
 	dsync "next.orly.dev/pkg/sync"
 	"next.orly.dev/pkg/wireguard"
 	"next.orly.dev/pkg/archive"
+	"next.orly.dev/pkg/tor"
 
 	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 )
@@ -548,6 +549,32 @@ func Run(
 		log.I.F("archive relay manager initialized with %d relays", len(archiveRelays))
 	}
 
+	// Initialize Tor hidden service if enabled
+	torEnabled, torPort, torHSDir, torOnionAddr := cfg.GetTorConfigValues()
+	if torEnabled {
+		torCfg := &tor.Config{
+			Port:         torPort,
+			HSDir:        torHSDir,
+			OnionAddress: torOnionAddr,
+			Handler:      l,
+		}
+		var err error
+		l.torService, err = tor.New(torCfg)
+		if err != nil {
+			log.W.F("failed to create Tor service: %v", err)
+		} else {
+			if err = l.torService.Start(); err != nil {
+				log.W.F("failed to start Tor service: %v", err)
+			} else {
+				if addr := l.torService.OnionWSAddress(); addr != "" {
+					log.I.F("Tor hidden service listening on port %d, address: %s", torPort, addr)
+				} else {
+					log.I.F("Tor hidden service listening on port %d (waiting for .onion address)", torPort)
+				}
+			}
+		}
+	}
+
 	// Start rate limiter if enabled
 	if limiter != nil && limiter.IsEnabled() {
 		limiter.Start()
@@ -661,6 +688,12 @@ func Run(
 		if l.archiveManager != nil {
 			l.archiveManager.Stop()
 			log.I.F("archive manager stopped")
+		}
+
+		// Stop Tor service if running
+		if l.torService != nil {
+			l.torService.Stop()
+			log.I.F("Tor service stopped")
 		}
 
 		// Stop garbage collector if running

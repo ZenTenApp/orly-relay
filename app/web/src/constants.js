@@ -7,6 +7,14 @@ export const DEFAULT_RELAYS = [
   `${wsProtocol}//${window.location.host}/`,
 ];
 
+// Fallback relays for profile lookups when local relay doesn't have the data
+export const FALLBACK_RELAYS = [
+  'wss://relay.damus.io',
+  'wss://nos.lol',
+  'wss://relay.nostr.band',
+  'wss://purplepag.es',
+];
+
 // Replaceable kinds for the recovery dropdown
 // Based on NIP-01: kinds 0, 3, and 10000-19999 are replaceable
 // kinds 30000-39999 are addressable (parameterized replaceable)

@@ -149,6 +149,12 @@ type C struct {
 	BunkerEnabled bool `env:"ORLY_BUNKER_ENABLED" default:"false" usage:"enable NIP-46 bunker signing service (requires WireGuard)"`
 	BunkerPort    int  `env:"ORLY_BUNKER_PORT" default:"3335" usage:"internal port for bunker WebSocket (only accessible via WireGuard)"`
 
+	// Tor hidden service configuration
+	TorEnabled      bool   `env:"ORLY_TOR_ENABLED" default:"false" usage:"enable Tor hidden service integration (requires external Tor daemon)"`
+	TorPort         int    `env:"ORLY_TOR_PORT" default:"3336" usage:"internal port that Tor forwards .onion traffic to"`
+	TorHSDir        string `env:"ORLY_TOR_HS_DIR" usage:"Tor HiddenServiceDir path to read .onion hostname (e.g., /var/lib/tor/orly-relay)"`
+	TorOnionAddress string `env:"ORLY_TOR_ONION_ADDRESS" usage:"manual .onion address override (optional, auto-detected from TorHSDir if empty)"`
+
 	// Cashu access token configuration (NIP-XX)
 	CashuEnabled     bool   `env:"ORLY_CASHU_ENABLED" default:"false" usage:"enable Cashu blind signature tokens for access control"`
 	CashuTokenTTL    string `env:"ORLY_CASHU_TOKEN_TTL" default:"168h" usage:"token validity duration (default: 1 week)"`
@@ -631,4 +637,19 @@ func (cfg *C) GetStorageConfigValues() (
 		cfg.GCEnabled,
 		cfg.GCIntervalSec,
 		cfg.GCBatchSize
+}
+
+// GetTorConfigValues returns the Tor hidden service configuration values.
+// This avoids circular imports with pkg/tor while allowing main.go to construct
+// the Tor service configuration.
+func (cfg *C) GetTorConfigValues() (
+	enabled bool,
+	port int,
+	hsDir string,
+	onionAddress string,
+) {
+	return cfg.TorEnabled,
+		cfg.TorPort,
+		cfg.TorHSDir,
+		cfg.TorOnionAddress
 }
