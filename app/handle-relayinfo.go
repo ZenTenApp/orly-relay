@@ -37,7 +37,8 @@ type ExtendedRelayInfo struct {
 // Informer interface implementation or predefined server configuration. It
 // returns this document as a JSON response to the client.
 func (s *Server) HandleRelayInfo(w http.ResponseWriter, r *http.Request) {
-	r.Header.Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Vary", "Accept")
 	log.D.Ln("handling relay information document")
 	var info *relayinfo.T
 	nips := []relayinfo.NIP{

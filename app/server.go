@@ -738,6 +738,12 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(
 		"Content-Disposition", "attachment; filename=\""+filename+"\"",
 	)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+
+	// Flush headers to start streaming immediately
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
 
 	// Stream export
 	s.DB.Export(s.Ctx, w, pks...)

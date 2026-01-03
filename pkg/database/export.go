@@ -17,6 +17,11 @@ import (
 	"git.mleku.dev/mleku/nostr/utils/units"
 )
 
+// Flusher interface for HTTP streaming
+type flusher interface {
+	Flush()
+}
+
 // Export the complete database of stored events to an io.Writer in line structured minified
 // JSON. Supports both legacy and compact event formats.
 func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
@@ -24,11 +29,18 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 	evB := make([]byte, 0, units.Mb)
 	evBuf := bytes.NewBuffer(evB)
 
+	// Get flusher for HTTP streaming if available
+	var f flusher
+	if fl, ok := w.(flusher); ok {
+		f = fl
+	}
+
 	// Performance tracking
 	startTime := time.Now()
 	var eventCount, bytesWritten int64
 	lastLogTime := startTime
 	const logInterval = 5 * time.Second
+	const flushInterval = 100 // Flush every N events
 
 	log.I.F("export: starting export operation")
 
@@ -109,6 +121,11 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 					eventCount++
 					ev.Free()
 
+					// Flush periodically for HTTP streaming
+					if f != nil && eventCount%flushInterval == 0 {
+						f.Flush()
+					}
+
 					// Progress logging every logInterval
 					if time.Since(lastLogTime) >= logInterval {
 						elapsed := time.Since(startTime)
@@ -169,6 +186,11 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 					eventCount++
 					ev.Free()
 
+					// Flush periodically for HTTP streaming
+					if f != nil && eventCount%flushInterval == 0 {
+						f.Flush()
+					}
+
 					// Progress logging every logInterval
 					if time.Since(lastLogTime) >= logInterval {
 						elapsed := time.Since(startTime)
@@ -184,6 +206,11 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 			},
 		); err != nil {
 			return
+		}
+
+		// Final flush
+		if f != nil {
+			f.Flush()
 		}
 
 		// Final export summary
@@ -244,6 +271,11 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 						eventCount++
 						ev.Free()
 
+						// Flush periodically for HTTP streaming
+						if f != nil && eventCount%flushInterval == 0 {
+							f.Flush()
+						}
+
 						// Progress logging every logInterval
 						if time.Since(lastLogTime) >= logInterval {
 							elapsed := time.Since(startTime)
@@ -259,6 +291,11 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 			); err != nil {
 				return
 			}
+		}
+
+		// Final flush
+		if f != nil {
+			f.Flush()
 		}
 
 		// Final export summary for pubkey export
