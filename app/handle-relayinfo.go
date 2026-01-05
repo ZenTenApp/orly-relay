@@ -15,11 +15,20 @@ import (
 	"next.orly.dev/pkg/version"
 )
 
+// GraphQueryConfig describes graph query capabilities for NIP-11 advertisement.
+type GraphQueryConfig struct {
+	Enabled    bool     `json:"enabled"`
+	MaxDepth   int      `json:"max_depth"`
+	MaxResults int      `json:"max_results"`
+	Methods    []string `json:"methods"`
+}
+
 // ExtendedRelayInfo extends the standard NIP-11 relay info with additional fields.
 // The Addresses field contains alternative WebSocket URLs for the relay (e.g., .onion).
 type ExtendedRelayInfo struct {
 	*relayinfo.T
-	Addresses []string `json:"addresses,omitempty"`
+	Addresses  []string          `json:"addresses,omitempty"`
+	GraphQuery *GraphQueryConfig `json:"graph_query,omitempty"`
 }
 
 // HandleRelayInfo generates and returns a relay information document in JSON
@@ -132,6 +141,10 @@ func (s *Server) HandleRelayInfo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Restricted writes applies when ACL mode is not managed/curating but also not none
+	// (e.g., follows mode restricts writes to followed pubkeys)
+	restrictedWrites := s.Config.ACLMode != "managed" && s.Config.ACLMode != "curating" && s.Config.ACLMode != "none"
+
 	info = &relayinfo.T{
 		Name:        name,
 		Description: description,
@@ -141,7 +154,7 @@ func (s *Server) HandleRelayInfo(w http.ResponseWriter, r *http.Request) {
 		Version:     strings.TrimPrefix(version.V, "v"),
 		Limitation: relayinfo.Limits{
 			AuthRequired:     s.Config.AuthRequired || s.Config.ACLMode != "none",
-			RestrictedWrites: s.Config.ACLMode != "managed" && s.Config.ACLMode != "none",
+			RestrictedWrites: restrictedWrites,
 			PaymentRequired:  s.Config.MonthlyPriceSats > 0,
 		},
 		Icon: icon,
@@ -162,11 +175,26 @@ func (s *Server) HandleRelayInfo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Return extended info if we have addresses, otherwise standard info
-	if len(addresses) > 0 {
+	// Build graph query config if enabled
+	var graphConfig *GraphQueryConfig
+	if s.graphExecutor != nil && s.Config.GraphQueriesEnabled {
+		graphEnabled, maxDepth, maxResults, _ := s.Config.GetGraphConfigValues()
+		if graphEnabled {
+			graphConfig = &GraphQueryConfig{
+				Enabled:    true,
+				MaxDepth:   maxDepth,
+				MaxResults: maxResults,
+				Methods:    []string{"follows", "followers", "mentions", "thread"},
+			}
+		}
+	}
+
+	// Return extended info if we have addresses or graph query support, otherwise standard info
+	if len(addresses) > 0 || graphConfig != nil {
 		extInfo := &ExtendedRelayInfo{
-			T:         info,
-			Addresses: addresses,
+			T:          info,
+			Addresses:  addresses,
+			GraphQuery: graphConfig,
 		}
 		if err := json.NewEncoder(w).Encode(extInfo); chk.E(err) {
 		}

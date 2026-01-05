@@ -325,3 +325,13 @@ func (r *GraphResult) GetTotalPubkeys() int {
 func (r *GraphResult) GetTotalEvents() int {
 	return r.TotalEvents
 }
+
+// GetInboundRefs returns the InboundRefs map for external access.
+func (r *GraphResult) GetInboundRefs() map[uint16]map[string][]string {
+	return r.InboundRefs
+}
+
+// GetOutboundRefs returns the OutboundRefs map for external access.
+func (r *GraphResult) GetOutboundRefs() map[uint16]map[string][]string {
+	return r.OutboundRefs
+}

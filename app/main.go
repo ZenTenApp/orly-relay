@@ -135,8 +135,8 @@ func Run(
 		}
 	}
 
-	// Initialize graph query executor (Badger backend)
-	if badgerDB, ok := db.(*database.D); ok {
+	// Initialize graph query executor (Badger backend) if enabled
+	if badgerDB, ok := db.(*database.D); ok && cfg.GraphQueriesEnabled {
 		// Get relay identity key for signing graph query responses
 		relaySecretKey, err := badgerDB.GetOrCreateRelayIdentitySecret()
 		if err != nil {
@@ -147,13 +147,15 @@ func Run(
 			if l.graphExecutor, err = graph.NewExecutor(graphAdapter, relaySecretKey); err != nil {
 				log.E.F("failed to create graph executor: %v", err)
 			} else {
-				log.I.F("graph query executor initialized (Badger backend)")
+				graphEnabled, maxDepth, maxResults, rateLimitRPM := cfg.GetGraphConfigValues()
+				log.I.F("graph query executor initialized (Badger backend, enabled=%v, max_depth=%d, max_results=%d, rate_limit=%d/min)",
+					graphEnabled, maxDepth, maxResults, rateLimitRPM)
 			}
 		}
 	}
 
-	// Initialize graph query executor (Neo4j backend)
-	if neo4jDB, ok := db.(*neo4j.N); ok {
+	// Initialize graph query executor (Neo4j backend) if enabled
+	if neo4jDB, ok := db.(*neo4j.N); ok && cfg.GraphQueriesEnabled {
 		// Get relay identity key for signing graph query responses
 		relaySecretKey, err := neo4jDB.GetOrCreateRelayIdentitySecret()
 		if err != nil {
@@ -164,7 +166,9 @@ func Run(
 			if l.graphExecutor, err = graph.NewExecutor(graphAdapter, relaySecretKey); err != nil {
 				log.E.F("failed to create graph executor: %v", err)
 			} else {
-				log.I.F("graph query executor initialized (Neo4j backend)")
+				graphEnabled, maxDepth, maxResults, rateLimitRPM := cfg.GetGraphConfigValues()
+				log.I.F("graph query executor initialized (Neo4j backend, enabled=%v, max_depth=%d, max_results=%d, rate_limit=%d/min)",
+					graphEnabled, maxDepth, maxResults, rateLimitRPM)
 			}
 		}
 	}

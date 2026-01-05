@@ -12,6 +12,7 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/envelopes/eventenvelope"
 	"git.mleku.dev/mleku/nostr/encoders/envelopes/noticeenvelope"
 	"git.mleku.dev/mleku/nostr/encoders/envelopes/okenvelope"
+	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/encoders/reason"
@@ -175,6 +176,29 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 			log.E.F("failed to process NIP-43 leave request: %v", err)
 		}
 		return
+	case acl.CuratingConfigKind:
+		// Handle curating configuration events (kind 30078 with d-tag "curating-config")
+		// Check if this is a curating config event (verify d-tag)
+		dTag := env.E.Tags.GetFirst([]byte("d"))
+		if dTag != nil && string(dTag.Value()) == acl.CuratingConfigDTag {
+			if err = l.HandleCuratingConfigUpdate(env.E); chk.E(err) {
+				log.E.F("failed to process curating config update: %v", err)
+				if err = Ok.Error(l, env, err.Error()); chk.E(err) {
+					return
+				}
+				return
+			}
+			// Save the event and send OK response
+			result := l.eventProcessor.Process(context.Background(), env.E)
+			if result.Error != nil {
+				log.E.F("failed to save curating config event: %v", result.Error)
+			}
+			if err = Ok.Ok(l, env, "curating configuration updated"); chk.E(err) {
+				return
+			}
+			return
+		}
+		// Not a curating config event, continue with normal processing
 	case kind.PolicyConfig.K:
 		// Handle policy configuration update events (kind 12345)
 		// Only policy admins can update policy configuration
@@ -323,4 +347,23 @@ func (l *Listener) isPeerRelayPubkey(pubkey []byte) bool {
 	}
 
 	return false
+}
+
+// HandleCuratingConfigUpdate processes curating configuration events (kind 30078)
+func (l *Listener) HandleCuratingConfigUpdate(ev *event.E) error {
+	// Check if curating ACL is active
+	if acl.Registry.Type() != "curating" {
+		return nil // Ignore config events if not in curating mode
+	}
+
+	// Find the curating ACL instance
+	for _, aclInstance := range acl.Registry.ACL {
+		if aclInstance.Type() == "curating" {
+			if curating, ok := aclInstance.(*acl.Curating); ok {
+				return curating.ProcessConfigEvent(ev)
+			}
+		}
+	}
+
+	return nil
 }

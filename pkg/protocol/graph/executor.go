@@ -6,6 +6,7 @@ package graph
 
 import (
 	"encoding/json"
+	"sort"
 	"strconv"
 	"time"
 
@@ -37,6 +38,9 @@ type GraphResultI interface {
 	GetEventsByDepth() map[int][]string
 	GetTotalPubkeys() int
 	GetTotalEvents() int
+	// Ref aggregation methods
+	GetInboundRefs() map[uint16]map[string][]string
+	GetOutboundRefs() map[uint16]map[string][]string
 }
 
 // GraphDatabase defines the interface for graph traversal operations.
@@ -50,6 +54,10 @@ type GraphDatabase interface {
 	FindMentions(pubkey []byte, kinds []uint16) (GraphResultI, error)
 	// TraverseThread performs BFS traversal of thread structure
 	TraverseThread(seedEventID []byte, maxDepth int, direction string) (GraphResultI, error)
+	// CollectInboundRefs finds events that reference items in the result
+	CollectInboundRefs(result GraphResultI, depth int, kinds []uint16) error
+	// CollectOutboundRefs finds events referenced by items in the result
+	CollectOutboundRefs(result GraphResultI, depth int, kinds []uint16) error
 }
 
 // Executor handles graph query execution and response generation.
@@ -138,6 +146,36 @@ func (e *Executor) Execute(q *Query) (*event.E, error) {
 		return nil, ErrInvalidMethod
 	}
 
+	// Collect inbound refs if specified
+	if q.HasInboundRefs() {
+		for _, refSpec := range q.InboundRefs {
+			kinds := make([]uint16, len(refSpec.Kinds))
+			for i, k := range refSpec.Kinds {
+				kinds[i] = uint16(k)
+			}
+			// Collect refs at the specified from_depth (0 = all depths)
+			if err = e.db.CollectInboundRefs(result, refSpec.FromDepth, kinds); err != nil {
+				log.W.F("graph executor: failed to collect inbound refs: %v", err)
+				// Continue without refs rather than failing the query
+			}
+		}
+		log.D.F("graph executor: collected inbound refs")
+	}
+
+	// Collect outbound refs if specified
+	if q.HasOutboundRefs() {
+		for _, refSpec := range q.OutboundRefs {
+			kinds := make([]uint16, len(refSpec.Kinds))
+			for i, k := range refSpec.Kinds {
+				kinds[i] = uint16(k)
+			}
+			if err = e.db.CollectOutboundRefs(result, refSpec.FromDepth, kinds); err != nil {
+				log.W.F("graph executor: failed to collect outbound refs: %v", err)
+			}
+		}
+		log.D.F("graph executor: collected outbound refs")
+	}
+
 	// Generate response event
 	return e.generateResponse(q, result, responseKind)
 }
@@ -155,6 +193,14 @@ func (e *Executor) generateResponse(q *Query, result GraphResultI, responseKind 
 		// For event-based queries, use events_by_depth
 		content.EventsByDepth = result.ToEventDepthArrays()
 		content.TotalEvents = result.GetTotalEvents()
+	}
+
+	// Add ref summaries if present
+	if inboundRefs := result.GetInboundRefs(); len(inboundRefs) > 0 {
+		content.InboundRefs = buildRefSummaries(inboundRefs)
+	}
+	if outboundRefs := result.GetOutboundRefs(); len(outboundRefs) > 0 {
+		content.OutboundRefs = buildRefSummaries(outboundRefs)
 	}
 
 	contentBytes, err := json.Marshal(content)
@@ -199,4 +245,55 @@ type ResponseContent struct {
 
 	// TotalEvents is the total count of unique events discovered
 	TotalEvents int `json:"total_events,omitempty"`
+
+	// InboundRefs contains aggregated inbound references (events referencing discovered items)
+	// Structure: array of {kind, target, count, refs[]}
+	InboundRefs []RefSummary `json:"inbound_refs,omitempty"`
+
+	// OutboundRefs contains aggregated outbound references (events referenced by discovered items)
+	// Structure: array of {kind, source, count, refs[]}
+	OutboundRefs []RefSummary `json:"outbound_refs,omitempty"`
+}
+
+// RefSummary represents aggregated reference data for a single target/source.
+type RefSummary struct {
+	// Kind is the kind of the referencing/referenced events
+	Kind uint16 `json:"kind"`
+
+	// Target is the event ID being referenced (for inbound) or referencing (for outbound)
+	Target string `json:"target"`
+
+	// Count is the number of references
+	Count int `json:"count"`
+
+	// Refs is the list of event IDs (optional, may be omitted for large sets)
+	Refs []string `json:"refs,omitempty"`
+}
+
+// buildRefSummaries converts the ref map structure to a sorted array of RefSummary.
+// Results are sorted by count descending (most referenced first).
+func buildRefSummaries(refs map[uint16]map[string][]string) []RefSummary {
+	var summaries []RefSummary
+
+	for kind, targets := range refs {
+		for targetID, refIDs := range targets {
+			summaries = append(summaries, RefSummary{
+				Kind:   kind,
+				Target: targetID,
+				Count:  len(refIDs),
+				Refs:   refIDs,
+			})
+		}
+	}
+
+	// Sort by count descending
+	sort.Slice(summaries, func(i, j int) bool {
+		if summaries[i].Count != summaries[j].Count {
+			return summaries[i].Count > summaries[j].Count
+		}
+		// Secondary sort by kind for stability
+		return summaries[i].Kind < summaries[j].Kind
+	})
+
+	return summaries
 }

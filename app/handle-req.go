@@ -602,6 +602,27 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		events = aclFilteredEvents
 	}
 
+	// Apply curating ACL filtering for read access if curating ACL is active
+	if acl.Registry.Active.Load() == "curating" {
+		// Find the curating ACL instance
+		for _, aclInstance := range acl.Registry.ACL {
+			if aclInstance.Type() == "curating" {
+				if curatingACL, ok := aclInstance.(*acl.Curating); ok {
+					var curatingFilteredEvents event.S
+					for _, ev := range events {
+						if curatingACL.IsEventVisible(ev, accessLevel) {
+							curatingFilteredEvents = append(curatingFilteredEvents, ev)
+						} else {
+							log.D.F("curating ACL filtered out event %s from blacklisted pubkey", hexenc.Enc(ev.ID))
+						}
+					}
+					events = curatingFilteredEvents
+				}
+				break
+			}
+		}
+	}
+
 	// Apply private tag filtering - only show events with "private" tags to authorized users
 	var privateFilteredEvents event.S
 	authedPubkey := l.authedPubkey.Load()

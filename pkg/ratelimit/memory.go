@@ -10,7 +10,7 @@ import (
 )
 
 // MinimumMemoryMB is the minimum memory required to run the relay with rate limiting.
-const MinimumMemoryMB = 500
+const MinimumMemoryMB = 128
 
 // AutoDetectMemoryFraction is the fraction of available memory to use when auto-detecting.
 const AutoDetectMemoryFraction = 0.66
@@ -20,7 +20,7 @@ const AutoDetectMemoryFraction = 0.66
 const DefaultMaxMemoryMB = 1500
 
 // ErrInsufficientMemory is returned when there isn't enough memory to run the relay.
-var ErrInsufficientMemory = errors.New("insufficient memory: relay requires at least 500MB of available memory")
+var ErrInsufficientMemory = errors.New("insufficient memory: relay requires at least 128MB of available memory")
 
 // ProcessMemoryStats contains memory statistics for the current process.
 // On Linux, these are read from /proc/self/status for accurate RSS values.

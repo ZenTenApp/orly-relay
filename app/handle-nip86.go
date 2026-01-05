@@ -55,9 +55,16 @@ func (s *Server) handleNIP86Management(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if managed ACL is active
-	if acl.Registry.Type() != "managed" {
-		http.Error(w, "Managed ACL mode is not active", http.StatusBadRequest)
+	// Dispatch based on ACL mode
+	aclType := acl.Registry.Type()
+	switch aclType {
+	case "curating":
+		s.handleCuratingNIP86Request(w, r, pubkey)
+		return
+	case "managed":
+		// Continue with managed ACL handling below
+	default:
+		http.Error(w, "NIP-86 requires managed or curating ACL mode", http.StatusBadRequest)
 		return
 	}
 

@@ -53,7 +53,7 @@ type C struct {
 	IPBlacklist         []string      `env:"ORLY_IP_BLACKLIST" usage:"comma-separated list of IP addresses to block; matches on prefixes to allow subnets, e.g. 192.168 = 192.168.0.0/16"`
 	Admins              []string      `env:"ORLY_ADMINS" usage:"comma-separated list of admin npubs"`
 	Owners              []string      `env:"ORLY_OWNERS" usage:"comma-separated list of owner npubs, who have full control of the relay for wipe and restart and other functions"`
-	ACLMode             string        `env:"ORLY_ACL_MODE" usage:"ACL mode: follows, managed (nip-86), none" default:"none"`
+	ACLMode             string        `env:"ORLY_ACL_MODE" usage:"ACL mode: follows, managed (nip-86), curating, none" default:"none"`
 	AuthRequired        bool          `env:"ORLY_AUTH_REQUIRED" usage:"require authentication for all requests (works with managed ACL)" default:"false"`
 	AuthToWrite         bool          `env:"ORLY_AUTH_TO_WRITE" usage:"require authentication only for write operations (EVENT), allow REQ/COUNT without auth" default:"false"`
 	BootstrapRelays     []string      `env:"ORLY_BOOTSTRAP_RELAYS" usage:"comma-separated list of bootstrap relay URLs for initial sync"`
@@ -166,6 +166,12 @@ type C struct {
 
 	// Cluster replication configuration
 	ClusterPropagatePrivilegedEvents bool `env:"ORLY_CLUSTER_PROPAGATE_PRIVILEGED_EVENTS" default:"true" usage:"propagate privileged events (DMs, gift wraps, etc.) to relay peers for replication"`
+
+	// Graph query configuration (NIP-XX)
+	GraphQueriesEnabled bool `env:"ORLY_GRAPH_QUERIES_ENABLED" default:"true" usage:"enable graph traversal queries (_graph filter extension)"`
+	GraphMaxDepth       int  `env:"ORLY_GRAPH_MAX_DEPTH" default:"16" usage:"maximum depth for graph traversal queries (1-16)"`
+	GraphMaxResults     int  `env:"ORLY_GRAPH_MAX_RESULTS" default:"10000" usage:"maximum pubkeys/events returned per graph query"`
+	GraphRateLimitRPM   int  `env:"ORLY_GRAPH_RATE_LIMIT_RPM" default:"60" usage:"graph queries per minute per connection (0=unlimited)"`
 
 	// Archive relay configuration (query augmentation from authoritative archives)
 	ArchiveEnabled     bool     `env:"ORLY_ARCHIVE_ENABLED" default:"false" usage:"enable archive relay query augmentation (fetch from archives, cache locally)"`
@@ -327,6 +333,25 @@ func VersionRequested() (requested bool) {
 		switch strings.ToLower(os.Args[1]) {
 		case "version", "-v", "--v", "-version", "--version":
 			requested = true
+		}
+	}
+	return
+}
+
+// CuratingModeRequested checks if the first command line argument is "curatingmode"
+// and returns the owner npub/hex pubkey if provided.
+//
+// Return Values
+//   - requested: true if the 'curatingmode' subcommand was provided
+//   - ownerKey: the npub or hex pubkey provided as the second argument (empty if not provided)
+func CuratingModeRequested() (requested bool, ownerKey string) {
+	if len(os.Args) > 1 {
+		switch strings.ToLower(os.Args[1]) {
+		case "curatingmode":
+			requested = true
+			if len(os.Args) > 2 {
+				ownerKey = os.Args[2]
+			}
 		}
 	}
 	return
@@ -659,4 +684,26 @@ func (cfg *C) GetTorConfigValues() (
 		dataDir,
 		cfg.TorBinary,
 		cfg.TorSOCKS
+}
+
+// GetGraphConfigValues returns the graph query configuration values.
+// This avoids circular imports with pkg/protocol/graph while allowing main.go
+// to construct the graph executor configuration.
+func (cfg *C) GetGraphConfigValues() (
+	enabled bool,
+	maxDepth int,
+	maxResults int,
+	rateLimitRPM int,
+) {
+	maxDepth = cfg.GraphMaxDepth
+	if maxDepth < 1 {
+		maxDepth = 1
+	}
+	if maxDepth > 16 {
+		maxDepth = 16
+	}
+	return cfg.GraphQueriesEnabled,
+		maxDepth,
+		cfg.GraphMaxResults,
+		cfg.GraphRateLimitRPM
 }

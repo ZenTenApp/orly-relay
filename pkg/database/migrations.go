@@ -13,12 +13,13 @@ import (
 	"next.orly.dev/pkg/database/indexes"
 	"next.orly.dev/pkg/database/indexes/types"
 	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"git.mleku.dev/mleku/nostr/encoders/ints"
 	"git.mleku.dev/mleku/nostr/encoders/kind"
 )
 
 const (
-	currentVersion uint32 = 7
+	currentVersion uint32 = 8
 )
 
 func (d *D) RunMigrations() {
@@ -114,6 +115,14 @@ func (d *D) RunMigrations() {
 		d.RebuildWordIndexesWithNormalization()
 		// bump to version 7
 		_ = d.writeVersionTag(7)
+	}
+	if dbVersion < 8 {
+		log.I.F("migrating to version 8...")
+		// Backfill e-tag graph indexes (eeg/gee) for graph query support
+		// This creates edges for all existing events with e-tags
+		d.BackfillETagGraph()
+		// bump to version 8
+		_ = d.writeVersionTag(8)
 	}
 }
 
@@ -1078,4 +1087,184 @@ func (d *D) RebuildWordIndexesWithNormalization() {
 	d.UpdateWordIndexes()
 
 	log.I.F("word index rebuild with unicode normalization complete")
+}
+
+// BackfillETagGraph populates e-tag graph indexes (eeg/gee) for all existing events.
+// This enables graph traversal queries for thread/reply discovery.
+//
+// The migration:
+// 1. Iterates all events in compact storage (cmp prefix)
+// 2. Extracts e-tags from each event
+// 3. For e-tags referencing events we have, creates bidirectional edges:
+//    - eeg|source|target|kind|direction(out) - forward edge
+//    - gee|target|kind|direction(in)|source - reverse edge
+//
+// This is idempotent: running multiple times won't create duplicate edges
+// (BadgerDB overwrites existing keys).
+func (d *D) BackfillETagGraph() {
+	log.I.F("backfilling e-tag graph indexes for graph query support...")
+	var err error
+
+	type ETagEdge struct {
+		SourceSerial *types.Uint40
+		TargetSerial *types.Uint40
+		Kind         *types.Uint16
+	}
+
+	var edges []ETagEdge
+	var processedEvents int
+	var eventsWithETags int
+	var skippedTargets int
+
+	// First pass: collect all e-tag edges from events
+	if err = d.View(func(txn *badger.Txn) error {
+		// Iterate compact events (cmp prefix)
+		cmpPrf := new(bytes.Buffer)
+		if err = indexes.CompactEventEnc(nil).MarshalWrite(cmpPrf); chk.E(err) {
+			return err
+		}
+
+		it := txn.NewIterator(badger.IteratorOptions{Prefix: cmpPrf.Bytes()})
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			key := item.KeyCopy(nil)
+
+			// Extract serial from key (prefix 3 bytes + serial 5 bytes)
+			if len(key) < 8 {
+				continue
+			}
+			sourceSerial := new(types.Uint40)
+			if err = sourceSerial.UnmarshalRead(bytes.NewReader(key[3:8])); chk.E(err) {
+				continue
+			}
+
+			// Get event data
+			var val []byte
+			if val, err = item.ValueCopy(nil); chk.E(err) {
+				continue
+			}
+
+			// Decode the event
+			// First get the event ID from serial (needed for compact format decoding)
+			eventId, idErr := d.GetEventIdBySerial(sourceSerial)
+			if idErr != nil {
+				continue
+			}
+			resolver := NewDatabaseSerialResolver(d, d.serialCache)
+			ev, decErr := UnmarshalCompactEvent(val, eventId, resolver)
+			if decErr != nil || ev == nil {
+				continue
+			}
+			processedEvents++
+
+			// Extract e-tags
+			eTags := ev.Tags.GetAll([]byte("e"))
+			if len(eTags) == 0 {
+				continue
+			}
+			eventsWithETags++
+
+			eventKind := new(types.Uint16)
+			eventKind.Set(ev.Kind)
+
+			for _, eTag := range eTags {
+				if eTag.Len() < 2 {
+					continue
+				}
+
+				// Get event ID from e-tag
+				var targetEventID []byte
+				targetEventID, err = hex.Dec(string(eTag.ValueHex()))
+				if err != nil || len(targetEventID) != 32 {
+					continue
+				}
+
+				// Look up target event's serial
+				targetSerial, lookupErr := d.GetSerialById(targetEventID)
+				if lookupErr != nil || targetSerial == nil {
+					// Target event not in our database - skip
+					skippedTargets++
+					continue
+				}
+
+				edges = append(edges, ETagEdge{
+					SourceSerial: sourceSerial,
+					TargetSerial: targetSerial,
+					Kind:         eventKind,
+				})
+			}
+		}
+		return nil
+	}); chk.E(err) {
+		log.E.F("e-tag graph backfill: failed to collect edges: %v", err)
+		return
+	}
+
+	log.I.F("e-tag graph backfill: processed %d events, %d with e-tags, found %d edges to create (%d targets not found)",
+		processedEvents, eventsWithETags, len(edges), skippedTargets)
+
+	if len(edges) == 0 {
+		log.I.F("e-tag graph backfill: no edges to create")
+		return
+	}
+
+	// Sort edges for ordered writes (improves compaction)
+	sort.Slice(edges, func(i, j int) bool {
+		if edges[i].SourceSerial.Get() != edges[j].SourceSerial.Get() {
+			return edges[i].SourceSerial.Get() < edges[j].SourceSerial.Get()
+		}
+		return edges[i].TargetSerial.Get() < edges[j].TargetSerial.Get()
+	})
+
+	// Second pass: write edges in batches
+	const batchSize = 1000
+	var createdEdges int
+
+	for i := 0; i < len(edges); i += batchSize {
+		end := i + batchSize
+		if end > len(edges) {
+			end = len(edges)
+		}
+		batch := edges[i:end]
+
+		if err = d.Update(func(txn *badger.Txn) error {
+			for _, edge := range batch {
+				// Create forward edge: eeg|source|target|kind|direction(out)
+				directionOut := new(types.Letter)
+				directionOut.Set(types.EdgeDirectionETagOut)
+				keyBuf := new(bytes.Buffer)
+				if err = indexes.EventEventGraphEnc(edge.SourceSerial, edge.TargetSerial, edge.Kind, directionOut).MarshalWrite(keyBuf); chk.E(err) {
+					continue
+				}
+				if err = txn.Set(keyBuf.Bytes(), nil); chk.E(err) {
+					continue
+				}
+
+				// Create reverse edge: gee|target|kind|direction(in)|source
+				directionIn := new(types.Letter)
+				directionIn.Set(types.EdgeDirectionETagIn)
+				keyBuf.Reset()
+				if err = indexes.GraphEventEventEnc(edge.TargetSerial, edge.Kind, directionIn, edge.SourceSerial).MarshalWrite(keyBuf); chk.E(err) {
+					continue
+				}
+				if err = txn.Set(keyBuf.Bytes(), nil); chk.E(err) {
+					continue
+				}
+
+				createdEdges++
+			}
+			return nil
+		}); chk.E(err) {
+			log.W.F("e-tag graph backfill: batch write failed: %v", err)
+			continue
+		}
+
+		if (i/batchSize)%10 == 0 && i > 0 {
+			log.I.F("e-tag graph backfill progress: %d/%d edges created", i, len(edges))
+		}
+	}
+
+	log.I.F("e-tag graph backfill complete: created %d bidirectional edges", createdEdges)
 }

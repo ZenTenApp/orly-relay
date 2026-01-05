@@ -11,6 +11,7 @@
     import RecoveryView from "./RecoveryView.svelte";
     import SprocketView from "./SprocketView.svelte";
     import PolicyView from "./PolicyView.svelte";
+    import CurationView from "./CurationView.svelte";
     import BlossomView from "./BlossomView.svelte";
     import LogView from "./LogView.svelte";
     import SearchResultsView from "./SearchResultsView.svelte";
@@ -1657,6 +1658,12 @@
             label: "Managed ACL",
             requiresOwner: true,
         },
+        {
+            id: "curation",
+            icon: "📋",
+            label: "Curation",
+            requiresOwner: true,
+        },
         { id: "sprocket", icon: "⚙️", label: "Sprocket", requiresOwner: true },
         { id: "policy", icon: "📜", label: "Policy", requiresOwner: true },
         { id: "logs", icon: "📋", label: "Logs", requiresOwner: true },
@@ -1689,6 +1696,10 @@
         }
         // Hide managed ACL tab if not in managed mode
         if (tab.id === "managed-acl" && aclMode !== "managed") {
+            return false;
+        }
+        // Hide curation tab if not in curating mode
+        if (tab.id === "curation" && aclMode !== "curating") {
             return false;
         }
         // Debug logging for tab filtering
@@ -2853,6 +2864,40 @@
                         <p>
                             Please log in with owner permissions to access
                             managed ACL configuration.
+                        </p>
+                        <button class="login-btn" on:click={openLoginModal}
+                            >Log In</button
+                        >
+                    </div>
+                {/if}
+            </div>
+        {:else if selectedTab === "curation"}
+            <div class="curation-view-container">
+                {#if aclMode !== "curating"}
+                    <div class="acl-mode-warning">
+                        <h3>Curating Mode Not Active</h3>
+                        <p>
+                            To use the Curation interface, you need to set
+                            the ACL mode to "curating" in your relay
+                            configuration.
+                        </p>
+                        <p>
+                            Current ACL mode: <strong
+                                >{aclMode || "unknown"}</strong
+                            >
+                        </p>
+                        <p>
+                            Please set <code>ORLY_ACL_MODE=curating</code> in your
+                            environment variables and restart the relay.
+                        </p>
+                    </div>
+                {:else if isLoggedIn && userRole === "owner"}
+                    <CurationView {userSigner} {userPubkey} />
+                {:else}
+                    <div class="access-denied">
+                        <p>
+                            Please log in with owner permissions to access
+                            curation configuration.
                         </p>
                         <button class="login-btn" on:click={openLoginModal}
                             >Log In</button

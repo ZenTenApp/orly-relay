@@ -38,5 +38,27 @@ func (a *GraphAdapter) TraverseThread(seedEventID []byte, maxDepth int, directio
 	return a.db.TraverseThread(seedEventID, maxDepth, direction)
 }
 
+// CollectInboundRefs implements graph.GraphDatabase.
+// It collects events that reference items in the result.
+func (a *GraphAdapter) CollectInboundRefs(result graph.GraphResultI, depth int, kinds []uint16) error {
+	// Type assert to get the concrete GraphResult
+	graphResult, ok := result.(*GraphResult)
+	if !ok {
+		return nil // Can't collect refs if we don't have a GraphResult
+	}
+	return a.db.AddInboundRefsToResult(graphResult, depth, kinds)
+}
+
+// CollectOutboundRefs implements graph.GraphDatabase.
+// It collects events referenced by items in the result.
+func (a *GraphAdapter) CollectOutboundRefs(result graph.GraphResultI, depth int, kinds []uint16) error {
+	// Type assert to get the concrete GraphResult
+	graphResult, ok := result.(*GraphResult)
+	if !ok {
+		return nil
+	}
+	return a.db.AddOutboundRefsToResult(graphResult, depth, kinds)
+}
+
 // Verify GraphAdapter implements graph.GraphDatabase
 var _ graph.GraphDatabase = (*GraphAdapter)(nil)

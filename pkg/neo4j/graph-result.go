@@ -33,6 +33,14 @@ type GraphResult struct {
 
 	// TotalEvents is the count of unique events discovered across all depths.
 	TotalEvents int
+
+	// InboundRefs tracks inbound references (events that reference discovered items).
+	// Structure: kind -> target_id -> []referencing_event_ids
+	InboundRefs map[uint16]map[string][]string
+
+	// OutboundRefs tracks outbound references (events referenced by discovered items).
+	// Structure: kind -> source_id -> []referenced_event_ids
+	OutboundRefs map[uint16]map[string][]string
 }
 
 // NewGraphResult creates a new initialized GraphResult.
@@ -42,6 +50,8 @@ func NewGraphResult() *GraphResult {
 		EventsByDepth:   make(map[int][]string),
 		FirstSeenPubkey: make(map[string]int),
 		FirstSeenEvent:  make(map[string]int),
+		InboundRefs:     make(map[uint16]map[string][]string),
+		OutboundRefs:    make(map[uint16]map[string][]string),
 	}
 }
 
@@ -194,4 +204,46 @@ func (r *GraphResult) GetEventDepthsSorted() []int {
 	}
 	sort.Ints(depths)
 	return depths
+}
+
+// GetInboundRefs returns the InboundRefs map for external access.
+func (r *GraphResult) GetInboundRefs() map[uint16]map[string][]string {
+	return r.InboundRefs
+}
+
+// GetOutboundRefs returns the OutboundRefs map for external access.
+func (r *GraphResult) GetOutboundRefs() map[uint16]map[string][]string {
+	return r.OutboundRefs
+}
+
+// AddInboundRef records an inbound reference from a referencing event to a target.
+func (r *GraphResult) AddInboundRef(kind uint16, targetIDHex string, referencingEventIDHex string) {
+	if r.InboundRefs[kind] == nil {
+		r.InboundRefs[kind] = make(map[string][]string)
+	}
+	r.InboundRefs[kind][targetIDHex] = append(r.InboundRefs[kind][targetIDHex], referencingEventIDHex)
+}
+
+// AddOutboundRef records an outbound reference from a source event to a referenced event.
+func (r *GraphResult) AddOutboundRef(kind uint16, sourceIDHex string, referencedEventIDHex string) {
+	if r.OutboundRefs[kind] == nil {
+		r.OutboundRefs[kind] = make(map[string][]string)
+	}
+	r.OutboundRefs[kind][sourceIDHex] = append(r.OutboundRefs[kind][sourceIDHex], referencedEventIDHex)
+}
+
+// GetPubkeysAtDepth returns pubkeys at a specific depth, or empty slice if none.
+func (r *GraphResult) GetPubkeysAtDepth(depth int) []string {
+	if pubkeys, exists := r.PubkeysByDepth[depth]; exists {
+		return pubkeys
+	}
+	return []string{}
+}
+
+// GetEventsAtDepth returns events at a specific depth, or empty slice if none.
+func (r *GraphResult) GetEventsAtDepth(depth int) []string {
+	if events, exists := r.EventsByDepth[depth]; exists {
+		return events
+	}
+	return []string{}
 }

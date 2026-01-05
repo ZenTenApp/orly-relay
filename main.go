@@ -6,20 +6,24 @@ import (
 	"net/http"
 	pp "net/http/pprof"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/pkg/profile"
+	"golang.org/x/term"
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
 	"next.orly.dev/app"
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/acl"
 	"git.mleku.dev/mleku/nostr/crypto/keys"
+	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
 	"next.orly.dev/pkg/database"
 	neo4jdb "next.orly.dev/pkg/neo4j" // Import for neo4j factory and type
 	"git.mleku.dev/mleku/nostr/encoders/hex"
@@ -95,6 +99,96 @@ func main() {
 
 		log.I.F("serve mode: listening on %s:%d with ACL mode '%s' (full owner access)",
 			cfg.Listen, cfg.Port, cfg.ACLMode)
+	}
+
+	// Handle 'curatingmode' subcommand: start relay in curating mode with specified owner
+	if requested, ownerKey := config.CuratingModeRequested(); requested {
+		if ownerKey == "" {
+			fmt.Println("Usage: orly curatingmode <npub|hex_pubkey>")
+			fmt.Println("")
+			fmt.Println("Starts the relay in curating mode with the specified pubkey as owner.")
+			fmt.Println("Opens a browser to the curation setup page where you must log in")
+			fmt.Println("with a Nostr extension to configure the relay.")
+			fmt.Println("")
+			fmt.Println("Press Escape or Ctrl+C to stop the relay.")
+			os.Exit(1)
+		}
+
+		// Parse the owner key (npub or hex)
+		var ownerHex string
+		if strings.HasPrefix(ownerKey, "npub1") {
+			// Decode npub to hex
+			_, pubBytes, err := bech32encoding.Decode([]byte(ownerKey))
+			if err != nil {
+				fmt.Printf("Error: invalid npub: %v\n", err)
+				os.Exit(1)
+			}
+			if pb, ok := pubBytes.([]byte); ok {
+				ownerHex = hex.Enc(pb)
+			} else {
+				fmt.Println("Error: invalid npub encoding")
+				os.Exit(1)
+			}
+		} else if len(ownerKey) == 64 {
+			// Assume hex pubkey
+			ownerHex = strings.ToLower(ownerKey)
+		} else {
+			fmt.Println("Error: owner key must be an npub or 64-character hex pubkey")
+			os.Exit(1)
+		}
+
+		// Configure for curating mode
+		cfg.ACLMode = "curating"
+		cfg.Owners = []string{ownerHex}
+
+		log.I.F("curatingmode: starting with owner %s", ownerHex)
+		log.I.F("curatingmode: listening on %s:%d", cfg.Listen, cfg.Port)
+
+		// Start a goroutine to open browser after a short delay
+		go func() {
+			time.Sleep(2 * time.Second)
+			url := fmt.Sprintf("http://%s:%d/#curation", cfg.Listen, cfg.Port)
+			log.I.F("curatingmode: opening browser to %s", url)
+			openBrowser(url)
+		}()
+
+		// Start a goroutine to listen for Escape key
+		go func() {
+			// Set terminal to raw mode to capture individual key presses
+			oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+			if err != nil {
+				log.W.F("could not set terminal to raw mode: %v", err)
+				return
+			}
+			defer term.Restore(int(os.Stdin.Fd()), oldState)
+
+			buf := make([]byte, 1)
+			for {
+				_, err := os.Stdin.Read(buf)
+				if err != nil {
+					return
+				}
+				// Escape key is 0x1b (27)
+				if buf[0] == 0x1b {
+					fmt.Println("\nEscape pressed, shutting down...")
+					p, _ := os.FindProcess(os.Getpid())
+					_ = p.Signal(os.Interrupt)
+					return
+				}
+			}
+		}()
+
+		fmt.Println("")
+		fmt.Println("Curating Mode Setup")
+		fmt.Println("===================")
+		fmt.Printf("Owner: %s\n", ownerHex)
+		fmt.Printf("URL:   http://%s:%d/#curation\n", cfg.Listen, cfg.Port)
+		fmt.Println("")
+		fmt.Println("Log in with your Nostr extension to configure allowed event kinds")
+		fmt.Println("and rate limiting settings.")
+		fmt.Println("")
+		fmt.Println("Press Escape or Ctrl+C to stop the relay.")
+		fmt.Println("")
 	}
 
 	// Ensure profiling is stopped on interrupts (SIGINT/SIGTERM) as well as on normal exit
@@ -546,5 +640,21 @@ func makeDatabaseConfig(cfg *config.C) *database.DatabaseConfig {
 		Neo4jFetchSize:         neo4jFetchSize,
 		Neo4jMaxTxRetrySeconds: neo4jMaxTxRetrySeconds,
 		Neo4jQueryResultLimit:  neo4jQueryResultLimit,
+	}
+}
+
+// openBrowser opens the specified URL in the default browser.
+func openBrowser(url string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", url)
+	default: // linux, freebsd, etc.
+		cmd = exec.Command("xdg-open", url)
+	}
+	if err := cmd.Start(); err != nil {
+		log.W.F("could not open browser: %v", err)
 	}
 }
