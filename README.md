@@ -12,6 +12,36 @@ zap me: �mlekudev@getalby.com
 
 follow me on [nostr](https://jumble.social/users/npub1fjqqy4a93z5zsjwsfxqhc2764kvykfdyttvldkkkdera8dr78vhsmmleku)
 
+## Table of Contents
+
+- [Bug Reports & Feature Requests](#%EF%B8%8F-bug-reports--feature-requests)
+- [System Requirements](#%EF%B8%8F-system-requirements)
+- [About](#about)
+- [Performance & Cryptography](#performance--cryptography)
+- [Building](#building)
+  - [Prerequisites](#prerequisites)
+  - [Basic Build](#basic-build)
+  - [Building with Web UI](#building-with-web-ui)
+- [Core Features](#core-features)
+  - [Web UI](#web-ui)
+  - [Sprocket Event Processing](#sprocket-event-processing)
+  - [Policy System](#policy-system)
+- [Deployment](#deployment)
+  - [Automated Deployment](#automated-deployment)
+  - [TLS Configuration](#tls-configuration)
+  - [systemd Service Management](#systemd-service-management)
+  - [Remote Deployment](#remote-deployment)
+  - [Configuration](#configuration)
+  - [Firewall Configuration](#firewall-configuration)
+  - [Monitoring](#monitoring)
+- [Testing](#testing)
+- [Command-Line Tools](#command-line-tools)
+- [Access Control](#access-control)
+  - [Follows ACL](#follows-acl)
+  - [Curation ACL](#curation-acl)
+  - [Cluster Replication](#cluster-replication)
+- [Developer Notes](#developer-notes)
+
 ## ⚠️ Bug Reports & Feature Requests
 
 **Bug reports and feature requests that do not follow the protocol will not be accepted.**
@@ -566,9 +596,22 @@ go run ./cmd/subscription-test-simple -url ws://localhost:3334 -duration 120
 
 ## Access Control
 
+ORLY provides four ACL (Access Control List) modes to control who can publish events to your relay:
+
+| Mode | Description | Best For |
+|------|-------------|----------|
+| `none` | Open relay, anyone can write | Public relays |
+| `follows` | Write access based on admin follow lists | Personal/community relays |
+| `managed` | Explicit allow/deny lists via NIP-86 API | Private relays |
+| `curating` | Three-tier classification with rate limiting | Curated community relays |
+
+```bash
+export ORLY_ACL_MODE=follows  # or: none, managed, curating
+```
+
 ### Follows ACL
 
-The follows ACL (Access Control List) system provides flexible relay access control based on social relationships in the Nostr network.
+The follows ACL system provides flexible relay access control based on social relationships in the Nostr network.
 
 ```bash
 export ORLY_ACL_MODE=follows
@@ -577,6 +620,30 @@ export ORLY_ADMINS=npub1fjqqy4a93z5zsjwsfxqhc2764kvykfdyttvldkkkdera8dr78vhsmmle
 ```
 
 The system grants write access to users followed by designated admins, with read-only access for others. Follow lists update dynamically as admins modify their relationships.
+
+### Curation ACL
+
+The curation ACL mode provides sophisticated content curation with a three-tier publisher classification system:
+
+- **Trusted**: Unlimited publishing, bypass rate limits
+- **Blacklisted**: Blocked from publishing, invisible to regular users
+- **Unclassified**: Rate-limited publishing (default 50 events/day)
+
+Key features:
+- **Kind whitelisting**: Only allow specific event kinds (e.g., social, DMs, longform)
+- **IP-based flood protection**: Auto-ban IPs that exceed rate limits
+- **Spam flagging**: Mark events as spam without deleting
+- **Web UI management**: Configure via the built-in curation interface
+
+```bash
+export ORLY_ACL_MODE=curating
+export ORLY_OWNERS=npub1your_owner_key
+./orly
+```
+
+After starting, publish a configuration event (kind 30078) to enable the relay. The web UI at `/#curation` provides a complete management interface.
+
+For detailed configuration and API documentation, see the [Curation Mode Guide](docs/CURATION_MODE_GUIDE.md).
 
 ### Cluster Replication
 

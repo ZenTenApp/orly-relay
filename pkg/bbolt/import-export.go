@@ -31,9 +31,10 @@ func (b *B) ImportEventsFromReader(ctx context.Context, rr io.Reader) error {
 	if chk.E(err) {
 		return err
 	}
-	defer os.Remove(tmp.Name()) // Clean up temp file when done
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName) // Clean up temp file when done
 
-	log.I.F("bbolt import: buffering upload to %s", tmp.Name())
+	log.I.F("bbolt import: buffering upload to %s", tmpName)
 	bufferStart := time.Now()
 	bytesBuffered, err := io.Copy(tmp, rr)
 	if chk.E(err) {
@@ -48,12 +49,30 @@ func (b *B) ImportEventsFromReader(ctx context.Context, rr io.Reader) error {
 		return err
 	}
 
-	processErr := b.processJSONLEvents(ctx, tmp)
+	count, processErr := b.processJSONLEventsReturningCount(ctx, tmp)
+
+	// Close temp file to release resources before index building
+	tmp.Close()
+
+	if processErr != nil {
+		return processErr
+	}
+
+	// Build indexes after events are stored (minimal import mode)
+	if count > 0 {
+		// Force garbage collection to reclaim memory before index building
+		debug.FreeOSMemory()
+		log.I.F("bbolt import: building indexes for %d events...", count)
+		if err := b.BuildIndexes(ctx); err != nil {
+			log.E.F("bbolt import: failed to build indexes: %v", err)
+			return err
+		}
+	}
 
 	totalElapsed := time.Since(startTime)
 	log.I.F("bbolt import: total operation time: %v", totalElapsed.Round(time.Millisecond))
 
-	return processErr
+	return nil
 }
 
 // ImportEventsFromStrings imports events from a slice of JSON strings with policy filtering
@@ -67,7 +86,95 @@ func (b *B) ImportEventsFromStrings(ctx context.Context, eventJSONs []string, po
 
 // processJSONLEvents processes JSONL events from a reader
 func (b *B) processJSONLEvents(ctx context.Context, rr io.Reader) error {
-	return b.processJSONLEventsWithPolicy(ctx, rr, nil)
+	_, err := b.processJSONLEventsReturningCount(ctx, rr)
+	return err
+}
+
+// processJSONLEventsReturningCount processes JSONL events and returns the count saved
+// This is used by ImportEventsFromReader for migration mode (minimal import without inline indexes)
+func (b *B) processJSONLEventsReturningCount(ctx context.Context, rr io.Reader) (int, error) {
+	// Create a scanner to read the buffer line by line
+	scan := bufio.NewScanner(rr)
+	scanBuf := make([]byte, maxLen)
+	scan.Buffer(scanBuf, maxLen)
+
+	// Performance tracking
+	startTime := time.Now()
+	lastLogTime := startTime
+	const logInterval = 5 * time.Second
+
+	var count, total, skipped, unmarshalErrors, saveErrors int
+	for scan.Scan() {
+		select {
+		case <-ctx.Done():
+			log.I.F("bbolt import: context closed after %d events", count)
+			return count, ctx.Err()
+		default:
+		}
+
+		line := scan.Bytes()
+		total += len(line) + 1
+		if len(line) < 1 {
+			skipped++
+			continue
+		}
+
+		ev := event.New()
+		if _, err := ev.Unmarshal(line); err != nil {
+			ev.Free()
+			unmarshalErrors++
+			log.W.F("bbolt import: failed to unmarshal event: %v", err)
+			continue
+		}
+
+		// Minimal path for migration: store events only, indexes built later
+		if err := b.SaveEventMinimal(ev); err != nil {
+			ev.Free()
+			saveErrors++
+			log.W.F("bbolt import: failed to save event: %v", err)
+			continue
+		}
+
+		ev.Free()
+		line = nil
+		count++
+
+		// Progress logging every logInterval
+		if time.Since(lastLogTime) >= logInterval {
+			elapsed := time.Since(startTime)
+			eventsPerSec := float64(count) / elapsed.Seconds()
+			mbPerSec := float64(total) / elapsed.Seconds() / 1024 / 1024
+			log.I.F("bbolt import: progress %d events saved, %.2f MB read, %.0f events/sec, %.2f MB/sec",
+				count, float64(total)/1024/1024, eventsPerSec, mbPerSec)
+			lastLogTime = time.Now()
+			debug.FreeOSMemory()
+		}
+	}
+
+	// Flush any remaining batched events
+	if b.batcher != nil {
+		b.batcher.Flush()
+	}
+
+	// Final summary
+	elapsed := time.Since(startTime)
+	eventsPerSec := float64(count) / elapsed.Seconds()
+	mbPerSec := float64(total) / elapsed.Seconds() / 1024 / 1024
+	log.I.F("bbolt import: completed - %d events saved, %.2f MB in %v (%.0f events/sec, %.2f MB/sec)",
+		count, float64(total)/1024/1024, elapsed.Round(time.Millisecond), eventsPerSec, mbPerSec)
+	if unmarshalErrors > 0 || saveErrors > 0 || skipped > 0 {
+		log.I.F("bbolt import: stats - %d unmarshal errors, %d save errors, %d skipped empty lines",
+			unmarshalErrors, saveErrors, skipped)
+	}
+
+	if err := scan.Err(); err != nil {
+		return count, err
+	}
+
+	// Clear scanner buffer to help GC
+	scanBuf = nil
+
+	return count, nil
 }
 
 // processJSONLEventsWithPolicy processes JSONL events from a reader with optional policy filtering
@@ -179,15 +286,6 @@ func (b *B) processJSONLEventsWithPolicy(ctx context.Context, rr io.Reader, poli
 
 	if err := scan.Err(); err != nil {
 		return err
-	}
-
-	// Build indexes after minimal import (when no policy manager = migration mode)
-	if policyManager == nil && count > 0 {
-		log.I.F("bbolt import: building indexes for %d events...", count)
-		if err := b.BuildIndexes(ctx); err != nil {
-			log.E.F("bbolt import: failed to build indexes: %v", err)
-			return err
-		}
 	}
 
 	return nil

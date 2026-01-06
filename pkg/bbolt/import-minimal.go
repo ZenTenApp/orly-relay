@@ -62,9 +62,12 @@ func (b *B) BuildIndexes(ctx context.Context) error {
 	log.I.F("bbolt: starting index build...")
 	startTime := time.Now()
 
-	// Process in chunks to avoid OOM
-	// With ~15 indexes per event and ~50 bytes per key, 200k events = ~150MB
-	const chunkSize = 200000
+	// Force GC before starting to reclaim batch buffer memory
+	debug.FreeOSMemory()
+
+	// Process in small chunks to avoid OOM on memory-constrained systems
+	// With ~15 indexes per event and ~50 bytes per key, 50k events = ~37.5MB per chunk
+	const chunkSize = 50000
 
 	var totalEvents int
 	var lastSerial uint64 = 0
