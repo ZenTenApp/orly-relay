@@ -5,7 +5,6 @@ package bbolt
 import (
 	"context"
 	"errors"
-	"io"
 	"time"
 
 	"next.orly.dev/pkg/database"
@@ -93,30 +92,6 @@ func (b *B) ProcessDelete(ev *event.E, admins [][]byte) error {
 func (b *B) CheckForDeleted(ev *event.E, admins [][]byte) error {
 	return nil // Not deleted by default
 }
-
-// Import imports events from a reader.
-func (b *B) Import(rr io.Reader) {
-	// TODO: Implement
-}
-
-// Export exports events to a writer.
-func (b *B) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
-	// TODO: Implement
-}
-
-// ImportEventsFromReader imports events from a JSONL reader.
-func (b *B) ImportEventsFromReader(ctx context.Context, rr io.Reader) error {
-	return errNotImplemented
-}
-
-// ImportEventsFromStrings imports events from JSON strings.
-func (b *B) ImportEventsFromStrings(ctx context.Context, eventJSONs []string, policyManager interface {
-	CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error)
-}) error {
-	return errNotImplemented
-}
-
-
 
 // GetSubscription gets a user's subscription.
 func (b *B) GetSubscription(pubkey []byte) (*database.Subscription, error) {
