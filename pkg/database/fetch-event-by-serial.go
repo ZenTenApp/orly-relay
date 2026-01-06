@@ -44,9 +44,12 @@ func (d *D) FetchEventBySerial(ser *types.Uint40) (ev *event.E, err error) {
 						// Check if this is compact format
 						if len(eventData) > 0 && eventData[0] == CompactFormatVersion {
 							eventId, idErr := d.GetEventIdBySerial(ser)
-							if idErr == nil {
-								return UnmarshalCompactEvent(eventData, eventId, resolver)
+							if idErr != nil {
+								// Cannot decode compact format without event ID - return error
+								// DO NOT fall back to legacy unmarshal as compact format is not valid legacy format
+								return nil, fmt.Errorf("compact format inline but no event ID mapping for serial %d: %w", ser.Get(), idErr)
 							}
+							return UnmarshalCompactEvent(eventData, eventId, resolver)
 						}
 
 						// Legacy binary format
@@ -106,10 +109,14 @@ func (d *D) FetchEventBySerial(ser *types.Uint40) (ev *event.E, err error) {
 			// Check if this is compact format
 			if len(v) > 0 && v[0] == CompactFormatVersion {
 				eventId, idErr := d.GetEventIdBySerial(ser)
-				if idErr == nil {
-					ev, err = UnmarshalCompactEvent(v, eventId, resolver)
+				if idErr != nil {
+					// Cannot decode compact format without event ID - return error
+					// DO NOT fall back to legacy unmarshal as compact format is not valid legacy format
+					err = fmt.Errorf("compact format evt but no event ID mapping for serial %d: %w", ser.Get(), idErr)
 					return
 				}
+				ev, err = UnmarshalCompactEvent(v, eventId, resolver)
+				return
 			}
 
 			// Check if we have valid data before attempting to unmarshal

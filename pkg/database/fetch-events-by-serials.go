@@ -149,12 +149,10 @@ func (d *D) fetchSmallEvent(txn *badger.Txn, ser *types.Uint40) (ev *event.E, er
 		resolver := NewDatabaseSerialResolver(d, d.serialCache)
 		eventId, idErr := d.GetEventIdBySerial(ser)
 		if idErr != nil {
-			// Fall back to legacy unmarshal
-			ev = new(event.E)
-			if err = ev.UnmarshalBinary(bytes.NewBuffer(eventData)); err != nil {
-				return nil, err
-			}
-			return ev, nil
+			// Cannot decode compact format without event ID - return error
+			// DO NOT fall back to legacy unmarshal as compact format is not valid legacy format
+			log.W.F("fetchSmallEvent: compact format but no event ID mapping for serial %d: %v", ser.Get(), idErr)
+			return nil, idErr
 		}
 		return UnmarshalCompactEvent(eventData, eventId, resolver)
 	}
@@ -196,12 +194,10 @@ func (d *D) fetchLegacyEvent(txn *badger.Txn, ser *types.Uint40) (ev *event.E, e
 		resolver := NewDatabaseSerialResolver(d, d.serialCache)
 		eventId, idErr := d.GetEventIdBySerial(ser)
 		if idErr != nil {
-			// Fall back to legacy unmarshal
-			ev = new(event.E)
-			if err = ev.UnmarshalBinary(bytes.NewBuffer(v)); err != nil {
-				return nil, err
-			}
-			return ev, nil
+			// Cannot decode compact format without event ID - return error
+			// DO NOT fall back to legacy unmarshal as compact format is not valid legacy format
+			log.W.F("fetchLegacyEvent: compact format but no event ID mapping for serial %d: %v", ser.Get(), idErr)
+			return nil, idErr
 		}
 		return UnmarshalCompactEvent(v, eventId, resolver)
 	}

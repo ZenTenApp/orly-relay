@@ -251,7 +251,11 @@ func (d *D) GetEventIdBySerial(ser *types.Uint40) (eventId []byte, err error) {
 		}
 
 		return item.Value(func(val []byte) error {
-			eventId = make([]byte, len(val))
+			// Validate that the stored value is exactly 32 bytes
+			if len(val) != 32 {
+				return errors.New("corrupted event ID: expected 32 bytes")
+			}
+			eventId = make([]byte, 32)
 			copy(eventId, val)
 			return nil
 		})

@@ -240,6 +240,11 @@ func readUint40(r io.Reader) (value uint64, err error) {
 // The resolver is used to look up pubkeys and event IDs from serials.
 // The eventId parameter is the full 32-byte event ID (from SerialEventId table).
 func UnmarshalCompactEvent(data []byte, eventId []byte, resolver SerialResolver) (ev *event.E, err error) {
+	// Validate eventId upfront to prevent returning events with zero IDs
+	if len(eventId) != 32 {
+		return nil, errors.New("invalid eventId: must be exactly 32 bytes")
+	}
+
 	r := bytes.NewReader(data)
 	ev = new(event.E)
 
