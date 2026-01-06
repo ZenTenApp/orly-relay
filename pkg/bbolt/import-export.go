@@ -127,14 +127,21 @@ func (b *B) processJSONLEventsWithPolicy(ctx context.Context, rr io.Reader, poli
 				continue
 			}
 			log.D.F("bbolt import: policy allowed event %x during sync import", ev.ID)
-		}
-
-		if _, err := b.SaveEvent(ctx, ev); err != nil {
-			// return the pooled buffer on error paths too
-			ev.Free()
-			saveErrors++
-			log.W.F("bbolt import: failed to save event: %v", err)
-			continue
+			// With policy checking, use regular SaveEvent path
+			if _, err := b.SaveEvent(ctx, ev); err != nil {
+				ev.Free()
+				saveErrors++
+				log.W.F("bbolt import: failed to save event: %v", err)
+				continue
+			}
+		} else {
+			// Minimal path for migration: store events only, build indexes later
+			if err := b.SaveEventMinimal(ev); err != nil {
+				ev.Free()
+				saveErrors++
+				log.W.F("bbolt import: failed to save event: %v", err)
+				continue
+			}
 		}
 
 		// return the pooled buffer after successful save
@@ -172,6 +179,15 @@ func (b *B) processJSONLEventsWithPolicy(ctx context.Context, rr io.Reader, poli
 
 	if err := scan.Err(); err != nil {
 		return err
+	}
+
+	// Build indexes after minimal import (when no policy manager = migration mode)
+	if policyManager == nil && count > 0 {
+		log.I.F("bbolt import: building indexes for %d events...", count)
+		if err := b.BuildIndexes(ctx); err != nil {
+			log.E.F("bbolt import: failed to build indexes: %v", err)
+			return err
+		}
 	}
 
 	return nil

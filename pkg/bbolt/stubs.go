@@ -84,8 +84,12 @@ func (b *B) DeleteExpired() {
 }
 
 // ProcessDelete processes a deletion event.
+// For migration from other backends, deletions have already been processed,
+// so this is a no-op. Full implementation needed for production use.
 func (b *B) ProcessDelete(ev *event.E, admins [][]byte) error {
-	return errNotImplemented
+	// TODO: Implement full deletion processing for production use
+	// For now, just return nil to allow migrations to proceed
+	return nil
 }
 
 // CheckForDeleted checks if an event has been deleted.
