@@ -95,8 +95,16 @@ type C struct {
 	NIP43InviteExpiry     time.Duration `env:"ORLY_NIP43_INVITE_EXPIRY" default:"24h" usage:"how long invite codes remain valid"`
 
 	// Database configuration
-	DBType              string `env:"ORLY_DB_TYPE" default:"badger" usage:"database backend to use: badger or neo4j"`
+	DBType              string `env:"ORLY_DB_TYPE" default:"badger" usage:"database backend to use: badger, bbolt, or neo4j"`
 	QueryCacheDisabled  bool   `env:"ORLY_QUERY_CACHE_DISABLED" default:"true" usage:"disable query cache to reduce memory usage (trades memory for query performance)"`
+
+	// BBolt configuration (only used when ORLY_DB_TYPE=bbolt)
+	BboltBatchMaxEvents  int  `env:"ORLY_BBOLT_BATCH_MAX_EVENTS" default:"5000" usage:"max events before flush (tuned for HDD, only used when ORLY_DB_TYPE=bbolt)"`
+	BboltBatchMaxMB      int  `env:"ORLY_BBOLT_BATCH_MAX_MB" default:"128" usage:"max batch size in MB before flush (only used when ORLY_DB_TYPE=bbolt)"`
+	BboltFlushTimeout    int  `env:"ORLY_BBOLT_FLUSH_TIMEOUT_SEC" default:"30" usage:"max seconds before flush (only used when ORLY_DB_TYPE=bbolt)"`
+	BboltBloomSizeMB     int  `env:"ORLY_BBOLT_BLOOM_SIZE_MB" default:"16" usage:"bloom filter size in MB for edge queries (only used when ORLY_DB_TYPE=bbolt)"`
+	BboltNoSync          bool `env:"ORLY_BBOLT_NO_SYNC" default:"false" usage:"disable fsync for performance (DANGEROUS - data loss risk, only used when ORLY_DB_TYPE=bbolt)"`
+	BboltMmapSizeMB      int  `env:"ORLY_BBOLT_MMAP_SIZE_MB" default:"8192" usage:"initial mmap size in MB (only used when ORLY_DB_TYPE=bbolt)"`
 	QueryCacheSizeMB    int    `env:"ORLY_QUERY_CACHE_SIZE_MB" default:"512" usage:"query cache size in MB (caches database query results for faster REQ responses)"`
 	QueryCacheMaxAge    string `env:"ORLY_QUERY_CACHE_MAX_AGE" default:"5m" usage:"maximum age for cached query results (e.g., 5m, 10m, 1h)"`
 
@@ -357,6 +365,45 @@ func CuratingModeRequested() (requested bool, ownerKey string) {
 	return
 }
 
+// MigrateRequested checks if the first command line argument is "migrate"
+// and returns the migration parameters.
+//
+// Return Values
+//   - requested: true if the 'migrate' subcommand was provided
+//   - fromType: source database type (badger, bbolt, neo4j)
+//   - toType: destination database type
+//   - targetPath: optional target path for destination database
+func MigrateRequested() (requested bool, fromType, toType, targetPath string) {
+	if len(os.Args) > 1 {
+		switch strings.ToLower(os.Args[1]) {
+		case "migrate":
+			requested = true
+			// Parse --from, --to, --target-path flags
+			for i := 2; i < len(os.Args); i++ {
+				arg := os.Args[i]
+				switch {
+				case strings.HasPrefix(arg, "--from="):
+					fromType = strings.TrimPrefix(arg, "--from=")
+				case strings.HasPrefix(arg, "--to="):
+					toType = strings.TrimPrefix(arg, "--to=")
+				case strings.HasPrefix(arg, "--target-path="):
+					targetPath = strings.TrimPrefix(arg, "--target-path=")
+				case arg == "--from" && i+1 < len(os.Args):
+					i++
+					fromType = os.Args[i]
+				case arg == "--to" && i+1 < len(os.Args):
+					i++
+					toType = os.Args[i]
+				case arg == "--target-path" && i+1 < len(os.Args):
+					i++
+					targetPath = os.Args[i]
+				}
+			}
+		}
+	}
+	return
+}
+
 // KV is a key/value pair.
 type KV struct{ Key, Value string }
 
@@ -488,18 +535,20 @@ func PrintHelp(cfg *C, printer io.Writer) {
 	)
 	_, _ = fmt.Fprintf(
 		printer,
-		`Usage: %s [env|help|identity|serve|version]
+		`Usage: %s [env|help|identity|migrate|serve|version]
 
 - env: print environment variables configuring %s
 - help: print this help text
 - identity: print the relay identity secret and public key
+- migrate: migrate data between database backends
+           Example: %s migrate --from badger --to bbolt
 - serve: start ephemeral relay with RAM-based storage at /dev/shm/orlyserve
          listening on 0.0.0.0:10547 with 'none' ACL mode (open relay)
          useful for testing and benchmarking
 - version: print version and exit (also: -v, --v, -version, --version)
 
 `,
-		cfg.AppName, cfg.AppName,
+		cfg.AppName, cfg.AppName, cfg.AppName,
 	)
 	_, _ = fmt.Fprintf(
 		printer,
@@ -706,4 +755,23 @@ func (cfg *C) GetGraphConfigValues() (
 		maxDepth,
 		cfg.GraphMaxResults,
 		cfg.GraphRateLimitRPM
+}
+
+// GetBboltConfigValues returns the BBolt database configuration values.
+// This avoids circular imports with pkg/bbolt while allowing main.go to construct
+// the BBolt-specific configuration.
+func (cfg *C) GetBboltConfigValues() (
+	batchMaxEvents int,
+	batchMaxBytes int64,
+	flushTimeoutSec int,
+	bloomSizeMB int,
+	noSync bool,
+	mmapSizeBytes int,
+) {
+	return cfg.BboltBatchMaxEvents,
+		int64(cfg.BboltBatchMaxMB) * 1024 * 1024,
+		cfg.BboltFlushTimeout,
+		cfg.BboltBloomSizeMB,
+		cfg.BboltNoSync,
+		cfg.BboltMmapSizeMB * 1024 * 1024
 }

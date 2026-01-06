@@ -41,6 +41,14 @@ type DatabaseConfig struct {
 	Neo4jFetchSize         int // ORLY_NEO4J_FETCH_SIZE - max records per fetch batch (default: 1000)
 	Neo4jMaxTxRetrySeconds int // ORLY_NEO4J_MAX_TX_RETRY_SEC - max transaction retry time (default: 30)
 	Neo4jQueryResultLimit  int // ORLY_NEO4J_QUERY_RESULT_LIMIT - max results per query (default: 10000, 0=unlimited)
+
+	// BBolt-specific settings (optimized for HDD)
+	BboltBatchMaxEvents int           // ORLY_BBOLT_BATCH_MAX_EVENTS - max events per batch (default: 5000)
+	BboltBatchMaxBytes  int64         // ORLY_BBOLT_BATCH_MAX_MB * 1024 * 1024 (default: 128MB)
+	BboltFlushTimeout   time.Duration // ORLY_BBOLT_BATCH_FLUSH_SEC * time.Second (default: 30s)
+	BboltBloomSizeMB    int           // ORLY_BBOLT_BLOOM_SIZE_MB - bloom filter size (default: 16MB)
+	BboltNoSync         bool          // ORLY_BBOLT_NO_SYNC - disable fsync (DANGEROUS)
+	BboltMmapSize       int           // ORLY_BBOLT_MMAP_SIZE_GB * 1024 * 1024 * 1024 (default: 8GB)
 }
 
 // NewDatabase creates a database instance based on the specified type.
@@ -84,8 +92,14 @@ func NewDatabaseWithConfig(
 			return nil, fmt.Errorf("wasmdb database backend not available (import _ \"next.orly.dev/pkg/wasmdb\")")
 		}
 		return newWasmDBDatabase(ctx, cancel, cfg)
+	case "bbolt", "bolt":
+		// Use the bbolt implementation (B+tree, optimized for HDD)
+		if newBboltDatabase == nil {
+			return nil, fmt.Errorf("bbolt database backend not available (import _ \"next.orly.dev/pkg/bbolt\")")
+		}
+		return newBboltDatabase(ctx, cancel, cfg)
 	default:
-		return nil, fmt.Errorf("unsupported database type: %s (supported: badger, neo4j, wasmdb)", dbType)
+		return nil, fmt.Errorf("unsupported database type: %s (supported: badger, neo4j, wasmdb, bbolt)", dbType)
 	}
 }
 
@@ -107,4 +121,14 @@ var newWasmDBDatabase func(context.Context, context.CancelFunc, *DatabaseConfig)
 // This is called from the wasmdb package's init() function
 func RegisterWasmDBFactory(factory func(context.Context, context.CancelFunc, *DatabaseConfig) (Database, error)) {
 	newWasmDBDatabase = factory
+}
+
+// newBboltDatabase creates a bbolt database instance
+// This is defined here to avoid import cycles
+var newBboltDatabase func(context.Context, context.CancelFunc, *DatabaseConfig) (Database, error)
+
+// RegisterBboltFactory registers the bbolt database factory
+// This is called from the bbolt package's init() function
+func RegisterBboltFactory(factory func(context.Context, context.CancelFunc, *DatabaseConfig) (Database, error)) {
+	newBboltDatabase = factory
 }

@@ -73,6 +73,117 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Handle 'migrate' subcommand: migrate data between database backends
+	if requested, fromType, toType, targetPath := config.MigrateRequested(); requested {
+		if fromType == "" || toType == "" {
+			fmt.Println("Usage: orly migrate --from <type> --to <type> [--target-path <path>]")
+			fmt.Println("")
+			fmt.Println("Migrate data between database backends.")
+			fmt.Println("")
+			fmt.Println("Options:")
+			fmt.Println("  --from <type>         Source database type (badger, bbolt, neo4j)")
+			fmt.Println("  --to <type>           Destination database type (badger, bbolt, neo4j)")
+			fmt.Println("  --target-path <path>  Optional: destination data directory")
+			fmt.Println("                        (default: $ORLY_DATA_DIR/<type>)")
+			fmt.Println("")
+			fmt.Println("Examples:")
+			fmt.Println("  orly migrate --from badger --to bbolt")
+			fmt.Println("  orly migrate --from badger --to bbolt --target-path /mnt/hdd/orly-bbolt")
+			os.Exit(1)
+		}
+
+		// Set target path if not specified
+		if targetPath == "" {
+			targetPath = cfg.DataDir + "-" + toType
+		}
+
+		log.I.F("migrate: %s -> %s", fromType, toType)
+		log.I.F("migrate: source path: %s", cfg.DataDir)
+		log.I.F("migrate: target path: %s", targetPath)
+
+		// Open source database
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		srcCfg := makeDatabaseConfig(cfg)
+		var srcDB database.Database
+		if srcDB, err = database.NewDatabaseWithConfig(ctx, cancel, fromType, srcCfg); chk.E(err) {
+			log.E.F("migrate: failed to open source database: %v", err)
+			os.Exit(1)
+		}
+
+		// Wait for source database to be ready
+		select {
+		case <-srcDB.Ready():
+			log.I.F("migrate: source database ready")
+		case <-time.After(60 * time.Second):
+			log.E.F("migrate: timeout waiting for source database")
+			os.Exit(1)
+		}
+
+		// Open destination database
+		dstCfg := makeDatabaseConfig(cfg)
+		dstCfg.DataDir = targetPath
+		var dstDB database.Database
+		if dstDB, err = database.NewDatabaseWithConfig(ctx, cancel, toType, dstCfg); chk.E(err) {
+			log.E.F("migrate: failed to open destination database: %v", err)
+			srcDB.Close()
+			os.Exit(1)
+		}
+
+		// Wait for destination database to be ready
+		select {
+		case <-dstDB.Ready():
+			log.I.F("migrate: destination database ready")
+		case <-time.After(60 * time.Second):
+			log.E.F("migrate: timeout waiting for destination database")
+			srcDB.Close()
+			os.Exit(1)
+		}
+
+		// Migrate using pipe (export from source, import to destination)
+		log.I.F("migrate: starting data transfer...")
+		pr, pw, pipeErr := os.Pipe()
+		if pipeErr != nil {
+			log.E.F("migrate: failed to create pipe: %v", pipeErr)
+			srcDB.Close()
+			dstDB.Close()
+			os.Exit(1)
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+
+		// Export goroutine
+		go func() {
+			defer wg.Done()
+			defer pw.Close()
+			srcDB.Export(ctx, pw)
+			log.I.F("migrate: export complete")
+		}()
+
+		// Import goroutine
+		go func() {
+			defer wg.Done()
+			if importErr := dstDB.ImportEventsFromReader(ctx, pr); importErr != nil {
+				log.E.F("migrate: import error: %v", importErr)
+			}
+			log.I.F("migrate: import complete")
+		}()
+
+		wg.Wait()
+
+		// Sync and close databases
+		if err = dstDB.Sync(); chk.E(err) {
+			log.W.F("migrate: sync warning: %v", err)
+		}
+		srcDB.Close()
+		dstDB.Close()
+
+		log.I.F("migrate: migration complete!")
+		os.Exit(0)
+	}
+
 	// Handle 'serve' subcommand: start ephemeral relay with RAM-based storage
 	if config.ServeRequested() {
 		const serveDataDir = "/dev/shm/orlyserve"
@@ -622,6 +733,9 @@ func makeDatabaseConfig(cfg *config.C) *database.DatabaseConfig {
 		neo4jURI, neo4jUser, neo4jPassword,
 		neo4jMaxConnPoolSize, neo4jFetchSize, neo4jMaxTxRetrySeconds, neo4jQueryResultLimit := cfg.GetDatabaseConfigValues()
 
+	// Get BBolt-specific configuration
+	batchMaxEvents, batchMaxBytes, flushTimeoutSec, bloomSizeMB, noSync, mmapSizeBytes := cfg.GetBboltConfigValues()
+
 	return &database.DatabaseConfig{
 		DataDir:                dataDir,
 		LogLevel:               logLevel,
@@ -640,6 +754,13 @@ func makeDatabaseConfig(cfg *config.C) *database.DatabaseConfig {
 		Neo4jFetchSize:         neo4jFetchSize,
 		Neo4jMaxTxRetrySeconds: neo4jMaxTxRetrySeconds,
 		Neo4jQueryResultLimit:  neo4jQueryResultLimit,
+		// BBolt-specific settings
+		BboltBatchMaxEvents:  batchMaxEvents,
+		BboltBatchMaxBytes:   batchMaxBytes,
+		BboltFlushTimeout:    time.Duration(flushTimeoutSec) * time.Second,
+		BboltBloomSizeMB:     bloomSizeMB,
+		BboltNoSync:          noSync,
+		BboltMmapSize:        mmapSizeBytes,
 	}
 }
 
