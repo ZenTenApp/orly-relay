@@ -24,6 +24,7 @@ import (
 	"next.orly.dev/pkg/acl"
 	"git.mleku.dev/mleku/nostr/crypto/keys"
 	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
+	_ "next.orly.dev/pkg/bbolt"   // Import for bbolt factory registration
 	"next.orly.dev/pkg/database"
 	neo4jdb "next.orly.dev/pkg/neo4j" // Import for neo4j factory and type
 	"git.mleku.dev/mleku/nostr/encoders/hex"
