@@ -21,6 +21,7 @@ const (
 	ScopeNIP46   = "nip46"   // NIP-46 remote signing / bunker
 	ScopeBlossom = "blossom" // Blossom media server
 	ScopeAPI     = "api"     // HTTP API access
+	ScopeNRC     = "nrc"     // Nostr Relay Connect tunneling
 )
 
 // WildcardKind indicates all kinds are permitted.

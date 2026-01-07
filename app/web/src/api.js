@@ -482,3 +482,107 @@ export async function getWireGuardAudit(signer, pubkey) {
     return await response.json();
 }
 
+// ==================== NRC (Nostr Relay Connect) API ====================
+
+/**
+ * Get NRC configuration status (no auth required)
+ * @returns {Promise<object>} NRC config status
+ */
+export async function fetchNRCConfig() {
+    try {
+        const response = await fetch(`${window.location.origin}/api/nrc/config`);
+        if (response.ok) {
+            return await response.json();
+        }
+    } catch (error) {
+        console.error("Error fetching NRC config:", error);
+    }
+    return { enabled: false, badger_required: true };
+}
+
+/**
+ * Get all NRC connections
+ * @param {object} signer - The signer instance
+ * @param {string} pubkey - User's pubkey
+ * @returns {Promise<object>} Connections list and config
+ */
+export async function fetchNRCConnections(signer, pubkey) {
+    const url = `${window.location.origin}/api/nrc/connections`;
+    const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
+    const response = await fetch(url, {
+        headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+    });
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || `Failed to get NRC connections: ${response.statusText}`);
+    }
+    return await response.json();
+}
+
+/**
+ * Create a new NRC connection
+ * @param {object} signer - The signer instance
+ * @param {string} pubkey - User's pubkey
+ * @param {string} label - Connection label
+ * @param {boolean} useCashu - Whether to use CAT authentication
+ * @returns {Promise<object>} Created connection with URI
+ */
+export async function createNRCConnection(signer, pubkey, label, useCashu = false) {
+    const url = `${window.location.origin}/api/nrc/connections`;
+    const authHeader = await createNIP98Auth(signer, pubkey, "POST", url);
+    const response = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...(authHeader ? { Authorization: `Nostr ${authHeader}` } : {}),
+        },
+        body: JSON.stringify({ label, use_cashu: useCashu }),
+    });
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || `Failed to create NRC connection: ${response.statusText}`);
+    }
+    return await response.json();
+}
+
+/**
+ * Delete an NRC connection
+ * @param {object} signer - The signer instance
+ * @param {string} pubkey - User's pubkey
+ * @param {string} connId - Connection ID to delete
+ * @returns {Promise<object>} Delete result
+ */
+export async function deleteNRCConnection(signer, pubkey, connId) {
+    const url = `${window.location.origin}/api/nrc/connections/${connId}`;
+    const authHeader = await createNIP98Auth(signer, pubkey, "DELETE", url);
+    const response = await fetch(url, {
+        method: "DELETE",
+        headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+    });
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || `Failed to delete NRC connection: ${response.statusText}`);
+    }
+    return await response.json();
+}
+
+/**
+ * Get connection URI for an NRC connection
+ * @param {object} signer - The signer instance
+ * @param {string} pubkey - User's pubkey
+ * @param {string} connId - Connection ID
+ * @returns {Promise<object>} Connection URI
+ */
+export async function getNRCConnectionURI(signer, pubkey, connId) {
+    const url = `${window.location.origin}/api/nrc/connections/${connId}/uri`;
+    const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
+    const response = await fetch(url, {
+        headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+    });
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || `Failed to get NRC URI: ${response.statusText}`);
+    }
+    return await response.json();
+}
+

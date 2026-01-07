@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"git.mleku.dev/mleku/nostr/crypto/keys"
 	"next.orly.dev/pkg/database"
 	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"next.orly.dev/pkg/neo4j"
 	"next.orly.dev/pkg/policy"
 	"next.orly.dev/pkg/protocol/graph"
@@ -26,6 +28,7 @@ import (
 	"next.orly.dev/pkg/cashu/issuer"
 	"next.orly.dev/pkg/cashu/keyset"
 	"next.orly.dev/pkg/cashu/verifier"
+	"next.orly.dev/pkg/protocol/nrc"
 	cashuiface "next.orly.dev/pkg/interfaces/cashu"
 	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/spider"
@@ -195,6 +198,81 @@ func Run(
 				l.CashuVerifier = verifier.New(keysetManager, cashuiface.AllowAllChecker{}, verifier.DefaultConfig())
 
 				log.I.F("Cashu access token system enabled (ACL mode: %s, keysets: %s)", cfg.ACLMode, keysetPath)
+			}
+		}
+	}
+
+	// Initialize NRC (Nostr Relay Connect) bridge if enabled
+	nrcEnabled, nrcRendezvousURL, nrcAuthorizedKeys, nrcUseCashu, nrcSessionTimeout := cfg.GetNRCConfigValues()
+	if nrcEnabled && nrcRendezvousURL != "" {
+		// Get relay identity for signing NRC responses
+		relaySecretKey, err := db.GetOrCreateRelayIdentitySecret()
+		if err != nil {
+			log.E.F("failed to get relay identity for NRC bridge: %v", err)
+		} else {
+			// Create signer from secret key
+			relaySigner, sigErr := p8k.New()
+			if sigErr != nil {
+				log.E.F("failed to create signer for NRC bridge: %v", sigErr)
+			} else if sigErr = relaySigner.InitSec(relaySecretKey); sigErr != nil {
+				log.E.F("failed to init signer for NRC bridge: %v", sigErr)
+			} else {
+				// Parse authorized secrets (format: secret:name,secret:name,...)
+				authorizedSecrets := make(map[string]string)
+				for _, entry := range nrcAuthorizedKeys {
+					parts := strings.SplitN(entry, ":", 2)
+					if len(parts) >= 1 {
+						secretHex := parts[0]
+						name := ""
+						if len(parts) == 2 {
+							name = parts[1]
+						}
+						// Derive pubkey from secret
+						secretBytes, decErr := hex.Dec(secretHex)
+						if decErr != nil || len(secretBytes) != 32 {
+							log.W.F("NRC: skipping invalid secret key: %s", secretHex[:8])
+							continue
+						}
+						derivedSigner, signerErr := p8k.New()
+						if signerErr != nil {
+							log.W.F("NRC: failed to create signer: %v", signerErr)
+							continue
+						}
+						if signerErr = derivedSigner.InitSec(secretBytes); signerErr != nil {
+							log.W.F("NRC: failed to init signer: %v", signerErr)
+							continue
+						}
+						derivedPubkeyHex := string(hex.Enc(derivedSigner.Pub()))
+						authorizedSecrets[derivedPubkeyHex] = name
+					}
+				}
+
+				// Construct local relay URL
+				localRelayURL := fmt.Sprintf("ws://localhost:%d", cfg.Port)
+
+				// Create bridge config
+				bridgeConfig := &nrc.BridgeConfig{
+					RendezvousURL:     nrcRendezvousURL,
+					LocalRelayURL:     localRelayURL,
+					Signer:            relaySigner,
+					AuthorizedSecrets: authorizedSecrets,
+					SessionTimeout:    nrcSessionTimeout,
+				}
+
+				// Add Cashu verifier if enabled
+				if nrcUseCashu && l.CashuVerifier != nil {
+					bridgeConfig.CashuVerifier = l.CashuVerifier
+				}
+
+				// Create and start the bridge
+				l.nrcBridge = nrc.NewBridge(bridgeConfig)
+				if err := l.nrcBridge.Start(); err != nil {
+					log.E.F("failed to start NRC bridge: %v", err)
+					l.nrcBridge = nil
+				} else {
+					log.I.F("NRC bridge started (rendezvous: %s, authorized: %d, cashu: %v)",
+						nrcRendezvousURL, len(authorizedSecrets), nrcUseCashu && l.CashuVerifier != nil)
+				}
 			}
 		}
 	}
@@ -718,6 +796,12 @@ func Run(
 		if l.bunkerServer != nil {
 			l.bunkerServer.Stop()
 			log.I.F("bunker server stopped")
+		}
+
+		// Stop NRC bridge if running
+		if l.nrcBridge != nil {
+			l.nrcBridge.Stop()
+			log.I.F("NRC bridge stopped")
 		}
 
 		// Stop WireGuard server if running

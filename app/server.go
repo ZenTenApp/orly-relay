@@ -36,6 +36,7 @@ import (
 	"next.orly.dev/pkg/bunker"
 	"next.orly.dev/pkg/cashu/issuer"
 	"next.orly.dev/pkg/cashu/verifier"
+	"next.orly.dev/pkg/protocol/nrc"
 	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/spider"
 	"next.orly.dev/pkg/storage"
@@ -94,6 +95,9 @@ type Server struct {
 	// Cashu access token system (NIP-XX)
 	CashuIssuer   *issuer.Issuer
 	CashuVerifier *verifier.Verifier
+
+	// NRC (Nostr Relay Connect) bridge for remote relay access
+	nrcBridge *nrc.Bridge
 
 	// Archive relay and storage management
 	archiveManager   *archive.Manager
@@ -376,6 +380,11 @@ func (s *Server) UserInterface() {
 	if s.CashuIssuer != nil {
 		log.Printf("Cashu access token API enabled at /cashu")
 	}
+
+	// NRC (Nostr Relay Connect) management endpoints
+	s.mux.HandleFunc("/api/nrc/connections", s.handleNRCConnectionsRouter)
+	s.mux.HandleFunc("/api/nrc/connections/", s.handleNRCConnectionsRouter)
+	s.mux.HandleFunc("/api/nrc/config", s.handleNRCConfig)
 }
 
 // handleFavicon serves favicon.png as favicon.ico

@@ -14,6 +14,7 @@
     import CurationView from "./CurationView.svelte";
     import BlossomView from "./BlossomView.svelte";
     import LogView from "./LogView.svelte";
+    import RelayConnectView from "./RelayConnectView.svelte";
     import SearchResultsView from "./SearchResultsView.svelte";
     import FilterDisplay from "./FilterDisplay.svelte";
 
@@ -114,6 +115,9 @@
     let policyMessageType = "info";
     let policyValidationErrors = [];
     let policyFollows = [];
+
+    // NRC (Nostr Relay Connect) state
+    let nrcEnabled = false;
 
     // ACL mode
     let aclMode = "";
@@ -862,6 +866,9 @@
         // Load sprocket configuration
         loadSprocketConfig();
 
+        // Load NRC configuration
+        loadNRCConfig();
+
         // Load policy configuration
         loadPolicyConfig();
 
@@ -982,6 +989,15 @@
             }
         } catch (error) {
             console.error("Error loading sprocket config:", error);
+        }
+    }
+
+    async function loadNRCConfig() {
+        try {
+            const config = await api.fetchNRCConfig();
+            nrcEnabled = config.enabled;
+        } catch (error) {
+            console.error("Error loading NRC config:", error);
         }
     }
 
@@ -1666,6 +1682,7 @@
         },
         { id: "sprocket", icon: "⚙️", label: "Sprocket", requiresOwner: true },
         { id: "policy", icon: "📜", label: "Policy", requiresOwner: true },
+        { id: "relay-connect", icon: "🔗", label: "Relay Connect", requiresOwner: true },
         { id: "logs", icon: "📋", label: "Logs", requiresOwner: true },
     ];
 
@@ -1692,6 +1709,10 @@
         }
         // Hide policy tab if not enabled
         if (tab.id === "policy" && !policyEnabled) {
+            return false;
+        }
+        // Hide relay-connect tab if NRC is not enabled
+        if (tab.id === "relay-connect" && !nrcEnabled) {
             return false;
         }
         // Hide managed ACL tab if not in managed mode
@@ -2946,6 +2967,14 @@
                 on:addPolicyAdmin={addPolicyAdmin}
                 on:removePolicyAdmin={removePolicyAdmin}
                 on:refreshFollows={refreshFollows}
+                on:openLoginModal={openLoginModal}
+            />
+        {:else if selectedTab === "relay-connect"}
+            <RelayConnectView
+                {isLoggedIn}
+                {userRole}
+                {userSigner}
+                {userPubkey}
                 on:openLoginModal={openLoginModal}
             />
         {:else if selectedTab === "logs"}

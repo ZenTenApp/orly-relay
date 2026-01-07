@@ -185,6 +185,12 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Handle 'nrc' subcommand: NRC (Nostr Relay Connect) utilities
+	if requested, subcommand, args := config.NRCRequested(); requested {
+		handleNRCCommand(cfg, subcommand, args)
+		os.Exit(0)
+	}
+
 	// Handle 'serve' subcommand: start ephemeral relay with RAM-based storage
 	if config.ServeRequested() {
 		const serveDataDir = "/dev/shm/orlyserve"
@@ -779,4 +785,180 @@ func openBrowser(url string) {
 	if err := cmd.Start(); err != nil {
 		log.W.F("could not open browser: %v", err)
 	}
+}
+
+// handleNRCCommand handles the 'nrc' CLI subcommand for NRC (Nostr Relay Connect) utilities.
+func handleNRCCommand(cfg *config.C, subcommand string, args []string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	switch subcommand {
+	case "generate":
+		handleNRCGenerate(ctx, cfg, args)
+	case "list":
+		handleNRCList(cfg)
+	case "revoke":
+		handleNRCRevoke(args)
+	default:
+		printNRCUsage()
+	}
+}
+
+// printNRCUsage prints the usage information for the nrc subcommand.
+func printNRCUsage() {
+	fmt.Println("Usage: orly nrc <subcommand> [options]")
+	fmt.Println("")
+	fmt.Println("Nostr Relay Connect (NRC) utilities for private relay access.")
+	fmt.Println("")
+	fmt.Println("Subcommands:")
+	fmt.Println("  generate [--name <device>]  Generate a new connection URI")
+	fmt.Println("  list                        List currently configured authorized secrets")
+	fmt.Println("  revoke <name>               Revoke access for a device (show instructions)")
+	fmt.Println("")
+	fmt.Println("Examples:")
+	fmt.Println("  orly nrc generate")
+	fmt.Println("  orly nrc generate --name phone")
+	fmt.Println("  orly nrc list")
+	fmt.Println("  orly nrc revoke phone")
+	fmt.Println("")
+	fmt.Println("To enable NRC, set these environment variables:")
+	fmt.Println("  ORLY_NRC_ENABLED=true")
+	fmt.Println("  ORLY_NRC_RENDEZVOUS_URL=wss://public-relay.example.com")
+	fmt.Println("  ORLY_NRC_AUTHORIZED_KEYS=<secret1>:<name1>,<secret2>:<name2>")
+	fmt.Println("")
+	fmt.Println("For CAT-based authentication, also set:")
+	fmt.Println("  ORLY_NRC_USE_CASHU=true")
+}
+
+// handleNRCGenerate generates a new NRC connection URI.
+func handleNRCGenerate(ctx context.Context, cfg *config.C, args []string) {
+	// Parse device name from args
+	var deviceName string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--name" && i+1 < len(args) {
+			deviceName = args[i+1]
+			i++
+		}
+	}
+
+	// Get relay identity
+	var db database.Database
+	var err error
+	if db, err = database.NewDatabaseWithConfig(
+		ctx, nil, cfg.DBType, makeDatabaseConfig(cfg),
+	); chk.E(err) {
+		fmt.Printf("Error: failed to open database: %v\n", err)
+		return
+	}
+	defer db.Close()
+
+	<-db.Ready()
+
+	relaySecretKey, err := db.GetOrCreateRelayIdentitySecret()
+	if err != nil {
+		fmt.Printf("Error: failed to get relay identity: %v\n", err)
+		return
+	}
+
+	relayPubkey, err := keys.SecretBytesToPubKeyBytes(relaySecretKey)
+	if err != nil {
+		fmt.Printf("Error: failed to derive relay pubkey: %v\n", err)
+		return
+	}
+
+	// Get rendezvous URL from config
+	nrcEnabled, nrcRendezvousURL, _, _, _ := cfg.GetNRCConfigValues()
+	if !nrcEnabled || nrcRendezvousURL == "" {
+		fmt.Println("Error: NRC is not configured. Set ORLY_NRC_ENABLED=true and ORLY_NRC_RENDEZVOUS_URL")
+		return
+	}
+
+	// Generate a new random secret
+	secret := make([]byte, 32)
+	if _, err := os.ReadFile("/dev/urandom"); err != nil {
+		// Fallback - use crypto/rand
+		fmt.Printf("Error: failed to generate random secret: %v\n", err)
+		return
+	}
+	f, _ := os.Open("/dev/urandom")
+	defer f.Close()
+	f.Read(secret)
+
+	secretHex := hex.Enc(secret)
+
+	// Build the URI
+	uri := fmt.Sprintf("nostr+relayconnect://%s?relay=%s&secret=%s",
+		hex.Enc(relayPubkey), nrcRendezvousURL, secretHex)
+	if deviceName != "" {
+		uri += fmt.Sprintf("&name=%s", deviceName)
+	}
+
+	fmt.Println("Generated NRC Connection URI:")
+	fmt.Println("")
+	fmt.Println(uri)
+	fmt.Println("")
+	fmt.Println("Add this secret to ORLY_NRC_AUTHORIZED_KEYS:")
+	if deviceName != "" {
+		fmt.Printf("  %s:%s\n", secretHex, deviceName)
+	} else {
+		fmt.Printf("  %s\n", secretHex)
+	}
+	fmt.Println("")
+	fmt.Println("IMPORTANT: Store this URI securely - anyone with this URI can access your relay.")
+}
+
+// handleNRCList lists configured authorized secrets from environment.
+func handleNRCList(cfg *config.C) {
+	_, _, authorizedKeys, useCashu, _ := cfg.GetNRCConfigValues()
+
+	fmt.Println("NRC Configuration:")
+	fmt.Println("")
+
+	if len(authorizedKeys) == 0 {
+		fmt.Println("  No authorized secrets configured.")
+		fmt.Println("")
+		fmt.Println("  To add secrets, set ORLY_NRC_AUTHORIZED_KEYS=<secret>:<name>,...")
+	} else {
+		fmt.Printf("  Authorized secrets: %d\n", len(authorizedKeys))
+		fmt.Println("")
+		for _, entry := range authorizedKeys {
+			parts := strings.SplitN(entry, ":", 2)
+			secretHex := parts[0]
+			name := "(unnamed)"
+			if len(parts) == 2 && parts[1] != "" {
+				name = parts[1]
+			}
+			// Show truncated secret for identification
+			truncated := secretHex
+			if len(secretHex) > 16 {
+				truncated = secretHex[:8] + "..." + secretHex[len(secretHex)-8:]
+			}
+			fmt.Printf("  - %s: %s\n", name, truncated)
+		}
+	}
+	fmt.Println("")
+	fmt.Printf("  CAT authentication: %v\n", useCashu)
+}
+
+// handleNRCRevoke provides instructions for revoking access.
+func handleNRCRevoke(args []string) {
+	if len(args) == 0 {
+		fmt.Println("Usage: orly nrc revoke <device-name>")
+		fmt.Println("")
+		fmt.Println("To revoke access for a device:")
+		fmt.Println("1. Remove the corresponding secret from ORLY_NRC_AUTHORIZED_KEYS")
+		fmt.Println("2. Restart the relay")
+		fmt.Println("")
+		fmt.Println("Example: If ORLY_NRC_AUTHORIZED_KEYS=\"abc123:phone,def456:laptop\"")
+		fmt.Println("To revoke 'phone', change to: ORLY_NRC_AUTHORIZED_KEYS=\"def456:laptop\"")
+		return
+	}
+
+	deviceName := args[0]
+	fmt.Printf("To revoke access for '%s':\n", deviceName)
+	fmt.Println("")
+	fmt.Println("1. Edit ORLY_NRC_AUTHORIZED_KEYS and remove the entry for this device")
+	fmt.Println("2. Restart the relay")
+	fmt.Println("")
+	fmt.Println("The device will no longer be able to connect after the restart.")
 }

@@ -26,6 +26,7 @@ func NewACLAuthzChecker() *ACLAuthzChecker {
 			token.ScopeNIP46:   acliface.Write, // Bunker access requires write
 			token.ScopeBlossom: acliface.Write, // Blossom access requires write
 			token.ScopeAPI:     acliface.Admin, // API access requires admin
+			token.ScopeNRC:     acliface.Write, // NRC tunnel access requires write
 		},
 	}
 }

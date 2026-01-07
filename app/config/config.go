@@ -172,6 +172,13 @@ type C struct {
 	CashuScopes      string `env:"ORLY_CASHU_SCOPES" default:"relay,nip46" usage:"comma-separated list of allowed token scopes"`
 	CashuReauthorize bool   `env:"ORLY_CASHU_REAUTHORIZE" default:"true" usage:"re-check ACL on each token verification for stateless revocation"`
 
+	// Nostr Relay Connect (NRC) configuration - tunnel private relay through public relay
+	NRCEnabled          bool   `env:"ORLY_NRC_ENABLED" default:"false" usage:"enable NRC bridge to expose this relay through a public rendezvous relay"`
+	NRCRendezvousURL    string `env:"ORLY_NRC_RENDEZVOUS_URL" usage:"WebSocket URL of the public relay to use as rendezvous point (e.g., wss://relay.example.com)"`
+	NRCAuthorizedKeys   string `env:"ORLY_NRC_AUTHORIZED_KEYS" usage:"comma-separated list of authorized client pubkeys (hex) for secret-based auth"`
+	NRCUseCashu         bool   `env:"ORLY_NRC_USE_CASHU" default:"false" usage:"use Cashu access tokens for NRC authentication instead of static secrets"`
+	NRCSessionTimeout   string `env:"ORLY_NRC_SESSION_TIMEOUT" default:"30m" usage:"inactivity timeout for NRC sessions"`
+
 	// Cluster replication configuration
 	ClusterPropagatePrivilegedEvents bool `env:"ORLY_CLUSTER_PROPAGATE_PRIVILEGED_EVENTS" default:"true" usage:"propagate privileged events (DMs, gift wraps, etc.) to relay peers for replication"`
 
@@ -397,6 +404,29 @@ func MigrateRequested() (requested bool, fromType, toType, targetPath string) {
 				case arg == "--target-path" && i+1 < len(os.Args):
 					i++
 					targetPath = os.Args[i]
+				}
+			}
+		}
+	}
+	return
+}
+
+// NRCRequested checks if the first command line argument is "nrc" and returns
+// the NRC subcommand parameters.
+//
+// Return Values
+//   - requested: true if the 'nrc' subcommand was provided
+//   - subcommand: the NRC subcommand (generate, list, revoke)
+//   - args: additional arguments for the subcommand
+func NRCRequested() (requested bool, subcommand string, args []string) {
+	if len(os.Args) > 1 {
+		switch strings.ToLower(os.Args[1]) {
+		case "nrc":
+			requested = true
+			if len(os.Args) > 2 {
+				subcommand = strings.ToLower(os.Args[2])
+				if len(os.Args) > 3 {
+					args = os.Args[3:]
 				}
 			}
 		}
@@ -774,4 +804,40 @@ func (cfg *C) GetBboltConfigValues() (
 		cfg.BboltBloomSizeMB,
 		cfg.BboltNoSync,
 		cfg.BboltMmapSizeMB * 1024 * 1024
+}
+
+// GetNRCConfigValues returns the NRC (Nostr Relay Connect) configuration values.
+// This avoids circular imports with pkg/protocol/nrc while allowing main.go to construct
+// the NRC bridge configuration.
+func (cfg *C) GetNRCConfigValues() (
+	enabled bool,
+	rendezvousURL string,
+	authorizedKeys []string,
+	useCashu bool,
+	sessionTimeout time.Duration,
+) {
+	// Parse session timeout
+	sessionTimeout = 30 * time.Minute // Default
+	if cfg.NRCSessionTimeout != "" {
+		if d, err := time.ParseDuration(cfg.NRCSessionTimeout); err == nil {
+			sessionTimeout = d
+		}
+	}
+
+	// Parse authorized keys
+	if cfg.NRCAuthorizedKeys != "" {
+		keys := strings.Split(cfg.NRCAuthorizedKeys, ",")
+		for _, k := range keys {
+			k = strings.TrimSpace(k)
+			if k != "" {
+				authorizedKeys = append(authorizedKeys, k)
+			}
+		}
+	}
+
+	return cfg.NRCEnabled,
+		cfg.NRCRendezvousURL,
+		authorizedKeys,
+		cfg.NRCUseCashu,
+		sessionTimeout
 }
