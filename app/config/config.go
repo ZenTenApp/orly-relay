@@ -67,6 +67,11 @@ type C struct {
 	ClusterAdmins       []string      `env:"ORLY_CLUSTER_ADMINS" usage:"comma-separated list of npubs authorized to manage cluster membership"`
 	FollowListFrequency time.Duration `env:"ORLY_FOLLOW_LIST_FREQUENCY" usage:"how often to fetch admin follow lists (default: 1h)" default:"1h"`
 
+	// Progressive throttle for follows ACL mode - allows non-followed users to write with increasing delay
+	FollowsThrottleEnabled  bool          `env:"ORLY_FOLLOWS_THROTTLE" default:"false" usage:"enable progressive delay for non-followed users in follows ACL mode"`
+	FollowsThrottlePerEvent time.Duration `env:"ORLY_FOLLOWS_THROTTLE_INCREMENT" default:"200ms" usage:"delay added per event for non-followed users"`
+	FollowsThrottleMaxDelay time.Duration `env:"ORLY_FOLLOWS_THROTTLE_MAX" default:"60s" usage:"maximum throttle delay cap"`
+
 	// Blossom blob storage service level settings
 	BlossomServiceLevels string `env:"ORLY_BLOSSOM_SERVICE_LEVELS" usage:"comma-separated list of service levels in format: name:storage_mb_per_sat_per_month (e.g., basic:1,premium:10)"`
 
@@ -840,4 +845,16 @@ func (cfg *C) GetNRCConfigValues() (
 		authorizedKeys,
 		cfg.NRCUseCashu,
 		sessionTimeout
+}
+
+// GetFollowsThrottleConfigValues returns the progressive throttle configuration values
+// for the follows ACL mode. This allows non-followed users to write with increasing delay.
+func (cfg *C) GetFollowsThrottleConfigValues() (
+	enabled bool,
+	perEvent time.Duration,
+	maxDelay time.Duration,
+) {
+	return cfg.FollowsThrottleEnabled,
+		cfg.FollowsThrottlePerEvent,
+		cfg.FollowsThrottleMaxDelay
 }

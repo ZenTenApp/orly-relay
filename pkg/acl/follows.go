@@ -45,6 +45,8 @@ type Follows struct {
 	lastFollowListFetch time.Time
 	// Callback for external notification of follow list changes
 	onFollowListUpdate func()
+	// Progressive throttle for non-followed users (nil if disabled)
+	throttle *ProgressiveThrottle
 }
 
 func (f *Follows) Configure(cfg ...any) (err error) {
@@ -131,6 +133,22 @@ func (f *Follows) Configure(cfg ...any) (err error) {
 			}
 		}
 	}
+
+	// Initialize progressive throttle if enabled
+	if f.cfg.FollowsThrottleEnabled {
+		perEvent := f.cfg.FollowsThrottlePerEvent
+		if perEvent == 0 {
+			perEvent = 200 * time.Millisecond
+		}
+		maxDelay := f.cfg.FollowsThrottleMaxDelay
+		if maxDelay == 0 {
+			maxDelay = 60 * time.Second
+		}
+		f.throttle = NewProgressiveThrottle(perEvent, maxDelay)
+		log.I.F("follows ACL: progressive throttle enabled (increment: %v, max: %v)",
+			perEvent, maxDelay)
+	}
+
 	return
 }
 
@@ -155,6 +173,10 @@ func (f *Follows) GetAccessLevel(pub []byte, address string) (level string) {
 	if f.cfg == nil {
 		return "write"
 	}
+	// If throttle enabled, non-followed users get write access (with delay applied in handle-event)
+	if f.throttle != nil {
+		return "write"
+	}
 	return "read"
 }
 
@@ -164,6 +186,41 @@ func (f *Follows) GetACLInfo() (name, description, documentation string) {
 }
 
 func (f *Follows) Type() string { return "follows" }
+
+// GetThrottleDelay returns the progressive throttle delay for this event.
+// Returns 0 if throttle is disabled or if the user is exempt (owner/admin/followed).
+func (f *Follows) GetThrottleDelay(pubkey []byte, ip string) time.Duration {
+	if f.throttle == nil {
+		return 0
+	}
+
+	// Check if user is exempt from throttling
+	f.followsMx.RLock()
+	defer f.followsMx.RUnlock()
+
+	// Owners bypass throttle
+	for _, v := range f.owners {
+		if utils.FastEqual(v, pubkey) {
+			return 0
+		}
+	}
+	// Admins bypass throttle
+	for _, v := range f.admins {
+		if utils.FastEqual(v, pubkey) {
+			return 0
+		}
+	}
+	// Followed users bypass throttle
+	for _, v := range f.follows {
+		if utils.FastEqual(v, pubkey) {
+			return 0
+		}
+	}
+
+	// Non-followed users get throttled
+	pubkeyHex := hex.EncodeToString(pubkey)
+	return f.throttle.GetDelay(ip, pubkeyHex)
+}
 
 func (f *Follows) adminRelays() (urls []string) {
 	f.followsMx.RLock()
@@ -353,6 +410,29 @@ func (f *Follows) Syncer() {
 
 	// Start periodic follow list and metadata fetching
 	go f.startPeriodicFollowListFetching()
+
+	// Start throttle cleanup goroutine if throttle is enabled
+	if f.throttle != nil {
+		go f.throttleCleanup()
+	}
+}
+
+// throttleCleanup periodically removes fully-decayed throttle entries
+func (f *Follows) throttleCleanup() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-f.Ctx.Done():
+			return
+		case <-ticker.C:
+			f.throttle.Cleanup()
+			ipCount, pubkeyCount := f.throttle.Stats()
+			log.T.F("follows throttle: cleanup complete, tracking %d IPs and %d pubkeys",
+				ipCount, pubkeyCount)
+		}
+	}
 }
 
 // startPeriodicFollowListFetching starts periodic fetching of admin follow lists

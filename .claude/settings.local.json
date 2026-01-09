@@ -3,12 +3,8 @@
     "allow": [],
     "deny": [],
     "ask": [],
-    "additionalDirectories": [
-      "/home/mleku/smesh",
-      "/home/mleku/Tourmaline",
-      "/home/mleku/Amber"
-    ]
+    "additionalDirectories": []
   },
   "outputStyle": "Default",
-  "MAX_THINKING_TOKENS": "8000"
+  "MAX_THINKING_TOKENS": "16000"
 }

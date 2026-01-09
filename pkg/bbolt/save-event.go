@@ -350,12 +350,15 @@ func (r *bboltSerialResolver) GetPubkeyBySerial(serial uint64) (pubkey []byte, e
 	r.b.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(bucketSpk)
 		if bucket == nil {
+			err = errors.New("bbolt: spk bucket not found")
 			return nil
 		}
 		val := bucket.Get(makeSerialKey(serial))
 		if val != nil {
 			pubkey = make([]byte, 32)
 			copy(pubkey, val)
+		} else {
+			err = errors.New("bbolt: pubkey serial not found")
 		}
 		return nil
 	})
@@ -374,12 +377,15 @@ func (r *bboltSerialResolver) GetEventIdBySerial(serial uint64) (eventID []byte,
 	r.b.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(bucketSei)
 		if bucket == nil {
+			err = errors.New("bbolt: sei bucket not found")
 			return nil
 		}
 		val := bucket.Get(makeSerialKey(serial))
 		if val != nil {
 			eventID = make([]byte, 32)
 			copy(eventID, val)
+		} else {
+			err = errors.New("bbolt: event serial not found")
 		}
 		return nil
 	})

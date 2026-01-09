@@ -301,6 +301,22 @@ func (l *Listener) getManagedACL() *database.ManagedACL {
 	return nil
 }
 
+// getFollowsThrottleDelay returns the progressive throttle delay for follows ACL mode.
+// Returns 0 if not in follows mode, throttle is disabled, or user is exempt.
+func (l *Listener) getFollowsThrottleDelay(ev *event.E) time.Duration {
+	// Only applies to follows ACL mode
+	if acl.Registry.Active.Load() != "follows" {
+		return 0
+	}
+	// Find the Follows ACL instance and get the throttle delay
+	for _, aclInstance := range acl.Registry.ACL {
+		if follows, ok := aclInstance.(*acl.Follows); ok {
+			return follows.GetThrottleDelay(ev.Pubkey, l.remote)
+		}
+	}
+	return 0
+}
+
 // QueryEvents queries events using the database QueryEvents method
 func (l *Listener) QueryEvents(ctx context.Context, f *filter.F) (event.S, error) {
 	return l.DB.QueryEvents(ctx, f)

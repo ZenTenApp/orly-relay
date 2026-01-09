@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"time"
 
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
@@ -253,6 +254,18 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 		return
 	}
 	log.I.F("HandleEvent: authorized with access level %s", decision.AccessLevel)
+
+	// Progressive throttle for follows ACL mode (delays non-followed users)
+	if delay := l.getFollowsThrottleDelay(env.E); delay > 0 {
+		log.D.F("HandleEvent: applying progressive throttle delay of %v for %0x from %s",
+			delay, env.E.Pubkey, l.remote)
+		select {
+		case <-l.ctx.Done():
+			return l.ctx.Err()
+		case <-time.After(delay):
+			// Delay completed, continue processing
+		}
+	}
 
 	// Route special event kinds (ephemeral, etc.) - use routing service
 	if routeResult := l.eventRouter.Route(env.E, l.authedPubkey.Load()); routeResult.Action != routing.Continue {
