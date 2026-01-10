@@ -40,7 +40,7 @@ NOSTR_SECRET_KEY=nsec1... ./nurl https://relay.example.com/api/logs/clear
 |----------|---------|-------------|
 | `ORLY_PORT` | 3334 | Server port |
 | `ORLY_LOG_LEVEL` | info | trace/debug/info/warn/error |
-| `ORLY_DB_TYPE` | badger | badger/neo4j/wasmdb |
+| `ORLY_DB_TYPE` | badger | badger/bbolt/neo4j/wasmdb |
 | `ORLY_POLICY_ENABLED` | false | Enable policy system |
 | `ORLY_ACL_MODE` | none | none/follows/managed |
 | `ORLY_TLS_DOMAINS` | | Let's Encrypt domains |
@@ -67,6 +67,7 @@ app/
   web/               → Svelte frontend (embedded via go:embed)
 pkg/
   database/          → Database interface + Badger implementation
+  bbolt/             → BBolt backend (HDD-optimized, B+tree)
   neo4j/             → Neo4j backend with WoT extensions
   wasmdb/            → WebAssembly IndexedDB backend
   protocol/          → Nostr protocol (ws/, auth/, publish/)
@@ -149,11 +150,58 @@ Before enabling auth-required on any deployment:
 
 | Backend | Use Case | Build |
 |---------|----------|-------|
-| **Badger** (default) | Single-instance, embedded | Standard |
+| **Badger** (default) | Single-instance, SSD, high performance | Standard |
+| **BBolt** | HDD-optimized, large archives, lower memory | `ORLY_DB_TYPE=bbolt` |
 | **Neo4j** | Social graph, WoT queries | `ORLY_DB_TYPE=neo4j` |
 | **WasmDB** | Browser/WebAssembly | `GOOS=js GOARCH=wasm` |
 
 All implement `pkg/database.Database` interface.
+
+### Scaling for Large Archives
+
+For archives with millions of events, consider:
+
+**Option 1: Tune Badger (SSD recommended)**
+```bash
+# Increase caches for larger working set (requires more RAM)
+ORLY_DB_BLOCK_CACHE_MB=2048      # 2GB block cache
+ORLY_DB_INDEX_CACHE_MB=1024      # 1GB index cache
+ORLY_SERIAL_CACHE_PUBKEYS=500000 # 500k pubkeys
+ORLY_SERIAL_CACHE_EVENT_IDS=2000000  # 2M event IDs
+
+# Higher compression to reduce disk IO
+ORLY_DB_ZSTD_LEVEL=9             # Best compression ratio
+
+# Enable storage GC with aggressive eviction
+ORLY_GC_ENABLED=true
+ORLY_GC_BATCH_SIZE=5000
+ORLY_MAX_STORAGE_BYTES=107374182400  # 100GB cap
+```
+
+**Option 2: Use BBolt for HDD/Low-Memory Deployments**
+```bash
+ORLY_DB_TYPE=bbolt
+
+# Tune for your HDD
+ORLY_BBOLT_BATCH_MAX_EVENTS=10000   # Larger batches for HDD
+ORLY_BBOLT_BATCH_MAX_MB=256          # 256MB batch buffer
+ORLY_BBOLT_FLUSH_TIMEOUT_SEC=60      # Longer flush interval
+ORLY_BBOLT_BLOOM_SIZE_MB=32          # Larger bloom filter
+ORLY_BBOLT_MMAP_SIZE_MB=16384        # 16GB mmap (scales with DB size)
+```
+
+**Migration Between Backends**
+```bash
+# Migrate from Badger to BBolt
+./orly migrate --from badger --to bbolt
+
+# Migrate with custom target path
+./orly migrate --from badger --to bbolt --target-path /mnt/hdd/orly-archive
+```
+
+**BBolt vs Badger Trade-offs:**
+- BBolt: Lower memory, HDD-friendly, simpler (B+tree), slower random reads
+- Badger: Higher memory, SSD-optimized (LSM), faster concurrent access
 
 ## Logging (lol.mleku.dev)
 
@@ -221,7 +269,8 @@ if (isValidNsec(nsec)) { ... }
 
 ## Dependencies
 
-- `github.com/dgraph-io/badger/v4` - Badger DB
+- `github.com/dgraph-io/badger/v4` - Badger DB (LSM, SSD-optimized)
+- `go.etcd.io/bbolt` - BBolt DB (B+tree, HDD-optimized)
 - `github.com/neo4j/neo4j-go-driver/v5` - Neo4j
 - `github.com/gorilla/websocket` - WebSocket
 - `github.com/ebitengine/purego` - CGO-free C loading

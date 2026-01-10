@@ -24,7 +24,7 @@ import (
 	"next.orly.dev/pkg/acl"
 	"git.mleku.dev/mleku/nostr/crypto/keys"
 	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
-	_ "next.orly.dev/pkg/bbolt"   // Import for bbolt factory registration
+	bboltdb "next.orly.dev/pkg/bbolt" // Import for bbolt factory and type
 	"next.orly.dev/pkg/database"
 	neo4jdb "next.orly.dev/pkg/neo4j" // Import for neo4j factory and type
 	"git.mleku.dev/mleku/nostr/encoders/hex"
@@ -617,6 +617,10 @@ func main() {
 				n4jDB.MaxConcurrentQueries(),
 			)
 			log.I.F("rate limiter configured for Neo4j backend (target: %dMB)", targetMB)
+		} else if _, ok := db.(*bboltdb.B); ok {
+			// BBolt uses memory-mapped IO, so memory-only limiter is appropriate
+			limiter = ratelimit.NewMemoryOnlyLimiter(rlConfig)
+			log.I.F("rate limiter configured for BBolt backend (target: %dMB)", targetMB)
 		} else {
 			// For other backends, create a disabled limiter
 			limiter = ratelimit.NewDisabledLimiter()
