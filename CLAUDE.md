@@ -130,6 +130,21 @@ if timeout > DefaultTimeoutSeconds {
 - Provide public API methods (`IsEnabled()`, `CheckPolicy()`)
 - Never change unexported→exported to fix bugs
 
+### 6. Auth-Required Configuration (CAUTION)
+
+**Be extremely careful when modifying auth-related settings in deployment configs.**
+
+The `ORLY_AUTH_REQUIRED` and `ORLY_AUTH_TO_WRITE` settings control whether clients must authenticate via NIP-42 before interacting with the relay. Changing these on a production relay can:
+
+- **Lock out all existing clients** if they don't support NIP-42 auth
+- **Break automated systems** (bots, bridges, scrapers) that depend on anonymous access
+- **Cause data sync issues** if upstream relays can't push events
+
+Before enabling auth-required on any deployment:
+1. Verify all expected clients support NIP-42
+2. Ensure the relay identity key is properly configured
+3. Test with a non-production instance first
+
 ## Database Backends
 
 | Backend | Use Case | Build |

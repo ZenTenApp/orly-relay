@@ -480,14 +480,9 @@ export async function fetchUserProfile(pubkey) {
     console.warn("Failed to fetch profile from fallback relays:", error);
   }
 
-  // 4) No profile found anywhere - create a default profile for new users
-  console.log("No profile found for pubkey, creating default:", pubkey);
-  try {
-    return await createDefaultProfile(pubkey);
-  } catch (e) {
-    console.error("Failed to create default profile:", e);
-    return null;
-  }
+  // 4) No profile found anywhere
+  console.log("No profile found for pubkey:", pubkey);
+  return null;
 }
 
 // Helper to fetch profile from fallback relays
@@ -556,57 +551,6 @@ async function processProfileEvent(profileEvent, pubkey) {
     }
   } catch (e) {
     console.warn("Failed to dispatch profile-updated event", e);
-  }
-
-  return profile;
-}
-
-/**
- * Create a default profile for new users
- * @param {string} pubkey - The user's public key (hex)
- * @returns {Promise<Object>} - The created profile
- */
-async function createDefaultProfile(pubkey) {
-  // Generate name from first 6 chars of pubkey
-  const shortId = pubkey.slice(0, 6);
-  const defaultName = `testuser${shortId}`;
-
-  // Get the current origin for the logo URL
-  const logoUrl = `${window.location.origin}/orly.png`;
-
-  const profileContent = {
-    name: defaultName,
-    display_name: defaultName,
-    picture: logoUrl,
-    about: "New ORLY user"
-  };
-
-  const profile = {
-    name: defaultName,
-    displayName: defaultName,
-    picture: logoUrl,
-    about: "New ORLY user",
-    pubkey: pubkey
-  };
-
-  // Try to publish the profile if we have a signer
-  if (nostrClient.signer) {
-    try {
-      const event = {
-        kind: 0,
-        content: JSON.stringify(profileContent),
-        tags: [],
-        created_at: Math.floor(Date.now() / 1000)
-      };
-
-      // Sign and publish using the websocket-auth client
-      const signedEvent = await nostrClient.signer.signEvent(event);
-      await nostrClient.publish(signedEvent);
-      console.log("Default profile published:", signedEvent.id);
-    } catch (e) {
-      console.warn("Failed to publish default profile:", e);
-      // Still return the profile even if publishing fails
-    }
   }
 
   return profile;
