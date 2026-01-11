@@ -6,25 +6,35 @@
 
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { writeFileSync } from 'fs';
+import { writeFileSync, existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const KINDS_URL = 'https://git.mleku.dev/mleku/nostr/raw/branch/main/encoders/kind/kinds.json';
+const OUTPUT_PATH = join(__dirname, '..', 'src', 'eventKinds.js');
 
 async function fetchKinds() {
   console.log(`Fetching kinds from ${KINDS_URL}...`);
 
-  const response = await fetch(KINDS_URL);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch kinds.json: ${response.status} ${response.statusText}`);
+  try {
+    const response = await fetch(KINDS_URL, { timeout: 10000 });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log(`Fetched ${Object.keys(data.kinds).length} kinds (version: ${data.version})`);
+    return data;
+  } catch (error) {
+    // Check if we have an existing eventKinds.js we can use
+    if (existsSync(OUTPUT_PATH)) {
+      console.warn(`Warning: Could not fetch kinds.json (${error.message})`);
+      console.log(`Using existing ${OUTPUT_PATH}`);
+      return null; // Signal to skip generation
+    }
+    throw new Error(`Failed to fetch kinds.json and no existing file: ${error.message}`);
   }
-
-  const data = await response.json();
-  console.log(`Fetched ${Object.keys(data.kinds).length} kinds (version: ${data.version})`);
-
-  return data;
 }
 
 function generateEventKinds(data) {
@@ -202,14 +212,18 @@ export const kindCategories = [
 async function main() {
   try {
     const data = await fetchKinds();
+
+    // If fetchKinds returned null, we're using the existing file
+    if (data === null) {
+      console.log('Skipping generation, using existing eventKinds.js');
+      return;
+    }
+
     const kinds = generateEventKinds(data);
     const js = generateJS(kinds, data);
 
-    // Write to src/eventKinds.js
-    const outPath = join(__dirname, '..', 'src', 'eventKinds.js');
-
-    writeFileSync(outPath, js);
-    console.log(`Generated ${outPath} with ${kinds.length} kinds`);
+    writeFileSync(OUTPUT_PATH, js);
+    console.log(`Generated ${OUTPUT_PATH} with ${kinds.length} kinds`);
   } catch (error) {
     console.error('Error:', error.message);
     process.exit(1);

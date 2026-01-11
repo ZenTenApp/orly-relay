@@ -179,6 +179,28 @@ export class Nip07Signer {
   }
 }
 
+// Merge two event arrays, deduplicating by event id
+// Newer events (by created_at) take precedence for same id
+function mergeAndDeduplicateEvents(cached, relay) {
+  const eventMap = new Map();
+
+  // Add cached events first
+  for (const event of cached) {
+    eventMap.set(event.id, event);
+  }
+
+  // Add/update with relay events (they may be newer)
+  for (const event of relay) {
+    const existing = eventMap.get(event.id);
+    if (!existing || event.created_at >= existing.created_at) {
+      eventMap.set(event.id, event);
+    }
+  }
+
+  // Return sorted by created_at descending (newest first)
+  return Array.from(eventMap.values()).sort((a, b) => b.created_at - a.created_at);
+}
+
 // IndexedDB helpers for unified event storage
 // This provides a local cache that all components can access
 const DB_NAME = "nostrCache";
@@ -573,9 +595,10 @@ export async function fetchEvents(filters, options = {}) {
   } = options;
 
   // Try to get cached events first if requested
+  let cachedEvents = [];
   if (useCache) {
     try {
-      const cachedEvents = await queryEventsFromDB(filters);
+      cachedEvents = await queryEventsFromDB(filters);
       if (cachedEvents.length > 0) {
         console.log(`Found ${cachedEvents.length} cached events in IndexedDB`);
       }
@@ -585,17 +608,19 @@ export async function fetchEvents(filters, options = {}) {
   }
 
   return new Promise((resolve, reject) => {
-    const events = [];
+    const relayEvents = [];
     const timeoutId = setTimeout(() => {
-      console.log(`Timeout reached after ${timeout}ms, returning ${events.length} events`);
+      console.log(`Timeout reached after ${timeout}ms, returning ${relayEvents.length} relay events`);
       sub.close();
-      
+
       // Store all received events in IndexedDB before resolving
-      if (events.length > 0) {
-        putEvents(events).catch(e => console.warn("Failed to cache events", e));
+      if (relayEvents.length > 0) {
+        putEvents(relayEvents).catch(e => console.warn("Failed to cache events", e));
       }
-      
-      resolve(events);
+
+      // Merge cached events with relay events, deduplicate by id
+      const mergedEvents = mergeAndDeduplicateEvents(cachedEvents, relayEvents);
+      resolve(mergedEvents);
     }, timeout);
 
     try {
@@ -615,22 +640,25 @@ export async function fetchEvents(filters, options = {}) {
               created_at: event.created_at,
               content_preview: event.content?.substring(0, 50)
             });
-            events.push(event);
-            
+            relayEvents.push(event);
+
             // Store event immediately in IndexedDB
             putEvent(event).catch(e => console.warn("Failed to cache event", e));
           },
           oneose() {
-            console.log(`✅ EOSE received for REQ [${subId}], got ${events.length} events`);
+            console.log(`✅ EOSE received for REQ [${subId}], got ${relayEvents.length} relay events`);
             clearTimeout(timeoutId);
             sub.close();
-            
+
             // Store all events in IndexedDB before resolving
-            if (events.length > 0) {
-              putEvents(events).catch(e => console.warn("Failed to cache events", e));
+            if (relayEvents.length > 0) {
+              putEvents(relayEvents).catch(e => console.warn("Failed to cache events", e));
             }
-            
-            resolve(events);
+
+            // Merge cached events with relay events, deduplicate by id
+            const mergedEvents = mergeAndDeduplicateEvents(cachedEvents, relayEvents);
+            console.log(`Merged ${cachedEvents.length} cached + ${relayEvents.length} relay = ${mergedEvents.length} total events`);
+            resolve(mergedEvents);
           }
         }
       );

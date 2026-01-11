@@ -435,7 +435,7 @@ func Run(
 
 	// Initialize Blossom blob storage server (only for Badger backend)
 	// MUST be done before UserInterface() which registers routes
-	if badgerDB, ok := db.(*database.D); ok {
+	if badgerDB, ok := db.(*database.D); ok && cfg.BlossomEnabled {
 		log.I.F("Badger backend detected, initializing Blossom server...")
 		if l.blossomServer, err = initializeBlossomServer(ctx, cfg, badgerDB); err != nil {
 			log.E.F("failed to initialize blossom server: %v", err)
@@ -445,6 +445,8 @@ func Run(
 		} else {
 			log.W.F("blossom server initialization returned nil without error")
 		}
+	} else if !cfg.BlossomEnabled {
+		log.I.F("Blossom server disabled via ORLY_BLOSSOM_ENABLED=false")
 	} else {
 		log.I.F("Non-Badger backend detected (type: %T), Blossom server not available", db)
 	}
