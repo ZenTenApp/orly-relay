@@ -137,7 +137,7 @@ Where `payload` is the standard Nostr message array, e.g.:
 The encrypted content structure:
 ```json
 {
-  "type": "EVENT" | "OK" | "EOSE" | "NOTICE" | "CLOSED" | "COUNT" | "AUTH",
+  "type": "EVENT" | "OK" | "EOSE" | "NOTICE" | "CLOSED" | "COUNT" | "AUTH" | "CHUNK",
   "payload": <standard_nostr_response_array>
 }
 ```
@@ -150,6 +150,7 @@ Where `payload` is the standard Nostr response array, e.g.:
 - `["CLOSED", "<sub_id>", "<message>"]`
 - `["COUNT", "<sub_id>", {"count": <n>}]`
 - `["AUTH", "<challenge>"]`
+- `[<chunk_object>]` (for CHUNK type, see Message Segmentation)
 
 ### Session Management
 
@@ -167,6 +168,85 @@ All content is encrypted using [NIP-44](https://github.com/nostr-protocol/nips/b
 The conversation key is derived from:
 - **Secret-based auth**: ECDH between client's secret key (derived from URI secret) and relay's public key
 - **CAT auth**: ECDH between client's Nostr key and relay's public key
+
+### Message Segmentation
+
+Some Nostr events exceed the typical relay message size limits (commonly 64KB). NRC supports message segmentation to handle large payloads by splitting them into multiple chunks.
+
+#### When to Chunk
+
+Senders SHOULD chunk messages when the JSON-serialized response exceeds 40KB. This threshold accounts for:
+- NIP-44 encryption overhead (~100 bytes)
+- Base64 encoding expansion (~33%)
+- Event wrapper overhead (tags, signature, etc.)
+
+#### Chunk Message Format
+
+When a response is too large, it is split into multiple CHUNK responses:
+
+```json
+{
+  "type": "CHUNK",
+  "payload": [{
+    "type": "CHUNK",
+    "messageId": "<uuid>",
+    "index": 0,
+    "total": 3,
+    "data": "<base64_encoded_chunk>"
+  }]
+}
+```
+
+Fields:
+- `messageId`: A unique identifier (UUID) for the chunked message, used to correlate chunks
+- `index`: Zero-based chunk index (0, 1, 2, ...)
+- `total`: Total number of chunks in this message
+- `data`: Base64-encoded segment of the original message
+
+#### Chunking Process (Sender)
+
+1. Serialize the original response message to JSON
+2. If the serialized length exceeds the threshold (40KB), proceed with chunking
+3. Encode the JSON string as UTF-8, then Base64 encode it
+4. Split the Base64 string into chunks of the maximum chunk size
+5. Generate a unique `messageId` (UUID recommended)
+6. Send each chunk as a separate CHUNK response event
+
+Example encoding (JavaScript):
+```javascript
+const encoded = btoa(unescape(encodeURIComponent(jsonString)))
+```
+
+#### Reassembly Process (Receiver)
+
+1. When receiving a CHUNK response, buffer it by `messageId`
+2. Track received chunks by `index`
+3. When all chunks are received (`chunks.size === total`):
+   a. Concatenate chunk data in index order (0, 1, 2, ...)
+   b. Base64 decode the concatenated string
+   c. Parse as UTF-8 JSON to recover the original response
+4. Process the reassembled response as normal
+5. Clean up the chunk buffer
+
+Example decoding (JavaScript):
+```javascript
+const jsonString = decodeURIComponent(escape(atob(concatenatedBase64)))
+const response = JSON.parse(jsonString)
+```
+
+#### Chunk Buffer Management
+
+Receivers MUST implement chunk buffer cleanup:
+- Discard incomplete chunk buffers after 60 seconds of inactivity
+- Limit the number of concurrent incomplete messages to prevent memory exhaustion
+- Log warnings when discarding stale buffers for debugging
+
+#### Ordering and Reliability
+
+- Chunks MAY arrive out of order; receivers MUST reassemble by index
+- Missing chunks result in message loss; the incomplete buffer is eventually discarded
+- Duplicate chunks (same messageId + index) SHOULD be ignored
+- Each chunk is sent as a separate encrypted NRC response event
 
 ### Authentication
 
@@ -208,6 +288,9 @@ The conversation key is derived from:
 4. Match responses using the `e` tag (references request event ID)
 5. Handle EOSE by waiting for kind 24892 with type "EOSE" in content
 6. For subscriptions, maintain mapping of internal sub IDs to tunnel session
+7. **Chunking**: Maintain a chunk buffer map keyed by `messageId`
+8. **Chunking**: When receiving CHUNK responses, buffer chunks and reassemble when complete
+9. **Chunking**: Implement 60-second timeout for incomplete chunk buffers
 
 ## Bridge Implementation Notes
 
@@ -217,10 +300,14 @@ The conversation key is derived from:
 4. Capture all relay responses and wrap in kind 24892
 5. Sign with relay's key and publish to rendezvous relay
 6. Maintain session state for subscription mapping
+7. **Chunking**: Check response size before sending; chunk if > 40KB
+8. **Chunking**: Use consistent messageId (UUID) across all chunks of a message
+9. **Chunking**: Send chunks in order (index 0, 1, 2, ...) for optimal reassembly
 
 ## Reference Implementations
 
-- ORLY Relay: [https://git.mleku.dev/mleku/next.orly.dev](https://git.mleku.dev/mleku/next.orly.dev)
+- ORLY Relay (Bridge): [https://git.mleku.dev/mleku/next.orly.dev](https://git.mleku.dev/mleku/next.orly.dev)
+- Smesh Client: [https://git.mleku.dev/mleku/smesh](https://git.mleku.dev/mleku/smesh)
 
 ## See Also
 
