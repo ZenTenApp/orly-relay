@@ -49,10 +49,12 @@ If no argument provided, default to `patch`.
     GIT_SSH_COMMAND="ssh -i ~/.ssh/gitmlekudev" git push ssh://mleku@git.mleku.dev:2222/mleku/next.orly.dev.git main --tags
     ```
 
-11. **Deploy to VPS** by running:
+11. **Deploy to relay.orly.dev** (ARM64):
+    Build on remote (faster than uploading cross-compiled binary due to slow local bandwidth):
+    ```bash
+    ssh relay.orly.dev 'cd ~/src/next.orly.dev && git pull origin main && GOPATH=$HOME CGO_ENABLED=0 ~/go/bin/go build -o ~/.local/bin/next.orly.dev && sudo /usr/sbin/setcap cap_net_bind_service=+ep ~/.local/bin/next.orly.dev && sudo systemctl restart orly && ~/.local/bin/next.orly.dev version'
     ```
-    ssh relay.orly.dev 'cd ~/src/next.orly.dev && git stash && git pull origin main && export PATH=$PATH:~/go/bin && CGO_ENABLED=0 go build -o ~/.local/bin/next.orly.dev && sudo /usr/sbin/setcap cap_net_bind_service=+ep ~/.local/bin/next.orly.dev && sudo systemctl restart orly && ~/.local/bin/next.orly.dev version'
-    ```
+    Note: setcap must be re-applied after each binary rebuild to allow binding to ports 80/443.
 
 12. **Report completion** with the new version and commit hash
 
