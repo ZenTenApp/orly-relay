@@ -21,7 +21,7 @@ import (
 )
 
 func (l *Listener) HandleEvent(msg []byte) (err error) {
-	log.D.F("HandleEvent: START handling event: %s", msg)
+	log.I.F("HandleEvent: START handling event: %s", string(msg[:min(200, len(msg))]))
 
 	// 1. Raw JSON validation (before unmarshal) - use validation service
 	if result := l.eventValidator.ValidateRawJSON(msg); !result.Valid {
@@ -231,6 +231,11 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 
 	// Authorization check (policy + ACL) - use authorization service
 	decision := l.eventAuthorizer.Authorize(env.E, l.authedPubkey.Load(), l.remote, env.E.Kind)
+	// Debug: log ephemeral event authorization
+	if env.E.Kind >= 20000 && env.E.Kind < 30000 {
+		log.I.F("ephemeral auth check: kind %d, allowed=%v, reason=%s",
+			env.E.Kind, decision.Allowed, decision.DenyReason)
+	}
 	if !decision.Allowed {
 		log.D.F("HandleEvent: authorization denied: %s (requireAuth=%v)", decision.DenyReason, decision.RequireAuth)
 		if decision.RequireAuth {
@@ -256,14 +261,17 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 	log.I.F("HandleEvent: authorized with access level %s", decision.AccessLevel)
 
 	// Progressive throttle for follows ACL mode (delays non-followed users)
-	if delay := l.getFollowsThrottleDelay(env.E); delay > 0 {
-		log.D.F("HandleEvent: applying progressive throttle delay of %v for %0x from %s",
-			delay, env.E.Pubkey, l.remote)
-		select {
-		case <-l.ctx.Done():
-			return l.ctx.Err()
-		case <-time.After(delay):
-			// Delay completed, continue processing
+	// Skip throttle if a Cashu Access Token is present (authenticated via CAT)
+	if l.cashuToken == nil {
+		if delay := l.getFollowsThrottleDelay(env.E); delay > 0 {
+			log.D.F("HandleEvent: applying progressive throttle delay of %v for %0x from %s",
+				delay, env.E.Pubkey, l.remote)
+			select {
+			case <-l.ctx.Done():
+				return l.ctx.Err()
+			case <-time.After(delay):
+				// Delay completed, continue processing
+			}
 		}
 	}
 

@@ -20,8 +20,12 @@ func initializeBlossomServer(
 	blossomCfg := &blossom.Config{
 		BaseURL:          "", // Will be set dynamically per request
 		MaxBlobSize:      100 * 1024 * 1024, // 100MB default
-		AllowedMimeTypes: nil,                // Allow all MIME types by default
+		AllowedMimeTypes: nil,               // Allow all MIME types by default
 		RequireAuth:      cfg.AuthRequired || cfg.AuthToWrite,
+		// Rate limiting for non-followed users
+		RateLimitEnabled: cfg.BlossomRateLimitEnabled,
+		DailyLimitMB:     cfg.BlossomDailyLimitMB,
+		BurstLimitMB:     cfg.BlossomBurstLimitMB,
 	}
 
 	// Create blossom server with relay's ACL registry
@@ -31,7 +35,12 @@ func initializeBlossomServer(
 	// We'll need to modify the handler to inject the baseURL per request
 	// For now, we'll use a middleware approach
 
-	log.I.F("blossom server initialized with ACL mode: %s", cfg.ACLMode)
+	if cfg.BlossomRateLimitEnabled {
+		log.I.F("blossom server initialized with ACL mode: %s, rate limit: %dMB/day (burst: %dMB)",
+			cfg.ACLMode, cfg.BlossomDailyLimitMB, cfg.BlossomBurstLimitMB)
+	} else {
+		log.I.F("blossom server initialized with ACL mode: %s", cfg.ACLMode)
+	}
 	return bs, nil
 }
 

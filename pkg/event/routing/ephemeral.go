@@ -3,6 +3,7 @@ package routing
 import (
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"lol.mleku.dev/log"
 )
 
 // Publisher abstracts event delivery to subscribers.
@@ -22,6 +23,7 @@ func IsEphemeral(k uint16) bool {
 // - Are immediately delivered to subscribers
 func MakeEphemeralHandler(publisher Publisher) Handler {
 	return func(ev *event.E, authedPubkey []byte) Result {
+		log.I.F("ephemeral handler received event kind %d, id %0x", ev.Kind, ev.ID[:8])
 		// Clone and deliver immediately without persistence
 		cloned := ev.Clone()
 		go publisher.Deliver(cloned)

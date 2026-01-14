@@ -24,8 +24,8 @@ func (i *IdHash) Set(idh []byte) {
 func (i *IdHash) FromId(id []byte) (err error) {
 	if len(id) != sha256.Size {
 		err = errorf.E(
-			"FromId: invalid ID length, got %d require %d", len(id),
-			sha256.Size,
+			"FromId: invalid ID length, got %d require %d (data=%x)", len(id),
+			sha256.Size, id,
 		)
 		return
 	}

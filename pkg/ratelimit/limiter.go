@@ -377,29 +377,26 @@ func (l *Limiter) ComputeDelay(opType OperationType) time.Duration {
 
 		// In emergency mode, apply progressive throttling for writes
 		if inEmergency {
-			// Calculate how far above recovery threshold we are
-			// At emergency threshold, add 1x normal delay
-			// For every additional 10% above emergency, double the delay
-			excessPressure := metrics.MemoryPressure - l.config.RecoveryThreshold
-			if excessPressure > 0 {
-				// Progressive multiplier: starts at 2x, doubles every 10% excess
-				multiplier := 2.0
-				for excess := excessPressure; excess > 0.1; excess -= 0.1 {
-					multiplier *= 2
-				}
-
-				emergencyDelaySec := delaySec * multiplier
-				maxEmergencySec := float64(l.config.EmergencyMaxDelayMs) / 1000.0
-
-				if emergencyDelaySec > maxEmergencySec {
-					emergencyDelaySec = maxEmergencySec
-				}
-				// Minimum emergency delay of 100ms to allow other operations
-				if emergencyDelaySec < 0.1 {
-					emergencyDelaySec = 0.1
-				}
-				delaySec = emergencyDelaySec
+			// Calculate how far above emergency threshold we are
+			// Linear scaling: multiplier = 1 + (excess * 5)
+			// At emergency threshold: 1x, at +20% above: 2x, at +40% above: 3x
+			excessPressure := metrics.MemoryPressure - l.config.EmergencyThreshold
+			if excessPressure < 0 {
+				excessPressure = 0
 			}
+			multiplier := 1.0 + excessPressure*5.0
+
+			emergencyDelaySec := delaySec * multiplier
+			maxEmergencySec := float64(l.config.EmergencyMaxDelayMs) / 1000.0
+
+			if emergencyDelaySec > maxEmergencySec {
+				emergencyDelaySec = maxEmergencySec
+			}
+			// Minimum emergency delay of 100ms to allow other operations
+			if emergencyDelaySec < 0.1 {
+				emergencyDelaySec = 0.1
+			}
+			delaySec = emergencyDelaySec
 		}
 
 		if delaySec > 0 {

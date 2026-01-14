@@ -20,6 +20,10 @@ import (
 
 func (d *D) GetSerialById(id []byte) (ser *types.Uint40, err error) {
 	// log.T.F("GetSerialById: input id=%s", hex.Enc(id))
+	if len(id) == 0 {
+		err = errorf.E("GetSerialById: called with empty ID")
+		return
+	}
 	var idxs []Range
 	if idxs, err = GetIndexesFromFilter(&filter.F{Ids: tag.NewFromBytesSlice(id)}); chk.E(err) {
 		return
@@ -102,6 +106,10 @@ func (d *D) GetSerialsByIdsWithFilter(
 
 			// Process each ID sequentially
 			for _, id := range ids.T {
+				// Skip empty IDs
+				if len(id) == 0 {
+					continue
+				}
 				// idHex := hex.Enc(id)
 
 				// Get the index prefix for this ID

@@ -19,6 +19,9 @@ type Server struct {
 	maxBlobSize      int64
 	allowedMimeTypes map[string]bool
 	requireAuth      bool
+
+	// Rate limiting for uploads
+	bandwidthLimiter *BandwidthLimiter
 }
 
 // Config holds configuration for the Blossom server
@@ -27,6 +30,11 @@ type Config struct {
 	MaxBlobSize      int64
 	AllowedMimeTypes []string
 	RequireAuth      bool
+
+	// Rate limiting (for non-followed users)
+	RateLimitEnabled bool
+	DailyLimitMB     int64
+	BurstLimitMB     int64
 }
 
 // NewServer creates a new Blossom server instance
@@ -48,6 +56,20 @@ func NewServer(db *database.D, aclRegistry *acl.S, cfg *Config) *Server {
 		}
 	}
 
+	// Initialize bandwidth limiter if enabled
+	var bwLimiter *BandwidthLimiter
+	if cfg.RateLimitEnabled {
+		dailyMB := cfg.DailyLimitMB
+		if dailyMB <= 0 {
+			dailyMB = 10 // 10MB default
+		}
+		burstMB := cfg.BurstLimitMB
+		if burstMB <= 0 {
+			burstMB = 50 // 50MB default burst
+		}
+		bwLimiter = NewBandwidthLimiter(dailyMB, burstMB)
+	}
+
 	return &Server{
 		db:               db,
 		storage:          storage,
@@ -56,6 +78,7 @@ func NewServer(db *database.D, aclRegistry *acl.S, cfg *Config) *Server {
 		maxBlobSize:      cfg.MaxBlobSize,
 		allowedMimeTypes: allowedMap,
 		requireAuth:      cfg.RequireAuth,
+		bandwidthLimiter: bwLimiter,
 	}
 }
 
@@ -206,6 +229,44 @@ func (s *Server) checkACL(
 	actual := levelMap[level]
 
 	return actual >= required
+}
+
+// isRateLimitExempt returns true if the user is exempt from rate limiting.
+// Users with write access or higher (followed users, admins, owners) are exempt.
+func (s *Server) isRateLimitExempt(pubkey []byte, remoteAddr string) bool {
+	if s.acl == nil {
+		return true // No ACL configured, no rate limiting
+	}
+
+	level := s.acl.GetAccessLevel(pubkey, remoteAddr)
+
+	// Followed users get "write" level, admins/owners get higher
+	// Only "read" and "none" are rate limited
+	return level == "write" || level == "admin" || level == "owner"
+}
+
+// checkBandwidthLimit checks if the upload is allowed under rate limits.
+// Returns true if allowed, false if rate limited.
+// Exempt users (followed, admin, owner) always return true.
+func (s *Server) checkBandwidthLimit(pubkey []byte, remoteAddr string, sizeBytes int64) bool {
+	if s.bandwidthLimiter == nil {
+		return true // No rate limiting configured
+	}
+
+	// Check if user is exempt
+	if s.isRateLimitExempt(pubkey, remoteAddr) {
+		return true
+	}
+
+	// Use pubkey hex if available, otherwise IP
+	var identity string
+	if len(pubkey) > 0 {
+		identity = string(pubkey) // Will be converted to hex in handler
+	} else {
+		identity = remoteAddr
+	}
+
+	return s.bandwidthLimiter.CheckAndConsume(identity, sizeBytes)
 }
 
 // BaseURLKey is the context key for the base URL (exported for use by app handler)

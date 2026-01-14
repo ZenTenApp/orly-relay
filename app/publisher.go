@@ -159,12 +159,26 @@ func (p *P) Deliver(ev *event.E) {
 		sub Subscription
 	}
 	var deliveries []delivery
+	// Debug: log ephemeral event delivery attempts
+	isEphemeral := ev.Kind >= 20000 && ev.Kind < 30000
+	if isEphemeral {
+		var tagInfo string
+		if ev.Tags != nil {
+			tagInfo = string(ev.Tags.Marshal(nil))
+		}
+		log.I.F("ephemeral event kind %d, id %0x, checking %d connections for matches, tags: %s",
+			ev.Kind, ev.ID[:8], len(p.Map), tagInfo)
+	}
 	for w, subs := range p.Map {
 		for id, subscriber := range subs {
 			if subscriber.Match(ev) {
 				deliveries = append(
 					deliveries, delivery{w: w, id: id, sub: subscriber},
 				)
+			} else if isEphemeral {
+				// Debug: log why ephemeral events don't match
+				log.I.F("ephemeral event kind %d did NOT match subscription %s (filters: %s)",
+					ev.Kind, id, string(subscriber.S.Marshal(nil)))
 			}
 		}
 	}

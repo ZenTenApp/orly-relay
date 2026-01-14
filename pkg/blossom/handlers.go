@@ -200,6 +200,12 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check bandwidth rate limit (non-followed users)
+	if !s.checkBandwidthLimit(pubkey, remoteAddr, int64(len(body))) {
+		s.setErrorResponse(w, http.StatusTooManyRequests, "upload rate limit exceeded, try again later")
+		return
+	}
+
 	// Calculate SHA256 after auth check
 	sha256Hash := CalculateSHA256(body)
 	sha256Hex := hex.Enc(sha256Hash)
@@ -647,6 +653,12 @@ func (s *Server) handleMirror(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check bandwidth rate limit (non-followed users)
+	if !s.checkBandwidthLimit(pubkey, remoteAddr, int64(len(body))) {
+		s.setErrorResponse(w, http.StatusTooManyRequests, "upload rate limit exceeded, try again later")
+		return
+	}
+
 	// Note: pubkey may be nil for anonymous uploads if ACL allows it
 
 	// Detect MIME type from remote response
@@ -723,6 +735,12 @@ func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 	// Check ACL (do this AFTER getting pubkey from auth)
 	if !s.checkACL(pubkey, remoteAddr, "write") {
 		s.setErrorResponse(w, http.StatusForbidden, "insufficient permissions")
+		return
+	}
+
+	// Check bandwidth rate limit (non-followed users)
+	if !s.checkBandwidthLimit(pubkey, remoteAddr, int64(len(body))) {
+		s.setErrorResponse(w, http.StatusTooManyRequests, "upload rate limit exceeded, try again later")
 		return
 	}
 

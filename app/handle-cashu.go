@@ -124,6 +124,17 @@ func (s *Server) handleCashuKeysets(w http.ResponseWriter, r *http.Request) {
 
 // handleCashuInfo handles GET /cashu/info - returns mint information.
 func (s *Server) handleCashuInfo(w http.ResponseWriter, r *http.Request) {
+	// CORS headers for browser-based CAT support detection
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept")
+
+	// Handle preflight
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	if s.CashuIssuer == nil {
 		http.Error(w, "Cashu tokens not enabled", http.StatusNotImplemented)
 		return

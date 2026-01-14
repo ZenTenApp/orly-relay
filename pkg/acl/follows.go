@@ -138,7 +138,7 @@ func (f *Follows) Configure(cfg ...any) (err error) {
 	if f.cfg.FollowsThrottleEnabled {
 		perEvent := f.cfg.FollowsThrottlePerEvent
 		if perEvent == 0 {
-			perEvent = 200 * time.Millisecond
+			perEvent = 25 * time.Millisecond
 		}
 		maxDelay := f.cfg.FollowsThrottleMaxDelay
 		if maxDelay == 0 {

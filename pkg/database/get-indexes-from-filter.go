@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"lol.mleku.dev/chk"
+	"lol.mleku.dev/errorf"
 	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/database/indexes"
 	types2 "next.orly.dev/pkg/database/indexes/types"
@@ -43,6 +44,12 @@ func NormalizeTagValueForHash(key byte, valueBytes []byte) []byte {
 // CreateIdHashFromData creates an IdHash from data that could be hex or binary
 func CreateIdHashFromData(data []byte) (i *types2.IdHash, err error) {
 	i = new(types2.IdHash)
+
+	// Skip empty data to avoid noisy errors
+	if len(data) == 0 {
+		err = errorf.E("CreateIdHashFromData: empty ID provided")
+		return
+	}
 
 	// If data looks like hex string and has the right length for hex-encoded
 	// sha256
@@ -95,6 +102,11 @@ func GetIndexesFromFilter(f *filter.F) (idxs []Range, err error) {
 	// should be an error, but convention just ignores it.
 	if f.Ids.Len() > 0 {
 		for _, id := range f.Ids.T {
+			// Skip empty IDs - some filters have empty ID values
+			if len(id) == 0 {
+				log.D.F("GetIndexesFromFilter: skipping empty ID in filter (ids=%d)", f.Ids.Len())
+				continue
+			}
 			if err = func() (err error) {
 				var i *types2.IdHash
 				if i, err = CreateIdHashFromData(id); chk.E(err) {
