@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
+	"github.com/minio/sha256-simd"
 )
 
 // CuratingConfig represents the configuration for curating ACL mode
@@ -1108,13 +1109,16 @@ func (c *CuratingACL) countEventsForPubkey(pubkeyHex string) (int, error) {
 		fmt.Sscanf(pubkeyHex[i*2:i*2+2], "%02x", &pubkeyBytes[i])
 	}
 
+	// Compute the pubkey hash (SHA256 of pubkey, first 8 bytes)
+	// This matches the PubHash type in indexes/types/pubhash.go
+	pkh := sha256.Sum256(pubkeyBytes)
+
 	// Scan the Pubkey index (prefix "pc-") for this pubkey
 	err := c.View(func(txn *badger.Txn) error {
-		// Build prefix: "pc-" + 8-byte pubkey hash
-		// The pubkey hash is the first 8 bytes of the pubkey
+		// Build prefix: "pc-" + 8-byte SHA256 hash of pubkey
 		prefix := make([]byte, 3+8)
 		copy(prefix[:3], []byte("pc-"))
-		copy(prefix[3:], pubkeyBytes[:8])
+		copy(prefix[3:], pkh[:8])
 
 		it := txn.NewIterator(badger.IteratorOptions{Prefix: prefix})
 		defer it.Close()

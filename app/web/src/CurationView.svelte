@@ -678,7 +678,7 @@
                                 <div class="list-item">
                                     <div class="item-main">
                                         <span class="pubkey" title={user.pubkey}>{formatPubkey(user.pubkey)}</span>
-                                        <span class="event-count">{user.total_events} events</span>
+                                        <span class="event-count">{user.event_count} events</span>
                                     </div>
                                     <div class="item-actions">
                                         <button class="btn-success" on:click={() => trustPubkey(user.pubkey, "")}>
