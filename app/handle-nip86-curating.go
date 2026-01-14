@@ -143,6 +143,8 @@ func (s *Server) handleCuratingNIP86Method(request NIP86Request, curatingACL *ac
 		return s.handleUnblockCuratingIP(request.Params, dbACL)
 	case "isconfigured":
 		return s.handleIsConfigured(dbACL)
+	case "scanpubkeys":
+		return s.handleScanPubkeys(dbACL)
 	default:
 		return NIP86Response{Error: "Unknown method: " + request.Method}
 	}
@@ -167,6 +169,7 @@ func (s *Server) handleCuratingSupportedMethods() NIP86Response {
 		"listblockedips",
 		"unblockip",
 		"isconfigured",
+		"scanpubkeys",
 	}
 	return NIP86Response{Result: methods}
 }
@@ -605,4 +608,19 @@ func parseRange(s string, parts []int) (int, error) {
 		}
 	}
 	return 0, nil
+}
+
+// handleScanPubkeys scans the database for all pubkeys and populates event counts
+// This is used to retroactively populate the unclassified users list
+func (s *Server) handleScanPubkeys(dbACL *database.CuratingACL) NIP86Response {
+	result, err := dbACL.ScanAllPubkeys()
+	if chk.E(err) {
+		return NIP86Response{Error: "Failed to scan pubkeys: " + err.Error()}
+	}
+
+	return NIP86Response{Result: map[string]interface{}{
+		"total_pubkeys": result.TotalPubkeys,
+		"total_events":  result.TotalEvents,
+		"skipped":       result.Skipped,
+	}}
 }

@@ -990,3 +990,140 @@ func kindInCategory(kind int, category string) bool {
 	}
 	return false
 }
+
+// ==================== Database Scanning ====================
+
+// ScanResult contains the results of scanning all pubkeys in the database
+type ScanResult struct {
+	TotalPubkeys int `json:"total_pubkeys"`
+	TotalEvents  int `json:"total_events"`
+	Skipped      int `json:"skipped"` // Trusted/blacklisted users skipped
+}
+
+// ScanAllPubkeys scans the database to find all unique pubkeys and count their events.
+// This populates the event count data needed for the unclassified users list.
+// It uses the SerialPubkey index to find all pubkeys, then counts events for each.
+func (c *CuratingACL) ScanAllPubkeys() (*ScanResult, error) {
+	result := &ScanResult{}
+
+	// First, get all trusted and blacklisted pubkeys to skip
+	trusted, err := c.ListTrustedPubkeys()
+	if err != nil {
+		return nil, err
+	}
+	blacklisted, err := c.ListBlacklistedPubkeys()
+	if err != nil {
+		return nil, err
+	}
+
+	excludeSet := make(map[string]struct{})
+	for _, t := range trusted {
+		excludeSet[t.Pubkey] = struct{}{}
+	}
+	for _, b := range blacklisted {
+		excludeSet[b.Pubkey] = struct{}{}
+	}
+
+	// Scan the SerialPubkey index to get all pubkeys
+	pubkeys := make(map[string]struct{})
+
+	err = c.View(func(txn *badger.Txn) error {
+		// SerialPubkey prefix is "spk"
+		prefix := []byte("spk")
+		it := txn.NewIterator(badger.IteratorOptions{Prefix: prefix})
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			// The value contains the 32-byte pubkey
+			val, err := item.ValueCopy(nil)
+			if err != nil {
+				continue
+			}
+			if len(val) == 32 {
+				// Convert to hex
+				pubkeyHex := fmt.Sprintf("%x", val)
+				pubkeys[pubkeyHex] = struct{}{}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result.TotalPubkeys = len(pubkeys)
+
+	// For each pubkey, count events and store the count
+	today := time.Now().Format("2006-01-02")
+
+	for pubkeyHex := range pubkeys {
+		// Skip if trusted or blacklisted
+		if _, excluded := excludeSet[pubkeyHex]; excluded {
+			result.Skipped++
+			continue
+		}
+
+		// Count events for this pubkey using the Pubkey index
+		count, err := c.countEventsForPubkey(pubkeyHex)
+		if err != nil {
+			continue
+		}
+
+		if count > 0 {
+			result.TotalEvents += count
+
+			// Store the event count
+			ec := PubkeyEventCount{
+				Pubkey:    pubkeyHex,
+				Date:      today,
+				Count:     count,
+				LastEvent: time.Now(),
+			}
+
+			err = c.Update(func(txn *badger.Txn) error {
+				key := c.getEventCountKey(pubkeyHex, today)
+				data, err := json.Marshal(ec)
+				if err != nil {
+					return err
+				}
+				return txn.Set(key, data)
+			})
+			if err != nil {
+				continue
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// countEventsForPubkey counts events in the database for a given pubkey hex string
+func (c *CuratingACL) countEventsForPubkey(pubkeyHex string) (int, error) {
+	count := 0
+
+	// Decode the pubkey hex to bytes
+	pubkeyBytes := make([]byte, 32)
+	for i := 0; i < 32 && i*2+1 < len(pubkeyHex); i++ {
+		fmt.Sscanf(pubkeyHex[i*2:i*2+2], "%02x", &pubkeyBytes[i])
+	}
+
+	// Scan the Pubkey index (prefix "pc-") for this pubkey
+	err := c.View(func(txn *badger.Txn) error {
+		// Build prefix: "pc-" + 8-byte pubkey hash
+		// The pubkey hash is the first 8 bytes of the pubkey
+		prefix := make([]byte, 3+8)
+		copy(prefix[:3], []byte("pc-"))
+		copy(prefix[3:], pubkeyBytes[:8])
+
+		it := txn.NewIterator(badger.IteratorOptions{Prefix: prefix})
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			count++
+		}
+		return nil
+	})
+
+	return count, err
+}
