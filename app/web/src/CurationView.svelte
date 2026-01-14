@@ -186,6 +186,19 @@
         }
     }
 
+    // Scan database for all pubkeys
+    async function scanDatabase() {
+        try {
+            const result = await callNIP86API("scanpubkeys");
+            showMessage(`Database scanned: ${result.total_pubkeys} pubkeys, ${result.total_events} events (${result.skipped} skipped)`, "success");
+            // Refresh the unclassified users list
+            await loadUnclassifiedUsers();
+        } catch (error) {
+            console.error("Failed to scan database:", error);
+            showMessage("Failed to scan database: " + error.message, "error");
+        }
+    }
+
     // Load spam events
     async function loadSpamEvents() {
         try {
@@ -650,9 +663,14 @@
                     <h3>Unclassified Users</h3>
                     <p class="help-text">Users who have posted events but haven't been classified. Sorted by event count.</p>
 
-                    <button class="refresh-btn" on:click={loadUnclassifiedUsers} disabled={isLoading}>
-                        Refresh
-                    </button>
+                    <div class="button-row">
+                        <button class="refresh-btn" on:click={loadUnclassifiedUsers} disabled={isLoading}>
+                            Refresh
+                        </button>
+                        <button class="scan-btn" on:click={scanDatabase} disabled={isLoading}>
+                            Scan Database
+                        </button>
+                    </div>
 
                     <div class="list">
                         {#if unclassifiedUsers.length > 0}
@@ -1145,6 +1163,26 @@
     }
 
     .refresh-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .button-row {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .scan-btn {
+        padding: 0.5rem 1rem;
+        background: var(--warning, #f0ad4e);
+        color: var(--text-color);
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .scan-btn:disabled {
         opacity: 0.6;
         cursor: not-allowed;
     }
