@@ -444,8 +444,11 @@ func (s *Server) handleGetCuratingConfig(dbACL *database.CuratingACL) NIP86Respo
 		"first_ban_hours":   config.FirstBanHours,
 		"second_ban_hours":  config.SecondBanHours,
 		"allowed_kinds":     config.AllowedKinds,
+		"custom_kinds":      config.AllowedKinds, // Alias for frontend compatibility
 		"allowed_ranges":    config.AllowedRanges,
+		"kind_ranges":       config.AllowedRanges, // Alias for frontend compatibility
 		"kind_categories":   config.KindCategories,
+		"categories":        config.KindCategories, // Alias for frontend compatibility
 		"config_event_id":   config.ConfigEventID,
 		"config_pubkey":     config.ConfigPubkey,
 		"configured_at":     config.ConfiguredAt,
