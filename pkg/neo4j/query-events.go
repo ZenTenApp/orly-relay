@@ -10,12 +10,15 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/database/indexes/types"
 	"next.orly.dev/pkg/interfaces/store"
 )
 
 // QueryEvents retrieves events matching the given filter
 func (n *N) QueryEvents(c context.Context, f *filter.F) (evs event.S, err error) {
+	log.T.F("Neo4j QueryEvents called with filter: kinds=%v, authors=%d, tags=%v",
+		f.Kinds != nil, f.Authors != nil && len(f.Authors.T) > 0, f.Tags != nil)
 	return n.QueryEventsWithOptions(c, f, false, false)
 }
 
@@ -101,6 +104,7 @@ func (n *N) buildCypherQuery(f *filter.F, includeDeleteEvents bool) (string, map
 			// Normalize to lowercase hex using our utility function
 			// This handles both binary-encoded pubkeys and hex string pubkeys (including uppercase)
 			hexAuthor := NormalizePubkeyHex(author)
+			log.T.F("Neo4j author filter: raw_len=%d, normalized=%q", len(author), hexAuthor)
 			if hexAuthor == "" {
 				continue
 			}
@@ -142,20 +146,27 @@ func (n *N) buildCypherQuery(f *filter.F, includeDeleteEvents bool) (string, map
 	}
 
 	// Tag filters - this is where Neo4j's graph capabilities shine
-	// We can efficiently traverse tag relationships
+	// We use EXISTS subqueries to efficiently filter events by tags
+	// This ensures events are only returned if they have matching tags
 	tagIndex := 0
 	if f.Tags != nil {
 		for _, tagValues := range *f.Tags {
 			if len(tagValues.T) > 0 {
-				tagVarName := fmt.Sprintf("t%d", tagIndex)
 				tagTypeParam := fmt.Sprintf("tagType_%d", tagIndex)
 				tagValuesParam := fmt.Sprintf("tagValues_%d", tagIndex)
 
-				// Add tag relationship to MATCH clause
-				matchClause += fmt.Sprintf(" OPTIONAL MATCH (e)-[:TAGGED_WITH]->(%s:Tag)", tagVarName)
+				// The first element is the tag type (e.g., "e", "p", "#e", "#p", etc.)
+				// Filter tags may have "#" prefix (e.g., "#d" for d-tag filters)
+				// Event tags are stored without prefix, so we must strip it
+				tagTypeBytes := tagValues.T[0]
+				var tagType string
+				if len(tagTypeBytes) > 0 && tagTypeBytes[0] == '#' {
+					tagType = string(tagTypeBytes[1:]) // Strip "#" prefix
+				} else {
+					tagType = string(tagTypeBytes)
+				}
 
-				// The first element is the tag type (e.g., "e", "p", etc.)
-				tagType := string(tagValues.T[0])
+				log.T.F("Neo4j tag filter: type=%q (raw=%q, len=%d)", tagType, string(tagTypeBytes), len(tagTypeBytes))
 
 				// Convert remaining tag values to strings (skip first element which is the type)
 				// For e/p tags, use NormalizePubkeyHex to handle binary encoding and uppercase hex
@@ -164,26 +175,34 @@ func (n *N) buildCypherQuery(f *filter.F, includeDeleteEvents bool) (string, map
 					if tagType == "e" || tagType == "p" {
 						// Normalize e/p tag values to lowercase hex (handles binary encoding)
 						normalized := NormalizePubkeyHex(tv)
+						log.T.F("Neo4j tag filter: %s-tag value normalized: %q (raw len=%d, binary=%v)",
+							tagType, normalized, len(tv), IsBinaryEncoded(tv))
 						if normalized != "" {
 							tagValueStrings = append(tagValueStrings, normalized)
 						}
 					} else {
 						// For other tags, use direct string conversion
-						tagValueStrings = append(tagValueStrings, string(tv))
+						val := string(tv)
+						log.T.F("Neo4j tag filter: %s-tag value: %q (len=%d)", tagType, val, len(val))
+						tagValueStrings = append(tagValueStrings, val)
 					}
 				}
 
 				// Skip if no valid values after normalization
 				if len(tagValueStrings) == 0 {
+					log.W.F("Neo4j tag filter: no valid values for tag type %q, skipping", tagType)
 					continue
 				}
 
-				// Add WHERE conditions for this tag
+				log.T.F("Neo4j tag filter: type=%s, values=%v", tagType, tagValueStrings)
+
+				// Use EXISTS subquery to filter events that have matching tags
+				// This is more correct than OPTIONAL MATCH because it requires the tag to exist
 				params[tagTypeParam] = tagType
 				params[tagValuesParam] = tagValueStrings
 				whereClauses = append(whereClauses,
-					fmt.Sprintf("(%s.type = $%s AND %s.value IN $%s)",
-						tagVarName, tagTypeParam, tagVarName, tagValuesParam))
+					fmt.Sprintf("EXISTS { MATCH (e)-[:TAGGED_WITH]->(t:Tag) WHERE t.type = $%s AND t.value IN $%s }",
+						tagTypeParam, tagValuesParam))
 
 				tagIndex++
 			}
@@ -249,6 +268,26 @@ RETURN e.id AS id,
 
 	// Combine all parts
 	cypher := matchClause + whereClause + returnClause + orderClause + limitClause
+
+	// Log the generated query for debugging
+	log.T.F("Neo4j query: %s", cypher)
+	// Log params at trace level for debugging
+	var paramSummary strings.Builder
+	for k, v := range params {
+		switch val := v.(type) {
+		case []string:
+			if len(val) <= 3 {
+				paramSummary.WriteString(fmt.Sprintf("%s: %v ", k, val))
+			} else {
+				paramSummary.WriteString(fmt.Sprintf("%s: [%d values] ", k, len(val)))
+			}
+		case []int64:
+			paramSummary.WriteString(fmt.Sprintf("%s: %v ", k, val))
+		default:
+			paramSummary.WriteString(fmt.Sprintf("%s: %v ", k, v))
+		}
+	}
+	log.T.F("Neo4j params: %s", paramSummary.String())
 
 	return cypher, params
 }

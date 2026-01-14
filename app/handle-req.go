@@ -34,7 +34,6 @@ import (
 
 func (l *Listener) HandleReq(msg []byte) (err error) {
 	log.D.F("handling REQ: %s", msg)
-	log.T.F("HandleReq: START processing from %s", l.remote)
 	// var rem []byte
 	env := reqenvelope.New()
 	if _, err = env.Unmarshal(msg); chk.E(err) {
