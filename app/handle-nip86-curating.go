@@ -145,6 +145,10 @@ func (s *Server) handleCuratingNIP86Method(request NIP86Request, curatingACL *ac
 		return s.handleIsConfigured(dbACL)
 	case "scanpubkeys":
 		return s.handleScanPubkeys(dbACL)
+	case "geteventsforpubkey":
+		return s.handleGetEventsForPubkey(request.Params, dbACL)
+	case "deleteeventsforpubkey":
+		return s.handleDeleteEventsForPubkey(request.Params, dbACL)
 	default:
 		return NIP86Response{Error: "Unknown method: " + request.Method}
 	}
@@ -170,6 +174,8 @@ func (s *Server) handleCuratingSupportedMethods() NIP86Response {
 		"unblockip",
 		"isconfigured",
 		"scanpubkeys",
+		"geteventsforpubkey",
+		"deleteeventsforpubkey",
 	}
 	return NIP86Response{Result: methods}
 }
@@ -622,5 +628,109 @@ func (s *Server) handleScanPubkeys(dbACL *database.CuratingACL) NIP86Response {
 		"total_pubkeys": result.TotalPubkeys,
 		"total_events":  result.TotalEvents,
 		"skipped":       result.Skipped,
+	}}
+}
+
+// handleGetEventsForPubkey returns events for a specific pubkey
+// Params: [pubkey, limit (optional, default 100), offset (optional, default 0)]
+func (s *Server) handleGetEventsForPubkey(params []interface{}, dbACL *database.CuratingACL) NIP86Response {
+	if len(params) < 1 {
+		return NIP86Response{Error: "Missing required parameter: pubkey"}
+	}
+
+	pubkey, ok := params[0].(string)
+	if !ok {
+		return NIP86Response{Error: "Invalid pubkey parameter"}
+	}
+
+	if len(pubkey) != 64 {
+		return NIP86Response{Error: "Invalid pubkey format (must be 64 hex characters)"}
+	}
+
+	// Parse optional limit (default 100)
+	limit := 100
+	if len(params) > 1 {
+		if l, ok := params[1].(float64); ok {
+			limit = int(l)
+			if limit > 500 {
+				limit = 500 // Cap at 500
+			}
+			if limit < 1 {
+				limit = 1
+			}
+		}
+	}
+
+	// Parse optional offset (default 0)
+	offset := 0
+	if len(params) > 2 {
+		if o, ok := params[2].(float64); ok {
+			offset = int(o)
+			if offset < 0 {
+				offset = 0
+			}
+		}
+	}
+
+	events, total, err := dbACL.GetEventsForPubkey(pubkey, limit, offset)
+	if chk.E(err) {
+		return NIP86Response{Error: "Failed to get events: " + err.Error()}
+	}
+
+	// Convert to response format
+	eventList := make([]map[string]interface{}, len(events))
+	for i, ev := range events {
+		eventList[i] = map[string]interface{}{
+			"id":         ev.ID,
+			"kind":       ev.Kind,
+			"content":    ev.Content,
+			"created_at": ev.CreatedAt,
+		}
+	}
+
+	return NIP86Response{Result: map[string]interface{}{
+		"events": eventList,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	}}
+}
+
+// handleDeleteEventsForPubkey deletes all events for a specific pubkey
+// This is only allowed for blacklisted pubkeys as a safety measure
+// Params: [pubkey]
+func (s *Server) handleDeleteEventsForPubkey(params []interface{}, dbACL *database.CuratingACL) NIP86Response {
+	if len(params) < 1 {
+		return NIP86Response{Error: "Missing required parameter: pubkey"}
+	}
+
+	pubkey, ok := params[0].(string)
+	if !ok {
+		return NIP86Response{Error: "Invalid pubkey parameter"}
+	}
+
+	if len(pubkey) != 64 {
+		return NIP86Response{Error: "Invalid pubkey format (must be 64 hex characters)"}
+	}
+
+	// Safety check: only allow deletion of events from blacklisted users
+	isBlacklisted, err := dbACL.IsPubkeyBlacklisted(pubkey)
+	if chk.E(err) {
+		return NIP86Response{Error: "Failed to check blacklist status: " + err.Error()}
+	}
+
+	if !isBlacklisted {
+		return NIP86Response{Error: "Can only delete events from blacklisted users. Blacklist the user first."}
+	}
+
+	// Delete all events for this pubkey
+	deleted, err := dbACL.DeleteEventsForPubkey(pubkey)
+	if chk.E(err) {
+		return NIP86Response{Error: "Failed to delete events: " + err.Error()}
+	}
+
+	return NIP86Response{Result: map[string]interface{}{
+		"deleted": deleted,
+		"pubkey":  pubkey,
 	}}
 }

@@ -4,6 +4,7 @@ package database
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -11,6 +12,9 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/minio/sha256-simd"
+	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
 )
 
 // CuratingConfig represents the configuration for curating ACL mode
@@ -1097,6 +1101,99 @@ func (c *CuratingACL) ScanAllPubkeys() (*ScanResult, error) {
 	}
 
 	return result, nil
+}
+
+// EventSummary represents a simplified event for display in the UI
+type EventSummary struct {
+	ID        string `json:"id"`
+	Kind      int    `json:"kind"`
+	Content   string `json:"content"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+// GetEventsForPubkey fetches events for a pubkey, returning simplified event data
+// limit specifies max events to return, offset is for pagination
+func (c *CuratingACL) GetEventsForPubkey(pubkeyHex string, limit, offset int) ([]EventSummary, int, error) {
+	var events []EventSummary
+
+	// First, count total events for this pubkey
+	totalCount, err := c.countEventsForPubkey(pubkeyHex)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Decode the pubkey hex to bytes
+	pubkeyBytes, err := hex.DecAppend(nil, []byte(pubkeyHex))
+	if err != nil {
+		return nil, 0, fmt.Errorf("invalid pubkey hex: %w", err)
+	}
+
+	// Create a filter to query events by author
+	// Use a larger limit to account for offset, then slice
+	queryLimit := uint(limit + offset)
+	f := &filter.F{
+		Authors: tag.NewFromBytesSlice(pubkeyBytes),
+		Limit:   &queryLimit,
+	}
+
+	// Query events using the database's QueryEvents method
+	ctx := context.Background()
+	evs, err := c.D.QueryEvents(ctx, f)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Apply offset and convert to EventSummary
+	for i, ev := range evs {
+		if i < offset {
+			continue
+		}
+		if len(events) >= limit {
+			break
+		}
+		events = append(events, EventSummary{
+			ID:        hex.Enc(ev.ID),
+			Kind:      int(ev.Kind),
+			Content:   string(ev.Content),
+			CreatedAt: ev.CreatedAt,
+		})
+	}
+
+	return events, totalCount, nil
+}
+
+// DeleteEventsForPubkey deletes all events for a given pubkey
+// Returns the number of events deleted
+func (c *CuratingACL) DeleteEventsForPubkey(pubkeyHex string) (int, error) {
+	// Decode the pubkey hex to bytes
+	pubkeyBytes, err := hex.DecAppend(nil, []byte(pubkeyHex))
+	if err != nil {
+		return 0, fmt.Errorf("invalid pubkey hex: %w", err)
+	}
+
+	// Create a filter to find all events by this author
+	f := &filter.F{
+		Authors: tag.NewFromBytesSlice(pubkeyBytes),
+	}
+
+	// Query all events for this pubkey
+	ctx := context.Background()
+	evs, err := c.D.QueryEvents(ctx, f)
+	if err != nil {
+		return 0, err
+	}
+
+	// Delete each event
+	deleted := 0
+	for _, ev := range evs {
+		if err := c.D.DeleteEvent(ctx, ev.ID); err != nil {
+			// Log error but continue deleting
+			continue
+		}
+		deleted++
+	}
+
+	return deleted, nil
 }
 
 // countEventsForPubkey counts events in the database for a given pubkey hex string

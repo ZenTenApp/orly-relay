@@ -13,6 +13,15 @@
     let messageType = "info";
     let isConfigured = false;
 
+    // User detail view state
+    let selectedUser = null;
+    let selectedUserType = null; // "trusted", "blacklisted", or "unclassified"
+    let userEvents = [];
+    let userEventsTotal = 0;
+    let userEventsOffset = 0;
+    let loadingEvents = false;
+    let expandedEvents = {}; // Track which events are expanded
+
     // Configuration state
     let config = {
         daily_limit: 50,
@@ -443,6 +452,176 @@
         if (!timestamp) return "";
         return new Date(timestamp).toLocaleString();
     }
+
+    // Show message helper
+    function showMessage(msg, type = "info") {
+        message = msg;
+        messageType = type;
+    }
+
+    // Open user detail view
+    async function openUserDetail(pubkey, type) {
+        console.log("openUserDetail called:", pubkey, type);
+        selectedUser = pubkey;
+        selectedUserType = type;
+        userEvents = [];
+        userEventsTotal = 0;
+        userEventsOffset = 0;
+        expandedEvents = {};
+        console.log("selectedUser set to:", selectedUser);
+        await loadUserEvents();
+    }
+
+    // Close user detail view
+    function closeUserDetail() {
+        selectedUser = null;
+        selectedUserType = null;
+        userEvents = [];
+        userEventsTotal = 0;
+        userEventsOffset = 0;
+        expandedEvents = {};
+    }
+
+    // Load events for selected user
+    async function loadUserEvents() {
+        console.log("loadUserEvents called, selectedUser:", selectedUser, "loadingEvents:", loadingEvents);
+        if (!selectedUser || loadingEvents) return;
+
+        try {
+            loadingEvents = true;
+            console.log("Calling geteventsforpubkey API...");
+            const result = await callNIP86API("geteventsforpubkey", [selectedUser, 100, userEventsOffset]);
+            console.log("API result:", result);
+            if (result) {
+                if (userEventsOffset === 0) {
+                    userEvents = result.events || [];
+                } else {
+                    userEvents = [...userEvents, ...(result.events || [])];
+                }
+                userEventsTotal = result.total || 0;
+            }
+        } catch (error) {
+            console.error("Failed to load user events:", error);
+            showMessage("Failed to load events: " + error.message, "error");
+        } finally {
+            loadingEvents = false;
+        }
+    }
+
+    // Load more events
+    async function loadMoreEvents() {
+        userEventsOffset = userEvents.length;
+        await loadUserEvents();
+    }
+
+    // Toggle event expansion
+    function toggleEventExpansion(eventId) {
+        expandedEvents = {
+            ...expandedEvents,
+            [eventId]: !expandedEvents[eventId]
+        };
+    }
+
+    // Truncate content to 6 lines (approximately 300 chars per line)
+    function truncateContent(content, maxLines = 6) {
+        if (!content) return "";
+        const lines = content.split('\n');
+        if (lines.length <= maxLines && content.length <= maxLines * 100) {
+            return content;
+        }
+        // Truncate by lines or characters, whichever is smaller
+        let truncated = lines.slice(0, maxLines).join('\n');
+        if (truncated.length > maxLines * 100) {
+            truncated = truncated.substring(0, maxLines * 100);
+        }
+        return truncated;
+    }
+
+    // Check if content is truncated
+    function isContentTruncated(content, maxLines = 6) {
+        if (!content) return false;
+        const lines = content.split('\n');
+        return lines.length > maxLines || content.length > maxLines * 100;
+    }
+
+    // Trust user from detail view and refresh
+    async function trustUserFromDetail() {
+        await trustPubkey(selectedUser, "");
+        // Refresh list and go back
+        await loadAllData();
+        closeUserDetail();
+    }
+
+    // Blacklist user from detail view and refresh
+    async function blacklistUserFromDetail() {
+        await blacklistPubkey(selectedUser, "");
+        // Refresh list and go back
+        await loadAllData();
+        closeUserDetail();
+    }
+
+    // Untrust user from detail view and refresh
+    async function untrustUserFromDetail() {
+        await untrustPubkey(selectedUser);
+        await loadAllData();
+        closeUserDetail();
+    }
+
+    // Unblacklist user from detail view and refresh
+    async function unblacklistUserFromDetail() {
+        await unblacklistPubkey(selectedUser);
+        await loadAllData();
+        closeUserDetail();
+    }
+
+    // Delete all events for a blacklisted user
+    async function deleteAllEventsForUser() {
+        if (!confirm(`Delete ALL ${userEventsTotal} events from this user? This cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            isLoading = true;
+            const result = await callNIP86API("deleteeventsforpubkey", [selectedUser]);
+            showMessage(`Deleted ${result.deleted} events`, "success");
+            // Refresh the events list
+            userEvents = [];
+            userEventsTotal = 0;
+            userEventsOffset = 0;
+            await loadUserEvents();
+        } catch (error) {
+            console.error("Failed to delete events:", error);
+            showMessage("Failed to delete events: " + error.message, "error");
+        } finally {
+            isLoading = false;
+        }
+    }
+
+    // Get kind name
+    function getKindName(kind) {
+        const kindNames = {
+            0: "Metadata",
+            1: "Text Note",
+            3: "Follow List",
+            4: "Encrypted DM",
+            6: "Repost",
+            7: "Reaction",
+            14: "Chat Message",
+            16: "Order Message",
+            17: "Payment Receipt",
+            1063: "File Metadata",
+            10002: "Relay List",
+            30017: "Stall",
+            30018: "Product (NIP-15)",
+            30023: "Long-form",
+            30078: "App Data",
+            30402: "Product (NIP-99)",
+            30405: "Collection",
+            30406: "Shipping",
+            31555: "Review",
+        };
+        return kindNames[kind] || `Kind ${kind}`;
+    }
 </script>
 
 <div class="curation-view">
@@ -545,29 +724,97 @@
             </div>
         </div>
     {:else}
-        <!-- Active Mode -->
-        <div class="tabs">
-            <button class="tab" class:active={activeTab === "trusted"} on:click={() => activeTab = "trusted"}>
-                Trusted ({trustedPubkeys.length})
-            </button>
-            <button class="tab" class:active={activeTab === "blacklist"} on:click={() => activeTab = "blacklist"}>
-                Blacklist ({blacklistedPubkeys.length})
-            </button>
-            <button class="tab" class:active={activeTab === "unclassified"} on:click={() => activeTab = "unclassified"}>
-                Unclassified ({unclassifiedUsers.length})
-            </button>
-            <button class="tab" class:active={activeTab === "spam"} on:click={() => activeTab = "spam"}>
-                Spam ({spamEvents.length})
-            </button>
-            <button class="tab" class:active={activeTab === "ips"} on:click={() => activeTab = "ips"}>
-                Blocked IPs ({blockedIPs.length})
-            </button>
-            <button class="tab" class:active={activeTab === "settings"} on:click={() => activeTab = "settings"}>
-                Settings
-            </button>
-        </div>
+        <!-- User Detail View -->
+        {#if selectedUser}
+            <div class="user-detail-view">
+                <div class="detail-header">
+                    <div class="detail-header-left">
+                        <button class="back-btn" on:click={closeUserDetail}>
+                            &larr; Back
+                        </button>
+                        <h3>User Events</h3>
+                        <span class="detail-pubkey" title={selectedUser}>{formatPubkey(selectedUser)}</span>
+                        <span class="detail-count">{userEventsTotal} events</span>
+                    </div>
+                    <div class="detail-header-right">
+                        {#if selectedUserType === "trusted"}
+                            <button class="btn-danger" on:click={untrustUserFromDetail}>Remove Trust</button>
+                            <button class="btn-danger" on:click={blacklistUserFromDetail}>Blacklist</button>
+                        {:else if selectedUserType === "blacklisted"}
+                            <button class="btn-delete-all" on:click={deleteAllEventsForUser} disabled={isLoading || userEventsTotal === 0}>
+                                Delete All Events
+                            </button>
+                            <button class="btn-success" on:click={unblacklistUserFromDetail}>Remove from Blacklist</button>
+                            <button class="btn-success" on:click={trustUserFromDetail}>Trust</button>
+                        {:else}
+                            <button class="btn-success" on:click={trustUserFromDetail}>Trust</button>
+                            <button class="btn-danger" on:click={blacklistUserFromDetail}>Blacklist</button>
+                        {/if}
+                    </div>
+                </div>
 
-        <div class="tab-content">
+                <div class="events-list">
+                    {#if loadingEvents && userEvents.length === 0}
+                        <div class="loading">Loading events...</div>
+                    {:else if userEvents.length === 0}
+                        <div class="empty">No events found for this user.</div>
+                    {:else}
+                        {#each userEvents as event}
+                            <div class="event-item">
+                                <div class="event-header">
+                                    <span class="event-kind">{getKindName(event.kind)}</span>
+                                    <span class="event-id" title={event.id}>{formatPubkey(event.id)}</span>
+                                    <span class="event-time">{formatDate(event.created_at * 1000)}</span>
+                                </div>
+                                <div class="event-content" class:expanded={expandedEvents[event.id]}>
+                                    {#if expandedEvents[event.id] || !isContentTruncated(event.content)}
+                                        <pre>{event.content || "(empty)"}</pre>
+                                    {:else}
+                                        <pre>{truncateContent(event.content)}...</pre>
+                                    {/if}
+                                </div>
+                                {#if isContentTruncated(event.content)}
+                                    <button class="expand-btn" on:click={() => toggleEventExpansion(event.id)}>
+                                        {expandedEvents[event.id] ? "Show less" : "Show more"}
+                                    </button>
+                                {/if}
+                            </div>
+                        {/each}
+
+                        {#if userEvents.length < userEventsTotal}
+                            <div class="load-more">
+                                <button on:click={loadMoreEvents} disabled={loadingEvents}>
+                                    {loadingEvents ? "Loading..." : `Load more (${userEvents.length} of ${userEventsTotal})`}
+                                </button>
+                            </div>
+                        {/if}
+                    {/if}
+                </div>
+            </div>
+        {:else}
+            <!-- Active Mode -->
+            <div class="tabs">
+                <button class="tab" class:active={activeTab === "trusted"} on:click={() => activeTab = "trusted"}>
+                    Trusted ({trustedPubkeys.length})
+                </button>
+                <button class="tab" class:active={activeTab === "blacklist"} on:click={() => activeTab = "blacklist"}>
+                    Blacklist ({blacklistedPubkeys.length})
+                </button>
+                <button class="tab" class:active={activeTab === "unclassified"} on:click={() => activeTab = "unclassified"}>
+                    Unclassified ({unclassifiedUsers.length})
+                </button>
+                <button class="tab" class:active={activeTab === "spam"} on:click={() => activeTab = "spam"}>
+                    Spam ({spamEvents.length})
+                </button>
+                <button class="tab" class:active={activeTab === "ips"} on:click={() => activeTab = "ips"}>
+                    Blocked IPs ({blockedIPs.length})
+                </button>
+                <button class="tab" class:active={activeTab === "settings"} on:click={() => activeTab = "settings"}>
+                    Settings
+                </button>
+            </div>
+
+            <div class="tab-content">
             {#if activeTab === "trusted"}
                 <div class="section">
                     <h3>Trusted Publishers</h3>
@@ -592,7 +839,7 @@
                     <div class="list">
                         {#if trustedPubkeys.length > 0}
                             {#each trustedPubkeys as item}
-                                <div class="list-item">
+                                <div class="list-item clickable" on:click={() => openUserDetail(item.pubkey, "trusted")}>
                                     <div class="item-main">
                                         <span class="pubkey" title={item.pubkey}>{formatPubkey(item.pubkey)}</span>
                                         {#if item.note}
@@ -600,7 +847,7 @@
                                         {/if}
                                     </div>
                                     <div class="item-actions">
-                                        <button class="btn-danger" on:click={() => untrustPubkey(item.pubkey)}>
+                                        <button class="btn-danger" on:click|stopPropagation={() => untrustPubkey(item.pubkey)}>
                                             Remove
                                         </button>
                                     </div>
@@ -637,7 +884,7 @@
                     <div class="list">
                         {#if blacklistedPubkeys.length > 0}
                             {#each blacklistedPubkeys as item}
-                                <div class="list-item">
+                                <div class="list-item clickable" on:click={() => openUserDetail(item.pubkey, "blacklisted")}>
                                     <div class="item-main">
                                         <span class="pubkey" title={item.pubkey}>{formatPubkey(item.pubkey)}</span>
                                         {#if item.reason}
@@ -645,7 +892,7 @@
                                         {/if}
                                     </div>
                                     <div class="item-actions">
-                                        <button class="btn-success" on:click={() => unblacklistPubkey(item.pubkey)}>
+                                        <button class="btn-success" on:click|stopPropagation={() => unblacklistPubkey(item.pubkey)}>
                                             Remove
                                         </button>
                                     </div>
@@ -675,16 +922,16 @@
                     <div class="list">
                         {#if unclassifiedUsers.length > 0}
                             {#each unclassifiedUsers as user}
-                                <div class="list-item">
+                                <div class="list-item clickable" on:click={() => openUserDetail(user.pubkey, "unclassified")}>
                                     <div class="item-main">
                                         <span class="pubkey" title={user.pubkey}>{formatPubkey(user.pubkey)}</span>
                                         <span class="event-count">{user.event_count} events</span>
                                     </div>
                                     <div class="item-actions">
-                                        <button class="btn-success" on:click={() => trustPubkey(user.pubkey, "")}>
+                                        <button class="btn-success" on:click|stopPropagation={() => trustPubkey(user.pubkey, "")}>
                                             Trust
                                         </button>
-                                        <button class="btn-danger" on:click={() => blacklistPubkey(user.pubkey, "")}>
+                                        <button class="btn-danger" on:click|stopPropagation={() => blacklistPubkey(user.pubkey, "")}>
                                             Blacklist
                                         </button>
                                     </div>
@@ -858,6 +1105,7 @@
                 </div>
             {/if}
         </div>
+        {/if}
     {/if}
 </div>
 
@@ -1260,11 +1508,214 @@
         font-size: 0.85em;
     }
 
+    .btn-delete-all {
+        padding: 0.35rem 0.75rem;
+        background: #8B0000;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.85em;
+        font-weight: 600;
+    }
+
+    .btn-delete-all:hover:not(:disabled) {
+        background: #660000;
+    }
+
+    .btn-delete-all:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
     .empty {
         padding: 2rem;
         text-align: center;
         color: var(--text-color);
         opacity: 0.6;
         font-style: italic;
+    }
+
+    /* Clickable list items */
+    .list-item.clickable {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .list-item.clickable:hover {
+        background-color: var(--button-hover-bg);
+    }
+
+    /* User Detail View */
+    .user-detail-view {
+        background: var(--card-bg);
+        border-radius: 8px;
+        padding: 1.5em;
+        border: 1px solid var(--border-color);
+    }
+
+    .detail-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--border-color);
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .detail-header-left {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .detail-header-left h3 {
+        margin: 0;
+        color: var(--text-color);
+    }
+
+    .detail-header-right {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .back-btn {
+        padding: 0.5rem 1rem;
+        background: var(--bg-color);
+        color: var(--text-color);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9em;
+    }
+
+    .back-btn:hover {
+        background: var(--button-hover-bg);
+    }
+
+    .detail-pubkey {
+        font-family: monospace;
+        font-size: 0.9em;
+        color: var(--text-color);
+        background: var(--bg-color);
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+
+    .detail-count {
+        font-size: 0.85em;
+        color: var(--success);
+        font-weight: 500;
+    }
+
+    /* Events List */
+    .events-list {
+        max-height: 600px;
+        overflow-y: auto;
+    }
+
+    .event-item {
+        background: var(--bg-color);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .event-header {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 0.5rem;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .event-kind {
+        background: var(--accent-color);
+        color: var(--text-color);
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.8em;
+        font-weight: 500;
+    }
+
+    .event-id {
+        font-family: monospace;
+        font-size: 0.8em;
+        color: var(--text-color);
+        opacity: 0.7;
+    }
+
+    .event-time {
+        font-size: 0.8em;
+        color: var(--text-color);
+        opacity: 0.6;
+    }
+
+    .event-content {
+        background: var(--card-bg);
+        border-radius: 4px;
+        padding: 0.75rem;
+        overflow: hidden;
+    }
+
+    .event-content pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: inherit;
+        font-size: 0.9em;
+        color: var(--text-color);
+        max-height: 150px;
+        overflow: hidden;
+    }
+
+    .event-content.expanded pre {
+        max-height: none;
+    }
+
+    .expand-btn {
+        margin-top: 0.5rem;
+        padding: 0.25rem 0.5rem;
+        background: transparent;
+        color: var(--accent-color);
+        border: 1px solid var(--accent-color);
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.8em;
+    }
+
+    .expand-btn:hover {
+        background: var(--accent-color);
+        color: var(--text-color);
+    }
+
+    .load-more {
+        text-align: center;
+        padding: 1rem;
+    }
+
+    .load-more button {
+        padding: 0.5rem 1.5rem;
+        background: var(--info);
+        color: var(--text-color);
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .load-more button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .loading {
+        padding: 2rem;
+        text-align: center;
+        color: var(--text-color);
+        opacity: 0.6;
     }
 </style>
