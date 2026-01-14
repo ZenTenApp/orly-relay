@@ -130,11 +130,13 @@ func (n *N) buildCypherQuery(f *filter.F, includeDeleteEvents bool) (string, map
 	}
 
 	// Time range filters - for temporal queries
-	if f.Since != nil {
+	// Note: Check both pointer and value - a zero timestamp (Unix epoch 1970) is almost
+	// certainly not a valid constraint as Nostr events didn't exist then
+	if f.Since != nil && f.Since.V > 0 {
 		params["since"] = f.Since.V
 		whereClauses = append(whereClauses, "e.created_at >= $since")
 	}
-	if f.Until != nil {
+	if f.Until != nil && f.Until.V > 0 {
 		params["until"] = f.Until.V
 		whereClauses = append(whereClauses, "e.created_at <= $until")
 	}
@@ -300,18 +302,16 @@ func (n *N) parseEventsFromResult(result *CollectedResult) ([]*event.E, error) {
 			_ = tags.UnmarshalJSON([]byte(tagsStr))
 		}
 
-		// Create event
+		// Create event with decoded binary fields
 		e := &event.E{
+			ID:        id,
+			Pubkey:    pubkey,
 			Kind:      uint16(kind),
 			CreatedAt: createdAt,
 			Content:   []byte(content),
 			Tags:      tags,
+			Sig:       sig,
 		}
-
-		// Copy fixed-size arrays
-		copy(e.ID[:], id)
-		copy(e.Sig[:], sig)
-		copy(e.Pubkey[:], pubkey)
 
 		events = append(events, e)
 	}
