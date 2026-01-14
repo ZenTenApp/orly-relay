@@ -965,14 +965,17 @@ func kindInRange(kind int, rangeStr string) bool {
 // kindInCategory checks if a kind belongs to a predefined category
 func kindInCategory(kind int, category string) bool {
 	categories := map[string][]int{
-		"social":      {0, 1, 3, 6, 7, 10002},
-		"dm":          {4, 14, 1059},
-		"longform":    {30023, 30024},
-		"media":       {1063, 20, 21, 22},
-		"marketplace": {30017, 30018, 30019, 30020, 1021, 1022},
-		"groups_nip29": {9, 10, 11, 12, 9000, 9001, 9002, 39000, 39001, 39002},
-		"groups_nip72": {34550, 1111, 4550},
-		"lists":       {10000, 10001, 10003, 30000, 30001, 30003},
+		"social":              {0, 1, 3, 6, 7, 10002},
+		"dm":                  {4, 14, 1059},
+		"longform":            {30023, 30024},
+		"media":               {1063, 20, 21, 22},
+		"marketplace":         {30017, 30018, 30019, 30020, 1021, 1022}, // Legacy alias
+		"marketplace_nip15":   {30017, 30018, 30019, 30020, 1021, 1022},
+		"marketplace_nip99":   {30402, 30403, 30405, 30406, 31555}, // NIP-99/Gamma Markets (Plebeian Market)
+		"order_communication": {16, 17},                            // Gamma Markets order messages
+		"groups_nip29":        {9, 10, 11, 12, 9000, 9001, 9002, 39000, 39001, 39002},
+		"groups_nip72":        {34550, 1111, 4550},
+		"lists":               {10000, 10001, 10003, 30000, 30001, 30003},
 	}
 
 	kinds, ok := categories[category]

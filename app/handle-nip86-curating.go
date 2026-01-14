@@ -531,10 +531,22 @@ func GetKindCategoriesInfo() []map[string]interface{} {
 			"kinds":       []int{1063, 20, 21, 22},
 		},
 		{
-			"id":          "marketplace",
-			"name":        "Marketplace",
-			"description": "Product listings, stalls, auctions",
+			"id":          "marketplace_nip15",
+			"name":        "Marketplace (NIP-15)",
+			"description": "Legacy NIP-15 stalls and products",
 			"kinds":       []int{30017, 30018, 30019, 30020, 1021, 1022},
+		},
+		{
+			"id":          "marketplace_nip99",
+			"name":        "Marketplace (NIP-99/Gamma)",
+			"description": "NIP-99 classified listings, collections, shipping, reviews (Plebeian Market)",
+			"kinds":       []int{30402, 30403, 30405, 30406, 31555},
+		},
+		{
+			"id":          "order_communication",
+			"name":        "Order Communication",
+			"description": "Gamma Markets order messages and payment receipts",
+			"kinds":       []int{16, 17},
 		},
 		{
 			"id":          "groups_nip29",
