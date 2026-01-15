@@ -309,10 +309,12 @@ func (s *Server) Pinger(
 func (s *Server) extractWebSocketToken(r *http.Request, remote string) *token.Token {
 	// Try query param first (WebSocket clients often can't set custom headers)
 	tokenStr := r.URL.Query().Get("token")
+	log.D.F("ws %s: CAT extraction - query param token: %v", remote, tokenStr != "")
 
 	// Try X-Cashu-Token header
 	if tokenStr == "" {
 		tokenStr = r.Header.Get("X-Cashu-Token")
+		log.D.F("ws %s: CAT extraction - X-Cashu-Token header: %v", remote, tokenStr != "")
 	}
 
 	// Try Authorization: Cashu scheme
@@ -321,12 +323,15 @@ func (s *Server) extractWebSocketToken(r *http.Request, remote string) *token.To
 		if strings.HasPrefix(auth, "Cashu ") {
 			tokenStr = strings.TrimPrefix(auth, "Cashu ")
 		}
+		log.D.F("ws %s: CAT extraction - Authorization header: %v", remote, tokenStr != "")
 	}
 
 	// No token provided - this is fine, connection proceeds without token
 	if tokenStr == "" {
+		log.D.F("ws %s: CAT extraction - no token found", remote)
 		return nil
 	}
+	log.D.F("ws %s: CAT extraction - found token (len=%d)", remote, len(tokenStr))
 
 	// Parse the token
 	tok, err := token.Parse(tokenStr)

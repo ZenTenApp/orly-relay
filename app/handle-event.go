@@ -146,8 +146,9 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 	// Require Cashu token for NIP-46 events when Cashu is enabled and ACL is active
 	const kindNIP46 = 24133
 	if env.E.Kind == kindNIP46 && l.CashuVerifier != nil && l.Config.ACLMode != "none" {
+		log.D.F("HandleEvent: NIP-46 event from %s, cashuToken=%v, ACLMode=%s", l.remote, l.cashuToken != nil, l.Config.ACLMode)
 		if l.cashuToken == nil {
-			log.W.F("HandleEvent: rejecting NIP-46 event - Cashu access token required")
+			log.W.F("HandleEvent: rejecting NIP-46 event from %s - Cashu access token required (connection has no token)", l.remote)
 			if err = Ok.Error(l, env, "restricted: NIP-46 requires Cashu access token"); chk.E(err) {
 				return
 			}

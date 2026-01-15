@@ -23,15 +23,27 @@ type CashuMintRequest struct {
 }
 
 // CashuMintResponse is the response body for token issuance.
+// Field names match NIP-XX Cashu Access Tokens spec.
 type CashuMintResponse struct {
 	BlindedSignature string `json:"blinded_signature"` // Hex-encoded blinded signature C_
 	KeysetID         string `json:"keyset_id"`         // Keyset ID used
 	Expiry           int64  `json:"expiry"`            // Token expiration timestamp
-	MintPubkey       string `json:"mint_pubkey"`       // Hex-encoded mint public key
+	MintPubkey       string `json:"pubkey"`            // Hex-encoded mint public key (spec: "pubkey")
 }
 
 // handleCashuMint handles POST /cashu/mint - issues a new token.
 func (s *Server) handleCashuMint(w http.ResponseWriter, r *http.Request) {
+	// CORS headers for browser-based CAT token requests
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization")
+
+	// Handle preflight
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	// Check if Cashu is enabled
 	if s.CashuIssuer == nil {
 		log.W.F("Cashu mint request but issuer not initialized")
@@ -107,6 +119,17 @@ func (s *Server) handleCashuMint(w http.ResponseWriter, r *http.Request) {
 
 // handleCashuKeysets handles GET /cashu/keysets - returns available keysets.
 func (s *Server) handleCashuKeysets(w http.ResponseWriter, r *http.Request) {
+	// CORS headers for browser-based CAT support
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept")
+
+	// Handle preflight
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	if s.CashuIssuer == nil {
 		http.Error(w, "Cashu tokens not enabled", http.StatusNotImplemented)
 		return

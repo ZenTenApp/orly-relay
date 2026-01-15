@@ -3,6 +3,7 @@ package issuer
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -222,22 +223,28 @@ func (i *Issuer) GetActiveKeysetID() string {
 
 // MintInfo contains public information about the mint.
 type MintInfo struct {
-	Name           string   `json:"name,omitempty"`
-	Version        string   `json:"version"`
-	TokenTTL       int64    `json:"token_ttl"`
-	MaxKinds       int      `json:"max_kinds,omitempty"`
-	MaxKindRanges  int      `json:"max_kind_ranges,omitempty"`
+	Name            string   `json:"name,omitempty"`
+	Version         string   `json:"version"`
+	Pubkey          string   `json:"pubkey"`
+	TokenTTL        int64    `json:"token_ttl"`
+	MaxKinds        int      `json:"max_kinds,omitempty"`
+	MaxKindRanges   int      `json:"max_kind_ranges,omitempty"`
 	SupportedScopes []string `json:"supported_scopes,omitempty"`
 }
 
 // GetMintInfo returns public information about the issuer.
 func (i *Issuer) GetMintInfo(name string) MintInfo {
+	var pubkeyHex string
+	if ks := i.keysets.GetSigningKeyset(); ks != nil {
+		pubkeyHex = hex.EncodeToString(ks.SerializePublicKey())
+	}
 	return MintInfo{
-		Name:           name,
-		Version:        "NIP-XX/1",
-		TokenTTL:       int64(i.config.DefaultTTL.Seconds()),
-		MaxKinds:       i.config.MaxKinds,
-		MaxKindRanges:  i.config.MaxKindRanges,
+		Name:            name,
+		Version:         "NIP-XX/1",
+		Pubkey:          pubkeyHex,
+		TokenTTL:        int64(i.config.DefaultTTL.Seconds()),
+		MaxKinds:        i.config.MaxKinds,
+		MaxKindRanges:   i.config.MaxKindRanges,
 		SupportedScopes: i.config.AllowedScopes,
 	}
 }
