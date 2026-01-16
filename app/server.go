@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"lol.mleku.dev/chk"
+	"next.orly.dev/app/branding"
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/acl"
 	"next.orly.dev/pkg/blossom"
@@ -106,6 +107,9 @@ type Server struct {
 
 	// Tor hidden service
 	torService *tor.Service
+
+	// Branding/white-label customization
+	brandingMgr *branding.Manager
 }
 
 // isIPBlacklisted checks if an IP address is blacklisted using the managed ACL system
@@ -302,6 +306,12 @@ func (s *Server) UserInterface() {
 	// Serve favicon.ico by serving favicon.png
 	s.mux.HandleFunc("/favicon.ico", s.handleFavicon)
 
+	// Branding/white-label endpoints (custom assets, CSS, manifest)
+	s.mux.HandleFunc("/branding/", s.handleBrandingAsset)
+
+	// Intercept /orly.png to serve custom logo if branding is active
+	s.mux.HandleFunc("/orly.png", s.handleLogo)
+
 	// Serve the main login interface (and static assets) or proxy in dev mode
 	s.mux.HandleFunc("/", s.handleLoginInterface)
 
@@ -401,6 +411,16 @@ func (s *Server) handleFavicon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check for custom branding favicon first
+	if s.brandingMgr != nil {
+		if data, mimeType, ok := s.brandingMgr.GetAsset("favicon"); ok {
+			w.Header().Set("Content-Type", mimeType)
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+			w.Write(data)
+			return
+		}
+	}
+
 	// Serve favicon.png as favicon.ico from embedded web app
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 1 day
@@ -411,6 +431,30 @@ func (s *Server) handleFavicon(w http.ResponseWriter, r *http.Request) {
 		URL:    &url.URL{Path: "/favicon.png"},
 	}
 	ServeEmbeddedWeb(w, faviconReq)
+}
+
+// handleLogo serves the logo image, using custom branding if available
+func (s *Server) handleLogo(w http.ResponseWriter, r *http.Request) {
+	// In dev mode with proxy configured, forward to dev server
+	if s.devProxy != nil {
+		s.devProxy.ServeHTTP(w, r)
+		return
+	}
+
+	// Check for custom branding logo first
+	if s.brandingMgr != nil {
+		if data, mimeType, ok := s.brandingMgr.GetAsset("logo"); ok {
+			w.Header().Set("Content-Type", mimeType)
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+			w.Write(data)
+			return
+		}
+	}
+
+	// Fall back to embedded orly.png
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	ServeEmbeddedWeb(w, r)
 }
 
 // handleLoginInterface serves the main user interface for login
@@ -427,8 +471,131 @@ func (s *Server) handleLoginInterface(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If branding is enabled and this is the index page, inject customizations
+	if s.brandingMgr != nil && (r.URL.Path == "/" || r.URL.Path == "/index.html") {
+		s.serveModifiedIndex(w, r)
+		return
+	}
+
 	// Serve embedded web interface
 	ServeEmbeddedWeb(w, r)
+}
+
+// serveModifiedIndex serves the index.html with branding modifications injected
+func (s *Server) serveModifiedIndex(w http.ResponseWriter, r *http.Request) {
+	// Read the embedded index.html
+	fs := GetReactAppFS()
+	file, err := fs.Open("index.html")
+	if err != nil {
+		// Fallback to embedded serving
+		ServeEmbeddedWeb(w, r)
+		return
+	}
+	defer file.Close()
+
+	originalHTML, err := io.ReadAll(file)
+	if err != nil {
+		ServeEmbeddedWeb(w, r)
+		return
+	}
+
+	// Apply branding modifications
+	modifiedHTML, err := s.brandingMgr.ModifyIndexHTML(originalHTML)
+	if err != nil {
+		ServeEmbeddedWeb(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Write(modifiedHTML)
+}
+
+// handleBrandingAsset serves custom branding assets (logo, icons, CSS, manifest)
+func (s *Server) handleBrandingAsset(w http.ResponseWriter, r *http.Request) {
+	// Extract asset name from path: /branding/logo.png -> logo.png
+	path := strings.TrimPrefix(r.URL.Path, "/branding/")
+
+	// If no branding manager, return 404
+	if s.brandingMgr == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	switch path {
+	case "custom.css":
+		// Serve combined custom CSS
+		css, err := s.brandingMgr.GetCustomCSS()
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		w.Write(css)
+
+	case "manifest.json":
+		// Serve customized manifest.json
+		// First read the embedded manifest
+		fs := GetReactAppFS()
+		file, err := fs.Open("manifest.json")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		defer file.Close()
+
+		originalManifest, err := io.ReadAll(file)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		manifest, err := s.brandingMgr.GetManifest(originalManifest)
+		if err != nil {
+			// Fallback to original
+			w.Header().Set("Content-Type", "application/manifest+json")
+			w.Write(originalManifest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/manifest+json")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		w.Write(manifest)
+
+	case "logo.png":
+		s.serveBrandingAsset(w, "logo")
+
+	case "favicon.png":
+		s.serveBrandingAsset(w, "favicon")
+
+	case "icon-192.png":
+		s.serveBrandingAsset(w, "icon-192")
+
+	case "icon-512.png":
+		s.serveBrandingAsset(w, "icon-512")
+
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+// serveBrandingAsset serves a specific branding asset by name
+func (s *Server) serveBrandingAsset(w http.ResponseWriter, name string) {
+	if s.brandingMgr == nil {
+		http.NotFound(w, nil)
+		return
+	}
+
+	data, mimeType, ok := s.brandingMgr.GetAsset(name)
+	if !ok {
+		http.NotFound(w, nil)
+		return
+	}
+
+	w.Header().Set("Content-Type", mimeType)
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Write(data)
 }
 
 // handleAuthChallenge generates a new authentication challenge

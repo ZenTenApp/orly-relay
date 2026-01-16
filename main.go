@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -15,11 +16,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/adrg/xdg"
 	"github.com/pkg/profile"
 	"golang.org/x/term"
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
 	"next.orly.dev/app"
+	"next.orly.dev/app/branding"
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/acl"
 	"git.mleku.dev/mleku/nostr/crypto/keys"
@@ -48,6 +51,40 @@ func main() {
 	if cfg, err = config.New(); chk.T(err) {
 	}
 	log.I.F("starting %s %s", cfg.AppName, version.V)
+
+	// Handle 'init-branding' subcommand: create branding directory with default assets
+	if requested, targetDir, style := config.InitBrandingRequested(); requested {
+		if targetDir == "" {
+			targetDir = filepath.Join(xdg.ConfigHome, cfg.AppName, "branding")
+		}
+
+		// Validate and convert style
+		var brandingStyle branding.BrandingStyle
+		switch style {
+		case "orly":
+			brandingStyle = branding.StyleORLY
+		case "generic", "":
+			brandingStyle = branding.StyleGeneric
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown style: %s (use 'orly' or 'generic')\n", style)
+			os.Exit(1)
+		}
+
+		fmt.Printf("Initializing %s branding kit at: %s\n", style, targetDir)
+		if err := branding.InitBrandingKit(targetDir, app.GetEmbeddedWebFS(), brandingStyle); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("\nBranding kit created successfully!")
+		fmt.Println("\nFiles created:")
+		fmt.Println("  branding.json     - Main configuration file")
+		fmt.Println("  assets/           - Logo, favicon, and PWA icons")
+		fmt.Println("  css/custom.css    - Full CSS override template")
+		fmt.Println("  css/variables.css - CSS variables-only template")
+		fmt.Println("\nEdit these files to customize your relay's appearance.")
+		fmt.Println("Restart the relay to apply changes.")
+		os.Exit(0)
+	}
 
 	// Handle 'identity' subcommand: print relay identity secret and pubkey and exit
 	if config.IdentityRequested() {

@@ -10,9 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/adrg/xdg"
 	"golang.org/x/crypto/acme/autocert"
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
+	"next.orly.dev/app/branding"
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/acl"
 	"git.mleku.dev/mleku/nostr/crypto/keys"
@@ -89,6 +91,21 @@ func Run(
 		rateLimiter: limiter,
 		cfg:         cfg,
 		db:          db,
+	}
+
+	// Initialize branding/white-label manager if enabled
+	if cfg.BrandingEnabled {
+		brandingDir := cfg.BrandingDir
+		if brandingDir == "" {
+			brandingDir = filepath.Join(xdg.ConfigHome, cfg.AppName, "branding")
+		}
+		if _, err := os.Stat(brandingDir); err == nil {
+			if l.brandingMgr, err = branding.New(brandingDir); err != nil {
+				log.W.F("failed to load branding from %s: %v", brandingDir, err)
+			} else {
+				log.I.F("custom branding loaded from %s", brandingDir)
+			}
+		}
 	}
 
 	// Initialize NIP-43 invite manager if enabled

@@ -115,6 +115,20 @@ func (s *Server) HandleRelayInfo(w http.ResponseWriter, r *http.Request) {
 	description := version.Description + " dashboard: " + s.DashboardURL(r)
 	icon := "https://i.nostr.build/6wGXAn7Zaw9mHxFg.png"
 
+	// Override with branding config if available
+	if s.brandingMgr != nil {
+		nip11 := s.brandingMgr.NIP11Config()
+		if nip11.Name != "" {
+			name = nip11.Name
+		}
+		if nip11.Description != "" {
+			description = nip11.Description
+		}
+		if nip11.Icon != "" {
+			icon = nip11.Icon
+		}
+	}
+
 	// Override with managed ACL config if in managed mode
 	if s.Config.ACLMode == "managed" {
 		// Get managed ACL instance

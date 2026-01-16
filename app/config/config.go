@@ -85,6 +85,10 @@ type C struct {
 	WebDisableEmbedded bool   `env:"ORLY_WEB_DISABLE" default:"false" usage:"disable serving the embedded web UI; useful for hot-reload during development"`
 	WebDevProxyURL     string `env:"ORLY_WEB_DEV_PROXY_URL" usage:"when ORLY_WEB_DISABLE is true, reverse-proxy non-API paths to this dev server URL (e.g. http://localhost:5173)"`
 
+	// Branding/white-label settings
+	BrandingDir     string `env:"ORLY_BRANDING_DIR" usage:"directory containing branding assets and configuration (default: ~/.config/ORLY/branding)"`
+	BrandingEnabled bool   `env:"ORLY_BRANDING_ENABLED" default:"true" usage:"enable custom branding if branding directory exists"`
+
 	// Sprocket settings
 	SprocketEnabled bool `env:"ORLY_SPROCKET_ENABLED" default:"false" usage:"enable sprocket event processing plugin system"`
 
@@ -445,6 +449,36 @@ func NRCRequested() (requested bool, subcommand string, args []string) {
 	return
 }
 
+// InitBrandingRequested checks if the first command line argument is "init-branding"
+// and returns the target directory and style if provided.
+//
+// Return Values
+//   - requested: true if the 'init-branding' subcommand was provided
+//   - targetDir: optional target directory for branding files (default: ~/.config/ORLY/branding)
+//   - style: branding style ("orly" or "generic", default: "generic")
+//
+// Usage: orly init-branding [--style orly|generic] [path]
+func InitBrandingRequested() (requested bool, targetDir, style string) {
+	style = "generic" // default to generic/white-label
+	if len(os.Args) > 1 {
+		switch strings.ToLower(os.Args[1]) {
+		case "init-branding":
+			requested = true
+			// Parse remaining arguments
+			for i := 2; i < len(os.Args); i++ {
+				arg := os.Args[i]
+				if arg == "--style" && i+1 < len(os.Args) {
+					style = strings.ToLower(os.Args[i+1])
+					i++ // skip next arg
+				} else if !strings.HasPrefix(arg, "-") {
+					targetDir = arg
+				}
+			}
+		}
+	}
+	return
+}
+
 // KV is a key/value pair.
 type KV struct{ Key, Value string }
 
@@ -576,11 +610,16 @@ func PrintHelp(cfg *C, printer io.Writer) {
 	)
 	_, _ = fmt.Fprintf(
 		printer,
-		`Usage: %s [env|help|identity|migrate|serve|version]
+		`Usage: %s [env|help|identity|init-branding|migrate|serve|version]
 
 - env: print environment variables configuring %s
 - help: print this help text
 - identity: print the relay identity secret and public key
+- init-branding: create branding directory with default assets and CSS templates
+           Example: %s init-branding [--style generic|orly] [/path/to/branding]
+           Styles: generic (default) - neutral white-label branding
+                   orly - ORLY-branded assets
+           Default location: ~/.config/%s/branding
 - migrate: migrate data between database backends
            Example: %s migrate --from badger --to bbolt
 - serve: start ephemeral relay with RAM-based storage at /dev/shm/orlyserve
@@ -589,7 +628,7 @@ func PrintHelp(cfg *C, printer io.Writer) {
 - version: print version and exit (also: -v, --v, -version, --version)
 
 `,
-		cfg.AppName, cfg.AppName, cfg.AppName,
+		cfg.AppName, cfg.AppName, cfg.AppName, cfg.AppName, cfg.AppName,
 	)
 	_, _ = fmt.Fprintf(
 		printer,

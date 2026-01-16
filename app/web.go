@@ -23,3 +23,9 @@ func ServeEmbeddedWeb(w http.ResponseWriter, r *http.Request) {
 	// Serve the embedded web app
 	http.FileServer(GetReactAppFS()).ServeHTTP(w, r)
 }
+
+// GetEmbeddedWebFS returns the raw embedded filesystem for branding initialization.
+// This is used by the init-branding command to extract default assets.
+func GetEmbeddedWebFS() embed.FS {
+	return reactAppFS
+}
