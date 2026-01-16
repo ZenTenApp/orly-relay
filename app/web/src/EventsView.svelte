@@ -408,7 +408,7 @@
 
     .kind-number {
         background: var(--primary);
-        color: var(--text-color);
+        color: #ffffff;
         padding: 0.1em 0.4em;
         border: 0;
         font-size: 0.7em;
@@ -455,7 +455,7 @@
 
     .delete-target {
         background: var(--danger);
-        color: var(--text-color);
+        color: #ffffff;
         padding: 0.1em 0.3em;
         border-radius: 0.2rem;
         font-size: 0.7em;
