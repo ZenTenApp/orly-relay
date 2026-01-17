@@ -2,6 +2,8 @@
  * API helper functions for ORLY relay management endpoints
  */
 
+import { getApiBase } from './config.js';
+
 /**
  * Create NIP-98 authentication header
  * @param {object} signer - The signer instance
@@ -59,7 +61,7 @@ export async function createNIP98Auth(signer, pubkey, method, url) {
  */
 export async function fetchUserRole(signer, pubkey) {
     try {
-        const url = `${window.location.origin}/api/role`;
+        const url = `${getApiBase()}/api/role`;
         const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
         const response = await fetch(url, {
             headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
@@ -80,7 +82,7 @@ export async function fetchUserRole(signer, pubkey) {
  */
 export async function fetchACLMode() {
     try {
-        const response = await fetch(`${window.location.origin}/api/acl-mode`);
+        const response = await fetch(`${getApiBase()}/api/acl-mode`);
         if (response.ok) {
             const data = await response.json();
             return data.mode || "";
@@ -100,7 +102,7 @@ export async function fetchACLMode() {
  * @returns {Promise<object>} Sprocket config data
  */
 export async function loadSprocketConfig(signer, pubkey) {
-    const url = `${window.location.origin}/api/sprocket/config`;
+    const url = `${getApiBase()}/api/sprocket/config`;
     const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
     const response = await fetch(url, {
         headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
@@ -116,7 +118,7 @@ export async function loadSprocketConfig(signer, pubkey) {
  * @returns {Promise<object>} Sprocket status data
  */
 export async function loadSprocketStatus(signer, pubkey) {
-    const url = `${window.location.origin}/api/sprocket/status`;
+    const url = `${getApiBase()}/api/sprocket/status`;
     const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
     const response = await fetch(url, {
         headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
@@ -132,7 +134,7 @@ export async function loadSprocketStatus(signer, pubkey) {
  * @returns {Promise<string>} Sprocket script content
  */
 export async function loadSprocketScript(signer, pubkey) {
-    const url = `${window.location.origin}/api/sprocket`;
+    const url = `${getApiBase()}/api/sprocket`;
     const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
     const response = await fetch(url, {
         headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
@@ -150,7 +152,7 @@ export async function loadSprocketScript(signer, pubkey) {
  * @returns {Promise<object>} Save result
  */
 export async function saveSprocketScript(signer, pubkey, script) {
-    const url = `${window.location.origin}/api/sprocket`;
+    const url = `${getApiBase()}/api/sprocket`;
     const authHeader = await createNIP98Auth(signer, pubkey, "PUT", url);
     const response = await fetch(url, {
         method: "PUT",
@@ -171,7 +173,7 @@ export async function saveSprocketScript(signer, pubkey, script) {
  * @returns {Promise<object>} Restart result
  */
 export async function restartSprocket(signer, pubkey) {
-    const url = `${window.location.origin}/api/sprocket/restart`;
+    const url = `${getApiBase()}/api/sprocket/restart`;
     const authHeader = await createNIP98Auth(signer, pubkey, "POST", url);
     const response = await fetch(url, {
         method: "POST",
@@ -188,7 +190,7 @@ export async function restartSprocket(signer, pubkey) {
  * @returns {Promise<object>} Delete result
  */
 export async function deleteSprocket(signer, pubkey) {
-    const url = `${window.location.origin}/api/sprocket`;
+    const url = `${getApiBase()}/api/sprocket`;
     const authHeader = await createNIP98Auth(signer, pubkey, "DELETE", url);
     const response = await fetch(url, {
         method: "DELETE",
@@ -205,7 +207,7 @@ export async function deleteSprocket(signer, pubkey) {
  * @returns {Promise<Array>} Version list
  */
 export async function loadSprocketVersions(signer, pubkey) {
-    const url = `${window.location.origin}/api/sprocket/versions`;
+    const url = `${getApiBase()}/api/sprocket/versions`;
     const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
     const response = await fetch(url, {
         headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
@@ -222,7 +224,7 @@ export async function loadSprocketVersions(signer, pubkey) {
  * @returns {Promise<string>} Version content
  */
 export async function loadSprocketVersion(signer, pubkey, version) {
-    const url = `${window.location.origin}/api/sprocket/versions/${encodeURIComponent(version)}`;
+    const url = `${getApiBase()}/api/sprocket/versions/${encodeURIComponent(version)}`;
     const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
     const response = await fetch(url, {
         headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
@@ -239,7 +241,7 @@ export async function loadSprocketVersion(signer, pubkey, version) {
  * @returns {Promise<object>} Delete result
  */
 export async function deleteSprocketVersion(signer, pubkey, filename) {
-    const url = `${window.location.origin}/api/sprocket/versions/${encodeURIComponent(filename)}`;
+    const url = `${getApiBase()}/api/sprocket/versions/${encodeURIComponent(filename)}`;
     const authHeader = await createNIP98Auth(signer, pubkey, "DELETE", url);
     const response = await fetch(url, {
         method: "DELETE",
@@ -270,7 +272,7 @@ export async function uploadSprocketScript(signer, pubkey, file) {
  * @returns {Promise<object>} Policy config
  */
 export async function loadPolicyConfig(signer, pubkey) {
-    const url = `${window.location.origin}/api/policy/config`;
+    const url = `${getApiBase()}/api/policy/config`;
     const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
     const response = await fetch(url, {
         headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
@@ -286,7 +288,7 @@ export async function loadPolicyConfig(signer, pubkey) {
  * @returns {Promise<object>} Policy JSON
  */
 export async function loadPolicy(signer, pubkey) {
-    const url = `${window.location.origin}/api/policy`;
+    const url = `${getApiBase()}/api/policy`;
     const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
     const response = await fetch(url, {
         headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
@@ -303,7 +305,7 @@ export async function loadPolicy(signer, pubkey) {
  * @returns {Promise<object>} Validation result
  */
 export async function validatePolicy(signer, pubkey, policyJson) {
-    const url = `${window.location.origin}/api/policy/validate`;
+    const url = `${getApiBase()}/api/policy/validate`;
     const authHeader = await createNIP98Auth(signer, pubkey, "POST", url);
     const response = await fetch(url, {
         method: "POST",
@@ -323,7 +325,7 @@ export async function validatePolicy(signer, pubkey, policyJson) {
  * @returns {Promise<Array>} List of followed pubkeys
  */
 export async function fetchPolicyFollows(signer, pubkey) {
-    const url = `${window.location.origin}/api/policy/follows`;
+    const url = `${getApiBase()}/api/policy/follows`;
     const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
     const response = await fetch(url, {
         headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
@@ -341,7 +343,7 @@ export async function fetchPolicyFollows(signer, pubkey) {
  */
 export async function fetchRelayInfo() {
     try {
-        const response = await fetch(window.location.origin, {
+        const response = await fetch(getApiBase(), {
             headers: {
                 Accept: "application/nostr+json",
             },
@@ -365,7 +367,7 @@ export async function fetchRelayInfo() {
  * @returns {Promise<Blob>} JSONL blob
  */
 export async function exportEvents(signer, pubkey, authorPubkeys = []) {
-    const url = `${window.location.origin}/api/export`;
+    const url = `${getApiBase()}/api/export`;
     const authHeader = await createNIP98Auth(signer, pubkey, "POST", url);
 
     const response = await fetch(url, {
@@ -389,7 +391,7 @@ export async function exportEvents(signer, pubkey, authorPubkeys = []) {
  * @returns {Promise<object>} Import result
  */
 export async function importEvents(signer, pubkey, file) {
-    const url = `${window.location.origin}/api/import`;
+    const url = `${getApiBase()}/api/import`;
     const authHeader = await createNIP98Auth(signer, pubkey, "POST", url);
 
     const formData = new FormData();
@@ -413,7 +415,7 @@ export async function importEvents(signer, pubkey, file) {
  */
 export async function fetchWireGuardStatus() {
     try {
-        const response = await fetch(`${window.location.origin}/api/wireguard/status`);
+        const response = await fetch(`${getApiBase()}/api/wireguard/status`);
         if (response.ok) {
             return await response.json();
         }
@@ -430,7 +432,7 @@ export async function fetchWireGuardStatus() {
  * @returns {Promise<object>} WireGuard config
  */
 export async function getWireGuardConfig(signer, pubkey) {
-    const url = `${window.location.origin}/api/wireguard/config`;
+    const url = `${getApiBase()}/api/wireguard/config`;
     const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
     const response = await fetch(url, {
         headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
@@ -449,7 +451,7 @@ export async function getWireGuardConfig(signer, pubkey) {
  * @returns {Promise<object>} Regeneration result
  */
 export async function regenerateWireGuard(signer, pubkey) {
-    const url = `${window.location.origin}/api/wireguard/regenerate`;
+    const url = `${getApiBase()}/api/wireguard/regenerate`;
     const authHeader = await createNIP98Auth(signer, pubkey, "POST", url);
     const response = await fetch(url, {
         method: "POST",
@@ -470,7 +472,7 @@ export async function regenerateWireGuard(signer, pubkey) {
  * @returns {Promise<object>} Audit data with revoked_keys and access_logs
  */
 export async function getWireGuardAudit(signer, pubkey) {
-    const url = `${window.location.origin}/api/wireguard/audit`;
+    const url = `${getApiBase()}/api/wireguard/audit`;
     const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
     const response = await fetch(url, {
         headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
@@ -489,8 +491,10 @@ export async function getWireGuardAudit(signer, pubkey) {
  * @returns {Promise<object>} NRC config status
  */
 export async function fetchNRCConfig() {
+    const apiBase = getApiBase();
+    console.log("[api] fetchNRCConfig using base URL:", apiBase);
     try {
-        const response = await fetch(`${window.location.origin}/api/nrc/config`);
+        const response = await fetch(`${apiBase}/api/nrc/config`);
         if (response.ok) {
             return await response.json();
         }
@@ -507,7 +511,7 @@ export async function fetchNRCConfig() {
  * @returns {Promise<object>} Connections list and config
  */
 export async function fetchNRCConnections(signer, pubkey) {
-    const url = `${window.location.origin}/api/nrc/connections`;
+    const url = `${getApiBase()}/api/nrc/connections`;
     const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
     const response = await fetch(url, {
         headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
@@ -528,7 +532,7 @@ export async function fetchNRCConnections(signer, pubkey) {
  * @returns {Promise<object>} Created connection with URI
  */
 export async function createNRCConnection(signer, pubkey, label, useCashu = false) {
-    const url = `${window.location.origin}/api/nrc/connections`;
+    const url = `${getApiBase()}/api/nrc/connections`;
     const authHeader = await createNIP98Auth(signer, pubkey, "POST", url);
     const response = await fetch(url, {
         method: "POST",
@@ -553,7 +557,7 @@ export async function createNRCConnection(signer, pubkey, label, useCashu = fals
  * @returns {Promise<object>} Delete result
  */
 export async function deleteNRCConnection(signer, pubkey, connId) {
-    const url = `${window.location.origin}/api/nrc/connections/${connId}`;
+    const url = `${getApiBase()}/api/nrc/connections/${connId}`;
     const authHeader = await createNIP98Auth(signer, pubkey, "DELETE", url);
     const response = await fetch(url, {
         method: "DELETE",
@@ -574,7 +578,7 @@ export async function deleteNRCConnection(signer, pubkey, connId) {
  * @returns {Promise<object>} Connection URI
  */
 export async function getNRCConnectionURI(signer, pubkey, connId) {
-    const url = `${window.location.origin}/api/nrc/connections/${connId}/uri`;
+    const url = `${getApiBase()}/api/nrc/connections/${connId}/uri`;
     const authHeader = await createNIP98Auth(signer, pubkey, "GET", url);
     const response = await fetch(url, {
         headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},

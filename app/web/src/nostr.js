@@ -1,7 +1,17 @@
 import { SimplePool } from 'nostr-tools/pool';
 import { EventStore } from 'applesauce-core';
 import { PrivateKeySigner } from 'applesauce-signers';
-import { DEFAULT_RELAYS, FALLBACK_RELAYS } from "./constants.js";
+import { getDefaultRelays, FALLBACK_RELAYS } from "./constants.js";
+
+// Dedicated pool for fallback relay queries (separate from main pool to avoid conflicts)
+let fallbackPool = null;
+
+function getFallbackPool() {
+  if (!fallbackPool) {
+    fallbackPool = new SimplePool();
+  }
+  return fallbackPool;
+}
 
 // Nostr client wrapper using nostr-tools
 class NostrClient {
@@ -10,7 +20,39 @@ class NostrClient {
     this.eventStore = new EventStore();
     this.isConnected = false;
     this.signer = null;
-    this.relays = [...DEFAULT_RELAYS];
+    // Use dynamic relay list (supports standalone mode)
+    this.relays = [...getDefaultRelays()];
+  }
+
+  // Refresh relay list from config (call when relay URL changes)
+  refreshRelays() {
+    const newRelays = getDefaultRelays();
+    if (JSON.stringify(this.relays) !== JSON.stringify(newRelays)) {
+      console.log("Relay list updated:", newRelays);
+      this.relays = [...newRelays];
+    }
+  }
+
+  // Reset client for new relay (close old connections, refresh relay list, create new pool)
+  reset() {
+    console.log("[NostrClient] Resetting for new relay...");
+    // Close ALL existing connections by destroying the pool
+    if (this.pool) {
+      try {
+        // Close connections to old relays first
+        this.pool.close(this.relays);
+      } catch (e) {
+        console.warn("[NostrClient] Error closing old relay connections:", e);
+      }
+      // Destroy the pool reference completely
+      this.pool = null;
+    }
+    // Create completely fresh pool
+    this.pool = new SimplePool();
+    this.isConnected = false;
+    // Refresh relay list
+    this.relays = [...getDefaultRelays()];
+    console.log("[NostrClient] Reset complete, new relays:", this.relays);
   }
 
   async connect() {
@@ -511,8 +553,11 @@ export async function fetchUserProfile(pubkey) {
 async function fetchProfileFromFallbackRelays(pubkey, filters) {
   return new Promise((resolve) => {
     const events = [];
+    const pool = getFallbackPool();
+    let sub;
+
     const timeoutId = setTimeout(() => {
-      sub.close();
+      if (sub) sub.close();
       // Return the most recent profile event
       if (events.length > 0) {
         events.sort((a, b) => b.created_at - a.created_at);
@@ -522,7 +567,7 @@ async function fetchProfileFromFallbackRelays(pubkey, filters) {
       }
     }, 5000);
 
-    const sub = nostrClient.pool.subscribeMany(
+    sub = pool.subscribeMany(
       FALLBACK_RELAYS,
       filters,
       {
@@ -532,7 +577,7 @@ async function fetchProfileFromFallbackRelays(pubkey, filters) {
         },
         oneose() {
           clearTimeout(timeoutId);
-          sub.close();
+          if (sub) sub.close();
           if (events.length > 0) {
             events.sort((a, b) => b.created_at - a.created_at);
             resolve(events[0]);
@@ -578,6 +623,202 @@ async function processProfileEvent(profileEvent, pubkey) {
   return profile;
 }
 
+// Fetch user's relay list (NIP-65 kind 10002)
+export async function fetchUserRelayList(pubkey) {
+  console.log(`[nostr] Fetching relay list for pubkey: ${pubkey?.substring(0, 8)}...`);
+
+  const filters = [{
+    kinds: [10002],
+    authors: [pubkey],
+    limit: 1
+  }];
+
+  // Try local relay first
+  try {
+    const events = await fetchEvents(filters, { timeout: 10000, useCache: true });
+    if (events.length > 0) {
+      const relayListEvent = events.sort((a, b) => b.created_at - a.created_at)[0];
+      console.log("[nostr] Relay list found on local relay");
+      return parseRelayListFromEvent(relayListEvent);
+    }
+  } catch (error) {
+    console.warn("[nostr] Failed to fetch relay list from local relay:", error);
+  }
+
+  // Try fallback relays
+  console.log("[nostr] Relay list not found locally, trying fallback relays...");
+  try {
+    const relayListEvent = await fetchFromFallbackRelays(filters);
+    if (relayListEvent) {
+      // Cache and publish to local relay
+      await putEvent(relayListEvent);
+      try {
+        await nostrClient.publish(relayListEvent);
+      } catch (e) {
+        console.warn("[nostr] Failed to publish relay list to local relay:", e);
+      }
+      return parseRelayListFromEvent(relayListEvent);
+    }
+  } catch (error) {
+    console.warn("[nostr] Failed to fetch relay list from fallback relays:", error);
+  }
+
+  console.log("[nostr] No relay list found for pubkey");
+  return null;
+}
+
+// Parse relay list from kind 10002 event
+function parseRelayListFromEvent(event) {
+  if (!event || event.kind !== 10002) return null;
+
+  const relays = {
+    read: [],
+    write: [],
+    all: []
+  };
+
+  for (const tag of event.tags) {
+    if (tag[0] === 'r' && tag[1]) {
+      const url = tag[1];
+      const marker = tag[2]; // 'read', 'write', or undefined (both)
+
+      if (marker === 'read') {
+        relays.read.push(url);
+      } else if (marker === 'write') {
+        relays.write.push(url);
+      } else {
+        // No marker means both read and write
+        relays.read.push(url);
+        relays.write.push(url);
+      }
+      relays.all.push({ url, read: marker !== 'write', write: marker !== 'read' });
+    }
+  }
+
+  console.log(`[nostr] Parsed relay list: ${relays.all.length} relays`);
+  return relays;
+}
+
+// Generic helper to fetch from fallback relays
+async function fetchFromFallbackRelays(filters) {
+  return new Promise((resolve) => {
+    const events = [];
+    const pool = getFallbackPool();
+    let sub;
+
+    const timeoutId = setTimeout(() => {
+      if (sub) sub.close();
+      if (events.length > 0) {
+        events.sort((a, b) => b.created_at - a.created_at);
+        resolve(events[0]);
+      } else {
+        resolve(null);
+      }
+    }, 5000);
+
+    sub = pool.subscribeMany(
+      FALLBACK_RELAYS,
+      filters,
+      {
+        onevent(event) {
+          events.push(event);
+        },
+        oneose() {
+          clearTimeout(timeoutId);
+          if (sub) sub.close();
+          if (events.length > 0) {
+            events.sort((a, b) => b.created_at - a.created_at);
+            resolve(events[0]);
+          } else {
+            resolve(null);
+          }
+        }
+      }
+    );
+  });
+}
+
+// Fetch user's contact list (kind 3) - includes follows and may have relay hints
+export async function fetchUserContactList(pubkey) {
+  console.log(`[nostr] Fetching contact list for pubkey: ${pubkey?.substring(0, 8)}...`);
+
+  const filters = [{
+    kinds: [3],
+    authors: [pubkey],
+    limit: 1
+  }];
+
+  // Try local relay first
+  try {
+    const events = await fetchEvents(filters, { timeout: 10000, useCache: true });
+    if (events.length > 0) {
+      const contactEvent = events.sort((a, b) => b.created_at - a.created_at)[0];
+      console.log("[nostr] Contact list found on local relay");
+      return parseContactListFromEvent(contactEvent);
+    }
+  } catch (error) {
+    console.warn("[nostr] Failed to fetch contact list from local relay:", error);
+  }
+
+  // Try fallback relays
+  console.log("[nostr] Contact list not found locally, trying fallback relays...");
+  try {
+    const contactEvent = await fetchFromFallbackRelays(filters);
+    if (contactEvent) {
+      await putEvent(contactEvent);
+      try {
+        await nostrClient.publish(contactEvent);
+      } catch (e) {
+        console.warn("[nostr] Failed to publish contact list to local relay:", e);
+      }
+      return parseContactListFromEvent(contactEvent);
+    }
+  } catch (error) {
+    console.warn("[nostr] Failed to fetch contact list from fallback relays:", error);
+  }
+
+  console.log("[nostr] No contact list found for pubkey");
+  return null;
+}
+
+// Parse contact list from kind 3 event
+function parseContactListFromEvent(event) {
+  if (!event || event.kind !== 3) return null;
+
+  const follows = [];
+  const relayHints = {};
+
+  for (const tag of event.tags) {
+    if (tag[0] === 'p' && tag[1]) {
+      const pubkey = tag[1];
+      const relayUrl = tag[2] || null;
+      const petname = tag[3] || null;
+
+      follows.push({ pubkey, relayUrl, petname });
+
+      if (relayUrl) {
+        if (!relayHints[relayUrl]) {
+          relayHints[relayUrl] = [];
+        }
+        relayHints[relayUrl].push(pubkey);
+      }
+    }
+  }
+
+  // Also parse the content field which may contain relay preferences (legacy format)
+  let legacyRelays = {};
+  try {
+    if (event.content) {
+      legacyRelays = JSON.parse(event.content);
+    }
+  } catch (e) {
+    // Content is not JSON, ignore
+  }
+
+  console.log(`[nostr] Parsed contact list: ${follows.length} follows, ${Object.keys(relayHints).length} relay hints`);
+  return { follows, relayHints, legacyRelays, event };
+}
+
 // Fetch events
 export async function fetchEvents(filters, options = {}) {
   console.log(`Starting event fetch with filters:`, JSON.stringify(filters, null, 2));
@@ -609,9 +850,11 @@ export async function fetchEvents(filters, options = {}) {
 
   return new Promise((resolve, reject) => {
     const relayEvents = [];
+    let sub = null;
+
     const timeoutId = setTimeout(() => {
       console.log(`Timeout reached after ${timeout}ms, returning ${relayEvents.length} relay events`);
-      sub.close();
+      if (sub) sub.close();
 
       // Store all received events in IndexedDB before resolving
       if (relayEvents.length > 0) {
@@ -626,11 +869,31 @@ export async function fetchEvents(filters, options = {}) {
     try {
       // Generate a subscription ID for logging
       const subId = Math.random().toString(36).substring(7);
-      console.log(`📤 REQ [${subId}]:`, JSON.stringify(["REQ", subId, ...filters], null, 2));
-      
-      const sub = nostrClient.pool.subscribeMany(
+
+      // Validate filters before sending
+      if (!Array.isArray(filters) || filters.length === 0) {
+        console.error(`❌ Invalid filters: not an array or empty`, filters);
+        resolve(cachedEvents);
+        return;
+      }
+
+      // Ensure each filter is a valid object
+      const validFilters = filters.filter(f => f && typeof f === 'object' && !Array.isArray(f));
+      if (validFilters.length !== filters.length) {
+        console.warn(`⚠️ Some filters were invalid, filtered ${filters.length} -> ${validFilters.length}`, filters);
+      }
+
+      if (validFilters.length === 0) {
+        console.error(`❌ No valid filters remaining`);
+        resolve(cachedEvents);
+        return;
+      }
+
+      console.log(`📤 REQ [${subId}] to ${nostrClient.relays.join(', ')}:`, JSON.stringify(["REQ", subId, ...validFilters], null, 2));
+
+      sub = nostrClient.pool.subscribeMany(
         nostrClient.relays,
-        filters,
+        validFilters,
         {
           onevent(event) {
             console.log(`📥 EVENT received for REQ [${subId}]:`, {
@@ -648,7 +911,7 @@ export async function fetchEvents(filters, options = {}) {
           oneose() {
             console.log(`✅ EOSE received for REQ [${subId}], got ${relayEvents.length} relay events`);
             clearTimeout(timeoutId);
-            sub.close();
+            if (sub) sub.close();
 
             // Store all events in IndexedDB before resolving
             if (relayEvents.length > 0) {
@@ -681,18 +944,35 @@ export async function fetchAllEvents(options = {}) {
     ...rest
   } = options;
 
+  const now = Math.floor(Date.now() / 1000);
+  const thirtyDaysAgo = now - (30 * 24 * 60 * 60);
+  const sixMonthsAgo = now - (180 * 24 * 60 * 60);
+
+  // Start with 30 days if no since specified
+  const initialSince = since || thirtyDaysAgo;
+
   const filters = [{ ...rest }];
-  
-  if (since) filters[0].since = since;
+  filters[0].since = initialSince;
   if (until) filters[0].until = until;
   if (authors) filters[0].authors = authors;
   if (kinds) filters[0].kinds = kinds;
   if (limit) filters[0].limit = limit;
-  
-  const events = await fetchEvents(filters, { 
-    timeout: 30000 
+
+  let events = await fetchEvents(filters, {
+    timeout: 30000
   });
-  
+
+  // If we got few results and weren't already using a longer window, retry with 6 months
+  const fewResultsThreshold = Math.min(20, limit / 2);
+  if (events.length < fewResultsThreshold && initialSince > sixMonthsAgo && !since) {
+    console.log(`[fetchAllEvents] Only got ${events.length} events, retrying with 6-month window...`);
+    filters[0].since = sixMonthsAgo;
+    events = await fetchEvents(filters, {
+      timeout: 30000
+    });
+    console.log(`[fetchAllEvents] 6-month window returned ${events.length} events`);
+  }
+
   return events;
 }
 
@@ -840,6 +1120,24 @@ export async function queryEvents(filters, options = {}) {
 
 // Export cache query function for direct access
 export { queryEventsFromDB };
+
+// Clear the IndexedDB cache (call when switching relays)
+export async function clearIndexedDBCache() {
+  console.log("[nostr] Clearing IndexedDB cache...");
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_EVENTS, "readwrite");
+    const store = tx.objectStore(STORE_EVENTS);
+    await new Promise((resolve, reject) => {
+      const req = store.clear();
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+    console.log("[nostr] IndexedDB cache cleared");
+  } catch (e) {
+    console.warn("[nostr] Failed to clear IndexedDB cache", e);
+  }
+}
 
 // Debug function to check database contents
 export async function debugIndexedDB() {

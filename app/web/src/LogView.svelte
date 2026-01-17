@@ -1,5 +1,6 @@
 <script>
     import { createEventDispatcher, onMount, onDestroy } from "svelte";
+    import { getApiBase } from "./config.js";
 
     export let isLoggedIn = false;
     export let userRole = "";
@@ -68,7 +69,7 @@
                 kind: 27235,
                 created_at: now,
                 tags: [
-                    ["u", `${window.location.origin}${path}`],
+                    ["u", `${getApiBase()}${path}`],
                     ["method", method],
                 ],
                 content: "",
@@ -97,7 +98,7 @@
         try {
             const path = `/api/logs?offset=${offset}&limit=${LIMIT}`;
             const authHeader = await createAuthHeader("GET", path);
-            const url = `${window.location.origin}${path}`;
+            const url = `${getApiBase()}${path}`;
             const response = await fetch(url, {
                 headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
             });
@@ -131,7 +132,7 @@
 
     async function loadLogLevel() {
         try {
-            const response = await fetch(`${window.location.origin}/api/logs/level`);
+            const response = await fetch(`${getApiBase()}/api/logs/level`);
             if (response.ok) {
                 const data = await response.json();
                 currentLogLevel = data.level || "info";
@@ -147,7 +148,7 @@
 
         try {
             const authHeader = await createAuthHeader("POST", "/api/logs/level");
-            const response = await fetch(`${window.location.origin}/api/logs/level`, {
+            const response = await fetch(`${getApiBase()}/api/logs/level`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -175,7 +176,7 @@
 
         try {
             const authHeader = await createAuthHeader("POST", "/api/logs/clear");
-            const response = await fetch(`${window.location.origin}/api/logs/clear`, {
+            const response = await fetch(`${getApiBase()}/api/logs/clear`, {
                 method: "POST",
                 headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
             });

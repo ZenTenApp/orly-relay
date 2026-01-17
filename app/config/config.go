@@ -88,6 +88,11 @@ type C struct {
 	// Branding/white-label settings
 	BrandingDir     string `env:"ORLY_BRANDING_DIR" usage:"directory containing branding assets and configuration (default: ~/.config/ORLY/branding)"`
 	BrandingEnabled bool   `env:"ORLY_BRANDING_ENABLED" default:"true" usage:"enable custom branding if branding directory exists"`
+	Theme           string `env:"ORLY_THEME" default:"auto" usage:"UI color theme: auto (follow system), light, dark"`
+
+	// CORS settings (for standalone dashboard mode)
+	CORSEnabled bool     `env:"ORLY_CORS_ENABLED" default:"false" usage:"enable CORS headers for API endpoints (required for standalone dashboard)"`
+	CORSOrigins []string `env:"ORLY_CORS_ORIGINS" usage:"allowed CORS origins (comma-separated, or * for all origins)"`
 
 	// Sprocket settings
 	SprocketEnabled bool `env:"ORLY_SPROCKET_ENABLED" default:"false" usage:"enable sprocket event processing plugin system"`

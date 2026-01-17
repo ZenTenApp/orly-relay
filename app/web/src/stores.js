@@ -1,5 +1,32 @@
 import { writable, derived } from 'svelte/store';
 
+// ==================== Relay Connection State ====================
+
+// Configured relay URL (empty = use same origin / embedded mode)
+export const relayUrl = writable(localStorage.getItem("relayUrl") || "");
+export const isStandaloneMode = writable(false);
+export const relayInfo = writable(null); // NIP-11 relay info
+export const relayConnectionStatus = writable("disconnected"); // disconnected, connecting, connected, error
+export const isOrlyRelay = writable(true); // true if connected to ORLY relay with API endpoints
+
+// Saved relays list - each entry: { url: string, name: string, lastConnected?: number }
+const storedRelays = localStorage.getItem("savedRelays");
+export const savedRelays = writable(storedRelays ? JSON.parse(storedRelays) : []);
+
+// Persist relay URL to localStorage
+relayUrl.subscribe(url => {
+    if (url) {
+        localStorage.setItem("relayUrl", url);
+    } else {
+        localStorage.removeItem("relayUrl");
+    }
+});
+
+// Persist saved relays to localStorage
+savedRelays.subscribe(relays => {
+    localStorage.setItem("savedRelays", JSON.stringify(relays));
+});
+
 // ==================== User/Auth State ====================
 
 export const isLoggedIn = writable(false);
@@ -85,4 +112,56 @@ export function isCacheValid(cacheDuration = 5 * 60 * 1000) {
     let timestamp;
     globalCacheTimestamp.subscribe(v => timestamp = v)();
     return Date.now() - timestamp < cacheDuration;
+}
+
+/**
+ * Clear relay connection and reset to embedded mode
+ */
+export function clearRelayConnection() {
+    relayUrl.set("");
+    relayInfo.set(null);
+    relayConnectionStatus.set("disconnected");
+    // Also clear auth state since we're changing relays
+    resetAuthState();
+    clearEventsCache();
+}
+
+/**
+ * Add or update a relay in the saved relays list
+ * @param {string} url - Relay URL
+ * @param {string} name - Relay name (from NIP-11 or user input)
+ */
+export function saveRelay(url, name) {
+    savedRelays.update(relays => {
+        const existing = relays.findIndex(r => r.url === url);
+        const entry = { url, name, lastConnected: Date.now() };
+        if (existing >= 0) {
+            relays[existing] = entry;
+        } else {
+            relays.unshift(entry);
+        }
+        return relays;
+    });
+}
+
+/**
+ * Remove a relay from the saved relays list
+ * @param {string} url - Relay URL to remove
+ */
+export function removeRelay(url) {
+    savedRelays.update(relays => relays.filter(r => r.url !== url));
+}
+
+/**
+ * Update the last connected timestamp for a relay
+ * @param {string} url - Relay URL
+ */
+export function touchRelay(url) {
+    savedRelays.update(relays => {
+        const relay = relays.find(r => r.url === url);
+        if (relay) {
+            relay.lastConnected = Date.now();
+        }
+        return relays;
+    });
 }

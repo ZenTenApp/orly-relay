@@ -1,5 +1,6 @@
 <script>
     import { onMount } from "svelte";
+    import { getApiBase } from "./config.js";
 
     // Props
     export let userSigner;
@@ -93,7 +94,7 @@
         try {
             isLoading = true;
             console.log("Fetching relay info from /");
-            const response = await fetch(window.location.origin + "/", {
+            const response = await fetch(getApiBase() +"/", {
                 headers: {
                     Accept: "application/nostr+json",
                 },
@@ -147,7 +148,7 @@
         }
 
         // Get the full URL
-        const fullUrl = window.location.origin + url;
+        const fullUrl = getApiBase() +url;
 
         // Create NIP-98 authentication event
         const authEvent = {

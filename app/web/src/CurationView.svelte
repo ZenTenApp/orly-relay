@@ -1,6 +1,7 @@
 <script>
     import { onMount } from "svelte";
     import { curationKindCategories, parseCustomKinds, formatKindsCompact } from "./kindCategories.js";
+    import { getApiBase, getWsUrl } from "./config.js";
 
     // Props
     export let userSigner;
@@ -65,7 +66,7 @@
             throw new Error("No user pubkey available.");
         }
 
-        const fullUrl = window.location.origin + url;
+        const fullUrl = getApiBase() + url;
         const authEvent = {
             kind: 27235,
             created_at: Math.floor(Date.now() / 1000),
@@ -401,7 +402,7 @@
             const signedEvent = await userSigner.signEvent(configEvent);
 
             // Submit to relay via WebSocket
-            const ws = new WebSocket(window.location.origin.replace(/^http/, 'ws'));
+            const ws = new WebSocket(getWsUrl());
 
             await new Promise((resolve, reject) => {
                 ws.onopen = () => {

@@ -6,8 +6,13 @@ import resolve from "@rollup/plugin-node-resolve";
 import livereload from "rollup-plugin-livereload";
 import css from "rollup-plugin-css-only";
 import copy from "rollup-plugin-copy";
+import replace from "@rollup/plugin-replace";
 
 const production = !process.env.ROLLUP_WATCH;
+
+// Standalone mode configuration (for dashboard that connects to remote relay)
+const standaloneMode = process.env.STANDALONE_MODE === 'true';
+const defaultRelayUrl = process.env.DEFAULT_RELAY_URL || '';
 
 // In dev mode, output to public/ so sirv can serve it
 // In production, output to dist/ for embedding
@@ -43,6 +48,13 @@ export default {
     file: `${outputDir}/bundle.js`,
   },
   plugins: [
+    // Replace environment variables at build time (for standalone mode)
+    replace({
+      preventAssignment: true,
+      'process.env.STANDALONE_MODE': JSON.stringify(standaloneMode ? 'true' : 'false'),
+      'process.env.DEFAULT_RELAY_URL': JSON.stringify(defaultRelayUrl),
+    }),
+
     svelte({
       compilerOptions: {
         // enable run-time checks when not in production

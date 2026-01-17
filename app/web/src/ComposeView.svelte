@@ -240,7 +240,7 @@
 
     @media (max-width: 640px) {
         .compose-view {
-            left: 160px;
+            left: 0;
         }
 
         .compose-header {

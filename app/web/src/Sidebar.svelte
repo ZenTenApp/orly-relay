@@ -3,20 +3,33 @@
     export let tabs = [];
     export let selectedTab = "";
     export let version = "";
+    export let mobileOpen = false;
 
     import { createEventDispatcher } from "svelte";
     const dispatch = createEventDispatcher();
 
     function selectTab(tabId) {
         dispatch("selectTab", tabId);
+        // Close mobile drawer when tab is selected
+        dispatch("closeMobileMenu");
     }
 
     function closeSearchTab(tabId) {
         dispatch("closeSearchTab", tabId);
     }
+
+    function closeMobileMenu() {
+        dispatch("closeMobileMenu");
+    }
 </script>
 
-<aside class="sidebar" class:dark-theme={isDarkTheme}>
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+{#if mobileOpen}
+    <div class="mobile-overlay" on:click={closeMobileMenu}></div>
+{/if}
+
+<aside class="sidebar" class:dark-theme={isDarkTheme} class:mobile-open={mobileOpen}>
     <div class="sidebar-content">
         <div class="tabs">
             {#each tabs as tab}
@@ -151,20 +164,6 @@
         }
     }
 
-    @media (max-width: 640px) {
-        .sidebar {
-            width: 160px;
-        }
-
-        .tab-label {
-            display: block;
-        }
-
-        .tab {
-            justify-content: flex-start;
-        }
-    }
-
     .version-link {
         position: absolute;
         bottom: 0;
@@ -207,9 +206,50 @@
         }
     }
 
+    /* Mobile drawer styles */
+    .mobile-overlay {
+        display: none;
+    }
+
     @media (max-width: 640px) {
-        .version-text {
+        .mobile-overlay {
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 199;
+        }
+
+        .sidebar {
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+            z-index: 200;
+            width: 200px;
+        }
+
+        .sidebar.mobile-open {
+            transform: translateX(0);
+        }
+
+        /* Show labels in mobile drawer */
+        .sidebar.mobile-open .tab-label {
+            display: block;
+        }
+
+        .sidebar.mobile-open .tab-close-icon {
+            display: block;
+        }
+
+        .sidebar.mobile-open .version-text {
             display: inline;
         }
+
+        .sidebar.mobile-open .version-link {
+            padding-left: 1em;
+        }
     }
+
 </style>

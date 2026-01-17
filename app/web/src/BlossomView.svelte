@@ -2,6 +2,7 @@
     import { createEventDispatcher, onMount } from "svelte";
     import { npubEncode } from "nostr-tools/nip19";
     import { fetchUserProfile } from "./nostr.js";
+    import { getApiBase } from "./config.js";
 
     export let isLoggedIn = false;
     export let userPubkey = "";
@@ -104,7 +105,7 @@
         error = "";
 
         try {
-            const url = `${window.location.origin}/blossom/list/${userPubkey}`;
+            const url = `${getApiBase()}/blossom/list/${userPubkey}`;
             const authHeader = await createBlossomAuth(userSigner, "list");
             const response = await fetch(url, {
                 headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
@@ -209,16 +210,16 @@
             if (blob.url.startsWith("http://") || blob.url.startsWith("https://")) {
                 return blob.url;
             }
-            // Starts with / - it's a path, prepend origin
+            // Starts with / - it's a path, prepend API base
             if (blob.url.startsWith("/")) {
-                return `${window.location.origin}${blob.url}`;
+                return `${getApiBase()}${blob.url}`;
             }
             // No protocol - looks like host:port/path, add http://
             // This handles cases like "localhost:3334/blossom/..."
             return `http://${blob.url}`;
         }
         // Fallback: construct URL with sha256 only
-        return `${window.location.origin}/blossom/${blob.sha256}`;
+        return `${getApiBase()}/blossom/${blob.sha256}`;
     }
 
     function openLoginModal() {
@@ -229,7 +230,7 @@
         if (!confirm(`Delete blob ${truncateHash(blob.sha256)}?`)) return;
 
         try {
-            const url = `${window.location.origin}/blossom/${blob.sha256}`;
+            const url = `${getApiBase()}/blossom/${blob.sha256}`;
             const authHeader = await createBlossomAuth(userSigner, "delete", blob.sha256);
             const response = await fetch(url, {
                 method: "DELETE",
@@ -271,7 +272,7 @@
             uploadProgress = `Uploading ${i + 1}/${selectedFiles.length}: ${file.name}`;
 
             try {
-                const url = `${window.location.origin}/blossom/upload`;
+                const url = `${getApiBase()}/blossom/upload`;
                 const authHeader = await createBlossomAuth(userSigner, "upload");
 
                 const response = await fetch(url, {
@@ -330,7 +331,7 @@
         error = "";
 
         try {
-            const url = `${window.location.origin}/blossom/admin/users`;
+            const url = `${getApiBase()}/blossom/admin/users`;
             const authHeader = await createBlossomAuth(userSigner, "admin");
             const response = await fetch(url, {
                 headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
@@ -364,7 +365,7 @@
         error = "";
 
         try {
-            const url = `${window.location.origin}/blossom/list/${pubkeyHex}`;
+            const url = `${getApiBase()}/blossom/list/${pubkeyHex}`;
             const authHeader = await createBlossomAuth(userSigner, "list");
             const response = await fetch(url, {
                 headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},

@@ -17,6 +17,11 @@
     import RelayConnectView from "./RelayConnectView.svelte";
     import SearchResultsView from "./SearchResultsView.svelte";
     import FilterDisplay from "./FilterDisplay.svelte";
+    import RelayConnectModal from "./RelayConnectModal.svelte";
+
+    // Relay config imports
+    import { isStandalone, hasRelayConfigured, fetchRelayInfoFromUrl, getApiBase } from "./config.js";
+    import { isStandaloneMode, relayUrl, relayInfo as relayInfoStore, relayConnectionStatus, isOrlyRelay } from "./stores.js";
 
     // Utility imports
     import { buildFilter } from "./helpers.tsx";
@@ -28,6 +33,8 @@
     import {
         initializeNostrClient,
         fetchUserProfile,
+        fetchUserRelayList,
+        fetchUserContactList,
         fetchAllEvents,
         fetchUserEvents,
         searchEvents,
@@ -37,6 +44,7 @@
         queryEvents,
         queryEventsFromDB,
         debugIndexedDB,
+        clearIndexedDBCache,
         nostrClient,
         NostrClient,
         Nip07Signer,
@@ -51,13 +59,17 @@
 
     let isDarkTheme = false;
     let showLoginModal = false;
+    let showRelayConnectModal = false;
     let isLoggedIn = false;
     let userPubkey = "";
     let authMethod = "";
     let userProfile = null;
+    let userRelayList = null;
+    let userContactList = null;
     let userRole = "";
     let userSigner = null;
     let showSettingsDrawer = false;
+    let mobileMenuOpen = false;
     let selectedTab = localStorage.getItem("selectedTab") || "export";
     let showFilterBuilder = false; // Show filter builder in events view
     let eventsViewFilter = {}; // Active filter for events view
@@ -828,15 +840,33 @@
         ? escapeHtml(userProfile.about).replace(/\n{2,}/g, "<br>")
         : "";
 
+    // Theme configuration: "auto" follows system, "light"/"dark" are forced
+    let configuredTheme = "auto";
+
     // Detect system theme preference and listen for changes
     if (typeof window !== "undefined" && window.matchMedia) {
         const darkModeQuery = window.matchMedia("(prefers-color-scheme: dark)");
         isDarkTheme = darkModeQuery.matches;
 
-        // Listen for system theme changes
+        // Listen for system theme changes (only applies when theme is "auto")
         darkModeQuery.addEventListener("change", (e) => {
-            isDarkTheme = e.matches;
+            if (configuredTheme === "auto") {
+                isDarkTheme = e.matches;
+            }
         });
+
+        // Fetch relay info to get configured theme
+        (async () => {
+            try {
+                const relayInfo = await api.fetchRelayInfo();
+                if (relayInfo?.theme && relayInfo.theme !== "auto") {
+                    configuredTheme = relayInfo.theme;
+                    isDarkTheme = relayInfo.theme === "dark";
+                }
+            } catch (e) {
+                console.log("Could not fetch relay theme config:", e);
+            }
+        })();
     }
 
     // Load state from localStorage
@@ -854,14 +884,24 @@
             if (storedAuthMethod === "extension" && window.nostr) {
                 userSigner = window.nostr;
             }
-
-            // Fetch user role for already logged in users
-            fetchUserRole();
-            fetchACLMode();
         }
 
         // Load persistent app state
         loadPersistentState();
+
+        // Initialize relay connection first
+        // In standalone mode without a relay, this will show the modal
+        // and skip the API calls until a relay is connected
+        initializeRelayConnection();
+    }
+
+    // Load relay-dependent data (called after relay is confirmed)
+    async function loadRelayData() {
+        // Fetch user role for already logged in users
+        if (isLoggedIn) {
+            fetchUserRole();
+        }
+        fetchACLMode();
 
         // Load sprocket configuration
         loadSprocketConfig();
@@ -874,6 +914,90 @@
 
         // Load relay version
         fetchRelayVersion();
+    }
+
+    // Handle relay change from header dropdown
+    async function handleRelayChange(event) {
+        console.log("Relay changed:", event.detail?.info?.name);
+
+        // Reset the NostrClient to use new relay
+        nostrClient.reset();
+
+        // Clear IndexedDB cache (contains events from old relay)
+        await clearIndexedDBCache();
+
+        // Clear the events cache when switching relays
+        globalEventsCache = [];
+        globalCacheTimestamp = 0;
+        hasAttemptedEventLoad = false;
+
+        // Clear displayed events
+        allEvents = [];
+        myEvents = [];
+
+        // Reset pagination state
+        hasMoreEvents = true;
+        hasMoreMyEvents = true;
+        oldestEventTimestamp = null;
+        newestEventTimestamp = null;
+
+        // Clear search results
+        searchResults.clear();
+        searchTabs = [];
+
+        // Reload all relay-dependent data
+        loadRelayData();
+
+        // If the events tab is currently active, reload events
+        if (selectedTab === "events" && isLoggedIn) {
+            loadAllEvents(true);
+        } else if (selectedTab === "myevents" && isLoggedIn) {
+            loadMyEvents(true);
+        }
+    }
+
+    // Initialize relay connection
+    // In standalone mode with no relay configured, show the connection modal
+    // Otherwise, try to connect to the configured relay
+    async function initializeRelayConnection() {
+        if (isStandalone()) {
+            if (!hasRelayConfigured()) {
+                // No relay configured - show the connection modal
+                // Don't load relay data yet
+                showRelayConnectModal = true;
+                return;
+            } else {
+                // Try to fetch relay info to verify connection
+                await fetchRelayInfoFromUrl();
+            }
+        } else {
+            // Embedded mode - fetch relay info from same origin
+            await fetchRelayInfoFromUrl();
+        }
+
+        // Relay is configured/connected - load relay-dependent data
+        await loadRelayData();
+    }
+
+    function openRelayConnectModal() {
+        showRelayConnectModal = true;
+    }
+
+    function closeRelayConnectModal() {
+        showRelayConnectModal = false;
+    }
+
+    async function handleRelayConnected(event) {
+        // Relay connected successfully - reload data
+        console.log("Connected to relay:", event.detail?.info?.name);
+
+        // Refresh nostr client with new relay
+        if (nostrClient) {
+            nostrClient.refreshRelays();
+        }
+
+        // Load all relay-dependent data
+        await loadRelayData();
     }
 
     function savePersistentState() {
@@ -976,7 +1100,7 @@
     // Sprocket management functions
     async function loadSprocketConfig() {
         try {
-            const response = await fetch("/api/sprocket/config", {
+            const response = await fetch(`${getApiBase()}/api/sprocket/config`, {
                 method: "GET",
                 headers: {
                     "Content-Type": "application/json",
@@ -986,9 +1110,13 @@
             if (response.ok) {
                 const config = await response.json();
                 sprocketEnabled = config.enabled;
+            } else if (response.status === 404) {
+                // Non-ORLY relay - sprocket not available
+                sprocketEnabled = false;
             }
         } catch (error) {
-            console.error("Error loading sprocket config:", error);
+            // Non-ORLY relay or network error - sprocket not available
+            sprocketEnabled = false;
         }
     }
 
@@ -997,13 +1125,14 @@
             const config = await api.fetchNRCConfig();
             nrcEnabled = config.enabled;
         } catch (error) {
-            console.error("Error loading NRC config:", error);
+            // Non-ORLY relay or network error - NRC not available
+            nrcEnabled = false;
         }
     }
 
     async function loadPolicyConfig() {
         try {
-            const response = await fetch("/api/policy/config", {
+            const response = await fetch(`${getApiBase()}/api/policy/config`, {
                 method: "GET",
                 headers: {
                     "Content-Type": "application/json",
@@ -1013,9 +1142,12 @@
             if (response.ok) {
                 const config = await response.json();
                 policyEnabled = config.enabled || false;
+            } else if (response.status === 404) {
+                // Non-ORLY relay - policy not available
+                policyEnabled = false;
             }
         } catch (error) {
-            console.error("Error loading policy config:", error);
+            // Non-ORLY relay or network error - policy not available
             policyEnabled = false;
         }
     }
@@ -1025,10 +1157,10 @@
 
         try {
             isLoadingSprocket = true;
-            const response = await fetch("/api/sprocket/status", {
+            const response = await fetch(`${getApiBase()}/api/sprocket/status`, {
                 method: "GET",
                 headers: {
-                    Authorization: `Nostr ${await createNIP98Auth("GET", "/api/sprocket/status")}`,
+                    Authorization: `Nostr ${await createNIP98Auth("GET", `${getApiBase()}/api/sprocket/status`)}`,
                     "Content-Type": "application/json",
                 },
             });
@@ -1053,10 +1185,10 @@
 
         try {
             isLoadingSprocket = true;
-            const response = await fetch("/api/sprocket/status", {
+            const response = await fetch(`${getApiBase()}/api/sprocket/status`, {
                 method: "GET",
                 headers: {
-                    Authorization: `Nostr ${await createNIP98Auth("GET", "/api/sprocket/status")}`,
+                    Authorization: `Nostr ${await createNIP98Auth("GET", `${getApiBase()}/api/sprocket/status`)}`,
                     "Content-Type": "application/json",
                 },
             });
@@ -1084,10 +1216,10 @@
 
         try {
             isLoadingSprocket = true;
-            const response = await fetch("/api/sprocket/update", {
+            const response = await fetch(`${getApiBase()}/api/sprocket/update`, {
                 method: "POST",
                 headers: {
-                    Authorization: `Nostr ${await createNIP98Auth("POST", "/api/sprocket/update")}`,
+                    Authorization: `Nostr ${await createNIP98Auth("POST", `${getApiBase()}/api/sprocket/update`)}`,
                     "Content-Type": "text/plain",
                 },
                 body: sprocketScript,
@@ -1122,10 +1254,10 @@
 
         try {
             isLoadingSprocket = true;
-            const response = await fetch("/api/sprocket/restart", {
+            const response = await fetch(`${getApiBase()}/api/sprocket/restart`, {
                 method: "POST",
                 headers: {
-                    Authorization: `Nostr ${await createNIP98Auth("POST", "/api/sprocket/restart")}`,
+                    Authorization: `Nostr ${await createNIP98Auth("POST", `${getApiBase()}/api/sprocket/restart`)}`,
                     "Content-Type": "application/json",
                 },
             });
@@ -1166,10 +1298,10 @@
 
         try {
             isLoadingSprocket = true;
-            const response = await fetch("/api/sprocket/update", {
+            const response = await fetch(`${getApiBase()}/api/sprocket/update`, {
                 method: "POST",
                 headers: {
-                    Authorization: `Nostr ${await createNIP98Auth("POST", "/api/sprocket/update")}`,
+                    Authorization: `Nostr ${await createNIP98Auth("POST", `${getApiBase()}/api/sprocket/update`)}`,
                     "Content-Type": "text/plain",
                 },
                 body: "", // Empty body deletes the script
@@ -1205,10 +1337,10 @@
 
         try {
             isLoadingSprocket = true;
-            const response = await fetch("/api/sprocket/versions", {
+            const response = await fetch(`${getApiBase()}/api/sprocket/versions`, {
                 method: "GET",
                 headers: {
-                    Authorization: `Nostr ${await createNIP98Auth("GET", "/api/sprocket/versions")}`,
+                    Authorization: `Nostr ${await createNIP98Auth("GET", `${getApiBase()}/api/sprocket/versions`)}`,
                     "Content-Type": "application/json",
                 },
             });
@@ -1244,10 +1376,10 @@
 
         try {
             isLoadingSprocket = true;
-            const response = await fetch("/api/sprocket/delete-version", {
+            const response = await fetch(`${getApiBase()}/api/sprocket/delete-version`, {
                 method: "POST",
                 headers: {
-                    Authorization: `Nostr ${await createNIP98Auth("POST", "/api/sprocket/delete-version")}`,
+                    Authorization: `Nostr ${await createNIP98Auth("POST", `${getApiBase()}/api/sprocket/delete-version`)}`,
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({ filename }),
@@ -1321,10 +1453,10 @@
                 showPolicyMessage("Policy loaded successfully", "success");
             } else {
                 // No policy event found, try to load from file via API
-                const response = await fetch("/api/policy", {
+                const response = await fetch(`${getApiBase()}/api/policy`, {
                     method: "GET",
                     headers: {
-                        Authorization: `Nostr ${await createNIP98Auth("GET", "/api/policy")}`,
+                        Authorization: `Nostr ${await createNIP98Auth("GET", `${getApiBase()}/api/policy`)}`,
                         "Content-Type": "application/json",
                     },
                 });
@@ -1621,10 +1753,10 @@
             const fileContent = await sprocketUploadFile.text();
 
             // Upload the script
-            const response = await fetch("/api/sprocket/update", {
+            const response = await fetch(`${getApiBase()}/api/sprocket/update`, {
                 method: "POST",
                 headers: {
-                    Authorization: `Nostr ${await createNIP98Auth("POST", "/api/sprocket/update")}`,
+                    Authorization: `Nostr ${await createNIP98Auth("POST", `${getApiBase()}/api/sprocket/update`)}`,
                     "Content-Type": "text/plain",
                 },
                 body: fileContent,
@@ -1701,6 +1833,11 @@
             return false;
         }
         if (tab.requiresWrite && (!isLoggedIn || currentRole === "read")) {
+            return false;
+        }
+        // Hide ORLY-specific tabs when connected to a non-ORLY relay
+        const orlyOnlyTabs = ["sprocket", "policy", "managed-acl", "curation", "logs", "relay-connect"];
+        if (orlyOnlyTabs.includes(tab.id) && !$isOrlyRelay) {
             return false;
         }
         // Hide sprocket tab if not enabled
@@ -1795,6 +1932,17 @@
 
             userProfile = await fetchUserProfile(pubkey);
             console.log("Profile loaded:", userProfile);
+
+            // Fetch user's relay list (NIP-65) and contact list
+            userRelayList = await fetchUserRelayList(pubkey);
+            if (userRelayList) {
+                console.log("User relay list loaded:", userRelayList.all.length, "relays");
+            }
+
+            userContactList = await fetchUserContactList(pubkey);
+            if (userContactList) {
+                console.log("User contact list loaded:", userContactList.follows.length, "follows");
+            }
         } catch (error) {
             console.error("Failed to load profile:", error);
         }
@@ -1809,6 +1957,8 @@
         userPubkey = "";
         authMethod = "";
         userProfile = null;
+        userRelayList = null;
+        userContactList = null;
         userRole = "";
         userSigner = null;
         userPrivkey = null;
@@ -1839,6 +1989,14 @@
 
     function closeSettingsDrawer() {
         showSettingsDrawer = false;
+    }
+
+    function toggleMobileMenu() {
+        mobileMenuOpen = !mobileMenuOpen;
+    }
+
+    function closeMobileMenu() {
+        mobileMenuOpen = false;
     }
 
     function toggleFilterBuilder() {
@@ -2028,36 +2186,81 @@
         }
 
         try {
-            const response = await fetch(`/api/permissions/${userPubkey}`);
+            const url = `${getApiBase()}/api/permissions/${userPubkey}`;
+            const response = await fetch(url);
             if (response.ok) {
                 const data = await response.json();
                 userRole = data.permission || "";
+                isOrlyRelay.set(true);
                 console.log("User role loaded:", userRole);
                 console.log("Is owner?", userRole === "owner");
+            } else if (response.status === 404) {
+                // Non-ORLY relay - fallback to write permission based on NIP-11
+                console.log("ORLY API not available, using NIP-11 fallback");
+                isOrlyRelay.set(false);
+                userRole = determineRoleFromNIP11();
             } else {
                 console.error("Failed to fetch user role:", response.status);
                 userRole = "";
             }
         } catch (error) {
-            console.error("Error fetching user role:", error);
-            userRole = "";
+            // Network error or non-ORLY relay - fallback to NIP-11
+            console.log("Error fetching user role, using NIP-11 fallback:", error.message);
+            isOrlyRelay.set(false);
+            userRole = determineRoleFromNIP11();
         }
+    }
+
+    /**
+     * Determine user role from NIP-11 relay info when ORLY API is not available.
+     * For generic relays, assume write permission unless NIP-11 indicates restrictions.
+     */
+    function determineRoleFromNIP11() {
+        const info = $relayInfoStore;
+        if (!info) {
+            // No relay info, assume write access
+            return "write";
+        }
+
+        // Check NIP-11 limitation fields
+        const limitation = info.limitation || {};
+
+        // If auth_required is true and we're logged in, assume write
+        // If auth_required is false or not set, also assume write
+        if (limitation.auth_required === false || !limitation.auth_required) {
+            console.log("NIP-11: No auth required, granting write access");
+            return "write";
+        }
+
+        // If we're logged in and relay requires auth, assume write
+        if (isLoggedIn) {
+            console.log("NIP-11: Auth required and user is logged in, granting write access");
+            return "write";
+        }
+
+        // Otherwise, read-only
+        return "read";
     }
 
     async function fetchACLMode() {
         try {
-            const response = await fetch("/api/acl-mode");
+            const response = await fetch(`${getApiBase()}/api/acl-mode`);
             if (response.ok) {
                 const data = await response.json();
                 aclMode = data.acl_mode || "";
                 console.log("ACL mode loaded:", aclMode);
+            } else if (response.status === 404) {
+                // Non-ORLY relay - default to "none" (open relay mode)
+                console.log("ACL API not available, defaulting to 'none'");
+                aclMode = "none";
             } else {
                 console.error("Failed to fetch ACL mode:", response.status);
                 aclMode = "";
             }
         } catch (error) {
-            console.error("Error fetching ACL mode:", error);
-            aclMode = "";
+            // Non-ORLY relay - default to "none"
+            console.log("Error fetching ACL mode, defaulting to 'none':", error.message);
+            aclMode = "none";
         }
     }
 
@@ -2099,11 +2302,11 @@
             };
             if (aclMode !== "none" && isLoggedIn) {
                 headers.Authorization = await createNIP98AuthHeader(
-                    "/api/export",
+                    `${getApiBase()}/api/export`,
                     "POST",
                 );
             }
-            const response = await fetch("/api/export", {
+            const response = await fetch(`${getApiBase()}/api/export`, {
                 method: "POST",
                 headers,
                 body: JSON.stringify({ pubkeys }),
@@ -2180,14 +2383,14 @@
             const headers = {};
             if (aclMode !== "none" && isLoggedIn) {
                 headers.Authorization = await createNIP98AuthHeader(
-                    "/api/import",
+                    `${getApiBase()}/api/import`,
                     "POST",
                 );
             }
             const formData = new FormData();
             formData.append("file", selectedFile);
 
-            const response = await fetch("/api/import", {
+            const response = await fetch(`${getApiBase()}/api/import`, {
                 method: "POST",
                 headers,
                 body: formData,
@@ -2480,7 +2683,7 @@
             kind: 27235,
             created_at: Math.floor(Date.now() / 1000),
             tags: [
-                ["u", window.location.origin + url],
+                ["u", url],  // URL should already be absolute
                 ["method", method.toUpperCase()],
             ],
             content: "",
@@ -2526,7 +2729,7 @@
             kind: 27235,
             created_at: Math.floor(Date.now() / 1000),
             tags: [
-                ["u", window.location.origin + url],
+                ["u", url],  // URL should already be absolute
                 ["method", method.toUpperCase()],
             ],
             content: "",
@@ -2780,6 +2983,9 @@
     {userPubkey}
     on:openSettingsDrawer={openSettingsDrawer}
     on:openLoginModal={openLoginModal}
+    on:openRelayModal={openRelayConnectModal}
+    on:relayChanged={handleRelayChange}
+    on:toggleMobileMenu={toggleMobileMenu}
 />
 
 <!-- Main Content Area -->
@@ -2790,8 +2996,10 @@
         {tabs}
         {selectedTab}
         version={relayVersion}
+        mobileOpen={mobileMenuOpen}
         on:selectTab={(e) => selectTab(e.detail)}
         on:closeSearchTab={(e) => closeSearchTab(e.detail)}
+        on:closeMobileMenu={closeMobileMenu}
     />
 
     <!-- Main Content -->
@@ -2839,13 +3047,15 @@
                 on:filterClear={handleFilterClear}
             />
         {:else if selectedTab === "blossom"}
-            <BlossomView
-                {isLoggedIn}
-                {userPubkey}
-                {userSigner}
-                {currentEffectiveRole}
-                on:openLoginModal={openLoginModal}
-            />
+            {#key $relayUrl}
+                <BlossomView
+                    {isLoggedIn}
+                    {userPubkey}
+                    {userSigner}
+                    {currentEffectiveRole}
+                    on:openLoginModal={openLoginModal}
+                />
+            {/key}
         {:else if selectedTab === "compose"}
             <ComposeView
                 bind:composeEventJson
@@ -2879,7 +3089,9 @@
                         </p>
                     </div>
                 {:else if isLoggedIn && userRole === "owner"}
-                    <ManagedACL {userSigner} {userPubkey} />
+                    {#key $relayUrl}
+                        <ManagedACL {userSigner} {userPubkey} />
+                    {/key}
                 {:else}
                     <div class="access-denied">
                         <p>
@@ -2913,7 +3125,9 @@
                         </p>
                     </div>
                 {:else if isLoggedIn && userRole === "owner"}
-                    <CurationView {userSigner} {userPubkey} />
+                    {#key $relayUrl}
+                        <CurationView {userSigner} {userPubkey} />
+                    {/key}
                 {:else}
                     <div class="access-denied">
                         <p>
@@ -2970,20 +3184,24 @@
                 on:openLoginModal={openLoginModal}
             />
         {:else if selectedTab === "relay-connect"}
-            <RelayConnectView
-                {isLoggedIn}
-                {userRole}
-                {userSigner}
-                {userPubkey}
-                on:openLoginModal={openLoginModal}
-            />
+            {#key $relayUrl}
+                <RelayConnectView
+                    {isLoggedIn}
+                    {userRole}
+                    {userSigner}
+                    {userPubkey}
+                    on:openLoginModal={openLoginModal}
+                />
+            {/key}
         {:else if selectedTab === "logs"}
-            <LogView
-                {isLoggedIn}
-                {userRole}
-                {userSigner}
-                on:openLoginModal={openLoginModal}
-            />
+            {#key $relayUrl}
+                <LogView
+                    {isLoggedIn}
+                    {userRole}
+                    {userSigner}
+                    on:openLoginModal={openLoginModal}
+                />
+            {/key}
         {:else if selectedTab === "recovery"}
             <div class="recovery-tab">
                 <div>
@@ -3406,7 +3624,30 @@
                         </div>
                     </div>
                 {/if}
-                <!-- Additional settings can be added here -->
+
+                <!-- Relay Connection Section (for standalone mode) -->
+                {#if $isStandaloneMode}
+                    <div class="relay-section">
+                        <h3>Connected Relay</h3>
+                        {#if $relayInfoStore}
+                            <div class="relay-info-card">
+                                <div class="relay-name">{$relayInfoStore.name || "Unknown relay"}</div>
+                                {#if $relayInfoStore.description}
+                                    <div class="relay-description">{$relayInfoStore.description}</div>
+                                {/if}
+                                <div class="relay-url">{$relayUrl}</div>
+                            </div>
+                        {:else}
+                            <div class="relay-disconnected">
+                                <span class="status-dot disconnected"></span>
+                                Not connected
+                            </div>
+                        {/if}
+                        <button class="change-relay-btn" on:click={() => { closeSettingsDrawer(); openRelayConnectModal(); }}>
+                            {$relayInfoStore ? "Change Relay" : "Connect to Relay"}
+                        </button>
+                    </div>
+                {/if}
             </div>
         </div>
     </div>
@@ -3418,6 +3659,14 @@
     {isDarkTheme}
     on:login={handleLogin}
     on:close={closeLoginModal}
+/>
+
+<!-- Relay Connect Modal (for standalone mode) -->
+<RelayConnectModal
+    bind:showModal={showRelayConnectModal}
+    {isDarkTheme}
+    on:connected={handleRelayConnected}
+    on:close={closeRelayConnectModal}
 />
 
 <style>
@@ -3598,13 +3847,6 @@
 
     .welcome-message p {
         font-size: 1.2rem;
-    }
-
-    @media (max-width: 640px) {
-        .main-content {
-            left: 160px;
-            padding: 1rem;
-        }
     }
 
     .logout-btn {
@@ -4201,6 +4443,14 @@
     }
 
     @media (max-width: 640px) {
+        .main-content {
+            left: 0;
+        }
+
+        .search-results-view {
+            left: 0;
+        }
+
         .settings-drawer {
             width: 100%;
         }
@@ -4457,5 +4707,78 @@
     :global(body.dark-theme) .event-item.old-version {
         background: var(--header-bg);
         border: none;
+    }
+
+    /* Relay connection section in settings drawer */
+    .relay-section {
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border-color);
+    }
+
+    .relay-section h3 {
+        margin: 0 0 12px 0;
+        color: var(--text-color);
+        font-size: 1.1rem;
+    }
+
+    .relay-info-card {
+        background: var(--muted);
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 12px;
+    }
+
+    .relay-name {
+        font-weight: 600;
+        color: var(--text-color);
+        margin-bottom: 4px;
+    }
+
+    .relay-description {
+        font-size: 0.9rem;
+        color: var(--muted-foreground);
+        margin-bottom: 8px;
+    }
+
+    .relay-url {
+        font-family: monospace;
+        font-size: 0.85rem;
+        color: var(--primary);
+        word-break: break-all;
+    }
+
+    .relay-disconnected {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted-foreground);
+        margin-bottom: 12px;
+    }
+
+    .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+    }
+
+    .status-dot.disconnected {
+        background: var(--danger);
+    }
+
+    .change-relay-btn {
+        width: 100%;
+        padding: 10px 16px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.95rem;
+        transition: background-color 0.2s;
+    }
+
+    .change-relay-btn:hover {
+        background: #00acc1;
     }
 </style>

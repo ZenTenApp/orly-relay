@@ -407,10 +407,10 @@
     }
 
     .kind-number {
-        background: var(--primary);
-        color: #ffffff;
+        background: var(--card-bg);
+        color: var(--text-color);
         padding: 0.1em 0.4em;
-        border: 0;
+        border: 1px solid var(--border-color);
         font-size: 0.7em;
         font-weight: 600;
         font-family: monospace;

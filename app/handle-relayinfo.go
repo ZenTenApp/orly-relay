@@ -29,6 +29,7 @@ type ExtendedRelayInfo struct {
 	*relayinfo.T
 	Addresses  []string          `json:"addresses,omitempty"`
 	GraphQuery *GraphQueryConfig `json:"graph_query,omitempty"`
+	Theme      string            `json:"theme,omitempty"`
 }
 
 // HandleRelayInfo generates and returns a relay information document in JSON
@@ -203,12 +204,17 @@ func (s *Server) HandleRelayInfo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Return extended info if we have addresses or graph query support, otherwise standard info
-	if len(addresses) > 0 || graphConfig != nil {
+	// Return extended info if we have addresses, graph query support, or custom theme
+	theme := s.Config.Theme
+	if theme != "auto" && theme != "light" && theme != "dark" {
+		theme = "auto"
+	}
+	if len(addresses) > 0 || graphConfig != nil || theme != "auto" {
 		extInfo := &ExtendedRelayInfo{
 			T:          info,
 			Addresses:  addresses,
 			GraphQuery: graphConfig,
+			Theme:      theme,
 		}
 		if err := json.NewEncoder(w).Encode(extInfo); chk.E(err) {
 		}

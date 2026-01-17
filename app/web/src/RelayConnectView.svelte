@@ -7,6 +7,7 @@
     import { createEventDispatcher, onMount } from "svelte";
     import * as api from "./api.js";
     import { copyToClipboard, showCopyFeedback } from "./utils.js";
+    import { relayUrl } from "./stores.js";
 
     const dispatch = createEventDispatcher();
 
@@ -28,13 +29,35 @@
     let currentURI = "";
     let currentLabel = "";
 
+    let initialLoadDone = false;
+    let currentRelayUrl = "";
+
     onMount(async () => {
+        currentRelayUrl = $relayUrl || "";
         await loadNRCConfig();
+        initialLoadDone = true;
     });
 
+    // Watch for relay URL changes after initial load
+    $: watchedRelayUrl = $relayUrl;
+    $: if (initialLoadDone && watchedRelayUrl !== currentRelayUrl) {
+        currentRelayUrl = watchedRelayUrl;
+        handleRelayChange();
+    }
+
+    function handleRelayChange() {
+        console.log("[RelayConnectView] Relay changed, reloading...");
+        connections = [];
+        config = {};
+        nrcEnabled = false;
+        loadNRCConfig();
+    }
+
     async function loadNRCConfig() {
+        console.log("[RelayConnectView] loadNRCConfig called, current relayUrl:", $relayUrl);
         try {
             const result = await api.fetchNRCConfig();
+            console.log("[RelayConnectView] NRC config result:", result);
             nrcEnabled = result.enabled;
             badgerRequired = result.badger_required;
 

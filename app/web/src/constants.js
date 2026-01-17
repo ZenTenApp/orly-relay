@@ -1,9 +1,18 @@
 // Default Nostr relays for searching
-// Use startsWith to avoid minifier optimization issues
+// Import from config module for dual-mode support (embedded vs standalone)
+import { getRelayUrls } from './config.js';
+
+// Dynamic relay list - call this function to get current relay(s)
+// In embedded mode: returns same-origin relay
+// In standalone mode: returns configured relay URL
+export function getDefaultRelays() {
+  return getRelayUrls();
+}
+
+// Legacy export for backwards compatibility
+// Components should migrate to getDefaultRelays() for dynamic behavior
 const wsProtocol = window.location.protocol.startsWith('https') ? 'wss:' : 'ws:';
 export const DEFAULT_RELAYS = [
-  // Use the local relay WebSocket endpoint
-  // Automatically use ws:// for http:// and wss:// for https://
   `${wsProtocol}//${window.location.host}/`,
 ];
 

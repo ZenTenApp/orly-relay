@@ -141,6 +141,32 @@ func (s *Server) isIPBlacklisted(remote string) bool {
 	return false
 }
 
+// isAllowedCORSOrigin checks if the given origin is allowed for CORS requests.
+// Returns true if:
+//   - CORSOrigins contains "*" (allow all)
+//   - CORSOrigins is empty (allow all when CORS is enabled)
+//   - The origin matches one of the configured origins
+func (s *Server) isAllowedCORSOrigin(origin string) bool {
+	if origin == "" {
+		return false
+	}
+
+	// If no specific origins configured, allow all
+	if len(s.Config.CORSOrigins) == 0 {
+		return true
+	}
+
+	for _, allowed := range s.Config.CORSOrigins {
+		if allowed == "*" {
+			return true
+		}
+		if allowed == origin {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check if this is a blossom-related path (needs CORS headers)
 	path := r.URL.Path
@@ -163,8 +189,31 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-	} else if r.Method == "OPTIONS" {
-		// Handle OPTIONS for non-blossom paths
+	}
+
+	// Set CORS headers for API endpoints when enabled (for standalone dashboard mode)
+	// Also allow root path for NIP-11 relay info requests
+	isAPIPath := strings.HasPrefix(path, "/api/")
+	isRelayInfoRequest := path == "/" && r.Header.Get("Accept") == "application/nostr+json"
+	if s.Config != nil && s.Config.CORSEnabled && (isAPIPath || isRelayInfoRequest) {
+		origin := r.Header.Get("Origin")
+		if s.isAllowedCORSOrigin(origin) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Max-Age", "86400")
+		}
+
+		// Handle preflight OPTIONS requests for API paths
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+	}
+
+	if r.Method == "OPTIONS" && !isBlossomPath && !isAPIPath {
+		// Handle OPTIONS for other paths
 		if s.mux != nil {
 			s.mux.ServeHTTP(w, r)
 			return

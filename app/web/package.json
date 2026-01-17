@@ -7,12 +7,14 @@
     "fetch-kinds": "node scripts/fetch-kinds.js",
     "prebuild": "npm run fetch-kinds",
     "build": "rollup -c",
+    "build:standalone": "STANDALONE_MODE=true rollup -c",
     "dev": "rollup -c -w",
     "start": "sirv public --no-clear --single"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^24.0.0",
     "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-replace": "^5.0.0",
     "@rollup/plugin-terser": "^0.4.0",
     "rollup": "^3.15.0",
     "rollup-plugin-copy": "^3.5.0",
