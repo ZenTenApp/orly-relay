@@ -2,6 +2,8 @@ package nrc
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -25,6 +27,8 @@ const (
 	KindNRCRequest = 24891
 	// KindNRCResponse is the event kind for NRC responses.
 	KindNRCResponse = 24892
+	// MaxChunkSize is the maximum size for a single chunk (40KB to stay under 65KB limit after NIP-44 + base64).
+	MaxChunkSize = 40000
 )
 
 // BridgeConfig holds configuration for the NRC bridge.
@@ -300,6 +304,8 @@ func (b *Bridge) forwardToLocalRelay(ctx context.Context, session *Session, reqE
 		return b.handleCLOSE(ctx, session, reqEvent, reqMsg)
 	case "COUNT":
 		return b.handleCOUNT(ctx, session, reqEvent, reqMsg, localConn)
+	case "IDS":
+		return b.handleIDS(ctx, session, reqEvent, reqMsg, localConn)
 	default:
 		return fmt.Errorf("unsupported message type: %s", reqMsg.Type)
 	}
@@ -460,6 +466,158 @@ func (b *Bridge) handleCOUNT(ctx context.Context, session *Session, reqEvent *ev
 		Payload: []any{"NOTICE", "COUNT not supported through NRC tunnel"},
 	}
 	return b.sendResponse(ctx, reqEvent, session, resp)
+}
+
+// handleIDS handles an IDS message - returns event manifests for diffing.
+func (b *Bridge) handleIDS(ctx context.Context, session *Session, reqEvent *event.E, reqMsg *RequestMessage, conn *ws.Client) error {
+	// Extract subscription ID and filters from payload
+	// Payload: ["IDS", "<sub_id>", filter1, filter2, ...]
+	if len(reqMsg.Payload) < 3 {
+		return fmt.Errorf("invalid IDS payload")
+	}
+	subID, ok := reqMsg.Payload[1].(string)
+	if !ok {
+		return fmt.Errorf("invalid subscription ID")
+	}
+
+	// Parse filters from payload
+	var filters []*filter.F
+	for i := 2; i < len(reqMsg.Payload); i++ {
+		filterMap, ok := reqMsg.Payload[i].(map[string]any)
+		if !ok {
+			continue
+		}
+		filterBytes, err := json.Marshal(filterMap)
+		if err != nil {
+			continue
+		}
+		var f filter.F
+		if err := json.Unmarshal(filterBytes, &f); err != nil {
+			continue
+		}
+		filters = append(filters, &f)
+	}
+
+	if len(filters) == 0 {
+		return fmt.Errorf("no valid filters in IDS")
+	}
+
+	// Add subscription to session
+	if err := session.AddSubscription(subID); err != nil {
+		return err
+	}
+	defer session.RemoveSubscription(subID)
+
+	// Create filter set
+	filterSet := filter.NewS(filters...)
+
+	// Subscribe to local relay
+	sub, err := conn.Subscribe(ctx, filterSet)
+	if chk.E(err) {
+		return fmt.Errorf("local subscribe failed: %w", err)
+	}
+	defer sub.Unsub()
+
+	// Collect events and build manifest
+	var manifest []EventManifestEntry
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case ev := <-sub.Events:
+			if ev == nil {
+				// Subscription closed, send IDS response
+				return b.sendIDSResponse(ctx, reqEvent, session, subID, manifest)
+			}
+
+			// Build manifest entry
+			entry := EventManifestEntry{
+				Kind:      int(ev.Kind),
+				ID:        string(hex.Enc(ev.ID[:])),
+				CreatedAt: ev.CreatedAt,
+			}
+
+			// Check for d tag (parameterized replaceable events)
+			dTag := ev.Tags.GetFirst([]byte("d"))
+			if dTag != nil && dTag.Len() >= 2 {
+				entry.D = string(dTag.Value())
+			}
+
+			manifest = append(manifest, entry)
+		case <-sub.EndOfStoredEvents:
+			// Send IDS response with manifest
+			return b.sendIDSResponse(ctx, reqEvent, session, subID, manifest)
+		}
+	}
+}
+
+// sendIDSResponse sends an IDS response with the event manifest, chunking if necessary.
+func (b *Bridge) sendIDSResponse(ctx context.Context, reqEvent *event.E, session *Session, subID string, manifest []EventManifestEntry) error {
+	resp := &ResponseMessage{
+		Type:    "IDS",
+		Payload: []any{"IDS", subID, manifest},
+	}
+	return b.sendResponseChunked(ctx, reqEvent, session, resp)
+}
+
+// sendResponseChunked sends a response, chunking if necessary for large payloads.
+func (b *Bridge) sendResponseChunked(ctx context.Context, reqEvent *event.E, session *Session, resp *ResponseMessage) error {
+	// Marshal response content
+	content, err := MarshalResponseContent(resp)
+	if err != nil {
+		return fmt.Errorf("marshal failed: %w", err)
+	}
+
+	// If small enough, send directly
+	if len(content) <= MaxChunkSize {
+		return b.sendResponse(ctx, reqEvent, session, resp)
+	}
+
+	// Need to chunk - encode to base64 for safe transmission
+	encoded := base64.StdEncoding.EncodeToString(content)
+	var chunks []string
+
+	// Split into chunks
+	for i := 0; i < len(encoded); i += MaxChunkSize {
+		end := i + MaxChunkSize
+		if end > len(encoded) {
+			end = len(encoded)
+		}
+		chunks = append(chunks, encoded[i:end])
+	}
+
+	// Generate message ID
+	messageID := generateMessageID()
+	log.D.F("NRC: chunking large message (%d bytes) into %d chunks", len(content), len(chunks))
+
+	// Send each chunk
+	for i, chunkData := range chunks {
+		chunkMsg := ChunkMessage{
+			Type:      "CHUNK",
+			MessageID: messageID,
+			Index:     i,
+			Total:     len(chunks),
+			Data:      chunkData,
+		}
+
+		chunkResp := &ResponseMessage{
+			Type:    "CHUNK",
+			Payload: []any{chunkMsg},
+		}
+
+		if err := b.sendResponse(ctx, reqEvent, session, chunkResp); err != nil {
+			return fmt.Errorf("failed to send chunk %d/%d: %w", i+1, len(chunks), err)
+		}
+	}
+
+	return nil
+}
+
+// generateMessageID generates a random message ID for chunking.
+func generateMessageID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return string(hex.Enc(b))
 }
 
 // sendResponse encrypts and sends a response to the client.

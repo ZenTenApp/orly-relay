@@ -183,8 +183,9 @@ func (s *Service) saveEvent(ctx context.Context, ev *event.E) Result {
 	saveCtx, cancel := context.WithTimeout(ctx, s.cfg.WriteTimeout)
 	defer cancel()
 
-	// Apply rate limiting
-	if s.rateLimiter != nil && s.rateLimiter.IsEnabled() {
+	// Apply rate limiting (skip for NIP-46 bunker events which need realtime priority)
+	const kindNIP46 = 24133
+	if s.rateLimiter != nil && s.rateLimiter.IsEnabled() && ev.Kind != uint16(kindNIP46) {
 		const writeOpType = 1 // ratelimit.Write
 		s.rateLimiter.Wait(saveCtx, writeOpType)
 	}

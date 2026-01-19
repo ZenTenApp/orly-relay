@@ -276,14 +276,31 @@ func (m *SessionManager) Close() {
 
 // RequestMessage represents a parsed NRC request message.
 type RequestMessage struct {
-	Type    string // EVENT, REQ, CLOSE, AUTH, COUNT
+	Type    string // EVENT, REQ, CLOSE, AUTH, COUNT, IDS
 	Payload []any
 }
 
 // ResponseMessage represents an NRC response message to be sent.
 type ResponseMessage struct {
-	Type    string // EVENT, OK, EOSE, NOTICE, CLOSED, COUNT, AUTH
+	Type    string // EVENT, OK, EOSE, NOTICE, CLOSED, COUNT, AUTH, IDS, CHUNK
 	Payload []any
+}
+
+// EventManifestEntry describes an event for manifest diffing (used by IDS).
+type EventManifestEntry struct {
+	Kind      int    `json:"kind"`
+	ID        string `json:"id"`
+	CreatedAt int64  `json:"created_at"`
+	D         string `json:"d,omitempty"` // For parameterized replaceable events (kinds 30000-39999)
+}
+
+// ChunkMessage represents a chunk of a large message.
+type ChunkMessage struct {
+	Type      string `json:"type"`       // Always "CHUNK"
+	MessageID string `json:"messageId"`  // Unique ID for the chunked message
+	Index     int    `json:"index"`      // 0-based chunk index
+	Total     int    `json:"total"`      // Total number of chunks
+	Data      string `json:"data"`       // Base64 encoded chunk data
 }
 
 // ParseRequestContent parses the decrypted content of an NRC request.

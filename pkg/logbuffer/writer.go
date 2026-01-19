@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type BufferedWriter struct {
 	original io.Writer
 	buffer   *Buffer
 	lineBuf  bytes.Buffer
+	mu       sync.Mutex
 }
 
 // Log format regex patterns
@@ -42,10 +44,12 @@ func (w *BufferedWriter) Write(p []byte) (n int, err error) {
 
 	// Store in buffer if we have one
 	if w.buffer != nil {
+		w.mu.Lock()
 		// Accumulate data in line buffer
 		w.lineBuf.Write(p)
 
 		// Process complete lines
+		var entries []LogEntry
 		for {
 			line, lineErr := w.lineBuf.ReadString('\n')
 			if lineErr != nil {
@@ -56,11 +60,17 @@ func (w *BufferedWriter) Write(p []byte) (n int, err error) {
 				break
 			}
 
-			// Parse and store the complete line
+			// Parse the complete line
 			entry := w.parseLine(strings.TrimSuffix(line, "\n"))
 			if entry.Message != "" {
-				w.buffer.Add(entry)
+				entries = append(entries, entry)
 			}
+		}
+		w.mu.Unlock()
+
+		// Add entries outside the lock to avoid holding it during buffer.Add
+		for _, entry := range entries {
+			w.buffer.Add(entry)
 		}
 	}
 

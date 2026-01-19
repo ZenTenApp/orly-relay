@@ -2,6 +2,7 @@ package nrc
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -21,6 +22,13 @@ import (
 	"lol.mleku.dev/log"
 )
 
+// chunkBuffer holds chunks for a message being reassembled.
+type chunkBuffer struct {
+	chunks     map[int]string
+	total      int
+	receivedAt time.Time
+}
+
 // Client connects to a private relay through the NRC tunnel.
 type Client struct {
 	uri             *ConnectionURI
@@ -37,6 +45,10 @@ type Client struct {
 	// subscriptions maps subscription IDs to event channels.
 	subscriptions   map[string]chan *event.E
 	subscriptionsMu sync.Mutex
+
+	// chunkBuffers holds partially received chunked messages.
+	chunkBuffers   map[string]*chunkBuffer
+	chunkBuffersMu sync.Mutex
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -61,6 +73,7 @@ func NewClient(connectionURI string) (*Client, error) {
 		clientSigner:    uri.GetClientSigner(),
 		pending:         make(map[string]chan *ResponseMessage),
 		subscriptions:   make(map[string]chan *event.E),
+		chunkBuffers:    make(map[string]*chunkBuffer),
 		ctx:             ctx,
 		cancel:          cancel,
 	}, nil
@@ -127,6 +140,11 @@ func (c *Client) Close() {
 	}
 	c.subscriptions = make(map[string]chan *event.E)
 	c.subscriptionsMu.Unlock()
+
+	// Clear chunk buffers
+	c.chunkBuffersMu.Lock()
+	c.chunkBuffers = make(map[string]*chunkBuffer)
+	c.chunkBuffersMu.Unlock()
 }
 
 // handleResponses processes incoming NRC response events.
@@ -186,6 +204,10 @@ func (c *Client) processResponse(ev *event.E) {
 		c.handleCountResponse(resp.Payload, requestEventID)
 	case "AUTH":
 		c.handleAuthResponse(resp.Payload, requestEventID)
+	case "IDS":
+		c.handleIDSResponse(resp.Payload, requestEventID)
+	case "CHUNK":
+		c.handleChunkResponse(resp.Payload, requestEventID)
 	}
 }
 
@@ -311,6 +333,127 @@ func (c *Client) handleAuthResponse(payload []any, requestEventID string) {
 		select {
 		case ch <- resp:
 		default:
+		}
+	}
+}
+
+// handleIDSResponse handles an IDS response.
+func (c *Client) handleIDSResponse(payload []any, requestEventID string) {
+	c.pendingMu.Lock()
+	ch, exists := c.pending[requestEventID]
+	c.pendingMu.Unlock()
+
+	if exists {
+		resp := &ResponseMessage{Type: "IDS", Payload: payload}
+		select {
+		case ch <- resp:
+		default:
+		}
+	}
+}
+
+// handleChunkResponse handles a CHUNK response and reassembles the message.
+func (c *Client) handleChunkResponse(payload []any, requestEventID string) {
+	if len(payload) < 1 {
+		return
+	}
+
+	// Parse chunk message from payload
+	chunkData, ok := payload[0].(map[string]any)
+	if !ok {
+		log.W.F("NRC: invalid chunk payload format")
+		return
+	}
+
+	messageID, _ := chunkData["messageId"].(string)
+	indexFloat, _ := chunkData["index"].(float64)
+	totalFloat, _ := chunkData["total"].(float64)
+	data, _ := chunkData["data"].(string)
+
+	if messageID == "" || data == "" {
+		log.W.F("NRC: chunk missing required fields")
+		return
+	}
+
+	index := int(indexFloat)
+	total := int(totalFloat)
+
+	c.chunkBuffersMu.Lock()
+	defer c.chunkBuffersMu.Unlock()
+
+	// Get or create buffer for this message
+	buf, exists := c.chunkBuffers[messageID]
+	if !exists {
+		buf = &chunkBuffer{
+			chunks:     make(map[int]string),
+			total:      total,
+			receivedAt: time.Now(),
+		}
+		c.chunkBuffers[messageID] = buf
+	}
+
+	// Store the chunk
+	buf.chunks[index] = data
+	log.D.F("NRC: received chunk %d/%d for message %s", index+1, total, messageID[:8])
+
+	// Check if we have all chunks
+	if len(buf.chunks) == buf.total {
+		// Reassemble the message
+		var encoded string
+		for i := 0; i < buf.total; i++ {
+			part, ok := buf.chunks[i]
+			if !ok {
+				log.W.F("NRC: missing chunk %d for message %s", i, messageID)
+				delete(c.chunkBuffers, messageID)
+				return
+			}
+			encoded += part
+		}
+
+		// Decode from base64
+		decoded, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			log.W.F("NRC: failed to decode chunked message: %v", err)
+			delete(c.chunkBuffers, messageID)
+			return
+		}
+
+		// Parse the reassembled response
+		var resp struct {
+			Type    string `json:"type"`
+			Payload []any  `json:"payload"`
+		}
+		if err := json.Unmarshal(decoded, &resp); err != nil {
+			log.W.F("NRC: failed to parse reassembled message: %v", err)
+			delete(c.chunkBuffers, messageID)
+			return
+		}
+
+		log.D.F("NRC: reassembled chunked message: %s", resp.Type)
+
+		// Clean up buffer
+		delete(c.chunkBuffers, messageID)
+
+		// Route the reassembled response
+		c.pendingMu.Lock()
+		ch, exists := c.pending[requestEventID]
+		c.pendingMu.Unlock()
+
+		if exists {
+			respMsg := &ResponseMessage{Type: resp.Type, Payload: resp.Payload}
+			select {
+			case ch <- respMsg:
+			default:
+			}
+		}
+	}
+
+	// Clean up stale buffers (older than 60 seconds)
+	now := time.Now()
+	for id, b := range c.chunkBuffers {
+		if now.Sub(b.receivedAt) > 60*time.Second {
+			log.W.F("NRC: discarding stale chunk buffer: %s", id)
+			delete(c.chunkBuffers, id)
 		}
 	}
 }
@@ -510,4 +653,62 @@ func (c *Client) Count(ctx context.Context, subID string, filters ...*filter.F) 
 // RelayURL returns a pseudo-URL for this NRC connection.
 func (c *Client) RelayURL() string {
 	return "nrc://" + string(hex.Enc(c.uri.RelayPubkey))
+}
+
+// RequestIDs sends an IDS request to get event manifests for diffing.
+func (c *Client) RequestIDs(ctx context.Context, subID string, filters ...*filter.F) ([]EventManifestEntry, error) {
+	// Build payload: ["IDS", "<sub_id>", filter1, filter2, ...]
+	payload := []any{"IDS", subID}
+	for _, f := range filters {
+		filterBytes, err := json.Marshal(f)
+		if err != nil {
+			return nil, fmt.Errorf("marshal filter failed: %w", err)
+		}
+		var filterMap map[string]any
+		if err := json.Unmarshal(filterBytes, &filterMap); err != nil {
+			return nil, fmt.Errorf("unmarshal filter failed: %w", err)
+		}
+		payload = append(payload, filterMap)
+	}
+
+	resp, err := c.sendRequest(ctx, "IDS", payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse IDS response: ["IDS", "<sub_id>", [...manifest...]]
+	if resp.Type != "IDS" || len(resp.Payload) < 3 {
+		return nil, fmt.Errorf("unexpected response type: %s", resp.Type)
+	}
+
+	// Parse manifest entries
+	manifestData, ok := resp.Payload[2].([]any)
+	if !ok {
+		return nil, fmt.Errorf("invalid manifest response")
+	}
+
+	var manifest []EventManifestEntry
+	for _, item := range manifestData {
+		entryMap, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		entry := EventManifestEntry{}
+		if k, ok := entryMap["kind"].(float64); ok {
+			entry.Kind = int(k)
+		}
+		if id, ok := entryMap["id"].(string); ok {
+			entry.ID = id
+		}
+		if ca, ok := entryMap["created_at"].(float64); ok {
+			entry.CreatedAt = int64(ca)
+		}
+		if d, ok := entryMap["d"].(string); ok {
+			entry.D = d
+		}
+		manifest = append(manifest, entry)
+	}
+
+	return manifest, nil
 }
