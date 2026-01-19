@@ -528,10 +528,9 @@ export async function fetchNRCConnections(signer, pubkey) {
  * @param {object} signer - The signer instance
  * @param {string} pubkey - User's pubkey
  * @param {string} label - Connection label
- * @param {boolean} useCashu - Whether to use CAT authentication
  * @returns {Promise<object>} Created connection with URI
  */
-export async function createNRCConnection(signer, pubkey, label, useCashu = false) {
+export async function createNRCConnection(signer, pubkey, label) {
     const url = `${getApiBase()}/api/nrc/connections`;
     const authHeader = await createNIP98Auth(signer, pubkey, "POST", url);
     const response = await fetch(url, {
@@ -540,7 +539,7 @@ export async function createNRCConnection(signer, pubkey, label, useCashu = fals
             "Content-Type": "application/json",
             ...(authHeader ? { Authorization: `Nostr ${authHeader}` } : {}),
         },
-        body: JSON.stringify({ label, use_cashu: useCashu }),
+        body: JSON.stringify({ label }),
     });
     if (!response.ok) {
         const error = await response.text();

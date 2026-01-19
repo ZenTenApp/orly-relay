@@ -70,10 +70,11 @@ type SyncManager interface {
 
 // Config holds configuration for the authorization service.
 type Config struct {
-	AuthRequired bool     // Whether auth is required for all operations
-	AuthToWrite  bool     // Whether auth is required for write operations
-	Admins       [][]byte // Admin pubkeys
-	Owners       [][]byte // Owner pubkeys
+	AuthRequired    bool     // Whether auth is required for all operations
+	AuthToWrite     bool     // Whether auth is required for write operations
+	NIP46BypassAuth bool     // Allow NIP-46 events through without auth
+	Admins          [][]byte // Admin pubkeys
+	Owners          [][]byte // Owner pubkeys
 }
 
 // Service implements the Authorizer interface.
@@ -135,8 +136,12 @@ func (s *Service) Authorize(ev *event.E, authedPubkey []byte, remote string, eve
 	}
 
 	// Check if auth is required but user not authenticated
+	// NIP-46 bunker events (kind 24133) can bypass auth if configured
+	const kindNIP46 = 24133
 	if (s.cfg.AuthRequired || s.cfg.AuthToWrite) && len(authedPubkey) == 0 {
-		return Deny("authentication required for write operations", true)
+		if !(s.cfg.NIP46BypassAuth && eventKind == kindNIP46) {
+			return Deny("authentication required for write operations", true)
+		}
 	}
 
 	// Get access level

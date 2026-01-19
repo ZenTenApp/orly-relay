@@ -18,7 +18,6 @@ type BunkerInfoResponse struct {
 	RelayNpub    string `json:"relay_npub"`     // Relay's npub
 	RelayPubkey  string `json:"relay_pubkey"`   // Relay's hex pubkey
 	ACLMode      string `json:"acl_mode"`       // Current ACL mode
-	CashuEnabled bool   `json:"cashu_enabled"`  // Whether CAT is required
 	Available    bool   `json:"available"`      // Whether bunker is available
 }
 
@@ -63,19 +62,15 @@ func (s *Server) handleBunkerInfo(w http.ResponseWriter, r *http.Request) {
 	wsURL := strings.Replace(serviceURL, "https://", "wss://", 1)
 	wsURL = strings.Replace(wsURL, "http://", "ws://", 1)
 
-	// Check if Cashu is enabled
-	cashuEnabled := s.CashuIssuer != nil
-
 	// Bunker is available when ACL mode is not "none"
 	available := s.Config.ACLMode != "none"
 
 	resp := BunkerInfoResponse{
-		RelayURL:     wsURL,
-		RelayNpub:    relayNpub,
-		RelayPubkey:  relayPubkeyHex,
-		ACLMode:      s.Config.ACLMode,
-		CashuEnabled: cashuEnabled,
-		Available:    available,
+		RelayURL:    wsURL,
+		RelayNpub:   relayNpub,
+		RelayPubkey: relayPubkeyHex,
+		ACLMode:     s.Config.ACLMode,
+		Available:   available,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

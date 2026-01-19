@@ -15,7 +15,6 @@ let connected = false;
 let userPubkey = null;
 let userPrivkey = null;
 let relayUrl = null;
-let catTokenEncoded = null;
 let subscriptionId = null;
 let heartbeatInterval = null;
 let allowedSecrets = new Set();
@@ -69,14 +68,7 @@ async function connect() {
             wsUrl = 'wss://' + wsUrl;
         }
 
-        // Add CAT token if available
-        if (catTokenEncoded) {
-            const url = new URL(wsUrl);
-            url.searchParams.set('token', catTokenEncoded);
-            wsUrl = url.toString();
-        }
-
-        console.log('[BunkerWorker] Connecting to:', wsUrl.split('?')[0]);
+        console.log('[BunkerWorker] Connecting to:', wsUrl);
 
         ws = new WebSocket(wsUrl);
 
@@ -383,7 +375,6 @@ self.onmessage = async (event) => {
             userPubkey = data.userPubkey;
             userPrivkey = data.userPrivkey ? hexToBytes(data.userPrivkey) : null;
             relayUrl = data.relayUrl;
-            catTokenEncoded = data.catTokenEncoded;
             if (data.secrets) {
                 allowedSecrets = new Set(data.secrets);
             }

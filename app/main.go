@@ -27,11 +27,7 @@ import (
 	"next.orly.dev/pkg/protocol/nip43"
 	"next.orly.dev/pkg/protocol/publish"
 	"next.orly.dev/pkg/bunker"
-	"next.orly.dev/pkg/cashu/issuer"
-	"next.orly.dev/pkg/cashu/keyset"
-	"next.orly.dev/pkg/cashu/verifier"
 	"next.orly.dev/pkg/protocol/nrc"
-	cashuiface "next.orly.dev/pkg/interfaces/cashu"
 	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/spider"
 	"next.orly.dev/pkg/storage"
@@ -193,34 +189,8 @@ func Run(
 		}
 	}
 
-	// Initialize Cashu access token system when ACL is active
-	if cfg.ACLMode != "none" {
-		// Create keyset manager with file-based store (keysets persist across restarts)
-		keysetPath := filepath.Join(cfg.DataDir, "cashu-keysets.json")
-		keysetStore, err := keyset.NewFileStore(keysetPath)
-		if err != nil {
-			log.E.F("failed to create Cashu keyset store at %s: %v", keysetPath, err)
-		} else {
-			keysetManager := keyset.NewManager(keysetStore, keyset.DefaultActiveWindow, keyset.DefaultVerifyWindow)
-
-			// Initialize keyset manager (loads existing keysets or creates new one)
-			if err := keysetManager.Init(); err != nil {
-				log.E.F("failed to initialize Cashu keyset manager: %v", err)
-			} else {
-				// Create issuer with permissive checker (ACL handles authorization)
-				issuerCfg := issuer.DefaultConfig()
-				l.CashuIssuer = issuer.New(keysetManager, cashuiface.AllowAllChecker{}, issuerCfg)
-
-				// Create verifier for validating tokens
-				l.CashuVerifier = verifier.New(keysetManager, cashuiface.AllowAllChecker{}, verifier.DefaultConfig())
-
-				log.I.F("Cashu access token system enabled (ACL mode: %s, keysets: %s)", cfg.ACLMode, keysetPath)
-			}
-		}
-	}
-
 	// Initialize NRC (Nostr Relay Connect) bridge if enabled
-	nrcEnabled, nrcRendezvousURL, nrcAuthorizedKeys, nrcUseCashu, nrcSessionTimeout := cfg.GetNRCConfigValues()
+	nrcEnabled, nrcRendezvousURL, nrcAuthorizedKeys, nrcSessionTimeout := cfg.GetNRCConfigValues()
 	if nrcEnabled && nrcRendezvousURL != "" {
 		// Get relay identity for signing NRC responses
 		relaySecretKey, err := db.GetOrCreateRelayIdentitySecret()
@@ -276,19 +246,14 @@ func Run(
 					SessionTimeout:    nrcSessionTimeout,
 				}
 
-				// Add Cashu verifier if enabled
-				if nrcUseCashu && l.CashuVerifier != nil {
-					bridgeConfig.CashuVerifier = l.CashuVerifier
-				}
-
 				// Create and start the bridge
 				l.nrcBridge = nrc.NewBridge(bridgeConfig)
 				if err := l.nrcBridge.Start(); err != nil {
 					log.E.F("failed to start NRC bridge: %v", err)
 					l.nrcBridge = nil
 				} else {
-					log.I.F("NRC bridge started (rendezvous: %s, authorized: %d, cashu: %v)",
-						nrcRendezvousURL, len(authorizedSecrets), nrcUseCashu && l.CashuVerifier != nil)
+					log.I.F("NRC bridge started (rendezvous: %s, authorized: %d)",
+						nrcRendezvousURL, len(authorizedSecrets))
 				}
 			}
 		}

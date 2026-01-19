@@ -15,27 +15,12 @@ import (
 	"next.orly.dev/pkg/database"
 )
 
-// getCashuMintURL returns the Cashu mint URL based on relay configuration.
-// Returns empty string if Cashu is not enabled.
-func (s *Server) getCashuMintURL() string {
-	if !s.Config.CashuEnabled || s.CashuIssuer == nil {
-		return ""
-	}
-	// Use configured relay URL with /cashu/mint path
-	relayURL := strings.TrimSuffix(s.Config.RelayURL, "/")
-	if relayURL == "" {
-		return ""
-	}
-	return relayURL + "/cashu/mint"
-}
-
 // NRCConnectionResponse is the response structure for NRC connection API.
 type NRCConnectionResponse struct {
 	ID        string `json:"id"`
 	Label     string `json:"label"`
 	CreatedAt int64  `json:"created_at"`
 	LastUsed  int64  `json:"last_used"`
-	UseCashu  bool   `json:"use_cashu"`
 	URI       string `json:"uri,omitempty"` // Only included when specifically requested
 }
 
@@ -49,14 +34,12 @@ type NRCConnectionsResponse struct {
 type NRCConfigResponse struct {
 	Enabled       bool   `json:"enabled"`
 	RendezvousURL string `json:"rendezvous_url"`
-	MintURL       string `json:"mint_url,omitempty"`
 	RelayPubkey   string `json:"relay_pubkey"`
 }
 
 // NRCCreateRequest is the request body for creating a connection.
 type NRCCreateRequest struct {
-	Label    string `json:"label"`
-	UseCashu bool   `json:"use_cashu"`
+	Label string `json:"label"`
 }
 
 // handleNRCConnections handles GET /api/nrc/connections
@@ -107,7 +90,7 @@ func (s *Server) handleNRCConnections(w http.ResponseWriter, r *http.Request) {
 	relayPubkey, _ := keys.SecretBytesToPubKeyBytes(relaySecretKey)
 
 	// Get NRC config values
-	nrcEnabled, nrcRendezvousURL, _, nrcUseCashu, _ := s.Config.GetNRCConfigValues()
+	nrcEnabled, nrcRendezvousURL, _, _ := s.Config.GetNRCConfigValues()
 
 	// Build response
 	response := NRCConnectionsResponse{
@@ -119,19 +102,12 @@ func (s *Server) handleNRCConnections(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	// Add mint URL if Cashu is enabled
-	mintURL := s.getCashuMintURL()
-	if nrcUseCashu && mintURL != "" {
-		response.Config.MintURL = mintURL
-	}
-
 	for _, conn := range conns {
 		response.Connections = append(response.Connections, NRCConnectionResponse{
 			ID:        conn.ID,
 			Label:     conn.Label,
 			CreatedAt: conn.CreatedAt,
 			LastUsed:  conn.LastUsed,
-			UseCashu:  conn.UseCashu,
 		})
 	}
 
@@ -186,7 +162,7 @@ func (s *Server) handleNRCCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create the connection
-	conn, err := badgerDB.CreateNRCConnection(req.Label, req.UseCashu)
+	conn, err := badgerDB.CreateNRCConnection(req.Label)
 	if chk.E(err) {
 		http.Error(w, "Failed to create connection", http.StatusInternalServerError)
 		return
@@ -201,16 +177,10 @@ func (s *Server) handleNRCCreate(w http.ResponseWriter, r *http.Request) {
 	relayPubkey, _ := keys.SecretBytesToPubKeyBytes(relaySecretKey)
 
 	// Get NRC config values
-	_, nrcRendezvousURL, _, nrcUseCashu, _ := s.Config.GetNRCConfigValues()
-
-	// Get mint URL if Cashu enabled
-	mintURL := ""
-	if nrcUseCashu {
-		mintURL = s.getCashuMintURL()
-	}
+	_, nrcRendezvousURL, _, _ := s.Config.GetNRCConfigValues()
 
 	// Generate URI
-	uri, err := badgerDB.GetNRCConnectionURI(conn, relayPubkey, nrcRendezvousURL, mintURL)
+	uri, err := badgerDB.GetNRCConnectionURI(conn, relayPubkey, nrcRendezvousURL)
 	if chk.E(err) {
 		log.W.F("failed to generate URI for new connection: %v", err)
 	}
@@ -224,7 +194,6 @@ func (s *Server) handleNRCCreate(w http.ResponseWriter, r *http.Request) {
 		Label:     conn.Label,
 		CreatedAt: conn.CreatedAt,
 		LastUsed:  conn.LastUsed,
-		UseCashu:  conn.UseCashu,
 		URI:       uri,
 	}
 
@@ -347,16 +316,10 @@ func (s *Server) handleNRCGetURI(w http.ResponseWriter, r *http.Request) {
 	relayPubkey, _ := keys.SecretBytesToPubKeyBytes(relaySecretKey)
 
 	// Get NRC config values
-	_, nrcRendezvousURL, _, nrcUseCashu, _ := s.Config.GetNRCConfigValues()
-
-	// Get mint URL if Cashu enabled
-	mintURL := ""
-	if nrcUseCashu {
-		mintURL = s.getCashuMintURL()
-	}
+	_, nrcRendezvousURL, _, _ := s.Config.GetNRCConfigValues()
 
 	// Generate URI
-	uri, err := badgerDB.GetNRCConnectionURI(conn, relayPubkey, nrcRendezvousURL, mintURL)
+	uri, err := badgerDB.GetNRCConnectionURI(conn, relayPubkey, nrcRendezvousURL)
 	if chk.E(err) {
 		http.Error(w, "Failed to generate URI", http.StatusInternalServerError)
 		return
@@ -417,7 +380,7 @@ func (s *Server) handleNRCConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get NRC config values
-	nrcEnabled, nrcRendezvousURL, _, nrcUseCashu, _ := s.Config.GetNRCConfigValues()
+	nrcEnabled, nrcRendezvousURL, _, _ := s.Config.GetNRCConfigValues()
 
 	// Check if Badger is available (NRC requires Badger)
 	_, badgerAvailable := s.DB.(*database.D)
@@ -426,21 +389,10 @@ func (s *Server) handleNRCConfig(w http.ResponseWriter, r *http.Request) {
 		Enabled        bool   `json:"enabled"`
 		BadgerRequired bool   `json:"badger_required"`
 		RendezvousURL  string `json:"rendezvous_url,omitempty"`
-		UseCashu       bool   `json:"use_cashu"`
-		MintURL        string `json:"mint_url,omitempty"`
 	}{
 		Enabled:        nrcEnabled && badgerAvailable,
 		BadgerRequired: !badgerAvailable,
 		RendezvousURL:  nrcRendezvousURL,
-		UseCashu:       nrcUseCashu,
-	}
-
-	// Add mint URL if Cashu is enabled
-	if nrcUseCashu {
-		mintURL := s.getCashuMintURL()
-		if mintURL != "" {
-			response.MintURL = mintURL
-		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

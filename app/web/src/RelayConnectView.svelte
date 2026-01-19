@@ -22,7 +22,6 @@
 
     // New connection form
     let newLabel = "";
-    let newUseCashu = false;
 
     // URI display modal
     let showURIModal = false;
@@ -92,7 +91,7 @@
 
         isLoading = true;
         try {
-            const result = await api.createNRCConnection(userSigner, userPubkey, newLabel.trim(), newUseCashu);
+            const result = await api.createNRCConnection(userSigner, userPubkey, newLabel.trim());
 
             // Show the URI modal with the new connection
             currentURI = result.uri;
@@ -101,7 +100,6 @@
 
             // Reset form
             newLabel = "";
-            newUseCashu = false;
 
             // Reload connections
             await loadConnections();
@@ -223,12 +221,6 @@
                 <span class="status-label">Rendezvous:</span>
                 <span class="status-value">{config.rendezvous_url || "Not configured"}</span>
             </div>
-            {#if config.mint_url}
-                <div class="status-item">
-                    <span class="status-label">Cashu Mint:</span>
-                    <span class="status-value">{config.mint_url}</span>
-                </div>
-            {/if}
         </div>
 
         <!-- Create new connection -->
@@ -244,19 +236,6 @@
                         placeholder="e.g., Phone, Laptop, Tablet"
                         disabled={isLoading}
                     />
-                </div>
-                <div class="form-group checkbox-group">
-                    <label>
-                        <input
-                            type="checkbox"
-                            bind:checked={newUseCashu}
-                            disabled={isLoading || !config.mint_url}
-                        />
-                        Include CAT (Cashu Access Token)
-                        {#if !config.mint_url}
-                            <span class="hint">(requires Cashu mint)</span>
-                        {/if}
-                    </label>
                 </div>
                 <button
                     class="create-btn"
@@ -284,9 +263,6 @@
                                     <span class="detail">Created: {formatTimestamp(conn.created_at)}</span>
                                     {#if conn.last_used}
                                         <span class="detail">Last used: {formatTimestamp(conn.last_used)}</span>
-                                    {/if}
-                                    {#if conn.use_cashu}
-                                        <span class="badge cashu">CAT</span>
                                     {/if}
                                 </div>
                             </div>
@@ -452,28 +428,6 @@
         font-size: 1em;
     }
 
-    .checkbox-group {
-        flex-direction: row;
-        align-items: center;
-    }
-
-    .checkbox-group label {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        cursor: pointer;
-    }
-
-    .checkbox-group input[type="checkbox"] {
-        width: 1.2em;
-        height: 1.2em;
-    }
-
-    .hint {
-        color: var(--muted-foreground);
-        font-size: 0.85em;
-    }
-
     .create-btn {
         background: var(--primary);
         color: var(--text-color);
@@ -530,19 +484,6 @@
         gap: 0.75rem;
         font-size: 0.85em;
         color: var(--muted-foreground);
-    }
-
-    .badge {
-        background: var(--primary);
-        color: var(--text-color);
-        padding: 0.1em 0.4em;
-        border-radius: 0.25rem;
-        font-size: 0.75em;
-        font-weight: 600;
-    }
-
-    .badge.cashu {
-        background: var(--warning);
     }
 
     .connection-actions {

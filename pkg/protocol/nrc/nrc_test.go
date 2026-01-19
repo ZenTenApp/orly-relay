@@ -91,23 +91,6 @@ func TestParseConnectionURI(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "valid CAT-based URI",
-			uri:  "nostr+relayconnect://" + relayPubkeyHex + "?relay=wss://relay.example.com&auth=cat&mint=https://mint.example.com",
-			check: func(t *testing.T, conn *ConnectionURI) {
-				if conn.AuthMode != AuthModeCAT {
-					t.Errorf("expected AuthModeCAT, got %d", conn.AuthMode)
-				}
-				if conn.MintURL != "https://mint.example.com" {
-					t.Errorf("expected mint URL, got %s", conn.MintURL)
-				}
-			},
-		},
-		{
-			name:    "CAT URI missing mint",
-			uri:     "nostr+relayconnect://" + relayPubkeyHex + "?relay=wss://relay.example.com&auth=cat",
-			wantErr: true,
-		},
 	}
 
 	for _, tt := range tests {

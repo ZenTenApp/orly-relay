@@ -56,6 +56,7 @@ type C struct {
 	ACLMode             string        `env:"ORLY_ACL_MODE" usage:"ACL mode: follows, managed (nip-86), curating, none" default:"none"`
 	AuthRequired        bool          `env:"ORLY_AUTH_REQUIRED" usage:"require authentication for all requests (works with managed ACL)" default:"false"`
 	AuthToWrite         bool          `env:"ORLY_AUTH_TO_WRITE" usage:"require authentication only for write operations (EVENT), allow REQ/COUNT without auth" default:"false"`
+	NIP46BypassAuth     bool          `env:"ORLY_NIP46_BYPASS_AUTH" usage:"allow NIP-46 bunker events (kind 24133) through without authentication even when auth is required" default:"false"`
 	BootstrapRelays     []string      `env:"ORLY_BOOTSTRAP_RELAYS" usage:"comma-separated list of bootstrap relay URLs for initial sync"`
 	NWCUri              string        `env:"ORLY_NWC_URI" usage:"NWC (Nostr Wallet Connect) connection string for Lightning payments"`
 	SubscriptionEnabled bool          `env:"ORLY_SUBSCRIPTION_ENABLED" default:"false" usage:"enable subscription-based access control requiring payment for non-directory events"`
@@ -184,19 +185,10 @@ type C struct {
 	TorBinary   string `env:"ORLY_TOR_BINARY" default:"tor" usage:"path to tor binary (default: search in PATH)"`
 	TorSOCKS    int    `env:"ORLY_TOR_SOCKS" default:"0" usage:"SOCKS port for outbound Tor connections (0=disabled)"`
 
-	// Cashu access token configuration (NIP-XX)
-	CashuEnabled     bool   `env:"ORLY_CASHU_ENABLED" default:"false" usage:"enable Cashu blind signature tokens for access control"`
-	CashuTokenTTL    string `env:"ORLY_CASHU_TOKEN_TTL" default:"168h" usage:"token validity duration (default: 1 week)"`
-	CashuKeysetTTL   string `env:"ORLY_CASHU_KEYSET_TTL" default:"168h" usage:"keyset active signing period (default: 1 week)"`
-	CashuVerifyTTL   string `env:"ORLY_CASHU_VERIFY_TTL" default:"504h" usage:"keyset verification period (default: 3 weeks)"`
-	CashuScopes      string `env:"ORLY_CASHU_SCOPES" default:"relay,nip46" usage:"comma-separated list of allowed token scopes"`
-	CashuReauthorize bool   `env:"ORLY_CASHU_REAUTHORIZE" default:"true" usage:"re-check ACL on each token verification for stateless revocation"`
-
 	// Nostr Relay Connect (NRC) configuration - tunnel private relay through public relay
 	NRCEnabled          bool   `env:"ORLY_NRC_ENABLED" default:"false" usage:"enable NRC bridge to expose this relay through a public rendezvous relay"`
 	NRCRendezvousURL    string `env:"ORLY_NRC_RENDEZVOUS_URL" usage:"WebSocket URL of the public relay to use as rendezvous point (e.g., wss://relay.example.com)"`
 	NRCAuthorizedKeys   string `env:"ORLY_NRC_AUTHORIZED_KEYS" usage:"comma-separated list of authorized client pubkeys (hex) for secret-based auth"`
-	NRCUseCashu         bool   `env:"ORLY_NRC_USE_CASHU" default:"false" usage:"use Cashu access tokens for NRC authentication instead of static secrets"`
 	NRCSessionTimeout   string `env:"ORLY_NRC_SESSION_TIMEOUT" default:"30m" usage:"inactivity timeout for NRC sessions"`
 
 	// Cluster replication configuration
@@ -718,57 +710,6 @@ func (cfg *C) GetWireGuardConfigValues() (
 		cfg.BunkerPort
 }
 
-// GetCashuConfigValues returns the Cashu access token configuration values.
-// This avoids circular imports with pkg/cashu while allowing main.go to construct
-// the Cashu issuer/verifier configuration.
-func (cfg *C) GetCashuConfigValues() (
-	enabled bool,
-	tokenTTL time.Duration,
-	keysetTTL time.Duration,
-	verifyTTL time.Duration,
-	scopes []string,
-	reauthorize bool,
-) {
-	// Parse token TTL
-	tokenTTL = 168 * time.Hour // Default: 1 week
-	if cfg.CashuTokenTTL != "" {
-		if d, err := time.ParseDuration(cfg.CashuTokenTTL); err == nil {
-			tokenTTL = d
-		}
-	}
-
-	// Parse keyset TTL
-	keysetTTL = 168 * time.Hour // Default: 1 week
-	if cfg.CashuKeysetTTL != "" {
-		if d, err := time.ParseDuration(cfg.CashuKeysetTTL); err == nil {
-			keysetTTL = d
-		}
-	}
-
-	// Parse verify TTL
-	verifyTTL = 504 * time.Hour // Default: 3 weeks
-	if cfg.CashuVerifyTTL != "" {
-		if d, err := time.ParseDuration(cfg.CashuVerifyTTL); err == nil {
-			verifyTTL = d
-		}
-	}
-
-	// Parse scopes
-	if cfg.CashuScopes != "" {
-		scopes = strings.Split(cfg.CashuScopes, ",")
-		for i := range scopes {
-			scopes[i] = strings.TrimSpace(scopes[i])
-		}
-	}
-
-	return cfg.CashuEnabled,
-		tokenTTL,
-		keysetTTL,
-		verifyTTL,
-		scopes,
-		cfg.CashuReauthorize
-}
-
 // GetArchiveConfigValues returns the archive relay configuration values.
 // This avoids circular imports with pkg/archive while allowing main.go to construct
 // the archive manager configuration.
@@ -868,7 +809,6 @@ func (cfg *C) GetNRCConfigValues() (
 	enabled bool,
 	rendezvousURL string,
 	authorizedKeys []string,
-	useCashu bool,
 	sessionTimeout time.Duration,
 ) {
 	// Parse session timeout
@@ -893,7 +833,6 @@ func (cfg *C) GetNRCConfigValues() (
 	return cfg.NRCEnabled,
 		cfg.NRCRendezvousURL,
 		authorizedKeys,
-		cfg.NRCUseCashu,
 		sessionTimeout
 }
 

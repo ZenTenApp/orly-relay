@@ -18,9 +18,6 @@ import (
 	"git.mleku.dev/mleku/nostr/ws"
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
-
-	"next.orly.dev/pkg/cashu/token"
-	"next.orly.dev/pkg/cashu/verifier"
 )
 
 const (
@@ -40,8 +37,6 @@ type BridgeConfig struct {
 	Signer signer.I
 	// AuthorizedSecrets maps derived pubkeys to device names (secret-based auth).
 	AuthorizedSecrets map[string]string
-	// CashuVerifier is used for CAT token verification (optional).
-	CashuVerifier *verifier.Verifier
 	// SessionTimeout is the inactivity timeout for sessions.
 	SessionTimeout time.Duration
 }
@@ -266,36 +261,6 @@ func (b *Bridge) handleRequest(ev *event.E) {
 func (b *Bridge) authorize(ctx context.Context, ev *event.E) (conversationKey []byte, authMode AuthMode, deviceName string, err error) {
 	clientPubkey := ev.Pubkey[:]
 	clientPubkeyHex := string(hex.Enc(clientPubkey))
-
-	// Check for CAT token in tags
-	cashuTag := ev.Tags.GetFirst([]byte("cashu"))
-	if cashuTag != nil && cashuTag.Len() >= 2 {
-		// CAT authentication
-		if b.config.CashuVerifier == nil {
-			err = fmt.Errorf("CAT auth not configured")
-			return
-		}
-		tokenStr := string(cashuTag.Value())
-		var tok *token.Token
-		tok, err = token.Parse(tokenStr)
-		if chk.E(err) {
-			err = fmt.Errorf("invalid CAT token: %w", err)
-			return
-		}
-		if err = b.config.CashuVerifier.VerifyForScope(ctx, tok, token.ScopeNRC, ""); chk.E(err) {
-			return
-		}
-		// CAT auth uses ECDH between relay key and client's Nostr key
-		conversationKey, err = encryption.GenerateConversationKey(
-			b.config.Signer.Sec(),
-			clientPubkey,
-		)
-		if chk.E(err) {
-			return
-		}
-		authMode = AuthModeCAT
-		return
-	}
 
 	// Secret-based authentication: check if client pubkey is in authorized list
 	if name, ok := b.config.AuthorizedSecrets[clientPubkeyHex]; ok {

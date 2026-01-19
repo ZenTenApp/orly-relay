@@ -165,3 +165,87 @@ export function touchRelay(url) {
         return relays;
     });
 }
+
+// ==================== Bunker Service State ====================
+
+export const bunkerServiceActive = writable(false);
+export const bunkerConnectedClients = writable([]);
+
+// Bunker worker instance (persists across component mounts)
+let bunkerWorker = null;
+
+/**
+ * Get or create the bunker worker
+ */
+function getBunkerWorker() {
+    if (!bunkerWorker) {
+        bunkerWorker = new Worker(new URL('./bunker-worker.js', import.meta.url), { type: 'module' });
+        bunkerWorker.onmessage = (event) => {
+            const { type, ...data } = event.data;
+            switch (type) {
+                case 'status':
+                    bunkerServiceActive.set(data.status === 'connected');
+                    break;
+                case 'clients':
+                    bunkerConnectedClients.set(data.clients || []);
+                    break;
+                case 'error':
+                    console.error('[BunkerStore] Worker error:', data.error);
+                    break;
+                case 'request':
+                    console.log('[BunkerStore] Request:', data.method, 'from:', data.from);
+                    break;
+            }
+        };
+    }
+    return bunkerWorker;
+}
+
+/**
+ * Configure the bunker worker
+ */
+export function configureBunkerWorker(config) {
+    const worker = getBunkerWorker();
+    worker.postMessage({ type: 'configure', ...config });
+}
+
+/**
+ * Connect the bunker worker
+ */
+export function connectBunkerWorker() {
+    const worker = getBunkerWorker();
+    worker.postMessage({ type: 'connect' });
+}
+
+/**
+ * Disconnect the bunker worker
+ */
+export function disconnectBunkerWorker() {
+    const worker = getBunkerWorker();
+    worker.postMessage({ type: 'disconnect' });
+}
+
+/**
+ * Add a secret to the bunker worker
+ */
+export function addBunkerSecret(secret) {
+    const worker = getBunkerWorker();
+    worker.postMessage({ type: 'addSecret', secret });
+}
+
+/**
+ * Request current bunker status
+ */
+export function requestBunkerStatus() {
+    const worker = getBunkerWorker();
+    worker.postMessage({ type: 'getStatus' });
+}
+
+/**
+ * Reset bunker state
+ */
+export function resetBunkerState() {
+    disconnectBunkerWorker();
+    bunkerServiceActive.set(false);
+    bunkerConnectedClients.set([]);
+}

@@ -29,7 +29,6 @@ type NRCConnection struct {
 	Secret    []byte `json:"secret"`     // 32-byte secret for client authentication
 	CreatedAt int64  `json:"created_at"` // Unix timestamp
 	LastUsed  int64  `json:"last_used"`  // Unix timestamp of last connection (0 if never)
-	UseCashu  bool   `json:"use_cashu"`  // Whether to include CAT token in URI
 }
 
 // GetNRCConnection retrieves an NRC connection by ID.
@@ -108,7 +107,7 @@ func (d *D) GetAllNRCConnections() (conns []*NRCConnection, err error) {
 }
 
 // CreateNRCConnection generates a new NRC connection with a random secret.
-func (d *D) CreateNRCConnection(label string, useCashu bool) (*NRCConnection, error) {
+func (d *D) CreateNRCConnection(label string) (*NRCConnection, error) {
 	// Generate random 32-byte secret
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
@@ -124,22 +123,20 @@ func (d *D) CreateNRCConnection(label string, useCashu bool) (*NRCConnection, er
 		Secret:    secret,
 		CreatedAt: time.Now().Unix(),
 		LastUsed:  0,
-		UseCashu:  useCashu,
 	}
 
 	if err := d.SaveNRCConnection(conn); chk.E(err) {
 		return nil, err
 	}
 
-	log.I.F("created NRC connection: id=%s label=%s cashu=%v", id, label, useCashu)
+	log.I.F("created NRC connection: id=%s label=%s", id, label)
 	return conn, nil
 }
 
 // GetNRCConnectionURI generates the full connection URI for a connection.
 // relayPubkey is the relay's public key (32 bytes).
 // rendezvousURL is the public relay URL.
-// mintURL is the CAT mint URL (required if useCashu is true).
-func (d *D) GetNRCConnectionURI(conn *NRCConnection, relayPubkey []byte, rendezvousURL, mintURL string) (string, error) {
+func (d *D) GetNRCConnectionURI(conn *NRCConnection, relayPubkey []byte, rendezvousURL string) (string, error) {
 	if len(relayPubkey) != 32 {
 		return "", fmt.Errorf("invalid relay pubkey length: %d", len(relayPubkey))
 	}
@@ -150,19 +147,9 @@ func (d *D) GetNRCConnectionURI(conn *NRCConnection, relayPubkey []byte, rendezv
 	relayPubkeyHex := hex.Enc(relayPubkey)
 	secretHex := hex.Enc(conn.Secret)
 
-	var uri string
-	if conn.UseCashu {
-		if mintURL == "" {
-			return "", fmt.Errorf("mint URL is required for CAT authentication")
-		}
-		// CAT-based URI includes both secret (for non-CAT relays) and CAT auth
-		uri = fmt.Sprintf("nostr+relayconnect://%s?relay=%s&secret=%s&auth=cat&mint=%s",
-			relayPubkeyHex, rendezvousURL, secretHex, mintURL)
-	} else {
-		// Secret-only URI
-		uri = fmt.Sprintf("nostr+relayconnect://%s?relay=%s&secret=%s",
-			relayPubkeyHex, rendezvousURL, secretHex)
-	}
+	// Secret-only URI
+	uri := fmt.Sprintf("nostr+relayconnect://%s?relay=%s&secret=%s",
+		relayPubkeyHex, rendezvousURL, secretHex)
 
 	if conn.Label != "" {
 		uri += fmt.Sprintf("&name=%s", conn.Label)

@@ -866,9 +866,6 @@ func printNRCUsage() {
 	fmt.Println("  ORLY_NRC_ENABLED=true")
 	fmt.Println("  ORLY_NRC_RENDEZVOUS_URL=wss://public-relay.example.com")
 	fmt.Println("  ORLY_NRC_AUTHORIZED_KEYS=<secret1>:<name1>,<secret2>:<name2>")
-	fmt.Println("")
-	fmt.Println("For CAT-based authentication, also set:")
-	fmt.Println("  ORLY_NRC_USE_CASHU=true")
 }
 
 // handleNRCGenerate generates a new NRC connection URI.
@@ -908,7 +905,7 @@ func handleNRCGenerate(ctx context.Context, cfg *config.C, args []string) {
 	}
 
 	// Get rendezvous URL from config
-	nrcEnabled, nrcRendezvousURL, _, _, _ := cfg.GetNRCConfigValues()
+	nrcEnabled, nrcRendezvousURL, _, _ := cfg.GetNRCConfigValues()
 	if !nrcEnabled || nrcRendezvousURL == "" {
 		fmt.Println("Error: NRC is not configured. Set ORLY_NRC_ENABLED=true and ORLY_NRC_RENDEZVOUS_URL")
 		return
@@ -950,7 +947,7 @@ func handleNRCGenerate(ctx context.Context, cfg *config.C, args []string) {
 
 // handleNRCList lists configured authorized secrets from environment.
 func handleNRCList(cfg *config.C) {
-	_, _, authorizedKeys, useCashu, _ := cfg.GetNRCConfigValues()
+	_, _, authorizedKeys, _ := cfg.GetNRCConfigValues()
 
 	fmt.Println("NRC Configuration:")
 	fmt.Println("")
@@ -977,8 +974,6 @@ func handleNRCList(cfg *config.C) {
 			fmt.Printf("  - %s: %s\n", name, truncated)
 		}
 	}
-	fmt.Println("")
-	fmt.Printf("  CAT authentication: %v\n", useCashu)
 }
 
 // handleNRCRevoke provides instructions for revoking access.

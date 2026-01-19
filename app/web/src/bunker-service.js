@@ -14,7 +14,6 @@
 import { nip04 } from 'nostr-tools';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';
-import { encodeToken } from './cashu-client.js';
 
 // NIP-46 methods
 const NIP46_METHOD = {
@@ -55,7 +54,6 @@ export class BunkerService {
         this.requestLog = [];
         this.heartbeatInterval = null;
         this.subscriptionId = null;
-        this.catToken = null;
 
         // Callbacks
         this.onClientConnected = null;
@@ -79,13 +77,6 @@ export class BunkerService {
     }
 
     /**
-     * Set CAT token for WebSocket connection.
-     */
-    setCatToken(token) {
-        this.catToken = token;
-    }
-
-    /**
      * Connect to the relay and start listening for NIP-46 requests.
      */
     async connect() {
@@ -100,15 +91,7 @@ export class BunkerService {
                 wsUrl = 'wss://' + wsUrl;
             }
 
-            // Add CAT token if available
-            if (this.catToken) {
-                const tokenEncoded = encodeToken(this.catToken);
-                const url = new URL(wsUrl);
-                url.searchParams.set('token', tokenEncoded);
-                wsUrl = url.toString();
-            }
-
-            console.log('[BunkerService] Connecting to:', wsUrl.split('?')[0]);
+            console.log('[BunkerService] Connecting to:', wsUrl);
 
             const ws = new WebSocket(wsUrl);
 

@@ -501,6 +501,7 @@ function parseProfileFromEvent(event) {
 // Fetch user profile metadata (kind 0)
 export async function fetchUserProfile(pubkey) {
   console.log(`Starting profile fetch for pubkey: ${pubkey}`);
+  console.log(`[fetchUserProfile] Current relay list:`, nostrClient.relays);
 
   // 1) Try cached profile first and resolve immediately if present
   try {
@@ -551,6 +552,8 @@ export async function fetchUserProfile(pubkey) {
 
 // Helper to fetch profile from fallback relays
 async function fetchProfileFromFallbackRelays(pubkey, filters) {
+  console.log(`[fetchProfileFromFallbackRelays] Querying fallback relays:`, FALLBACK_RELAYS);
+  console.log(`[fetchProfileFromFallbackRelays] Using filters:`, JSON.stringify(filters));
   return new Promise((resolve) => {
     const events = [];
     const pool = getFallbackPool();
@@ -572,16 +575,19 @@ async function fetchProfileFromFallbackRelays(pubkey, filters) {
       filters,
       {
         onevent(event) {
-          console.log("Profile event received from fallback relay:", event.id?.substring(0, 8));
+          console.log("[fetchProfileFromFallbackRelays] Event received:", event.id?.substring(0, 8), "kind:", event.kind, "pubkey:", event.pubkey?.substring(0, 8));
           events.push(event);
         },
         oneose() {
+          console.log(`[fetchProfileFromFallbackRelays] EOSE received, got ${events.length} events`);
           clearTimeout(timeoutId);
           if (sub) sub.close();
           if (events.length > 0) {
             events.sort((a, b) => b.created_at - a.created_at);
+            console.log("[fetchProfileFromFallbackRelays] Returning best event:", events[0].id?.substring(0, 8));
             resolve(events[0]);
           } else {
+            console.log("[fetchProfileFromFallbackRelays] No events found");
             resolve(null);
           }
         }
@@ -1080,6 +1086,8 @@ export async function fetchDeleteEventsByTarget(eventId, options = {}) {
 
 // Initialize client connection
 export async function initializeNostrClient() {
+  // Refresh relay list to pick up any changes (important for standalone mode)
+  nostrClient.refreshRelays();
   await nostrClient.connect();
 }
 

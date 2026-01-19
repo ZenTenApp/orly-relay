@@ -17,8 +17,6 @@ type AuthMode int
 const (
 	// AuthModeSecret uses a shared secret for authentication.
 	AuthModeSecret AuthMode = iota
-	// AuthModeCAT uses Cashu Access Tokens for authentication.
-	AuthModeCAT
 )
 
 // ConnectionURI represents a parsed nostr+relayconnect:// URI.
@@ -27,7 +25,7 @@ type ConnectionURI struct {
 	RelayPubkey []byte
 	// RendezvousRelay is the WebSocket URL of the public relay.
 	RendezvousRelay string
-	// AuthMode indicates whether to use secret or CAT authentication.
+	// AuthMode indicates the authentication mode.
 	AuthMode AuthMode
 	// DeviceName is an optional human-readable device identifier.
 	DeviceName string
@@ -35,9 +33,6 @@ type ConnectionURI struct {
 	// Secret-based authentication fields
 	clientSecretKey signer.I
 	conversationKey []byte
-
-	// CAT-based authentication fields
-	MintURL string
 }
 
 // GetClientSigner returns the signer derived from the secret (secret-based auth only).
@@ -52,13 +47,9 @@ func (c *ConnectionURI) GetConversationKey() []byte {
 
 // ParseConnectionURI parses a nostr+relayconnect:// URI.
 //
-// Secret-based URI format:
+// URI format:
 //
 //	nostr+relayconnect://<relay-pubkey>?relay=<rendezvous-relay>&secret=<client-secret>[&name=<device-name>]
-//
-// CAT-based URI format:
-//
-//	nostr+relayconnect://<relay-pubkey>?relay=<rendezvous-relay>&auth=cat&mint=<mint-url>
 func ParseConnectionURI(nrcURI string) (conn *ConnectionURI, err error) {
 	var p *url.URL
 	if p, err = url.Parse(nrcURI); chk.E(err) {
@@ -100,52 +91,40 @@ func ParseConnectionURI(nrcURI string) (conn *ConnectionURI, err error) {
 	// Parse optional device name
 	conn.DeviceName = query.Get("name")
 
-	// Determine auth mode
-	authParam := query.Get("auth")
-	if authParam == "cat" {
-		conn.AuthMode = AuthModeCAT
-		// Parse mint URL for CAT auth
-		conn.MintURL = query.Get("mint")
-		if conn.MintURL == "" {
-			err = errors.New("missing mint parameter for CAT auth")
-			return
-		}
-	} else {
-		conn.AuthMode = AuthModeSecret
-		// Parse secret for secret-based auth
-		secret := query.Get("secret")
-		if secret == "" {
-			err = errors.New("missing secret parameter")
-			return
-		}
+	conn.AuthMode = AuthModeSecret
+	// Parse secret for secret-based auth
+	secret := query.Get("secret")
+	if secret == "" {
+		err = errors.New("missing secret parameter")
+		return
+	}
 
-		var secretBytes []byte
-		if secretBytes, err = hex.Dec(secret); chk.E(err) {
-			err = errors.New("invalid secret: must be hex-encoded")
-			return
-		}
-		if len(secretBytes) != 32 {
-			err = errors.New("secret must be 32 bytes")
-			return
-		}
+	var secretBytes []byte
+	if secretBytes, err = hex.Dec(secret); chk.E(err) {
+		err = errors.New("invalid secret: must be hex-encoded")
+		return
+	}
+	if len(secretBytes) != 32 {
+		err = errors.New("secret must be 32 bytes")
+		return
+	}
 
-		// Create signer from secret
-		var clientKey *p8k.Signer
-		if clientKey, err = p8k.New(); chk.E(err) {
-			return
-		}
-		if err = clientKey.InitSec(secretBytes); chk.E(err) {
-			return
-		}
-		conn.clientSecretKey = clientKey
+	// Create signer from secret
+	var clientKey *p8k.Signer
+	if clientKey, err = p8k.New(); chk.E(err) {
+		return
+	}
+	if err = clientKey.InitSec(secretBytes); chk.E(err) {
+		return
+	}
+	conn.clientSecretKey = clientKey
 
-		// Generate conversation key using NIP-44 key derivation
-		if conn.conversationKey, err = encryption.GenerateConversationKey(
-			clientKey.Sec(),
-			conn.RelayPubkey,
-		); chk.E(err) {
-			return
-		}
+	// Generate conversation key using NIP-44 key derivation
+	if conn.conversationKey, err = encryption.GenerateConversationKey(
+		clientKey.Sec(),
+		conn.RelayPubkey,
+	); chk.E(err) {
+		return
 	}
 
 	return
@@ -184,23 +163,3 @@ func GenerateConnectionURI(relayPubkey []byte, rendezvousRelay string, deviceNam
 	return
 }
 
-// GenerateCATConnectionURI creates a new NRC connection URI for CAT authentication.
-func GenerateCATConnectionURI(relayPubkey []byte, rendezvousRelay string, mintURL string) (uri string, err error) {
-	if len(relayPubkey) != 32 {
-		err = errors.New("relay public key must be 32 bytes")
-		return
-	}
-
-	// Build URI
-	u := &url.URL{
-		Scheme: "nostr+relayconnect",
-		Host:   string(hex.Enc(relayPubkey)),
-	}
-	q := u.Query()
-	q.Set("relay", rendezvousRelay)
-	q.Set("auth", "cat")
-	q.Set("mint", mintURL)
-	u.RawQuery = q.Encode()
-	uri = u.String()
-	return
-}

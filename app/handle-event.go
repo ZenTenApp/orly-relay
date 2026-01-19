@@ -7,7 +7,6 @@ import (
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/cashu/token"
 	"next.orly.dev/pkg/event/routing"
 	"git.mleku.dev/mleku/nostr/encoders/envelopes/authenvelope"
 	"git.mleku.dev/mleku/nostr/encoders/envelopes/eventenvelope"
@@ -134,36 +133,6 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 		return
 	}
 
-	// Check Cashu token kind permissions if a token was provided
-	if l.cashuToken != nil && !l.cashuToken.IsKindPermitted(int(env.E.Kind)) {
-		log.W.F("HandleEvent: rejecting event kind %d - not permitted by Cashu token", env.E.Kind)
-		if err = Ok.Error(l, env, "event kind not permitted by access token"); chk.E(err) {
-			return
-		}
-		return
-	}
-
-	// Require Cashu token for NIP-46 events when Cashu is enabled and ACL is active
-	const kindNIP46 = 24133
-	if env.E.Kind == kindNIP46 && l.CashuVerifier != nil && l.Config.ACLMode != "none" {
-		log.D.F("HandleEvent: NIP-46 event from %s, cashuToken=%v, ACLMode=%s", l.remote, l.cashuToken != nil, l.Config.ACLMode)
-		if l.cashuToken == nil {
-			log.W.F("HandleEvent: rejecting NIP-46 event from %s - Cashu access token required (connection has no token)", l.remote)
-			if err = Ok.Error(l, env, "restricted: NIP-46 requires Cashu access token"); chk.E(err) {
-				return
-			}
-			return
-		}
-		// Also verify the token has NIP-46 scope
-		if l.cashuToken.Scope != token.ScopeNIP46 && l.cashuToken.Scope != token.ScopeRelay {
-			log.W.F("HandleEvent: rejecting NIP-46 event - token scope %q not valid for NIP-46", l.cashuToken.Scope)
-			if err = Ok.Error(l, env, "restricted: access token scope not valid for NIP-46"); chk.E(err) {
-				return
-			}
-			return
-		}
-	}
-
 	// Handle NIP-43 special events before ACL checks
 	switch env.E.Kind {
 	case nip43.KindJoinRequest:
@@ -262,17 +231,14 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 	log.I.F("HandleEvent: authorized with access level %s", decision.AccessLevel)
 
 	// Progressive throttle for follows ACL mode (delays non-followed users)
-	// Skip throttle if a Cashu Access Token is present (authenticated via CAT)
-	if l.cashuToken == nil {
-		if delay := l.getFollowsThrottleDelay(env.E); delay > 0 {
-			log.D.F("HandleEvent: applying progressive throttle delay of %v for %0x from %s",
-				delay, env.E.Pubkey, l.remote)
-			select {
-			case <-l.ctx.Done():
-				return l.ctx.Err()
-			case <-time.After(delay):
-				// Delay completed, continue processing
-			}
+	if delay := l.getFollowsThrottleDelay(env.E); delay > 0 {
+		log.D.F("HandleEvent: applying progressive throttle delay of %v for %0x from %s",
+			delay, env.E.Pubkey, l.remote)
+		select {
+		case <-l.ctx.Done():
+			return l.ctx.Err()
+		case <-time.After(delay):
+			// Delay completed, continue processing
 		}
 	}
 
