@@ -56,6 +56,15 @@ func (n *N) SaveEvent(c context.Context, ev *event.E) (exists bool, err error) {
 		return true, nil // Event already exists
 	}
 
+	// For parameterized replaceable events (kinds 30000-39999), delete older versions
+	// before saving the new one. This ensures Neo4j only stores the latest version.
+	if ev.Kind >= 30000 && ev.Kind < 40000 {
+		if err := n.deleteOlderParameterizedReplaceable(c, ev); err != nil {
+			n.Logger.Warningf("failed to delete older replaceable events: %v", err)
+			// Continue with save - older events will be filtered at query time
+		}
+	}
+
 	// Get next serial number
 	serial, err := n.getNextSerial()
 	if err != nil {
@@ -443,4 +452,38 @@ ORDER BY e.created_at DESC`
 	}
 
 	return wouldReplace, serials, nil
+}
+
+// deleteOlderParameterizedReplaceable deletes older versions of parameterized replaceable events
+// (kinds 30000-39999) that have the same pubkey, kind, and d-tag value.
+// This is called before saving a new event to ensure only the latest version is stored.
+func (n *N) deleteOlderParameterizedReplaceable(c context.Context, ev *event.E) error {
+	authorPubkey := hex.Enc(ev.Pubkey[:])
+
+	// Get the d-tag value
+	dTag := ev.Tags.GetFirst([]byte{'d'})
+	dValue := ""
+	if dTag != nil && len(dTag.T) >= 2 {
+		dValue = string(dTag.T[1])
+	}
+
+	// Delete older events with same pubkey, kind, and d-tag
+	// Only delete if the existing event is older than the new one
+	cypher := `
+MATCH (e:Event {kind: $kind, pubkey: $pubkey})-[:TAGGED_WITH]->(t:Tag {type: 'd', value: $dValue})
+WHERE e.created_at < $createdAt
+DETACH DELETE e`
+
+	params := map[string]any{
+		"pubkey":    authorPubkey,
+		"kind":      int64(ev.Kind),
+		"dValue":    dValue,
+		"createdAt": ev.CreatedAt,
+	}
+
+	if _, err := n.ExecuteWrite(c, cypher, params); err != nil {
+		return fmt.Errorf("failed to delete older replaceable events: %w", err)
+	}
+
+	return nil
 }

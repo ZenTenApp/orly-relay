@@ -3,12 +3,15 @@ package neo4j
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/database/indexes/types"
@@ -41,9 +44,79 @@ func (n *N) QueryEventsWithOptions(
 	}
 
 	// Parse response
-	evs, err = n.parseEventsFromResult(result)
+	allEvents, err := n.parseEventsFromResult(result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse events: %w", err)
+	}
+
+	// Filter replaceable events to only return the latest version
+	// unless showAllVersions is true
+	if showAllVersions {
+		return allEvents, nil
+	}
+
+	// Separate events by type and filter replaceables
+	replaceableEvents := make(map[string]*event.E)           // key: pubkey:kind
+	paramReplaceableEvents := make(map[string]map[string]*event.E) // key: pubkey:kind -> d-tag -> event
+	var regularEvents event.S
+
+	for _, ev := range allEvents {
+		if kind.IsReplaceable(ev.Kind) {
+			// For replaceable events, keep only the latest per pubkey:kind
+			key := hex.Enc(ev.Pubkey) + ":" + strconv.Itoa(int(ev.Kind))
+			existing, exists := replaceableEvents[key]
+			if !exists || ev.CreatedAt > existing.CreatedAt {
+				replaceableEvents[key] = ev
+			}
+		} else if kind.IsParameterizedReplaceable(ev.Kind) {
+			// For parameterized replaceable events, keep only the latest per pubkey:kind:d-tag
+			key := hex.Enc(ev.Pubkey) + ":" + strconv.Itoa(int(ev.Kind))
+
+			// Get the 'd' tag value
+			dTag := ev.Tags.GetFirst([]byte("d"))
+			var dValue string
+			if dTag != nil && dTag.Len() > 1 {
+				dValue = string(dTag.Value())
+			}
+
+			// Initialize inner map if needed
+			if _, exists := paramReplaceableEvents[key]; !exists {
+				paramReplaceableEvents[key] = make(map[string]*event.E)
+			}
+
+			// Keep only the newest version
+			existing, exists := paramReplaceableEvents[key][dValue]
+			if !exists || ev.CreatedAt > existing.CreatedAt {
+				paramReplaceableEvents[key][dValue] = ev
+			}
+		} else {
+			regularEvents = append(regularEvents, ev)
+		}
+	}
+
+	// Combine results
+	evs = make(event.S, 0, len(replaceableEvents)+len(paramReplaceableEvents)+len(regularEvents))
+
+	for _, ev := range replaceableEvents {
+		evs = append(evs, ev)
+	}
+
+	for _, innerMap := range paramReplaceableEvents {
+		for _, ev := range innerMap {
+			evs = append(evs, ev)
+		}
+	}
+
+	evs = append(evs, regularEvents...)
+
+	// Re-sort by timestamp (newest first)
+	sort.Slice(evs, func(i, j int) bool {
+		return evs[i].CreatedAt > evs[j].CreatedAt
+	})
+
+	// Re-apply limit after filtering
+	if f.Limit != nil && len(evs) > int(*f.Limit) {
+		evs = evs[:*f.Limit]
 	}
 
 	return evs, nil
