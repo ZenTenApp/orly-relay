@@ -951,11 +951,10 @@ export async function fetchAllEvents(options = {}) {
   } = options;
 
   const now = Math.floor(Date.now() / 1000);
-  const thirtyDaysAgo = now - (30 * 24 * 60 * 60);
-  const sixMonthsAgo = now - (180 * 24 * 60 * 60);
+  const fiveYearsAgo = now - (5 * 365 * 24 * 60 * 60);
 
-  // Start with 30 days if no since specified
-  const initialSince = since || thirtyDaysAgo;
+  // Start with 5 years if no since specified
+  const initialSince = since || fiveYearsAgo;
 
   const filters = [{ ...rest }];
   filters[0].since = initialSince;
@@ -964,20 +963,9 @@ export async function fetchAllEvents(options = {}) {
   if (kinds) filters[0].kinds = kinds;
   if (limit) filters[0].limit = limit;
 
-  let events = await fetchEvents(filters, {
+  const events = await fetchEvents(filters, {
     timeout: 30000
   });
-
-  // If we got few results and weren't already using a longer window, retry with 6 months
-  const fewResultsThreshold = Math.min(20, limit / 2);
-  if (events.length < fewResultsThreshold && initialSince > sixMonthsAgo && !since) {
-    console.log(`[fetchAllEvents] Only got ${events.length} events, retrying with 6-month window...`);
-    filters[0].since = sixMonthsAgo;
-    events = await fetchEvents(filters, {
-      timeout: 30000
-    });
-    console.log(`[fetchAllEvents] 6-month window returned ${events.length} events`);
-  }
 
   return events;
 }
