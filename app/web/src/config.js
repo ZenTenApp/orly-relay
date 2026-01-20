@@ -26,7 +26,7 @@ export function initConfig() {
     // 4. Not running on a typical relay port (3334) - likely a static server
     const hasStoredRelay = !!localStorage.getItem("relayUrl");
     const isFileProtocol = window.location.protocol === 'file:';
-    const isNonRelayPort = !['3334', '443', '80', ''].includes(window.location.port);
+    const isNonRelayPort = !['3334', '7777', '443', '80', ''].includes(window.location.port);
 
     const standalone = BUILD_STANDALONE_MODE || hasStoredRelay || isFileProtocol || isNonRelayPort;
     isStandaloneMode.set(standalone);
