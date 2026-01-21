@@ -56,6 +56,42 @@ func (s *Server) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 whitelist:
+	// Extract IP from remote (strip port)
+	ip := remote
+	if idx := strings.LastIndex(remote, ":"); idx != -1 {
+		ip = remote[:idx]
+	}
+
+	// Check per-IP connection limit (hard limit 40, default 25)
+	maxConnPerIP := s.Config.MaxConnectionsPerIP
+	if maxConnPerIP <= 0 {
+		maxConnPerIP = 25
+	}
+	if maxConnPerIP > 40 {
+		maxConnPerIP = 40 // Hard limit
+	}
+
+	s.connPerIPMu.Lock()
+	currentConns := s.connPerIP[ip]
+	if currentConns >= maxConnPerIP {
+		s.connPerIPMu.Unlock()
+		log.W.F("connection limit exceeded for IP %s: %d/%d connections", ip, currentConns, maxConnPerIP)
+		http.Error(w, "too many connections from your IP", http.StatusTooManyRequests)
+		return
+	}
+	s.connPerIP[ip]++
+	s.connPerIPMu.Unlock()
+
+	// Decrement connection count when this function returns
+	defer func() {
+		s.connPerIPMu.Lock()
+		s.connPerIP[ip]--
+		if s.connPerIP[ip] <= 0 {
+			delete(s.connPerIP, ip)
+		}
+		s.connPerIPMu.Unlock()
+	}()
+
 	// Create an independent context for this connection
 	// This context will be cancelled when the connection closes or server shuts down
 	ctx, cancel := context.WithCancel(s.Ctx)

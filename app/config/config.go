@@ -146,6 +146,7 @@ type C struct {
 
 	// Connection concurrency control
 	MaxHandlersPerConnection int `env:"ORLY_MAX_HANDLERS_PER_CONN" default:"100" usage:"max concurrent message handlers per WebSocket connection (limits goroutine growth under load)"`
+	MaxConnectionsPerIP      int `env:"ORLY_MAX_CONN_PER_IP" default:"25" usage:"max WebSocket connections per IP address (prevents resource exhaustion, hard limit 40)"`
 
 	// Adaptive rate limiting (PID-controlled)
 	RateLimitEnabled            bool    `env:"ORLY_RATE_LIMIT_ENABLED" default:"true" usage:"enable adaptive PID-controlled rate limiting for database operations"`

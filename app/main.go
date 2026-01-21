@@ -87,6 +87,7 @@ func Run(
 		rateLimiter: limiter,
 		cfg:         cfg,
 		db:          db,
+		connPerIP:   make(map[string]int),
 	}
 
 	// Initialize branding/white-label manager if enabled

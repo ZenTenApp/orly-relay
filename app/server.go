@@ -57,6 +57,10 @@ type Server struct {
 	// optional reverse proxy for dev web server
 	devProxy *httputil.ReverseProxy
 
+	// Per-IP connection tracking to prevent resource exhaustion
+	connPerIPMu sync.RWMutex
+	connPerIP   map[string]int
+
 	// Challenge storage for HTTP UI authentication
 	challengeMutex sync.RWMutex
 	challenges     map[string][]byte
