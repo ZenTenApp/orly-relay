@@ -2,6 +2,24 @@
 
 package storage
 
+// TODO: IMPORTANT - This GC implementation is EXPERIMENTAL and may cause crashes under high load.
+// The current implementation has the following issues that need to be addressed:
+//
+// 1. Badger race condition: DeleteEventBySerial runs transactions that can trigger
+//    "assignment to entry in nil map" panics in Badger v4.8.0 under concurrent load.
+//    This happens when GC deletes events while many REQ queries are being processed.
+//
+// 2. Batch transaction handling: On large datasets (14+ GB), deletions should be:
+//    - Serialized or use a transaction pool to prevent concurrent txn issues
+//    - Batched with proper delays between batches to avoid overwhelming Badger
+//    - Rate-limited based on current system load
+//
+// 3. The current 10ms delay every 100 events (line ~237) is insufficient for busy relays.
+//    Consider adaptive rate limiting based on pending transaction count.
+//
+// 4. Consider using Badger's WriteBatch API instead of individual Update transactions
+//    for bulk deletions, which may be more efficient and avoid some race conditions.
+
 import (
 	"context"
 	"sync"

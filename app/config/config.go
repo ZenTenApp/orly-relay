@@ -207,8 +207,11 @@ type C struct {
 	ArchiveCacheTTLHrs int      `env:"ORLY_ARCHIVE_CACHE_TTL_HRS" default:"24" usage:"hours to cache query fingerprints to avoid repeated archive requests"`
 
 	// Storage management configuration (access-based garbage collection)
+	// TODO: GC implementation needs batch transaction handling to avoid Badger race conditions
+	// TODO: GC should use smaller batches with delays between transactions on large datasets
+	// TODO: GC deletion should be serialized or use transaction pools to prevent concurrent txn issues
 	MaxStorageBytes int64 `env:"ORLY_MAX_STORAGE_BYTES" default:"0" usage:"maximum storage in bytes (0=auto-detect 80%% of filesystem)"`
-	GCEnabled       bool  `env:"ORLY_GC_ENABLED" default:"true" usage:"enable continuous garbage collection based on access patterns"`
+	GCEnabled       bool  `env:"ORLY_GC_ENABLED" default:"false" usage:"enable continuous garbage collection based on access patterns (EXPERIMENTAL - may cause crashes under load)"`
 	GCIntervalSec   int   `env:"ORLY_GC_INTERVAL_SEC" default:"60" usage:"seconds between GC runs when storage exceeds limit"`
 	GCBatchSize     int   `env:"ORLY_GC_BATCH_SIZE" default:"1000" usage:"number of events to consider per GC run"`
 
