@@ -13,12 +13,19 @@ import (
 	"github.com/dgraph-io/badger/v4/options"
 	"lol.mleku.dev"
 	"lol.mleku.dev/chk"
+	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/database/querycache"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"next.orly.dev/pkg/utils/apputil"
 	"git.mleku.dev/mleku/nostr/utils/units"
 )
+
+// DefaultMaxConcurrentQueries limits concurrent database queries to prevent memory exhaustion.
+// Each query creates Badger iterators that consume significant memory. With many concurrent
+// connections, unlimited queries can exhaust available memory in seconds.
+// Set very low (3) because each query can internally create many iterators.
+const DefaultMaxConcurrentQueries = 3
 
 // RateLimiterInterface defines the minimal interface for rate limiting during import
 type RateLimiterInterface interface {
@@ -47,6 +54,10 @@ type D struct {
 
 	// Rate limiter for controlling memory pressure during bulk operations
 	rateLimiter RateLimiterInterface
+
+	// Query semaphore limits concurrent database queries to prevent memory exhaustion.
+	// Each query with iterators consumes significant memory; this prevents OOM under load.
+	querySem chan struct{}
 }
 
 // SetRateLimiter sets the rate limiter for controlling memory during import/export
@@ -139,6 +150,7 @@ func NewWithConfig(
 		ready:       make(chan struct{}),
 		queryCache:  qc,
 		serialCache: NewSerialCache(serialCachePubkeys, serialCacheEventIds),
+		querySem:    make(chan struct{}, DefaultMaxConcurrentQueries),
 	}
 
 	// Ensure the data directory exists
@@ -352,4 +364,25 @@ func (d *D) Close() (err error) {
 		}
 	}
 	return
+}
+
+// AcquireQuerySlot acquires a slot from the query semaphore to limit concurrent queries.
+// This blocks until a slot is available or the context is cancelled.
+// Returns true if slot was acquired, false if context cancelled.
+func (d *D) AcquireQuerySlot(ctx context.Context) bool {
+	select {
+	case d.querySem <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// ReleaseQuerySlot releases a previously acquired query slot.
+func (d *D) ReleaseQuerySlot() {
+	select {
+	case <-d.querySem:
+	default:
+		log.W.F("ReleaseQuerySlot called without matching AcquireQuerySlot")
+	}
 }

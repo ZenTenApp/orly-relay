@@ -54,6 +54,13 @@ func (d *D) QueryAllVersions(c context.Context, f *filter.F) (
 func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDeleteEvents bool, showAllVersions bool) (
 	evs event.S, err error,
 ) {
+	// Acquire query slot to limit concurrent queries and prevent memory exhaustion
+	if !d.AcquireQuerySlot(c) {
+		err = c.Err()
+		return
+	}
+	defer d.ReleaseQuerySlot()
+
 	// Determine if we should return multiple versions of replaceable events
 	// based on the limit parameter
 	wantMultipleVersions := showAllVersions || (f.Limit != nil && *f.Limit > 1)
@@ -310,18 +317,13 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 						}
 					}
 
-					// If not found in current batch, try to fetch it directly
+					// DISABLED: Fetching target events not in current batch causes memory
+					// exhaustion under high concurrent load. Each GetSerialById call creates
+					// a Badger iterator that consumes significant memory. With many connections
+					// processing deletion events, this explodes memory usage (~300MB/connection).
+					// The deletion will still work when the target event is directly queried.
 					if targetEv == nil {
-						// Get serial for the event ID
-						ser, serErr := d.GetSerialById(evId)
-						if serErr != nil || ser == nil {
-							continue
-						}
-						// Fetch the event by serial
-						targetEv, serErr = d.FetchEventBySerial(ser)
-						if serErr != nil || targetEv == nil {
-							continue
-						}
+						continue
 					}
 
 					// Only allow users to delete their own events

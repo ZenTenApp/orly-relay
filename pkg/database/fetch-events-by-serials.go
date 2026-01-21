@@ -33,6 +33,14 @@ func (d *D) FetchEventsBySerials(serials []*types.Uint40) (events map[uint64]*ev
 
 	if err = d.View(
 		func(txn *badger.Txn) (err error) {
+			// Create ONE iterator for sev prefix lookups - reused for all serials
+			// This dramatically reduces memory usage vs creating one per serial
+			sevOpts := badger.DefaultIteratorOptions
+			sevOpts.PrefetchValues = false // We read from key, not value
+			sevOpts.PrefetchSize = 1
+			sevIt := txn.NewIterator(sevOpts)
+			defer sevIt.Close()
+
 			for _, ser := range serials {
 				var ev *event.E
 				serialVal := ser.Get()
@@ -45,8 +53,8 @@ func (d *D) FetchEventsBySerials(serials []*types.Uint40) (events map[uint64]*ev
 				}
 				err = nil // Reset error, try legacy formats
 
-				// Try sev (small event inline) prefix - legacy Reiser4 optimization
-				ev, err = d.fetchSmallEvent(txn, ser)
+				// Try sev (small event inline) using shared iterator
+				ev, err = d.fetchSmallEventWithIterator(txn, ser, sevIt)
 				if err == nil && ev != nil {
 					events[serialVal] = ev
 					continue
@@ -68,6 +76,61 @@ func (d *D) FetchEventsBySerials(serials []*types.Uint40) (events map[uint64]*ev
 	}
 
 	return events, nil
+}
+
+// fetchSmallEventWithIterator uses a provided iterator for sev lookups (memory efficient)
+func (d *D) fetchSmallEventWithIterator(txn *badger.Txn, ser *types.Uint40, it *badger.Iterator) (ev *event.E, err error) {
+	smallBuf := new(bytes.Buffer)
+	if err = indexes.SmallEventEnc(ser).MarshalWrite(smallBuf); chk.E(err) {
+		return nil, err
+	}
+	prefix := smallBuf.Bytes()
+
+	// Seek to the prefix for this serial
+	it.Seek(prefix)
+	if !it.ValidForPrefix(prefix) {
+		return nil, nil // Not found
+	}
+
+	// Found in sev table - extract inline data
+	key := it.Item().KeyCopy(nil) // Copy key as iterator may be reused
+	// Key format: sev|serial|size_uint16|event_data
+	if len(key) <= 8+2 { // prefix(3) + serial(5) + size(2) = 10 bytes minimum
+		return nil, nil
+	}
+
+	sizeIdx := 8 // After sev(3) + serial(5)
+	// Read uint16 big-endian size
+	size := int(key[sizeIdx])<<8 | int(key[sizeIdx+1])
+	dataStart := sizeIdx + 2
+
+	if len(key) < dataStart+size {
+		return nil, nil
+	}
+
+	eventData := key[dataStart : dataStart+size]
+
+	// Check if this is compact format (starts with version byte 1)
+	if len(eventData) > 0 && eventData[0] == CompactFormatVersion {
+		// This is compact format stored in sev - need to decode with resolver
+		resolver := NewDatabaseSerialResolver(d, d.serialCache)
+		eventId, idErr := d.GetEventIdBySerial(ser)
+		if idErr != nil {
+			// Cannot decode compact format without event ID - return error
+			// DO NOT fall back to legacy unmarshal as compact format is not valid legacy format
+			log.W.F("fetchSmallEventWithIterator: compact format but no event ID mapping for serial %d: %v", ser.Get(), idErr)
+			return nil, idErr
+		}
+		return UnmarshalCompactEvent(eventData, eventId, resolver)
+	}
+
+	// Legacy binary format
+	ev = new(event.E)
+	if err = ev.UnmarshalBinary(bytes.NewBuffer(eventData)); err != nil {
+		return nil, err
+	}
+
+	return ev, nil
 }
 
 // fetchCompactEvent tries to fetch an event from the compact format (cmp prefix).

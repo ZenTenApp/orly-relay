@@ -21,7 +21,8 @@ import (
 func (d *D) GetSerialById(id []byte) (ser *types.Uint40, err error) {
 	// log.T.F("GetSerialById: input id=%s", hex.Enc(id))
 	if len(id) == 0 {
-		err = errorf.E("GetSerialById: called with empty ID")
+		// Return error without logging - caller should validate ID before calling
+		err = errorf.E("empty event ID")
 		return
 	}
 	var idxs []Range

@@ -734,6 +734,10 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 	if l.accessTracker != nil && len(events) > 0 {
 		go func(evts event.S, connID string) {
 			for _, ev := range evts {
+				// Validate event ID before calling GetSerialById
+				if len(ev.ID) != 32 {
+					continue
+				}
 				if ser, err := l.DB.GetSerialById(ev.ID); err == nil && ser != nil {
 					l.accessTracker.RecordAccess(ser.Get(), connID)
 				}
