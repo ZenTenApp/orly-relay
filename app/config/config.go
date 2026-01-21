@@ -148,6 +148,9 @@ type C struct {
 	MaxHandlersPerConnection int `env:"ORLY_MAX_HANDLERS_PER_CONN" default:"100" usage:"max concurrent message handlers per WebSocket connection (limits goroutine growth under load)"`
 	MaxConnectionsPerIP      int `env:"ORLY_MAX_CONN_PER_IP" default:"25" usage:"max WebSocket connections per IP address (prevents resource exhaustion, hard limit 40)"`
 
+	// Query result limits (prevents memory exhaustion from unbounded queries)
+	QueryResultLimit int `env:"ORLY_QUERY_RESULT_LIMIT" default:"256" usage:"max events returned per REQ filter (prevents unbounded memory usage, 0=unlimited)"`
+
 	// Adaptive rate limiting (PID-controlled)
 	RateLimitEnabled            bool    `env:"ORLY_RATE_LIMIT_ENABLED" default:"true" usage:"enable adaptive PID-controlled rate limiting for database operations"`
 	RateLimitTargetMB           int     `env:"ORLY_RATE_LIMIT_TARGET_MB" default:"0" usage:"target memory limit in MB (0=auto-detect: 66% of available, min 500MB)"`

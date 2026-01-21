@@ -316,8 +316,27 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 
 	// Collect all events from all filters
 	var allEvents event.S
+
+	// Server-side query result limit to prevent memory exhaustion
+	serverLimit := l.Config.QueryResultLimit
+	if serverLimit <= 0 {
+		serverLimit = 256 // Default if not configured
+	}
+
 	for _, f := range *env.Filters {
 		if f != nil {
+			// Enforce server-side limit on each filter
+			if serverLimit > 0 {
+				if f.Limit == nil {
+					// No client limit - apply server limit
+					limitVal := uint(serverLimit)
+					f.Limit = &limitVal
+				} else if int(*f.Limit) > serverLimit {
+					// Client limit exceeds server limit - cap it
+					limitVal := uint(serverLimit)
+					f.Limit = &limitVal
+				}
+			}
 			// Summarize filter details for diagnostics (avoid internal fields)
 			var kindsLen int
 			if f.Kinds != nil {
