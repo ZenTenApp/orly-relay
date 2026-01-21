@@ -100,8 +100,10 @@ whitelist:
 	var conn *websocket.Conn
 
 	// Configure upgrader for this connection
-	upgrader.ReadBufferSize = int(DefaultMaxMessageSize)
-	upgrader.WriteBufferSize = int(DefaultMaxMessageSize)
+	// Use reasonable buffer sizes (64KB) instead of max message size (10MB)
+	// to prevent memory exhaustion with many connections
+	upgrader.ReadBufferSize = 64 * 1024  // 64KB
+	upgrader.WriteBufferSize = 64 * 1024 // 64KB
 
 	if conn, err = upgrader.Upgrade(w, r, nil); chk.E(err) {
 		log.E.F("websocket accept failed from %s: %v", remote, err)
