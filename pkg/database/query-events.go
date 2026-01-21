@@ -590,14 +590,14 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 		if f.Limit != nil && len(evs) > int(*f.Limit) {
 			evs = evs[:*f.Limit]
 		}
-		// delete the expired events in a background thread
-		go func() {
-			for i, ser := range expDeletes {
-				if err = d.DeleteEventBySerial(c, ser, expEvs[i]); chk.E(err) {
-					continue
-				}
-			}
-		}()
+		// TODO: DISABLED - inline deletion of expired events causes Badger race conditions
+		// under high concurrent load ("assignment to entry in nil map" panic).
+		// Expired events should be cleaned up by a separate, rate-limited background
+		// worker instead of being deleted inline during query processing.
+		// See: pkg/storage/gc.go TODOs for proper batch deletion implementation.
+		if len(expDeletes) > 0 {
+			log.D.F("QueryEvents: found %d expired events (deletion disabled)", len(expDeletes))
+		}
 	}
 
 	return
