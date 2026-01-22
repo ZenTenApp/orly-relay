@@ -1,0 +1,34 @@
+# ORLY relay Dockerfile for negentropy interop testing
+
+FROM golang:1.23-alpine AS builder
+
+RUN apk add --no-cache git make
+
+WORKDIR /build
+COPY . .
+
+# Build orly binary
+RUN CGO_ENABLED=0 go build -o orly ./cmd/orly
+
+# Runtime image
+FROM alpine:3.19
+
+RUN apk add --no-cache ca-certificates curl jq
+
+WORKDIR /app
+COPY --from=builder /build/orly /app/
+
+RUN mkdir -p /data
+
+EXPOSE 3334
+
+# Environment variables
+ENV ORLY_PORT=3334
+ENV ORLY_DATA_DIR=/data
+ENV ORLY_LOG_LEVEL=info
+
+HEALTHCHECK --interval=5s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3334 || exit 1
+
+# Run orly relay
+CMD ["/app/orly"]

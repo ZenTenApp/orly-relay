@@ -1,0 +1,78 @@
+# Docker Compose for negentropy interop testing between strfry and orly
+#
+# Usage:
+#   docker compose build
+#   docker compose up -d
+#   ./test-sync.sh
+#   docker compose down -v
+
+services:
+  strfry:
+    build:
+      context: .
+      dockerfile: Dockerfile.strfry
+    ports:
+      - "7777:7777"
+    volumes:
+      - strfry-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7777"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - negentropy-test
+
+  orly:
+    build:
+      context: ../..
+      dockerfile: tests/negentropy/Dockerfile.orly
+    ports:
+      - "3334:3334"
+    environment:
+      - ORLY_PORT=3334
+      - ORLY_DATA_DIR=/data
+      - ORLY_LOG_LEVEL=info
+      - ORLY_SYNC_TARGET_RELAYS=ws://strfry:7777
+    volumes:
+      - orly-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3334"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      strfry:
+        condition: service_healthy
+    networks:
+      - negentropy-test
+
+  # Utility container for running sync commands
+  sync-runner:
+    build:
+      context: ../..
+      dockerfile: tests/negentropy/Dockerfile.orly
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["sleep infinity"]
+    environment:
+      - ORLY_DATA_DIR=/data
+    volumes:
+      - sync-data:/data
+    depends_on:
+      strfry:
+        condition: service_healthy
+      orly:
+        condition: service_healthy
+    networks:
+      - negentropy-test
+
+volumes:
+  strfry-data:
+  orly-data:
+  sync-data:
+
+networks:
+  negentropy-test:
+    driver: bridge

@@ -1,0 +1,59 @@
+# strfry Dockerfile for negentropy interop testing
+# Uses Ubuntu for easier dependency management
+
+FROM ubuntu:22.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    build-essential \
+    liblmdb-dev \
+    libsecp256k1-dev \
+    libflatbuffers-dev \
+    libzstd-dev \
+    pkg-config \
+    libtool \
+    autoconf \
+    automake \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Clone strfry
+RUN git clone https://github.com/hoytech/strfry.git . && \
+    git submodule update --init
+
+# Build strfry
+RUN make setup-golpe && \
+    make -j$(nproc)
+
+# Runtime image
+FROM ubuntu:22.04
+
+RUN apt-get update && apt-get install -y \
+    liblmdb0 \
+    libsecp256k1-0 \
+    libflatbuffers1 \
+    libzstd1 \
+    curl \
+    jq \
+    websocat \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY --from=builder /build/strfry /app/
+RUN mkdir -p /data/strfry-db
+
+# Copy config
+COPY strfry.conf /etc/strfry.conf
+
+EXPOSE 7777
+
+HEALTHCHECK --interval=5s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:7777 || exit 1
+
+# Run strfry relay
+CMD ["/app/strfry", "--config=/etc/strfry.conf", "relay"]
