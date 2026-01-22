@@ -77,6 +77,34 @@ func main() {
 	<-db.Ready()
 	log.I.F("database ready")
 
+	// Create gRPC server EARLY so launcher can detect it's alive
+	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(16<<20), // 16MB
+		grpc.MaxSendMsgSize(16<<20), // 16MB
+	)
+
+	// Register ACL service (will be configured below)
+	service := NewACLService(cfg, db)
+	orlyaclv1.RegisterACLServiceServer(grpcServer, service)
+
+	// Register reflection for debugging with grpcurl
+	reflection.Register(grpcServer)
+
+	// Start listening immediately so launcher knows we're alive
+	lis, err := net.Listen("tcp", cfg.Listen)
+	if chk.E(err) {
+		log.E.F("failed to listen on %s: %v", cfg.Listen, err)
+		os.Exit(1)
+	}
+	log.I.F("gRPC ACL server listening on %s", cfg.Listen)
+
+	// Start serving in background while we configure
+	go func() {
+		if err := grpcServer.Serve(lis); err != nil {
+			log.E.F("gRPC server error: %v", err)
+		}
+	}()
+
 	// Create app config for ACL configuration
 	appCfg := &config.C{
 		Owners:                  cfg.GetOwners(),
@@ -89,79 +117,54 @@ func main() {
 		FollowsThrottleMaxDelay: cfg.FollowsThrottleMaxDelay,
 	}
 
-	// Set ACL mode and configure the registry
+	// Set ACL mode and configure the registry (may take time to load follow lists)
 	acl.Registry.SetMode(cfg.ACLMode)
 	if err := acl.Registry.Configure(appCfg, db, ctx); chk.E(err) {
 		log.E.F("failed to configure ACL: %v", err)
 		os.Exit(1)
 	}
 
+	// Mark service as ready now that configuration is complete
+	service.SetReady(true)
+
 	// Start the syncer goroutine for background operations
 	acl.Registry.Syncer()
 	log.I.F("ACL syncer started for mode: %s", cfg.ACLMode)
 
-	// Create gRPC server
-	grpcServer := grpc.NewServer(
-		grpc.MaxRecvMsgSize(16<<20), // 16MB
-		grpc.MaxSendMsgSize(16<<20), // 16MB
-	)
+	// Handle graceful shutdown - block until signal received
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
+	sig := <-sigs
+	log.I.F("received signal %v, shutting down...", sig)
 
-	// Register ACL service
-	service := NewACLService(cfg, db)
-	orlyaclv1.RegisterACLServiceServer(grpcServer, service)
+	// Cancel context to stop all operations
+	cancel()
 
-	// Register reflection for debugging with grpcurl
-	reflection.Register(grpcServer)
-
-	// Start listening
-	lis, err := net.Listen("tcp", cfg.Listen)
-	if chk.E(err) {
-		log.E.F("failed to listen on %s: %v", cfg.Listen, err)
-		os.Exit(1)
-	}
-	log.I.F("gRPC ACL server listening on %s", cfg.Listen)
-
-	// Handle graceful shutdown
+	// Gracefully stop gRPC server with timeout
+	stopped := make(chan struct{})
 	go func() {
-		sigs := make(chan os.Signal, 1)
-		signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
-		sig := <-sigs
-		log.I.F("received signal %v, shutting down...", sig)
-
-		// Cancel context to stop all operations
-		cancel()
-
-		// Gracefully stop gRPC server with timeout
-		stopped := make(chan struct{})
-		go func() {
-			grpcServer.GracefulStop()
-			close(stopped)
-		}()
-
-		select {
-		case <-stopped:
-			log.I.F("gRPC server stopped gracefully")
-		case <-time.After(5 * time.Second):
-			log.W.F("gRPC graceful stop timed out, forcing stop")
-			grpcServer.Stop()
-		}
-
-		// Sync and close database (only for direct Badger)
-		if cfg.DBType != "grpc" {
-			log.I.F("syncing database...")
-			if err := db.Sync(); chk.E(err) {
-				log.W.F("failed to sync database: %v", err)
-			}
-			log.I.F("closing database...")
-			if err := db.Close(); chk.E(err) {
-				log.W.F("failed to close database: %v", err)
-			}
-		}
-		log.I.F("shutdown complete")
+		grpcServer.GracefulStop()
+		close(stopped)
 	}()
 
-	// Serve gRPC
-	if err := grpcServer.Serve(lis); err != nil {
-		log.E.F("gRPC server error: %v", err)
+	select {
+	case <-stopped:
+		log.I.F("gRPC server stopped gracefully")
+	case <-time.After(5 * time.Second):
+		log.W.F("gRPC graceful stop timed out, forcing stop")
+		grpcServer.Stop()
 	}
+
+	// Sync and close database (only for direct Badger)
+	if cfg.DBType != "grpc" {
+		log.I.F("syncing database...")
+		if err := db.Sync(); chk.E(err) {
+			log.W.F("failed to sync database: %v", err)
+		}
+		log.I.F("closing database...")
+		if err := db.Close(); chk.E(err) {
+			log.W.F("failed to close database: %v", err)
+		}
+	}
+	log.I.F("shutdown complete")
 }

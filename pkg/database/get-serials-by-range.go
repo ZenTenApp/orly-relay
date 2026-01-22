@@ -8,7 +8,6 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/database/indexes/types"
 )
 
@@ -33,27 +32,15 @@ func (d *D) GetSerialsByRange(idx Range) (
 			for i := 0; i < 5; i++ {
 				endBoundary = append(endBoundary, 0xff)
 			}
-			iterCount := 0
 			it.Seek(endBoundary)
-			// log.T.F("GetSerialsByRange: iterator valid=%v, sought to endBoundary", it.Valid())
 			for it.Valid() {
-				iterCount++
-				if iterCount > 100 {
-					// Safety limit to prevent infinite loops in debugging
-					log.T.F("GetSerialsByRange: hit safety limit of 100 iterations")
-					break
-				}
 				item := it.Item()
 				var key []byte
 				key = item.Key()
 				keyWithoutSerial := key[:len(key)-5]
 				cmp := bytes.Compare(keyWithoutSerial, idx.Start)
-				// log.T.F("GetSerialsByRange: iter %d, key prefix matches=%v, cmp=%d", iterCount, bytes.HasPrefix(key, idx.Start[:len(idx.Start)-8]), cmp)
 				if cmp < 0 {
 					// didn't find it within the timestamp range
-					// log.T.F("GetSerialsByRange: key out of range (cmp=%d), stopping iteration", cmp)
-					// log.T.F("  keyWithoutSerial len=%d: %x", len(keyWithoutSerial), keyWithoutSerial)
-					// log.T.F("  idx.Start len=%d: %x", len(idx.Start), idx.Start)
 					return
 				}
 				ser := new(types.Uint40)
@@ -64,7 +51,6 @@ func (d *D) GetSerialsByRange(idx Range) (
 				sers = append(sers, ser)
 				it.Next()
 			}
-			// log.T.F("GetSerialsByRange: iteration complete, found %d serials", len(sers))
 			return
 		},
 	); chk.E(err) {

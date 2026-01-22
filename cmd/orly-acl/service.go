@@ -17,15 +17,25 @@ import (
 // ACLService implements the orlyaclv1.ACLServiceServer interface.
 type ACLService struct {
 	orlyaclv1.UnimplementedACLServiceServer
-	cfg *Config
-	db  database.Database
+	cfg   *Config
+	db    database.Database
+	ready bool
 }
 
 // NewACLService creates a new ACL service.
 func NewACLService(cfg *Config, db database.Database) *ACLService {
 	return &ACLService{
-		cfg: cfg,
-		db:  db,
+		cfg:   cfg,
+		db:    db,
+		ready: false, // Not ready until Configure completes
+	}
+}
+
+// SetReady marks the service as ready (or not ready).
+func (s *ACLService) SetReady(ready bool) {
+	s.ready = ready
+	if ready {
+		log.I.F("ACL service is now ready")
 	}
 }
 
@@ -60,13 +70,8 @@ func (s *ACLService) GetMode(ctx context.Context, req *orlyaclv1.Empty) (*orlyac
 }
 
 func (s *ACLService) Ready(ctx context.Context, req *orlyaclv1.Empty) (*orlyaclv1.ReadyResponse, error) {
-	// Check if database is ready
-	select {
-	case <-s.db.Ready():
-		return &orlyaclv1.ReadyResponse{Ready: true}, nil
-	default:
-		return &orlyaclv1.ReadyResponse{Ready: false}, nil
-	}
+	// Check if service is fully configured and ready
+	return &orlyaclv1.ReadyResponse{Ready: s.ready}, nil
 }
 
 // === Follows ACL Methods ===
