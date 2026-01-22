@@ -10,8 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
+
+	orlyaclv1 "next.orly.dev/pkg/proto/orlyacl/v1"
 )
 
 // Supervisor manages the database, ACL, sync, and relay processes.
@@ -258,21 +262,51 @@ func (s *Supervisor) waitForACLReady(timeout time.Duration) error {
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 
+	var grpcConn *grpc.ClientConn
+	var aclClient orlyaclv1.ACLServiceClient
+
 	for {
 		select {
 		case <-s.ctx.Done():
+			if grpcConn != nil {
+				grpcConn.Close()
+			}
 			return s.ctx.Err()
 		case <-ticker.C:
 			if time.Now().After(deadline) {
+				if grpcConn != nil {
+					grpcConn.Close()
+				}
 				return fmt.Errorf("timeout waiting for ACL server")
 			}
 
-			// Try to connect to the gRPC port
+			// First, check if TCP port is open
 			conn, err := net.DialTimeout("tcp", s.cfg.ACLListen, time.Second)
-			if err == nil {
-				conn.Close()
-				return nil // ACL server is accepting connections
+			if err != nil {
+				continue // Port not open yet
 			}
+			conn.Close()
+
+			// Port is open, now check gRPC Ready() endpoint
+			if grpcConn == nil {
+				grpcConn, err = grpc.DialContext(s.ctx, s.cfg.ACLListen,
+					grpc.WithTransportCredentials(insecure.NewCredentials()),
+				)
+				if err != nil {
+					continue // Failed to connect
+				}
+				aclClient = orlyaclv1.NewACLServiceClient(grpcConn)
+			}
+
+			// Call Ready() to check if service is fully configured
+			ctx, cancel := context.WithTimeout(s.ctx, time.Second)
+			resp, err := aclClient.Ready(ctx, &orlyaclv1.Empty{})
+			cancel()
+			if err == nil && resp.Ready {
+				grpcConn.Close()
+				return nil // ACL server is fully ready
+			}
+			// Not ready yet, keep polling
 		}
 	}
 }

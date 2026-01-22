@@ -103,7 +103,7 @@ func loadConfig() (*Config, error) {
 		ACLEnabled:      getEnvOrDefault("ORLY_LAUNCHER_ACL_ENABLED", "false") == "true",
 		ACLMode:         aclMode,
 		DBReadyTimeout:  parseDuration("ORLY_LAUNCHER_DB_READY_TIMEOUT", 30*time.Second),
-		ACLReadyTimeout: parseDuration("ORLY_LAUNCHER_ACL_READY_TIMEOUT", 30*time.Second),
+		ACLReadyTimeout: parseDuration("ORLY_LAUNCHER_ACL_READY_TIMEOUT", 120*time.Second),
 		StopTimeout:     parseDuration("ORLY_LAUNCHER_STOP_TIMEOUT", 30*time.Second), // Increased for DB flush
 		DataDir:         getEnvOrDefault("ORLY_DATA_DIR", filepath.Join(xdg.DataHome, "ORLY")),
 		LogLevel:        getEnvOrDefault("ORLY_LOG_LEVEL", "info"),

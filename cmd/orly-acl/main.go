@@ -117,19 +117,25 @@ func main() {
 		FollowsThrottleMaxDelay: cfg.FollowsThrottleMaxDelay,
 	}
 
-	// Set ACL mode and configure the registry (may take time to load follow lists)
+	// Set ACL mode first
 	acl.Registry.SetMode(cfg.ACLMode)
-	if err := acl.Registry.Configure(appCfg, db, ctx); chk.E(err) {
-		log.E.F("failed to configure ACL: %v", err)
-		os.Exit(1)
-	}
 
-	// Mark service as ready now that configuration is complete
+	// Mark service as ready IMMEDIATELY so relay can start
+	// Configure runs in background and loads follow lists asynchronously
 	service.SetReady(true)
+	log.I.F("ACL service ready (follow lists loading in background)")
 
-	// Start the syncer goroutine for background operations
-	acl.Registry.Syncer()
-	log.I.F("ACL syncer started for mode: %s", cfg.ACLMode)
+	// Run Configure in background (may take time to load follow lists)
+	go func() {
+		if err := acl.Registry.Configure(appCfg, db, ctx); chk.E(err) {
+			log.E.F("failed to configure ACL: %v", err)
+			// Don't exit - service can still function with limited ACL
+		}
+		log.I.F("ACL configuration complete")
+		// Start the syncer goroutine for background operations
+		acl.Registry.Syncer()
+		log.I.F("ACL syncer started for mode: %s", cfg.ACLMode)
+	}()
 
 	// Handle graceful shutdown - block until signal received
 	sigs := make(chan os.Signal, 1)
