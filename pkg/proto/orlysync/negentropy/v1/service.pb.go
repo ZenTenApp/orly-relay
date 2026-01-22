@@ -95,8 +95,11 @@ func (x *NegOpenRequest) GetConnectionId() string {
 // NegOpenResponse returns the initial negentropy response
 type NegOpenResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       []byte                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"` // Negentropy protocol message to send back
-	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`     // Error message if failed
+	Message       []byte                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`                // Negentropy protocol message to send back
+	HaveIds       [][]byte               `protobuf:"bytes,2,rep,name=have_ids,json=haveIds,proto3" json:"have_ids,omitempty"` // Event IDs we have that client needs (if initial reconciliation completes)
+	NeedIds       [][]byte               `protobuf:"bytes,3,rep,name=need_ids,json=needIds,proto3" json:"need_ids,omitempty"` // Event IDs we need from client (if initial reconciliation completes)
+	Complete      bool                   `protobuf:"varint,4,opt,name=complete,proto3" json:"complete,omitempty"`             // True if reconciliation completed in first round
+	Error         string                 `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`                    // Error message if failed
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -136,6 +139,27 @@ func (x *NegOpenResponse) GetMessage() []byte {
 		return x.Message
 	}
 	return nil
+}
+
+func (x *NegOpenResponse) GetHaveIds() [][]byte {
+	if x != nil {
+		return x.HaveIds
+	}
+	return nil
+}
+
+func (x *NegOpenResponse) GetNeedIds() [][]byte {
+	if x != nil {
+		return x.NeedIds
+	}
+	return nil
+}
+
+func (x *NegOpenResponse) GetComplete() bool {
+	if x != nil {
+		return x.Complete
+	}
+	return false
 }
 
 func (x *NegOpenResponse) GetError() string {
@@ -1124,10 +1148,13 @@ const file_orlysync_negentropy_v1_service_proto_rawDesc = "" +
 	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x122\n" +
 	"\x06filter\x18\x02 \x01(\v2\x1a.orlysync.common.v1.FilterR\x06filter\x12'\n" +
 	"\x0finitial_message\x18\x03 \x01(\fR\x0einitialMessage\x12#\n" +
-	"\rconnection_id\x18\x04 \x01(\tR\fconnectionId\"A\n" +
+	"\rconnection_id\x18\x04 \x01(\tR\fconnectionId\"\x93\x01\n" +
 	"\x0fNegOpenResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\fR\amessage\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"w\n" +
+	"\amessage\x18\x01 \x01(\fR\amessage\x12\x19\n" +
+	"\bhave_ids\x18\x02 \x03(\fR\ahaveIds\x12\x19\n" +
+	"\bneed_ids\x18\x03 \x03(\fR\aneedIds\x12\x1a\n" +
+	"\bcomplete\x18\x04 \x01(\bR\bcomplete\x12\x14\n" +
+	"\x05error\x18\x05 \x01(\tR\x05error\"w\n" +
 	"\rNegMsgRequest\x12'\n" +
 	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\fR\amessage\x12#\n" +

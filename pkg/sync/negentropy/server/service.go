@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 
 	"google.golang.org/grpc"
@@ -75,8 +76,8 @@ func (s *Service) HandleNegOpen(ctx context.Context, req *negentropyv1.NegOpenRe
 
 	// If we have an initial message from client, process it
 	var respMsg []byte
+	var complete bool
 	if len(req.InitialMessage) > 0 {
-		var complete bool
 		respMsg, complete, err = neg.Reconcile(req.InitialMessage)
 		if err != nil {
 			log.E.F("NEG-OPEN: reconcile failed: %v", err)
@@ -99,9 +100,35 @@ func (s *Service) HandleNegOpen(ctx context.Context, req *negentropyv1.NegOpenRe
 		log.D.F("NEG-OPEN: started negentropy, initial msg len=%d", len(respMsg))
 	}
 
+	// Collect IDs we have that client needs (to send as events)
+	haveIDs := neg.CollectHaves()
+	var haveIDBytes [][]byte
+	for _, id := range haveIDs {
+		// ID is a hex string, decode to binary
+		if decoded, err := hex.DecodeString(id); err == nil {
+			haveIDBytes = append(haveIDBytes, decoded)
+		}
+	}
+
+	// Collect IDs we need from client
+	needIDs := neg.CollectHaveNots()
+	var needIDBytes [][]byte
+	for _, id := range needIDs {
+		// ID is a hex string, decode to binary
+		if decoded, err := hex.DecodeString(id); err == nil {
+			needIDBytes = append(needIDBytes, decoded)
+		}
+	}
+
+	log.I.F("NEG-OPEN: complete=%v, haves=%d, needs=%d, response len=%d",
+		complete, len(haveIDs), len(needIDs), len(respMsg))
+
 	return &negentropyv1.NegOpenResponse{
-		Message: respMsg,
-		Error:   "",
+		Message:  respMsg,
+		HaveIds:  haveIDBytes,
+		NeedIds:  needIDBytes,
+		Complete: complete,
+		Error:    "",
 	}, nil
 }
 
@@ -138,14 +165,20 @@ func (s *Service) HandleNegMsg(ctx context.Context, req *negentropyv1.NegMsgRequ
 	haveIDs := neg.CollectHaves()
 	var haveIDBytes [][]byte
 	for _, id := range haveIDs {
-		haveIDBytes = append(haveIDBytes, []byte(id))
+		// ID is a hex string, decode to binary
+		if decoded, err := hex.DecodeString(id); err == nil {
+			haveIDBytes = append(haveIDBytes, decoded)
+		}
 	}
 
 	// Collect IDs we need from client
 	needIDs := neg.CollectHaveNots()
 	var needIDBytes [][]byte
 	for _, id := range needIDs {
-		needIDBytes = append(needIDBytes, []byte(id))
+		// ID is a hex string, decode to binary
+		if decoded, err := hex.DecodeString(id); err == nil {
+			needIDBytes = append(needIDBytes, decoded)
+		}
 	}
 
 	log.I.F("NEG-MSG: complete=%v, haves=%d, needs=%d, response len=%d",

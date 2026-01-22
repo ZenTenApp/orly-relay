@@ -102,7 +102,8 @@ func (c *Client) Stop(ctx context.Context) error {
 }
 
 // HandleNegOpen processes a NEG-OPEN message from a client.
-func (c *Client) HandleNegOpen(ctx context.Context, connectionID, subscriptionID string, filter *commonv1.Filter, initialMessage []byte) ([]byte, string, error) {
+// Returns: message, haveIDs, needIDs, complete, errorStr, error
+func (c *Client) HandleNegOpen(ctx context.Context, connectionID, subscriptionID string, filter *commonv1.Filter, initialMessage []byte) ([]byte, [][]byte, [][]byte, bool, string, error) {
 	resp, err := c.client.HandleNegOpen(ctx, &negentropyv1.NegOpenRequest{
 		ConnectionId:   connectionID,
 		SubscriptionId: subscriptionID,
@@ -110,9 +111,9 @@ func (c *Client) HandleNegOpen(ctx context.Context, connectionID, subscriptionID
 		InitialMessage: initialMessage,
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, nil, nil, false, "", err
 	}
-	return resp.Message, resp.Error, nil
+	return resp.Message, resp.HaveIds, resp.NeedIds, resp.Complete, resp.Error, nil
 }
 
 // HandleNegMsg processes a NEG-MSG message from a client.

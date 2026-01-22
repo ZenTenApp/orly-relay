@@ -80,7 +80,10 @@ message NegOpenRequest {
 // NegOpenResponse returns the initial negentropy response
 message NegOpenResponse {
   bytes message = 1;            // Negentropy protocol message to send back
-  string error = 2;             // Error message if failed
+  repeated bytes have_ids = 2;  // Event IDs we have that client needs (if initial reconciliation completes)
+  repeated bytes need_ids = 3;  // Event IDs we need from client (if initial reconciliation completes)
+  bool complete = 4;            // True if reconciliation completed in first round
+  string error = 5;             // Error message if failed
 }
 
 // NegMsgRequest processes a NEG-MSG from client

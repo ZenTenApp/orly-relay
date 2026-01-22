@@ -108,7 +108,7 @@ func (l *Listener) HandleNegOpen(msg []byte) error {
 
 	// Call gRPC service
 	ctx := context.Background()
-	respMsg, errStr, err := negentropyClient.HandleNegOpen(
+	respMsg, haveIDs, needIDs, complete, errStr, err := negentropyClient.HandleNegOpen(
 		ctx,
 		l.connectionID,
 		subscriptionID,
@@ -124,8 +124,29 @@ func (l *Listener) HandleNegOpen(msg []byte) error {
 		return l.sendNegErr(subscriptionID, errStr)
 	}
 
-	// Send NEG-MSG response with initial message
-	return l.sendNegMsg(subscriptionID, respMsg)
+	// Log need_ids (events client should send us)
+	if len(needIDs) > 0 {
+		log.D.F("NEG-OPEN: client needs to send %d events", len(needIDs))
+	}
+
+	// Send NEG-MSG response FIRST (before events)
+	if err := l.sendNegMsg(subscriptionID, respMsg); err != nil {
+		return err
+	}
+
+	// If reconciliation is complete, log it
+	if complete {
+		log.D.F("NEG-OPEN: reconciliation complete for %s", subscriptionID)
+	}
+
+	// AFTER sending response, send events for IDs we have that client needs
+	if len(haveIDs) > 0 {
+		if err := l.sendEventsForIDs(subscriptionID, haveIDs); err != nil {
+			log.E.F("failed to send events for NEG-OPEN: %v", err)
+		}
+	}
+
+	return nil
 }
 
 // HandleNegMsg processes NEG-MSG messages
@@ -180,19 +201,12 @@ func (l *Listener) HandleNegMsg(msg []byte) error {
 		return l.sendNegErr(subscriptionID, errStr)
 	}
 
-	// If we have events to send (have_ids), fetch and send them
-	if len(haveIDs) > 0 {
-		if err := l.sendEventsForIDs(subscriptionID, haveIDs); err != nil {
-			log.E.F("failed to send events for NEG-MSG: %v", err)
-		}
-	}
-
 	// Log need_ids (events client should send us)
 	if len(needIDs) > 0 {
 		log.D.F("NEG-MSG: client needs to send %d events", len(needIDs))
 	}
 
-	// Send NEG-MSG response
+	// Send NEG-MSG response FIRST (before events)
 	if err := l.sendNegMsg(subscriptionID, respMsg); err != nil {
 		return err
 	}
@@ -200,6 +214,13 @@ func (l *Listener) HandleNegMsg(msg []byte) error {
 	// If reconciliation is complete, log it
 	if complete {
 		log.D.F("NEG-MSG: reconciliation complete for %s", subscriptionID)
+	}
+
+	// AFTER sending response, send events for IDs we have that client needs
+	if len(haveIDs) > 0 {
+		if err := l.sendEventsForIDs(subscriptionID, haveIDs); err != nil {
+			log.E.F("failed to send events for NEG-MSG: %v", err)
+		}
 	}
 
 	return nil
@@ -275,13 +296,12 @@ func (l *Listener) sendEventsForIDs(subscriptionID string, ids [][]byte) error {
 
 	log.I.F("NEG: sending %d events for subscription %s", len(ids), subscriptionID)
 
-	// Build filter with hex-encoded IDs
+	// Build filter with binary IDs (32 bytes each)
 	f := &filter.F{}
 	f.Ids = &tag.T{}
 	for _, id := range ids {
-		// IDs can be 32 bytes (full) or 16 bytes (truncated per NIP-77)
-		hexID := hex.EncodeToString(id)
-		f.Ids.T = append(f.Ids.T, []byte(hexID))
+		// IDs are binary (32 bytes full or 16 bytes truncated per NIP-77)
+		f.Ids.T = append(f.Ids.T, id)
 	}
 
 	// Query events by IDs

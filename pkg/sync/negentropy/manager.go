@@ -260,6 +260,9 @@ func (m *Manager) performNegentropy(ctx context.Context, peerURL string) (int64,
 	var eventsSynced int64
 	var needIDs []string
 	var haveIDs []string
+	var waitingForEvents bool
+	var expectedEvents int
+	var receivedEvents int64
 
 	// Exchange messages until complete
 	for i := 0; i < 20; i++ { // Max 20 rounds
@@ -308,10 +311,20 @@ func (m *Manager) performNegentropy(ctx context.Context, peerURL string) (int64,
 			haveIDs = append(haveIDs, neg.CollectHaves()...)
 
 			if complete {
-				// Send NEG-CLOSE
-				negClose := []any{"NEG-CLOSE", subID}
-				conn.WriteJSON(negClose)
-				goto done
+				log.I.F("negentropy: reconciliation complete, waiting for %d events from peer", len(needIDs))
+				// Don't send NEG-CLOSE yet - wait for EVENT messages
+				// The server will send events we need after this
+				waitingForEvents = true
+				expectedEvents = len(needIDs)
+				if expectedEvents == 0 {
+					// No events to receive, close now
+					negClose := []any{"NEG-CLOSE", subID}
+					conn.WriteJSON(negClose)
+					goto done
+				}
+				// Set a read deadline to avoid waiting forever
+				conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+				continue
 			}
 
 			// Send NEG-MSG response
@@ -329,7 +342,20 @@ func (m *Manager) performNegentropy(ctx context.Context, peerURL string) (int64,
 
 		case "EVENT":
 			// Peer is sending us an event
-			eventsSynced++
+			if len(msg) >= 3 {
+				if err := m.storeEventFromJSON(ctx, msg[2]); err != nil {
+					log.W.F("negentropy: failed to store event from peer: %v", err)
+				} else {
+					eventsSynced++
+					receivedEvents++
+				}
+			}
+			// If we've received all expected events (or more), we can close
+			if waitingForEvents && receivedEvents >= int64(expectedEvents) {
+				negClose := []any{"NEG-CLOSE", subID}
+				conn.WriteJSON(negClose)
+				goto done
+			}
 		}
 	}
 
