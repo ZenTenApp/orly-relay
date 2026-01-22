@@ -1,14 +1,15 @@
 # ORLY relay Dockerfile for negentropy interop testing
 
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 RUN apk add --no-cache git make
 
 WORKDIR /build
 COPY . .
 
-# Build orly binary
-RUN CGO_ENABLED=0 go build -o orly ./cmd/orly
+# Build orly relay binary (main.go in project root) and sync binary
+RUN GOTOOLCHAIN=auto CGO_ENABLED=0 go build -o orly . && \
+    GOTOOLCHAIN=auto CGO_ENABLED=0 go build -o orly-sync ./cmd/orly
 
 # Runtime image
 FROM alpine:3.19
@@ -17,6 +18,7 @@ RUN apk add --no-cache ca-certificates curl jq
 
 WORKDIR /app
 COPY --from=builder /build/orly /app/
+COPY --from=builder /build/orly-sync /app/
 
 RUN mkdir -p /data
 

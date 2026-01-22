@@ -8,19 +8,13 @@
 
 services:
   strfry:
-    build:
-      context: .
-      dockerfile: Dockerfile.strfry
+    image: dockurr/strfry:latest
     ports:
       - "7777:7777"
     volumes:
-      - strfry-data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7777"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      - strfry-data:/strfry-db
+      - ./strfry.conf:/etc/strfry.conf:ro
+    command: ["/app/strfry", "relay", "--config=/etc/strfry.conf"]
     networks:
       - negentropy-test
 
@@ -34,18 +28,16 @@ services:
       - ORLY_PORT=3334
       - ORLY_DATA_DIR=/data
       - ORLY_LOG_LEVEL=info
-      - ORLY_SYNC_TARGET_RELAYS=ws://strfry:7777
     volumes:
       - orly-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3334"]
+      test: ["CMD", "curl", "-sf", "http://localhost:3334"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 10s
     depends_on:
-      strfry:
-        condition: service_healthy
+      - strfry
     networks:
       - negentropy-test
 
@@ -61,10 +53,8 @@ services:
     volumes:
       - sync-data:/data
     depends_on:
-      strfry:
-        condition: service_healthy
-      orly:
-        condition: service_healthy
+      - strfry
+      - orly
     networks:
       - negentropy-test
 

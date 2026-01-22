@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
     libsecp256k1-dev \
     libflatbuffers-dev \
     libzstd-dev \
+    libssl-dev \
+    zlib1g-dev \
     pkg-config \
     libtool \
     autoconf \
@@ -38,6 +40,7 @@ RUN apt-get update && apt-get install -y \
     libsecp256k1-0 \
     libflatbuffers1 \
     libzstd1 \
+    libssl3 \
     curl \
     jq \
     websocat \
