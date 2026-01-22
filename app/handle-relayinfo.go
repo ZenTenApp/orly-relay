@@ -27,9 +27,10 @@ type GraphQueryConfig struct {
 // The Addresses field contains alternative WebSocket URLs for the relay (e.g., .onion).
 type ExtendedRelayInfo struct {
 	*relayinfo.T
-	Addresses  []string          `json:"addresses,omitempty"`
-	GraphQuery *GraphQueryConfig `json:"graph_query,omitempty"`
-	Theme      string            `json:"theme,omitempty"`
+	Addresses      []string          `json:"addresses,omitempty"`
+	GraphQuery     *GraphQueryConfig `json:"graph_query,omitempty"`
+	Theme          string            `json:"theme,omitempty"`
+	BlossomEnabled bool              `json:"blossom_enabled,omitempty"`
 }
 
 // HandleRelayInfo generates and returns a relay information document in JSON
@@ -204,17 +205,20 @@ func (s *Server) HandleRelayInfo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Return extended info if we have addresses, graph query support, or custom theme
+	// Return extended info if we have addresses, graph query support, custom theme, or blossom
 	theme := s.Config.Theme
 	if theme != "auto" && theme != "light" && theme != "dark" {
 		theme = "auto"
 	}
-	if len(addresses) > 0 || graphConfig != nil || theme != "auto" {
+	// Blossom is only available if the server is actually initialized (requires Badger backend)
+	blossomEnabled := s.blossomServer != nil
+	if len(addresses) > 0 || graphConfig != nil || theme != "auto" || blossomEnabled {
 		extInfo := &ExtendedRelayInfo{
-			T:          info,
-			Addresses:  addresses,
-			GraphQuery: graphConfig,
-			Theme:      theme,
+			T:              info,
+			Addresses:      addresses,
+			GraphQuery:     graphConfig,
+			Theme:          theme,
+			BlossomEnabled: blossomEnabled,
 		}
 		if err := json.NewEncoder(w).Encode(extInfo); chk.E(err) {
 		}

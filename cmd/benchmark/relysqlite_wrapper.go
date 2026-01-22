@@ -289,6 +289,35 @@ func (w *RelySQLiteWrapper) GetLeastAccessedEvents(limit int, minAgeSec int64) (
 	return nil, nil
 }
 
+// Blob storage stubs (not needed for benchmarking)
+func (w *RelySQLiteWrapper) SaveBlob(sha256Hash []byte, data []byte, pubkey []byte, mimeType string, extension string) error {
+	return fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) GetBlob(sha256Hash []byte) (data []byte, metadata *database.BlobMetadata, err error) {
+	return nil, nil, fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) HasBlob(sha256Hash []byte) (exists bool, err error) {
+	return false, fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) DeleteBlob(sha256Hash []byte, pubkey []byte) error {
+	return fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) ListBlobs(pubkey []byte, since, until int64) ([]*database.BlobDescriptor, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) GetBlobMetadata(sha256Hash []byte) (*database.BlobMetadata, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) GetTotalBlobStorageUsed(pubkey []byte) (totalMB int64, err error) {
+	return 0, fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) SaveBlobReport(sha256Hash []byte, reportData []byte) error {
+	return fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) ListAllBlobUserStats() ([]*database.UserBlobStats, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 // Helper function to check if a kind is replaceable
 func isReplaceableKind(kind int) bool {
 	return (kind >= 10000 && kind < 20000) || kind == 0 || kind == 3

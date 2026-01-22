@@ -131,6 +131,13 @@
     // NRC (Nostr Relay Connect) state
     let nrcEnabled = false;
 
+    // Blossom (blob storage) state
+    let blossomEnabled = true; // Default to true for backward compatibility
+    // Update blossomEnabled when relay info changes
+    $: if ($relayInfoStore && typeof $relayInfoStore.blossom_enabled === "boolean") {
+        blossomEnabled = $relayInfoStore.blossom_enabled;
+    }
+
     // ACL mode
     let aclMode = "";
 
@@ -855,13 +862,17 @@
             }
         });
 
-        // Fetch relay info to get configured theme
+        // Fetch relay info to get configured theme and feature flags
         (async () => {
             try {
                 const relayInfo = await api.fetchRelayInfo();
                 if (relayInfo?.theme && relayInfo.theme !== "auto") {
                     configuredTheme = relayInfo.theme;
                     isDarkTheme = relayInfo.theme === "dark";
+                }
+                // Check if blossom is enabled (default to true for backward compatibility)
+                if (relayInfo && typeof relayInfo.blossom_enabled === "boolean") {
+                    blossomEnabled = relayInfo.blossom_enabled;
                 }
             } catch (e) {
                 console.log("Could not fetch relay theme config:", e);
@@ -1858,6 +1869,10 @@
         }
         // Hide curation tab if not in curating mode
         if (tab.id === "curation" && aclMode !== "curating") {
+            return false;
+        }
+        // Hide blossom tab if not enabled
+        if (tab.id === "blossom" && !blossomEnabled) {
             return false;
         }
         // Debug logging for tab filtering

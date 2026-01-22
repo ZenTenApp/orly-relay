@@ -14,7 +14,7 @@ import (
 
 // initializeBlossomServer creates and configures the Blossom blob storage server
 func initializeBlossomServer(
-	ctx context.Context, cfg *config.C, db *database.D,
+	ctx context.Context, cfg *config.C, db database.Database,
 ) (*blossom.Server, error) {
 	// Create blossom server configuration
 	blossomCfg := &blossom.Config{

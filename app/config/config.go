@@ -116,16 +116,13 @@ type C struct {
 	NIP43InviteExpiry     time.Duration `env:"ORLY_NIP43_INVITE_EXPIRY" default:"24h" usage:"how long invite codes remain valid"`
 
 	// Database configuration
-	DBType              string `env:"ORLY_DB_TYPE" default:"badger" usage:"database backend to use: badger, bbolt, or neo4j"`
+	DBType              string `env:"ORLY_DB_TYPE" default:"badger" usage:"database backend to use: badger, neo4j, or grpc"`
 	QueryCacheDisabled  bool   `env:"ORLY_QUERY_CACHE_DISABLED" default:"true" usage:"disable query cache to reduce memory usage (trades memory for query performance)"`
 
-	// BBolt configuration (only used when ORLY_DB_TYPE=bbolt)
-	BboltBatchMaxEvents  int  `env:"ORLY_BBOLT_BATCH_MAX_EVENTS" default:"5000" usage:"max events before flush (tuned for HDD, only used when ORLY_DB_TYPE=bbolt)"`
-	BboltBatchMaxMB      int  `env:"ORLY_BBOLT_BATCH_MAX_MB" default:"128" usage:"max batch size in MB before flush (only used when ORLY_DB_TYPE=bbolt)"`
-	BboltFlushTimeout    int  `env:"ORLY_BBOLT_FLUSH_TIMEOUT_SEC" default:"30" usage:"max seconds before flush (only used when ORLY_DB_TYPE=bbolt)"`
-	BboltBloomSizeMB     int  `env:"ORLY_BBOLT_BLOOM_SIZE_MB" default:"16" usage:"bloom filter size in MB for edge queries (only used when ORLY_DB_TYPE=bbolt)"`
-	BboltNoSync          bool `env:"ORLY_BBOLT_NO_SYNC" default:"false" usage:"disable fsync for performance (DANGEROUS - data loss risk, only used when ORLY_DB_TYPE=bbolt)"`
-	BboltMmapSizeMB      int  `env:"ORLY_BBOLT_MMAP_SIZE_MB" default:"8192" usage:"initial mmap size in MB (only used when ORLY_DB_TYPE=bbolt)"`
+	// gRPC database client settings (only used when ORLY_DB_TYPE=grpc)
+	GRPCServerAddress  string        `env:"ORLY_GRPC_SERVER" usage:"address of remote gRPC database server (only used when ORLY_DB_TYPE=grpc)"`
+	GRPCConnectTimeout time.Duration `env:"ORLY_GRPC_CONNECT_TIMEOUT" default:"10s" usage:"gRPC connection timeout (only used when ORLY_DB_TYPE=grpc)"`
+
 	QueryCacheSizeMB    int    `env:"ORLY_QUERY_CACHE_SIZE_MB" default:"512" usage:"query cache size in MB (caches database query results for faster REQ responses)"`
 	QueryCacheMaxAge    string `env:"ORLY_QUERY_CACHE_MAX_AGE" default:"5m" usage:"maximum age for cached query results (e.g., 5m, 10m, 1h)"`
 
@@ -625,7 +622,7 @@ func PrintHelp(cfg *C, printer io.Writer) {
                    orly - ORLY-branded assets
            Default location: ~/.config/%s/branding
 - migrate: migrate data between database backends
-           Example: %s migrate --from badger --to bbolt
+           Example: %s migrate --from badger --to neo4j
 - serve: start ephemeral relay with RAM-based storage at /dev/shm/orlyserve
          listening on 0.0.0.0:10547 with 'none' ACL mode (open relay)
          useful for testing and benchmarking
@@ -790,25 +787,6 @@ func (cfg *C) GetGraphConfigValues() (
 		cfg.GraphRateLimitRPM
 }
 
-// GetBboltConfigValues returns the BBolt database configuration values.
-// This avoids circular imports with pkg/bbolt while allowing main.go to construct
-// the BBolt-specific configuration.
-func (cfg *C) GetBboltConfigValues() (
-	batchMaxEvents int,
-	batchMaxBytes int64,
-	flushTimeoutSec int,
-	bloomSizeMB int,
-	noSync bool,
-	mmapSizeBytes int,
-) {
-	return cfg.BboltBatchMaxEvents,
-		int64(cfg.BboltBatchMaxMB) * 1024 * 1024,
-		cfg.BboltFlushTimeout,
-		cfg.BboltBloomSizeMB,
-		cfg.BboltNoSync,
-		cfg.BboltMmapSizeMB * 1024 * 1024
-}
-
 // GetNRCConfigValues returns the NRC (Nostr Relay Connect) configuration values.
 // This avoids circular imports with pkg/protocol/nrc while allowing main.go to construct
 // the NRC bridge configuration.
@@ -853,4 +831,15 @@ func (cfg *C) GetFollowsThrottleConfigValues() (
 	return cfg.FollowsThrottleEnabled,
 		cfg.FollowsThrottlePerEvent,
 		cfg.FollowsThrottleMaxDelay
+}
+
+// GetGRPCConfigValues returns the gRPC database client configuration values.
+// This avoids circular imports with pkg/database/grpc while allowing main.go to construct
+// the gRPC client configuration.
+func (cfg *C) GetGRPCConfigValues() (
+	serverAddress string,
+	connectTimeout time.Duration,
+) {
+	return cfg.GRPCServerAddress,
+		cfg.GRPCConnectTimeout
 }

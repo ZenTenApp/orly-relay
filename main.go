@@ -27,9 +27,9 @@ import (
 	"next.orly.dev/pkg/acl"
 	"git.mleku.dev/mleku/nostr/crypto/keys"
 	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
-	bboltdb "next.orly.dev/pkg/bbolt" // Import for bbolt factory and type
 	"next.orly.dev/pkg/database"
-	neo4jdb "next.orly.dev/pkg/neo4j" // Import for neo4j factory and type
+	_ "next.orly.dev/pkg/database/grpc" // Import for grpc factory registration
+	neo4jdb "next.orly.dev/pkg/neo4j"   // Import for neo4j factory and type
 	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/utils/interrupt"
@@ -119,14 +119,14 @@ func main() {
 			fmt.Println("Migrate data between database backends.")
 			fmt.Println("")
 			fmt.Println("Options:")
-			fmt.Println("  --from <type>         Source database type (badger, bbolt, neo4j)")
-			fmt.Println("  --to <type>           Destination database type (badger, bbolt, neo4j)")
+			fmt.Println("  --from <type>         Source database type (badger, neo4j)")
+			fmt.Println("  --to <type>           Destination database type (badger, neo4j)")
 			fmt.Println("  --target-path <path>  Optional: destination data directory")
 			fmt.Println("                        (default: $ORLY_DATA_DIR/<type>)")
 			fmt.Println("")
 			fmt.Println("Examples:")
-			fmt.Println("  orly migrate --from badger --to bbolt")
-			fmt.Println("  orly migrate --from badger --to bbolt --target-path /mnt/hdd/orly-bbolt")
+			fmt.Println("  orly migrate --from badger --to neo4j")
+			fmt.Println("  orly migrate --from badger --to neo4j --target-path /mnt/hdd/orly-neo4j")
 			os.Exit(1)
 		}
 
@@ -654,10 +654,6 @@ func main() {
 				n4jDB.MaxConcurrentQueries(),
 			)
 			log.I.F("rate limiter configured for Neo4j backend (target: %dMB)", targetMB)
-		} else if _, ok := db.(*bboltdb.B); ok {
-			// BBolt uses memory-mapped IO, so memory-only limiter is appropriate
-			limiter = ratelimit.NewMemoryOnlyLimiter(rlConfig)
-			log.I.F("rate limiter configured for BBolt backend (target: %dMB)", targetMB)
 		} else {
 			// For other backends, create a disabled limiter
 			limiter = ratelimit.NewDisabledLimiter()
@@ -781,8 +777,8 @@ func makeDatabaseConfig(cfg *config.C) *database.DatabaseConfig {
 		neo4jURI, neo4jUser, neo4jPassword,
 		neo4jMaxConnPoolSize, neo4jFetchSize, neo4jMaxTxRetrySeconds, neo4jQueryResultLimit := cfg.GetDatabaseConfigValues()
 
-	// Get BBolt-specific configuration
-	batchMaxEvents, batchMaxBytes, flushTimeoutSec, bloomSizeMB, noSync, mmapSizeBytes := cfg.GetBboltConfigValues()
+	// Get gRPC client configuration
+	grpcServerAddress, grpcConnectTimeout := cfg.GetGRPCConfigValues()
 
 	return &database.DatabaseConfig{
 		DataDir:                dataDir,
@@ -802,13 +798,9 @@ func makeDatabaseConfig(cfg *config.C) *database.DatabaseConfig {
 		Neo4jFetchSize:         neo4jFetchSize,
 		Neo4jMaxTxRetrySeconds: neo4jMaxTxRetrySeconds,
 		Neo4jQueryResultLimit:  neo4jQueryResultLimit,
-		// BBolt-specific settings
-		BboltBatchMaxEvents:  batchMaxEvents,
-		BboltBatchMaxBytes:   batchMaxBytes,
-		BboltFlushTimeout:    time.Duration(flushTimeoutSec) * time.Second,
-		BboltBloomSizeMB:     bloomSizeMB,
-		BboltNoSync:          noSync,
-		BboltMmapSize:        mmapSizeBytes,
+		// gRPC client settings
+		GRPCServerAddress:  grpcServerAddress,
+		GRPCConnectTimeout: grpcConnectTimeout,
 	}
 }
 

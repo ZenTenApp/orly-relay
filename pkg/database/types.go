@@ -24,3 +24,29 @@ type NIP43Membership struct {
 	AddedAt    time.Time
 	InviteCode string
 }
+
+// BlobMetadata stores metadata about a blob in the database
+type BlobMetadata struct {
+	Pubkey    []byte `json:"pubkey"`
+	MimeType  string `json:"mime_type"`
+	Uploaded  int64  `json:"uploaded"`
+	Size      int64  `json:"size"`
+	Extension string `json:"extension"` // File extension (e.g., ".png", ".pdf")
+}
+
+// BlobDescriptor represents a blob descriptor as defined in BUD-02
+type BlobDescriptor struct {
+	URL      string     `json:"url"`
+	SHA256   string     `json:"sha256"`
+	Size     int64      `json:"size"`
+	Type     string     `json:"type"`
+	Uploaded int64      `json:"uploaded"`
+	NIP94    [][]string `json:"nip94,omitempty"`
+}
+
+// UserBlobStats represents storage statistics for a single user
+type UserBlobStats struct {
+	PubkeyHex      string
+	BlobCount      int64
+	TotalSizeBytes int64
+}

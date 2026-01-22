@@ -10,7 +10,7 @@ import (
 
 // Server provides a Blossom server implementation
 type Server struct {
-	db      *database.D
+	db      database.Database
 	storage *Storage
 	acl     *acl.S
 	baseURL string
@@ -38,7 +38,7 @@ type Config struct {
 }
 
 // NewServer creates a new Blossom server instance
-func NewServer(db *database.D, aclRegistry *acl.S, cfg *Config) *Server {
+func NewServer(db database.Database, aclRegistry *acl.S, cfg *Config) *Server {
 	if cfg == nil {
 		cfg = &Config{
 			MaxBlobSize: 100 * 1024 * 1024, // 100MB default

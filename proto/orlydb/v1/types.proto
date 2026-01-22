@@ -1,0 +1,121 @@
+syntax = "proto3";
+package orlydb.v1;
+option go_package = "next.orly.dev/pkg/proto/orlydb/v1;orlydbv1";
+
+// Empty is used for requests/responses with no data
+message Empty {}
+
+// Event represents a Nostr event
+// Binary fields (id, pubkey, sig) are stored as raw bytes for efficiency
+message Event {
+  bytes id = 1;           // 32 bytes SHA256 hash
+  bytes pubkey = 2;       // 32 bytes public key
+  int64 created_at = 3;   // UNIX timestamp
+  uint32 kind = 4;        // Event kind (uint16 in Go, promoted to uint32)
+  repeated Tag tags = 5;  // Event tags
+  bytes content = 6;      // Arbitrary content (may be binary)
+  bytes sig = 7;          // 64 bytes Schnorr signature
+}
+
+// Tag represents a Nostr tag (array of byte slices)
+// Values are bytes to preserve binary data in e/p tags (33-byte format)
+message Tag {
+  repeated bytes values = 1;
+}
+
+// TagSet represents a set of tag values for filtering
+message TagSet {
+  repeated bytes values = 1;
+}
+
+// Filter represents a Nostr query filter (NIP-01)
+message Filter {
+  repeated bytes ids = 1;          // Event IDs to match (32 bytes each)
+  repeated uint32 kinds = 2;       // Kinds to match
+  repeated bytes authors = 3;      // Author pubkeys (32 bytes each)
+  map<string, TagSet> tags = 4;    // Tag filters (#e, #p, #t, etc.)
+  optional int64 since = 5;        // Created after timestamp
+  optional int64 until = 6;        // Created before timestamp
+  optional bytes search = 7;       // Full-text search query (NIP-50)
+  optional uint32 limit = 8;       // Max results
+}
+
+// Uint40 represents a 40-bit serial number
+// Packed into uint64 with upper 24 bits unused
+message Uint40 {
+  uint64 value = 1;
+}
+
+// IdPkTs holds event reference data (ID, Pubkey, Timestamp, Serial)
+message IdPkTs {
+  bytes id = 1;        // 32 bytes event ID
+  bytes pubkey = 2;    // 32 bytes author pubkey
+  int64 timestamp = 3; // Created timestamp
+  uint64 serial = 4;   // Database serial number
+}
+
+// Range represents an index range for serial queries
+message Range {
+  bytes prefix = 1;    // Index prefix
+  uint64 start = 2;    // Start serial
+  uint64 end = 3;      // End serial
+}
+
+// Subscription represents payment-based access control data
+message Subscription {
+  bytes pubkey = 1;
+  int64 trial_end = 2;
+  int64 paid_until = 3;
+  string blossom_level = 4;
+  int64 blossom_storage_mb = 5;
+}
+
+// Payment represents a payment record
+message Payment {
+  int64 amount = 1;
+  int64 timestamp = 2;
+  string invoice = 3;
+  string preimage = 4;
+}
+
+// NIP43Membership represents NIP-43 invite-based ACL membership
+message NIP43Membership {
+  bytes pubkey = 1;
+  int64 added_at = 2;
+  string invite_code = 3;
+}
+
+// EventBatch is used for streaming query results
+message EventBatch {
+  repeated Event events = 1;
+}
+
+// SerialList is used for returning lists of serials
+message SerialList {
+  repeated uint64 serials = 1;
+}
+
+// IdPkTsList is used for returning lists of IdPkTs
+message IdPkTsList {
+  repeated IdPkTs items = 1;
+}
+
+// EventMap maps serial numbers to events
+message EventMap {
+  map<uint64, Event> events = 1;
+}
+
+// SerialMap maps string IDs to serial numbers
+message SerialMap {
+  map<string, uint64> serials = 1;
+}
+
+// PaymentList is used for returning payment history
+message PaymentList {
+  repeated Payment payments = 1;
+}
+
+// PubkeyList is used for returning lists of pubkeys
+message PubkeyList {
+  repeated bytes pubkeys = 1;
+}

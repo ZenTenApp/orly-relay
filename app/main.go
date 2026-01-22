@@ -416,11 +416,12 @@ func Run(
 		}
 	}
 
-	// Initialize Blossom blob storage server (only for Badger backend)
-	// MUST be done before UserInterface() which registers routes
-	if badgerDB, ok := db.(*database.D); ok && cfg.BlossomEnabled {
-		log.I.F("Badger backend detected, initializing Blossom server...")
-		if l.blossomServer, err = initializeBlossomServer(ctx, cfg, badgerDB); err != nil {
+	// Initialize Blossom blob storage server
+	// Now works with any database backend that implements blob storage methods.
+	// MUST be done before UserInterface() which registers routes.
+	if cfg.BlossomEnabled {
+		log.I.F("initializing Blossom server...")
+		if l.blossomServer, err = initializeBlossomServer(ctx, cfg, db); err != nil {
 			log.E.F("failed to initialize blossom server: %v", err)
 			// Continue without blossom server
 		} else if l.blossomServer != nil {
@@ -428,10 +429,8 @@ func Run(
 		} else {
 			log.W.F("blossom server initialization returned nil without error")
 		}
-	} else if !cfg.BlossomEnabled {
-		log.I.F("Blossom server disabled via ORLY_BLOSSOM_ENABLED=false")
 	} else {
-		log.I.F("Non-Badger backend detected (type: %T), Blossom server not available", db)
+		log.I.F("Blossom server disabled via ORLY_BLOSSOM_ENABLED=false")
 	}
 
 	// Initialize WireGuard VPN and NIP-46 Bunker (only for Badger backend)

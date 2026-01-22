@@ -56,8 +56,7 @@ func MonitorFromNeo4jDriver(
 }
 
 // NewMemoryOnlyLimiter creates a rate limiter that only monitors process memory.
-// Useful for database backends that don't have their own load metrics (e.g., BBolt).
-// Since BBolt uses memory-mapped IO, memory pressure is still relevant.
+// Useful for database backends that don't have their own load metrics.
 func NewMemoryOnlyLimiter(config Config) *Limiter {
 	monitor := NewMemoryMonitor(100 * time.Millisecond)
 	return NewLimiter(config, monitor)

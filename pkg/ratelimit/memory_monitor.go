@@ -11,7 +11,7 @@ import (
 )
 
 // MemoryMonitor is a simple load monitor that only tracks process memory.
-// Used for database backends that don't have their own load metrics (e.g., BBolt).
+// Used for database backends that don't have their own load metrics.
 type MemoryMonitor struct {
 	// Configuration
 	pollInterval time.Duration
@@ -203,7 +203,7 @@ func (m *MemoryMonitor) updateMetrics() {
 		WriteLatency:      avgWrite,
 		Timestamp:         time.Now(),
 		InEmergencyMode:   m.inEmergency.Load(),
-		CompactionPending: false, // BBolt doesn't have compaction
+		CompactionPending: false, // memory-only monitor doesn't track compaction
 		PhysicalMemoryMB:  physicalMemMB,
 	}
 	m.mu.Unlock()

@@ -116,4 +116,15 @@ type Database interface {
 
 	// Utility methods
 	EventIdsBySerial(start uint64, count int) (evs []uint64, err error)
+
+	// Blob storage (Blossom)
+	SaveBlob(sha256Hash []byte, data []byte, pubkey []byte, mimeType string, extension string) error
+	GetBlob(sha256Hash []byte) (data []byte, metadata *BlobMetadata, err error)
+	HasBlob(sha256Hash []byte) (exists bool, err error)
+	DeleteBlob(sha256Hash []byte, pubkey []byte) error
+	ListBlobs(pubkey []byte, since, until int64) ([]*BlobDescriptor, error)
+	GetBlobMetadata(sha256Hash []byte) (*BlobMetadata, error)
+	GetTotalBlobStorageUsed(pubkey []byte) (totalMB int64, err error)
+	SaveBlobReport(sha256Hash []byte, reportData []byte) error
+	ListAllBlobUserStats() ([]*UserBlobStats, error)
 }

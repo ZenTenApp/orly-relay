@@ -1,0 +1,668 @@
+syntax = "proto3";
+package orlydb.v1;
+option go_package = "next.orly.dev/pkg/proto/orlydb/v1;orlydbv1";
+
+import "orlydb/v1/types.proto";
+
+// DatabaseService provides gRPC access to the ORLY database
+service DatabaseService {
+  // === Lifecycle Methods ===
+
+  // GetPath returns the database file path
+  rpc GetPath(Empty) returns (PathResponse);
+
+  // Sync flushes buffers to disk
+  rpc Sync(Empty) returns (Empty);
+
+  // Ready returns whether the database is ready to serve requests
+  rpc Ready(Empty) returns (ReadyResponse);
+
+  // SetLogLevel sets the database log level
+  rpc SetLogLevel(SetLogLevelRequest) returns (Empty);
+
+  // === Event Storage ===
+
+  // SaveEvent stores an event, returns whether it already existed
+  rpc SaveEvent(SaveEventRequest) returns (SaveEventResponse);
+
+  // GetSerialsFromFilter gets serial numbers matching a filter
+  rpc GetSerialsFromFilter(GetSerialsFromFilterRequest) returns (SerialList);
+
+  // WouldReplaceEvent checks if an event would replace existing ones
+  rpc WouldReplaceEvent(WouldReplaceEventRequest) returns (WouldReplaceEventResponse);
+
+  // === Event Queries (Streaming for large results) ===
+
+  // QueryEvents queries events matching a filter (with deletion filtering)
+  rpc QueryEvents(QueryEventsRequest) returns (stream EventBatch);
+
+  // QueryAllVersions queries all versions of replaceable events
+  rpc QueryAllVersions(QueryEventsRequest) returns (stream EventBatch);
+
+  // QueryEventsWithOptions provides full control over query behavior
+  rpc QueryEventsWithOptions(QueryEventsWithOptionsRequest) returns (stream EventBatch);
+
+  // QueryDeleteEventsByTargetId queries deletion events for a target
+  rpc QueryDeleteEventsByTargetId(QueryDeleteEventsByTargetIdRequest) returns (stream EventBatch);
+
+  // QueryForSerials queries just serial numbers matching a filter
+  rpc QueryForSerials(QueryEventsRequest) returns (SerialList);
+
+  // QueryForIds queries ID/Pubkey/Timestamp triplets
+  rpc QueryForIds(QueryEventsRequest) returns (IdPkTsList);
+
+  // CountEvents counts events matching a filter
+  rpc CountEvents(QueryEventsRequest) returns (CountEventsResponse);
+
+  // === Event Retrieval by Serial ===
+
+  // FetchEventBySerial fetches a single event by serial
+  rpc FetchEventBySerial(FetchEventBySerialRequest) returns (FetchEventBySerialResponse);
+
+  // FetchEventsBySerials fetches multiple events by serial (batch)
+  rpc FetchEventsBySerials(FetchEventsBySerialRequest) returns (EventMap);
+
+  // GetSerialById gets the serial for a single event ID
+  rpc GetSerialById(GetSerialByIdRequest) returns (GetSerialByIdResponse);
+
+  // GetSerialsByIds gets serials for multiple event IDs
+  rpc GetSerialsByIds(GetSerialsByIdsRequest) returns (SerialMap);
+
+  // GetSerialsByRange gets serials within an index range
+  rpc GetSerialsByRange(GetSerialsByRangeRequest) returns (SerialList);
+
+  // GetFullIdPubkeyBySerial gets full ID/Pubkey/Timestamp for a serial
+  rpc GetFullIdPubkeyBySerial(GetFullIdPubkeyBySerialRequest) returns (IdPkTs);
+
+  // GetFullIdPubkeyBySerials gets full data for multiple serials
+  rpc GetFullIdPubkeyBySerials(GetFullIdPubkeyBySerialsRequest) returns (IdPkTsList);
+
+  // === Event Deletion ===
+
+  // DeleteEvent deletes an event by ID
+  rpc DeleteEvent(DeleteEventRequest) returns (Empty);
+
+  // DeleteEventBySerial deletes an event by serial
+  rpc DeleteEventBySerial(DeleteEventBySerialRequest) returns (Empty);
+
+  // DeleteExpired deletes events with expired expiration tags
+  rpc DeleteExpired(Empty) returns (Empty);
+
+  // ProcessDelete processes a deletion event (NIP-09)
+  rpc ProcessDelete(ProcessDeleteRequest) returns (Empty);
+
+  // CheckForDeleted checks if an event was deleted
+  rpc CheckForDeleted(CheckForDeletedRequest) returns (Empty);
+
+  // === Import/Export (Streaming) ===
+
+  // Import imports events from a stream
+  rpc Import(stream ImportChunk) returns (ImportResponse);
+
+  // Export exports events to a stream
+  rpc Export(ExportRequest) returns (stream ExportChunk);
+
+  // ImportEventsFromStrings imports events from JSON strings
+  rpc ImportEventsFromStrings(ImportEventsFromStringsRequest) returns (ImportResponse);
+
+  // === Relay Identity ===
+
+  // GetRelayIdentitySecret gets the relay's secret key
+  rpc GetRelayIdentitySecret(Empty) returns (GetRelayIdentitySecretResponse);
+
+  // SetRelayIdentitySecret sets the relay's secret key
+  rpc SetRelayIdentitySecret(SetRelayIdentitySecretRequest) returns (Empty);
+
+  // GetOrCreateRelayIdentitySecret gets or creates the relay's secret key
+  rpc GetOrCreateRelayIdentitySecret(Empty) returns (GetRelayIdentitySecretResponse);
+
+  // === Markers (Key-Value Storage) ===
+
+  // SetMarker sets a metadata marker
+  rpc SetMarker(SetMarkerRequest) returns (Empty);
+
+  // GetMarker gets a metadata marker
+  rpc GetMarker(GetMarkerRequest) returns (GetMarkerResponse);
+
+  // HasMarker checks if a marker exists
+  rpc HasMarker(HasMarkerRequest) returns (HasMarkerResponse);
+
+  // DeleteMarker deletes a marker
+  rpc DeleteMarker(DeleteMarkerRequest) returns (Empty);
+
+  // === Subscriptions (Payment-Based Access) ===
+
+  // GetSubscription gets subscription info for a pubkey
+  rpc GetSubscription(GetSubscriptionRequest) returns (Subscription);
+
+  // IsSubscriptionActive checks if a subscription is active
+  rpc IsSubscriptionActive(IsSubscriptionActiveRequest) returns (IsSubscriptionActiveResponse);
+
+  // ExtendSubscription extends a subscription by days
+  rpc ExtendSubscription(ExtendSubscriptionRequest) returns (Empty);
+
+  // RecordPayment records a payment
+  rpc RecordPayment(RecordPaymentRequest) returns (Empty);
+
+  // GetPaymentHistory gets payment history for a pubkey
+  rpc GetPaymentHistory(GetPaymentHistoryRequest) returns (PaymentList);
+
+  // ExtendBlossomSubscription extends blossom storage subscription
+  rpc ExtendBlossomSubscription(ExtendBlossomSubscriptionRequest) returns (Empty);
+
+  // GetBlossomStorageQuota gets blossom storage quota
+  rpc GetBlossomStorageQuota(GetBlossomStorageQuotaRequest) returns (GetBlossomStorageQuotaResponse);
+
+  // IsFirstTimeUser checks if this is a first-time user
+  rpc IsFirstTimeUser(IsFirstTimeUserRequest) returns (IsFirstTimeUserResponse);
+
+  // === NIP-43 Invite-Based ACL ===
+
+  // AddNIP43Member adds a member via invite code
+  rpc AddNIP43Member(AddNIP43MemberRequest) returns (Empty);
+
+  // RemoveNIP43Member removes a member
+  rpc RemoveNIP43Member(RemoveNIP43MemberRequest) returns (Empty);
+
+  // IsNIP43Member checks if a pubkey is a member
+  rpc IsNIP43Member(IsNIP43MemberRequest) returns (IsNIP43MemberResponse);
+
+  // GetNIP43Membership gets membership details
+  rpc GetNIP43Membership(GetNIP43MembershipRequest) returns (NIP43Membership);
+
+  // GetAllNIP43Members gets all members
+  rpc GetAllNIP43Members(Empty) returns (PubkeyList);
+
+  // StoreInviteCode stores an invite code with expiration
+  rpc StoreInviteCode(StoreInviteCodeRequest) returns (Empty);
+
+  // ValidateInviteCode validates an invite code
+  rpc ValidateInviteCode(ValidateInviteCodeRequest) returns (ValidateInviteCodeResponse);
+
+  // DeleteInviteCode deletes an invite code
+  rpc DeleteInviteCode(DeleteInviteCodeRequest) returns (Empty);
+
+  // PublishNIP43MembershipEvent publishes a membership event
+  rpc PublishNIP43MembershipEvent(PublishNIP43MembershipEventRequest) returns (Empty);
+
+  // === Query Cache ===
+
+  // GetCachedJSON gets cached JSON for a filter
+  rpc GetCachedJSON(GetCachedJSONRequest) returns (GetCachedJSONResponse);
+
+  // CacheMarshaledJSON caches JSON for a filter
+  rpc CacheMarshaledJSON(CacheMarshaledJSONRequest) returns (Empty);
+
+  // GetCachedEvents gets cached events for a filter
+  rpc GetCachedEvents(GetCachedEventsRequest) returns (GetCachedEventsResponse);
+
+  // CacheEvents caches events for a filter
+  rpc CacheEvents(CacheEventsRequest) returns (Empty);
+
+  // InvalidateQueryCache invalidates the entire query cache
+  rpc InvalidateQueryCache(Empty) returns (Empty);
+
+  // === Access Tracking ===
+
+  // RecordEventAccess records an access to an event
+  rpc RecordEventAccess(RecordEventAccessRequest) returns (Empty);
+
+  // GetEventAccessInfo gets access info for an event
+  rpc GetEventAccessInfo(GetEventAccessInfoRequest) returns (GetEventAccessInfoResponse);
+
+  // GetLeastAccessedEvents gets least accessed events for GC
+  rpc GetLeastAccessedEvents(GetLeastAccessedEventsRequest) returns (SerialList);
+
+  // === Blob Storage (Blossom) ===
+
+  // SaveBlob stores a blob with its metadata
+  rpc SaveBlob(SaveBlobRequest) returns (Empty);
+
+  // GetBlob retrieves blob data and metadata
+  rpc GetBlob(GetBlobRequest) returns (GetBlobResponse);
+
+  // HasBlob checks if a blob exists
+  rpc HasBlob(HasBlobRequest) returns (HasBlobResponse);
+
+  // DeleteBlob deletes a blob
+  rpc DeleteBlob(DeleteBlobRequest) returns (Empty);
+
+  // ListBlobs lists blobs for a pubkey
+  rpc ListBlobs(ListBlobsRequest) returns (ListBlobsResponse);
+
+  // GetBlobMetadata gets only metadata for a blob
+  rpc GetBlobMetadata(GetBlobMetadataRequest) returns (BlobMetadata);
+
+  // GetTotalBlobStorageUsed gets total storage used by a pubkey in MB
+  rpc GetTotalBlobStorageUsed(GetTotalBlobStorageUsedRequest) returns (GetTotalBlobStorageUsedResponse);
+
+  // SaveBlobReport stores a report for a blob (BUD-09)
+  rpc SaveBlobReport(SaveBlobReportRequest) returns (Empty);
+
+  // ListAllBlobUserStats gets storage statistics for all users
+  rpc ListAllBlobUserStats(Empty) returns (ListAllBlobUserStatsResponse);
+
+  // === Utility ===
+
+  // EventIdsBySerial gets event IDs by serial range
+  rpc EventIdsBySerial(EventIdsBySerialRequest) returns (EventIdsBySerialResponse);
+
+  // RunMigrations runs database migrations
+  rpc RunMigrations(Empty) returns (Empty);
+}
+
+// === Request/Response Messages ===
+
+// Lifecycle
+message PathResponse {
+  string path = 1;
+}
+
+message ReadyResponse {
+  bool ready = 1;
+}
+
+message SetLogLevelRequest {
+  string level = 1;
+}
+
+// Event Storage
+message SaveEventRequest {
+  Event event = 1;
+}
+
+message SaveEventResponse {
+  bool exists = 1;
+}
+
+message GetSerialsFromFilterRequest {
+  Filter filter = 1;
+}
+
+message WouldReplaceEventRequest {
+  Event event = 1;
+}
+
+message WouldReplaceEventResponse {
+  bool would_replace = 1;
+  repeated uint64 replaced_serials = 2;
+}
+
+// Event Queries
+message QueryEventsRequest {
+  Filter filter = 1;
+}
+
+message QueryEventsWithOptionsRequest {
+  Filter filter = 1;
+  bool include_delete_events = 2;
+  bool show_all_versions = 3;
+}
+
+message QueryDeleteEventsByTargetIdRequest {
+  bytes target_event_id = 1;
+}
+
+message CountEventsResponse {
+  int32 count = 1;
+  bool approximate = 2;
+}
+
+// Event Retrieval
+message FetchEventBySerialRequest {
+  uint64 serial = 1;
+}
+
+message FetchEventBySerialResponse {
+  Event event = 1;
+  bool found = 2;
+}
+
+message FetchEventsBySerialRequest {
+  repeated uint64 serials = 1;
+}
+
+message GetSerialByIdRequest {
+  bytes id = 1;
+}
+
+message GetSerialByIdResponse {
+  uint64 serial = 1;
+  bool found = 2;
+}
+
+message GetSerialsByIdsRequest {
+  repeated bytes ids = 1;
+}
+
+message GetSerialsByRangeRequest {
+  Range range = 1;
+}
+
+message GetFullIdPubkeyBySerialRequest {
+  uint64 serial = 1;
+}
+
+message GetFullIdPubkeyBySerialsRequest {
+  repeated uint64 serials = 1;
+}
+
+// Event Deletion
+message DeleteEventRequest {
+  bytes event_id = 1;
+}
+
+message DeleteEventBySerialRequest {
+  uint64 serial = 1;
+  Event event = 2;
+}
+
+message ProcessDeleteRequest {
+  Event event = 1;
+  repeated bytes admins = 2;
+}
+
+message CheckForDeletedRequest {
+  Event event = 1;
+  repeated bytes admins = 2;
+}
+
+// Import/Export
+message ImportChunk {
+  bytes data = 1;
+}
+
+message ImportResponse {
+  int64 events_imported = 1;
+  int64 events_skipped = 2;
+}
+
+message ExportRequest {
+  repeated bytes pubkeys = 1;
+}
+
+message ExportChunk {
+  bytes data = 1;
+}
+
+message ImportEventsFromStringsRequest {
+  repeated string event_jsons = 1;
+  bool check_policy = 2;
+}
+
+// Relay Identity
+message GetRelayIdentitySecretResponse {
+  bytes secret_key = 1;
+}
+
+message SetRelayIdentitySecretRequest {
+  bytes secret_key = 1;
+}
+
+// Markers
+message SetMarkerRequest {
+  string key = 1;
+  bytes value = 2;
+}
+
+message GetMarkerRequest {
+  string key = 1;
+}
+
+message GetMarkerResponse {
+  bytes value = 1;
+  bool found = 2;
+}
+
+message HasMarkerRequest {
+  string key = 1;
+}
+
+message HasMarkerResponse {
+  bool exists = 1;
+}
+
+message DeleteMarkerRequest {
+  string key = 1;
+}
+
+// Subscriptions
+message GetSubscriptionRequest {
+  bytes pubkey = 1;
+}
+
+message IsSubscriptionActiveRequest {
+  bytes pubkey = 1;
+}
+
+message IsSubscriptionActiveResponse {
+  bool active = 1;
+}
+
+message ExtendSubscriptionRequest {
+  bytes pubkey = 1;
+  int32 days = 2;
+}
+
+message RecordPaymentRequest {
+  bytes pubkey = 1;
+  int64 amount = 2;
+  string invoice = 3;
+  string preimage = 4;
+}
+
+message GetPaymentHistoryRequest {
+  bytes pubkey = 1;
+}
+
+message ExtendBlossomSubscriptionRequest {
+  bytes pubkey = 1;
+  string tier = 2;
+  int64 storage_mb = 3;
+  int32 days_extended = 4;
+}
+
+message GetBlossomStorageQuotaRequest {
+  bytes pubkey = 1;
+}
+
+message GetBlossomStorageQuotaResponse {
+  int64 quota_mb = 1;
+}
+
+message IsFirstTimeUserRequest {
+  bytes pubkey = 1;
+}
+
+message IsFirstTimeUserResponse {
+  bool first_time = 1;
+}
+
+// NIP-43
+message AddNIP43MemberRequest {
+  bytes pubkey = 1;
+  string invite_code = 2;
+}
+
+message RemoveNIP43MemberRequest {
+  bytes pubkey = 1;
+}
+
+message IsNIP43MemberRequest {
+  bytes pubkey = 1;
+}
+
+message IsNIP43MemberResponse {
+  bool is_member = 1;
+}
+
+message GetNIP43MembershipRequest {
+  bytes pubkey = 1;
+}
+
+message StoreInviteCodeRequest {
+  string code = 1;
+  int64 expires_at = 2;
+}
+
+message ValidateInviteCodeRequest {
+  string code = 1;
+}
+
+message ValidateInviteCodeResponse {
+  bool valid = 1;
+}
+
+message DeleteInviteCodeRequest {
+  string code = 1;
+}
+
+message PublishNIP43MembershipEventRequest {
+  int32 kind = 1;
+  bytes pubkey = 2;
+}
+
+// Query Cache
+message GetCachedJSONRequest {
+  Filter filter = 1;
+}
+
+message GetCachedJSONResponse {
+  repeated bytes json_items = 1;
+  bool found = 2;
+}
+
+message CacheMarshaledJSONRequest {
+  Filter filter = 1;
+  repeated bytes json_items = 2;
+}
+
+message GetCachedEventsRequest {
+  Filter filter = 1;
+}
+
+message GetCachedEventsResponse {
+  repeated Event events = 1;
+  bool found = 2;
+}
+
+message CacheEventsRequest {
+  Filter filter = 1;
+  repeated Event events = 2;
+}
+
+// Access Tracking
+message RecordEventAccessRequest {
+  uint64 serial = 1;
+  string connection_id = 2;
+}
+
+message GetEventAccessInfoRequest {
+  uint64 serial = 1;
+}
+
+message GetEventAccessInfoResponse {
+  int64 last_access = 1;
+  uint32 access_count = 2;
+}
+
+message GetLeastAccessedEventsRequest {
+  int32 limit = 1;
+  int64 min_age_sec = 2;
+}
+
+// Utility
+message EventIdsBySerialRequest {
+  uint64 start = 1;
+  int32 count = 2;
+}
+
+message EventIdsBySerialResponse {
+  repeated uint64 event_ids = 1;
+}
+
+// === Blob Storage Messages ===
+
+message BlobMetadata {
+  bytes pubkey = 1;
+  string mime_type = 2;
+  int64 size = 3;
+  int64 uploaded = 4;  // Unix timestamp
+  string extension = 5;
+}
+
+message BlobDescriptor {
+  string url = 1;
+  string sha256 = 2;
+  int64 size = 3;
+  string type = 4;  // MIME type
+  int64 uploaded = 5;
+}
+
+message SaveBlobRequest {
+  bytes sha256_hash = 1;
+  bytes data = 2;
+  bytes pubkey = 3;
+  string mime_type = 4;
+  string extension = 5;
+}
+
+message GetBlobRequest {
+  bytes sha256_hash = 1;
+}
+
+message GetBlobResponse {
+  bool found = 1;
+  bytes data = 2;
+  BlobMetadata metadata = 3;
+}
+
+message HasBlobRequest {
+  bytes sha256_hash = 1;
+}
+
+message HasBlobResponse {
+  bool exists = 1;
+}
+
+message DeleteBlobRequest {
+  bytes sha256_hash = 1;
+  bytes pubkey = 2;
+}
+
+message ListBlobsRequest {
+  bytes pubkey = 1;
+  int64 since = 2;
+  int64 until = 3;
+}
+
+message ListBlobsResponse {
+  repeated BlobDescriptor descriptors = 1;
+}
+
+message GetBlobMetadataRequest {
+  bytes sha256_hash = 1;
+}
+
+message GetTotalBlobStorageUsedRequest {
+  bytes pubkey = 1;
+}
+
+message GetTotalBlobStorageUsedResponse {
+  int64 total_mb = 1;
+}
+
+message SaveBlobReportRequest {
+  bytes sha256_hash = 1;
+  bytes report_data = 2;
+}
+
+message UserBlobStats {
+  string pubkey_hex = 1;
+  int64 blob_count = 2;
+  int64 total_size_bytes = 3;
+}
+
+message ListAllBlobUserStatsResponse {
+  repeated UserBlobStats stats = 1;
+}
