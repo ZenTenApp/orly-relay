@@ -1,7 +1,6 @@
 package acl
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"net/http"
@@ -27,7 +26,6 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"next.orly.dev/pkg/protocol/publish"
-	"next.orly.dev/pkg/utils"
 	"git.mleku.dev/mleku/nostr/utils/normalize"
 	"git.mleku.dev/mleku/nostr/utils/values"
 )
@@ -41,6 +39,10 @@ type Follows struct {
 	admins     [][]byte
 	owners     [][]byte
 	follows    [][]byte
+	// Map-based caches for O(1) lookups (hex pubkey -> struct{})
+	ownersSet  map[string]struct{}
+	adminsSet  map[string]struct{}
+	followsSet map[string]struct{}
 	// Track last follow list fetch time
 	lastFollowListFetch time.Time
 	// Callback for external notification of follow list changes
@@ -73,6 +75,16 @@ func (f *Follows) Configure(cfg ...any) (err error) {
 		err = errorf.E("both config and database must be set")
 		return
 	}
+
+	// Build all lists in local variables WITHOUT holding the lock
+	// This prevents blocking GetAccessLevel calls during slow database I/O
+	var newOwners [][]byte
+	newOwnersSet := make(map[string]struct{})
+	var newAdmins [][]byte
+	newAdminsSet := make(map[string]struct{})
+	var newFollows [][]byte
+	newFollowsSet := make(map[string]struct{})
+
 	// add owners list
 	for _, owner := range f.cfg.Owners {
 		var own []byte
@@ -81,23 +93,21 @@ func (f *Follows) Configure(cfg ...any) (err error) {
 		} else {
 			own = o
 		}
-		f.owners = append(f.owners, own)
+		newOwners = append(newOwners, own)
+		newOwnersSet[hex.EncodeToString(own)] = struct{}{}
 	}
-	// find admin follow lists
-	f.followsMx.Lock()
-	defer f.followsMx.Unlock()
-	// log.I.F("finding admins")
-	f.follows, f.admins = nil, nil
+
+	// find admin follow lists (database I/O happens here, but no lock held)
 	for _, admin := range f.cfg.Admins {
-		// log.I.F("%s", admin)
 		var adm []byte
 		if a, e := bech32encoding.NpubOrHexToPublicKeyBinary(admin); chk.E(e) {
 			continue
 		} else {
 			adm = a
 		}
-		// log.I.F("admin: %0x", adm)
-		f.admins = append(f.admins, adm)
+		newAdmins = append(newAdmins, adm)
+		newAdminsSet[hex.EncodeToString(adm)] = struct{}{}
+
 		fl := &filter.F{
 			Authors: tag.NewFromAny(adm),
 			Kinds:   kind.NewS(kind.New(kind.FollowList.K)),
@@ -120,19 +130,34 @@ func (f *Follows) Configure(cfg ...any) (err error) {
 				if ev, err = f.db.FetchEventBySerial(s); chk.E(err) {
 					continue
 				}
-				// log.I.F("admin follow list:\n%s", ev.Serialize())
 				for _, v := range ev.Tags.GetAll([]byte("p")) {
-					// log.I.F("adding follow: %s", v.ValueHex())
 					// ValueHex() automatically handles both binary and hex storage formats
 					if b, e := hex.DecodeString(string(v.ValueHex())); chk.E(e) {
 						continue
 					} else {
-						f.follows = append(f.follows, b)
+						hexKey := hex.EncodeToString(b)
+						if _, exists := newFollowsSet[hexKey]; !exists {
+							newFollows = append(newFollows, b)
+							newFollowsSet[hexKey] = struct{}{}
+						}
 					}
 				}
 			}
 		}
 	}
+
+	// Now acquire the lock ONLY for the quick swap operation
+	f.followsMx.Lock()
+	f.owners = newOwners
+	f.ownersSet = newOwnersSet
+	f.admins = newAdmins
+	f.adminsSet = newAdminsSet
+	f.follows = newFollows
+	f.followsSet = newFollowsSet
+	f.followsMx.Unlock()
+
+	log.I.F("follows ACL configured: %d owners, %d admins, %d follows",
+		len(newOwners), len(newAdmins), len(newFollows))
 
 	// Initialize progressive throttle if enabled
 	if f.cfg.FollowsThrottleEnabled {
@@ -153,23 +178,28 @@ func (f *Follows) Configure(cfg ...any) (err error) {
 }
 
 func (f *Follows) GetAccessLevel(pub []byte, address string) (level string) {
+	pubHex := hex.EncodeToString(pub)
+
 	f.followsMx.RLock()
 	defer f.followsMx.RUnlock()
-	for _, v := range f.owners {
-		if utils.FastEqual(v, pub) {
+
+	// O(1) map lookups instead of O(n) linear scans
+	if f.ownersSet != nil {
+		if _, ok := f.ownersSet[pubHex]; ok {
 			return "owner"
 		}
 	}
-	for _, v := range f.admins {
-		if utils.FastEqual(v, pub) {
+	if f.adminsSet != nil {
+		if _, ok := f.adminsSet[pubHex]; ok {
 			return "admin"
 		}
 	}
-	for _, v := range f.follows {
-		if utils.FastEqual(v, pub) {
+	if f.followsSet != nil {
+		if _, ok := f.followsSet[pubHex]; ok {
 			return "write"
 		}
 	}
+
 	if f.cfg == nil {
 		return "write"
 	}
@@ -194,31 +224,32 @@ func (f *Follows) GetThrottleDelay(pubkey []byte, ip string) time.Duration {
 		return 0
 	}
 
-	// Check if user is exempt from throttling
+	pubkeyHex := hex.EncodeToString(pubkey)
+
+	// Check if user is exempt from throttling using O(1) map lookups
 	f.followsMx.RLock()
 	defer f.followsMx.RUnlock()
 
 	// Owners bypass throttle
-	for _, v := range f.owners {
-		if utils.FastEqual(v, pubkey) {
+	if f.ownersSet != nil {
+		if _, ok := f.ownersSet[pubkeyHex]; ok {
 			return 0
 		}
 	}
 	// Admins bypass throttle
-	for _, v := range f.admins {
-		if utils.FastEqual(v, pubkey) {
+	if f.adminsSet != nil {
+		if _, ok := f.adminsSet[pubkeyHex]; ok {
 			return 0
 		}
 	}
 	// Followed users bypass throttle
-	for _, v := range f.follows {
-		if utils.FastEqual(v, pubkey) {
+	if f.followsSet != nil {
+		if _, ok := f.followsSet[pubkeyHex]; ok {
 			return 0
 		}
 	}
 
 	// Non-followed users get throttled
-	pubkeyHex := hex.EncodeToString(pubkey)
 	return f.throttle.GetDelay(ip, pubkeyHex)
 }
 
@@ -723,13 +754,14 @@ func (f *Follows) GetFollowedPubkeys() [][]byte {
 
 // isAdminPubkey checks if a pubkey belongs to an admin
 func (f *Follows) isAdminPubkey(pubkey []byte) bool {
+	pubkeyHex := hex.EncodeToString(pubkey)
+
 	f.followsMx.RLock()
 	defer f.followsMx.RUnlock()
 
-	for _, admin := range f.admins {
-		if utils.FastEqual(admin, pubkey) {
-			return true
-		}
+	if f.adminsSet != nil {
+		_, ok := f.adminsSet[pubkeyHex]
+		return ok
 	}
 	return false
 }
@@ -773,19 +805,27 @@ func (f *Follows) AddFollow(pub []byte) {
 	if len(pub) == 0 {
 		return
 	}
+	pubHex := hex.EncodeToString(pub)
+
 	f.followsMx.Lock()
 	defer f.followsMx.Unlock()
-	for _, p := range f.follows {
-		if bytes.Equal(p, pub) {
-			return
-		}
+
+	// Use map for O(1) duplicate detection
+	if f.followsSet == nil {
+		f.followsSet = make(map[string]struct{})
 	}
+	if _, exists := f.followsSet[pubHex]; exists {
+		return
+	}
+
 	b := make([]byte, len(pub))
 	copy(b, pub)
 	f.follows = append(f.follows, b)
+	f.followsSet[pubHex] = struct{}{}
+
 	log.I.F(
 		"follows syncer: added new followed pubkey: %s",
-		hex.EncodeToString(pub),
+		pubHex,
 	)
 	// notify external listeners (e.g., spider)
 	if f.onFollowListUpdate != nil {

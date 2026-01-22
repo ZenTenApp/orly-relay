@@ -4,6 +4,7 @@
 .PHONY: all-split arm64-split install-split
 .PHONY: orly-sync-negentropy all-sync arm64-sync
 .PHONY: quick-deploy quick-deploy-restart deploy-both deploy-both-restart deploy-new list-releases rollback
+.PHONY: orly-unified orly-unified-full arm64-unified install-unified
 
 # Build flags
 CGO_ENABLED ?= 0
@@ -28,6 +29,9 @@ ORLY_DB_NEO4J = $(BIN_DIR)/orly-db-neo4j
 ORLY_ACL_FOLLOWS = $(BIN_DIR)/orly-acl-follows
 ORLY_ACL_MANAGED = $(BIN_DIR)/orly-acl-managed
 ORLY_ACL_CURATION = $(BIN_DIR)/orly-acl-curation
+
+# Unified binary (new architecture)
+ORLY_UNIFIED = $(BIN_DIR)/orly-unified
 
 # === Default Targets (Legacy) ===
 
@@ -89,6 +93,21 @@ orly-acl-curation:
 orly-launcher:
 	$(BUILD_FLAGS) go build -o $(ORLY_LAUNCHER) ./cmd/orly-launcher
 
+# === Unified Binary (New Architecture) ===
+
+# Unified binary with Badger driver (minimal, for most deployments)
+orly-unified:
+	$(BUILD_FLAGS) go build -o $(ORLY_UNIFIED) ./cmd/orly
+
+# Build unified binary for ARM64
+arm64-unified:
+	$(MAKE) GOOS=linux GOARCH=arm64 orly-unified
+
+# Install unified binary
+install-unified: orly-unified
+	mkdir -p ~/.local/bin
+	cp $(ORLY_UNIFIED) ~/.local/bin/
+
 # Generate protobuf code
 proto:
 	cd proto && buf generate
@@ -123,6 +142,7 @@ clean:
 	rm -f $(ORLY_DB_BADGER) $(ORLY_DB_NEO4J)
 	rm -f $(ORLY_ACL_FOLLOWS) $(ORLY_ACL_MANAGED) $(ORLY_ACL_CURATION)
 	rm -f $(ORLY_SYNC_NEGENTROPY)
+	rm -f $(ORLY_UNIFIED)
 	rm -f orly-db-arm64 orly-acl-arm64 orly-launcher-arm64 next.orly.dev
 	rm -rf build-arm64
 
@@ -245,6 +265,17 @@ help:
 	@echo "    orly-sync-negentropy - Build NIP-77 negentropy sync server"
 	@echo "    all-sync             - Build all including sync services"
 	@echo "    arm64-sync           - Cross-compile sync services for ARM64"
+	@echo ""
+	@echo "  Unified Binary (New Architecture):"
+	@echo "    orly-unified     - Build unified binary with subcommands"
+	@echo "    arm64-unified    - Cross-compile unified binary for ARM64"
+	@echo "    install-unified  - Install unified binary to ~/.local/bin/"
+	@echo ""
+	@echo "  Unified Binary Usage:"
+	@echo "    orly-unified db --driver=badger   - Run Badger database server"
+	@echo "    orly-unified db health            - Run database health check"
+	@echo "    orly-unified db repair --dry-run  - Preview database repairs"
+	@echo "    orly-unified acl --driver=follows - Run follows ACL server"
 	@echo ""
 	@echo "  Quick Deployment (symlink-based):"
 	@echo "    quick-deploy         - Build ARM64 and deploy to relay.orly.dev"
