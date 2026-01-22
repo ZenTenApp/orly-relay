@@ -69,6 +69,7 @@ func main() {
 		FrameSize:            cfg.FrameSize,
 		IDSize:               cfg.IDSize,
 		ClientSessionTimeout: cfg.ClientSessionTimeout,
+		Filter:               cfg.Filter,
 	}
 	negentropyMgr := negentropy.NewManager(db, mgrConfig)
 

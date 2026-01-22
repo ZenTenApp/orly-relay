@@ -62,6 +62,7 @@ type Config struct {
 	FrameSize            int
 	IDSize               int
 	ClientSessionTimeout time.Duration
+	Filter               *filter.F // Optional filter for selective sync
 }
 
 // Manager handles negentropy sync operations.
@@ -248,8 +249,9 @@ func (m *Manager) performNegentropy(ctx context.Context, peerURL string) (int64,
 	}
 
 	// Send NEG-OPEN: ["NEG-OPEN", subscription_id, filter, initial_message]
-	filter := map[string]any{} // Empty filter = all events
-	negOpen := []any{"NEG-OPEN", subID, filter, hex.EncodeToString(initialMsg)}
+	// Use configured filter or empty filter for all events
+	negFilter := m.filterToMap()
+	negOpen := []any{"NEG-OPEN", subID, negFilter, hex.EncodeToString(initialMsg)}
 	if err := conn.WriteJSON(negOpen); err != nil {
 		return 0, fmt.Errorf("failed to send NEG-OPEN: %w", err)
 	}
@@ -359,11 +361,17 @@ done:
 func (m *Manager) buildStorage(ctx context.Context) (*negentropy.Vector, error) {
 	storage := negentropy.NewVector()
 
-	// Query all events from database using an empty filter
-	// This returns IdPkTs structs with Id, Pub, Ts, Ser fields
+	// Build filter - start with configured filter or empty
 	limit := uint(100000)
-	f := &filter.F{
-		Limit: &limit, // Limit to 100k events for now
+	var f *filter.F
+	if m.config.Filter != nil {
+		// Use configured filter with our limit
+		f = m.config.Filter
+		f.Limit = &limit
+	} else {
+		f = &filter.F{
+			Limit: &limit,
+		}
 	}
 
 	idPkTs, err := m.db.QueryForIds(ctx, f)
@@ -378,6 +386,61 @@ func (m *Manager) buildStorage(ctx context.Context) (*negentropy.Vector, error) 
 
 	storage.Seal()
 	return storage, nil
+}
+
+// filterToMap converts the configured filter to a map for NEG-OPEN message.
+func (m *Manager) filterToMap() map[string]any {
+	result := map[string]any{}
+
+	if m.config.Filter == nil {
+		return result
+	}
+
+	f := m.config.Filter
+
+	// Add kinds if present
+	if f.Kinds != nil && f.Kinds.Len() > 0 {
+		kinds := make([]int, 0, f.Kinds.Len())
+		for _, k := range f.Kinds.K {
+			kinds = append(kinds, k.ToInt())
+		}
+		result["kinds"] = kinds
+	}
+
+	// Add authors if present
+	if f.Authors != nil && f.Authors.Len() > 0 {
+		authors := make([]string, 0, f.Authors.Len())
+		for _, a := range f.Authors.T {
+			authors = append(authors, hex.EncodeToString(a))
+		}
+		result["authors"] = authors
+	}
+
+	// Add IDs if present
+	if f.Ids != nil && f.Ids.Len() > 0 {
+		ids := make([]string, 0, f.Ids.Len())
+		for _, id := range f.Ids.T {
+			ids = append(ids, hex.EncodeToString(id))
+		}
+		result["ids"] = ids
+	}
+
+	// Add since if present
+	if f.Since != nil && f.Since.V != 0 {
+		result["since"] = f.Since.V
+	}
+
+	// Add until if present
+	if f.Until != nil && f.Until.V != 0 {
+		result["until"] = f.Until.V
+	}
+
+	// Add limit if present
+	if f.Limit != nil && *f.Limit > 0 {
+		result["limit"] = *f.Limit
+	}
+
+	return result
 }
 
 // pushEventsToPeer sends events we have to the peer.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"time"
@@ -8,6 +9,8 @@ import (
 	"go-simpler.org/env"
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
+
+	"git.mleku.dev/mleku/nostr/encoders/filter"
 )
 
 // Config holds the negentropy sync service configuration.
@@ -29,11 +32,18 @@ type Config struct {
 	FrameSize    int           `env:"ORLY_SYNC_NEGENTROPY_FRAME_SIZE" default:"4096" usage:"negentropy frame size"`
 	IDSize       int           `env:"ORLY_SYNC_NEGENTROPY_ID_SIZE" default:"16" usage:"negentropy ID truncation size"`
 
+	// Filter configuration - JSON encoded nostr filter
+	// Example: {"kinds":[1,6,7],"authors":["abc123..."]}
+	FilterJSON string `env:"ORLY_SYNC_NEGENTROPY_FILTER" usage:"JSON-encoded nostr filter for selective sync"`
+
 	// Client session configuration
 	ClientSessionTimeout time.Duration `env:"ORLY_SYNC_NEGENTROPY_SESSION_TIMEOUT" default:"5m" usage:"client session timeout"`
 
 	// Parsed peers
 	Peers []string
+
+	// Parsed filter
+	Filter *filter.F
 }
 
 // loadConfig loads configuration from environment variables.
@@ -50,6 +60,16 @@ func loadConfig() *Config {
 		for i, p := range cfg.Peers {
 			cfg.Peers[i] = strings.TrimSpace(p)
 		}
+	}
+
+	// Parse filter from JSON if provided
+	if cfg.FilterJSON != "" {
+		cfg.Filter = &filter.F{}
+		if err := json.Unmarshal([]byte(cfg.FilterJSON), cfg.Filter); err != nil {
+			log.E.F("failed to parse filter JSON: %v", err)
+			os.Exit(1)
+		}
+		log.I.F("using sync filter: %s", cfg.FilterJSON)
 	}
 
 	return cfg
