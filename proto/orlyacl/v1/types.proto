@@ -1,0 +1,292 @@
+syntax = "proto3";
+package orlyacl.v1;
+option go_package = "next.orly.dev/pkg/proto/orlyacl/v1;orlyaclv1";
+
+import "orlydb/v1/types.proto";
+
+// Empty is used for requests/responses with no data
+message Empty {}
+
+// Core ACL Messages
+
+message AccessLevelRequest {
+  bytes pubkey = 1;
+  string address = 2;
+}
+
+message AccessLevelResponse {
+  string level = 1;  // none/read/write/admin/owner/banned/blocked
+}
+
+message ACLInfoResponse {
+  string name = 1;
+  string description = 2;
+  string documentation = 3;
+}
+
+message ModeResponse {
+  string mode = 1;  // none/follows/managed/curating
+}
+
+message ReadyResponse {
+  bool ready = 1;
+}
+
+message BoolResponse {
+  bool value = 1;
+}
+
+message PolicyCheckRequest {
+  orlydb.v1.Event event = 1;
+}
+
+message PolicyCheckResponse {
+  bool allowed = 1;
+  string error = 2;
+}
+
+// Follows ACL Messages
+
+message ThrottleDelayRequest {
+  bytes pubkey = 1;
+  string ip = 2;
+}
+
+message ThrottleDelayResponse {
+  int64 delay_ms = 1;
+}
+
+message AddFollowRequest {
+  bytes pubkey = 1;
+}
+
+message FollowedPubkeysResponse {
+  repeated bytes pubkeys = 1;
+}
+
+message AdminRelaysResponse {
+  repeated string urls = 1;
+}
+
+// Managed ACL Messages
+
+message PubkeyRequest {
+  string pubkey = 1;
+}
+
+message IPRequest {
+  string ip = 1;
+}
+
+message BanPubkeyRequest {
+  string pubkey = 1;
+  string reason = 2;
+}
+
+message AllowPubkeyRequest {
+  string pubkey = 1;
+  string reason = 2;
+}
+
+message BannedPubkey {
+  string pubkey = 1;
+  string reason = 2;
+  int64 added = 3;
+}
+
+message AllowedPubkey {
+  string pubkey = 1;
+  string reason = 2;
+  int64 added = 3;
+}
+
+message BanEventRequest {
+  string event_id = 1;
+  string reason = 2;
+}
+
+message EventRequest {
+  string event_id = 1;
+}
+
+message BannedEvent {
+  string event_id = 1;
+  string reason = 2;
+  int64 added = 3;
+}
+
+message AllowedEvent {
+  string event_id = 1;
+  string reason = 2;
+  int64 added = 3;
+}
+
+message BlockIPRequest {
+  string ip = 1;
+  string reason = 2;
+}
+
+message BlockedIP {
+  string ip = 1;
+  string reason = 2;
+  int64 added = 3;
+}
+
+message AllowKindRequest {
+  int32 kind = 1;
+}
+
+message KindRequest {
+  int32 kind = 1;
+}
+
+message UpdatePeerAdminsRequest {
+  repeated bytes peer_pubkeys = 1;
+}
+
+message ListBannedPubkeysResponse {
+  repeated BannedPubkey pubkeys = 1;
+}
+
+message ListAllowedPubkeysResponse {
+  repeated AllowedPubkey pubkeys = 1;
+}
+
+message ListBannedEventsResponse {
+  repeated BannedEvent events = 1;
+}
+
+message ListAllowedEventsResponse {
+  repeated AllowedEvent events = 1;
+}
+
+message ListBlockedIPsResponse {
+  repeated BlockedIP ips = 1;
+}
+
+message ListAllowedKindsResponse {
+  repeated int32 kinds = 1;
+}
+
+// Curating ACL Messages
+
+message TrustPubkeyRequest {
+  string pubkey = 1;
+  string note = 2;
+}
+
+message BlacklistPubkeyRequest {
+  string pubkey = 1;
+  string reason = 2;
+}
+
+message TrustedPubkey {
+  string pubkey = 1;
+  string note = 2;
+  int64 added = 3;
+}
+
+message BlacklistedPubkey {
+  string pubkey = 1;
+  string reason = 2;
+  int64 added = 3;
+}
+
+message MarkSpamRequest {
+  string event_id = 1;
+  string pubkey = 2;
+  string reason = 3;
+}
+
+message SpamEvent {
+  string event_id = 1;
+  string pubkey = 2;
+  string reason = 3;
+  int64 added = 4;
+}
+
+message RateLimitCheckRequest {
+  string pubkey = 1;
+  string ip = 2;
+}
+
+message RateLimitCheckResponse {
+  bool allowed = 1;
+  string message = 2;
+}
+
+message ConfigEventRequest {
+  orlydb.v1.Event event = 1;
+}
+
+message CuratingConfig {
+  string config_event_id = 1;
+  string config_pubkey = 2;
+  int64 configured_at = 3;
+  int32 daily_limit = 4;
+  int32 ip_daily_limit = 5;
+  int32 first_ban_hours = 6;
+  int32 second_ban_hours = 7;
+  repeated string kind_categories = 8;
+  repeated string allowed_ranges = 9;
+  repeated int32 allowed_kinds = 10;
+}
+
+message UnclassifiedUser {
+  string pubkey = 1;
+  int32 event_count = 2;
+  string first_seen = 3;
+}
+
+message PaginationRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+}
+
+message ListTrustedPubkeysResponse {
+  repeated TrustedPubkey pubkeys = 1;
+}
+
+message ListBlacklistedPubkeysResponse {
+  repeated BlacklistedPubkey pubkeys = 1;
+}
+
+message ListSpamEventsResponse {
+  repeated SpamEvent events = 1;
+}
+
+message ListUnclassifiedUsersResponse {
+  repeated UnclassifiedUser users = 1;
+  int32 total = 2;
+}
+
+message GetEventsForPubkeyRequest {
+  string pubkey = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message EventSummary {
+  string id = 1;
+  uint32 kind = 2;
+  bytes content = 3;
+  int64 created_at = 4;
+}
+
+message EventsForPubkeyResponse {
+  repeated EventSummary events = 1;
+  int32 total = 2;
+}
+
+message DeleteEventsForPubkeyRequest {
+  string pubkey = 1;
+}
+
+message DeleteCountResponse {
+  int32 count = 1;
+}
+
+message ScanResultResponse {
+  int32 total_pubkeys = 1;
+  int32 total_events = 2;
+}

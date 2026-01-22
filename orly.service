@@ -1,0 +1,66 @@
+[Unit]
+Description=ORLY Nostr Relay (Split IPC Mode)
+After=network.target
+
+[Service]
+Type=simple
+User=mleku
+Group=mleku
+WorkingDirectory=/home/mleku/src/next.orly.dev
+
+# Use orly-launcher which manages orly-db-badger, orly-acl-follows, and the relay
+ExecStart=/home/mleku/.local/bin/orly-launcher
+
+# Launcher config - paths to split binaries
+Environment=ORLY_LAUNCHER_DB_BACKEND=badger
+Environment=ORLY_LAUNCHER_DB_BINARY=/home/mleku/.local/bin/orly-db-badger
+Environment=ORLY_LAUNCHER_ACL_BINARY=/home/mleku/.local/bin/orly-acl-follows
+Environment=ORLY_LAUNCHER_RELAY_BINARY=/home/mleku/.local/bin/next.orly.dev
+Environment=ORLY_LAUNCHER_DB_LISTEN=127.0.0.1:50051
+Environment=ORLY_LAUNCHER_ACL_LISTEN=127.0.0.1:50052
+Environment=ORLY_LAUNCHER_ACL_ENABLED=true
+Environment=ORLY_ACL_MODE=follows
+
+# gRPC client settings (for relay to connect to db and acl)
+Environment=ORLY_DB_TYPE=grpc
+Environment=ORLY_GRPC_SERVER=127.0.0.1:50051
+Environment=ORLY_ACL_TYPE=grpc
+Environment=ORLY_GRPC_ACL_SERVER=127.0.0.1:50052
+
+# Relay settings
+Environment=ORLY_PORT=3334
+Environment=ORLY_LISTEN=127.0.0.1
+Environment=ORLY_LOG_LEVEL=info
+Environment=ORLY_ADMINS=npub1fjqqy4a93z5zsjwsfxqhc2764kvykfdyttvldkkkdera8dr78vhsmmleku
+Environment=ORLY_OWNERS=npub1fjqqy4a93z5zsjwsfxqhc2764kvykfdyttvldkkkdera8dr78vhsmmleku
+Environment=ORLY_AUTH_REQUIRED=false
+Environment=ORLY_AUTH_TO_WRITE=false
+Environment=ORLY_NIP46_BYPASS_AUTH=true
+Environment=ORLY_FOLLOWS_THROTTLE=true
+Environment=ORLY_BLOSSOM_RATE_LIMIT=true
+Environment=ORLY_BLOSSOM_DAILY_LIMIT_MB=10
+
+# Memory settings for database server (orly-db-badger)
+Environment=ORLY_DB_BLOCK_CACHE_MB=256
+Environment=ORLY_DB_INDEX_CACHE_MB=128
+Environment=ORLY_QUERY_CACHE_DISABLED=false
+Environment=ORLY_QUERY_CACHE_SIZE_MB=64
+Environment=ORLY_SERIAL_CACHE_PUBKEYS=100000
+Environment=ORLY_SERIAL_CACHE_EVENT_IDS=500000
+Environment=ORLY_GC_ENABLED=false
+
+# Rate limiting for relay process
+Environment=ORLY_RATE_LIMIT_TARGET_MB=2000
+
+# Connection and query limits
+Environment=ORLY_MAX_CONN_PER_IP=5
+Environment=ORLY_QUERY_RESULT_LIMIT=256
+
+# Enable pprof HTTP endpoint for debugging
+Environment=ORLY_PPROF_HTTP=true
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

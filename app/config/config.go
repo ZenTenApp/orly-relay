@@ -123,6 +123,11 @@ type C struct {
 	GRPCServerAddress  string        `env:"ORLY_GRPC_SERVER" usage:"address of remote gRPC database server (only used when ORLY_DB_TYPE=grpc)"`
 	GRPCConnectTimeout time.Duration `env:"ORLY_GRPC_CONNECT_TIMEOUT" default:"10s" usage:"gRPC connection timeout (only used when ORLY_DB_TYPE=grpc)"`
 
+	// gRPC ACL client settings (only used when ORLY_ACL_TYPE=grpc)
+	ACLType               string        `env:"ORLY_ACL_TYPE" default:"local" usage:"ACL backend: local (in-process) or grpc (remote ACL server)"`
+	GRPCACLServerAddress  string        `env:"ORLY_GRPC_ACL_SERVER" usage:"address of remote gRPC ACL server (only used when ORLY_ACL_TYPE=grpc)"`
+	GRPCACLConnectTimeout time.Duration `env:"ORLY_GRPC_ACL_TIMEOUT" default:"10s" usage:"gRPC ACL connection timeout (only used when ORLY_ACL_TYPE=grpc)"`
+
 	QueryCacheSizeMB    int    `env:"ORLY_QUERY_CACHE_SIZE_MB" default:"512" usage:"query cache size in MB (caches database query results for faster REQ responses)"`
 	QueryCacheMaxAge    string `env:"ORLY_QUERY_CACHE_MAX_AGE" default:"5m" usage:"maximum age for cached query results (e.g., 5m, 10m, 1h)"`
 
@@ -842,4 +847,17 @@ func (cfg *C) GetGRPCConfigValues() (
 ) {
 	return cfg.GRPCServerAddress,
 		cfg.GRPCConnectTimeout
+}
+
+// GetGRPCACLConfigValues returns the gRPC ACL client configuration values.
+// This avoids circular imports with pkg/acl/grpc while allowing main.go to construct
+// the gRPC ACL client configuration.
+func (cfg *C) GetGRPCACLConfigValues() (
+	aclType string,
+	serverAddress string,
+	connectTimeout time.Duration,
+) {
+	return cfg.ACLType,
+		cfg.GRPCACLServerAddress,
+		cfg.GRPCACLConnectTimeout
 }

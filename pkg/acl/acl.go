@@ -27,6 +27,13 @@ func (s *S) Register(i acliface.I) {
 	(*s).ACL = append((*s).ACL, i)
 }
 
+// RegisterAndActivate registers an ACL implementation and sets it as the active one.
+// This is used for gRPC clients where the mode is determined by the remote server.
+func (s *S) RegisterAndActivate(i acliface.I) {
+	s.ACL = []acliface.I{i}
+	s.SetMode(i.Type())
+}
+
 func (s *S) Configure(cfg ...any) (err error) {
 	for _, i := range s.ACL {
 		if i.Type() == s.Active.Load() {

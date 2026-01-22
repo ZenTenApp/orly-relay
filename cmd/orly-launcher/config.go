@@ -10,17 +10,37 @@ import (
 
 // Config holds the launcher configuration.
 type Config struct {
-	// DBBinary is the path to the orly-db binary
+	// DBBackend is the database backend: badger or neo4j
+	DBBackend string
+
+	// DBBinary is the path to the database server binary (computed from DBBackend if not set)
 	DBBinary string
 
 	// RelayBinary is the path to the orly binary
 	RelayBinary string
 
+	// ACLBinary is the path to the ACL server binary (computed from ACLMode if not set)
+	ACLBinary string
+
 	// DBListen is the address the database server listens on
 	DBListen string
 
+	// ACLListen is the address the ACL server listens on
+	ACLListen string
+
+	// ACLEnabled controls whether to run the ACL server as a separate process
+	// When false, the relay runs in open mode (no ACL restrictions)
+	ACLEnabled bool
+
+	// ACLMode is the ACL mode: follows, managed, curation
+	// Determines which ACL binary to use when ACLEnabled is true
+	ACLMode string
+
 	// DBReadyTimeout is how long to wait for the database to be ready
 	DBReadyTimeout time.Duration
+
+	// ACLReadyTimeout is how long to wait for the ACL server to be ready
+	ACLReadyTimeout time.Duration
 
 	// StopTimeout is how long to wait for processes to stop gracefully
 	StopTimeout time.Duration
@@ -28,19 +48,33 @@ type Config struct {
 	// DataDir is the data directory to pass to orly-db
 	DataDir string
 
-	// LogLevel is the log level to use for both processes
+	// LogLevel is the log level to use for all processes
 	LogLevel string
 }
 
 func loadConfig() (*Config, error) {
+	// Get backend and mode first to compute default binary names
+	dbBackend := getEnvOrDefault("ORLY_LAUNCHER_DB_BACKEND", "badger")
+	aclMode := getEnvOrDefault("ORLY_ACL_MODE", "follows")
+
+	// Compute default binary names based on backend/mode
+	defaultDBBinary := "orly-db-" + dbBackend
+	defaultACLBinary := "orly-acl-" + aclMode
+
 	cfg := &Config{
-		DBBinary:       getEnvOrDefault("ORLY_LAUNCHER_DB_BINARY", "orly-db"),
-		RelayBinary:    getEnvOrDefault("ORLY_LAUNCHER_RELAY_BINARY", "orly"),
-		DBListen:       getEnvOrDefault("ORLY_LAUNCHER_DB_LISTEN", "127.0.0.1:50051"),
-		DBReadyTimeout: parseDuration("ORLY_LAUNCHER_DB_READY_TIMEOUT", 30*time.Second),
-		StopTimeout:    parseDuration("ORLY_LAUNCHER_STOP_TIMEOUT", 30*time.Second), // Increased for DB flush
-		DataDir:        getEnvOrDefault("ORLY_DATA_DIR", filepath.Join(xdg.DataHome, "ORLY")),
-		LogLevel:       getEnvOrDefault("ORLY_LOG_LEVEL", "info"),
+		DBBackend:       dbBackend,
+		DBBinary:        getEnvOrDefault("ORLY_LAUNCHER_DB_BINARY", defaultDBBinary),
+		RelayBinary:     getEnvOrDefault("ORLY_LAUNCHER_RELAY_BINARY", "orly"),
+		ACLBinary:       getEnvOrDefault("ORLY_LAUNCHER_ACL_BINARY", defaultACLBinary),
+		DBListen:        getEnvOrDefault("ORLY_LAUNCHER_DB_LISTEN", "127.0.0.1:50051"),
+		ACLListen:       getEnvOrDefault("ORLY_LAUNCHER_ACL_LISTEN", "127.0.0.1:50052"),
+		ACLEnabled:      getEnvOrDefault("ORLY_LAUNCHER_ACL_ENABLED", "false") == "true",
+		ACLMode:         aclMode,
+		DBReadyTimeout:  parseDuration("ORLY_LAUNCHER_DB_READY_TIMEOUT", 30*time.Second),
+		ACLReadyTimeout: parseDuration("ORLY_LAUNCHER_ACL_READY_TIMEOUT", 30*time.Second),
+		StopTimeout:     parseDuration("ORLY_LAUNCHER_STOP_TIMEOUT", 30*time.Second), // Increased for DB flush
+		DataDir:         getEnvOrDefault("ORLY_DATA_DIR", filepath.Join(xdg.DataHome, "ORLY")),
+		LogLevel:        getEnvOrDefault("ORLY_LOG_LEVEL", "info"),
 	}
 
 	return cfg, nil

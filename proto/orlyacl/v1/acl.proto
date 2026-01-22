@@ -1,0 +1,151 @@
+syntax = "proto3";
+package orlyacl.v1;
+option go_package = "next.orly.dev/pkg/proto/orlyacl/v1;orlyaclv1";
+
+import "orlyacl/v1/types.proto";
+
+// ACLService provides access control operations for the Nostr relay
+service ACLService {
+  // Core ACL interface methods
+
+  // GetAccessLevel returns the access level for a pubkey from an IP address
+  rpc GetAccessLevel(AccessLevelRequest) returns (AccessLevelResponse);
+
+  // CheckPolicy checks if an event passes policy checks
+  rpc CheckPolicy(PolicyCheckRequest) returns (PolicyCheckResponse);
+
+  // GetACLInfo returns information about the active ACL mode
+  rpc GetACLInfo(Empty) returns (ACLInfoResponse);
+
+  // GetMode returns the current ACL mode (none/follows/managed/curating)
+  rpc GetMode(Empty) returns (ModeResponse);
+
+  // Ready checks if the ACL service is ready
+  rpc Ready(Empty) returns (ReadyResponse);
+
+  // Follows ACL methods
+
+  // GetThrottleDelay returns the progressive throttle delay for a pubkey
+  rpc GetThrottleDelay(ThrottleDelayRequest) returns (ThrottleDelayResponse);
+
+  // AddFollow adds a pubkey to the followed list
+  rpc AddFollow(AddFollowRequest) returns (Empty);
+
+  // GetFollowedPubkeys returns all followed pubkeys
+  rpc GetFollowedPubkeys(Empty) returns (FollowedPubkeysResponse);
+
+  // GetAdminRelays returns the relay URLs from admin kind 10002 events
+  rpc GetAdminRelays(Empty) returns (AdminRelaysResponse);
+
+  // Managed ACL methods
+
+  // BanPubkey adds a pubkey to the ban list
+  rpc BanPubkey(BanPubkeyRequest) returns (Empty);
+
+  // UnbanPubkey removes a pubkey from the ban list
+  rpc UnbanPubkey(PubkeyRequest) returns (Empty);
+
+  // ListBannedPubkeys returns all banned pubkeys
+  rpc ListBannedPubkeys(Empty) returns (ListBannedPubkeysResponse);
+
+  // AllowPubkey adds a pubkey to the allow list
+  rpc AllowPubkey(AllowPubkeyRequest) returns (Empty);
+
+  // DisallowPubkey removes a pubkey from the allow list
+  rpc DisallowPubkey(PubkeyRequest) returns (Empty);
+
+  // ListAllowedPubkeys returns all explicitly allowed pubkeys
+  rpc ListAllowedPubkeys(Empty) returns (ListAllowedPubkeysResponse);
+
+  // BanEvent adds an event to the ban list
+  rpc BanEvent(BanEventRequest) returns (Empty);
+
+  // UnbanEvent removes an event from the ban list
+  rpc UnbanEvent(EventRequest) returns (Empty);
+
+  // ListBannedEvents returns all banned events
+  rpc ListBannedEvents(Empty) returns (ListBannedEventsResponse);
+
+  // AllowEvent adds an event to the allow list
+  rpc AllowEvent(BanEventRequest) returns (Empty);
+
+  // DisallowEvent removes an event from the allow list
+  rpc DisallowEvent(EventRequest) returns (Empty);
+
+  // ListAllowedEvents returns all explicitly allowed events
+  rpc ListAllowedEvents(Empty) returns (ListAllowedEventsResponse);
+
+  // BlockIP adds an IP to the block list
+  rpc BlockIP(BlockIPRequest) returns (Empty);
+
+  // UnblockIP removes an IP from the block list
+  rpc UnblockIP(IPRequest) returns (Empty);
+
+  // ListBlockedIPs returns all blocked IPs
+  rpc ListBlockedIPs(Empty) returns (ListBlockedIPsResponse);
+
+  // AllowKind adds a kind to the allow list
+  rpc AllowKind(AllowKindRequest) returns (Empty);
+
+  // DisallowKind removes a kind from the allow list
+  rpc DisallowKind(KindRequest) returns (Empty);
+
+  // ListAllowedKinds returns all allowed kinds
+  rpc ListAllowedKinds(Empty) returns (ListAllowedKindsResponse);
+
+  // UpdatePeerAdmins updates the peer relay identity pubkeys
+  rpc UpdatePeerAdmins(UpdatePeerAdminsRequest) returns (Empty);
+
+  // Curating ACL methods
+
+  // TrustPubkey adds a pubkey to the trusted list
+  rpc TrustPubkey(TrustPubkeyRequest) returns (Empty);
+
+  // UntrustPubkey removes a pubkey from the trusted list
+  rpc UntrustPubkey(PubkeyRequest) returns (Empty);
+
+  // ListTrustedPubkeys returns all trusted pubkeys
+  rpc ListTrustedPubkeys(Empty) returns (ListTrustedPubkeysResponse);
+
+  // BlacklistPubkey adds a pubkey to the blacklist
+  rpc BlacklistPubkey(BlacklistPubkeyRequest) returns (Empty);
+
+  // UnblacklistPubkey removes a pubkey from the blacklist
+  rpc UnblacklistPubkey(PubkeyRequest) returns (Empty);
+
+  // ListBlacklistedPubkeys returns all blacklisted pubkeys
+  rpc ListBlacklistedPubkeys(Empty) returns (ListBlacklistedPubkeysResponse);
+
+  // MarkSpam marks an event as spam
+  rpc MarkSpam(MarkSpamRequest) returns (Empty);
+
+  // UnmarkSpam removes the spam flag from an event
+  rpc UnmarkSpam(EventRequest) returns (Empty);
+
+  // ListSpamEvents returns all spam-flagged events
+  rpc ListSpamEvents(Empty) returns (ListSpamEventsResponse);
+
+  // RateLimitCheck checks if a pubkey/IP can publish (rate limiting)
+  rpc RateLimitCheck(RateLimitCheckRequest) returns (RateLimitCheckResponse);
+
+  // ProcessConfigEvent processes a curating config event (kind 30078)
+  rpc ProcessConfigEvent(ConfigEventRequest) returns (Empty);
+
+  // GetCuratingConfig returns the current curating configuration
+  rpc GetCuratingConfig(Empty) returns (CuratingConfig);
+
+  // IsCuratingConfigured checks if curating mode is configured
+  rpc IsCuratingConfigured(Empty) returns (BoolResponse);
+
+  // ListUnclassifiedUsers returns users who are not trusted or blacklisted
+  rpc ListUnclassifiedUsers(PaginationRequest) returns (ListUnclassifiedUsersResponse);
+
+  // GetEventsForPubkey returns events for a specific pubkey
+  rpc GetEventsForPubkey(GetEventsForPubkeyRequest) returns (EventsForPubkeyResponse);
+
+  // DeleteEventsForPubkey deletes all events for a pubkey
+  rpc DeleteEventsForPubkey(DeleteEventsForPubkeyRequest) returns (DeleteCountResponse);
+
+  // ScanAllPubkeys scans and indexes all pubkeys in the database
+  rpc ScanAllPubkeys(Empty) returns (ScanResultResponse);
+}

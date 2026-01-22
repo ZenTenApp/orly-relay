@@ -14,13 +14,14 @@ import (
 	"lol.mleku.dev/log"
 )
 
-// Supervisor manages the database and relay processes.
+// Supervisor manages the database, ACL, and relay processes.
 type Supervisor struct {
 	cfg    *Config
 	ctx    context.Context
 	cancel context.CancelFunc
 
 	dbProc    *Process
+	aclProc   *Process
 	relayProc *Process
 
 	wg     sync.WaitGroup
@@ -46,7 +47,7 @@ func NewSupervisor(ctx context.Context, cancel context.CancelFunc, cfg *Config) 
 	}
 }
 
-// Start starts the database and relay processes.
+// Start starts the database, optional ACL server, and relay processes.
 func (s *Supervisor) Start() error {
 	// 1. Start database server
 	if err := s.startDB(); err != nil {
@@ -61,15 +62,42 @@ func (s *Supervisor) Start() error {
 
 	log.I.F("database is ready")
 
-	// 3. Start relay with gRPC backend
+	// 3. Start ACL server if enabled
+	if s.cfg.ACLEnabled {
+		if err := s.startACL(); err != nil {
+			s.stopDB()
+			return fmt.Errorf("failed to start ACL server: %w", err)
+		}
+
+		// Wait for ACL to be ready
+		if err := s.waitForACLReady(s.cfg.ACLReadyTimeout); err != nil {
+			s.stopACL()
+			s.stopDB()
+			return fmt.Errorf("ACL server not ready: %w", err)
+		}
+
+		log.I.F("ACL server is ready")
+	}
+
+	// 4. Start relay with gRPC backend(s)
 	if err := s.startRelay(); err != nil {
+		if s.cfg.ACLEnabled {
+			s.stopACL()
+		}
 		s.stopDB()
 		return fmt.Errorf("failed to start relay: %w", err)
 	}
 
-	// 4. Start monitoring goroutines
-	s.wg.Add(2)
+	// 5. Start monitoring goroutines
+	monitorCount := 2
+	if s.cfg.ACLEnabled {
+		monitorCount = 3
+	}
+	s.wg.Add(monitorCount)
 	go s.monitorProcess(s.dbProc, "db", s.startDB)
+	if s.cfg.ACLEnabled {
+		go s.monitorProcess(s.aclProc, "acl", s.startACL)
+	}
 	go s.monitorProcess(s.relayProc, "relay", s.startRelay)
 
 	return nil
@@ -85,9 +113,15 @@ func (s *Supervisor) Stop() error {
 	s.closed = true
 	s.mu.Unlock()
 
-	// Stop relay first (it depends on DB)
+	// Stop relay first (it depends on ACL and DB)
 	log.I.F("stopping relay...")
 	s.stopProcess(s.relayProc, 5*time.Second)
+
+	// Stop ACL if enabled (it depends on DB)
+	if s.cfg.ACLEnabled && s.aclProc != nil {
+		log.I.F("stopping ACL server...")
+		s.stopProcess(s.aclProc, 5*time.Second)
+	}
 
 	// Stop DB with longer timeout for flush
 	log.I.F("stopping database...")
@@ -135,6 +169,72 @@ func (s *Supervisor) startDB() error {
 	return nil
 }
 
+func (s *Supervisor) startACL() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Build environment for ACL process
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("ORLY_ACL_LISTEN=%s", s.cfg.ACLListen))
+	env = append(env, "ORLY_ACL_DB_TYPE=grpc")
+	env = append(env, fmt.Sprintf("ORLY_ACL_GRPC_DB_SERVER=%s", s.cfg.DBListen))
+	env = append(env, fmt.Sprintf("ORLY_ACL_MODE=%s", s.cfg.ACLMode))
+	env = append(env, fmt.Sprintf("ORLY_ACL_LOG_LEVEL=%s", s.cfg.LogLevel))
+
+	cmd := exec.CommandContext(s.ctx, s.cfg.ACLBinary)
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); chk.E(err) {
+		return err
+	}
+
+	exited := make(chan struct{})
+	s.aclProc = &Process{
+		name:   "orly-acl",
+		cmd:    cmd,
+		exited: exited,
+	}
+
+	// Start a goroutine to wait for the process and close the exited channel
+	go func() {
+		cmd.Wait()
+		close(exited)
+	}()
+
+	log.I.F("started ACL server (pid %d)", cmd.Process.Pid)
+	return nil
+}
+
+func (s *Supervisor) waitForACLReady(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return s.ctx.Err()
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timeout waiting for ACL server")
+			}
+
+			// Try to connect to the gRPC port
+			conn, err := net.DialTimeout("tcp", s.cfg.ACLListen, time.Second)
+			if err == nil {
+				conn.Close()
+				return nil // ACL server is accepting connections
+			}
+		}
+	}
+}
+
+func (s *Supervisor) stopACL() {
+	s.stopProcess(s.aclProc, 5*time.Second)
+}
+
 func (s *Supervisor) startRelay() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -144,6 +244,18 @@ func (s *Supervisor) startRelay() error {
 	env = append(env, "ORLY_DB_TYPE=grpc")
 	env = append(env, fmt.Sprintf("ORLY_GRPC_SERVER=%s", s.cfg.DBListen))
 	env = append(env, fmt.Sprintf("ORLY_LOG_LEVEL=%s", s.cfg.LogLevel))
+
+	// If ACL is enabled, configure relay to use gRPC ACL
+	// Otherwise, run in open mode (no ACL restrictions)
+	if s.cfg.ACLEnabled {
+		env = append(env, "ORLY_ACL_TYPE=grpc")
+		env = append(env, fmt.Sprintf("ORLY_GRPC_ACL_SERVER=%s", s.cfg.ACLListen))
+		env = append(env, fmt.Sprintf("ORLY_ACL_MODE=%s", s.cfg.ACLMode))
+	} else {
+		// Open relay - no ACL restrictions
+		env = append(env, "ORLY_ACL_TYPE=local")
+		env = append(env, "ORLY_ACL_MODE=none")
+	}
 
 	cmd := exec.CommandContext(s.ctx, s.cfg.RelayBinary)
 	cmd.Env = env
@@ -299,9 +411,12 @@ func (s *Supervisor) monitorProcess(p *Process, procType string, restart func() 
 		} else {
 			// Update p to point to the new process
 			s.mu.Lock()
-			if procType == "db" {
+			switch procType {
+			case "db":
 				p = s.dbProc
-			} else {
+			case "acl":
+				p = s.aclProc
+			default:
 				p = s.relayProc
 			}
 			s.mu.Unlock()

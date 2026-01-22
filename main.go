@@ -25,6 +25,7 @@ import (
 	"next.orly.dev/app/branding"
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/acl"
+	aclgrpc "next.orly.dev/pkg/acl/grpc"
 	"git.mleku.dev/mleku/nostr/crypto/keys"
 	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
 	"next.orly.dev/pkg/database"
@@ -580,11 +581,38 @@ func main() {
 		os.Exit(1)
 	}
 	log.I.F("%s database initialized successfully", cfg.DBType)
-	acl.Registry.SetMode(cfg.ACLMode)
-	if err = acl.Registry.Configure(cfg, db, ctx); chk.E(err) {
-		os.Exit(1)
+
+	// Initialize ACL - either remote gRPC or in-process
+	aclType, aclServerAddr, aclConnTimeout := cfg.GetGRPCACLConfigValues()
+	if aclType == "grpc" {
+		// Use remote ACL server via gRPC
+		log.I.F("connecting to gRPC ACL server at %s", aclServerAddr)
+		aclClient, aclErr := aclgrpc.New(ctx, &aclgrpc.ClientConfig{
+			ServerAddress:  aclServerAddr,
+			ConnectTimeout: aclConnTimeout,
+		})
+		if chk.E(aclErr) {
+			log.E.F("failed to connect to gRPC ACL server: %v", aclErr)
+			os.Exit(1)
+		}
+		// Wait for ACL server to be ready
+		select {
+		case <-aclClient.Ready():
+			log.I.F("gRPC ACL client connected, mode: %s", aclClient.Type())
+		case <-time.After(30 * time.Second):
+			log.E.F("timeout waiting for gRPC ACL server")
+			os.Exit(1)
+		}
+		// Register and activate the gRPC client as the ACL backend
+		acl.Registry.RegisterAndActivate(aclClient)
+	} else {
+		// Use in-process ACL (existing behavior)
+		acl.Registry.SetMode(cfg.ACLMode)
+		if err = acl.Registry.Configure(cfg, db, ctx); chk.E(err) {
+			os.Exit(1)
+		}
+		acl.Registry.Syncer()
 	}
-	acl.Registry.Syncer()
 
 	// Create rate limiter if enabled
 	var limiter *ratelimit.Limiter
