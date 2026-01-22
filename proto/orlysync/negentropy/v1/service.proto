@@ -1,0 +1,203 @@
+syntax = "proto3";
+package orlysync.negentropy.v1;
+option go_package = "next.orly.dev/pkg/proto/orlysync/negentropy/v1;negentropyv1";
+
+import "orlysync/common/v1/types.proto";
+
+// NegentropyService provides NIP-77 negentropy-based set reconciliation
+// for both relay-to-relay sync and client-facing WebSocket operations
+service NegentropyService {
+  // === Lifecycle Methods ===
+
+  // Ready returns whether the service is ready to serve requests
+  rpc Ready(orlysync.common.v1.Empty) returns (orlysync.common.v1.ReadyResponse);
+
+  // Start starts the background relay-to-relay sync
+  rpc Start(orlysync.common.v1.Empty) returns (orlysync.common.v1.Empty);
+
+  // Stop stops the background sync
+  rpc Stop(orlysync.common.v1.Empty) returns (orlysync.common.v1.Empty);
+
+  // === Client-Facing NIP-77 (WebSocket Message Handling) ===
+  // These handle NEG-OPEN, NEG-MSG, NEG-CLOSE from WebSocket clients
+
+  // HandleNegOpen processes a NEG-OPEN message from a client
+  rpc HandleNegOpen(NegOpenRequest) returns (NegOpenResponse);
+
+  // HandleNegMsg processes a NEG-MSG message from a client
+  rpc HandleNegMsg(NegMsgRequest) returns (NegMsgResponse);
+
+  // HandleNegClose processes a NEG-CLOSE message from a client
+  rpc HandleNegClose(NegCloseRequest) returns (orlysync.common.v1.Empty);
+
+  // === Relay-to-Relay Sync ===
+
+  // SyncWithPeer initiates negentropy sync with a specific peer relay
+  rpc SyncWithPeer(SyncPeerRequest) returns (stream SyncProgress);
+
+  // GetSyncStatus returns the current sync status
+  rpc GetSyncStatus(orlysync.common.v1.Empty) returns (SyncStatusResponse);
+
+  // === Peer Management ===
+
+  // GetPeers returns the list of negentropy sync peers
+  rpc GetPeers(orlysync.common.v1.Empty) returns (PeersResponse);
+
+  // AddPeer adds a peer for negentropy sync
+  rpc AddPeer(AddPeerRequest) returns (orlysync.common.v1.Empty);
+
+  // RemovePeer removes a peer from negentropy sync
+  rpc RemovePeer(RemovePeerRequest) returns (orlysync.common.v1.Empty);
+
+  // === Sync Control ===
+
+  // TriggerSync manually triggers sync with a specific peer or all peers
+  rpc TriggerSync(TriggerSyncRequest) returns (orlysync.common.v1.Empty);
+
+  // GetPeerSyncState returns sync state for a specific peer
+  rpc GetPeerSyncState(PeerSyncStateRequest) returns (PeerSyncStateResponse);
+
+  // === Session Management ===
+
+  // ListSessions returns active client negentropy sessions
+  rpc ListSessions(orlysync.common.v1.Empty) returns (ListSessionsResponse);
+
+  // CloseSession forcefully closes a client session
+  rpc CloseSession(CloseSessionRequest) returns (orlysync.common.v1.Empty);
+}
+
+// === Client-Facing NIP-77 Messages ===
+
+// NegOpenRequest processes a NEG-OPEN from client
+// NEG-OPEN format: ["NEG-OPEN", subscription_id, filter, initial_message?]
+message NegOpenRequest {
+  string subscription_id = 1;   // Client's subscription ID
+  orlysync.common.v1.Filter filter = 2;  // Nostr filter for reconciliation
+  bytes initial_message = 3;    // Optional initial negentropy message
+  string connection_id = 4;     // Connection ID for session tracking
+}
+
+// NegOpenResponse returns the initial negentropy response
+message NegOpenResponse {
+  bytes message = 1;            // Negentropy protocol message to send back
+  string error = 2;             // Error message if failed
+}
+
+// NegMsgRequest processes a NEG-MSG from client
+// NEG-MSG format: ["NEG-MSG", subscription_id, message]
+message NegMsgRequest {
+  string subscription_id = 1;
+  bytes message = 2;            // Negentropy protocol message
+  string connection_id = 3;
+}
+
+// NegMsgResponse returns reconciliation results
+message NegMsgResponse {
+  bytes message = 1;            // Negentropy protocol message to send back
+  repeated bytes have_ids = 2;  // Event IDs we have that client needs
+  repeated bytes need_ids = 3;  // Event IDs we need from client
+  bool complete = 4;            // True if reconciliation is complete
+  string error = 5;             // Error message if failed
+}
+
+// NegCloseRequest processes a NEG-CLOSE from client
+// NEG-CLOSE format: ["NEG-CLOSE", subscription_id]
+message NegCloseRequest {
+  string subscription_id = 1;
+  string connection_id = 2;
+}
+
+// === Relay-to-Relay Sync Messages ===
+
+// SyncPeerRequest initiates sync with a peer
+message SyncPeerRequest {
+  string peer_url = 1;          // WebSocket URL of peer relay
+  orlysync.common.v1.Filter filter = 2;  // Optional filter to limit sync scope
+  int64 since = 3;              // Optional: only sync events since timestamp
+}
+
+// SyncProgress streams sync progress updates
+message SyncProgress {
+  string peer_url = 1;
+  int32 round = 2;              // Reconciliation round number
+  int64 have_count = 3;         // Events we have that peer needs
+  int64 need_count = 4;         // Events we need from peer
+  int64 fetched_count = 5;      // Events fetched so far
+  int64 sent_count = 6;         // Events sent so far
+  bool complete = 7;            // True when sync is complete
+  string error = 8;             // Error message if failed
+}
+
+// SyncStatusResponse contains overall sync status
+message SyncStatusResponse {
+  bool active = 1;              // Whether background sync is running
+  int64 last_sync = 2;          // Timestamp of last sync
+  int32 peer_count = 3;
+  repeated PeerSyncState peer_states = 4;
+}
+
+// === Peer Management Messages ===
+
+// PeersResponse contains the list of peers
+message PeersResponse {
+  repeated string peers = 1;    // List of peer WebSocket URLs
+}
+
+// AddPeerRequest adds a peer
+message AddPeerRequest {
+  string peer_url = 1;
+}
+
+// RemovePeerRequest removes a peer
+message RemovePeerRequest {
+  string peer_url = 1;
+}
+
+// TriggerSyncRequest triggers manual sync
+message TriggerSyncRequest {
+  string peer_url = 1;          // Optional: specific peer (empty = all)
+  orlysync.common.v1.Filter filter = 2;  // Optional: filter for sync scope
+}
+
+// PeerSyncStateRequest requests state for a peer
+message PeerSyncStateRequest {
+  string peer_url = 1;
+}
+
+// PeerSyncStateResponse contains peer sync state
+message PeerSyncStateResponse {
+  PeerSyncState state = 1;
+  bool found = 2;
+}
+
+// PeerSyncState represents sync state for a peer
+message PeerSyncState {
+  string peer_url = 1;
+  int64 last_sync = 2;          // Timestamp of last successful sync
+  int64 events_synced = 3;      // Total events synced from this peer
+  string status = 4;            // "idle", "syncing", "error"
+  string last_error = 5;        // Last error message
+  int32 consecutive_failures = 6;
+}
+
+// === Session Management Messages ===
+
+// ClientSession represents an active client negentropy session
+message ClientSession {
+  string subscription_id = 1;
+  string connection_id = 2;
+  int64 created_at = 3;
+  int64 last_activity = 4;
+  int32 round_count = 5;        // Number of reconciliation rounds
+}
+
+// ListSessionsResponse contains active sessions
+message ListSessionsResponse {
+  repeated ClientSession sessions = 1;
+}
+
+// CloseSessionRequest closes a session
+message CloseSessionRequest {
+  string subscription_id = 1;
+  string connection_id = 2;     // Optional: if empty, close all with this sub_id
+}

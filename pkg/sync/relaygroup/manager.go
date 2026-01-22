@@ -1,44 +1,56 @@
-// Package sync provides relay group configuration management
-package sync
+// Package relaygroup provides relay group configuration management
+package relaygroup
 
 import (
 	"context"
-	"github.com/minio/sha256-simd"
 	"encoding/hex"
 	"encoding/json"
 	"sort"
 	"strings"
 
-	"lol.mleku.dev/log"
-	"next.orly.dev/pkg/database"
+	"github.com/minio/sha256-simd"
 	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/database"
 )
 
-// RelayGroupConfig represents a relay group configuration event
-type RelayGroupConfig struct {
+// PeerUpdater is an interface for updating peer lists
+type PeerUpdater interface {
+	UpdatePeers(peers []string)
+}
+
+// Config represents a relay group configuration
+type Config struct {
 	Relays []string `json:"relays"`
 }
 
-// RelayGroupManager handles relay group configuration
-type RelayGroupManager struct {
-	db           *database.D
+// Manager handles relay group configuration
+type Manager struct {
+	db                *database.D
 	authorizedPubkeys [][]byte
 }
 
-// NewRelayGroupManager creates a new relay group manager
-func NewRelayGroupManager(db *database.D, adminNpubs []string) *RelayGroupManager {
+// ManagerConfig holds configuration for the relay group manager
+type ManagerConfig struct {
+	AdminNpubs []string
+}
+
+// NewManager creates a new relay group manager
+func NewManager(db *database.D, cfg *ManagerConfig) *Manager {
 	var pubkeys [][]byte
-	for _, npub := range adminNpubs {
-		if pk, err := bech32encoding.NpubOrHexToPublicKeyBinary(npub); err == nil {
-			pubkeys = append(pubkeys, pk)
+	if cfg != nil {
+		for _, npub := range cfg.AdminNpubs {
+			if pk, err := bech32encoding.NpubOrHexToPublicKeyBinary(npub); err == nil {
+				pubkeys = append(pubkeys, pk)
+			}
 		}
 	}
 
-	return &RelayGroupManager{
+	return &Manager{
 		db:                db,
 		authorizedPubkeys: pubkeys,
 	}
@@ -46,7 +58,7 @@ func NewRelayGroupManager(db *database.D, adminNpubs []string) *RelayGroupManage
 
 // FindAuthoritativeConfig finds the authoritative relay group configuration
 // by selecting the latest event by timestamp, with hash tie-breaking
-func (rgm *RelayGroupManager) FindAuthoritativeConfig(ctx context.Context) (*RelayGroupConfig, error) {
+func (rgm *Manager) FindAuthoritativeConfig(ctx context.Context) (*Config, error) {
 	if len(rgm.authorizedPubkeys) == 0 {
 		return nil, nil
 	}
@@ -73,7 +85,7 @@ func (rgm *RelayGroupManager) FindAuthoritativeConfig(ctx context.Context) (*Rel
 	}
 
 	// Parse the configuration from the event content
-	var config RelayGroupConfig
+	var config Config
 	if err := json.Unmarshal([]byte(authEvent.Content), &config); err != nil {
 		return nil, err
 	}
@@ -81,8 +93,20 @@ func (rgm *RelayGroupManager) FindAuthoritativeConfig(ctx context.Context) (*Rel
 	return &config, nil
 }
 
+// FindAuthoritativeRelays returns just the relay URLs from the authoritative config
+func (rgm *Manager) FindAuthoritativeRelays(ctx context.Context) ([]string, error) {
+	config, err := rgm.FindAuthoritativeConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if config == nil {
+		return nil, nil
+	}
+	return config.Relays, nil
+}
+
 // selectAuthoritativeEvent selects the authoritative event using the specified criteria
-func (rgm *RelayGroupManager) selectAuthoritativeEvent(events []*event.E) *event.E {
+func (rgm *Manager) selectAuthoritativeEvent(events []*event.E) *event.E {
 	if len(events) == 0 {
 		return nil
 	}
@@ -104,7 +128,7 @@ func (rgm *RelayGroupManager) selectAuthoritativeEvent(events []*event.E) *event
 }
 
 // IsAuthorizedPublisher checks if a pubkey is authorized to publish relay group configs
-func (rgm *RelayGroupManager) IsAuthorizedPublisher(pubkey []byte) bool {
+func (rgm *Manager) IsAuthorizedPublisher(pubkey []byte) bool {
 	for _, authPK := range rgm.authorizedPubkeys {
 		if string(authPK) == string(pubkey) {
 			return true
@@ -113,8 +137,19 @@ func (rgm *RelayGroupManager) IsAuthorizedPublisher(pubkey []byte) bool {
 	return false
 }
 
+// GetAuthorizedPubkeys returns all authorized pubkeys
+func (rgm *Manager) GetAuthorizedPubkeys() [][]byte {
+	result := make([][]byte, len(rgm.authorizedPubkeys))
+	for i, pk := range rgm.authorizedPubkeys {
+		pkCopy := make([]byte, len(pk))
+		copy(pkCopy, pk)
+		result[i] = pkCopy
+	}
+	return result
+}
+
 // ValidateRelayGroupEvent validates a relay group configuration event
-func (rgm *RelayGroupManager) ValidateRelayGroupEvent(ev *event.E) error {
+func (rgm *Manager) ValidateRelayGroupEvent(ev *event.E) error {
 	// Check if it's the right kind
 	if ev.Kind != kind.RelayGroupConfig.K {
 		return nil // Not our concern
@@ -126,7 +161,7 @@ func (rgm *RelayGroupManager) ValidateRelayGroupEvent(ev *event.E) error {
 	}
 
 	// Try to parse the content
-	var config RelayGroupConfig
+	var config Config
 	if err := json.Unmarshal([]byte(ev.Content), &config); err != nil {
 		return err
 	}
@@ -140,7 +175,7 @@ func (rgm *RelayGroupManager) ValidateRelayGroupEvent(ev *event.E) error {
 }
 
 // HandleRelayGroupEvent processes a relay group configuration event and updates peer lists
-func (rgm *RelayGroupManager) HandleRelayGroupEvent(ev *event.E, syncManager *Manager) {
+func (rgm *Manager) HandleRelayGroupEvent(ev *event.E, peerUpdater PeerUpdater) {
 	if ev.Kind != kind.RelayGroupConfig.K {
 		return
 	}
@@ -152,8 +187,8 @@ func (rgm *RelayGroupManager) HandleRelayGroupEvent(ev *event.E, syncManager *Ma
 		return
 	}
 
-	if authConfig != nil {
+	if authConfig != nil && peerUpdater != nil {
 		// Update the sync manager's peer list
-		syncManager.UpdatePeers(authConfig.Relays)
+		peerUpdater.UpdatePeers(authConfig.Relays)
 	}
 }

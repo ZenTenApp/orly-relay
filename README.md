@@ -12,8 +12,32 @@ zap me: �mlekudev@getalby.com
 
 follow me on [nostr](https://jumble.social/users/npub1fjqqy4a93z5zsjwsfxqhc2764kvykfdyttvldkkkdera8dr78vhsmmleku)
 
+## Architecture Overview
+
+ORLY supports a modular IPC architecture where core functionality runs as independent gRPC services:
+
+```
+orly-launcher (process supervisor)
+├── orly-db              (gRPC :50051) - Event storage & queries
+├── orly-acl             (gRPC :50052) - Access control
+├── orly-sync-distributed (gRPC :50061) - Peer-to-peer sync
+├── orly-sync-cluster    (gRPC :50062) - Cluster replication
+├── orly-sync-relaygroup (gRPC :50063) - Relay group config (Kind 39105)
+├── orly-sync-negentropy (gRPC :50064) - NIP-77 set reconciliation
+└── orly                 (WebSocket/HTTP) - Main relay
+```
+
+**Benefits**:
+- **Resource isolation**: Database, ACL, and sync run in separate processes
+- **Independent scaling**: Scale sync services independently from the relay
+- **Fault tolerance**: Service crashes don't bring down the entire relay
+- **Modular deployment**: Enable only the services you need
+
+See [docs/IPC_SYNC_SERVICES.md](./docs/IPC_SYNC_SERVICES.md) for detailed API documentation.
+
 ## Table of Contents
 
+- [Architecture Overview](#architecture-overview)
 - [Bug Reports & Feature Requests](#%EF%B8%8F-bug-reports--feature-requests)
 - [System Requirements](#%EF%B8%8F-system-requirements)
 - [About](#about)

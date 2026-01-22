@@ -128,6 +128,15 @@ type C struct {
 	GRPCACLServerAddress  string        `env:"ORLY_GRPC_ACL_SERVER" usage:"address of remote gRPC ACL server (only used when ORLY_ACL_TYPE=grpc)"`
 	GRPCACLConnectTimeout time.Duration `env:"ORLY_GRPC_ACL_TIMEOUT" default:"10s" usage:"gRPC ACL connection timeout (only used when ORLY_ACL_TYPE=grpc)"`
 
+	// gRPC Sync client settings (only used when ORLY_SYNC_TYPE=grpc)
+	SyncType                     string        `env:"ORLY_SYNC_TYPE" default:"local" usage:"sync backend: local (in-process) or grpc (remote sync services)"`
+	GRPCSyncDistributedAddress   string        `env:"ORLY_GRPC_SYNC_DISTRIBUTED" usage:"address of gRPC distributed sync server"`
+	GRPCSyncClusterAddress       string        `env:"ORLY_GRPC_SYNC_CLUSTER" usage:"address of gRPC cluster sync server"`
+	GRPCSyncRelayGroupAddress    string        `env:"ORLY_GRPC_SYNC_RELAYGROUP" usage:"address of gRPC relay group server"`
+	GRPCSyncNegentropyAddress    string        `env:"ORLY_GRPC_SYNC_NEGENTROPY" usage:"address of gRPC negentropy server"`
+	GRPCSyncConnectTimeout       time.Duration `env:"ORLY_GRPC_SYNC_TIMEOUT" default:"10s" usage:"gRPC sync connection timeout"`
+	NegentropyEnabled            bool          `env:"ORLY_NEGENTROPY_ENABLED" default:"false" usage:"enable NIP-77 negentropy set reconciliation"`
+
 	QueryCacheSizeMB    int    `env:"ORLY_QUERY_CACHE_SIZE_MB" default:"512" usage:"query cache size in MB (caches database query results for faster REQ responses)"`
 	QueryCacheMaxAge    string `env:"ORLY_QUERY_CACHE_MAX_AGE" default:"5m" usage:"maximum age for cached query results (e.g., 5m, 10m, 1h)"`
 
@@ -860,4 +869,25 @@ func (cfg *C) GetGRPCACLConfigValues() (
 	return cfg.ACLType,
 		cfg.GRPCACLServerAddress,
 		cfg.GRPCACLConnectTimeout
+}
+
+// GetGRPCSyncConfigValues returns the gRPC sync client configuration values.
+// This avoids circular imports with pkg/sync/*/grpc packages while allowing main.go
+// to construct the gRPC sync client configurations.
+func (cfg *C) GetGRPCSyncConfigValues() (
+	syncType string,
+	distributedAddress string,
+	clusterAddress string,
+	relayGroupAddress string,
+	negentropyAddress string,
+	connectTimeout time.Duration,
+	negentropyEnabled bool,
+) {
+	return cfg.SyncType,
+		cfg.GRPCSyncDistributedAddress,
+		cfg.GRPCSyncClusterAddress,
+		cfg.GRPCSyncRelayGroupAddress,
+		cfg.GRPCSyncNegentropyAddress,
+		cfg.GRPCSyncConnectTimeout,
+		cfg.NegentropyEnabled
 }

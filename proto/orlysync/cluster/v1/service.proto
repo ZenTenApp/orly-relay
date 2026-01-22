@@ -1,0 +1,130 @@
+syntax = "proto3";
+package orlysync.cluster.v1;
+option go_package = "next.orly.dev/pkg/proto/orlysync/cluster/v1;clusterv1";
+
+import "orlysync/common/v1/types.proto";
+
+// ClusterSyncService provides cluster replication with persistent state
+// for multi-member relay clusters
+service ClusterSyncService {
+  // === Lifecycle Methods ===
+
+  // Ready returns whether the service is ready to serve requests
+  rpc Ready(orlysync.common.v1.Empty) returns (orlysync.common.v1.ReadyResponse);
+
+  // Start starts the cluster polling loop
+  rpc Start(orlysync.common.v1.Empty) returns (orlysync.common.v1.Empty);
+
+  // Stop stops the cluster polling loop
+  rpc Stop(orlysync.common.v1.Empty) returns (orlysync.common.v1.Empty);
+
+  // === HTTP Proxy Handlers ===
+  // These allow the main relay to delegate HTTP cluster endpoints to this service
+
+  // HandleLatestSerial proxies GET /cluster/latest HTTP requests
+  rpc HandleLatestSerial(orlysync.common.v1.HTTPRequest) returns (orlysync.common.v1.HTTPResponse);
+
+  // HandleEventsRange proxies GET /cluster/events HTTP requests
+  rpc HandleEventsRange(orlysync.common.v1.HTTPRequest) returns (orlysync.common.v1.HTTPResponse);
+
+  // === Cluster Management ===
+
+  // GetMembers returns the current cluster members
+  rpc GetMembers(orlysync.common.v1.Empty) returns (MembersResponse);
+
+  // UpdateMembership updates cluster membership
+  rpc UpdateMembership(UpdateMembershipRequest) returns (orlysync.common.v1.Empty);
+
+  // HandleMembershipEvent processes a cluster membership event (Kind 39108)
+  rpc HandleMembershipEvent(MembershipEventRequest) returns (orlysync.common.v1.Empty);
+
+  // === Status ===
+
+  // GetClusterStatus returns overall cluster status
+  rpc GetClusterStatus(orlysync.common.v1.Empty) returns (ClusterStatusResponse);
+
+  // GetMemberStatus returns status for a specific member
+  rpc GetMemberStatus(MemberStatusRequest) returns (MemberStatusResponse);
+
+  // === Data Operations ===
+
+  // GetLatestSerial returns the latest serial from this relay's database
+  rpc GetLatestSerial(orlysync.common.v1.Empty) returns (LatestSerialResponse);
+
+  // GetEventsInRange returns event info for a serial range
+  rpc GetEventsInRange(EventsRangeRequest) returns (EventsRangeResponse);
+}
+
+// === Request/Response Messages ===
+
+// LatestSerialResponse contains the latest serial and timestamp
+message LatestSerialResponse {
+  uint64 serial = 1;
+  int64 timestamp = 2;  // Unix timestamp
+}
+
+// EventsRangeRequest requests events in a serial range
+message EventsRangeRequest {
+  uint64 from = 1;   // Start serial (inclusive)
+  uint64 to = 2;     // End serial (inclusive)
+  int32 limit = 3;   // Max events to return
+}
+
+// EventsRangeResponse contains events in the requested range
+message EventsRangeResponse {
+  repeated EventInfo events = 1;
+  bool has_more = 2;
+  uint64 next_from = 3;  // Next serial if has_more is true
+}
+
+// EventInfo contains metadata about an event
+message EventInfo {
+  uint64 serial = 1;
+  string id = 2;       // Event ID (hex)
+  int64 timestamp = 3; // Created timestamp
+}
+
+// ClusterMember represents a cluster member
+message ClusterMember {
+  string http_url = 1;
+  string websocket_url = 2;
+  uint64 last_serial = 3;
+  int64 last_poll = 4;    // Unix timestamp
+  string status = 5;      // "active", "error", "unknown"
+  int32 error_count = 6;
+}
+
+// MembersResponse contains the list of cluster members
+message MembersResponse {
+  repeated ClusterMember members = 1;
+}
+
+// UpdateMembershipRequest updates cluster membership
+message UpdateMembershipRequest {
+  repeated string relay_urls = 1;  // List of relay URLs to add
+}
+
+// MembershipEventRequest contains a cluster membership event
+message MembershipEventRequest {
+  orlysync.common.v1.Event event = 1;
+}
+
+// ClusterStatusResponse contains overall cluster status
+message ClusterStatusResponse {
+  uint64 latest_serial = 1;
+  int32 active_members = 2;
+  int32 total_members = 3;
+  bool propagate_privileged_events = 4;
+  repeated ClusterMember members = 5;
+}
+
+// MemberStatusRequest requests status for a specific member
+message MemberStatusRequest {
+  string http_url = 1;
+}
+
+// MemberStatusResponse contains status for a member
+message MemberStatusResponse {
+  ClusterMember member = 1;
+  bool found = 2;
+}

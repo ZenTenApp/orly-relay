@@ -50,6 +50,38 @@ type Config struct {
 
 	// LogLevel is the log level to use for all processes
 	LogLevel string
+
+	// Sync service configuration
+	// DistributedSyncEnabled enables the distributed sync service
+	DistributedSyncEnabled bool
+	// DistributedSyncBinary is the path to the distributed sync binary
+	DistributedSyncBinary string
+	// DistributedSyncListen is the gRPC listen address for distributed sync
+	DistributedSyncListen string
+
+	// ClusterSyncEnabled enables the cluster sync service
+	ClusterSyncEnabled bool
+	// ClusterSyncBinary is the path to the cluster sync binary
+	ClusterSyncBinary string
+	// ClusterSyncListen is the gRPC listen address for cluster sync
+	ClusterSyncListen string
+
+	// RelayGroupEnabled enables the relay group service
+	RelayGroupEnabled bool
+	// RelayGroupBinary is the path to the relay group binary
+	RelayGroupBinary string
+	// RelayGroupListen is the gRPC listen address for relay group
+	RelayGroupListen string
+
+	// NegentropyEnabled enables the negentropy sync service
+	NegentropyEnabled bool
+	// NegentropyBinary is the path to the negentropy sync binary
+	NegentropyBinary string
+	// NegentropyListen is the gRPC listen address for negentropy
+	NegentropyListen string
+
+	// SyncReadyTimeout is how long to wait for sync services to be ready
+	SyncReadyTimeout time.Duration
 }
 
 func loadConfig() (*Config, error) {
@@ -75,6 +107,25 @@ func loadConfig() (*Config, error) {
 		StopTimeout:     parseDuration("ORLY_LAUNCHER_STOP_TIMEOUT", 30*time.Second), // Increased for DB flush
 		DataDir:         getEnvOrDefault("ORLY_DATA_DIR", filepath.Join(xdg.DataHome, "ORLY")),
 		LogLevel:        getEnvOrDefault("ORLY_LOG_LEVEL", "info"),
+
+		// Sync services configuration
+		DistributedSyncEnabled: getEnvOrDefault("ORLY_LAUNCHER_SYNC_DISTRIBUTED_ENABLED", "false") == "true",
+		DistributedSyncBinary:  getEnvOrDefault("ORLY_LAUNCHER_SYNC_DISTRIBUTED_BINARY", "orly-sync-distributed"),
+		DistributedSyncListen:  getEnvOrDefault("ORLY_LAUNCHER_SYNC_DISTRIBUTED_LISTEN", "127.0.0.1:50061"),
+
+		ClusterSyncEnabled: getEnvOrDefault("ORLY_LAUNCHER_SYNC_CLUSTER_ENABLED", "false") == "true",
+		ClusterSyncBinary:  getEnvOrDefault("ORLY_LAUNCHER_SYNC_CLUSTER_BINARY", "orly-sync-cluster"),
+		ClusterSyncListen:  getEnvOrDefault("ORLY_LAUNCHER_SYNC_CLUSTER_LISTEN", "127.0.0.1:50062"),
+
+		RelayGroupEnabled: getEnvOrDefault("ORLY_LAUNCHER_SYNC_RELAYGROUP_ENABLED", "false") == "true",
+		RelayGroupBinary:  getEnvOrDefault("ORLY_LAUNCHER_SYNC_RELAYGROUP_BINARY", "orly-sync-relaygroup"),
+		RelayGroupListen:  getEnvOrDefault("ORLY_LAUNCHER_SYNC_RELAYGROUP_LISTEN", "127.0.0.1:50063"),
+
+		NegentropyEnabled: getEnvOrDefault("ORLY_LAUNCHER_SYNC_NEGENTROPY_ENABLED", "false") == "true",
+		NegentropyBinary:  getEnvOrDefault("ORLY_LAUNCHER_SYNC_NEGENTROPY_BINARY", "orly-sync-negentropy"),
+		NegentropyListen:  getEnvOrDefault("ORLY_LAUNCHER_SYNC_NEGENTROPY_LISTEN", "127.0.0.1:50064"),
+
+		SyncReadyTimeout: parseDuration("ORLY_LAUNCHER_SYNC_READY_TIMEOUT", 30*time.Second),
 	}
 
 	return cfg, nil

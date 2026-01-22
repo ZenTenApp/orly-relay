@@ -1,0 +1,135 @@
+syntax = "proto3";
+package orlysync.distributed.v1;
+option go_package = "next.orly.dev/pkg/proto/orlysync/distributed/v1;distributedv1";
+
+import "orlysync/common/v1/types.proto";
+
+// DistributedSyncService provides serial-based peer-to-peer synchronization
+// between relay instances using HTTP polling
+service DistributedSyncService {
+  // === Lifecycle Methods ===
+
+  // Ready returns whether the service is ready to serve requests
+  rpc Ready(orlysync.common.v1.Empty) returns (orlysync.common.v1.ReadyResponse);
+
+  // GetInfo returns current sync service information
+  rpc GetInfo(orlysync.common.v1.Empty) returns (orlysync.common.v1.SyncInfo);
+
+  // === Sync Operations ===
+
+  // GetCurrentSerial returns this relay's current serial number
+  rpc GetCurrentSerial(CurrentRequest) returns (CurrentResponse);
+
+  // GetEventIDs returns event IDs for a serial range
+  rpc GetEventIDs(EventIDsRequest) returns (EventIDsResponse);
+
+  // === HTTP Proxy Handlers ===
+  // These allow the main relay to delegate HTTP sync endpoints to this service
+
+  // HandleCurrentRequest proxies /api/sync/current HTTP requests
+  rpc HandleCurrentRequest(orlysync.common.v1.HTTPRequest) returns (orlysync.common.v1.HTTPResponse);
+
+  // HandleEventIDsRequest proxies /api/sync/event-ids HTTP requests
+  rpc HandleEventIDsRequest(orlysync.common.v1.HTTPRequest) returns (orlysync.common.v1.HTTPResponse);
+
+  // === Peer Management ===
+
+  // GetPeers returns the current list of sync peers
+  rpc GetPeers(orlysync.common.v1.Empty) returns (PeersResponse);
+
+  // UpdatePeers updates the peer list
+  rpc UpdatePeers(UpdatePeersRequest) returns (orlysync.common.v1.Empty);
+
+  // IsAuthorizedPeer checks if a peer is authorized by validating its NIP-11 pubkey
+  rpc IsAuthorizedPeer(AuthorizedPeerRequest) returns (AuthorizedPeerResponse);
+
+  // GetPeerPubkey fetches the pubkey for a peer relay via NIP-11
+  rpc GetPeerPubkey(PeerPubkeyRequest) returns (PeerPubkeyResponse);
+
+  // === Serial Tracking ===
+
+  // UpdateSerial updates the current serial from database
+  rpc UpdateSerial(orlysync.common.v1.Empty) returns (orlysync.common.v1.Empty);
+
+  // NotifyNewEvent notifies the service of a new event being stored
+  rpc NotifyNewEvent(NewEventNotification) returns (orlysync.common.v1.Empty);
+
+  // === Sync Control ===
+
+  // TriggerSync manually triggers a sync cycle with all peers
+  rpc TriggerSync(orlysync.common.v1.Empty) returns (orlysync.common.v1.Empty);
+
+  // GetSyncStatus returns current sync status for all peers
+  rpc GetSyncStatus(orlysync.common.v1.Empty) returns (SyncStatusResponse);
+}
+
+// === Request/Response Messages ===
+
+// CurrentRequest is sent to request current serial number
+message CurrentRequest {
+  string node_id = 1;     // Requesting node's identity
+  string relay_url = 2;   // Requesting relay's URL
+}
+
+// CurrentResponse contains the current serial number
+message CurrentResponse {
+  string node_id = 1;     // Responding node's identity
+  string relay_url = 2;   // Responding relay's URL
+  uint64 serial = 3;      // Current serial number
+}
+
+// EventIDsRequest requests event IDs in a serial range
+message EventIDsRequest {
+  string node_id = 1;     // Requesting node's identity
+  string relay_url = 2;   // Requesting relay's URL
+  uint64 from = 3;        // Start serial (inclusive)
+  uint64 to = 4;          // End serial (inclusive)
+}
+
+// EventIDsResponse contains event IDs mapped to serial numbers
+message EventIDsResponse {
+  map<string, uint64> event_map = 1;  // event_id (hex) -> serial
+}
+
+// PeersResponse contains the list of sync peers
+message PeersResponse {
+  repeated string peers = 1;  // List of peer relay URLs
+}
+
+// UpdatePeersRequest updates the peer list
+message UpdatePeersRequest {
+  repeated string peers = 1;  // New list of peer relay URLs
+}
+
+// AuthorizedPeerRequest checks if a peer is authorized
+message AuthorizedPeerRequest {
+  string peer_url = 1;
+  string expected_pubkey = 2;  // Expected NIP-11 pubkey
+}
+
+// AuthorizedPeerResponse indicates if the peer is authorized
+message AuthorizedPeerResponse {
+  bool authorized = 1;
+}
+
+// PeerPubkeyRequest requests the pubkey for a peer
+message PeerPubkeyRequest {
+  string peer_url = 1;
+}
+
+// PeerPubkeyResponse contains the peer's pubkey
+message PeerPubkeyResponse {
+  string pubkey = 1;  // Peer's NIP-11 pubkey (hex or npub)
+}
+
+// NewEventNotification notifies of a new event
+message NewEventNotification {
+  bytes event_id = 1;   // 32 bytes event ID
+  uint64 serial = 2;    // Assigned serial number
+}
+
+// SyncStatusResponse contains sync status for all peers
+message SyncStatusResponse {
+  uint64 current_serial = 1;
+  repeated orlysync.common.v1.PeerInfo peers = 2;
+}

@@ -73,6 +73,10 @@ func (s *Server) HandleRelayInfo(w http.ResponseWriter, r *http.Request) {
 	if s.Config.NIP43Enabled {
 		nips = append(nips, relayinfo.RelayAccessMetadata)
 	}
+	// Add NIP-77 (negentropy) if enabled
+	if s.Config.NegentropyEnabled {
+		nips = append(nips, relayinfo.NIP{Number: 77, Description: "Negentropy-based sync"})
+	}
 	supportedNIPs := relayinfo.GetList(nips...)
 	if s.Config.ACLMode != "none" {
 		nipsACL := []relayinfo.NIP{
@@ -95,6 +99,10 @@ func (s *Server) HandleRelayInfo(w http.ResponseWriter, r *http.Request) {
 		// Add NIP-43 if enabled
 		if s.Config.NIP43Enabled {
 			nipsACL = append(nipsACL, relayinfo.RelayAccessMetadata)
+		}
+		// Add NIP-77 (negentropy) if enabled
+		if s.Config.NegentropyEnabled {
+			nipsACL = append(nipsACL, relayinfo.NIP{Number: 77, Description: "Negentropy-based sync"})
 		}
 		supportedNIPs = relayinfo.GetList(nipsACL...)
 	}

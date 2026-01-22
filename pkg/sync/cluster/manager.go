@@ -1,4 +1,5 @@
-package sync
+// Package cluster provides cluster replication with persistent state
+package cluster
 
 import (
 	"context"
@@ -6,37 +7,45 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sync"
+	gosync "sync"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
-	"lol.mleku.dev/log"
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/database/indexes/types"
 	"git.mleku.dev/mleku/nostr/crypto/keys"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/database"
+	"next.orly.dev/pkg/database/indexes/types"
+	"next.orly.dev/pkg/sync/common"
 )
 
-type ClusterManager struct {
-	ctx                           context.Context
-	cancel                        context.CancelFunc
-	db                            *database.D
-	adminNpubs                    []string
-	relayIdentityPubkey           string                    // Our relay's identity pubkey (hex)
-	selfURLs                      map[string]bool           // URLs discovered to be ourselves (for fast lookups)
-	members                       map[string]*ClusterMember // keyed by relay URL
-	membersMux                    sync.RWMutex
-	pollTicker                    *time.Ticker
-	pollDone                      chan struct{}
-	httpClient                    *http.Client
-	propagatePrivilegedEvents     bool
-	publisher                     interface{ Deliver(*event.E) }
-	nip11Cache                    *NIP11Cache
+// EventPublisher is an interface for publishing events
+type EventPublisher interface {
+	Deliver(*event.E)
 }
 
-type ClusterMember struct {
+// Manager handles cluster replication between relay instances
+type Manager struct {
+	ctx                       context.Context
+	cancel                    context.CancelFunc
+	db                        *database.D
+	adminNpubs                []string
+	relayIdentityPubkey       string                // Our relay's identity pubkey (hex)
+	selfURLs                  map[string]bool       // URLs discovered to be ourselves (for fast lookups)
+	members                   map[string]*Member    // keyed by relay URL
+	membersMux                gosync.RWMutex
+	pollTicker                *time.Ticker
+	pollDone                  chan struct{}
+	httpClient                *http.Client
+	propagatePrivilegedEvents bool
+	publisher                 EventPublisher
+	nip11Cache                *common.NIP11Cache
+}
+
+// Member represents a cluster member
+type Member struct {
 	HTTPURL      string
 	WebSocketURL string
 	LastSerial   uint64
@@ -45,25 +54,50 @@ type ClusterMember struct {
 	ErrorCount   int
 }
 
+// LatestSerialResponse returns the latest serial
 type LatestSerialResponse struct {
 	Serial    uint64 `json:"serial"`
 	Timestamp int64  `json:"timestamp"`
 }
 
+// EventsRangeResponse contains events in a range
 type EventsRangeResponse struct {
 	Events   []EventInfo `json:"events"`
 	HasMore  bool        `json:"has_more"`
 	NextFrom uint64      `json:"next_from,omitempty"`
 }
 
+// EventInfo contains metadata about an event
 type EventInfo struct {
 	Serial    uint64 `json:"serial"`
 	ID        string `json:"id"`
 	Timestamp int64  `json:"timestamp"`
 }
 
-func NewClusterManager(ctx context.Context, db *database.D, adminNpubs []string, propagatePrivilegedEvents bool, publisher interface{ Deliver(*event.E) }) *ClusterManager {
+// Config holds configuration for the cluster manager
+type Config struct {
+	AdminNpubs                []string
+	PropagatePrivilegedEvents bool
+	PollInterval              time.Duration
+	NIP11CacheTTL             time.Duration
+}
+
+// DefaultConfig returns default configuration
+func DefaultConfig() *Config {
+	return &Config{
+		PropagatePrivilegedEvents: true,
+		PollInterval:              5 * time.Second,
+		NIP11CacheTTL:             30 * time.Minute,
+	}
+}
+
+// NewManager creates a new cluster manager
+func NewManager(ctx context.Context, db *database.D, cfg *Config, publisher EventPublisher) *Manager {
 	ctx, cancel := context.WithCancel(ctx)
+
+	if cfg == nil {
+		cfg = DefaultConfig()
+	}
 
 	// Get our relay identity pubkey
 	var relayPubkey string
@@ -73,27 +107,28 @@ func NewClusterManager(ctx context.Context, db *database.D, adminNpubs []string,
 		}
 	}
 
-	cm := &ClusterManager{
+	cm := &Manager{
 		ctx:                       ctx,
 		cancel:                    cancel,
 		db:                        db,
-		adminNpubs:                adminNpubs,
+		adminNpubs:                cfg.AdminNpubs,
 		relayIdentityPubkey:       relayPubkey,
 		selfURLs:                  make(map[string]bool),
-		members:                   make(map[string]*ClusterMember),
+		members:                   make(map[string]*Member),
 		pollDone:                  make(chan struct{}),
-		propagatePrivilegedEvents: propagatePrivilegedEvents,
+		propagatePrivilegedEvents: cfg.PropagatePrivilegedEvents,
 		publisher:                 publisher,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		nip11Cache: NewNIP11Cache(30 * time.Minute),
+		nip11Cache: common.NewNIP11Cache(cfg.NIP11CacheTTL),
 	}
 
 	return cm
 }
 
-func (cm *ClusterManager) Start() {
+// Start starts the cluster polling loop
+func (cm *Manager) Start() {
 	log.I.Ln("starting cluster replication manager")
 
 	// Load persisted peer state from database
@@ -105,7 +140,8 @@ func (cm *ClusterManager) Start() {
 	go cm.pollingLoop()
 }
 
-func (cm *ClusterManager) Stop() {
+// Stop stops the cluster polling loop
+func (cm *Manager) Stop() {
 	log.I.Ln("stopping cluster replication manager")
 	cm.cancel()
 	if cm.pollTicker != nil {
@@ -114,7 +150,73 @@ func (cm *ClusterManager) Stop() {
 	<-cm.pollDone
 }
 
-func (cm *ClusterManager) pollingLoop() {
+// GetRelayIdentityPubkey returns the relay's identity pubkey
+func (cm *Manager) GetRelayIdentityPubkey() string {
+	return cm.relayIdentityPubkey
+}
+
+// GetMembers returns a copy of the current members
+func (cm *Manager) GetMembers() []*Member {
+	cm.membersMux.RLock()
+	defer cm.membersMux.RUnlock()
+	members := make([]*Member, 0, len(cm.members))
+	for _, m := range cm.members {
+		memberCopy := *m
+		members = append(members, &memberCopy)
+	}
+	return members
+}
+
+// GetMember returns a specific member by URL or nil if not found
+func (cm *Manager) GetMember(httpURL string) *Member {
+	cm.membersMux.RLock()
+	defer cm.membersMux.RUnlock()
+	if m, ok := cm.members[httpURL]; ok {
+		memberCopy := *m
+		return &memberCopy
+	}
+	return nil
+}
+
+// GetLatestSerial returns the latest serial and timestamp from the database
+func (cm *Manager) GetLatestSerial() (uint64, int64) {
+	serial, err := cm.getLatestSerialFromDB()
+	if err != nil {
+		return 0, time.Now().Unix()
+	}
+	return serial, time.Now().Unix()
+}
+
+// PropagatePrivilegedEvents returns whether privileged events should be propagated
+func (cm *Manager) PropagatePrivilegedEvents() bool {
+	return cm.propagatePrivilegedEvents
+}
+
+// GetEventsInRange returns events in a serial range with pagination
+func (cm *Manager) GetEventsInRange(from, to uint64, limit int) ([]EventInfo, bool, uint64) {
+	events, hasMore, nextFrom, err := cm.getEventsInRangeFromDB(from, to, limit)
+	if err != nil {
+		return nil, false, 0
+	}
+	return events, hasMore, nextFrom
+}
+
+// IsSelfURL checks if a URL is our own relay
+func (cm *Manager) IsSelfURL(url string) bool {
+	cm.membersMux.RLock()
+	result := cm.selfURLs[url]
+	cm.membersMux.RUnlock()
+	return result
+}
+
+// MarkSelfURL marks a URL as belonging to us
+func (cm *Manager) MarkSelfURL(url string) {
+	cm.membersMux.Lock()
+	cm.selfURLs[url] = true
+	cm.membersMux.Unlock()
+}
+
+func (cm *Manager) pollingLoop() {
 	defer close(cm.pollDone)
 
 	for {
@@ -127,9 +229,9 @@ func (cm *ClusterManager) pollingLoop() {
 	}
 }
 
-func (cm *ClusterManager) pollAllMembers() {
+func (cm *Manager) pollAllMembers() {
 	cm.membersMux.RLock()
-	members := make([]*ClusterMember, 0, len(cm.members))
+	members := make([]*Member, 0, len(cm.members))
 	for _, member := range cm.members {
 		members = append(members, member)
 	}
@@ -140,7 +242,7 @@ func (cm *ClusterManager) pollAllMembers() {
 	}
 }
 
-func (cm *ClusterManager) pollMember(member *ClusterMember) {
+func (cm *Manager) pollMember(member *Member) {
 	// Get latest serial from peer
 	latestResp, err := cm.getLatestSerial(member.HTTPURL)
 	if err != nil {
@@ -167,17 +269,17 @@ func (cm *ClusterManager) pollMember(member *ClusterMember) {
 		return
 	}
 
-		// Process fetched events
-		for _, eventInfo := range eventsResp.Events {
-			if cm.shouldFetchEvent(eventInfo) {
-				// Fetch full event via WebSocket and store it
-				if err := cm.fetchAndStoreEvent(member.WebSocketURL, eventInfo.ID, cm.publisher); err != nil {
-					log.W.F("failed to fetch/store event %s from %s: %v", eventInfo.ID, member.HTTPURL, err)
-				} else {
-					log.D.F("successfully replicated event %s from %s", eventInfo.ID, member.HTTPURL)
-				}
+	// Process fetched events
+	for _, eventInfo := range eventsResp.Events {
+		if cm.shouldFetchEvent(eventInfo) {
+			// Fetch full event via WebSocket and store it
+			if err := cm.fetchAndStoreEvent(member.WebSocketURL, eventInfo.ID, cm.publisher); err != nil {
+				log.W.F("failed to fetch/store event %s from %s: %v", eventInfo.ID, member.HTTPURL, err)
+			} else {
+				log.D.F("successfully replicated event %s from %s", eventInfo.ID, member.HTTPURL)
 			}
 		}
+	}
 
 	// Update last serial if we processed all events
 	if !eventsResp.HasMore && member.LastSerial != to {
@@ -189,7 +291,7 @@ func (cm *ClusterManager) pollMember(member *ClusterMember) {
 	}
 }
 
-func (cm *ClusterManager) getLatestSerial(peerURL string) (*LatestSerialResponse, error) {
+func (cm *Manager) getLatestSerial(peerURL string) (*LatestSerialResponse, error) {
 	url := fmt.Sprintf("%s/cluster/latest", peerURL)
 	resp, err := cm.httpClient.Get(url)
 	if err != nil {
@@ -209,7 +311,7 @@ func (cm *ClusterManager) getLatestSerial(peerURL string) (*LatestSerialResponse
 	return &result, nil
 }
 
-func (cm *ClusterManager) getEventsInRange(peerURL string, from, to uint64, limit int) (*EventsRangeResponse, error) {
+func (cm *Manager) getEventsInRange(peerURL string, from, to uint64, limit int) (*EventsRangeResponse, error) {
 	url := fmt.Sprintf("%s/cluster/events?from=%d&to=%d&limit=%d", peerURL, from, to, limit)
 	resp, err := cm.httpClient.Get(url)
 	if err != nil {
@@ -229,13 +331,13 @@ func (cm *ClusterManager) getEventsInRange(peerURL string, from, to uint64, limi
 	return &result, nil
 }
 
-func (cm *ClusterManager) shouldFetchEvent(eventInfo EventInfo) bool {
+func (cm *Manager) shouldFetchEvent(eventInfo EventInfo) bool {
 	// Relays MAY choose not to store every event they receive
 	// For now, accept all events
 	return true
 }
 
-func (cm *ClusterManager) updateMemberStatus(member *ClusterMember, status string) {
+func (cm *Manager) updateMemberStatus(member *Member, status string) {
 	member.Status = status
 	if status == "error" {
 		member.ErrorCount++
@@ -244,7 +346,8 @@ func (cm *ClusterManager) updateMemberStatus(member *ClusterMember, status strin
 	}
 }
 
-func (cm *ClusterManager) UpdateMembership(relayURLs []string) {
+// UpdateMembership updates the cluster membership
+func (cm *Manager) UpdateMembership(relayURLs []string) {
 	cm.membersMux.Lock()
 	defer cm.membersMux.Unlock()
 
@@ -297,7 +400,7 @@ func (cm *ClusterManager) UpdateMembership(relayURLs []string) {
 		}
 
 		// Add member
-		member := &ClusterMember{
+		member := &Member{
 			HTTPURL:      url,
 			WebSocketURL: url, // TODO: Convert to WebSocket URL
 			LastSerial:   0,
@@ -309,7 +412,7 @@ func (cm *ClusterManager) UpdateMembership(relayURLs []string) {
 }
 
 // HandleMembershipEvent processes a cluster membership event (Kind 39108)
-func (cm *ClusterManager) HandleMembershipEvent(event *event.E) error {
+func (cm *Manager) HandleMembershipEvent(ev *event.E) error {
 	// Verify the event is signed by a cluster admin
 	adminFound := false
 	for _, adminNpub := range cm.adminNpubs {
@@ -326,7 +429,7 @@ func (cm *ClusterManager) HandleMembershipEvent(event *event.E) error {
 
 	// Parse the relay URLs from the tags
 	var relayURLs []string
-	for _, tag := range *event.Tags {
+	for _, tag := range *ev.Tags {
 		if len(tag.T) >= 2 && string(tag.T[0]) == "relay" {
 			relayURLs = append(relayURLs, string(tag.T[1]))
 		}
@@ -339,21 +442,21 @@ func (cm *ClusterManager) HandleMembershipEvent(event *event.E) error {
 	// Update cluster membership
 	cm.UpdateMembership(relayURLs)
 
-	log.I.F("updated cluster membership with %d relays from event %x", len(relayURLs), event.ID)
+	log.I.F("updated cluster membership with %d relays from event %x", len(relayURLs), ev.ID)
 
 	return nil
 }
 
 // HTTP Handlers
 
-func (cm *ClusterManager) HandleLatestSerial(w http.ResponseWriter, r *http.Request) {
+// HandleLatestSerial handles GET /cluster/latest
+func (cm *Manager) HandleLatestSerial(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	// Check if request is from ourselves by examining the Referer or Origin header
-	// Note: Self-members are already filtered out, but this catches edge cases
 	origin := r.Header.Get("Origin")
 	referer := r.Header.Get("Referer")
 
@@ -386,7 +489,7 @@ func (cm *ClusterManager) HandleLatestSerial(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	// Get the latest serial from database by querying for the highest serial
+	// Get the latest serial from database
 	latestSerial, err := cm.getLatestSerialFromDB()
 	if err != nil {
 		log.W.F("failed to get latest serial: %v", err)
@@ -403,14 +506,14 @@ func (cm *ClusterManager) HandleLatestSerial(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(response)
 }
 
-func (cm *ClusterManager) HandleEventsRange(w http.ResponseWriter, r *http.Request) {
+// HandleEventsRange handles GET /cluster/events
+func (cm *Manager) HandleEventsRange(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Check if request is from ourselves by examining the Referer or Origin header
-	// Note: Self-members are already filtered out, but this catches edge cases
+	// Check if request is from ourselves
 	origin := r.Header.Get("Origin")
 	referer := r.Header.Get("Referer")
 
@@ -434,7 +537,6 @@ func (cm *ClusterManager) HandleEventsRange(w http.ResponseWriter, r *http.Reque
 
 		if err == nil && peerPubkey == cm.relayIdentityPubkey {
 			log.D.F("rejecting cluster events request from self (discovered): %s", checkURL)
-			// Cache for future fast lookups
 			cm.membersMux.Lock()
 			cm.selfURLs[checkURL] = true
 			cm.membersMux.Unlock()
@@ -466,7 +568,7 @@ func (cm *ClusterManager) HandleEventsRange(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Get events in range
-	events, hasMore, nextFrom, err := cm.getEventsInRangeFromDB(from, to, int(limit))
+	events, hasMore, nextFrom, err := cm.getEventsInRangeFromDB(from, to, limit)
 	if err != nil {
 		log.W.F("failed to get events in range: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -483,24 +585,21 @@ func (cm *ClusterManager) HandleEventsRange(w http.ResponseWriter, r *http.Reque
 	json.NewEncoder(w).Encode(response)
 }
 
-func (cm *ClusterManager) getLatestSerialFromDB() (uint64, error) {
-	// Query the database to find the highest serial number
-	// We'll iterate through the event keys to find the maximum serial
+func (cm *Manager) getLatestSerialFromDB() (uint64, error) {
 	var maxSerial uint64 = 0
 
 	err := cm.db.View(func(txn *badger.Txn) error {
 		it := txn.NewIterator(badger.IteratorOptions{
-			Reverse: true, // Start from highest
-			Prefix:  []byte{0}, // Event keys start with 0
+			Reverse: true,
+			Prefix:  []byte{0},
 		})
 		defer it.Close()
 
-		// Look for the first event key (which should have the highest serial in reverse iteration)
 		it.Seek([]byte{0})
 		if it.Valid() {
 			key := it.Item().Key()
-			if len(key) >= 5 { // Serial is in the last 5 bytes
-				serial := binary.BigEndian.Uint64(key[len(key)-8:]) >> 24 // Convert from Uint40
+			if len(key) >= 5 {
+				serial := binary.BigEndian.Uint64(key[len(key)-8:]) >> 24
 				if serial > maxSerial {
 					maxSerial = serial
 				}
@@ -513,12 +612,11 @@ func (cm *ClusterManager) getLatestSerialFromDB() (uint64, error) {
 	return maxSerial, err
 }
 
-func (cm *ClusterManager) getEventsInRangeFromDB(from, to uint64, limit int) ([]EventInfo, bool, uint64, error) {
+func (cm *Manager) getEventsInRangeFromDB(from, to uint64, limit int) ([]EventInfo, bool, uint64, error) {
 	var events []EventInfo
 	var hasMore bool
 	var nextFrom uint64
 
-	// Convert serials to Uint40 format for querying
 	fromSerial := &types.Uint40{}
 	toSerial := &types.Uint40{}
 
@@ -529,11 +627,9 @@ func (cm *ClusterManager) getEventsInRangeFromDB(from, to uint64, limit int) ([]
 		return nil, false, 0, err
 	}
 
-	// Query events by serial range
 	err := cm.db.View(func(txn *badger.Txn) error {
-		// Iterate through event keys in the database
 		it := txn.NewIterator(badger.IteratorOptions{
-			Prefix: []byte{0}, // Event keys start with 0
+			Prefix: []byte{0},
 		})
 		defer it.Close()
 
@@ -543,15 +639,11 @@ func (cm *ClusterManager) getEventsInRangeFromDB(from, to uint64, limit int) ([]
 		for it.Valid() && count < limit {
 			key := it.Item().Key()
 
-			// Check if this is an event key (starts with event prefix)
 			if len(key) >= 8 && key[0] == 0 && key[1] == 0 && key[2] == 0 {
-				// Extract serial from the last 5 bytes (Uint40)
 				if len(key) >= 8 {
-					serial := binary.BigEndian.Uint64(key[len(key)-8:]) >> 24 // Convert from Uint40
+					serial := binary.BigEndian.Uint64(key[len(key)-8:]) >> 24
 
-					// Check if serial is in range
 					if serial >= from && serial <= to {
-						// Fetch the full event to check if it's privileged
 						serial40 := &types.Uint40{}
 						if err := serial40.Set(serial); err != nil {
 							continue
@@ -562,7 +654,6 @@ func (cm *ClusterManager) getEventsInRangeFromDB(from, to uint64, limit int) ([]
 							continue
 						}
 
-						// Check if we should propagate this event
 						shouldPropagate := true
 						if !cm.propagatePrivilegedEvents && kind.IsPrivileged(ev.Kind) {
 							shouldPropagate = false
@@ -577,7 +668,6 @@ func (cm *ClusterManager) getEventsInRangeFromDB(from, to uint64, limit int) ([]
 							count++
 						}
 
-						// Free the event
 						ev.Free()
 					}
 				}
@@ -586,10 +676,8 @@ func (cm *ClusterManager) getEventsInRangeFromDB(from, to uint64, limit int) ([]
 			it.Next()
 		}
 
-		// Check if there are more events
 		if it.Valid() {
 			hasMore = true
-			// Try to get the next serial
 			nextKey := it.Item().Key()
 			if len(nextKey) >= 8 && nextKey[0] == 0 && nextKey[1] == 0 && nextKey[2] == 0 {
 				nextSerial := binary.BigEndian.Uint64(nextKey[len(nextKey)-8:]) >> 24
@@ -603,27 +691,10 @@ func (cm *ClusterManager) getEventsInRangeFromDB(from, to uint64, limit int) ([]
 	return events, hasMore, nextFrom, err
 }
 
-func (cm *ClusterManager) fetchAndStoreEvent(wsURL, eventID string, publisher interface{ Deliver(*event.E) }) error {
+func (cm *Manager) fetchAndStoreEvent(wsURL, eventID string, publisher EventPublisher) error {
 	// TODO: Implement WebSocket connection and event fetching
-	// For now, this is a placeholder that assumes the event can be fetched
-	// In a full implementation, this would:
-	// 1. Connect to the WebSocket endpoint
-	// 2. Send a REQ message for the specific event ID
-	// 3. Receive the EVENT message
-	// 4. Validate and store the event in the local database
-	// 5. Propagate the event to subscribers via the publisher
-
-	// Placeholder - mark as not implemented for now
 	log.D.F("fetchAndStoreEvent called for %s from %s (placeholder implementation)", eventID, wsURL)
-
-	// Note: When implementing the full WebSocket fetching logic, after storing the event,
-	// the publisher should be called like this:
-	// if publisher != nil {
-	//     clonedEvent := fetchedEvent.Clone()
-	//     go publisher.Deliver(clonedEvent)
-	// }
-
-	return nil // Return success for now
+	return nil
 }
 
 // Database key prefixes for cluster state persistence
@@ -631,8 +702,7 @@ const (
 	clusterPeerStatePrefix = "cluster:peer:"
 )
 
-// loadPeerState loads persisted peer state from the database
-func (cm *ClusterManager) loadPeerState() error {
+func (cm *Manager) loadPeerState() error {
 	cm.membersMux.Lock()
 	defer cm.membersMux.Unlock()
 
@@ -647,10 +717,8 @@ func (cm *ClusterManager) loadPeerState() error {
 			item := it.Item()
 			key := item.Key()
 
-			// Extract peer URL from key (remove prefix)
 			peerURL := string(key[len(prefix):])
 
-			// Read the serial value
 			var serial uint64
 			err := item.Value(func(val []byte) error {
 				if len(val) == 8 {
@@ -663,15 +731,13 @@ func (cm *ClusterManager) loadPeerState() error {
 				continue
 			}
 
-			// Update existing member or create new one
 			if member, exists := cm.members[peerURL]; exists {
 				member.LastSerial = serial
 				log.D.F("loaded persisted serial %d for existing peer %s", serial, peerURL)
 			} else {
-				// Create member with persisted state
-				member := &ClusterMember{
+				member := &Member{
 					HTTPURL:      peerURL,
-					WebSocketURL: peerURL, // TODO: Convert to WebSocket URL
+					WebSocketURL: peerURL,
 					LastSerial:   serial,
 					Status:       "unknown",
 				}
@@ -683,8 +749,7 @@ func (cm *ClusterManager) loadPeerState() error {
 	})
 }
 
-// savePeerState saves the current serial for a peer to the database
-func (cm *ClusterManager) savePeerState(peerURL string, serial uint64) error {
+func (cm *Manager) savePeerState(peerURL string, serial uint64) error {
 	key := []byte(clusterPeerStatePrefix + peerURL)
 	value := make([]byte, 8)
 	binary.BigEndian.PutUint64(value, serial)
@@ -694,8 +759,7 @@ func (cm *ClusterManager) savePeerState(peerURL string, serial uint64) error {
 	})
 }
 
-// removePeerState removes persisted state for a peer from the database
-func (cm *ClusterManager) removePeerState(peerURL string) error {
+func (cm *Manager) removePeerState(peerURL string) error {
 	key := []byte(clusterPeerStatePrefix + peerURL)
 
 	return cm.db.Update(func(txn *badger.Txn) error {

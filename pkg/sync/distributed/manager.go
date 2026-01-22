@@ -1,4 +1,5 @@
-package sync
+// Package distributed provides serial-based peer-to-peer synchronization
+package distributed
 
 import (
 	"bytes"
@@ -7,32 +8,42 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
+	gosync "sync"
 	"time"
 
-	"lol.mleku.dev/log"
-	"next.orly.dev/pkg/database"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/database"
+	"next.orly.dev/pkg/sync/common"
 )
+
+// PolicyChecker is an interface for checking event policies
+type PolicyChecker interface {
+	CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error)
+}
+
+// RelayGroupConfigProvider provides relay group configuration
+type RelayGroupConfigProvider interface {
+	FindAuthoritativeConfig(ctx context.Context) ([]string, error)
+}
 
 // Manager handles distributed synchronization between relay peers using serial numbers as clocks
 type Manager struct {
-	ctx             context.Context
-	cancel          context.CancelFunc
-	db              *database.D
-	nodeID          string
-	relayURL        string
-	peers           []string
-	selfURLs        map[string]bool   // URLs discovered to be ourselves (for fast lookups)
-	currentSerial   uint64
-	peerSerials     map[string]uint64 // peer URL -> latest serial seen
-	relayGroupMgr   *RelayGroupManager
-	nip11Cache      *NIP11Cache
-	policyManager   interface{ CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error) }
-	mutex          sync.RWMutex
+	ctx           context.Context
+	cancel        context.CancelFunc
+	db            *database.D
+	nodeID        string
+	relayURL      string
+	peers         []string
+	selfURLs      map[string]bool   // URLs discovered to be ourselves (for fast lookups)
+	currentSerial uint64
+	peerSerials   map[string]uint64 // peer URL -> latest serial seen
+	nip11Cache    *common.NIP11Cache
+	policyManager PolicyChecker
+	mutex         gosync.RWMutex
 }
 
 // CurrentRequest represents a request for the current serial number
@@ -43,11 +54,10 @@ type CurrentRequest struct {
 
 // CurrentResponse returns the current serial number
 type CurrentResponse struct {
-	NodeID      string `json:"node_id"`
-	RelayURL    string `json:"relay_url"`
-	Serial      uint64 `json:"serial"`
+	NodeID   string `json:"node_id"`
+	RelayURL string `json:"relay_url"`
+	Serial   uint64 `json:"serial"`
 }
-
 
 // EventIDsRequest represents a request for event IDs with serials
 type EventIDsRequest struct {
@@ -62,23 +72,43 @@ type EventIDsResponse struct {
 	EventMap map[string]uint64 `json:"event_map"` // event_id -> serial
 }
 
+// Config holds configuration for the distributed sync manager
+type Config struct {
+	NodeID        string
+	RelayURL      string
+	Peers         []string
+	SyncInterval  time.Duration
+	NIP11CacheTTL time.Duration
+}
+
+// DefaultConfig returns default configuration
+func DefaultConfig() *Config {
+	return &Config{
+		SyncInterval:  5 * time.Second,
+		NIP11CacheTTL: 30 * time.Minute,
+	}
+}
+
 // NewManager creates a new sync manager
-func NewManager(ctx context.Context, db *database.D, nodeID, relayURL string, peers []string, relayGroupMgr *RelayGroupManager, policyManager interface{ CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error) }) *Manager {
+func NewManager(ctx context.Context, db *database.D, cfg *Config, policyManager PolicyChecker) *Manager {
 	ctx, cancel := context.WithCancel(ctx)
 
+	if cfg == nil {
+		cfg = DefaultConfig()
+	}
+
 	m := &Manager{
-		ctx:            ctx,
-		cancel:         cancel,
-		db:             db,
-		nodeID:         nodeID,
-		relayURL:       relayURL,
-		peers:          peers,
-		selfURLs:       make(map[string]bool),
-		currentSerial:   0,
-		peerSerials:     make(map[string]uint64),
-		relayGroupMgr:  relayGroupMgr,
-		nip11Cache:     NewNIP11Cache(30 * time.Minute), // Cache NIP-11 docs for 30 minutes
-		policyManager:  policyManager,
+		ctx:           ctx,
+		cancel:        cancel,
+		db:            db,
+		nodeID:        cfg.NodeID,
+		relayURL:      cfg.RelayURL,
+		peers:         cfg.Peers,
+		selfURLs:      make(map[string]bool),
+		currentSerial: 0,
+		peerSerials:   make(map[string]uint64),
+		nip11Cache:    common.NewNIP11Cache(cfg.NIP11CacheTTL),
+		policyManager: policyManager,
 	}
 
 	// Add our configured relay URL to self-URLs cache if provided
@@ -97,9 +127,9 @@ func NewManager(ctx context.Context, db *database.D, nodeID, relayURL string, pe
 			}
 
 			// Slow path: check via NIP-11 pubkey
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			peerPubkey, err := m.nip11Cache.GetPubkey(ctx, peerURL)
-			cancel()
+			pctx, pcancel := context.WithTimeout(context.Background(), 5*time.Second)
+			peerPubkey, err := m.nip11Cache.GetPubkey(pctx, peerURL)
+			pcancel()
 
 			if err != nil {
 				log.D.F("couldn't fetch NIP-11 for %s, keeping in peer list: %v", peerURL, err)
@@ -176,6 +206,16 @@ func (m *Manager) GetPeers() []string {
 	return peers
 }
 
+// GetNodeID returns the node's identity
+func (m *Manager) GetNodeID() string {
+	return m.nodeID
+}
+
+// GetRelayURL returns the relay's URL
+func (m *Manager) GetRelayURL() string {
+	return m.relayURL
+}
+
 // UpdateSerial updates the current serial number when a new event is stored
 func (m *Manager) UpdateSerial() {
 	m.mutex.Lock()
@@ -185,6 +225,38 @@ func (m *Manager) UpdateSerial() {
 	if latest, err := m.getLatestSerial(); err == nil {
 		m.currentSerial = latest
 	}
+}
+
+// NotifyNewEvent notifies the manager of a new event
+func (m *Manager) NotifyNewEvent(eventID []byte, serial uint64) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	if serial > m.currentSerial {
+		m.currentSerial = serial
+	}
+}
+
+// IsSelfURL checks if a URL is our own relay
+func (m *Manager) IsSelfURL(url string) bool {
+	m.mutex.RLock()
+	if m.selfURLs[url] {
+		m.mutex.RUnlock()
+		return true
+	}
+	m.mutex.RUnlock()
+	return false
+}
+
+// MarkSelfURL marks a URL as belonging to us
+func (m *Manager) MarkSelfURL(url string) {
+	m.mutex.Lock()
+	m.selfURLs[url] = true
+	m.mutex.Unlock()
+}
+
+// IsSelfNodeID checks if a node ID matches ours
+func (m *Manager) IsSelfNodeID(nodeID string) bool {
+	return nodeID != "" && nodeID == m.nodeID
 }
 
 // getLatestSerial gets the latest serial number from the database
@@ -354,8 +426,8 @@ func (m *Manager) requestEventsViaWebsocket(eventIDs []string) {
 	// Convert hex event IDs to bytes for websocket requests
 	var eventIDBytes [][]byte
 	for _, eventID := range eventIDs {
-		if bytes, err := hex.Dec(eventID); err == nil {
-			eventIDBytes = append(eventIDBytes, bytes)
+		if evBytes, err := hex.Dec(eventID); err == nil {
+			eventIDBytes = append(eventIDBytes, evBytes)
 		}
 	}
 
@@ -386,17 +458,8 @@ func (m *Manager) requestEventsViaWebsocket(eventIDs []string) {
 	log.I.F("requested %d events via websocket: %v", len(eventIDs), eventIDs[:limit])
 }
 
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-
-// getEventsWithIDs retrieves events with their IDs by serial range
-func (m *Manager) getEventsWithIDs(from, to uint64) (map[string]uint64, error) {
+// GetEventsWithIDs retrieves events with their IDs by serial range
+func (m *Manager) GetEventsWithIDs(from, to uint64) (map[string]uint64, error) {
 	eventMap := make(map[string]uint64)
 
 	// Get event serials by serial range
@@ -416,6 +479,17 @@ func (m *Manager) getEventsWithIDs(from, to uint64) (map[string]uint64, error) {
 	}
 
 	return eventMap, nil
+}
+
+// GetPeerStatus returns the sync status for all peers
+func (m *Manager) GetPeerStatus() map[string]uint64 {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	result := make(map[string]uint64)
+	for k, v := range m.peerSerials {
+		result[k] = v
+	}
+	return result
 }
 
 // HandleCurrentRequest handles requests for current serial number
@@ -483,7 +557,7 @@ func (m *Manager) HandleEventIDsRequest(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get events with IDs in the requested range
-	eventMap, err := m.getEventsWithIDs(req.From, req.To)
+	eventMap, err := m.GetEventsWithIDs(req.From, req.To)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get event IDs: %v", err), http.StatusInternalServerError)
 		return

@@ -1,5 +1,5 @@
-// Package sync provides NIP-11 relay information document fetching and caching
-package sync
+// Package common provides shared utilities for sync services
+package common
 
 import (
 	"context"

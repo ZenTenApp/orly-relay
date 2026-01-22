@@ -14,7 +14,7 @@ import (
 	"lol.mleku.dev/log"
 )
 
-// Supervisor manages the database, ACL, and relay processes.
+// Supervisor manages the database, ACL, sync, and relay processes.
 type Supervisor struct {
 	cfg    *Config
 	ctx    context.Context
@@ -23,6 +23,12 @@ type Supervisor struct {
 	dbProc    *Process
 	aclProc   *Process
 	relayProc *Process
+
+	// Sync service processes
+	distributedSyncProc *Process
+	clusterSyncProc     *Process
+	relayGroupProc      *Process
+	negentropyProc      *Process
 
 	wg     sync.WaitGroup
 	mu     sync.Mutex
@@ -47,7 +53,7 @@ func NewSupervisor(ctx context.Context, cancel context.CancelFunc, cfg *Config) 
 	}
 }
 
-// Start starts the database, optional ACL server, and relay processes.
+// Start starts the database, optional ACL server, sync services, and relay processes.
 func (s *Supervisor) Start() error {
 	// 1. Start database server
 	if err := s.startDB(); err != nil {
@@ -79,8 +85,19 @@ func (s *Supervisor) Start() error {
 		log.I.F("ACL server is ready")
 	}
 
-	// 4. Start relay with gRPC backend(s)
+	// 4. Start sync services in parallel (they all depend on DB)
+	if err := s.startSyncServices(); err != nil {
+		s.stopSyncServices()
+		if s.cfg.ACLEnabled {
+			s.stopACL()
+		}
+		s.stopDB()
+		return fmt.Errorf("failed to start sync services: %w", err)
+	}
+
+	// 5. Start relay with gRPC backend(s)
 	if err := s.startRelay(); err != nil {
+		s.stopSyncServices()
 		if s.cfg.ACLEnabled {
 			s.stopACL()
 		}
@@ -88,15 +105,40 @@ func (s *Supervisor) Start() error {
 		return fmt.Errorf("failed to start relay: %w", err)
 	}
 
-	// 5. Start monitoring goroutines
-	monitorCount := 2
+	// 6. Start monitoring goroutines
+	monitorCount := 2 // db + relay
 	if s.cfg.ACLEnabled {
-		monitorCount = 3
+		monitorCount++
 	}
+	if s.cfg.DistributedSyncEnabled {
+		monitorCount++
+	}
+	if s.cfg.ClusterSyncEnabled {
+		monitorCount++
+	}
+	if s.cfg.RelayGroupEnabled {
+		monitorCount++
+	}
+	if s.cfg.NegentropyEnabled {
+		monitorCount++
+	}
+
 	s.wg.Add(monitorCount)
 	go s.monitorProcess(s.dbProc, "db", s.startDB)
 	if s.cfg.ACLEnabled {
 		go s.monitorProcess(s.aclProc, "acl", s.startACL)
+	}
+	if s.cfg.DistributedSyncEnabled {
+		go s.monitorProcess(s.distributedSyncProc, "distributed-sync", s.startDistributedSync)
+	}
+	if s.cfg.ClusterSyncEnabled {
+		go s.monitorProcess(s.clusterSyncProc, "cluster-sync", s.startClusterSync)
+	}
+	if s.cfg.RelayGroupEnabled {
+		go s.monitorProcess(s.relayGroupProc, "relaygroup", s.startRelayGroup)
+	}
+	if s.cfg.NegentropyEnabled {
+		go s.monitorProcess(s.negentropyProc, "negentropy", s.startNegentropy)
 	}
 	go s.monitorProcess(s.relayProc, "relay", s.startRelay)
 
@@ -113,9 +155,13 @@ func (s *Supervisor) Stop() error {
 	s.closed = true
 	s.mu.Unlock()
 
-	// Stop relay first (it depends on ACL and DB)
+	// Stop relay first (it depends on sync services, ACL, and DB)
 	log.I.F("stopping relay...")
 	s.stopProcess(s.relayProc, 5*time.Second)
+
+	// Stop sync services in parallel (they depend on DB)
+	log.I.F("stopping sync services...")
+	s.stopSyncServices()
 
 	// Stop ACL if enabled (it depends on DB)
 	if s.cfg.ACLEnabled && s.aclProc != nil {
@@ -255,6 +301,22 @@ func (s *Supervisor) startRelay() error {
 		// Open relay - no ACL restrictions
 		env = append(env, "ORLY_ACL_TYPE=local")
 		env = append(env, "ORLY_ACL_MODE=none")
+	}
+
+	// Configure sync service connections
+	if s.cfg.DistributedSyncEnabled {
+		env = append(env, "ORLY_SYNC_TYPE=grpc")
+		env = append(env, fmt.Sprintf("ORLY_GRPC_SYNC_DISTRIBUTED=%s", s.cfg.DistributedSyncListen))
+	}
+	if s.cfg.ClusterSyncEnabled {
+		env = append(env, fmt.Sprintf("ORLY_GRPC_SYNC_CLUSTER=%s", s.cfg.ClusterSyncListen))
+	}
+	if s.cfg.RelayGroupEnabled {
+		env = append(env, fmt.Sprintf("ORLY_GRPC_SYNC_RELAYGROUP=%s", s.cfg.RelayGroupListen))
+	}
+	if s.cfg.NegentropyEnabled {
+		env = append(env, "ORLY_NEGENTROPY_ENABLED=true")
+		env = append(env, fmt.Sprintf("ORLY_GRPC_SYNC_NEGENTROPY=%s", s.cfg.NegentropyListen))
 	}
 
 	cmd := exec.CommandContext(s.ctx, s.cfg.RelayBinary)
@@ -416,10 +478,317 @@ func (s *Supervisor) monitorProcess(p *Process, procType string, restart func() 
 				p = s.dbProc
 			case "acl":
 				p = s.aclProc
+			case "distributed-sync":
+				p = s.distributedSyncProc
+			case "cluster-sync":
+				p = s.clusterSyncProc
+			case "relaygroup":
+				p = s.relayGroupProc
+			case "negentropy":
+				p = s.negentropyProc
 			default:
 				p = s.relayProc
 			}
 			s.mu.Unlock()
 		}
 	}
+}
+
+// startSyncServices starts all enabled sync services in parallel.
+func (s *Supervisor) startSyncServices() error {
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errs []error
+
+	// Start each enabled service in a goroutine
+	if s.cfg.DistributedSyncEnabled {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := s.startDistributedSync(); err != nil {
+				mu.Lock()
+				errs = append(errs, fmt.Errorf("distributed sync: %w", err))
+				mu.Unlock()
+				return
+			}
+			if err := s.waitForServiceReady(s.cfg.DistributedSyncListen, s.cfg.SyncReadyTimeout); err != nil {
+				mu.Lock()
+				errs = append(errs, fmt.Errorf("distributed sync not ready: %w", err))
+				mu.Unlock()
+				return
+			}
+			log.I.F("distributed sync service is ready")
+		}()
+	}
+
+	if s.cfg.ClusterSyncEnabled {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := s.startClusterSync(); err != nil {
+				mu.Lock()
+				errs = append(errs, fmt.Errorf("cluster sync: %w", err))
+				mu.Unlock()
+				return
+			}
+			if err := s.waitForServiceReady(s.cfg.ClusterSyncListen, s.cfg.SyncReadyTimeout); err != nil {
+				mu.Lock()
+				errs = append(errs, fmt.Errorf("cluster sync not ready: %w", err))
+				mu.Unlock()
+				return
+			}
+			log.I.F("cluster sync service is ready")
+		}()
+	}
+
+	if s.cfg.RelayGroupEnabled {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := s.startRelayGroup(); err != nil {
+				mu.Lock()
+				errs = append(errs, fmt.Errorf("relaygroup: %w", err))
+				mu.Unlock()
+				return
+			}
+			if err := s.waitForServiceReady(s.cfg.RelayGroupListen, s.cfg.SyncReadyTimeout); err != nil {
+				mu.Lock()
+				errs = append(errs, fmt.Errorf("relaygroup not ready: %w", err))
+				mu.Unlock()
+				return
+			}
+			log.I.F("relaygroup service is ready")
+		}()
+	}
+
+	if s.cfg.NegentropyEnabled {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := s.startNegentropy(); err != nil {
+				mu.Lock()
+				errs = append(errs, fmt.Errorf("negentropy: %w", err))
+				mu.Unlock()
+				return
+			}
+			if err := s.waitForServiceReady(s.cfg.NegentropyListen, s.cfg.SyncReadyTimeout); err != nil {
+				mu.Lock()
+				errs = append(errs, fmt.Errorf("negentropy not ready: %w", err))
+				mu.Unlock()
+				return
+			}
+			log.I.F("negentropy service is ready")
+		}()
+	}
+
+	wg.Wait()
+
+	if len(errs) > 0 {
+		return errs[0]
+	}
+	return nil
+}
+
+// stopSyncServices stops all sync services.
+func (s *Supervisor) stopSyncServices() {
+	// Stop all in parallel using a WaitGroup
+	var wg sync.WaitGroup
+
+	if s.distributedSyncProc != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.stopProcess(s.distributedSyncProc, 5*time.Second)
+		}()
+	}
+
+	if s.clusterSyncProc != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.stopProcess(s.clusterSyncProc, 5*time.Second)
+		}()
+	}
+
+	if s.relayGroupProc != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.stopProcess(s.relayGroupProc, 5*time.Second)
+		}()
+	}
+
+	if s.negentropyProc != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.stopProcess(s.negentropyProc, 5*time.Second)
+		}()
+	}
+
+	wg.Wait()
+}
+
+// waitForServiceReady waits for a gRPC service to be accepting connections.
+func (s *Supervisor) waitForServiceReady(address string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return s.ctx.Err()
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timeout waiting for service at %s", address)
+			}
+
+			conn, err := net.DialTimeout("tcp", address, time.Second)
+			if err == nil {
+				conn.Close()
+				return nil
+			}
+		}
+	}
+}
+
+func (s *Supervisor) startDistributedSync() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("ORLY_SYNC_DISTRIBUTED_LISTEN=%s", s.cfg.DistributedSyncListen))
+	env = append(env, "ORLY_SYNC_DISTRIBUTED_DB_TYPE=grpc")
+	env = append(env, fmt.Sprintf("ORLY_SYNC_DISTRIBUTED_DB_SERVER=%s", s.cfg.DBListen))
+	env = append(env, fmt.Sprintf("ORLY_SYNC_DISTRIBUTED_LOG_LEVEL=%s", s.cfg.LogLevel))
+
+	cmd := exec.CommandContext(s.ctx, s.cfg.DistributedSyncBinary)
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); chk.E(err) {
+		return err
+	}
+
+	exited := make(chan struct{})
+	s.distributedSyncProc = &Process{
+		name:   "orly-sync-distributed",
+		cmd:    cmd,
+		exited: exited,
+	}
+
+	go func() {
+		cmd.Wait()
+		close(exited)
+	}()
+
+	log.I.F("started distributed sync service (pid %d)", cmd.Process.Pid)
+	return nil
+}
+
+func (s *Supervisor) startClusterSync() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("ORLY_SYNC_CLUSTER_LISTEN=%s", s.cfg.ClusterSyncListen))
+	env = append(env, "ORLY_SYNC_CLUSTER_DB_TYPE=grpc")
+	env = append(env, fmt.Sprintf("ORLY_SYNC_CLUSTER_DB_SERVER=%s", s.cfg.DBListen))
+	env = append(env, fmt.Sprintf("ORLY_SYNC_CLUSTER_LOG_LEVEL=%s", s.cfg.LogLevel))
+
+	cmd := exec.CommandContext(s.ctx, s.cfg.ClusterSyncBinary)
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); chk.E(err) {
+		return err
+	}
+
+	exited := make(chan struct{})
+	s.clusterSyncProc = &Process{
+		name:   "orly-sync-cluster",
+		cmd:    cmd,
+		exited: exited,
+	}
+
+	go func() {
+		cmd.Wait()
+		close(exited)
+	}()
+
+	log.I.F("started cluster sync service (pid %d)", cmd.Process.Pid)
+	return nil
+}
+
+func (s *Supervisor) startRelayGroup() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("ORLY_SYNC_RELAYGROUP_LISTEN=%s", s.cfg.RelayGroupListen))
+	env = append(env, "ORLY_SYNC_RELAYGROUP_DB_TYPE=grpc")
+	env = append(env, fmt.Sprintf("ORLY_SYNC_RELAYGROUP_DB_SERVER=%s", s.cfg.DBListen))
+	env = append(env, fmt.Sprintf("ORLY_SYNC_RELAYGROUP_LOG_LEVEL=%s", s.cfg.LogLevel))
+
+	cmd := exec.CommandContext(s.ctx, s.cfg.RelayGroupBinary)
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); chk.E(err) {
+		return err
+	}
+
+	exited := make(chan struct{})
+	s.relayGroupProc = &Process{
+		name:   "orly-sync-relaygroup",
+		cmd:    cmd,
+		exited: exited,
+	}
+
+	go func() {
+		cmd.Wait()
+		close(exited)
+	}()
+
+	log.I.F("started relaygroup service (pid %d)", cmd.Process.Pid)
+	return nil
+}
+
+func (s *Supervisor) startNegentropy() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("ORLY_SYNC_NEGENTROPY_LISTEN=%s", s.cfg.NegentropyListen))
+	env = append(env, "ORLY_SYNC_NEGENTROPY_DB_TYPE=grpc")
+	env = append(env, fmt.Sprintf("ORLY_SYNC_NEGENTROPY_DB_SERVER=%s", s.cfg.DBListen))
+	env = append(env, fmt.Sprintf("ORLY_SYNC_NEGENTROPY_LOG_LEVEL=%s", s.cfg.LogLevel))
+
+	cmd := exec.CommandContext(s.ctx, s.cfg.NegentropyBinary)
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); chk.E(err) {
+		return err
+	}
+
+	exited := make(chan struct{})
+	s.negentropyProc = &Process{
+		name:   "orly-sync-negentropy",
+		cmd:    cmd,
+		exited: exited,
+	}
+
+	go func() {
+		cmd.Wait()
+		close(exited)
+	}()
+
+	log.I.F("started negentropy service (pid %d)", cmd.Process.Pid)
+	return nil
 }

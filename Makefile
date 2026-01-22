@@ -2,6 +2,8 @@
 .PHONY: all orly orly-db orly-acl orly-launcher proto clean test deploy web install help
 .PHONY: orly-db-badger orly-db-neo4j orly-acl-follows orly-acl-managed orly-acl-curation
 .PHONY: all-split arm64-split install-split
+.PHONY: orly-sync-negentropy all-sync arm64-sync
+.PHONY: quick-deploy quick-deploy-restart deploy-both deploy-both-restart deploy-new list-releases rollback
 
 # Build flags
 CGO_ENABLED ?= 0
@@ -120,7 +122,9 @@ clean:
 	rm -f $(ORLY) $(ORLY_DB) $(ORLY_ACL) $(ORLY_LAUNCHER)
 	rm -f $(ORLY_DB_BADGER) $(ORLY_DB_NEO4J)
 	rm -f $(ORLY_ACL_FOLLOWS) $(ORLY_ACL_MANAGED) $(ORLY_ACL_CURATION)
+	rm -f $(ORLY_SYNC_NEGENTROPY)
 	rm -f orly-db-arm64 orly-acl-arm64 orly-launcher-arm64 next.orly.dev
+	rm -rf build-arm64
 
 # Run tests
 test:
@@ -158,6 +162,50 @@ install-backends: all-backends
 	mkdir -p ~/.local/bin
 	cp $(ORLY) $(ORLY_DB_BADGER) $(ORLY_DB_NEO4J) $(ORLY_ACL_FOLLOWS) $(ORLY_ACL_MANAGED) $(ORLY_ACL_CURATION) $(ORLY_LAUNCHER) ~/.local/bin/
 
+# === Symlink-Based Deployment ===
+
+# Sync binaries
+ORLY_SYNC_NEGENTROPY = $(BIN_DIR)/orly-sync-negentropy
+
+orly-sync-negentropy:
+	$(BUILD_FLAGS) go build -o $(ORLY_SYNC_NEGENTROPY) ./cmd/orly-sync-negentropy
+
+# Build all sync services
+all-sync: proto orly orly-db orly-acl orly-launcher orly-sync-negentropy
+	@echo "All sync service binaries built successfully"
+
+# ARM64 for sync services
+arm64-sync:
+	$(MAKE) GOOS=linux GOARCH=arm64 all-sync
+
+# Quick deploy: build ARM64 and deploy to relay.orly.dev
+quick-deploy:
+	./scripts/build-and-deploy.sh relay.orly.dev
+
+# Quick deploy with restart
+quick-deploy-restart:
+	./scripts/build-and-deploy.sh relay.orly.dev --restart
+
+# Deploy to both relays
+deploy-both:
+	./scripts/build-and-deploy.sh both
+
+# Deploy to both relays with restart
+deploy-both-restart:
+	./scripts/build-and-deploy.sh both --restart
+
+# Deploy to new.orly.dev only
+deploy-new:
+	./scripts/build-and-deploy.sh new.orly.dev
+
+# List available releases on relay
+list-releases:
+	./scripts/deploy-orly.sh --host relay.orly.dev --list
+
+# Rollback to previous release
+rollback:
+	./scripts/deploy-orly.sh --host relay.orly.dev --rollback --restart
+
 # Help
 help:
 	@echo "ORLY Build Targets:"
@@ -192,3 +240,17 @@ help:
 	@echo "    test           - Run test suite"
 	@echo "    clean          - Remove build artifacts"
 	@echo "    help           - Show this help"
+	@echo ""
+	@echo "  Sync Services:"
+	@echo "    orly-sync-negentropy - Build NIP-77 negentropy sync server"
+	@echo "    all-sync             - Build all including sync services"
+	@echo "    arm64-sync           - Cross-compile sync services for ARM64"
+	@echo ""
+	@echo "  Quick Deployment (symlink-based):"
+	@echo "    quick-deploy         - Build ARM64 and deploy to relay.orly.dev"
+	@echo "    quick-deploy-restart - Build, deploy, and restart service"
+	@echo "    deploy-both          - Deploy to both relay.orly.dev and new.orly.dev"
+	@echo "    deploy-both-restart  - Deploy and restart both relays"
+	@echo "    deploy-new           - Deploy to new.orly.dev only"
+	@echo "    list-releases        - List available releases on relay"
+	@echo "    rollback             - Rollback to previous release"

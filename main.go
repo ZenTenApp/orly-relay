@@ -26,6 +26,7 @@ import (
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/acl"
 	aclgrpc "next.orly.dev/pkg/acl/grpc"
+	negentropygrpc "next.orly.dev/pkg/sync/negentropy/grpc"
 	"git.mleku.dev/mleku/nostr/crypto/keys"
 	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
 	"next.orly.dev/pkg/database"
@@ -612,6 +613,30 @@ func main() {
 			os.Exit(1)
 		}
 		acl.Registry.Syncer()
+	}
+
+	// Initialize negentropy client if enabled (gRPC mode)
+	syncType, _, _, _, negentropyAddr, syncTimeout, negentropyEnabled := cfg.GetGRPCSyncConfigValues()
+	if negentropyEnabled && syncType == "grpc" && negentropyAddr != "" {
+		log.I.F("connecting to gRPC negentropy server at %s", negentropyAddr)
+		negClient, negErr := negentropygrpc.New(ctx, &negentropygrpc.ClientConfig{
+			ServerAddress:  negentropyAddr,
+			ConnectTimeout: syncTimeout,
+		})
+		if negErr != nil {
+			log.W.F("failed to connect to gRPC negentropy server: %v (NIP-77 disabled)", negErr)
+		} else {
+			// Wait for negentropy server to be ready
+			select {
+			case <-negClient.Ready():
+				log.I.F("gRPC negentropy client connected")
+				app.SetNegentropyClient(negClient)
+			case <-time.After(30 * time.Second):
+				log.W.F("timeout waiting for gRPC negentropy server (NIP-77 disabled)")
+			}
+		}
+	} else if negentropyEnabled {
+		log.I.F("negentropy enabled but sync type is %q, skipping gRPC client", syncType)
 	}
 
 	// Create rate limiter if enabled

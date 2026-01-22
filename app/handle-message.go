@@ -92,6 +92,28 @@ func (l *Listener) HandleMessage(msg []byte, remote string) {
 	var t string
 	var rem []byte
 
+	// Check for NIP-77 negentropy envelopes first (NEG-OPEN, NEG-MSG, NEG-CLOSE)
+	if IsNegentropyEnvelope(msg) {
+		negType, ok := IdentifyNegentropyEnvelope(msg)
+		if ok {
+			log.T.F("%s processing %s envelope", remote, negType)
+			switch negType {
+			case NegOpenLabel:
+				err = l.HandleNegOpen(msg)
+			case NegMsgLabel:
+				err = l.HandleNegMsg(msg)
+			case NegCloseLabel:
+				err = l.HandleNegClose(msg)
+			default:
+				err = fmt.Errorf("unknown negentropy envelope type: %s", negType)
+			}
+			if err != nil {
+				log.E.F("%s %s processing failed: %v", remote, negType, err)
+			}
+			return
+		}
+	}
+
 	// Attempt to identify the envelope type
 	if t, rem, err = envelopes.Identify(msg); err != nil {
 		log.E.F(

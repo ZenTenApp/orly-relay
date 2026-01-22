@@ -1,0 +1,90 @@
+syntax = "proto3";
+package orlysync.relaygroup.v1;
+option go_package = "next.orly.dev/pkg/proto/orlysync/relaygroup/v1;relaygroupv1";
+
+import "orlysync/common/v1/types.proto";
+
+// RelayGroupService provides relay group configuration discovery
+// by selecting authoritative config from Kind 39105 events
+service RelayGroupService {
+  // === Lifecycle Methods ===
+
+  // Ready returns whether the service is ready to serve requests
+  rpc Ready(orlysync.common.v1.Empty) returns (orlysync.common.v1.ReadyResponse);
+
+  // === Configuration Lookup ===
+
+  // FindAuthoritativeConfig finds the authoritative relay group configuration
+  // using timestamp ordering with hash tie-breaking
+  rpc FindAuthoritativeConfig(orlysync.common.v1.Empty) returns (RelayGroupConfigResponse);
+
+  // GetRelays returns the list of relays from the authoritative config
+  rpc GetRelays(orlysync.common.v1.Empty) returns (RelaysResponse);
+
+  // === Publisher Verification ===
+
+  // IsAuthorizedPublisher checks if a pubkey can publish relay group configs
+  rpc IsAuthorizedPublisher(AuthorizedPublisherRequest) returns (AuthorizedPublisherResponse);
+
+  // GetAuthorizedPubkeys returns all authorized publisher pubkeys
+  rpc GetAuthorizedPubkeys(orlysync.common.v1.Empty) returns (AuthorizedPubkeysResponse);
+
+  // === Event Handling ===
+
+  // ValidateRelayGroupEvent validates a relay group configuration event
+  rpc ValidateRelayGroupEvent(ValidateEventRequest) returns (ValidateEventResponse);
+
+  // HandleRelayGroupEvent processes a relay group event and triggers peer updates
+  rpc HandleRelayGroupEvent(HandleEventRequest) returns (orlysync.common.v1.Empty);
+}
+
+// === Request/Response Messages ===
+
+// RelayGroupConfig represents a relay group configuration
+message RelayGroupConfig {
+  repeated string relays = 1;  // List of relay URLs
+}
+
+// RelayGroupConfigResponse contains the authoritative config
+message RelayGroupConfigResponse {
+  RelayGroupConfig config = 1;
+  bool found = 2;
+  bytes source_event_id = 3;  // ID of the event that provided this config
+  int64 source_timestamp = 4; // Timestamp of the source event
+}
+
+// RelaysResponse contains the list of relays
+message RelaysResponse {
+  repeated string relays = 1;
+}
+
+// AuthorizedPublisherRequest checks if a pubkey is authorized
+message AuthorizedPublisherRequest {
+  bytes pubkey = 1;  // 32 bytes public key
+}
+
+// AuthorizedPublisherResponse indicates if the pubkey is authorized
+message AuthorizedPublisherResponse {
+  bool authorized = 1;
+}
+
+// AuthorizedPubkeysResponse contains all authorized pubkeys
+message AuthorizedPubkeysResponse {
+  repeated bytes pubkeys = 1;  // List of 32-byte pubkeys
+}
+
+// ValidateEventRequest requests validation of a relay group event
+message ValidateEventRequest {
+  orlysync.common.v1.Event event = 1;
+}
+
+// ValidateEventResponse contains validation results
+message ValidateEventResponse {
+  bool valid = 1;
+  string error = 2;  // Error message if not valid
+}
+
+// HandleEventRequest requests processing of a relay group event
+message HandleEventRequest {
+  orlysync.common.v1.Event event = 1;
+}

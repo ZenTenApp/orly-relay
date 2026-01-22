@@ -3,7 +3,7 @@ module next.orly.dev
 go 1.25.3
 
 require (
-	git.mleku.dev/mleku/nostr v1.0.13
+	git.mleku.dev/mleku/nostr v1.0.14
 	github.com/adrg/xdg v0.5.3
 	github.com/alexflint/go-arg v1.6.1
 	github.com/aperturerobotics/go-indexeddb v0.2.3

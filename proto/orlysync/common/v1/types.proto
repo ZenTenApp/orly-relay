@@ -1,0 +1,80 @@
+syntax = "proto3";
+package orlysync.common.v1;
+option go_package = "next.orly.dev/pkg/proto/orlysync/common/v1;commonv1";
+
+// Empty is used for requests/responses with no data
+message Empty {}
+
+// ReadyResponse indicates if the service is ready
+message ReadyResponse {
+  bool ready = 1;
+}
+
+// HTTPRequest wraps an HTTP request for proxy delegation
+message HTTPRequest {
+  string method = 1;
+  string path = 2;
+  map<string, string> headers = 3;
+  bytes body = 4;
+  string query_string = 5;
+  string remote_addr = 6;
+}
+
+// HTTPResponse wraps an HTTP response from proxy delegation
+message HTTPResponse {
+  int32 status_code = 1;
+  map<string, string> headers = 2;
+  bytes body = 3;
+}
+
+// Event represents a Nostr event (shared across sync services)
+// Binary fields (id, pubkey, sig) are stored as raw bytes for efficiency
+message Event {
+  bytes id = 1;           // 32 bytes SHA256 hash
+  bytes pubkey = 2;       // 32 bytes public key
+  int64 created_at = 3;   // UNIX timestamp
+  uint32 kind = 4;        // Event kind
+  repeated Tag tags = 5;  // Event tags
+  bytes content = 6;      // Content (may be binary)
+  bytes sig = 7;          // 64 bytes Schnorr signature
+}
+
+// Tag represents a Nostr tag (array of byte slices)
+message Tag {
+  repeated bytes values = 1;
+}
+
+// Filter represents a Nostr query filter (NIP-01)
+message Filter {
+  repeated bytes ids = 1;          // Event IDs to match (32 bytes each)
+  repeated uint32 kinds = 2;       // Kinds to match
+  repeated bytes authors = 3;      // Author pubkeys (32 bytes each)
+  map<string, TagSet> tags = 4;    // Tag filters (#e, #p, #t, etc.)
+  optional int64 since = 5;        // Created after timestamp
+  optional int64 until = 6;        // Created before timestamp
+  optional bytes search = 7;       // Full-text search query (NIP-50)
+  optional uint32 limit = 8;       // Max results
+}
+
+// TagSet represents a set of tag values for filtering
+message TagSet {
+  repeated bytes values = 1;
+}
+
+// SyncInfo provides general sync service information
+message SyncInfo {
+  string node_id = 1;        // Node identity (npub/hex pubkey)
+  string relay_url = 2;      // This relay's URL
+  uint64 current_serial = 3; // Current highest serial number
+  int32 peer_count = 4;      // Number of configured peers
+  string status = 5;         // Service status
+}
+
+// PeerInfo represents information about a sync peer
+message PeerInfo {
+  string url = 1;
+  uint64 last_serial = 2;
+  string status = 3;        // "active", "error", "unknown"
+  int64 last_poll = 4;      // Unix timestamp of last poll
+  int32 error_count = 5;
+}
