@@ -19,7 +19,7 @@ import (
 type Managed struct {
 	Ctx context.Context
 	cfg *config.C
-	*database.D
+	db  database.Database
 	managedACL *database.ManagedACL
 	owners     [][]byte
 	admins     [][]byte
@@ -33,16 +33,22 @@ func (m *Managed) Configure(cfg ...any) (err error) {
 		switch c := ca.(type) {
 		case *config.C:
 			m.cfg = c
-		case *database.D:
-			m.D = c
-			m.managedACL = database.NewManagedACL(c)
+		case database.Database:
+			m.db = c
+			// ManagedACL requires the concrete Badger database type
+			// Type assertion to check if it's a Badger database
+			if d, ok := c.(*database.D); ok {
+				m.managedACL = database.NewManagedACL(d)
+			} else {
+				log.W.F("managed ACL: database is not Badger, managed ACL features will be limited")
+			}
 		case context.Context:
 			m.Ctx = c
 		default:
 			err = errorf.E("invalid type: %T", reflect.TypeOf(ca))
 		}
 	}
-	if m.cfg == nil || m.D == nil {
+	if m.cfg == nil || m.db == nil {
 		err = errorf.E("both config and database must be set")
 		return
 	}

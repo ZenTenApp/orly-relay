@@ -33,7 +33,7 @@ func TestManagedACL_BasicFunctionality(t *testing.T) {
 	managed := &Managed{
 		Ctx:        ctx,
 		cfg:        cfg,
-		D:          db,
+		db:         db,
 		managedACL: database.NewManagedACL(db),
 		owners:     [][]byte{[]byte("owner1")},
 		admins:     [][]byte{[]byte("admin1")},

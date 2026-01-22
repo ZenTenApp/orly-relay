@@ -36,7 +36,7 @@ const (
 type Curating struct {
 	Ctx         context.Context
 	cfg         *config.C
-	db          *database.D
+	db          database.Database
 	curatingACL *database.CuratingACL
 	owners      [][]byte
 	admins      [][]byte
@@ -56,9 +56,14 @@ func (c *Curating) Configure(cfg ...any) (err error) {
 		switch cv := ca.(type) {
 		case *config.C:
 			c.cfg = cv
-		case *database.D:
+		case database.Database:
 			c.db = cv
-			c.curatingACL = database.NewCuratingACL(cv)
+			// CuratingACL requires the concrete Badger database type
+			if d, ok := cv.(*database.D); ok {
+				c.curatingACL = database.NewCuratingACL(d)
+			} else {
+				log.W.F("curating ACL: database is not Badger, curating ACL features will be limited")
+			}
 		case context.Context:
 			c.Ctx = cv
 		default:

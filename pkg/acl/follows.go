@@ -35,7 +35,7 @@ import (
 type Follows struct {
 	Ctx context.Context
 	cfg *config.C
-	*database.D
+	db  database.Database
 	pubs       *publish.S
 	followsMx  sync.RWMutex
 	admins     [][]byte
@@ -56,9 +56,9 @@ func (f *Follows) Configure(cfg ...any) (err error) {
 		case *config.C:
 			// log.D.F("setting ACL config: %v", c)
 			f.cfg = c
-		case *database.D:
+		case database.Database:
 			// log.D.F("setting ACL database: %s", c.Path())
-			f.D = c
+			f.db = c
 		case context.Context:
 			// log.D.F("setting ACL context: %s", c.Value("id"))
 			f.Ctx = c
@@ -69,7 +69,7 @@ func (f *Follows) Configure(cfg ...any) (err error) {
 			err = errorf.E("invalid type: %T", reflect.TypeOf(ca))
 		}
 	}
-	if f.cfg == nil || f.D == nil {
+	if f.cfg == nil || f.db == nil {
 		err = errorf.E("both config and database must be set")
 		return
 	}
@@ -109,7 +109,7 @@ func (f *Follows) Configure(cfg ...any) (err error) {
 		var sers types.Uint40s
 		for _, idx := range idxs {
 			var s types.Uint40s
-			if s, err = f.D.GetSerialsByRange(idx); chk.E(err) {
+			if s, err = f.db.GetSerialsByRange(idx); chk.E(err) {
 				continue
 			}
 			sers = append(sers, s...)
@@ -117,7 +117,7 @@ func (f *Follows) Configure(cfg ...any) (err error) {
 		if len(sers) > 0 {
 			for _, s := range sers {
 				var ev *event.E
-				if ev, err = f.D.FetchEventBySerial(s); chk.E(err) {
+				if ev, err = f.db.FetchEventBySerial(s); chk.E(err) {
 					continue
 				}
 				// log.I.F("admin follow list:\n%s", ev.Serialize())
@@ -268,14 +268,14 @@ func (f *Follows) adminRelays() (urls []string) {
 		}
 		var sers types.Uint40s
 		for _, idx := range idxs {
-			s, err := f.D.GetSerialsByRange(idx)
+			s, err := f.db.GetSerialsByRange(idx)
 			if chk.E(err) {
 				continue
 			}
 			sers = append(sers, s...)
 		}
 		for _, s := range sers {
-			ev, err := f.D.FetchEventBySerial(s)
+			ev, err := f.db.FetchEventBySerial(s)
 			if chk.E(err) || ev == nil {
 				continue
 			}
@@ -663,7 +663,7 @@ func (f *Follows) processCollectedEvents(relayURL string, followListEvents, meta
 
 	// Save follow list events to database and extract follows
 	for pubkeyHex, ev := range latestFollowLists {
-		if _, err := f.D.SaveEvent(f.Ctx, ev); err != nil {
+		if _, err := f.db.SaveEvent(f.Ctx, ev); err != nil {
 			if !strings.HasPrefix(err.Error(), "blocked:") {
 				log.W.F("follows syncer: failed to save follow list from %s: %v", pubkeyHex, err)
 			}
@@ -682,7 +682,7 @@ func (f *Follows) processCollectedEvents(relayURL string, followListEvents, meta
 
 	// Save metadata events to database
 	for pubkeyHex, ev := range latestMetadata {
-		if _, err := f.D.SaveEvent(f.Ctx, ev); err != nil {
+		if _, err := f.db.SaveEvent(f.Ctx, ev); err != nil {
 			if !strings.HasPrefix(err.Error(), "blocked:") {
 				log.W.F("follows syncer: failed to save metadata from %s: %v", pubkeyHex, err)
 			}
@@ -695,7 +695,7 @@ func (f *Follows) processCollectedEvents(relayURL string, followListEvents, meta
 
 	// Save relay list events to database
 	for pubkeyHex, ev := range latestRelayLists {
-		if _, err := f.D.SaveEvent(f.Ctx, ev); err != nil {
+		if _, err := f.db.SaveEvent(f.Ctx, ev); err != nil {
 			if !strings.HasPrefix(err.Error(), "blocked:") {
 				log.W.F("follows syncer: failed to save relay list from %s: %v", pubkeyHex, err)
 			}
