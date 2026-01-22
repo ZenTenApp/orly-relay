@@ -11,6 +11,7 @@ import (
 	"lol.mleku.dev/log"
 
 	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
 	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
 	negentropygrpc "next.orly.dev/pkg/sync/negentropy/grpc"
 )
@@ -268,10 +269,43 @@ func (l *Listener) sendNegErr(subscriptionID, reason string) error {
 
 // sendEventsForIDs fetches and sends events for the given IDs
 func (l *Listener) sendEventsForIDs(subscriptionID string, ids [][]byte) error {
-	// TODO: Implement event fetching and sending via EVENT envelopes
-	// For each ID, query the database and send the event
-	// This would use the existing event broadcasting mechanism
-	log.D.F("NEG: would send %d events for subscription %s", len(ids), subscriptionID)
+	if len(ids) == 0 {
+		return nil
+	}
+
+	log.I.F("NEG: sending %d events for subscription %s", len(ids), subscriptionID)
+
+	// Build filter with hex-encoded IDs
+	f := &filter.F{}
+	f.Ids = &tag.T{}
+	for _, id := range ids {
+		// IDs can be 32 bytes (full) or 16 bytes (truncated per NIP-77)
+		hexID := hex.EncodeToString(id)
+		f.Ids.T = append(f.Ids.T, []byte(hexID))
+	}
+
+	// Query events by IDs
+	ctx := l.ctx
+	events, err := l.Server.db.QueryEvents(ctx, f)
+	if err != nil {
+		log.E.F("NEG: failed to query events: %v", err)
+		return err
+	}
+
+	// Send each event via EVENT envelope
+	sent := 0
+	for _, ev := range events {
+		if ev == nil {
+			continue
+		}
+		if err := l.SendEvent(ev); err != nil {
+			log.W.F("NEG: failed to send event: %v", err)
+			continue
+		}
+		sent++
+	}
+
+	log.I.F("NEG: sent %d/%d events for subscription %s", sent, len(ids), subscriptionID)
 	return nil
 }
 
