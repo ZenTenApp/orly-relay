@@ -15,7 +15,7 @@ ExecStart=/home/mleku/.local/bin/orly-launcher
 Environment=ORLY_LAUNCHER_DB_BACKEND=badger
 Environment=ORLY_LAUNCHER_DB_BINARY=/home/mleku/.local/bin/orly-db-badger
 Environment=ORLY_LAUNCHER_ACL_BINARY=/home/mleku/.local/bin/orly-acl-follows
-Environment=ORLY_LAUNCHER_RELAY_BINARY=/home/mleku/.local/bin/next.orly.dev
+Environment=ORLY_LAUNCHER_RELAY_BINARY=/home/mleku/.local/bin/orly-relay
 Environment=ORLY_LAUNCHER_DB_LISTEN=127.0.0.1:50051
 Environment=ORLY_LAUNCHER_ACL_LISTEN=127.0.0.1:50052
 Environment=ORLY_LAUNCHER_ACL_ENABLED=true
