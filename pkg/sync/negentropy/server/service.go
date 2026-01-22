@@ -306,11 +306,11 @@ func (s *Service) buildStorageForFilter(ctx context.Context, protoFilter *common
 
 	// If no filter provided, use a reasonable limit
 	if f == nil {
-		limit := uint(100000)
+		limit := uint(1000000)
 		f = &filter.F{Limit: &limit}
 	}
 	if f.Limit == nil {
-		limit := uint(100000)
+		limit := uint(1000000)
 		f.Limit = &limit
 	}
 

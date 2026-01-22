@@ -63,6 +63,7 @@ type Config struct {
 	IDSize               int
 	ClientSessionTimeout time.Duration
 	Filter               *filter.F // Optional filter for selective sync
+	MaxEvents            uint      // Max events to sync per cycle (0 = unlimited)
 }
 
 // Manager handles negentropy sync operations.
@@ -362,7 +363,11 @@ func (m *Manager) buildStorage(ctx context.Context) (*negentropy.Vector, error) 
 	storage := negentropy.NewVector()
 
 	// Build filter - start with configured filter or empty
-	limit := uint(100000)
+	// Use configured MaxEvents or default to 1,000,000
+	limit := m.config.MaxEvents
+	if limit == 0 {
+		limit = 1000000 // Default to 1M events
+	}
 	var f *filter.F
 	if m.config.Filter != nil {
 		// Use configured filter with our limit
