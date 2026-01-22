@@ -10,6 +10,7 @@ import (
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
 
+	"git.mleku.dev/mleku/nostr/encoders/envelopes/eventenvelope"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
@@ -312,13 +313,19 @@ func (l *Listener) sendEventsForIDs(subscriptionID string, ids [][]byte) error {
 		return err
 	}
 
-	// Send each event via EVENT envelope
+	// Send each event via EVENT envelope with subscription ID
 	sent := 0
 	for _, ev := range events {
 		if ev == nil {
 			continue
 		}
-		if err := l.SendEvent(ev); err != nil {
+		// Create proper EVENT envelope: ["EVENT", subscription_id, event]
+		res, err := eventenvelope.NewResultWith([]byte(subscriptionID), ev)
+		if err != nil {
+			log.W.F("NEG: failed to create event envelope: %v", err)
+			continue
+		}
+		if err := res.Write(l); err != nil {
 			log.W.F("NEG: failed to send event: %v", err)
 			continue
 		}
