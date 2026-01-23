@@ -26,6 +26,9 @@ type Config struct {
 	// LogLevel is the logging level
 	LogLevel string `env:"ORLY_DB_LOG_LEVEL" default:"info" usage:"log level (trace, debug, info, warn, error)"`
 
+	// DataDir is required by the database layer for metadata storage
+	DataDir string `env:"ORLY_DATA_DIR" default:"/tmp/orly-neo4j" usage:"data directory for metadata"`
+
 	// Neo4j configuration
 	Neo4jURI      string `env:"ORLY_NEO4J_URI" default:"bolt://localhost:7687" usage:"Neo4j connection URI"`
 	Neo4jUser     string `env:"ORLY_NEO4J_USER" default:"neo4j" usage:"Neo4j username"`
@@ -58,6 +61,7 @@ func main() {
 
 	// Create database configuration
 	dbCfg := &database.DatabaseConfig{
+		DataDir:              cfg.DataDir,
 		LogLevel:             cfg.LogLevel,
 		Neo4jURI:             cfg.Neo4jURI,
 		Neo4jUser:            cfg.Neo4jUser,
