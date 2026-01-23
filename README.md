@@ -4,7 +4,7 @@
 
 ![orly.dev](./docs/orly.png)
 
-![Version v0.24.1](https://img.shields.io/badge/version-v0.24.1-blue.svg)
+![Version v0.55.10](https://img.shields.io/badge/version-v0.55.10-blue.svg)
 [![Documentation](https://img.shields.io/badge/godoc-documentation-blue.svg)](https://pkg.go.dev/next.orly.dev)
 [![Support this project](https://img.shields.io/badge/donate-geyser_crowdfunding_project_page-orange.svg)](https://geyser.fund/project/orly)
 
@@ -64,6 +64,7 @@ See [docs/IPC_SYNC_SERVICES.md](./docs/IPC_SYNC_SERVICES.md) for detailed API do
   - [Follows ACL](#follows-acl)
   - [Curation ACL](#curation-acl)
   - [Cluster Replication](#cluster-replication)
+- [Negentropy Sync (NIP-77)](#negentropy-sync-nip-77)
 - [Developer Notes](#developer-notes)
 
 ## ⚠️ Bug Reports & Feature Requests
@@ -687,6 +688,52 @@ export ORLY_CLUSTER_PROPAGATE_PRIVILEGED_EVENTS=false
 ```
 
 **Important:** When disabled, privileged events will not be replicated to peer relays. This provides better privacy but means these events will only be available on the originating relay. Users should be aware that accessing their privileged events may require connecting directly to the relay where they were originally published.
+
+## Negentropy Sync (NIP-77)
+
+ORLY supports [NIP-77](https://github.com/nostr-protocol/nips/blob/master/77.md) negentropy-based set reconciliation for efficient relay synchronization.
+
+### Quick Start
+
+Enable negentropy client support:
+
+```bash
+export ORLY_NEGENTROPY_ENABLED=true
+./orly
+```
+
+Enable peer relay synchronization:
+
+```bash
+export ORLY_NEGENTROPY_ENABLED=true
+export ORLY_SYNC_NEGENTROPY_PEERS=wss://relay.orly.dev,wss://other-relay.com
+./orly
+```
+
+### Split IPC Mode
+
+For production deployments, run negentropy as a separate service:
+
+```bash
+# Build binaries
+CGO_ENABLED=0 go build -o orly-sync-negentropy ./cmd/orly-sync-negentropy
+
+# Configure launcher
+export ORLY_LAUNCHER_SYNC_NEGENTROPY_ENABLED=true
+export ORLY_LAUNCHER_SYNC_NEGENTROPY_BINARY=/path/to/orly-sync-negentropy
+export ORLY_SYNC_NEGENTROPY_PEERS=wss://peer-relay.com
+```
+
+### strfry Compatibility
+
+ORLY's negentropy implementation is compatible with strfry:
+
+```bash
+# Pull events from ORLY using strfry
+strfry sync wss://your-orly-relay.com --filter '{"kinds": [0, 1, 3]}' --dir down
+```
+
+For detailed configuration including Docker deployments, filtering options, and troubleshooting, see the [Negentropy Sync Guide](docs/NEGENTROPY_SYNC_GUIDE.md).
 
 ## Developer Notes
 
