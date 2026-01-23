@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/adrg/xdg"
@@ -82,6 +84,16 @@ type Config struct {
 
 	// SyncReadyTimeout is how long to wait for sync services to be ready
 	SyncReadyTimeout time.Duration
+
+	// Admin UI configuration
+	// AdminEnabled controls whether to run the admin HTTP server
+	AdminEnabled bool
+	// AdminPort is the port for the admin HTTP server
+	AdminPort int
+	// AdminOwners is a list of pubkeys (hex) allowed to access the admin UI
+	AdminOwners []string
+	// BinDir is the directory for versioned binary management
+	BinDir string
 }
 
 func loadConfig() (*Config, error) {
@@ -92,6 +104,9 @@ func loadConfig() (*Config, error) {
 	// Compute default binary names based on backend/mode
 	defaultDBBinary := "orly-db-" + dbBackend
 	defaultACLBinary := "orly-acl-" + aclMode
+
+	// Parse admin owners (comma-separated hex pubkeys)
+	adminOwners := parseOwnersList(getEnvOrDefault("ORLY_LAUNCHER_OWNERS", ""))
 
 	cfg := &Config{
 		DBBackend:       dbBackend,
@@ -126,9 +141,39 @@ func loadConfig() (*Config, error) {
 		NegentropyListen:  getEnvOrDefault("ORLY_LAUNCHER_SYNC_NEGENTROPY_LISTEN", "127.0.0.1:50064"),
 
 		SyncReadyTimeout: parseDuration("ORLY_LAUNCHER_SYNC_READY_TIMEOUT", 30*time.Second),
+
+		// Admin UI configuration
+		AdminEnabled: getEnvOrDefault("ORLY_LAUNCHER_ADMIN_ENABLED", "true") == "true",
+		AdminPort:    parseInt("ORLY_LAUNCHER_ADMIN_PORT", 8080),
+		AdminOwners:  adminOwners,
+		BinDir:       getEnvOrDefault("ORLY_LAUNCHER_BIN_DIR", filepath.Join(xdg.DataHome, "orly", "bin")),
 	}
 
 	return cfg, nil
+}
+
+func parseOwnersList(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	var owners []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			owners = append(owners, p)
+		}
+	}
+	return owners
+}
+
+func parseInt(key string, defaultValue int) int {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			return i
+		}
+	}
+	return defaultValue
 }
 
 func getEnvOrDefault(key, defaultValue string) string {

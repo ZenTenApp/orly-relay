@@ -54,6 +54,30 @@ func main() {
 	log.I.F("relay binary: %s", cfg.RelayBinary)
 	log.I.F("database listen: %s", cfg.DBListen)
 
+	// Start admin server if enabled
+	var adminServer *AdminServer
+	if cfg.AdminEnabled {
+		adminServer = NewAdminServer(cfg, supervisor)
+
+		// Ensure binary directory structure exists
+		if err := adminServer.updater.EnsureDirectories(); chk.E(err) {
+			log.W.F("failed to create binary directories: %v", err)
+		}
+
+		go func() {
+			if err := adminServer.Start(ctx); err != nil {
+				// Don't exit on admin server error, just log it
+				log.W.F("admin server stopped: %v", err)
+			}
+		}()
+		log.I.F("admin UI available at http://localhost:%d/admin", cfg.AdminPort)
+		if len(cfg.AdminOwners) > 0 {
+			log.I.F("admin owners: %v", cfg.AdminOwners)
+		} else {
+			log.W.F("no admin owners configured - admin API access disabled")
+		}
+	}
+
 	if err := supervisor.Start(); chk.E(err) {
 		fmt.Fprintf(os.Stderr, "failed to start: %v\n", err)
 		os.Exit(1)
@@ -73,7 +97,7 @@ func main() {
 func printHelp() {
 	fmt.Printf(`orly-launcher %s
 
-Process supervisor for split-mode deployment of ORLY relay.
+Process supervisor for split-mode deployment of ORLY relay with admin web UI.
 
 Usage: orly-launcher [command]
 
@@ -82,27 +106,51 @@ Commands:
   version, -v, --version Show version
 
 Environment Variables:
-  ORLY_LAUNCHER_DB_BINARY       Path to orly-db binary (default: orly-db)
-  ORLY_LAUNCHER_RELAY_BINARY    Path to orly binary (default: orly)
-  ORLY_LAUNCHER_DB_LISTEN       Address for database server (default: 127.0.0.1:50051)
-  ORLY_LAUNCHER_DB_READY_TIMEOUT Timeout waiting for DB ready (default: 30s)
-  ORLY_LAUNCHER_STOP_TIMEOUT    Timeout for graceful stop (default: 10s)
-  ORLY_DATA_DIR                 Data directory (passed to orly-db)
-  ORLY_DB_LOG_LEVEL             Database log level (passed to orly-db)
+  Process Management:
+    ORLY_LAUNCHER_DB_BINARY        Path to orly-db binary (default: orly-db-{backend})
+    ORLY_LAUNCHER_RELAY_BINARY     Path to orly binary (default: orly)
+    ORLY_LAUNCHER_ACL_BINARY       Path to orly-acl binary (default: orly-acl-{mode})
+    ORLY_LAUNCHER_DB_BACKEND       Database backend: badger, neo4j (default: badger)
+    ORLY_LAUNCHER_DB_LISTEN        Address for database server (default: 127.0.0.1:50051)
+    ORLY_LAUNCHER_ACL_LISTEN       Address for ACL server (default: 127.0.0.1:50052)
+    ORLY_LAUNCHER_ACL_ENABLED      Enable ACL server (default: false)
+    ORLY_ACL_MODE                  ACL mode: follows, managed, curation (default: follows)
+    ORLY_LAUNCHER_DB_READY_TIMEOUT Timeout waiting for DB ready (default: 30s)
+    ORLY_LAUNCHER_STOP_TIMEOUT     Timeout for graceful stop (default: 30s)
+    ORLY_DATA_DIR                  Data directory (passed to orly-db)
+    ORLY_LOG_LEVEL                 Log level for all processes (default: info)
+
+  Admin UI:
+    ORLY_LAUNCHER_ADMIN_ENABLED    Enable admin HTTP server (default: true)
+    ORLY_LAUNCHER_ADMIN_PORT       Admin server port (default: 8080)
+    ORLY_LAUNCHER_OWNERS           Comma-separated hex pubkeys for admin access
+    ORLY_LAUNCHER_BIN_DIR          Directory for versioned binaries
 
 The launcher will:
-1. Start the database server (orly-db)
-2. Wait for the database to be ready
-3. Start the relay (orly) with ORLY_DB_TYPE=grpc
-4. Monitor both processes and restart if they crash
-5. On shutdown, stop relay first, then database
+1. Start the admin HTTP server (optional)
+2. Start the database server (orly-db)
+3. Wait for the database to be ready
+4. Start the ACL server if enabled (orly-acl)
+5. Start sync services if enabled
+6. Start the relay (orly) with ORLY_DB_TYPE=grpc
+7. Monitor all processes and restart if they crash
+8. On shutdown, stop in reverse dependency order
+
+Admin UI Features:
+- View process status and versions
+- Update binaries from release URLs
+- Edit configuration
+- Restart/rollback binaries
 
 Example:
   # Start with default binaries in PATH
   orly-launcher
 
+  # Start with admin access for a specific pubkey
+  ORLY_LAUNCHER_OWNERS=abc123... orly-launcher
+
   # Start with custom binary paths
-  ORLY_LAUNCHER_DB_BINARY=/opt/orly/orly-db \
+  ORLY_LAUNCHER_DB_BINARY=/opt/orly/orly-db-badger \
   ORLY_LAUNCHER_RELAY_BINARY=/opt/orly/orly \
   orly-launcher
 `, version.V)

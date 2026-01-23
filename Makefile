@@ -5,6 +5,7 @@
 .PHONY: orly-sync-negentropy all-sync arm64-sync
 .PHONY: quick-deploy quick-deploy-restart deploy-both deploy-both-restart deploy-new list-releases rollback
 .PHONY: orly-unified orly-unified-full arm64-unified install-unified
+.PHONY: launcher-web orly-launcher-no-web
 
 # Build flags
 CGO_ENABLED ?= 0
@@ -90,7 +91,15 @@ orly-acl-curation:
 	$(BUILD_FLAGS) go build -o $(ORLY_ACL_CURATION) ./cmd/orly-acl-curation
 
 # Process supervisor/launcher
-orly-launcher:
+orly-launcher: launcher-web
+	$(BUILD_FLAGS) go build -o $(ORLY_LAUNCHER) ./cmd/orly-launcher
+
+# Build launcher admin web UI
+launcher-web:
+	cd cmd/orly-launcher/web && bun install && bun run build
+
+# Build launcher without web UI (for development)
+orly-launcher-no-web:
 	$(BUILD_FLAGS) go build -o $(ORLY_LAUNCHER) ./cmd/orly-launcher
 
 # === Unified Binary (New Architecture) ===
@@ -253,13 +262,15 @@ help:
 	@echo "    orly-acl       - Build monolithic ACL server"
 	@echo ""
 	@echo "  Core:"
-	@echo "    orly           - Build main relay binary"
-	@echo "    orly-launcher  - Build process supervisor"
-	@echo "    proto          - Generate protobuf code"
-	@echo "    web            - Rebuild embedded web UI"
-	@echo "    test           - Run test suite"
-	@echo "    clean          - Remove build artifacts"
-	@echo "    help           - Show this help"
+	@echo "    orly              - Build main relay binary"
+	@echo "    orly-launcher     - Build process supervisor with admin UI"
+	@echo "    orly-launcher-no-web - Build launcher without admin UI"
+	@echo "    proto             - Generate protobuf code"
+	@echo "    web               - Rebuild main embedded web UI"
+	@echo "    launcher-web      - Rebuild launcher admin web UI"
+	@echo "    test              - Run test suite"
+	@echo "    clean             - Remove build artifacts"
+	@echo "    help              - Show this help"
 	@echo ""
 	@echo "  Sync Services:"
 	@echo "    orly-sync-negentropy - Build NIP-77 negentropy sync server"

@@ -826,3 +826,132 @@ func (s *Supervisor) startNegentropy() error {
 	log.I.F("started negentropy service (pid %d)", cmd.Process.Pid)
 	return nil
 }
+
+// GetProcessStatuses returns the status of all managed processes.
+func (s *Supervisor) GetProcessStatuses() []ProcessStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var statuses []ProcessStatus
+
+	// Database process
+	if s.dbProc != nil {
+		statuses = append(statuses, s.getProcessStatus(s.dbProc, s.cfg.DBBinary))
+	}
+
+	// ACL process
+	if s.cfg.ACLEnabled && s.aclProc != nil {
+		statuses = append(statuses, s.getProcessStatus(s.aclProc, s.cfg.ACLBinary))
+	}
+
+	// Sync services
+	if s.cfg.DistributedSyncEnabled && s.distributedSyncProc != nil {
+		statuses = append(statuses, s.getProcessStatus(s.distributedSyncProc, s.cfg.DistributedSyncBinary))
+	}
+	if s.cfg.ClusterSyncEnabled && s.clusterSyncProc != nil {
+		statuses = append(statuses, s.getProcessStatus(s.clusterSyncProc, s.cfg.ClusterSyncBinary))
+	}
+	if s.cfg.RelayGroupEnabled && s.relayGroupProc != nil {
+		statuses = append(statuses, s.getProcessStatus(s.relayGroupProc, s.cfg.RelayGroupBinary))
+	}
+	if s.cfg.NegentropyEnabled && s.negentropyProc != nil {
+		statuses = append(statuses, s.getProcessStatus(s.negentropyProc, s.cfg.NegentropyBinary))
+	}
+
+	// Relay process
+	if s.relayProc != nil {
+		statuses = append(statuses, s.getProcessStatus(s.relayProc, s.cfg.RelayBinary))
+	}
+
+	return statuses
+}
+
+func (s *Supervisor) getProcessStatus(p *Process, binaryPath string) ProcessStatus {
+	status := "stopped"
+	pid := 0
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.cmd != nil && p.cmd.Process != nil {
+		// Check if process is still running
+		select {
+		case <-p.exited:
+			status = "stopped"
+		default:
+			status = "running"
+			pid = p.cmd.Process.Pid
+		}
+	}
+
+	return ProcessStatus{
+		Name:     p.name,
+		Binary:   binaryPath,
+		Version:  "", // Will be filled by caller if needed
+		Status:   status,
+		PID:      pid,
+		Restarts: p.restarts,
+	}
+}
+
+// RestartAll stops all processes and starts them again.
+func (s *Supervisor) RestartAll() error {
+	log.I.F("restarting all processes...")
+
+	// Stop in reverse dependency order
+	s.mu.Lock()
+	if s.relayProc != nil {
+		s.mu.Unlock()
+		s.stopProcess(s.relayProc, 5*time.Second)
+		s.mu.Lock()
+	}
+
+	s.mu.Unlock()
+	s.stopSyncServices()
+	s.mu.Lock()
+
+	if s.cfg.ACLEnabled && s.aclProc != nil {
+		s.mu.Unlock()
+		s.stopProcess(s.aclProc, 5*time.Second)
+		s.mu.Lock()
+	}
+
+	if s.dbProc != nil {
+		s.mu.Unlock()
+		s.stopProcess(s.dbProc, s.cfg.StopTimeout)
+		s.mu.Lock()
+	}
+	s.mu.Unlock()
+
+	// Small delay to ensure ports are released
+	time.Sleep(500 * time.Millisecond)
+
+	// Start again in dependency order
+	if err := s.startDB(); err != nil {
+		return fmt.Errorf("failed to restart database: %w", err)
+	}
+
+	if err := s.waitForDBReady(s.cfg.DBReadyTimeout); err != nil {
+		return fmt.Errorf("database not ready after restart: %w", err)
+	}
+
+	if s.cfg.ACLEnabled {
+		if err := s.startACL(); err != nil {
+			return fmt.Errorf("failed to restart ACL: %w", err)
+		}
+		if err := s.waitForACLReady(s.cfg.ACLReadyTimeout); err != nil {
+			return fmt.Errorf("ACL not ready after restart: %w", err)
+		}
+	}
+
+	if err := s.startSyncServices(); err != nil {
+		return fmt.Errorf("failed to restart sync services: %w", err)
+	}
+
+	if err := s.startRelay(); err != nil {
+		return fmt.Errorf("failed to restart relay: %w", err)
+	}
+
+	log.I.F("all processes restarted successfully")
+	return nil
+}

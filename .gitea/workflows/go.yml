@@ -1,5 +1,4 @@
-# This workflow will build a golang project for Gitea Actions
-# Using inline commands to avoid external action dependencies
+# This workflow builds and releases ORLY binaries for Gitea
 #
 # NOTE: All builds use CGO_ENABLED=0 since p8k library uses purego (not CGO)
 #       The library dynamically loads libsecp256k1 at runtime via purego
@@ -10,9 +9,10 @@
 #    git tag v1.2.3
 #    git push origin v1.2.3
 # 3. The workflow will automatically:
-#    - Build binaries for Linux AMD64
+#    - Build all binaries for Linux AMD64 and ARM64
+#    - Build the launcher admin web UI
 #    - Run tests
-#    - Create a Gitea release with the binaries
+#    - Create a Gitea release with all binaries
 #    - Generate checksums
 
 name: Go
@@ -31,14 +31,10 @@ jobs:
           set -e
           echo "Cloning repository..."
           echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
-          echo "GITHUB_SERVER_URL=${GITHUB_SERVER_URL}"
-          echo "GITHUB_REPOSITORY=${GITHUB_REPOSITORY}"
-          echo "GITHUB_WORKSPACE=${GITHUB_WORKSPACE}"
           git clone --depth 1 --branch ${GITHUB_REF_NAME} ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git ${GITHUB_WORKSPACE}
           cd ${GITHUB_WORKSPACE}
           echo "Cloned successfully. Last commit:"
           git log -1
-          ls -la
 
       - name: Set up Go
         run: |
@@ -60,7 +56,7 @@ jobs:
           export PATH="$BUN_INSTALL/bin:$PATH"
           bun --version
 
-      - name: Build Web UI
+      - name: Build Main Web UI
         run: |
           set -e
           export BUN_INSTALL="$HOME/.bun"
@@ -70,52 +66,92 @@ jobs:
           bun install
           echo "Building web app..."
           bun run build
-          echo "Verifying dist directory was created..."
           ls -lah dist/
-          echo "Web UI build complete"
+          echo "Main web UI build complete"
 
-      - name: Build (Pure Go + purego)
+      - name: Build Launcher Admin Web UI
+        run: |
+          set -e
+          export BUN_INSTALL="$HOME/.bun"
+          export PATH="$BUN_INSTALL/bin:$PATH"
+          cd ${GITHUB_WORKSPACE}/cmd/orly-launcher/web
+          echo "Installing launcher admin dependencies..."
+          bun install
+          echo "Building launcher admin UI..."
+          bun run build
+          ls -lah dist/
+          echo "Launcher admin UI build complete"
+
+      - name: Build All Packages
         run: |
           set -e
           export PATH=/usr/local/go/bin:$PATH
           cd ${GITHUB_WORKSPACE}
-          echo "Building with CGO_ENABLED=0..."
+          echo "Building all packages..."
           CGO_ENABLED=0 go build -v ./...
 
-      - name: Test (Pure Go + purego)
+      - name: Test
         run: |
           set -e
           export PATH=/usr/local/go/bin:$PATH
           cd ${GITHUB_WORKSPACE}
           echo "Running tests..."
-          # libsecp256k1.so is included in the repository
           chmod +x libsecp256k1.so
-          # Set LD_LIBRARY_PATH so tests can find the library
           export LD_LIBRARY_PATH=${GITHUB_WORKSPACE}:${LD_LIBRARY_PATH}
-          # Run tests but don't fail the build on test failures (some tests may need specific env)
           CGO_ENABLED=0 go test -v $(go list ./... | grep -v '/cmd/benchmark/external/' | xargs -n1 sh -c 'ls $0/*_test.go 1>/dev/null 2>&1 && echo $0' | grep .) || echo "Some tests failed, continuing..."
 
-      - name: Build Release Binaries (Pure Go + purego)
+      - name: Build Release Binaries
         run: |
           set -e
           export PATH=/usr/local/go/bin:$PATH
           cd ${GITHUB_WORKSPACE}
 
-          # Extract version from tag (e.g., v1.2.3 -> 1.2.3)
           VERSION=${GITHUB_REF_NAME#v}
-          echo "Building release binaries for version $VERSION (pure Go + purego)"
+          echo "Building release binaries for version $VERSION"
 
-          # Create directory for binaries
           mkdir -p release-binaries
 
-          # Copy libsecp256k1.so from repository to release binaries
+          # List of binaries to build
+          BINARIES=(
+            "orly:."
+            "orly-db-badger:./cmd/orly-db-badger"
+            "orly-db-neo4j:./cmd/orly-db-neo4j"
+            "orly-acl-follows:./cmd/orly-acl-follows"
+            "orly-acl-managed:./cmd/orly-acl-managed"
+            "orly-acl-curation:./cmd/orly-acl-curation"
+            "orly-launcher:./cmd/orly-launcher"
+            "orly-sync-negentropy:./cmd/orly-sync-negentropy"
+          )
+
+          # Build for AMD64
+          echo "Building for Linux AMD64..."
+          for entry in "${BINARIES[@]}"; do
+            name="${entry%%:*}"
+            path="${entry##*:}"
+            echo "  Building ${name}..."
+            GOEXPERIMENT=greenteagc,jsonv2 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+              go build -ldflags "-s -w" -o "release-binaries/${name}-${VERSION}-linux-amd64" "${path}"
+          done
+
+          # Build for ARM64
+          echo "Building for Linux ARM64..."
+          for entry in "${BINARIES[@]}"; do
+            name="${entry%%:*}"
+            path="${entry##*:}"
+            echo "  Building ${name}..."
+            GOEXPERIMENT=greenteagc,jsonv2 GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
+              go build -ldflags "-s -w" -o "release-binaries/${name}-${VERSION}-linux-arm64" "${path}"
+          done
+
+          # Copy libsecp256k1.so for AMD64
           cp libsecp256k1.so release-binaries/libsecp256k1-linux-amd64.so
           chmod +x release-binaries/libsecp256k1-linux-amd64.so
 
-          # Build for Linux AMD64 (pure Go + purego dynamic loading)
-          echo "Building Linux AMD64 (pure Go + purego dynamic loading)..."
-          GOEXPERIMENT=greenteagc,jsonv2 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
-            go build -ldflags "-s -w" -o release-binaries/orly-${VERSION}-linux-amd64 .
+          # Note: ARM64 libsecp256k1 must be built separately and added to repo
+          if [ -f libsecp256k1-arm64.so ]; then
+            cp libsecp256k1-arm64.so release-binaries/libsecp256k1-linux-arm64.so
+            chmod +x release-binaries/libsecp256k1-linux-arm64.so
+          fi
 
           # Create checksums
           cd release-binaries
@@ -130,75 +166,78 @@ jobs:
         env:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
-          set -e  # Exit on any error
-          export PATH=/usr/local/go/bin:$PATH
+          set -e
           cd ${GITHUB_WORKSPACE}
 
-          # Validate GITEA_TOKEN is set
           if [ -z "${GITEA_TOKEN}" ]; then
             echo "ERROR: GITEA_TOKEN secret is not set!"
-            echo "Please configure the GITEA_TOKEN secret in repository settings."
             exit 1
           fi
 
           VERSION=${GITHUB_REF_NAME}
+          VERSION_NUM=${GITHUB_REF_NAME#v}
           REPO_OWNER=$(echo ${GITHUB_REPOSITORY} | cut -d'/' -f1)
           REPO_NAME=$(echo ${GITHUB_REPOSITORY} | cut -d'/' -f2)
 
           echo "Creating release for ${REPO_OWNER}/${REPO_NAME} version ${VERSION}"
 
-          # Verify release binaries exist
-          if [ ! -f "release-binaries/orly-${VERSION#v}-linux-amd64" ]; then
-            echo "ERROR: Release binary not found!"
-            ls -la release-binaries/ || echo "release-binaries directory does not exist"
-            exit 1
-          fi
-
-          # Use Gitea API directly (more reliable than tea CLI)
-          cd ${GITHUB_WORKSPACE}
-
           API_URL="${GITHUB_SERVER_URL}/api/v1"
 
-          echo "Creating release via Gitea API..."
-          echo "API URL: ${API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/releases"
-
           # Create the release
+          RELEASE_BODY="## ORLY Release ${VERSION}
+
+          ### Binaries Included
+          - **orly** - Main relay binary
+          - **orly-db-badger** - Badger database server
+          - **orly-db-neo4j** - Neo4j database server
+          - **orly-acl-follows** - Follows ACL server
+          - **orly-acl-managed** - Managed ACL server
+          - **orly-acl-curation** - Curation ACL server
+          - **orly-launcher** - Process supervisor with admin UI
+          - **orly-sync-negentropy** - Negentropy sync service
+          - **libsecp256k1** - Required shared library
+
+          ### Architectures
+          - Linux AMD64 (x86_64)
+          - Linux ARM64 (aarch64)
+
+          ### Installation
+          1. Download the appropriate binaries for your architecture
+          2. Make them executable: \`chmod +x orly-*\`
+          3. Place libsecp256k1 in \`/usr/local/lib/\` or set \`LD_LIBRARY_PATH\`
+          4. Run with: \`./orly-launcher\` (for split mode) or \`./orly\` (standalone)
+          "
+
           RELEASE_RESPONSE=$(curl -s -X POST \
             -H "Authorization: token ${GITEA_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d "{\"tag_name\": \"${VERSION}\", \"name\": \"Release ${VERSION}\", \"body\": \"Automated release ${VERSION}\"}" \
+            -d "{\"tag_name\": \"${VERSION}\", \"name\": \"Release ${VERSION}\", \"body\": $(echo "$RELEASE_BODY" | jq -Rs .)}" \
             "${API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/releases")
 
           echo "Release response: ${RELEASE_RESPONSE}"
 
-          # Extract release ID
           RELEASE_ID=$(echo "${RELEASE_RESPONSE}" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
 
           if [ -z "${RELEASE_ID}" ]; then
-            echo "ERROR: Failed to create release or extract release ID"
-            echo "Full response: ${RELEASE_RESPONSE}"
+            echo "ERROR: Failed to create release"
             exit 1
           fi
 
           echo "Release created with ID: ${RELEASE_ID}"
 
-          # Upload assets
-          for ASSET in release-binaries/orly-${VERSION#v}-linux-amd64 release-binaries/libsecp256k1-linux-amd64.so release-binaries/SHA256SUMS.txt; do
+          # Upload all assets
+          for ASSET in release-binaries/*; do
             FILENAME=$(basename "${ASSET}")
             echo "Uploading ${FILENAME}..."
 
-            UPLOAD_RESPONSE=$(curl -s -X POST \
+            curl -s -X POST \
               -H "Authorization: token ${GITEA_TOKEN}" \
               -F "attachment=@${ASSET}" \
-              "${API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/releases/${RELEASE_ID}/assets?name=${FILENAME}")
-
-            echo "Upload response for ${FILENAME}: ${UPLOAD_RESPONSE}"
+              "${API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/releases/${RELEASE_ID}/assets?name=${FILENAME}"
           done
 
-          echo "Release ${VERSION} created successfully with all assets!"
+          echo "Release ${VERSION} created successfully!"
 
-          # Verify release exists
-          VERIFY=$(curl -s -H "Authorization: token ${GITEA_TOKEN}" \
-            "${API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${VERSION}")
-          echo "Verification: ${VERIFY}" | head -c 500
-
+          # Verify
+          curl -s -H "Authorization: token ${GITEA_TOKEN}" \
+            "${API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${VERSION}" | head -c 500
