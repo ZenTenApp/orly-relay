@@ -189,43 +189,68 @@ jobs:
 
           API_URL="${GITHUB_SERVER_URL}/api/v1"
 
-          # Create the release
+          # Check if release already exists and delete it
+          echo "Checking for existing release..."
+          EXISTING_RELEASE=$(curl -s -H "Authorization: token ${GITEA_TOKEN}" \
+            "${API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${VERSION}")
+
+          EXISTING_ID=$(echo "${EXISTING_RELEASE}" | jq -r '.id // empty' 2>/dev/null)
+          if [ -n "${EXISTING_ID}" ]; then
+            echo "Deleting existing release ${EXISTING_ID}..."
+            curl -s -X DELETE \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              "${API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/releases/${EXISTING_ID}"
+            sleep 2
+          fi
+
+          # Ensure tag exists by fetching it
+          git fetch origin "refs/tags/${VERSION}:refs/tags/${VERSION}" --force 2>/dev/null || true
+
+          # Create the release body
           RELEASE_BODY="## ORLY Release ${VERSION}
 
-          ### Binaries Included
-          - **orly** - Main relay binary
-          - **orly-db-badger** - Badger database server
-          - **orly-db-neo4j** - Neo4j database server
-          - **orly-acl-follows** - Follows ACL server
-          - **orly-acl-managed** - Managed ACL server
-          - **orly-acl-curation** - Curation ACL server
-          - **orly-launcher** - Process supervisor with admin UI
-          - **orly-sync-negentropy** - Negentropy sync service
-          - **libsecp256k1** - Required shared library
+### Binaries Included
+- **orly** - Main relay binary
+- **orly-db-badger** - Badger database server
+- **orly-db-neo4j** - Neo4j database server
+- **orly-acl-follows** - Follows ACL server
+- **orly-acl-managed** - Managed ACL server
+- **orly-acl-curation** - Curation ACL server
+- **orly-launcher** - Process supervisor with admin UI
+- **orly-sync-negentropy** - Negentropy sync service
+- **libsecp256k1** - Required shared library
 
-          ### Architectures
-          - Linux AMD64 (x86_64)
-          - Linux ARM64 (aarch64)
+### Architectures
+- Linux AMD64 (x86_64)
+- Linux ARM64 (aarch64)
 
-          ### Installation
-          1. Download the appropriate binaries for your architecture
-          2. Make them executable: \`chmod +x orly-*\`
-          3. Place libsecp256k1 in \`/usr/local/lib/\` or set \`LD_LIBRARY_PATH\`
-          4. Run with: \`./orly-launcher\` (for split mode) or \`./orly\` (standalone)
-          "
+### Installation
+1. Download the appropriate binaries for your architecture
+2. Make them executable: \`chmod +x orly-*\`
+3. Place libsecp256k1 in \`/usr/local/lib/\` or set \`LD_LIBRARY_PATH\`
+4. Run with: \`./orly-launcher\` (for split mode) or \`./orly\` (standalone)"
 
+          # Create release JSON payload
+          RELEASE_JSON=$(jq -n \
+            --arg tag "${VERSION}" \
+            --arg name "Release ${VERSION}" \
+            --arg body "${RELEASE_BODY}" \
+            '{tag_name: $tag, name: $name, body: $body}')
+
+          echo "Creating release..."
           RELEASE_RESPONSE=$(curl -s -X POST \
             -H "Authorization: token ${GITEA_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d "{\"tag_name\": \"${VERSION}\", \"name\": \"Release ${VERSION}\", \"body\": $(echo "$RELEASE_BODY" | jq -Rs .)}" \
+            -d "${RELEASE_JSON}" \
             "${API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/releases")
 
           echo "Release response: ${RELEASE_RESPONSE}"
 
-          RELEASE_ID=$(echo "${RELEASE_RESPONSE}" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+          RELEASE_ID=$(echo "${RELEASE_RESPONSE}" | jq -r '.id // empty')
 
           if [ -z "${RELEASE_ID}" ]; then
             echo "ERROR: Failed to create release"
+            echo "Response: ${RELEASE_RESPONSE}"
             exit 1
           fi
 
@@ -246,4 +271,4 @@ jobs:
 
           # Verify
           curl -s -H "Authorization: token ${GITEA_TOKEN}" \
-            "${API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${VERSION}" | head -c 500
+            "${API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${VERSION}" | jq '.'
