@@ -73,6 +73,38 @@ func (d *D) WouldReplaceEvent(ev *event.E) (bool, types.Uint40s, error) {
 		return false, nil, nil
 	}
 
+	// Fast path for parameterized replaceable events using AddressableEvent index
+	if kind.IsParameterizedReplaceable(ev.Kind) {
+		dTag := ev.Tags.GetFirst([]byte("d"))
+		if dTag == nil {
+			return false, nil, ErrMissingDTag
+		}
+
+		// Build filter for direct lookup
+		f := &filter.F{
+			Authors: tag.NewFromBytesSlice(ev.Pubkey),
+			Kinds:   kind.NewS(kind.New(ev.Kind)),
+			Tags: tag.NewS(
+				tag.NewFromAny("#d", dTag.Value()),
+			),
+		}
+
+		// Try direct O(1) lookup via AddressableEvent index
+		if serial, err := d.QueryForAddressableEvent(f); err == nil && serial != nil {
+			oldEv, ferr := d.FetchEventBySerial(serial)
+			if ferr == nil && oldEv != nil {
+				if ev.CreatedAt < oldEv.CreatedAt {
+					return false, nil, ErrOlderThanExisting
+				}
+				// Candidate is newer or same age - it should replace
+				return true, nil, nil
+			}
+			// Fetch failed - fall through to slow path
+		}
+		// Index miss (migration pending) - fall through to slow path
+	}
+
+	// Standard path for replaceable events and fallback for parameterized replaceable
 	var f *filter.F
 	if kind.IsReplaceable(ev.Kind) {
 		f = &filter.F{
@@ -80,7 +112,7 @@ func (d *D) WouldReplaceEvent(ev *event.E) (bool, types.Uint40s, error) {
 			Kinds:   kind.NewS(kind.New(ev.Kind)),
 		}
 	} else {
-		// parameterized replaceable requires 'd' tag
+		// parameterized replaceable - build filter for slow path
 		dTag := ev.Tags.GetFirst([]byte("d"))
 		if dTag == nil {
 			return false, nil, ErrMissingDTag
@@ -318,6 +350,30 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 
 			// Cache the event ID mapping
 			d.serialCache.CacheEventId(serial, ev.ID)
+
+			// Write AddressableEvent index for parameterized replaceable events (kinds 30000-39999)
+			// This enables O(1) direct lookup by pubkey + kind + d-tag for NIP-33 queries
+			// Key: aev|pubkey_hash|kind|dtag_hash, Value: serial (5 bytes)
+			if kind.IsParameterizedReplaceable(ev.Kind) {
+				dTag := ev.Tags.GetFirst([]byte("d"))
+				if dTag != nil {
+					aevKey, keyErr := BuildAddressableEventKey(ev.Pubkey, ev.Kind, dTag.Value())
+					if keyErr == nil {
+						// Serialize the serial as the value
+						serBuf := bufpool.GetSmall()
+						if err = ser.MarshalWrite(serBuf); chk.E(err) {
+							bufpool.PutSmall(serBuf)
+							return
+						}
+						if err = txn.Set(aevKey, bufpool.CopyBytes(serBuf)); chk.E(err) {
+							bufpool.PutSmall(serBuf)
+							return
+						}
+						bufpool.PutSmall(serBuf)
+						log.T.F("SaveEvent: wrote AddressableEvent index for kind=%d d=%s", ev.Kind, string(dTag.Value()))
+					}
+				}
+			}
 
 			// Store compact event with cmp prefix
 			// Format: cmp|serial|compact_event_data

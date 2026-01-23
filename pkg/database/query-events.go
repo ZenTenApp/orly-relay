@@ -61,6 +61,51 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 	}
 	defer d.ReleaseQuerySlot()
 
+	// Fast path for NIP-33 addressable event queries (kind + author + d-tag)
+	// This provides O(1) direct lookup instead of index scanning
+	if !showAllVersions && IsAddressableEventQuery(f) {
+		var serial *types.Uint40
+		if serial, err = d.QueryForAddressableEvent(f); err != nil {
+			log.W.F("QueryEvents: addressable event fast path error: %v", err)
+			// Fall through to regular query path
+			err = nil
+		} else if serial != nil {
+			// Found via fast path - fetch the event
+			ev, fetchErr := d.FetchEventBySerial(serial)
+			if fetchErr == nil && ev != nil {
+				// Apply time filters if present
+				if f.Since != nil && ev.CreatedAt < f.Since.V {
+					log.T.F("QueryEvents: addressable event fast path - event before 'since' filter")
+					return // Return empty result
+				}
+				if f.Until != nil && ev.CreatedAt > f.Until.V {
+					log.T.F("QueryEvents: addressable event fast path - event after 'until' filter")
+					return // Return empty result
+				}
+				// Check deletion status (skip in open relay mode)
+				if !mode.IsOpen() {
+					if derr := d.CheckForDeleted(ev, nil); derr != nil {
+						log.T.F("QueryEvents: addressable event fast path - event deleted: %v", derr)
+						return // Return empty result
+					}
+				}
+				// Check expiration
+				if !mode.IsOpen() && CheckExpiration(ev) {
+					log.T.F("QueryEvents: addressable event fast path - event expired")
+					return // Return empty result
+				}
+				log.T.F("QueryEvents: addressable event fast path SUCCESS - kind=%d d=%s",
+					ev.Kind, string(ev.Tags.GetFirst([]byte("d")).Value()))
+				evs = append(evs, ev)
+				return
+			}
+			// Fetch failed - fall through to regular path
+			log.T.F("QueryEvents: addressable event fast path - fetch failed, falling back")
+		}
+		// Not found via fast path - fall through to regular query path
+		// This handles the case where the index doesn't exist yet (migration)
+	}
+
 	// Determine if we should return multiple versions of replaceable events
 	// based on the limit parameter
 	wantMultipleVersions := showAllVersions || (f.Limit != nil && *f.Limit > 1)

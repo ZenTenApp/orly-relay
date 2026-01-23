@@ -143,21 +143,25 @@ func GetIndexesForEvent(ev *event.E, serial uint64) (
 			}
 		}
 	}
-	kind := new(Uint16)
-	kind.Set(uint16(ev.Kind))
+	kindType := new(Uint16)
+	kindType.Set(uint16(ev.Kind))
 	// Kind index
-	kindIndex := indexes.KindEnc(kind, createdAt, ser)
+	kindIndex := indexes.KindEnc(kindType, createdAt, ser)
 	if err = appendIndexBytes(&idxs, kindIndex, buf); chk.E(err) {
 		return
 	}
 	// KindPubkey index
 	// Using the correct parameters based on the function signature
 	kindPubkeyIndex := indexes.KindPubkeyEnc(
-		kind, pubHash, createdAt, ser,
+		kindType, pubHash, createdAt, ser,
 	)
 	if err = appendIndexBytes(&idxs, kindPubkeyIndex, buf); chk.E(err) {
 		return
 	}
+
+	// NOTE: AddressableEvent index for parameterized replaceable events (kinds 30000-39999)
+	// is written separately in save-event.go with the serial as value for O(1) direct lookup.
+	// This enables fast NIP-33 queries by pubkey + kind + d-tag.
 
 	// Word token indexes (from content)
 	if len(ev.Content) > 0 {
