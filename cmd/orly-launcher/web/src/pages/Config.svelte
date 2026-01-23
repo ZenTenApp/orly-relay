@@ -1,7 +1,13 @@
 <script>
     import { onMount } from 'svelte';
     import { userSigner, userPubkey, configData, isLoading, error } from '../stores.js';
-    import { fetchConfig } from '../api.js';
+    import { fetchConfig, saveConfig, restartServices } from '../api.js';
+
+    let editMode = false;
+    let editedConfig = {};
+    let saveMessage = '';
+    let saveSuccess = false;
+    let isSaving = false;
 
     onMount(async () => {
         await loadConfig();
@@ -11,6 +17,7 @@
         $isLoading = true;
         try {
             $configData = await fetchConfig($userSigner, $userPubkey);
+            editedConfig = JSON.parse(JSON.stringify($configData)); // Deep copy
             $error = '';
         } catch (e) {
             $error = e.message;
@@ -18,18 +25,93 @@
             $isLoading = false;
         }
     }
+
+    function startEdit() {
+        editedConfig = JSON.parse(JSON.stringify($configData));
+        editMode = true;
+        saveMessage = '';
+    }
+
+    function cancelEdit() {
+        editedConfig = JSON.parse(JSON.stringify($configData));
+        editMode = false;
+        saveMessage = '';
+    }
+
+    async function handleSave() {
+        isSaving = true;
+        saveMessage = '';
+        try {
+            const result = await saveConfig($userSigner, $userPubkey, editedConfig);
+            saveSuccess = result.success;
+            saveMessage = result.message;
+            if (result.success) {
+                $configData = { ...editedConfig };
+                editMode = false;
+            }
+        } catch (e) {
+            saveSuccess = false;
+            saveMessage = e.message;
+        } finally {
+            isSaving = false;
+        }
+    }
+
+    async function handleRestart() {
+        if (!confirm('Restart all services? This will briefly interrupt the relay.')) {
+            return;
+        }
+        try {
+            await restartServices($userSigner, $userPubkey);
+            saveMessage = 'Restart initiated. Services are restarting...';
+            saveSuccess = true;
+        } catch (e) {
+            saveMessage = e.message;
+            saveSuccess = false;
+        }
+    }
+
+    function addOwner() {
+        const newOwner = prompt('Enter hex pubkey for new admin owner:');
+        if (newOwner && newOwner.match(/^[0-9a-fA-F]{64}$/)) {
+            editedConfig.admin_owners = [...(editedConfig.admin_owners || []), newOwner.toLowerCase()];
+        } else if (newOwner) {
+            alert('Invalid pubkey. Must be 64 hex characters.');
+        }
+    }
+
+    function removeOwner(index) {
+        editedConfig.admin_owners = editedConfig.admin_owners.filter((_, i) => i !== index);
+    }
 </script>
 
 <div class="config-page">
     <div class="page-header">
         <h2>Configuration</h2>
-        <button class="refresh-btn" on:click={loadConfig} disabled={$isLoading}>
-            Refresh
-        </button>
+        <div class="header-buttons">
+            {#if editMode}
+                <button class="cancel-btn" on:click={cancelEdit} disabled={isSaving}>Cancel</button>
+                <button class="save-btn" on:click={handleSave} disabled={isSaving}>
+                    {isSaving ? 'Saving...' : 'Save'}
+                </button>
+            {:else}
+                <button class="refresh-btn" on:click={loadConfig} disabled={$isLoading}>Refresh</button>
+                <button class="edit-btn" on:click={startEdit} disabled={$isLoading || !$configData}>Edit</button>
+            {/if}
+        </div>
     </div>
 
     {#if $error}
         <div class="error-banner">{$error}</div>
+    {/if}
+
+    {#if saveMessage}
+        <div class="message-banner" class:success={saveSuccess} class:error={!saveSuccess}>
+            {saveMessage}
+            {#if saveSuccess && saveMessage.includes('Restart required')}
+                <button class="restart-btn-inline" on:click={handleRestart}>Restart Now</button>
+            {/if}
+        </div>
     {/if}
 
     {#if $configData}
@@ -38,20 +120,39 @@
                 <h3>Database</h3>
                 <div class="config-grid">
                     <div class="config-item">
-                        <span class="label">Backend</span>
-                        <span class="value">{$configData.db_backend}</span>
+                        <label class="label">Backend</label>
+                        {#if editMode}
+                            <select bind:value={editedConfig.db_backend}>
+                                <option value="badger">Badger</option>
+                                <option value="neo4j">Neo4j</option>
+                            </select>
+                        {:else}
+                            <span class="value">{$configData.db_backend}</span>
+                        {/if}
                     </div>
                     <div class="config-item">
-                        <span class="label">Binary</span>
-                        <span class="value mono">{$configData.db_binary}</span>
+                        <label class="label">Binary</label>
+                        {#if editMode}
+                            <input type="text" bind:value={editedConfig.db_binary} placeholder="orly-db-badger" />
+                        {:else}
+                            <span class="value mono">{$configData.db_binary}</span>
+                        {/if}
                     </div>
                     <div class="config-item">
-                        <span class="label">Listen Address</span>
-                        <span class="value mono">{$configData.db_listen}</span>
+                        <label class="label">Listen Address</label>
+                        {#if editMode}
+                            <input type="text" bind:value={editedConfig.db_listen} placeholder="127.0.0.1:50051" />
+                        {:else}
+                            <span class="value mono">{$configData.db_listen}</span>
+                        {/if}
                     </div>
                     <div class="config-item">
-                        <span class="label">Data Directory</span>
-                        <span class="value mono">{$configData.data_dir}</span>
+                        <label class="label">Data Directory</label>
+                        {#if editMode}
+                            <input type="text" bind:value={editedConfig.data_dir} />
+                        {:else}
+                            <span class="value mono">{$configData.data_dir}</span>
+                        {/if}
                     </div>
                 </div>
             </section>
@@ -60,22 +161,45 @@
                 <h3>ACL</h3>
                 <div class="config-grid">
                     <div class="config-item">
-                        <span class="label">Enabled</span>
-                        <span class="value bool" class:enabled={$configData.acl_enabled}>
-                            {$configData.acl_enabled ? 'Yes' : 'No'}
-                        </span>
+                        <label class="label">Enabled</label>
+                        {#if editMode}
+                            <label class="toggle">
+                                <input type="checkbox" bind:checked={editedConfig.acl_enabled} />
+                                <span>{editedConfig.acl_enabled ? 'Enabled' : 'Disabled'}</span>
+                            </label>
+                        {:else}
+                            <span class="value bool" class:enabled={$configData.acl_enabled}>
+                                {$configData.acl_enabled ? 'Yes' : 'No'}
+                            </span>
+                        {/if}
                     </div>
                     <div class="config-item">
-                        <span class="label">Mode</span>
-                        <span class="value">{$configData.acl_mode}</span>
+                        <label class="label">Mode</label>
+                        {#if editMode}
+                            <select bind:value={editedConfig.acl_mode}>
+                                <option value="follows">Follows</option>
+                                <option value="managed">Managed</option>
+                                <option value="curation">Curation</option>
+                            </select>
+                        {:else}
+                            <span class="value">{$configData.acl_mode}</span>
+                        {/if}
                     </div>
                     <div class="config-item">
-                        <span class="label">Binary</span>
-                        <span class="value mono">{$configData.acl_binary}</span>
+                        <label class="label">Binary</label>
+                        {#if editMode}
+                            <input type="text" bind:value={editedConfig.acl_binary} />
+                        {:else}
+                            <span class="value mono">{$configData.acl_binary}</span>
+                        {/if}
                     </div>
                     <div class="config-item">
-                        <span class="label">Listen Address</span>
-                        <span class="value mono">{$configData.acl_listen}</span>
+                        <label class="label">Listen Address</label>
+                        {#if editMode}
+                            <input type="text" bind:value={editedConfig.acl_listen} placeholder="127.0.0.1:50052" />
+                        {:else}
+                            <span class="value mono">{$configData.acl_listen}</span>
+                        {/if}
                     </div>
                 </div>
             </section>
@@ -84,12 +208,26 @@
                 <h3>Relay</h3>
                 <div class="config-grid">
                     <div class="config-item">
-                        <span class="label">Binary</span>
-                        <span class="value mono">{$configData.relay_binary}</span>
+                        <label class="label">Binary</label>
+                        {#if editMode}
+                            <input type="text" bind:value={editedConfig.relay_binary} placeholder="orly" />
+                        {:else}
+                            <span class="value mono">{$configData.relay_binary}</span>
+                        {/if}
                     </div>
                     <div class="config-item">
-                        <span class="label">Log Level</span>
-                        <span class="value">{$configData.log_level}</span>
+                        <label class="label">Log Level</label>
+                        {#if editMode}
+                            <select bind:value={editedConfig.log_level}>
+                                <option value="trace">Trace</option>
+                                <option value="debug">Debug</option>
+                                <option value="info">Info</option>
+                                <option value="warn">Warn</option>
+                                <option value="error">Error</option>
+                            </select>
+                        {:else}
+                            <span class="value">{$configData.log_level}</span>
+                        {/if}
                     </div>
                 </div>
             </section>
@@ -98,28 +236,56 @@
                 <h3>Sync Services</h3>
                 <div class="config-grid">
                     <div class="config-item">
-                        <span class="label">Distributed Sync</span>
-                        <span class="value bool" class:enabled={$configData.distributed_sync_enabled}>
-                            {$configData.distributed_sync_enabled ? 'Enabled' : 'Disabled'}
-                        </span>
+                        <label class="label">Distributed Sync</label>
+                        {#if editMode}
+                            <label class="toggle">
+                                <input type="checkbox" bind:checked={editedConfig.distributed_sync_enabled} />
+                                <span>{editedConfig.distributed_sync_enabled ? 'Enabled' : 'Disabled'}</span>
+                            </label>
+                        {:else}
+                            <span class="value bool" class:enabled={$configData.distributed_sync_enabled}>
+                                {$configData.distributed_sync_enabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                        {/if}
                     </div>
                     <div class="config-item">
-                        <span class="label">Cluster Sync</span>
-                        <span class="value bool" class:enabled={$configData.cluster_sync_enabled}>
-                            {$configData.cluster_sync_enabled ? 'Enabled' : 'Disabled'}
-                        </span>
+                        <label class="label">Cluster Sync</label>
+                        {#if editMode}
+                            <label class="toggle">
+                                <input type="checkbox" bind:checked={editedConfig.cluster_sync_enabled} />
+                                <span>{editedConfig.cluster_sync_enabled ? 'Enabled' : 'Disabled'}</span>
+                            </label>
+                        {:else}
+                            <span class="value bool" class:enabled={$configData.cluster_sync_enabled}>
+                                {$configData.cluster_sync_enabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                        {/if}
                     </div>
                     <div class="config-item">
-                        <span class="label">Relay Group</span>
-                        <span class="value bool" class:enabled={$configData.relay_group_enabled}>
-                            {$configData.relay_group_enabled ? 'Enabled' : 'Disabled'}
-                        </span>
+                        <label class="label">Relay Group</label>
+                        {#if editMode}
+                            <label class="toggle">
+                                <input type="checkbox" bind:checked={editedConfig.relay_group_enabled} />
+                                <span>{editedConfig.relay_group_enabled ? 'Enabled' : 'Disabled'}</span>
+                            </label>
+                        {:else}
+                            <span class="value bool" class:enabled={$configData.relay_group_enabled}>
+                                {$configData.relay_group_enabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                        {/if}
                     </div>
                     <div class="config-item">
-                        <span class="label">Negentropy</span>
-                        <span class="value bool" class:enabled={$configData.negentropy_enabled}>
-                            {$configData.negentropy_enabled ? 'Enabled' : 'Disabled'}
-                        </span>
+                        <label class="label">Negentropy</label>
+                        {#if editMode}
+                            <label class="toggle">
+                                <input type="checkbox" bind:checked={editedConfig.negentropy_enabled} />
+                                <span>{editedConfig.negentropy_enabled ? 'Enabled' : 'Disabled'}</span>
+                            </label>
+                        {:else}
+                            <span class="value bool" class:enabled={$configData.negentropy_enabled}>
+                                {$configData.negentropy_enabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                        {/if}
                     </div>
                 </div>
             </section>
@@ -128,14 +294,28 @@
                 <h3>Admin</h3>
                 <div class="config-grid">
                     <div class="config-item">
-                        <span class="label">Binary Directory</span>
-                        <span class="value mono">{$configData.bin_dir}</span>
+                        <label class="label">Binary Directory</label>
+                        {#if editMode}
+                            <input type="text" bind:value={editedConfig.bin_dir} />
+                        {:else}
+                            <span class="value mono">{$configData.bin_dir}</span>
+                        {/if}
                     </div>
                     <div class="config-item full-width">
-                        <span class="label">Admin Owners</span>
+                        <label class="label">
+                            Admin Owners
+                            {#if editMode}
+                                <button class="add-owner-btn" on:click={addOwner}>+ Add</button>
+                            {/if}
+                        </label>
                         <div class="owners-list">
-                            {#each $configData.admin_owners || [] as owner}
-                                <code class="owner">{owner}</code>
+                            {#each (editMode ? editedConfig.admin_owners : $configData.admin_owners) || [] as owner, index}
+                                <div class="owner-item">
+                                    <code class="owner">{owner}</code>
+                                    {#if editMode}
+                                        <button class="remove-owner-btn" on:click={() => removeOwner(index)}>x</button>
+                                    {/if}
+                                </div>
                             {:else}
                                 <span class="no-owners">No owners configured</span>
                             {/each}
@@ -145,9 +325,11 @@
             </section>
         </div>
 
-        <div class="config-note">
-            <p>Configuration is loaded from environment variables. To change settings, update the environment and restart the launcher.</p>
-        </div>
+        {#if !editMode}
+            <div class="config-note">
+                <p>Configuration is saved to <code>{$configData.bin_dir?.replace(/\/bin$/, '')}/launcher.json</code>. Environment variables override file settings.</p>
+            </div>
+        {/if}
     {:else if !$error}
         <div class="loading">Loading configuration...</div>
     {/if}
@@ -170,7 +352,12 @@
         color: var(--text-color);
     }
 
-    .refresh-btn {
+    .header-buttons {
+        display: flex;
+        gap: 8px;
+    }
+
+    .refresh-btn, .edit-btn, .cancel-btn, .save-btn {
         padding: 8px 16px;
         background: var(--card-bg);
         border: 1px solid var(--border-color);
@@ -180,11 +367,27 @@
         font-size: 0.9rem;
     }
 
-    .refresh-btn:hover:not(:disabled) {
+    .edit-btn {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: white;
+    }
+
+    .save-btn {
+        background: var(--success);
+        border-color: var(--success);
+        color: white;
+    }
+
+    .cancel-btn:hover:not(:disabled) {
         background: var(--border-color);
     }
 
-    .refresh-btn:disabled {
+    .edit-btn:hover:not(:disabled), .save-btn:hover:not(:disabled) {
+        opacity: 0.9;
+    }
+
+    button:disabled {
         opacity: 0.5;
         cursor: not-allowed;
     }
@@ -196,6 +399,37 @@
         border-radius: 6px;
         margin-bottom: 20px;
         border: 1px solid #ffcdd2;
+    }
+
+    .message-banner {
+        padding: 12px 16px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .message-banner.success {
+        background: #e8f5e9;
+        color: #2e7d32;
+        border: 1px solid #c8e6c9;
+    }
+
+    .message-banner.error {
+        background: #ffebee;
+        color: #c62828;
+        border: 1px solid #ffcdd2;
+    }
+
+    .restart-btn-inline {
+        padding: 4px 12px;
+        background: var(--primary);
+        border: none;
+        color: white;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.85rem;
     }
 
     .config-sections {
@@ -238,6 +472,9 @@
     .config-item .label {
         font-size: 0.85rem;
         color: var(--muted-color);
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
 
     .config-item .value {
@@ -258,11 +495,45 @@
         color: var(--success);
     }
 
+    .config-item input[type="text"],
+    .config-item select {
+        padding: 8px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: var(--bg-color);
+        color: var(--text-color);
+        font-size: 0.9rem;
+    }
+
+    .config-item input[type="text"]:focus,
+    .config-item select:focus {
+        outline: none;
+        border-color: var(--primary);
+    }
+
+    .toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+
+    .toggle input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+    }
+
     .owners-list {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
         margin-top: 4px;
+    }
+
+    .owner-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
     }
 
     .owner {
@@ -271,6 +542,26 @@
         padding: 4px 8px;
         border-radius: 4px;
         word-break: break-all;
+    }
+
+    .remove-owner-btn {
+        padding: 2px 6px;
+        background: #ffebee;
+        border: none;
+        color: #c62828;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.8rem;
+    }
+
+    .add-owner-btn {
+        padding: 2px 8px;
+        background: var(--primary);
+        border: none;
+        color: white;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.75rem;
     }
 
     .no-owners {
@@ -290,6 +581,13 @@
         color: var(--muted-color);
         font-size: 0.9rem;
         margin: 0;
+    }
+
+    .config-note code {
+        background: var(--bg-color);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.85rem;
     }
 
     .loading {

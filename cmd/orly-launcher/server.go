@@ -158,9 +158,132 @@ func (s *AdminServer) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// SetConfigRequest is the request body for POST /api/config
+type SetConfigRequest struct {
+	DBBackend              string   `json:"db_backend,omitempty"`
+	DBBinary               string   `json:"db_binary,omitempty"`
+	RelayBinary            string   `json:"relay_binary,omitempty"`
+	ACLBinary              string   `json:"acl_binary,omitempty"`
+	DBListen               string   `json:"db_listen,omitempty"`
+	ACLListen              string   `json:"acl_listen,omitempty"`
+	ACLEnabled             *bool    `json:"acl_enabled,omitempty"`
+	ACLMode                string   `json:"acl_mode,omitempty"`
+	DataDir                string   `json:"data_dir,omitempty"`
+	LogLevel               string   `json:"log_level,omitempty"`
+	AdminPort              *int     `json:"admin_port,omitempty"`
+	AdminOwners            []string `json:"admin_owners,omitempty"`
+	BinDir                 string   `json:"bin_dir,omitempty"`
+	DistributedSyncEnabled *bool    `json:"distributed_sync_enabled,omitempty"`
+	ClusterSyncEnabled     *bool    `json:"cluster_sync_enabled,omitempty"`
+	RelayGroupEnabled      *bool    `json:"relay_group_enabled,omitempty"`
+	NegentropyEnabled      *bool    `json:"negentropy_enabled,omitempty"`
+}
+
+// SetConfigResponse is the response for POST /api/config
+type SetConfigResponse struct {
+	Success        bool   `json:"success"`
+	Message        string `json:"message"`
+	RestartNeeded  bool   `json:"restart_needed"`
+	ConfigFilePath string `json:"config_file_path"`
+}
+
 func (s *AdminServer) handleSetConfig(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement config update (requires restart)
-	http.Error(w, "Config update not implemented yet", http.StatusNotImplemented)
+	var req SetConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); chk.E(err) {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Load existing config file or create new
+	cf, err := loadConfigFile()
+	if chk.E(err) {
+		cf = &ConfigFile{}
+	}
+
+	// Update only fields that were provided
+	if req.DBBackend != "" {
+		cf.DBBackend = req.DBBackend
+	}
+	if req.DBBinary != "" {
+		cf.DBBinary = req.DBBinary
+	}
+	if req.RelayBinary != "" {
+		cf.RelayBinary = req.RelayBinary
+	}
+	if req.ACLBinary != "" {
+		cf.ACLBinary = req.ACLBinary
+	}
+	if req.DBListen != "" {
+		cf.DBListen = req.DBListen
+	}
+	if req.ACLListen != "" {
+		cf.ACLListen = req.ACLListen
+	}
+	if req.ACLEnabled != nil {
+		cf.ACLEnabled = req.ACLEnabled
+	}
+	if req.ACLMode != "" {
+		cf.ACLMode = req.ACLMode
+	}
+	if req.DataDir != "" {
+		cf.DataDir = req.DataDir
+	}
+	if req.LogLevel != "" {
+		cf.LogLevel = req.LogLevel
+	}
+	if req.AdminPort != nil {
+		cf.AdminPort = req.AdminPort
+	}
+	if req.AdminOwners != nil {
+		cf.AdminOwners = req.AdminOwners
+	}
+	if req.BinDir != "" {
+		cf.BinDir = req.BinDir
+	}
+	if req.DistributedSyncEnabled != nil {
+		cf.DistributedSyncEnabled = req.DistributedSyncEnabled
+	}
+	if req.ClusterSyncEnabled != nil {
+		cf.ClusterSyncEnabled = req.ClusterSyncEnabled
+	}
+	if req.RelayGroupEnabled != nil {
+		cf.RelayGroupEnabled = req.RelayGroupEnabled
+	}
+	if req.NegentropyEnabled != nil {
+		cf.NegentropyEnabled = req.NegentropyEnabled
+	}
+
+	// Save to file
+	if err := SaveConfigFile(cf); chk.E(err) {
+		response := SetConfigResponse{
+			Success: false,
+			Message: fmt.Sprintf("Failed to save config: %v", err),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Update auth middleware if owners changed
+	if req.AdminOwners != nil {
+		for _, owner := range s.auth.Owners() {
+			s.auth.RemoveOwner(owner)
+		}
+		for _, owner := range req.AdminOwners {
+			s.auth.AddOwner(owner)
+		}
+	}
+
+	response := SetConfigResponse{
+		Success:        true,
+		Message:        "Configuration saved. Restart required for most changes to take effect.",
+		RestartNeeded:  true,
+		ConfigFilePath: configFilePath(),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 // BinariesResponse is the response for GET /api/binaries

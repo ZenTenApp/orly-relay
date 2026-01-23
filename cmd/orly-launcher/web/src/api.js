@@ -94,6 +94,24 @@ export async function fetchConfig(signer, pubkey) {
 }
 
 /**
+ * Save launcher configuration
+ * @param {object} config - Configuration object to save
+ */
+export async function saveConfig(signer, pubkey, config) {
+    const response = await authFetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+    }, signer, pubkey);
+
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || `Save failed: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
  * Fetch available binaries
  */
 export async function fetchBinaries(signer, pubkey) {

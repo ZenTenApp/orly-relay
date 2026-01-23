@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"io"
 	"io/fs"
 	"net/http"
 	"path"
@@ -11,29 +12,25 @@ import (
 //go:embed all:web/dist all:web/public
 var adminFS embed.FS
 
-// getAdminFS returns the embedded filesystem for the admin UI.
-func getAdminFS() (http.FileSystem, error) {
+// getAdminSubFS returns the embedded filesystem for the admin UI.
+func getAdminSubFS() (fs.FS, error) {
 	// Try dist first (built assets)
 	distFS, err := fs.Sub(adminFS, "web/dist")
 	if err == nil {
 		// Check if dist has content
 		entries, _ := fs.ReadDir(distFS, ".")
 		if len(entries) > 0 {
-			return http.FS(distFS), nil
+			return distFS, nil
 		}
 	}
 
 	// Fall back to public (template)
-	publicFS, err := fs.Sub(adminFS, "web/public")
-	if err != nil {
-		return nil, err
-	}
-	return http.FS(publicFS), nil
+	return fs.Sub(adminFS, "web/public")
 }
 
 // serveAdminUI serves the embedded admin web UI.
 func (s *AdminServer) serveAdminUI(w http.ResponseWriter, r *http.Request) {
-	fsys, err := getAdminFS()
+	fsys, err := getAdminSubFS()
 	if err != nil {
 		http.Error(w, "Admin UI not available", http.StatusInternalServerError)
 		return
@@ -43,32 +40,47 @@ func (s *AdminServer) serveAdminUI(w http.ResponseWriter, r *http.Request) {
 	urlPath := r.URL.Path
 	if strings.HasPrefix(urlPath, "/admin") {
 		urlPath = strings.TrimPrefix(urlPath, "/admin")
-		if urlPath == "" {
-			urlPath = "/"
-		}
+	}
+	urlPath = strings.TrimPrefix(urlPath, "/")
+
+	// Default to index.html
+	if urlPath == "" {
+		urlPath = "index.html"
 	}
 
-	// Try to serve the file
-	filePath := strings.TrimPrefix(urlPath, "/")
-	if filePath == "" {
-		filePath = "index.html"
-	}
-
-	// Check if file exists
-	f, err := fsys.Open(filePath)
+	// Try to open the file
+	f, err := fsys.Open(urlPath)
 	if err != nil {
-		// Serve index.html for SPA routing
-		filePath = "index.html"
-		f, err = fsys.Open(filePath)
+		// For SPA routing, serve index.html for non-existent paths
+		urlPath = "index.html"
+		f, err = fsys.Open(urlPath)
 		if err != nil {
 			http.Error(w, "Not found", http.StatusNotFound)
 			return
 		}
 	}
-	f.Close()
+	defer f.Close()
 
-	// Set content type
-	switch path.Ext(filePath) {
+	// Check if it's a directory
+	stat, err := f.Stat()
+	if err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	if stat.IsDir() {
+		// Try index.html in the directory
+		f.Close()
+		urlPath = path.Join(urlPath, "index.html")
+		f, err = fsys.Open(urlPath)
+		if err != nil {
+			http.Error(w, "Not found", http.StatusNotFound)
+			return
+		}
+		defer f.Close()
+	}
+
+	// Set content type based on extension
+	switch path.Ext(urlPath) {
 	case ".html":
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	case ".css":
@@ -81,9 +93,10 @@ func (s *AdminServer) serveAdminUI(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/svg+xml")
 	case ".png":
 		w.Header().Set("Content-Type", "image/png")
+	case ".ico":
+		w.Header().Set("Content-Type", "image/x-icon")
 	}
 
-	// Serve the file
-	r.URL.Path = "/" + filePath
-	http.FileServer(fsys).ServeHTTP(w, r)
+	// Serve the file content directly
+	io.Copy(w, f)
 }

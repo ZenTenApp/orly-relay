@@ -86,19 +86,31 @@
 
     function setReleaseUrls() {
         // Helper to fill in URLs from a release base
-        const baseUrl = prompt('Enter release base URL (e.g., https://git.mleku.dev/mleku/next.orly.dev/releases/download/v0.55.11):');
-        if (!baseUrl) return;
+        let inputUrl = prompt('Enter release URL (e.g., https://git.mleku.dev/mleku/next.orly.dev/releases/tag/v0.56.0):');
+        if (!inputUrl) return;
 
-        const cleanBase = baseUrl.replace(/\/$/, '');
+        // Normalize the URL - convert /releases/tag/ to /releases/download/
+        let cleanBase = inputUrl.replace(/\/$/, '');
+        if (cleanBase.includes('/releases/tag/')) {
+            cleanBase = cleanBase.replace('/releases/tag/', '/releases/download/');
+        } else if (!cleanBase.includes('/releases/download/')) {
+            // If it's just a repo URL, construct the download path
+            const ver = version.trim() || 'v0.56.0';
+            cleanBase = cleanBase.replace(/\/$/, '') + '/releases/download/' + ver;
+        }
+
         const arch = prompt('Enter architecture (amd64 or arm64):', 'amd64');
         if (!arch) return;
 
-        const ver = version.trim() || baseUrl.split('/').pop();
+        // Extract version from URL
+        const urlParts = cleanBase.split('/');
+        const ver = urlParts[urlParts.length - 1];
+        const verNum = ver.replace('v', '');
 
-        urls['orly'] = `${cleanBase}/orly-${ver.replace('v', '')}-linux-${arch}`;
-        urls['orly-db-badger'] = `${cleanBase}/orly-db-badger-${ver.replace('v', '')}-linux-${arch}`;
-        urls['orly-acl-follows'] = `${cleanBase}/orly-acl-follows-${ver.replace('v', '')}-linux-${arch}`;
-        urls['orly-launcher'] = `${cleanBase}/orly-launcher-${ver.replace('v', '')}-linux-${arch}`;
+        urls['orly'] = `${cleanBase}/orly-${verNum}-linux-${arch}`;
+        urls['orly-db-badger'] = `${cleanBase}/orly-db-badger-${verNum}-linux-${arch}`;
+        urls['orly-acl-follows'] = `${cleanBase}/orly-acl-follows-${verNum}-linux-${arch}`;
+        urls['orly-launcher'] = `${cleanBase}/orly-launcher-${verNum}-linux-${arch}`;
 
         if (!version.trim()) {
             version = ver;
