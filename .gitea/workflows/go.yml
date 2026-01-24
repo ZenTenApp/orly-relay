@@ -226,7 +226,7 @@ jobs:
           git fetch origin "refs/tags/${VERSION}:refs/tags/${VERSION}" --force 2>/dev/null || true
 
           # Create the release body
-          RELEASE_BODY="## ORLY Release ${VERSION}
+          RELEASE_BODY='## ORLY Release '"${VERSION}"'
 
 ### Binaries Included
 - **orly** - Main relay binary
@@ -246,9 +246,9 @@ jobs:
 
 ### Installation
 1. Download the appropriate binaries for your architecture
-2. Make them executable: \`chmod +x orly-*\`
-3. Copy libsecp256k1 to \`/usr/local/lib/\` and run \`ldconfig\`
-4. Run with: \`./orly-launcher\` (for split mode) or \`./orly\` (standalone)"
+2. Make them executable: chmod +x orly-*
+3. Copy libsecp256k1 to /usr/local/lib/ and run ldconfig
+4. Run with: ./orly-launcher (for split mode) or ./orly (standalone)'
 
           # Create release JSON payload
           RELEASE_JSON=$(jq -n \
