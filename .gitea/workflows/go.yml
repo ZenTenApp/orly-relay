@@ -149,14 +149,11 @@ jobs:
               go build -ldflags "-s -w" -o "release-binaries/${name}-${VERSION}-linux-arm64" "${path}"
           done
 
-          # Copy libsecp256k1.so from nostr module (has schnorr/musig2)
-          NOSTR_MOD=$(go list -m -f '{{.Dir}}' git.mleku.dev/mleku/nostr)
-          if [ -f "${NOSTR_MOD}/crypto/p8k/libsecp256k1.so" ]; then
-            cp "${NOSTR_MOD}/crypto/p8k/libsecp256k1.so" release-binaries/libsecp256k1-linux-amd64.so
-            chmod +x release-binaries/libsecp256k1-linux-amd64.so
-            echo "Copied libsecp256k1.so for AMD64"
-          fi
-          # Note: ARM64 users need to build libsecp256k1 from source
+          # Copy libsecp256k1 libraries (with schnorr/musig2 support)
+          cp lib/secp256k1/libsecp256k1-linux-amd64.so release-binaries/
+          cp lib/secp256k1/libsecp256k1-linux-arm64.so release-binaries/
+          chmod +x release-binaries/libsecp256k1-*.so
+          echo "Copied libsecp256k1.so for AMD64 and ARM64"
 
           # Create checksums
           cd release-binaries
@@ -219,7 +216,7 @@ jobs:
           * orly-launcher - Process supervisor with admin UI
           * orly-sync-negentropy - Negentropy sync service
           * orly-certs - DNS-01 wildcard certificate manager
-          * libsecp256k1 - AMD64 only, with schnorr/musig2 support
+          * libsecp256k1 - AMD64 and ARM64, with schnorr/musig2 support
 
           ### Architectures
           * Linux AMD64 (x86_64)

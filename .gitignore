@@ -91,6 +91,7 @@ cmd/benchmark/data
 !Dockerfile*
 !.dockerignore
 !libsecp256k1.so
+!lib/secp256k1/*.so
 # ...even if they are in subdirectories
 !*/
 
