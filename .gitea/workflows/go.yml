@@ -226,29 +226,32 @@ jobs:
           git fetch origin "refs/tags/${VERSION}:refs/tags/${VERSION}" --force 2>/dev/null || true
 
           # Create the release body
-          RELEASE_BODY='## ORLY Release '"${VERSION}"'
+          RELEASE_BODY=$(cat <<RELEASEBODY
+          ## ORLY Release ${VERSION}
 
-### Binaries Included
-- **orly** - Main relay binary
-- **orly-db-badger** - Badger database server
-- **orly-db-neo4j** - Neo4j database server
-- **orly-acl-follows** - Follows ACL server
-- **orly-acl-managed** - Managed ACL server
-- **orly-acl-curation** - Curation ACL server
-- **orly-launcher** - Process supervisor with admin UI
-- **orly-sync-negentropy** - Negentropy sync service
-- **orly-certs** - DNS-01 wildcard certificate manager
-- **libsecp256k1** - Custom build with schnorr/musig2 support
+          ### Binaries Included
+          * orly - Main relay binary
+          * orly-db-badger - Badger database server
+          * orly-db-neo4j - Neo4j database server
+          * orly-acl-follows - Follows ACL server
+          * orly-acl-managed - Managed ACL server
+          * orly-acl-curation - Curation ACL server
+          * orly-launcher - Process supervisor with admin UI
+          * orly-sync-negentropy - Negentropy sync service
+          * orly-certs - DNS-01 wildcard certificate manager
+          * libsecp256k1 - Custom build with schnorr/musig2 support
 
-### Architectures
-- Linux AMD64 (x86_64)
-- Linux ARM64 (aarch64)
+          ### Architectures
+          * Linux AMD64 (x86_64)
+          * Linux ARM64 (aarch64)
 
-### Installation
-1. Download the appropriate binaries for your architecture
-2. Make them executable: chmod +x orly-*
-3. Copy libsecp256k1 to /usr/local/lib/ and run ldconfig
-4. Run with: ./orly-launcher (for split mode) or ./orly (standalone)'
+          ### Installation
+          1. Download the appropriate binaries for your architecture
+          2. Make them executable: chmod +x orly-*
+          3. Copy libsecp256k1 to /usr/local/lib/ and run ldconfig
+          4. Run with: ./orly-launcher (for split mode) or ./orly (standalone)
+          RELEASEBODY
+          )
 
           # Create release JSON payload
           RELEASE_JSON=$(jq -n \
