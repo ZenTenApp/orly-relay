@@ -1,11 +1,11 @@
 package database
 
 import (
+	"bytes"
 	"testing"
 
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"next.orly.dev/pkg/utils"
 )
 
 func TestQueryForAuthorsTags(t *testing.T) {
@@ -56,10 +56,10 @@ func TestQueryForAuthorsTags(t *testing.T) {
 		// Find the event with this ID
 		var found bool
 		for _, ev := range events {
-			if utils.FastEqual(result.Id, ev.ID) {
+			if bytes.Equal(result.Id[:], ev.ID[:]) {
 				found = true
 
-				if !utils.FastEqual(ev.Pubkey, testEvent.Pubkey) {
+				if !bytes.Equal(ev.Pubkey[:], testEvent.Pubkey[:]) {
 					t.Fatalf(
 						"result %d has incorrect author, got %x, expected %x",
 						i, ev.Pubkey, testEvent.Pubkey,
@@ -70,9 +70,9 @@ func TestQueryForAuthorsTags(t *testing.T) {
 				var hasTag bool
 				for _, tg := range *ev.Tags {
 					if tg.Len() >= 2 && len(tg.Key()) == 1 {
-						if utils.FastEqual(
+						if bytes.Equal(
 							tg.Key(), testTag.Key(),
-						) && utils.FastEqual(tg.Value(), testTag.Value()) {
+						) && bytes.Equal(tg.Value(), testTag.Value()) {
 							hasTag = true
 							break
 						}

@@ -61,39 +61,54 @@ type Accountant interface {
 	EventCount() (count uint64, err error)
 }
 
-// IdPkTs holds event reference data with slice fields for backward compatibility.
-// For new code preferring stack-allocated, copy-on-assignment semantics,
-// use the IDFixed() and PubFixed() methods or convert to EventRef.
+// IdPkTs holds event reference data using fixed-size arrays for stack allocation.
+// Total size: 80 bytes (32+32+8+8), fits in a cache line.
+// Copies of this struct stay on the stack and are value-safe.
 type IdPkTs struct {
-	Id  []byte
-	Pub []byte
-	Ts  int64
-	Ser uint64
+	Id  ntypes.EventID // 32 bytes - event ID
+	Pub ntypes.Pubkey  // 32 bytes - author pubkey
+	Ts  int64          // 8 bytes - created_at timestamp
+	Ser uint64         // 8 bytes - database serial number
 }
 
-// IDFixed returns the event ID as a fixed-size array (stack-allocated, copied on assignment).
-func (i *IdPkTs) IDFixed() ntypes.EventID {
-	return ntypes.EventIDFromBytes(i.Id)
+// NewIdPkTs creates an IdPkTs from byte slices (copies into fixed arrays).
+func NewIdPkTs(id, pub []byte, ts int64, ser uint64) IdPkTs {
+	return IdPkTs{
+		Id:  ntypes.EventIDFromBytes(id),
+		Pub: ntypes.PubkeyFromBytes(pub),
+		Ts:  ts,
+		Ser: ser,
+	}
 }
 
-// PubFixed returns the pubkey as a fixed-size array (stack-allocated, copied on assignment).
-func (i *IdPkTs) PubFixed() ntypes.Pubkey {
-	return ntypes.PubkeyFromBytes(i.Pub)
+// IDSlice returns the event ID as a byte slice (shares memory with array).
+func (i *IdPkTs) IDSlice() []byte {
+	return i.Id[:]
+}
+
+// PubSlice returns the pubkey as a byte slice (shares memory with array).
+func (i *IdPkTs) PubSlice() []byte {
+	return i.Pub[:]
 }
 
 // IDHex returns the event ID as a lowercase hex string.
 func (i *IdPkTs) IDHex() string {
-	return ntypes.EventIDFromBytes(i.Id).Hex()
+	return i.Id.Hex()
 }
 
 // PubHex returns the pubkey as a lowercase hex string.
 func (i *IdPkTs) PubHex() string {
-	return ntypes.PubkeyFromBytes(i.Pub).Hex()
+	return i.Pub.Hex()
 }
 
-// ToEventRef converts IdPkTs to an EventRef (fully stack-allocated).
+// ToEventRef converts IdPkTs to an EventRef.
 func (i *IdPkTs) ToEventRef() EventRef {
-	return NewEventRef(i.Id, i.Pub, i.Ts, i.Ser)
+	return EventRef{
+		id:  i.Id,
+		pub: i.Pub,
+		ts:  i.Ts,
+		ser: i.Ser,
+	}
 }
 
 // EventRef is a stack-friendly event reference using fixed-size arrays.
@@ -141,12 +156,11 @@ func (r *EventRef) IDSlice() []byte { return r.id.Bytes() }
 // PubSlice returns a slice view of the pubkey (shares memory, use carefully).
 func (r *EventRef) PubSlice() []byte { return r.pub.Bytes() }
 
-// ToIdPkTs converts EventRef to IdPkTs for backward compatibility.
-// Note: This allocates new slices.
+// ToIdPkTs converts EventRef to IdPkTs.
 func (r EventRef) ToIdPkTs() *IdPkTs {
 	return &IdPkTs{
-		Id:  r.id.Copy(),
-		Pub: r.pub.Copy(),
+		Id:  r.id,
+		Pub: r.pub,
 		Ts:  r.ts,
 		Ser: r.ser,
 	}

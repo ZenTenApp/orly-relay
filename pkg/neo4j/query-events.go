@@ -595,12 +595,8 @@ func (n *N) QueryForIds(c context.Context, f *filter.F) (
 			continue
 		}
 
-		idPkTs = append(idPkTs, &store.IdPkTs{
-			Id:  id,
-			Pub: pubkey,
-			Ts:  createdAt,
-			Ser: uint64(serialVal),
-		})
+		ipkts := store.NewIdPkTs(id, pubkey, createdAt, uint64(serialVal))
+		idPkTs = append(idPkTs, &ipkts)
 	}
 
 	return idPkTs, nil

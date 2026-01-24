@@ -336,12 +336,8 @@ RETURN e.id AS id,
 				return nil, err
 			}
 
-			fidpk = &store.IdPkTs{
-				Id:  id,
-				Pub: pubkey,
-				Ts:  createdAt,
-				Ser: serial,
-			}
+			idpkts := store.NewIdPkTs(id, pubkey, createdAt, serial)
+			fidpk = &idpkts
 
 			return fidpk, nil
 		}
@@ -421,12 +417,8 @@ RETURN e.id AS id,
 			continue
 		}
 
-		fidpks = append(fidpks, &store.IdPkTs{
-			Id:  id,
-			Pub:  pubkey,
-			Ts:  createdAt,
-			Ser: uint64(serialVal),
-		})
+		idpkts := store.NewIdPkTs(id, pubkey, createdAt, uint64(serialVal))
+		fidpks = append(fidpks, &idpkts)
 	}
 
 	return fidpks, nil

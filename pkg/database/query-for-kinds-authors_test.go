@@ -1,12 +1,12 @@
 package database
 
 import (
+	"bytes"
 	"testing"
 
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"next.orly.dev/pkg/utils"
 )
 
 func TestQueryForKindsAuthors(t *testing.T) {
@@ -46,7 +46,7 @@ func TestQueryForKindsAuthors(t *testing.T) {
 		// Find the event with this ID
 		var found bool
 		for _, ev := range events {
-			if utils.FastEqual(result.Id, ev.ID) {
+			if bytes.Equal(result.Id[:], ev.ID[:]) {
 				found = true
 				if ev.Kind != testKind.K {
 					t.Fatalf(
@@ -54,7 +54,7 @@ func TestQueryForKindsAuthors(t *testing.T) {
 						i, ev.Kind, testKind.K,
 					)
 				}
-				if !utils.FastEqual(ev.Pubkey, events[1].Pubkey) {
+				if !bytes.Equal(ev.Pubkey[:], events[1].Pubkey[:]) {
 					t.Fatalf(
 						"result %d has incorrect author, got %x, expected %x",
 						i, ev.Pubkey, events[1].Pubkey,

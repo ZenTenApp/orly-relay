@@ -1,11 +1,11 @@
 package database
 
 import (
+	"bytes"
 	"testing"
 
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/kind"
-	"next.orly.dev/pkg/utils"
 )
 
 func TestQueryForKinds(t *testing.T) {
@@ -41,7 +41,7 @@ func TestQueryForKinds(t *testing.T) {
 		// Find the event with this ID
 		var found bool
 		for _, ev := range events {
-			if utils.FastEqual(result.Id, ev.ID) {
+			if bytes.Equal(result.Id[:], ev.ID[:]) {
 				found = true
 				if ev.Kind != testKind.K {
 					t.Fatalf(

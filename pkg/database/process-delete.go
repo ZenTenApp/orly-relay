@@ -129,11 +129,11 @@ func (d *D) ProcessDelete(ev *event.E, admins [][]byte) (err error) {
 			})
 			for _, v := range idPkTss {
 				if v.Ts < ev.CreatedAt {
-					if err = d.DeleteEvent(context.Background(), v.Id); chk.E(err) {
-						log.W.F("failed to delete event %x via a-tag: %v", v.Id, err)
+					if err = d.DeleteEvent(context.Background(), v.Id[:]); chk.E(err) {
+						log.W.F("failed to delete event %x via a-tag: %v", v.Id[:], err)
 						continue
 					}
-					log.D.F("deleted event %x via a-tag deletion", v.Id)
+					log.D.F("deleted event %x via a-tag deletion", v.Id[:])
 				}
 			}
 		}
@@ -187,7 +187,7 @@ func (d *D) ProcessDelete(ev *event.E, admins [][]byte) (err error) {
 			for _, v := range idPkTss {
 				if v.Ts < ev.CreatedAt {
 					if err = d.DeleteEvent(
-						context.Background(), v.Id,
+						context.Background(), v.Id[:],
 					); chk.E(err) {
 						continue
 					}

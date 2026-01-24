@@ -41,12 +41,12 @@ func (d *D) GetFullIdPubkeyBySerial(ser *types.Uint40) (
 				).UnmarshalRead(buf2); chk.E(err) {
 					return
 				}
-				idpkts := store.IdPkTs{
-					Id:  fid.Bytes(),
-					Pub: p.Bytes(),
-					Ts:  int64(ca.Get()),
-					Ser: ser.Get(),
-				}
+				idpkts := store.NewIdPkTs(
+					fid.Bytes(),
+					p.Bytes(),
+					int64(ca.Get()),
+					ser.Get(),
+				)
 				fidpk = &idpkts
 			}
 			return

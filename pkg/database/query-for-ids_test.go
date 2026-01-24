@@ -1,13 +1,13 @@
 package database
 
 import (
+	"bytes"
 	"testing"
 
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"git.mleku.dev/mleku/nostr/encoders/timestamp"
-	"next.orly.dev/pkg/utils"
 )
 
 func TestQueryForIds(t *testing.T) {
@@ -39,9 +39,9 @@ func TestQueryForIds(t *testing.T) {
 		// Find the event with this ID
 		var found bool
 		for _, ev := range events {
-			if utils.FastEqual(result.Id, ev.ID) {
+			if bytes.Equal(result.Id[:], ev.ID[:]) {
 				found = true
-				if !utils.FastEqual(ev.Pubkey, events[1].Pubkey) {
+				if !bytes.Equal(ev.Pubkey[:], events[1].Pubkey[:]) {
 					t.Fatalf(
 						"result %d has incorrect author, got %x, expected %x",
 						i, ev.Pubkey, events[1].Pubkey,
@@ -79,7 +79,7 @@ func TestQueryForIds(t *testing.T) {
 		// Find the event with this ID
 		var found bool
 		for _, ev := range events {
-			if utils.FastEqual(result.Id, ev.ID) {
+			if bytes.Equal(result.Id[:], ev.ID[:]) {
 				found = true
 				if ev.Kind != testKind.K {
 					t.Fatalf(
@@ -131,16 +131,16 @@ func TestQueryForIds(t *testing.T) {
 			// Find the event with this ID
 			var found bool
 			for _, ev := range events {
-				if utils.FastEqual(result.Id, ev.ID) {
+				if bytes.Equal(result.Id[:], ev.ID[:]) {
 					found = true
 
 					// Check if the event has the tag we're looking for
 					var hasTag bool
 					for _, tg := range *ev.Tags {
 						if tg.Len() >= 2 && len(tg.Key()) == 1 {
-							if utils.FastEqual(
+							if bytes.Equal(
 								tg.Key(), testTag.Key(),
-							) && utils.FastEqual(tg.Value(), testTag.Value()) {
+							) && bytes.Equal(tg.Value(), testTag.Value()) {
 								hasTag = true
 								break
 							}
@@ -182,7 +182,7 @@ func TestQueryForIds(t *testing.T) {
 				// Find the event with this ID
 				var found bool
 				for _, ev := range events {
-					if utils.FastEqual(result.Id, ev.ID) {
+					if bytes.Equal(result.Id[:], ev.ID[:]) {
 						found = true
 						if ev.Kind != testKind.K {
 							t.Fatalf(
@@ -190,7 +190,7 @@ func TestQueryForIds(t *testing.T) {
 								i, ev.Kind, testKind.K,
 							)
 						}
-						if !utils.FastEqual(ev.Pubkey, events[1].Pubkey) {
+						if !bytes.Equal(ev.Pubkey[:], events[1].Pubkey[:]) {
 							t.Fatalf(
 								"result %d has incorrect author, got %x, expected %x",
 								i, ev.Pubkey, events[1].Pubkey,
@@ -229,7 +229,7 @@ func TestQueryForIds(t *testing.T) {
 			// Find the event with this ID
 			var found bool
 			for _, ev := range events {
-				if utils.FastEqual(result.Id, ev.ID) {
+				if bytes.Equal(result.Id[:], ev.ID[:]) {
 					found = true
 					if ev.Kind != testEventForTag.Kind {
 						t.Fatalf(
@@ -242,9 +242,9 @@ func TestQueryForIds(t *testing.T) {
 					var hasTag bool
 					for _, tg := range *ev.Tags {
 						if tg.Len() >= 2 && len(tg.Key()) == 1 {
-							if utils.FastEqual(
+							if bytes.Equal(
 								tg.Key(), testTag.Key(),
-							) && utils.FastEqual(tg.Value(), testTag.Value()) {
+							) && bytes.Equal(tg.Value(), testTag.Value()) {
 								hasTag = true
 								break
 							}
@@ -290,7 +290,7 @@ func TestQueryForIds(t *testing.T) {
 			// Find the event with this ID
 			var found bool
 			for _, ev := range events {
-				if utils.FastEqual(result.Id, ev.ID) {
+				if bytes.Equal(result.Id[:], ev.ID[:]) {
 					found = true
 					if ev.Kind != testEventForTag.Kind {
 						t.Fatalf(
@@ -299,7 +299,7 @@ func TestQueryForIds(t *testing.T) {
 						)
 					}
 
-					if !utils.FastEqual(ev.Pubkey, testEventForTag.Pubkey) {
+					if !bytes.Equal(ev.Pubkey[:], testEventForTag.Pubkey[:]) {
 						t.Fatalf(
 							"result %d has incorrect author, got %x, expected %x",
 							i, ev.Pubkey, testEventForTag.Pubkey,
@@ -310,9 +310,9 @@ func TestQueryForIds(t *testing.T) {
 					var hasTag bool
 					for _, tg := range *ev.Tags {
 						if tg.Len() >= 2 && len(tg.Key()) == 1 {
-							if utils.FastEqual(
+							if bytes.Equal(
 								tg.Key(), testTag.Key(),
-							) && utils.FastEqual(tg.Value(), testTag.Value()) {
+							) && bytes.Equal(tg.Value(), testTag.Value()) {
 								hasTag = true
 								break
 							}
@@ -357,10 +357,10 @@ func TestQueryForIds(t *testing.T) {
 			// Find the event with this ID
 			var found bool
 			for _, ev := range events {
-				if utils.FastEqual(result.Id, ev.ID) {
+				if bytes.Equal(result.Id[:], ev.ID[:]) {
 					found = true
 
-					if !utils.FastEqual(ev.Pubkey, testEventForTag.Pubkey) {
+					if !bytes.Equal(ev.Pubkey[:], testEventForTag.Pubkey[:]) {
 						t.Fatalf(
 							"result %d has incorrect author, got %x, expected %x",
 							i, ev.Pubkey, testEventForTag.Pubkey,
@@ -371,9 +371,9 @@ func TestQueryForIds(t *testing.T) {
 					var hasTag bool
 					for _, tg := range *ev.Tags {
 						if tg.Len() >= 2 && len(tg.Key()) == 1 {
-							if utils.FastEqual(
+							if bytes.Equal(
 								tg.Key(), testTag.Key(),
-							) && utils.FastEqual(tg.Value(), testTag.Value()) {
+							) && bytes.Equal(tg.Value(), testTag.Value()) {
 								hasTag = true
 								break
 							}
@@ -430,7 +430,7 @@ func TestQueryForIds(t *testing.T) {
 		// Find the event with this ID
 		var found bool
 		for _, ev := range events {
-			if utils.FastEqual(result.Id, ev.ID) {
+			if bytes.Equal(result.Id[:], ev.ID[:]) {
 				found = true
 				break
 			}

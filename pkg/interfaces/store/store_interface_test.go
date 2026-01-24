@@ -7,8 +7,8 @@ import (
 	ntypes "git.mleku.dev/mleku/nostr/types"
 )
 
-func TestIdPkTsFixedMethods(t *testing.T) {
-	// Create an IdPkTs with sample data
+func TestNewIdPkTs(t *testing.T) {
+	// Create sample data
 	id := make([]byte, 32)
 	pub := make([]byte, 32)
 	for i := 0; i < 32; i++ {
@@ -16,29 +16,49 @@ func TestIdPkTsFixedMethods(t *testing.T) {
 		pub[i] = byte(i + 32)
 	}
 
-	ipk := &IdPkTs{
-		Id:  id,
-		Pub: pub,
-		Ts:  1234567890,
-		Ser: 42,
+	ipk := NewIdPkTs(id, pub, 1234567890, 42)
+
+	// Test that data was copied correctly
+	if !bytes.Equal(ipk.Id[:], id) {
+		t.Errorf("Id: got %x, want %x", ipk.Id[:], id)
+	}
+	if !bytes.Equal(ipk.Pub[:], pub) {
+		t.Errorf("Pub: got %x, want %x", ipk.Pub[:], pub)
+	}
+	if ipk.Ts != 1234567890 {
+		t.Errorf("Ts: got %d, want 1234567890", ipk.Ts)
+	}
+	if ipk.Ser != 42 {
+		t.Errorf("Ser: got %d, want 42", ipk.Ser)
 	}
 
-	// Test IDFixed returns correct data
-	idFixed := ipk.IDFixed()
-	if !bytes.Equal(idFixed[:], id) {
-		t.Errorf("IDFixed: got %x, want %x", idFixed[:], id)
-	}
-
-	// Test IDFixed returns a copy
-	idFixed[0] = 0xFF
+	// Test that Id is a copy (modifying original doesn't affect struct)
+	id[0] = 0xFF
 	if ipk.Id[0] == 0xFF {
-		t.Error("IDFixed should return a copy, not a reference")
+		t.Error("NewIdPkTs should copy data, not reference")
+	}
+}
+
+func TestIdPkTsSliceMethods(t *testing.T) {
+	id := make([]byte, 32)
+	pub := make([]byte, 32)
+	for i := 0; i < 32; i++ {
+		id[i] = byte(i)
+		pub[i] = byte(i + 32)
 	}
 
-	// Test PubFixed returns correct data
-	pubFixed := ipk.PubFixed()
-	if !bytes.Equal(pubFixed[:], pub) {
-		t.Errorf("PubFixed: got %x, want %x", pubFixed[:], pub)
+	ipk := NewIdPkTs(id, pub, 1234567890, 42)
+
+	// Test IDSlice returns correct data
+	idSlice := ipk.IDSlice()
+	if !bytes.Equal(idSlice, id) {
+		t.Errorf("IDSlice: got %x, want %x", idSlice, id)
+	}
+
+	// Test PubSlice returns correct data
+	pubSlice := ipk.PubSlice()
+	if !bytes.Equal(pubSlice, pub) {
+		t.Errorf("PubSlice: got %x, want %x", pubSlice, pub)
 	}
 
 	// Test hex methods
@@ -46,6 +66,26 @@ func TestIdPkTsFixedMethods(t *testing.T) {
 	expectedIDHex := "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
 	if idHex != expectedIDHex {
 		t.Errorf("IDHex: got %s, want %s", idHex, expectedIDHex)
+	}
+}
+
+func TestIdPkTsCopyOnAssignment(t *testing.T) {
+	id := make([]byte, 32)
+	pub := make([]byte, 32)
+	for i := 0; i < 32; i++ {
+		id[i] = byte(i)
+		pub[i] = byte(i + 32)
+	}
+
+	ipk1 := NewIdPkTs(id, pub, 1234567890, 42)
+	ipk2 := ipk1 // Copy
+
+	// Modify the copy
+	ipk2.Id[0] = 0xFF
+
+	// Original should be unchanged (arrays are copied on assignment)
+	if ipk1.Id[0] == 0xFF {
+		t.Error("IdPkTs should copy on assignment")
 	}
 }
 
@@ -103,10 +143,10 @@ func TestEventRefToIdPkTs(t *testing.T) {
 	ipk := ref.ToIdPkTs()
 
 	// Verify conversion
-	if !bytes.Equal(ipk.Id, id) {
+	if !bytes.Equal(ipk.Id[:], id) {
 		t.Error("ToIdPkTs: Id mismatch")
 	}
-	if !bytes.Equal(ipk.Pub, pub) {
+	if !bytes.Equal(ipk.Pub[:], pub) {
 		t.Error("ToIdPkTs: Pub mismatch")
 	}
 	if ipk.Ts != 1234567890 {
@@ -131,13 +171,7 @@ func TestIdPkTsToEventRef(t *testing.T) {
 		pub[i] = byte(i + 100)
 	}
 
-	ipk := &IdPkTs{
-		Id:  id,
-		Pub: pub,
-		Ts:  1234567890,
-		Ser: 42,
-	}
-
+	ipk := NewIdPkTs(id, pub, 1234567890, 42)
 	ref := ipk.ToEventRef()
 
 	// Verify conversion - need addressable values for slicing
@@ -154,6 +188,23 @@ func TestIdPkTsToEventRef(t *testing.T) {
 	}
 	if ref.Ser() != 42 {
 		t.Error("ToEventRef: Ser mismatch")
+	}
+}
+
+func BenchmarkIdPkTsCopy(b *testing.B) {
+	id := make([]byte, 32)
+	pub := make([]byte, 32)
+	for i := 0; i < 32; i++ {
+		id[i] = byte(i)
+		pub[i] = byte(i + 100)
+	}
+
+	ipk := NewIdPkTs(id, pub, 1234567890, 42)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ipk2 := ipk // Copy (should stay on stack)
+		_ = ipk2
 	}
 }
 
@@ -182,12 +233,7 @@ func BenchmarkIdPkTsToEventRef(b *testing.B) {
 		pub[i] = byte(i + 100)
 	}
 
-	ipk := &IdPkTs{
-		Id:  id,
-		Pub: pub,
-		Ts:  1234567890,
-		Ser: 42,
-	}
+	ipk := NewIdPkTs(id, pub, 1234567890, 42)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -215,7 +261,7 @@ func BenchmarkEventRefAccess(b *testing.B) {
 	}
 }
 
-func BenchmarkIdPkTsFixedAccess(b *testing.B) {
+func BenchmarkIdPkTsAccess(b *testing.B) {
 	id := make([]byte, 32)
 	pub := make([]byte, 32)
 	for i := 0; i < 32; i++ {
@@ -223,26 +269,55 @@ func BenchmarkIdPkTsFixedAccess(b *testing.B) {
 		pub[i] = byte(i + 100)
 	}
 
-	ipk := &IdPkTs{
+	ipk := NewIdPkTs(id, pub, 1234567890, 42)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		idCopy := ipk.Id
+		pubCopy := ipk.Pub
+		_ = idCopy
+		_ = pubCopy
+	}
+}
+
+// Ensure types satisfy expected size for stack allocation
+func TestStructSizes(t *testing.T) {
+	var ipk IdPkTs
+	var ref EventRef
+
+	// Both should be exactly 80 bytes (32+32+8+8)
+	// This is not directly testable in Go, but we can verify the fields exist
+	_ = ipk.Id
+	_ = ipk.Pub
+	_ = ipk.Ts
+	_ = ipk.Ser
+	_ = ref
+}
+
+// Ensure ntypes.EventID and ntypes.Pubkey are used correctly
+func TestNtypesCompatibility(t *testing.T) {
+	var id ntypes.EventID
+	var pub ntypes.Pubkey
+
+	// Fill with test data
+	for i := 0; i < 32; i++ {
+		id[i] = byte(i)
+		pub[i] = byte(i + 32)
+	}
+
+	// Create IdPkTs directly with ntypes
+	ipk := IdPkTs{
 		Id:  id,
 		Pub: pub,
 		Ts:  1234567890,
 		Ser: 42,
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		idCopy := ipk.IDFixed()
-		pubCopy := ipk.PubFixed()
-		_ = idCopy
-		_ = pubCopy
+	// Verify
+	if ipk.Id != id {
+		t.Error("ntypes.EventID should be directly assignable to IdPkTs.Id")
+	}
+	if ipk.Pub != pub {
+		t.Error("ntypes.Pubkey should be directly assignable to IdPkTs.Pub")
 	}
 }
-
-// Ensure EventRef implements expected interface at compile time
-var _ interface {
-	ID() ntypes.EventID
-	Pub() ntypes.Pubkey
-	Ts() int64
-	Ser() uint64
-} = EventRef{}

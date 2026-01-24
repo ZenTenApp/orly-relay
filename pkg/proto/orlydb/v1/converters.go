@@ -9,6 +9,7 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"git.mleku.dev/mleku/nostr/encoders/timestamp"
+	ntypes "git.mleku.dev/mleku/nostr/types"
 	"next.orly.dev/pkg/database"
 	indextypes "next.orly.dev/pkg/database/indexes/types"
 	"next.orly.dev/pkg/interfaces/store"
@@ -271,8 +272,8 @@ func IdPkTsToProto(i *store.IdPkTs) *IdPkTs {
 		return nil
 	}
 	return &IdPkTs{
-		Id:        i.Id,
-		Pubkey:    i.Pub,
+		Id:        i.Id[:],
+		Pubkey:    i.Pub[:],
 		Timestamp: i.Ts,
 		Serial:    i.Ser,
 	}
@@ -284,8 +285,8 @@ func ProtoToIdPkTs(pb *IdPkTs) *store.IdPkTs {
 		return nil
 	}
 	return &store.IdPkTs{
-		Id:  pb.Id,
-		Pub: pb.Pubkey,
+		Id:  ntypes.EventIDFromBytes(pb.Id),
+		Pub: ntypes.PubkeyFromBytes(pb.Pubkey),
 		Ts:  pb.Timestamp,
 		Ser: pb.Serial,
 	}

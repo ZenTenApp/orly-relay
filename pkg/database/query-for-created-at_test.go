@@ -1,11 +1,11 @@
 package database
 
 import (
+	"bytes"
 	"testing"
 
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/timestamp"
-	"next.orly.dev/pkg/utils"
 )
 
 func TestQueryForCreatedAt(t *testing.T) {
@@ -50,7 +50,7 @@ func TestQueryForCreatedAt(t *testing.T) {
 		// Find the event with this ID
 		var found bool
 		for _, ev := range events {
-			if utils.FastEqual(result.Id, ev.ID) {
+			if bytes.Equal(result.Id[:], ev.ID[:]) {
 				found = true
 				break
 			}
@@ -88,7 +88,7 @@ func TestQueryForCreatedAt(t *testing.T) {
 		// Find the event with this ID
 		var found bool
 		for _, ev := range events {
-			if utils.FastEqual(result.Id, ev.ID) {
+			if bytes.Equal(result.Id[:], ev.ID[:]) {
 				found = true
 				break
 			}
@@ -126,7 +126,7 @@ func TestQueryForCreatedAt(t *testing.T) {
 		// Find the event with this ID
 		var found bool
 		for _, ev := range events {
-			if utils.FastEqual(result.Id, ev.ID) {
+			if bytes.Equal(result.Id[:], ev.ID[:]) {
 				found = true
 				break
 			}
