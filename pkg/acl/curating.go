@@ -34,6 +34,8 @@ const (
 // - Blacklisted: Cannot publish
 // - Unclassified: Rate-limited publishing (default 50/day)
 type Curating struct {
+	// Ctx holds the context for the ACL.
+	// Deprecated: Use Context() method instead of accessing directly.
 	Ctx         context.Context
 	cfg         *config.C
 	db          database.Database
@@ -48,6 +50,11 @@ type Curating struct {
 	kindCache        map[int]bool
 	configCache      *database.CuratingConfig
 	cacheMx          sync.RWMutex
+}
+
+// Context returns the ACL context.
+func (c *Curating) Context() context.Context {
+	return c.Ctx
 }
 
 func (c *Curating) Configure(cfg ...any) (err error) {

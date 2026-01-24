@@ -46,13 +46,23 @@ import (
 )
 
 type Server struct {
-	mux        *http.ServeMux
-	Config     *config.C
-	Ctx        context.Context
+	mux *http.ServeMux
+	// Config holds the relay configuration.
+	// Deprecated: Use GetConfig() method instead of accessing directly.
+	Config *config.C
+	// Ctx holds the server context.
+	// Deprecated: Use Context() method instead of accessing directly.
+	Ctx context.Context
 	publishers *publish.S
-	Admins     [][]byte
-	Owners     [][]byte
-	DB         database.Database // Changed from embedded *database.D to interface field
+	// Admins holds the admin pubkeys.
+	// Deprecated: Use IsAdmin() method instead of accessing directly.
+	Admins [][]byte
+	// Owners holds the owner pubkeys.
+	// Deprecated: Use IsOwner() method instead of accessing directly.
+	Owners [][]byte
+	// DB holds the database instance.
+	// Deprecated: Use Database() method instead of accessing directly.
+	DB database.Database
 
 	// optional reverse proxy for dev web server
 	devProxy *httputil.ReverseProxy
@@ -108,6 +118,47 @@ type Server struct {
 
 	// Branding/white-label customization
 	brandingMgr *branding.Manager
+}
+
+// =============================================================================
+// Server Accessor Methods
+// =============================================================================
+
+// GetConfig returns the relay configuration.
+func (s *Server) GetConfig() *config.C {
+	return s.Config
+}
+
+// Context returns the server context.
+func (s *Server) Context() context.Context {
+	return s.Ctx
+}
+
+// Database returns the database instance.
+func (s *Server) Database() database.Database {
+	return s.DB
+}
+
+// IsAdmin returns true if the given pubkey is an admin.
+func (s *Server) IsAdmin(pubkey []byte) bool {
+	pubHex := string(hex.Enc(pubkey))
+	for _, admin := range s.Admins {
+		if string(hex.Enc(admin)) == pubHex {
+			return true
+		}
+	}
+	return false
+}
+
+// IsOwner returns true if the given pubkey is an owner.
+func (s *Server) IsOwner(pubkey []byte) bool {
+	pubHex := string(hex.Enc(pubkey))
+	for _, owner := range s.Owners {
+		if string(hex.Enc(owner)) == pubHex {
+			return true
+		}
+	}
+	return false
 }
 
 // isIPBlacklisted checks if an IP address is blacklisted using the managed ACL system

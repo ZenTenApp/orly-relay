@@ -31,6 +31,8 @@ import (
 )
 
 type Follows struct {
+	// Ctx holds the context for the ACL.
+	// Deprecated: Use Context() method instead of accessing directly.
 	Ctx context.Context
 	cfg *config.C
 	db  database.Database
@@ -49,6 +51,11 @@ type Follows struct {
 	onFollowListUpdate func()
 	// Progressive throttle for non-followed users (nil if disabled)
 	throttle *ProgressiveThrottle
+}
+
+// Context returns the ACL context.
+func (f *Follows) Context() context.Context {
+	return f.Ctx
 }
 
 func (f *Follows) Configure(cfg ...any) (err error) {

@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/websocket"
 	"lol.mleku.dev/errorf"
 	"lol.mleku.dev/log"
+	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/acl"
 	"next.orly.dev/pkg/database"
 	"git.mleku.dev/mleku/nostr/encoders/event"
@@ -22,8 +23,11 @@ import (
 )
 
 type Listener struct {
+	// Server is the embedded server reference.
+	// Deprecated: Prefer using accessor methods (ServerConfig, ServerDatabase, etc.)
+	// instead of accessing Server fields directly.
 	*Server
-	conn             *websocket.Conn
+	conn *websocket.Conn
 	ctx              context.Context
 	cancel           context.CancelFunc // Cancel function for this listener's context
 	remote           string
@@ -62,6 +66,21 @@ type messageRequest struct {
 // to prevent cancellation from affecting subsequent operations
 func (l *Listener) Ctx() context.Context {
 	return l.ctx
+}
+
+// ServerContext returns the server's context (distinct from the listener's own context).
+func (l *Listener) ServerContext() context.Context {
+	return l.Server.Context()
+}
+
+// ServerConfig returns the server's configuration.
+func (l *Listener) ServerConfig() *config.C {
+	return l.Server.GetConfig()
+}
+
+// ServerDatabase returns the server's database instance.
+func (l *Listener) ServerDatabase() database.Database {
+	return l.Server.Database()
 }
 
 // DroppedMessages returns the total number of messages that were dropped

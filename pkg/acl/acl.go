@@ -17,8 +17,46 @@ func (s *S) SetMode(m string) {
 }
 
 type S struct {
-	ACL    []acliface.I
+	// ACL holds registered ACL implementations.
+	// Deprecated: Use GetACLByType() or ListRegisteredACLs() instead of accessing directly.
+	ACL []acliface.I
+	// Active holds the name of the currently active ACL mode.
+	// Deprecated: Use GetMode() instead of Active.Load().
 	Active atomic.String
+}
+
+// GetMode returns the currently active ACL mode name.
+func (s *S) GetMode() string {
+	return s.Active.Load()
+}
+
+// GetACLByType returns the ACL implementation with the given type name, or nil if not found.
+func (s *S) GetACLByType(typ string) acliface.I {
+	for _, i := range s.ACL {
+		if i.Type() == typ {
+			return i
+		}
+	}
+	return nil
+}
+
+// GetActiveACL returns the currently active ACL implementation, or nil if none is active.
+func (s *S) GetActiveACL() acliface.I {
+	return s.GetACLByType(s.Active.Load())
+}
+
+// ListRegisteredACLs returns the type names of all registered ACL implementations.
+func (s *S) ListRegisteredACLs() []string {
+	types := make([]string, 0, len(s.ACL))
+	for _, i := range s.ACL {
+		types = append(types, i.Type())
+	}
+	return types
+}
+
+// IsRegistered returns true if an ACL with the given type is registered.
+func (s *S) IsRegistered(typ string) bool {
+	return s.GetACLByType(typ) != nil
 }
 
 type A struct{ S }

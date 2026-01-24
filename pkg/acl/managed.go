@@ -17,6 +17,8 @@ import (
 )
 
 type Managed struct {
+	// Ctx holds the context for the ACL.
+	// Deprecated: Use Context() method instead of accessing directly.
 	Ctx context.Context
 	cfg *config.C
 	db  database.Database
@@ -25,6 +27,11 @@ type Managed struct {
 	admins     [][]byte
 	peerAdmins [][]byte // peer relay identity pubkeys with admin access
 	mx         sync.RWMutex
+}
+
+// Context returns the ACL context.
+func (m *Managed) Context() context.Context {
+	return m.Ctx
 }
 
 func (m *Managed) Configure(cfg ...any) (err error) {

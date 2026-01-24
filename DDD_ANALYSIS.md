@@ -41,17 +41,19 @@ This document provides a comprehensive Domain-Driven Design (DDD) analysis of th
 
 ## Executive Summary
 
-ORLY demonstrates **mature DDD adoption** for a system of its complexity. The codebase exhibits clear bounded context separation, proper repository patterns with multiple backend implementations, and well-designed interface segregation that prevents circular dependencies.
+ORLY demonstrates **mature DDD adoption** with sophisticated modular architecture. The codebase has evolved from a single-binary relay to a **multi-process system** with clear bounded context separation, gRPC-based inter-process communication, and pluggable implementations for database, ACL, and sync services.
 
 **Strengths:**
 - Clear separation between `app/` (application layer) and `pkg/` (domain/infrastructure)
-- Repository pattern with three interchangeable backends (Badger, Neo4j, WasmDB)
-- Interface-based ACL system with pluggable implementations (None, Follows, Managed)
+- Repository pattern with four interchangeable backends (Badger, Neo4j, WasmDB, gRPC)
+- Interface-based ACL system with four implementations (None, Follows, Managed, Curating)
+- **Driver Registry pattern** for runtime component selection
+- **Process Supervisor pattern** for split IPC mode deployment
 - Per-connection aggregate isolation in `Listener`
 - Strong use of Go interfaces for dependency inversion
-- **New:** Immutable `EventRef` value object alongside legacy `IdPkTs`
-- **New:** Comprehensive protocol extensions (Blossom, Graph Queries, NIP-43, NIP-86)
-- **New:** Distributed sync with cluster replication support
+- Immutable `EventRef` value object alongside legacy `IdPkTs`
+- Comprehensive protocol extensions (NIP-43, NIP-77, NIP-86, Blossom, Graph Queries)
+- **gRPC service layer** exposing all major interfaces for remote access
 
 **Areas for Improvement:**
 - Domain events are implicit rather than explicit types
@@ -59,7 +61,7 @@ ORLY demonstrates **mature DDD adoption** for a system of its complexity. The co
 - Handler methods mix application orchestration with domain logic
 - Ubiquitous language is partially documented
 
-**Overall DDD Maturity Score: 7.5/10** (improved from 7/10)
+**Overall DDD Maturity Score: 8/10** (improved from 7.5/10)
 
 ---
 
@@ -72,13 +74,15 @@ ORLY organizes code into distinct bounded contexts, each with its own model and 
 #### 1. Event Storage Context (`pkg/database/`)
 - **Responsibility:** Persistent storage of Nostr events with indexing and querying
 - **Key Abstractions:** `Database` interface (109 lines), `Subscription`, `Payment`, `NIP43Membership`
-- **Implementations:** Badger (embedded), Neo4j (graph), WasmDB (browser)
+- **Implementations:** Badger (embedded), Neo4j (graph), WasmDB (browser), gRPC (remote)
+- **gRPC Server:** `pkg/database/server/` - DatabaseService with 250+ RPC methods
 - **File:** `pkg/database/interface.go:17-109`
 
 #### 2. Access Control Context (`pkg/acl/`)
 - **Responsibility:** Authorization decisions for read/write operations
 - **Key Abstractions:** `I` interface, `Registry`, access levels (none/read/write/admin/owner)
-- **Implementations:** `None`, `Follows`, `Managed`
+- **Implementations:** `None`, `Follows`, `Managed`, `Curating`
+- **gRPC Server:** `pkg/acl/server/` - ACLService
 - **Files:** `pkg/acl/acl.go`, `pkg/interfaces/acl/acl.go:21-40`
 
 #### 3. Event Policy Context (`pkg/policy/`)
@@ -90,19 +94,20 @@ ORLY organizes code into distinct bounded contexts, each with its own model and 
 #### 4. Connection Management Context (`app/`)
 - **Responsibility:** WebSocket lifecycle, message routing, authentication, flow control
 - **Key Abstractions:** `Listener`, `Server`, message handlers, `messageRequest`
+- **Handlers:** 25+ message type handlers
 - **File:** `app/listener.go:24-52`
 
 #### 5. Protocol Extensions Context (`pkg/protocol/`)
 - **Responsibility:** NIP implementations beyond core protocol
 - **Subcontexts:**
-  - **NIP-43 Membership** (`pkg/protocol/nip43/`): Invite-based access control
+  - **NIP-43 Membership** (`pkg/protocol/nip43/`): Invite-based access control (kinds 28934, 28936, 8000)
   - **Graph Queries** (`pkg/protocol/graph/`): BFS traversal for follows/followers/threads
   - **NWC Payments** (`pkg/protocol/nwc/`): Nostr Wallet Connect integration
   - **Blossom** (`pkg/protocol/blossom/`): BUD protocol definitions
   - **Directory** (`pkg/protocol/directory/`): Relay directory client
 
 #### 6. Blob Storage Context (`pkg/blossom/`)
-- **Responsibility:** Binary blob storage following BUD specifications
+- **Responsibility:** Binary blob storage following BUD-09 specifications
 - **Key Abstractions:** `Server`, `Storage`, `Blob`, `BlobMeta`
 - **Invariants:** SHA-256 hash integrity, MIME type validation, quota enforcement
 - **Files:** `pkg/blossom/server.go`, `pkg/blossom/storage.go`
@@ -115,9 +120,14 @@ ORLY organizes code into distinct bounded contexts, each with its own model and 
 
 #### 8. Distributed Sync Context (`pkg/sync/`)
 - **Responsibility:** Federation and replication between relay peers
-- **Key Abstractions:** `Manager`, `ClusterManager`, `RelayGroupManager`, `NIP11Cache`
-- **Integration:** Serial-number based sync protocol, NIP-11 peer discovery
-- **Files:** `pkg/sync/manager.go`, `pkg/sync/cluster.go`, `pkg/sync/relaygroup.go`
+- **Key Abstractions:** `Manager`, `Registry`, driver pattern
+- **Implementations:**
+  - **Negentropy** (`pkg/sync/negentropy/`): NIP-77 set reconciliation
+  - **Cluster** (`pkg/sync/cluster/`): HTTP-based pull replication (kind 39108)
+  - **Distributed** (`pkg/sync/distributed/`): Peer-to-peer sync
+  - **RelayGroup** (`pkg/sync/relaygroup/`): Relay grouping (kind 39105)
+- **gRPC Clients:** Each sync implementation has gRPC client for split mode
+- **Files:** `pkg/sync/manager.go`, `pkg/sync/negentropy/`, `pkg/sync/cluster/`
 
 #### 9. Spider Context (`pkg/spider/`)
 - **Responsibility:** Syncing events from admin relays for followed pubkeys
@@ -125,48 +135,78 @@ ORLY organizes code into distinct bounded contexts, each with its own model and 
 - **Integration:** Batch subscriptions, rate limit backoff, blackout periods
 - **File:** `pkg/spider/spider.go`
 
+#### 10. Process Supervision Context (`cmd/orly-launcher/`) **NEW**
+- **Responsibility:** Multi-process lifecycle management for split IPC mode
+- **Key Abstractions:** `Supervisor`, `Config`, process state machine
+- **Patterns:** Supervisor pattern with dependency ordering, crash recovery
+- **Integration:** gRPC health checks, graceful shutdown ordering
+- **Files:** `cmd/orly-launcher/supervisor.go`, `cmd/orly-launcher/config.go`
+
+#### 11. Certificate Management Context (`cmd/orly-certs/`) **NEW**
+- **Responsibility:** TLS certificate provisioning and renewal
+- **Key Abstractions:** Certificate manager, DNS-01 challenge handler
+- **Integration:** Independent service, communicates via filesystem
+- **File:** `cmd/orly-certs/`
+
 ### Context Map
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        Connection Management (app/)                          │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐   │
-│  │   Server    │───▶│  Listener   │───▶│  Handlers   │◀──▶│  Publishers │   │
-│  └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘   │
-└────────┬────────────────────┬────────────────────┬──────────────────────────┘
-         │                    │                    │
-         │ [Conformist]       │ [Customer-Supplier]│ [Customer-Supplier]
-         ▼                    ▼                    ▼
-┌────────────────┐   ┌────────────────┐   ┌────────────────┐
-│  Access Control│   │  Event Storage │   │  Event Policy  │
-│   (pkg/acl/)   │   │ (pkg/database/)│   │  (pkg/policy/) │
-│                │   │                │   │                │
-│  Registry ◀────┼───┼────Conformist──┼───┼─▶ Manager      │
-└────────────────┘   └────────────────┘   └────────────────┘
-         │                    │                    │
-         │                    │ [Shared Kernel]    │
-         │                    ▼                    │
-         │           ┌────────────────┐            │
-         │           │  Event Entity  │            │
-         │           │(git.mleku.dev/ │◀───────────┘
-         │           │ mleku/nostr)   │
-         │           └────────────────┘
-         │                    │
-         │ [Anti-Corruption]  │ [Customer-Supplier]
-         ▼                    ▼
-┌────────────────┐   ┌────────────────┐   ┌────────────────┐
-│  Rate Limiting │   │   Protocol     │   │  Blob Storage  │
-│ (pkg/ratelimit)│   │   Extensions   │   │  (pkg/blossom) │
-│                │   │ (pkg/protocol/)│   │                │
-└────────────────┘   └────────────────┘   └────────────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        ▼                    ▼                    ▼
-┌────────────────┐   ┌────────────────┐   ┌────────────────┐
-│  Distributed   │   │    Spider      │   │ Graph Queries  │
-│     Sync       │   │   (pkg/spider) │   │(pkg/protocol/  │
-│  (pkg/sync/)   │   │                │   │     graph/)    │
-└────────────────┘   └────────────────┘   └────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                      Process Supervision (orly-launcher)                         │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐       │
+│  │  Supervisor │───▶│ DB Process  │───▶│ ACL Process │───▶│Relay Process│       │
+│  └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘       │
+│         │                  │                  │                  │              │
+│         │  [Dependency]    │   [gRPC]         │    [gRPC]        │              │
+│         ▼                  ▼                  ▼                  ▼              │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐       │
+│  │Sync Services│    │   Certs     │    │ Admin Web   │    │   Health    │       │
+│  │  (4 procs)  │    │  Service    │    │     UI      │    │   Checks    │       │
+│  └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘       │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                         │
+         ┌───────────────────────────────┼───────────────────────────────┐
+         │                               │                               │
+         ▼                               ▼                               ▼
+┌────────────────┐              ┌────────────────┐              ┌────────────────┐
+│  Event Storage │              │  Access Control│              │  Event Policy  │
+│ (pkg/database/)│              │   (pkg/acl/)   │              │  (pkg/policy/) │
+│                │              │                │              │                │
+│ Badger│Neo4j   │◀─[gRPC]─────▶│Follows│Managed │◀─[Conformist]│   Manager      │
+│ WasmDB│gRPC    │              │Curating│None   │              │                │
+└────────────────┘              └────────────────┘              └────────────────┘
+         │                               │                               │
+         │ [Shared Kernel]               │                               │
+         ▼                               ▼                               │
+┌────────────────────────────────────────────────────────────┐          │
+│                      Event Entity                          │          │
+│                 (git.mleku.dev/mleku/nostr)                │◀─────────┘
+│            Filter, Tag, Subscription types                 │
+└────────────────────────────────────────────────────────────┘
+         │                               │
+         │ [Customer-Supplier]           │ [Customer-Supplier]
+         ▼                               ▼
+┌────────────────┐              ┌────────────────┐              ┌────────────────┐
+│  Blob Storage  │              │   Protocol     │              │  Rate Limiting │
+│  (pkg/blossom) │              │   Extensions   │              │ (pkg/ratelimit)│
+│                │              │ (pkg/protocol/)│              │                │
+└────────────────┘              └────────────────┘              └────────────────┘
+                                        │
+        ┌───────────────────────────────┼───────────────────────────────┐
+        ▼                               ▼                               ▼
+┌────────────────┐              ┌────────────────┐              ┌────────────────┐
+│   NIP-43       │              │   NIP-77       │              │ Graph Queries  │
+│  Membership    │              │  Negentropy    │              │(pkg/protocol/  │
+│(kinds 28934/36)│              │  Sync          │              │     graph/)    │
+└────────────────┘              └────────────────┘              └────────────────┘
+                                        │
+        ┌───────────────────────────────┼───────────────────────────────┐
+        ▼                               ▼                               ▼
+┌────────────────┐              ┌────────────────┐              ┌────────────────┐
+│   Cluster      │              │  Distributed   │              │  Relay Group   │
+│   Sync         │              │     Sync       │              │   (kind 39105) │
+│ (kind 39108)   │              │                │              │                │
+└────────────────┘              └────────────────┘              └────────────────┘
 ```
 
 **Integration Patterns Identified:**
@@ -174,26 +214,31 @@ ORLY organizes code into distinct bounded contexts, each with its own model and 
 | Upstream | Downstream | Pattern | Notes |
 |----------|------------|---------|-------|
 | nostr library | All contexts | Shared Kernel | Event, Filter, Tag types |
-| Database | ACL, Policy, Blossom | Customer-Supplier | Query for follow lists, permissions, blob storage |
+| Database | ACL, Policy, Blossom, Sync | Customer-Supplier | Query for follows, permissions, event storage |
 | Policy | Handlers, Sync | Conformist | All respect policy decisions |
 | ACL | Handlers, Blossom | Conformist | Handlers/Blossom respect access levels |
-| Rate Limit | Database | Anti-Corruption | Load monitor abstraction |
-| Sync | Database, Policy | Customer-Supplier | Serial-based event replication |
+| Rate Limit | Database | Anti-Corruption | LoadMonitor abstraction |
+| Sync Services | Database | Customer-Supplier | Serial-based event replication |
+| Launcher | All Services | Supervisor | Process lifecycle management |
+| gRPC Layer | DB, ACL, Sync | Published Language | Protocol buffer contracts |
 
 ### Subdomain Classification
 
 | Subdomain | Type | Justification |
 |-----------|------|---------------|
 | Event Storage | **Core** | Central to relay's value proposition |
-| Access Control | **Core** | Key differentiator (WoT, follows-based, managed) |
+| Access Control | **Core** | Key differentiator (WoT, follows-based, managed, curating) |
 | Event Policy | **Core** | Enables complex filtering rules |
 | Graph Queries | **Core** | Unique social graph traversal capabilities |
 | NIP-43 Membership | **Core** | Unique invite-based access model |
 | Blob Storage (Blossom) | **Core** | Media hosting differentiator |
+| NIP-77 Negentropy Sync | **Core** | Efficient relay-to-relay sync |
 | Connection Management | **Supporting** | Standard WebSocket infrastructure |
 | Rate Limiting | **Supporting** | Operational concern with PID controller |
-| Distributed Sync | **Supporting** | Infrastructure for federation |
+| Cluster Sync | **Supporting** | Infrastructure for federation |
 | Spider | **Supporting** | Data aggregation from external relays |
+| Process Supervision | **Generic** | Standard process management |
+| Certificate Management | **Generic** | Standard TLS infrastructure |
 
 ---
 
@@ -231,7 +276,7 @@ type InviteCode struct {
 }
 ```
 - **Identity:** Unique code string
-- **Lifecycle:** Created → Valid → Used/Expired
+- **Lifecycle:** Created -> Valid -> Used/Expired
 - **Invariants:** Cannot be reused once consumed
 
 #### Subscription (Payment Entity)
@@ -240,7 +285,7 @@ type InviteCode struct {
 // GetSubscription, ExtendSubscription, RecordPayment
 ```
 - **Identity:** Pubkey
-- **Lifecycle:** Trial → Active → Expired
+- **Lifecycle:** Trial -> Active -> Expired
 - **Invariants:** Can only extend if not expired
 
 #### Blob (Blossom Entity)
@@ -255,14 +300,28 @@ type BlobMeta struct {
 }
 ```
 - **Identity:** SHA-256 hash
-- **Lifecycle:** Uploaded → Active → Deleted
+- **Lifecycle:** Uploaded -> Active -> Deleted
 - **Invariants:** Hash must match content; owner can delete
+
+#### Process (Supervisor Entity) **NEW**
+```go
+// cmd/orly-launcher/supervisor.go (implied)
+type Process struct {
+    Name      string      // Identity: service name
+    Cmd       *exec.Cmd   // Running process
+    State     ProcessState
+    Restarts  int
+}
+```
+- **Identity:** Service name (orly-db, orly-acl, etc.)
+- **Lifecycle:** Stopped -> Starting -> Running -> Stopping
+- **Invariants:** Dependency ordering; health check before dependent startup
 
 ### Value Objects
 
 Value objects are immutable and defined by their attributes, not identity.
 
-#### EventRef (Immutable Event Reference) - **NEW**
+#### EventRef (Immutable Event Reference)
 ```go
 // pkg/interfaces/store/store_interface.go:99-107
 type EventRef struct {
@@ -321,7 +380,7 @@ type Rule struct {
 }
 ```
 - **Complexity:** 25+ fields, decomposition candidate
-- **Binary caches:** Performance optimization for hex→binary conversion
+- **Binary caches:** Performance optimization for hex->binary conversion
 
 #### WriteRequest (Message Value)
 ```go
@@ -334,6 +393,24 @@ type WriteRequest struct {
     Deadline  time.Time
 }
 ```
+
+#### LauncherConfig (Configuration Value) **NEW**
+```go
+// cmd/orly-launcher/config.go
+type Config struct {
+    DBBackend     string  // badger, neo4j
+    DBListen      string  // 127.0.0.1:50051
+    ACLEnabled    bool
+    ACLMode       string  // follows, managed, curation
+    ACLListen     string  // 127.0.0.1:50052
+    AdminEnabled  bool
+    AdminPort     int
+    AdminOwners   []string
+    // ... sync service configs
+}
+```
+- **Persistence:** JSON file at `~/.config/orly/launcher.json`
+- **Environment Override:** All fields can be overridden via `ORLY_LAUNCHER_*`
 
 ### Aggregates
 
@@ -387,6 +464,16 @@ if isAuthMessage {
   - MIME type restrictions
   - Owner-only deletion
 
+#### Supervisor Aggregate **NEW**
+- **Root:** `Supervisor`
+- **Members:** Process map, config, dependency graph
+- **Boundary:** All managed processes
+- **Invariants:**
+  - Dependency ordering (DB -> ACL -> Sync -> Relay)
+  - Health checks before dependent startup
+  - Reverse shutdown ordering
+  - Crash recovery with restart limits
+
 ### Repositories
 
 The Repository pattern abstracts persistence for aggregate roots.
@@ -429,6 +516,7 @@ type Database interface {
 1. **Badger** (`pkg/database/database.go`): Embedded key-value store
 2. **Neo4j** (`pkg/neo4j/`): Graph database for social queries
 3. **WasmDB** (`pkg/wasmdb/`): Browser IndexedDB for WASM builds
+4. **gRPC** (`pkg/database/grpc/`): Remote database via gRPC **NEW**
 
 **Interface Segregation:**
 ```go
@@ -449,6 +537,21 @@ type I interface {
     Initer
     SerialByIder
 }
+```
+
+#### Driver Registry Pattern **NEW**
+```go
+// pkg/database/ - Driver selection at runtime
+database.HasDriver("badger")  // Check availability
+database.NewFromDriver("badger", config)  // Create instance
+
+// pkg/acl/ - ACL driver selection
+acl.HasDriver("follows")
+acl.NewACLFromDriver("follows", config)
+
+// pkg/sync/ - Sync driver selection
+sync.HasDriver("negentropy")
+sync.NewSyncManager("negentropy", config)
 ```
 
 ### Domain Services
@@ -512,6 +615,24 @@ func (l *Limiter) Wait(ctx context.Context, op OperationType) error
 - Separate setpoints for read/write operations
 - Emergency mode with hysteresis
 
+#### Supervisor (Process Lifecycle Service) **NEW**
+```go
+// cmd/orly-launcher/supervisor.go
+type Supervisor struct {
+    config    *Config
+    processes map[string]*Process
+    mu        sync.Mutex
+}
+func (s *Supervisor) Start() error
+func (s *Supervisor) Stop() error
+func (s *Supervisor) Restart(name string) error
+func (s *Supervisor) IsRunning() bool
+```
+- Manages process lifecycle with dependency ordering
+- Health checks via gRPC before proceeding
+- Crash recovery with configurable restart limits
+- Graceful shutdown in reverse dependency order
+
 ### Domain Events
 
 **Current State:** Domain events are implicit in message flow, not explicit types.
@@ -529,6 +650,9 @@ func (l *Limiter) Wait(ctx context.Context, op OperationType) error
 | PolicyUpdated | Policy config event | `messagePauseMutex.Lock()` |
 | BlobUploaded | Blossom PUT success | Quota updated |
 | BlobDeleted | Blossom DELETE | Quota released |
+| ProcessStarted | Supervisor start | Health check, dependency unlock |
+| ProcessCrashed | Process exit | Restart attempt, alert |
+| ConfigUpdated | Admin UI save | JSON persistence, reload |
 
 ---
 
@@ -627,6 +751,13 @@ type BlobUploaded struct {
     Size      int64
     Timestamp time.Time
 }
+
+type ProcessStateChanged struct {
+    ServiceName string
+    OldState    ProcessState
+    NewState    ProcessState
+    Timestamp   time.Time
+}
 ```
 
 ### 2. Strengthen Aggregate Boundaries
@@ -690,6 +821,8 @@ func (s *EventService) ProcessIncomingEvent(ctx context.Context, ev *event.E, au
 | Blob | Binary content (images, media) | `blossom.BlobMeta` |
 | Spider | Event aggregator from external relays | `spider.Spider` |
 | Sync | Peer-to-peer replication | `sync.Manager` |
+| Supervisor | Process lifecycle manager | `supervisor.Supervisor` |
+| Driver | Pluggable implementation | Registry pattern |
 ```
 
 ### 5. Add Domain-Specific Error Types
@@ -706,6 +839,7 @@ var (
     ErrQuotaExceeded      = &DomainError{Code: "QUOTA_EXCEEDED"}
     ErrInviteCodeInvalid  = &DomainError{Code: "INVITE_INVALID"}
     ErrBlobTooLarge       = &DomainError{Code: "BLOB_TOO_LARGE"}
+    ErrServiceUnavailable = &DomainError{Code: "SERVICE_UNAVAILABLE"}
 )
 ```
 
@@ -739,13 +873,16 @@ The context map is now documented in this file with integration patterns.
 
 - [x] Bounded contexts identified with clear boundaries
 - [x] Repositories abstract persistence for aggregate roots
-- [x] Multiple repository implementations (Badger/Neo4j/WasmDB)
+- [x] Multiple repository implementations (Badger/Neo4j/WasmDB/gRPC)
 - [x] Interface segregation prevents circular dependencies
 - [x] Configuration centralized (`app/config/config.go`)
 - [x] Per-connection aggregate isolation
 - [x] Access control as pluggable strategy pattern
 - [x] Value objects have immutable alternative (`EventRef`)
 - [x] Context map documented
+- [x] Driver registry pattern for runtime selection
+- [x] gRPC layer for distributed deployment
+- [x] Process supervision for split mode
 
 ### Needs Attention
 
@@ -774,13 +911,14 @@ The context map is now documented in this file with integration patterns.
 
 | File | Purpose |
 |------|---------|
-| `app/server.go` | HTTP/WebSocket server setup (1240 lines) |
-| `app/listener.go` | Connection aggregate (297 lines) |
+| `app/server.go` | HTTP/WebSocket server setup |
+| `app/listener.go` | Connection aggregate |
 | `app/handle-event.go` | EVENT message handler |
 | `app/handle-req.go` | REQ message handler |
 | `app/handle-auth.go` | AUTH message handler |
 | `app/handle-nip43.go` | NIP-43 membership handlers |
 | `app/handle-nip86.go` | NIP-86 management handlers |
+| `app/handle-negentropy.go` | NIP-77 negentropy sync |
 | `app/handle-policy-config.go` | Policy configuration events |
 
 ### Infrastructure Files
@@ -788,13 +926,29 @@ The context map is now documented in this file with integration patterns.
 | File | Purpose |
 |------|---------|
 | `pkg/database/database.go` | Badger implementation |
+| `pkg/database/server/` | gRPC database server |
+| `pkg/database/grpc/` | gRPC database client |
 | `pkg/neo4j/` | Neo4j implementation |
 | `pkg/wasmdb/` | WasmDB implementation |
 | `pkg/blossom/server.go` | Blossom blob storage server |
 | `pkg/ratelimit/limiter.go` | PID-based rate limiting |
-| `pkg/sync/manager.go` | Distributed sync manager |
-| `pkg/sync/cluster.go` | Cluster replication |
+| `pkg/sync/negentropy/` | NIP-77 negentropy sync |
+| `pkg/sync/cluster/` | HTTP cluster replication |
 | `pkg/spider/spider.go` | Event spider/aggregator |
+
+### Command Binaries
+
+| Binary | Purpose |
+|--------|---------|
+| `cmd/orly-launcher/` | Process supervisor with admin UI |
+| `cmd/orly-db-badger/` | Standalone Badger database server |
+| `cmd/orly-db-neo4j/` | Standalone Neo4j database server |
+| `cmd/orly-acl-follows/` | Follows-based ACL server |
+| `cmd/orly-acl-managed/` | NIP-86 managed ACL server |
+| `cmd/orly-acl-curation/` | Trust-tier curation ACL server |
+| `cmd/orly-sync-negentropy/` | NIP-77 negentropy sync service |
+| `cmd/orly-sync-cluster/` | Cluster replication service |
+| `cmd/orly-certs/` | Certificate management service |
 
 ### Interface Packages
 
@@ -810,7 +964,15 @@ The context map is now documented in this file with integration patterns.
 | `pkg/interfaces/store/` | Store interface with IdPkTs, EventRef |
 | `pkg/interfaces/typer/` | Type introspection interface |
 
+### Protocol Buffer Definitions
+
+| Package | Purpose |
+|---------|---------|
+| `pkg/proto/orlydb/v1/` | Database gRPC service (250+ methods) |
+| `pkg/proto/orlyacl/v1/` | ACL gRPC service |
+| `pkg/proto/orlysync/` | Sync services (negentropy, cluster, etc.) |
+
 ---
 
-*Generated: 2025-12-24*
-*Analysis based on ORLY codebase v0.36.14*
+*Generated: 2026-01-24*
+*Analysis based on ORLY codebase v0.56.4*
