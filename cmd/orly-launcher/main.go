@@ -50,9 +50,13 @@ func main() {
 	}()
 
 	log.I.F("starting orly-launcher %s", version.V)
-	log.I.F("database binary: %s", cfg.DBBinary)
-	log.I.F("relay binary: %s", cfg.RelayBinary)
-	log.I.F("database listen: %s", cfg.DBListen)
+	if cfg.ServicesEnabled {
+		log.I.F("database binary: %s", cfg.DBBinary)
+		log.I.F("relay binary: %s", cfg.RelayBinary)
+		log.I.F("database listen: %s", cfg.DBListen)
+	} else {
+		log.I.F("services disabled - running admin UI only")
+	}
 
 	// Start admin server if enabled
 	var adminServer *AdminServer
@@ -78,17 +82,22 @@ func main() {
 		}
 	}
 
-	if err := supervisor.Start(); chk.E(err) {
-		fmt.Fprintf(os.Stderr, "failed to start: %v\n", err)
-		os.Exit(1)
+	// Only start services if enabled
+	if cfg.ServicesEnabled {
+		if err := supervisor.Start(); chk.E(err) {
+			fmt.Fprintf(os.Stderr, "failed to start: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// Wait for context cancellation (signal received)
 	<-ctx.Done()
 
-	log.I.F("stopping supervisor...")
-	if err := supervisor.Stop(); chk.E(err) {
-		log.E.F("error during shutdown: %v", err)
+	if cfg.ServicesEnabled {
+		log.I.F("stopping supervisor...")
+		if err := supervisor.Stop(); chk.E(err) {
+			log.E.F("error during shutdown: %v", err)
+		}
 	}
 
 	log.I.F("orly-launcher stopped")
@@ -107,6 +116,7 @@ Commands:
 
 Environment Variables:
   Process Management:
+    ORLY_LAUNCHER_SERVICES_ENABLED Start DB/relay on launch (default: true)
     ORLY_LAUNCHER_DB_BINARY        Path to orly-db binary (default: orly-db-{backend})
     ORLY_LAUNCHER_RELAY_BINARY     Path to orly binary (default: orly)
     ORLY_LAUNCHER_ACL_BINARY       Path to orly-acl binary (default: orly-acl-{mode})

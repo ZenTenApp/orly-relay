@@ -123,6 +123,17 @@ export async function fetchBinaries(signer, pubkey) {
 }
 
 /**
+ * Fetch available releases from official repo (proxied to avoid CORS)
+ */
+export async function fetchReleases(signer, pubkey) {
+    const response = await authFetch('/api/releases', {}, signer, pubkey);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch releases: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
  * Update binaries from URLs
  */
 export async function updateBinaries(signer, pubkey, version, urls) {
@@ -154,6 +165,24 @@ export async function restartServices(signer, pubkey) {
 }
 
 /**
+ * Restart a specific service with dependency handling
+ * @param {string} service - The service name (e.g., 'orly-db-badger', 'orly-acl-follows', 'orly')
+ */
+export async function restartService(signer, pubkey, service) {
+    const response = await authFetch('/api/restart-service', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ service }),
+    }, signer, pubkey);
+
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || `Restart failed: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
  * Rollback to previous version
  */
 export async function rollbackVersion(signer, pubkey) {
@@ -164,6 +193,36 @@ export async function rollbackVersion(signer, pubkey) {
     if (!response.ok) {
         const data = await response.json();
         throw new Error(data.message || `Rollback failed: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
+ * Start all services
+ */
+export async function startServices(signer, pubkey) {
+    const response = await authFetch('/api/start-services', {
+        method: 'POST',
+    }, signer, pubkey);
+
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || `Start failed: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
+ * Stop all services
+ */
+export async function stopServices(signer, pubkey) {
+    const response = await authFetch('/api/stop-services', {
+        method: 'POST',
+    }, signer, pubkey);
+
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || `Stop failed: ${response.statusText}`);
     }
     return response.json();
 }

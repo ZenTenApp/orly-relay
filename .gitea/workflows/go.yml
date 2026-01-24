@@ -127,6 +127,7 @@ jobs:
             "orly-acl-curation:./cmd/orly-acl-curation"
             "orly-launcher:./cmd/orly-launcher"
             "orly-sync-negentropy:./cmd/orly-sync-negentropy"
+            "orly-certs:./cmd/orly-certs"
           )
 
           # Build for AMD64
@@ -218,6 +219,7 @@ jobs:
 - **orly-acl-curation** - Curation ACL server
 - **orly-launcher** - Process supervisor with admin UI
 - **orly-sync-negentropy** - Negentropy sync service
+- **orly-certs** - DNS-01 wildcard certificate manager
 - **libsecp256k1** - Required shared library
 
 ### Architectures

@@ -39,6 +39,10 @@ type ConfigFile struct {
 	NegentropyEnabled      *bool  `json:"negentropy_enabled,omitempty"`
 	NegentropyBinary       string `json:"negentropy_binary,omitempty"`
 	NegentropyListen       string `json:"negentropy_listen,omitempty"`
+
+	// Certificate service
+	CertsEnabled *bool  `json:"certs_enabled,omitempty"`
+	CertsBinary  string `json:"certs_binary,omitempty"`
 }
 
 // configFilePath returns the path to the config file.
@@ -104,6 +108,8 @@ func ConfigToFile(cfg *Config) *ConfigFile {
 		NegentropyEnabled:      &cfg.NegentropyEnabled,
 		NegentropyBinary:       cfg.NegentropyBinary,
 		NegentropyListen:       cfg.NegentropyListen,
+		CertsEnabled:           &cfg.CertsEnabled,
+		CertsBinary:            cfg.CertsBinary,
 	}
 }
 
@@ -182,6 +188,16 @@ type Config struct {
 	// SyncReadyTimeout is how long to wait for sync services to be ready
 	SyncReadyTimeout time.Duration
 
+	// Certificate service configuration
+	// CertsEnabled enables the certificate service
+	CertsEnabled bool
+	// CertsBinary is the path to the certificate service binary
+	CertsBinary string
+
+	// ServicesEnabled controls whether to start the DB, relay, and other services
+	// When false, only the admin UI runs (useful for initial setup/updates)
+	ServicesEnabled bool
+
 	// Admin UI configuration
 	// AdminEnabled controls whether to run the admin HTTP server
 	AdminEnabled bool
@@ -251,6 +267,13 @@ func loadConfig() (*Config, error) {
 		NegentropyListen:  envOrFileOrDefault("ORLY_LAUNCHER_SYNC_NEGENTROPY_LISTEN", cf.NegentropyListen, "127.0.0.1:50064"),
 
 		SyncReadyTimeout: parseDuration("ORLY_LAUNCHER_SYNC_READY_TIMEOUT", 30*time.Second),
+
+		// Certificate service configuration
+		CertsEnabled: boolEnvOrFile("ORLY_LAUNCHER_CERTS_ENABLED", cf.CertsEnabled, false),
+		CertsBinary:  envOrFileOrDefault("ORLY_LAUNCHER_CERTS_BINARY", cf.CertsBinary, "orly-certs"),
+
+		// Services enabled (default true for backwards compatibility)
+		ServicesEnabled: getEnvOrDefault("ORLY_LAUNCHER_SERVICES_ENABLED", "true") == "true",
 
 		// Admin UI configuration
 		AdminEnabled: getEnvOrDefault("ORLY_LAUNCHER_ADMIN_ENABLED", "true") == "true",

@@ -34,6 +34,9 @@ type Supervisor struct {
 	relayGroupProc      *Process
 	negentropyProc      *Process
 
+	// Certificate service process
+	certsProc *Process
+
 	wg     sync.WaitGroup
 	mu     sync.Mutex
 	closed bool
@@ -57,8 +60,37 @@ func NewSupervisor(ctx context.Context, cancel context.CancelFunc, cfg *Config) 
 	}
 }
 
+// IsRunning returns true if any managed processes are running.
+func (s *Supervisor) IsRunning() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check if any process is running
+	if s.dbProc != nil {
+		select {
+		case <-s.dbProc.exited:
+			// Process has exited
+		default:
+			return true
+		}
+	}
+	if s.relayProc != nil {
+		select {
+		case <-s.relayProc.exited:
+			// Process has exited
+		default:
+			return true
+		}
+	}
+	return false
+}
+
 // Start starts the database, optional ACL server, sync services, and relay processes.
 func (s *Supervisor) Start() error {
+	s.mu.Lock()
+	s.closed = false
+	s.mu.Unlock()
+
 	// 1. Start database server
 	if err := s.startDB(); err != nil {
 		return fmt.Errorf("failed to start database: %w", err)
@@ -109,7 +141,17 @@ func (s *Supervisor) Start() error {
 		return fmt.Errorf("failed to start relay: %w", err)
 	}
 
-	// 6. Start monitoring goroutines
+	// 6. Start certificate service if enabled (independent of other services)
+	if s.cfg.CertsEnabled {
+		if err := s.startCerts(); err != nil {
+			log.W.F("failed to start certificate service: %v", err)
+			// Don't fail startup - certs are independent
+		} else {
+			log.I.F("certificate service started")
+		}
+	}
+
+	// 7. Start monitoring goroutines
 	monitorCount := 2 // db + relay
 	if s.cfg.ACLEnabled {
 		monitorCount++
@@ -124,6 +166,9 @@ func (s *Supervisor) Start() error {
 		monitorCount++
 	}
 	if s.cfg.NegentropyEnabled {
+		monitorCount++
+	}
+	if s.cfg.CertsEnabled {
 		monitorCount++
 	}
 
@@ -144,6 +189,9 @@ func (s *Supervisor) Start() error {
 	if s.cfg.NegentropyEnabled {
 		go s.monitorProcess(s.negentropyProc, "negentropy", s.startNegentropy)
 	}
+	if s.cfg.CertsEnabled {
+		go s.monitorProcess(s.certsProc, "certs", s.startCerts)
+	}
 	go s.monitorProcess(s.relayProc, "relay", s.startRelay)
 
 	return nil
@@ -159,7 +207,13 @@ func (s *Supervisor) Stop() error {
 	s.closed = true
 	s.mu.Unlock()
 
-	// Stop relay first (it depends on sync services, ACL, and DB)
+	// Stop certificate service first (independent, nothing depends on it)
+	if s.cfg.CertsEnabled && s.certsProc != nil {
+		log.I.F("stopping certificate service...")
+		s.stopProcess(s.certsProc, 5*time.Second)
+	}
+
+	// Stop relay (it depends on sync services, ACL, and DB)
 	log.I.F("stopping relay...")
 	s.stopProcess(s.relayProc, 5*time.Second)
 
@@ -520,6 +574,8 @@ func (s *Supervisor) monitorProcess(p *Process, procType string, restart func() 
 				p = s.relayGroupProc
 			case "negentropy":
 				p = s.negentropyProc
+			case "certs":
+				p = s.certsProc
 			default:
 				p = s.relayProc
 			}
@@ -827,6 +883,40 @@ func (s *Supervisor) startNegentropy() error {
 	return nil
 }
 
+func (s *Supervisor) startCerts() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Certificate service uses its own environment variables
+	// ORLY_CERTS_DOMAIN, ORLY_CERTS_EMAIL, ORLY_CERTS_DNS_PROVIDER, etc.
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("ORLY_CERTS_LOG_LEVEL=%s", s.cfg.LogLevel))
+
+	cmd := exec.CommandContext(s.ctx, s.cfg.CertsBinary)
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); chk.E(err) {
+		return err
+	}
+
+	exited := make(chan struct{})
+	s.certsProc = &Process{
+		name:   "orly-certs",
+		cmd:    cmd,
+		exited: exited,
+	}
+
+	go func() {
+		cmd.Wait()
+		close(exited)
+	}()
+
+	log.I.F("started certificate service (pid %d)", cmd.Process.Pid)
+	return nil
+}
+
 // GetProcessStatuses returns the status of all managed processes.
 func (s *Supervisor) GetProcessStatuses() []ProcessStatus {
 	s.mu.Lock()
@@ -856,6 +946,11 @@ func (s *Supervisor) GetProcessStatuses() []ProcessStatus {
 	}
 	if s.cfg.NegentropyEnabled && s.negentropyProc != nil {
 		statuses = append(statuses, s.getProcessStatus(s.negentropyProc, s.cfg.NegentropyBinary))
+	}
+
+	// Certificate service
+	if s.cfg.CertsEnabled && s.certsProc != nil {
+		statuses = append(statuses, s.getProcessStatus(s.certsProc, s.cfg.CertsBinary))
 	}
 
 	// Relay process
@@ -892,6 +987,170 @@ func (s *Supervisor) getProcessStatus(p *Process, binaryPath string) ProcessStat
 		PID:      pid,
 		Restarts: p.restarts,
 	}
+}
+
+// RestartService restarts a specific service with dependency handling.
+// If a service's dependencies need to restart, they are handled appropriately.
+// Returns the list of services that were restarted.
+func (s *Supervisor) RestartService(serviceName string) ([]string, error) {
+	log.I.F("restarting service: %s", serviceName)
+
+	var restarted []string
+
+	// Determine which services need to restart based on dependencies
+	// db → acl, sync services, relay all depend on db
+	// acl → relay depends on acl
+	// sync services → relay may depend on sync services
+	// relay → nothing depends on relay
+
+	switch serviceName {
+	case "orly-db", "db":
+		// Restart db and all dependent services
+		// First stop in reverse order: relay, sync, acl, db
+		s.stopProcess(s.relayProc, 5*time.Second)
+		s.stopSyncServices()
+		if s.cfg.ACLEnabled && s.aclProc != nil {
+			s.stopProcess(s.aclProc, 5*time.Second)
+		}
+		s.stopProcess(s.dbProc, s.cfg.StopTimeout)
+
+		time.Sleep(500 * time.Millisecond)
+
+		// Start in dependency order
+		if err := s.startDB(); err != nil {
+			return restarted, fmt.Errorf("failed to restart db: %w", err)
+		}
+		restarted = append(restarted, "orly-db")
+
+		if err := s.waitForDBReady(s.cfg.DBReadyTimeout); err != nil {
+			return restarted, fmt.Errorf("db not ready: %w", err)
+		}
+
+		if s.cfg.ACLEnabled {
+			if err := s.startACL(); err != nil {
+				return restarted, fmt.Errorf("failed to restart acl: %w", err)
+			}
+			restarted = append(restarted, "orly-acl")
+			if err := s.waitForACLReady(s.cfg.ACLReadyTimeout); err != nil {
+				return restarted, fmt.Errorf("acl not ready: %w", err)
+			}
+		}
+
+		if err := s.startSyncServices(); err != nil {
+			return restarted, fmt.Errorf("failed to restart sync services: %w", err)
+		}
+		if s.cfg.DistributedSyncEnabled {
+			restarted = append(restarted, "orly-sync-distributed")
+		}
+		if s.cfg.ClusterSyncEnabled {
+			restarted = append(restarted, "orly-sync-cluster")
+		}
+		if s.cfg.RelayGroupEnabled {
+			restarted = append(restarted, "orly-sync-relaygroup")
+		}
+		if s.cfg.NegentropyEnabled {
+			restarted = append(restarted, "orly-sync-negentropy")
+		}
+
+		if err := s.startRelay(); err != nil {
+			return restarted, fmt.Errorf("failed to restart relay: %w", err)
+		}
+		restarted = append(restarted, "orly")
+
+	case "orly-acl", "acl":
+		if !s.cfg.ACLEnabled {
+			return restarted, fmt.Errorf("ACL is not enabled")
+		}
+		// Restart acl and relay (relay depends on acl)
+		s.stopProcess(s.relayProc, 5*time.Second)
+		s.stopProcess(s.aclProc, 5*time.Second)
+
+		time.Sleep(500 * time.Millisecond)
+
+		if err := s.startACL(); err != nil {
+			return restarted, fmt.Errorf("failed to restart acl: %w", err)
+		}
+		restarted = append(restarted, "orly-acl")
+
+		if err := s.waitForACLReady(s.cfg.ACLReadyTimeout); err != nil {
+			return restarted, fmt.Errorf("acl not ready: %w", err)
+		}
+
+		if err := s.startRelay(); err != nil {
+			return restarted, fmt.Errorf("failed to restart relay: %w", err)
+		}
+		restarted = append(restarted, "orly")
+
+	case "orly-sync-distributed", "distributed-sync":
+		if !s.cfg.DistributedSyncEnabled {
+			return restarted, fmt.Errorf("distributed sync is not enabled")
+		}
+		s.stopProcess(s.distributedSyncProc, 5*time.Second)
+		time.Sleep(500 * time.Millisecond)
+		if err := s.startDistributedSync(); err != nil {
+			return restarted, fmt.Errorf("failed to restart distributed sync: %w", err)
+		}
+		restarted = append(restarted, "orly-sync-distributed")
+
+	case "orly-sync-cluster", "cluster-sync":
+		if !s.cfg.ClusterSyncEnabled {
+			return restarted, fmt.Errorf("cluster sync is not enabled")
+		}
+		s.stopProcess(s.clusterSyncProc, 5*time.Second)
+		time.Sleep(500 * time.Millisecond)
+		if err := s.startClusterSync(); err != nil {
+			return restarted, fmt.Errorf("failed to restart cluster sync: %w", err)
+		}
+		restarted = append(restarted, "orly-sync-cluster")
+
+	case "orly-sync-relaygroup", "relaygroup":
+		if !s.cfg.RelayGroupEnabled {
+			return restarted, fmt.Errorf("relaygroup is not enabled")
+		}
+		s.stopProcess(s.relayGroupProc, 5*time.Second)
+		time.Sleep(500 * time.Millisecond)
+		if err := s.startRelayGroup(); err != nil {
+			return restarted, fmt.Errorf("failed to restart relaygroup: %w", err)
+		}
+		restarted = append(restarted, "orly-sync-relaygroup")
+
+	case "orly-sync-negentropy", "negentropy":
+		if !s.cfg.NegentropyEnabled {
+			return restarted, fmt.Errorf("negentropy is not enabled")
+		}
+		s.stopProcess(s.negentropyProc, 5*time.Second)
+		time.Sleep(500 * time.Millisecond)
+		if err := s.startNegentropy(); err != nil {
+			return restarted, fmt.Errorf("failed to restart negentropy: %w", err)
+		}
+		restarted = append(restarted, "orly-sync-negentropy")
+
+	case "orly-certs", "certs":
+		if !s.cfg.CertsEnabled {
+			return restarted, fmt.Errorf("certificate service is not enabled")
+		}
+		s.stopProcess(s.certsProc, 5*time.Second)
+		time.Sleep(500 * time.Millisecond)
+		if err := s.startCerts(); err != nil {
+			return restarted, fmt.Errorf("failed to restart certificate service: %w", err)
+		}
+		restarted = append(restarted, "orly-certs")
+
+	case "orly", "relay":
+		// Just restart relay
+		s.stopProcess(s.relayProc, 5*time.Second)
+		time.Sleep(500 * time.Millisecond)
+		if err := s.startRelay(); err != nil {
+			return restarted, fmt.Errorf("failed to restart relay: %w", err)
+		}
+		restarted = append(restarted, "orly")
+
+	default:
+		return restarted, fmt.Errorf("unknown service: %s", serviceName)
+	}
+
+	log.I.F("restarted services: %v", restarted)
+	return restarted, nil
 }
 
 // RestartAll stops all processes and starts them again.

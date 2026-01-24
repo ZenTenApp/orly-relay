@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -45,8 +46,12 @@ func (s *AdminServer) Start(ctx context.Context) error {
 	mux.HandleFunc("/api/config", s.auth.RequireAuth(s.handleConfig))
 	mux.HandleFunc("/api/binaries", s.auth.RequireAuth(s.handleBinaries))
 	mux.HandleFunc("/api/update", s.auth.RequireAuth(s.handleUpdate))
+	mux.HandleFunc("/api/releases", s.auth.RequireAuth(s.handleReleases))
 	mux.HandleFunc("/api/restart", s.auth.RequireAuth(s.handleRestart))
+	mux.HandleFunc("/api/restart-service", s.auth.RequireAuth(s.handleRestartService))
 	mux.HandleFunc("/api/rollback", s.auth.RequireAuth(s.handleRollback))
+	mux.HandleFunc("/api/start-services", s.auth.RequireAuth(s.handleStartServices))
+	mux.HandleFunc("/api/stop-services", s.auth.RequireAuth(s.handleStopServices))
 
 	addr := fmt.Sprintf(":%d", s.cfg.AdminPort)
 	s.server = &http.Server{
@@ -68,9 +73,10 @@ func (s *AdminServer) Start(ctx context.Context) error {
 
 // StatusResponse is the response for GET /api/status
 type StatusResponse struct {
-	Version   string          `json:"version"`
-	Uptime    string          `json:"uptime"`
-	Processes []ProcessStatus `json:"processes"`
+	Version         string          `json:"version"`
+	Uptime          string          `json:"uptime"`
+	ServicesRunning bool            `json:"services_running"`
+	Processes       []ProcessStatus `json:"processes"`
 }
 
 // ProcessStatus represents the status of a single managed process.
@@ -94,9 +100,10 @@ func (s *AdminServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 	processes := s.supervisor.GetProcessStatuses()
 
 	response := StatusResponse{
-		Version:   s.updater.CurrentVersion(),
-		Uptime:    uptime,
-		Processes: processes,
+		Version:         s.updater.CurrentVersion(),
+		Uptime:          uptime,
+		ServicesRunning: s.supervisor.IsRunning(),
+		Processes:       processes,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -307,6 +314,83 @@ func (s *AdminServer) handleBinaries(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// ReleasesResponse is the response for GET /api/releases
+type ReleasesResponse struct {
+	Releases []ReleaseInfo `json:"releases"`
+}
+
+// ReleaseInfo represents a single release/tag
+type ReleaseInfo struct {
+	Tag     string `json:"tag"`
+	Message string `json:"message"`
+}
+
+const tagsAPIURL = "https://git.nostrdev.com/api/v1/repos/mleku/next.orly.dev/tags"
+
+func (s *AdminServer) handleReleases(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Fetch tags from upstream
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(tagsAPIURL)
+	if err != nil {
+		log.E.F("failed to fetch tags: %v", err)
+		http.Error(w, "Failed to fetch releases", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, "Failed to fetch releases", http.StatusBadGateway)
+		return
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		http.Error(w, "Failed to read response", http.StatusInternalServerError)
+		return
+	}
+
+	// Parse the tags response
+	var tags []struct {
+		Name    string `json:"name"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(body, &tags); chk.E(err) {
+		http.Error(w, "Failed to parse response", http.StatusInternalServerError)
+		return
+	}
+
+	// Filter and transform to our response format
+	var releases []ReleaseInfo
+	for _, tag := range tags {
+		if len(tag.Name) > 0 && tag.Name[0] == 'v' {
+			msg := tag.Message
+			// Get first line only
+			for i, c := range msg {
+				if c == '\n' {
+					msg = msg[:i]
+					break
+				}
+			}
+			releases = append(releases, ReleaseInfo{
+				Tag:     tag.Name,
+				Message: msg,
+			})
+		}
+		if len(releases) >= 15 {
+			break
+		}
+	}
+
+	response := ReleasesResponse{Releases: releases}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // UpdateRequest is the request body for POST /api/update
 type UpdateRequest struct {
 	Version string            `json:"version"`
@@ -396,6 +480,62 @@ func (s *AdminServer) handleRestart(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// RestartServiceRequest is the request body for POST /api/restart-service
+type RestartServiceRequest struct {
+	Service string `json:"service"`
+}
+
+// RestartServiceResponse is the response for POST /api/restart-service
+type RestartServiceResponse struct {
+	Success   bool     `json:"success"`
+	Message   string   `json:"message"`
+	Restarted []string `json:"restarted"`
+}
+
+func (s *AdminServer) handleRestartService(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req RestartServiceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); chk.E(err) {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Service == "" {
+		http.Error(w, "Service name is required", http.StatusBadRequest)
+		return
+	}
+
+	// Map binary names to service names
+	serviceName := req.Service
+	switch req.Service {
+	case "orly-db-badger", "orly-db-neo4j":
+		serviceName = "orly-db"
+	case "orly-acl-follows", "orly-acl-managed", "orly-acl-curation":
+		serviceName = "orly-acl"
+	}
+
+	// Perform the restart in a goroutine to avoid blocking
+	go func() {
+		if restarted, err := s.supervisor.RestartService(serviceName); chk.E(err) {
+			log.E.F("restart service %s failed: %v", serviceName, err)
+		} else {
+			log.I.F("restart service completed: %v", restarted)
+		}
+	}()
+
+	response := RestartServiceResponse{
+		Success: true,
+		Message: fmt.Sprintf("Restart of %s initiated", serviceName),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // RollbackResponse is the response for POST /api/rollback
 type RollbackResponse struct {
 	Success         bool   `json:"success"`
@@ -428,6 +568,86 @@ func (s *AdminServer) handleRollback(w http.ResponseWriter, r *http.Request) {
 		Message:         "Rollback successful - restart required to apply",
 		PreviousVersion: previousVersion,
 		CurrentVersion:  s.updater.CurrentVersion(),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// StartServicesResponse is the response for POST /api/start-services
+type StartServicesResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+func (s *AdminServer) handleStartServices(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check if services are already running
+	if s.supervisor.IsRunning() {
+		response := StartServicesResponse{
+			Success: false,
+			Message: "Services are already running",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Start services in a goroutine
+	go func() {
+		if err := s.supervisor.Start(); chk.E(err) {
+			log.E.F("failed to start services: %v", err)
+		}
+	}()
+
+	response := StartServicesResponse{
+		Success: true,
+		Message: "Services starting...",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// StopServicesResponse is the response for POST /api/stop-services
+type StopServicesResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+func (s *AdminServer) handleStopServices(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check if services are running
+	if !s.supervisor.IsRunning() {
+		response := StopServicesResponse{
+			Success: false,
+			Message: "Services are not running",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Stop services in a goroutine
+	go func() {
+		if err := s.supervisor.Stop(); chk.E(err) {
+			log.E.F("failed to stop services: %v", err)
+		}
+	}()
+
+	response := StopServicesResponse{
+		Success: true,
+		Message: "Services stopping...",
 	}
 
 	w.Header().Set("Content-Type", "application/json")

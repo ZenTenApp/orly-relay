@@ -1,7 +1,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { userSigner, userPubkey, statusData, isLoading, error } from '../stores.js';
-    import { fetchStatus, restartServices } from '../api.js';
+    import { fetchStatus, restartServices, startServices, stopServices } from '../api.js';
     import ProcessCard from '../components/ProcessCard.svelte';
 
     let refreshInterval;
@@ -43,6 +43,36 @@
             $isLoading = false;
         }
     }
+
+    async function handleStart() {
+        $isLoading = true;
+        try {
+            await startServices($userSigner, $userPubkey);
+            // Wait a moment then refresh
+            setTimeout(loadStatus, 2000);
+        } catch (e) {
+            $error = e.message;
+        } finally {
+            $isLoading = false;
+        }
+    }
+
+    async function handleStop() {
+        if (!confirm('Are you sure you want to stop all services?')) {
+            return;
+        }
+
+        $isLoading = true;
+        try {
+            await stopServices($userSigner, $userPubkey);
+            // Wait a moment then refresh
+            setTimeout(loadStatus, 2000);
+        } catch (e) {
+            $error = e.message;
+        } finally {
+            $isLoading = false;
+        }
+    }
 </script>
 
 <div class="dashboard">
@@ -52,9 +82,18 @@
             <button class="refresh-btn" on:click={loadStatus} disabled={$isLoading}>
                 Refresh
             </button>
-            <button class="restart-btn" on:click={handleRestart} disabled={$isLoading}>
-                Restart All
-            </button>
+            {#if $statusData?.services_running}
+                <button class="stop-btn" on:click={handleStop} disabled={$isLoading}>
+                    Stop Services
+                </button>
+                <button class="restart-btn" on:click={handleRestart} disabled={$isLoading}>
+                    Restart All
+                </button>
+            {:else}
+                <button class="start-btn" on:click={handleStart} disabled={$isLoading}>
+                    Start Services
+                </button>
+            {/if}
         </div>
     </div>
 
@@ -65,8 +104,14 @@
     {#if $statusData}
         <div class="status-summary">
             <div class="summary-card">
+                <span class="label">Status</span>
+                <span class="value status-indicator" class:running={$statusData.services_running} class:stopped={!$statusData.services_running}>
+                    {$statusData.services_running ? 'Running' : 'Stopped'}
+                </span>
+            </div>
+            <div class="summary-card">
                 <span class="label">Version</span>
-                <span class="value">{$statusData.version}</span>
+                <span class="value">{$statusData.version || 'unknown'}</span>
             </div>
             <div class="summary-card">
                 <span class="label">Uptime</span>
@@ -112,7 +157,9 @@
     }
 
     .refresh-btn,
-    .restart-btn {
+    .restart-btn,
+    .start-btn,
+    .stop-btn {
         padding: 8px 16px;
         border-radius: 4px;
         cursor: pointer;
@@ -139,8 +186,30 @@
         opacity: 0.9;
     }
 
+    .start-btn {
+        background: var(--success, #4caf50);
+        border: none;
+        color: white;
+    }
+
+    .start-btn:hover:not(:disabled) {
+        opacity: 0.9;
+    }
+
+    .stop-btn {
+        background: var(--error, #f44336);
+        border: none;
+        color: white;
+    }
+
+    .stop-btn:hover:not(:disabled) {
+        opacity: 0.9;
+    }
+
     .restart-btn:disabled,
-    .refresh-btn:disabled {
+    .refresh-btn:disabled,
+    .start-btn:disabled,
+    .stop-btn:disabled {
         opacity: 0.5;
         cursor: not-allowed;
     }
@@ -180,6 +249,14 @@
         font-size: 1.25rem;
         font-weight: 600;
         color: var(--text-color);
+    }
+
+    .status-indicator.running {
+        color: var(--success, #4caf50);
+    }
+
+    .status-indicator.stopped {
+        color: var(--error, #f44336);
     }
 
     h3 {
