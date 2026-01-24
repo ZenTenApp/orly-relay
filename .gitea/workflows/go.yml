@@ -102,8 +102,7 @@ jobs:
           export PATH=/usr/local/go/bin:$PATH
           cd ${GITHUB_WORKSPACE}
           echo "Running tests..."
-          chmod +x libsecp256k1.so
-          export LD_LIBRARY_PATH=${GITHUB_WORKSPACE}:${LD_LIBRARY_PATH}
+          # Note: libsecp256k1.so is loaded at runtime via purego, not needed for tests
           CGO_ENABLED=0 go test -v $(go list ./... | grep -v '/cmd/benchmark/external/' | xargs -n1 sh -c 'ls $0/*_test.go 1>/dev/null 2>&1 && echo $0' | grep .) || echo "Some tests failed, continuing..."
 
       - name: Build Release Binaries
@@ -150,15 +149,8 @@ jobs:
               go build -ldflags "-s -w" -o "release-binaries/${name}-${VERSION}-linux-arm64" "${path}"
           done
 
-          # Copy libsecp256k1.so for AMD64
-          cp libsecp256k1.so release-binaries/libsecp256k1-linux-amd64.so
-          chmod +x release-binaries/libsecp256k1-linux-amd64.so
-
-          # Note: ARM64 libsecp256k1 must be built separately and added to repo
-          if [ -f libsecp256k1-arm64.so ]; then
-            cp libsecp256k1-arm64.so release-binaries/libsecp256k1-linux-arm64.so
-            chmod +x release-binaries/libsecp256k1-linux-arm64.so
-          fi
+          # Note: libsecp256k1.so is not included - users must install it separately
+          # or use system package (e.g., apt install libsecp256k1-dev)
 
           # Create checksums
           cd release-binaries
@@ -220,17 +212,18 @@ jobs:
 - **orly-launcher** - Process supervisor with admin UI
 - **orly-sync-negentropy** - Negentropy sync service
 - **orly-certs** - DNS-01 wildcard certificate manager
-- **libsecp256k1** - Required shared library
 
 ### Architectures
 - Linux AMD64 (x86_64)
 - Linux ARM64 (aarch64)
 
+### Prerequisites
+- libsecp256k1 must be installed: \`apt install libsecp256k1-1\` or build from source
+
 ### Installation
 1. Download the appropriate binaries for your architecture
 2. Make them executable: \`chmod +x orly-*\`
-3. Place libsecp256k1 in \`/usr/local/lib/\` or set \`LD_LIBRARY_PATH\`
-4. Run with: \`./orly-launcher\` (for split mode) or \`./orly\` (standalone)"
+3. Run with: \`./orly-launcher\` (for split mode) or \`./orly\` (standalone)"
 
           # Create release JSON payload
           RELEASE_JSON=$(jq -n \
