@@ -39,8 +39,8 @@ jobs:
       - name: Install dependencies
         run: |
           set -e
-          echo "Installing jq..."
-          sudo apt-get update && sudo apt-get install -y jq
+          echo "Installing build dependencies..."
+          sudo apt-get update && sudo apt-get install -y jq autoconf automake libtool gcc-aarch64-linux-gnu
 
       - name: Set up Go
         run: |
@@ -105,6 +105,30 @@ jobs:
           # Note: libsecp256k1.so is loaded at runtime via purego, not needed for tests
           CGO_ENABLED=0 go test -v $(go list ./... | grep -v '/cmd/benchmark/external/' | xargs -n1 sh -c 'ls $0/*_test.go 1>/dev/null 2>&1 && echo $0' | grep .) || echo "Some tests failed, continuing..."
 
+      - name: Build libsecp256k1
+        run: |
+          set -e
+          echo "Building libsecp256k1 with schnorr/musig2 support..."
+          cd /tmp
+          git clone --depth 1 https://github.com/bitcoin-core/secp256k1.git
+          cd secp256k1
+          ./autogen.sh
+
+          # Build for AMD64
+          echo "Building for AMD64..."
+          ./configure --enable-module-schnorrsig --enable-module-extrakeys
+          make clean && make -j$(nproc)
+          cp .libs/libsecp256k1.so.2.2.3 /tmp/libsecp256k1-amd64.so
+
+          # Build for ARM64 (cross-compile)
+          echo "Building for ARM64..."
+          ./configure --enable-module-schnorrsig --enable-module-extrakeys \
+            --host=aarch64-linux-gnu CC=aarch64-linux-gnu-gcc
+          make clean && make -j$(nproc)
+          cp .libs/libsecp256k1.so.2.2.3 /tmp/libsecp256k1-arm64.so
+
+          ls -la /tmp/libsecp256k1-*.so
+
       - name: Build Release Binaries
         run: |
           set -e
@@ -149,16 +173,10 @@ jobs:
               go build -ldflags "-s -w" -o "release-binaries/${name}-${VERSION}-linux-arm64" "${path}"
           done
 
-          # Copy libsecp256k1.so from nostr module (has schnorr/musig2 support)
-          # System packages typically lack these features
-          NOSTR_MOD=$(go list -m -f '{{.Dir}}' git.mleku.dev/mleku/nostr)
-          if [ -f "${NOSTR_MOD}/crypto/p8k/libsecp256k1.so" ]; then
-            cp "${NOSTR_MOD}/crypto/p8k/libsecp256k1.so" release-binaries/libsecp256k1-linux-amd64.so
-            chmod +x release-binaries/libsecp256k1-linux-amd64.so
-            echo "Copied libsecp256k1.so from nostr module"
-          else
-            echo "WARNING: libsecp256k1.so not found in nostr module"
-          fi
+          # Copy libsecp256k1.so (built with schnorr/musig2 support)
+          cp /tmp/libsecp256k1-amd64.so release-binaries/libsecp256k1-linux-amd64.so
+          cp /tmp/libsecp256k1-arm64.so release-binaries/libsecp256k1-linux-arm64.so
+          chmod +x release-binaries/libsecp256k1-linux-*.so
 
           # Create checksums
           cd release-binaries
