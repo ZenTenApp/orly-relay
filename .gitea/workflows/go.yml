@@ -149,8 +149,16 @@ jobs:
               go build -ldflags "-s -w" -o "release-binaries/${name}-${VERSION}-linux-arm64" "${path}"
           done
 
-          # Note: libsecp256k1.so is not included - users must install it separately
-          # or use system package (e.g., apt install libsecp256k1-dev)
+          # Copy libsecp256k1.so from nostr module (has schnorr/musig2 support)
+          # System packages typically lack these features
+          NOSTR_MOD=$(go list -m -f '{{.Dir}}' git.mleku.dev/mleku/nostr)
+          if [ -f "${NOSTR_MOD}/crypto/p8k/libsecp256k1.so" ]; then
+            cp "${NOSTR_MOD}/crypto/p8k/libsecp256k1.so" release-binaries/libsecp256k1-linux-amd64.so
+            chmod +x release-binaries/libsecp256k1-linux-amd64.so
+            echo "Copied libsecp256k1.so from nostr module"
+          else
+            echo "WARNING: libsecp256k1.so not found in nostr module"
+          fi
 
           # Create checksums
           cd release-binaries
@@ -212,18 +220,17 @@ jobs:
 - **orly-launcher** - Process supervisor with admin UI
 - **orly-sync-negentropy** - Negentropy sync service
 - **orly-certs** - DNS-01 wildcard certificate manager
+- **libsecp256k1** - Custom build with schnorr/musig2 support
 
 ### Architectures
 - Linux AMD64 (x86_64)
 - Linux ARM64 (aarch64)
 
-### Prerequisites
-- libsecp256k1 must be installed: \`apt install libsecp256k1-1\` or build from source
-
 ### Installation
 1. Download the appropriate binaries for your architecture
 2. Make them executable: \`chmod +x orly-*\`
-3. Run with: \`./orly-launcher\` (for split mode) or \`./orly\` (standalone)"
+3. Copy libsecp256k1 to \`/usr/local/lib/\` and run \`ldconfig\`
+4. Run with: \`./orly-launcher\` (for split mode) or \`./orly\` (standalone)"
 
           # Create release JSON payload
           RELEASE_JSON=$(jq -n \
