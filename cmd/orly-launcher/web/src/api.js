@@ -226,3 +226,39 @@ export async function stopServices(signer, pubkey) {
     }
     return response.json();
 }
+
+/**
+ * Start a specific service
+ * @param {string} service - The service name (e.g., 'orly-db', 'orly-acl', 'orly')
+ */
+export async function startService(signer, pubkey, service) {
+    const response = await authFetch('/api/start-service', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ service }),
+    }, signer, pubkey);
+
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || `Start failed: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
+ * Stop a specific service (and its dependents)
+ * @param {string} service - The service name (e.g., 'orly-db', 'orly-acl', 'orly')
+ */
+export async function stopService(signer, pubkey, service) {
+    const response = await authFetch('/api/stop-service', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ service }),
+    }, signer, pubkey);
+
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || `Stop failed: ${response.statusText}`);
+    }
+    return response.json();
+}

@@ -1,7 +1,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { userSigner, userPubkey, statusData, isLoading, error } from '../stores.js';
-    import { fetchStatus, restartServices, startServices, stopServices } from '../api.js';
+    import { fetchStatus, restartServices, startServices, stopServices, startService, stopService, restartService, saveConfig } from '../api.js';
     import ProcessCard from '../components/ProcessCard.svelte';
 
     let refreshInterval;
@@ -73,6 +73,138 @@
             $isLoading = false;
         }
     }
+
+    async function handleServiceStart(event) {
+        const { service } = event.detail;
+        $isLoading = true;
+        try {
+            await startService($userSigner, $userPubkey, service);
+            // Wait a moment then refresh
+            setTimeout(loadStatus, 2000);
+        } catch (e) {
+            $error = e.message;
+        } finally {
+            $isLoading = false;
+        }
+    }
+
+    async function handleServiceStop(event) {
+        const { service } = event.detail;
+        // Check if this is a critical service with dependents
+        const hasDependents = ['orly-db', 'orly-acl'].includes(service);
+        if (hasDependents) {
+            if (!confirm(`Stopping ${service} will also stop its dependent services. Continue?`)) {
+                return;
+            }
+        }
+
+        $isLoading = true;
+        try {
+            await stopService($userSigner, $userPubkey, service);
+            // Wait a moment then refresh
+            setTimeout(loadStatus, 2000);
+        } catch (e) {
+            $error = e.message;
+        } finally {
+            $isLoading = false;
+        }
+    }
+
+    async function handleServiceRestart(event) {
+        const { service } = event.detail;
+        // Check if this is a critical service with dependents
+        const hasDependents = ['orly-db', 'orly-acl'].includes(service);
+        if (hasDependents) {
+            if (!confirm(`Restarting ${service} will also restart its dependent services. Continue?`)) {
+                return;
+            }
+        }
+
+        $isLoading = true;
+        try {
+            await restartService($userSigner, $userPubkey, service);
+            // Wait a moment then refresh
+            setTimeout(loadStatus, 2000);
+        } catch (e) {
+            $error = e.message;
+        } finally {
+            $isLoading = false;
+        }
+    }
+
+    // Map service names to config properties
+    function getConfigForService(service, enabled) {
+        switch (service) {
+            // Database backends (mutually exclusive)
+            case 'orly-db-badger':
+                return enabled ? { db_backend: 'badger' } : null;
+            case 'orly-db-neo4j':
+                return enabled ? { db_backend: 'neo4j' } : null;
+
+            // ACL backends (mutually exclusive)
+            case 'orly-acl-follows':
+                return enabled ? { acl_enabled: true, acl_mode: 'follows' } : { acl_enabled: false };
+            case 'orly-acl-managed':
+                return enabled ? { acl_enabled: true, acl_mode: 'managed' } : { acl_enabled: false };
+            case 'orly-acl-curation':
+                return enabled ? { acl_enabled: true, acl_mode: 'curation' } : { acl_enabled: false };
+
+            // Sync services (independent)
+            case 'orly-sync-distributed':
+                return { distributed_sync_enabled: enabled };
+            case 'orly-sync-cluster':
+                return { cluster_sync_enabled: enabled };
+            case 'orly-sync-relaygroup':
+                return { relay_group_enabled: enabled };
+            case 'orly-sync-negentropy':
+                return { negentropy_enabled: enabled };
+
+            // Certificate service
+            case 'orly-certs':
+                return { certs_enabled: enabled };
+
+            default:
+                return null;
+        }
+    }
+
+    async function handleToggleEnabled(event) {
+        const { service, enabled, category, isExclusive } = event.detail;
+
+        // For exclusive categories, warn if enabling will disable others
+        if (enabled && isExclusive) {
+            const currentlyEnabled = $statusData.processes
+                .filter(p => p.category === category && p.enabled && p.name !== service)
+                .map(p => p.name);
+
+            if (currentlyEnabled.length > 0) {
+                if (!confirm(`Enabling ${service} will disable ${currentlyEnabled.join(', ')}. Continue?`)) {
+                    // Refresh to reset the checkbox
+                    await loadStatus();
+                    return;
+                }
+            }
+        }
+
+        const configUpdate = getConfigForService(service, enabled);
+        if (!configUpdate) {
+            $error = `Unknown service: ${service}`;
+            return;
+        }
+
+        $isLoading = true;
+        try {
+            await saveConfig($userSigner, $userPubkey, configUpdate);
+            // Refresh status after config change
+            setTimeout(loadStatus, 1000);
+        } catch (e) {
+            $error = e.message;
+            // Refresh to reset the checkbox
+            setTimeout(loadStatus, 500);
+        } finally {
+            $isLoading = false;
+        }
+    }
 </script>
 
 <div class="dashboard">
@@ -118,15 +250,22 @@
                 <span class="value">{$statusData.uptime}</span>
             </div>
             <div class="summary-card">
-                <span class="label">Processes</span>
-                <span class="value">{$statusData.processes?.length || 0}</span>
+                <span class="label">Running</span>
+                <span class="value">{$statusData.processes?.filter(p => p.status === 'running').length || 0} / {$statusData.processes?.filter(p => p.enabled).length || 0}</span>
             </div>
         </div>
 
-        <h3>Managed Processes</h3>
+        <h3>Available Modules</h3>
         <div class="processes-grid">
             {#each $statusData.processes || [] as process}
-                <ProcessCard {process} />
+                <ProcessCard
+                    {process}
+                    isLoading={$isLoading}
+                    on:start={handleServiceStart}
+                    on:stop={handleServiceStop}
+                    on:restart={handleServiceRestart}
+                    on:toggle-enabled={handleToggleEnabled}
+                />
             {/each}
         </div>
     {:else if !$error}

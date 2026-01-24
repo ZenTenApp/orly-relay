@@ -52,6 +52,8 @@ func (s *AdminServer) Start(ctx context.Context) error {
 	mux.HandleFunc("/api/rollback", s.auth.RequireAuth(s.handleRollback))
 	mux.HandleFunc("/api/start-services", s.auth.RequireAuth(s.handleStartServices))
 	mux.HandleFunc("/api/stop-services", s.auth.RequireAuth(s.handleStopServices))
+	mux.HandleFunc("/api/start-service", s.auth.RequireAuth(s.handleStartService))
+	mux.HandleFunc("/api/stop-service", s.auth.RequireAuth(s.handleStopService))
 
 	addr := fmt.Sprintf(":%d", s.cfg.AdminPort)
 	s.server = &http.Server{
@@ -81,13 +83,16 @@ type StatusResponse struct {
 
 // ProcessStatus represents the status of a single managed process.
 type ProcessStatus struct {
-	Name      string `json:"name"`
-	Binary    string `json:"binary"`
-	Version   string `json:"version"`
-	Status    string `json:"status"`
-	PID       int    `json:"pid"`
-	Restarts  int    `json:"restarts"`
-	StartedAt string `json:"started_at,omitempty"`
+	Name        string `json:"name"`
+	Binary      string `json:"binary"`
+	Version     string `json:"version"`
+	Status      string `json:"status"`   // running, stopped, disabled
+	Enabled     bool   `json:"enabled"`
+	Category    string `json:"category"` // database, acl, sync, certs, relay
+	Description string `json:"description"`
+	PID         int    `json:"pid"`
+	Restarts    int    `json:"restarts"`
+	StartedAt   string `json:"started_at,omitempty"`
 }
 
 func (s *AdminServer) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -648,6 +653,98 @@ func (s *AdminServer) handleStopServices(w http.ResponseWriter, r *http.Request)
 	response := StopServicesResponse{
 		Success: true,
 		Message: "Services stopping...",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// StartServiceRequest is the request body for POST /api/start-service
+type StartServiceRequest struct {
+	Service string `json:"service"`
+}
+
+// StartServiceResponse is the response for POST /api/start-service
+type StartServiceResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+func (s *AdminServer) handleStartService(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req StartServiceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); chk.E(err) {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Service == "" {
+		http.Error(w, "Service name is required", http.StatusBadRequest)
+		return
+	}
+
+	// Start the service
+	go func() {
+		if err := s.supervisor.StartService(req.Service); chk.E(err) {
+			log.E.F("start service %s failed: %v", req.Service, err)
+		} else {
+			log.I.F("started service: %s", req.Service)
+		}
+	}()
+
+	response := StartServiceResponse{
+		Success: true,
+		Message: fmt.Sprintf("Start of %s initiated", req.Service),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// StopServiceRequest is the request body for POST /api/stop-service
+type StopServiceRequest struct {
+	Service string `json:"service"`
+}
+
+// StopServiceResponse is the response for POST /api/stop-service
+type StopServiceResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+func (s *AdminServer) handleStopService(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req StopServiceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); chk.E(err) {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Service == "" {
+		http.Error(w, "Service name is required", http.StatusBadRequest)
+		return
+	}
+
+	// Stop the service
+	go func() {
+		if err := s.supervisor.StopService(req.Service); chk.E(err) {
+			log.E.F("stop service %s failed: %v", req.Service, err)
+		} else {
+			log.I.F("stopped service: %s", req.Service)
+		}
+	}()
+
+	response := StopServiceResponse{
+		Success: true,
+		Message: fmt.Sprintf("Stop of %s initiated", req.Service),
 	}
 
 	w.Header().Set("Content-Type", "application/json")

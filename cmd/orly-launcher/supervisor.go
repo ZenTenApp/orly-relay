@@ -917,51 +917,79 @@ func (s *Supervisor) startCerts() error {
 	return nil
 }
 
-// GetProcessStatuses returns the status of all managed processes.
+// GetProcessStatuses returns the status of all available modules with categories.
+// Modules are grouped by category, and some categories are mutually exclusive.
 func (s *Supervisor) GetProcessStatuses() []ProcessStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var statuses []ProcessStatus
 
-	// Database process
-	if s.dbProc != nil {
-		statuses = append(statuses, s.getProcessStatus(s.dbProc, s.cfg.DBBinary))
-	}
+	// Database backends (mutually exclusive - only one can be active)
+	isBadger := s.cfg.DBBackend == "badger"
+	isNeo4j := s.cfg.DBBackend == "neo4j"
 
-	// ACL process
-	if s.cfg.ACLEnabled && s.aclProc != nil {
-		statuses = append(statuses, s.getProcessStatus(s.aclProc, s.cfg.ACLBinary))
-	}
+	statuses = append(statuses, s.getProcessStatusFull(
+		s.dbProc, "orly-db-badger", "orly-db-badger",
+		isBadger, "database", "Badger embedded key-value store (default)",
+	))
+	statuses = append(statuses, s.getProcessStatusFull(
+		nil, "orly-db-neo4j", "orly-db-neo4j",
+		isNeo4j, "database", "Neo4j graph database for WoT queries",
+	))
 
-	// Sync services
-	if s.cfg.DistributedSyncEnabled && s.distributedSyncProc != nil {
-		statuses = append(statuses, s.getProcessStatus(s.distributedSyncProc, s.cfg.DistributedSyncBinary))
-	}
-	if s.cfg.ClusterSyncEnabled && s.clusterSyncProc != nil {
-		statuses = append(statuses, s.getProcessStatus(s.clusterSyncProc, s.cfg.ClusterSyncBinary))
-	}
-	if s.cfg.RelayGroupEnabled && s.relayGroupProc != nil {
-		statuses = append(statuses, s.getProcessStatus(s.relayGroupProc, s.cfg.RelayGroupBinary))
-	}
-	if s.cfg.NegentropyEnabled && s.negentropyProc != nil {
-		statuses = append(statuses, s.getProcessStatus(s.negentropyProc, s.cfg.NegentropyBinary))
-	}
+	// ACL backends (mutually exclusive - only one can be active, can be disabled)
+	isFollows := s.cfg.ACLEnabled && s.cfg.ACLMode == "follows"
+	isManaged := s.cfg.ACLEnabled && s.cfg.ACLMode == "managed"
+	isCuration := s.cfg.ACLEnabled && (s.cfg.ACLMode == "curation" || s.cfg.ACLMode == "curating")
 
-	// Certificate service
-	if s.cfg.CertsEnabled && s.certsProc != nil {
-		statuses = append(statuses, s.getProcessStatus(s.certsProc, s.cfg.CertsBinary))
-	}
+	statuses = append(statuses, s.getProcessStatusFull(
+		s.aclProc, "orly-acl-follows", "orly-acl-follows",
+		isFollows, "acl", "Whitelist based on admin's follow list",
+	))
+	statuses = append(statuses, s.getProcessStatusFull(
+		nil, "orly-acl-managed", "orly-acl-managed",
+		isManaged, "acl", "NIP-86 fine-grained access control",
+	))
+	statuses = append(statuses, s.getProcessStatusFull(
+		nil, "orly-acl-curation", "orly-acl-curation",
+		isCuration, "acl", "Rate-limited trust tiers for curation",
+	))
 
-	// Relay process
-	if s.relayProc != nil {
-		statuses = append(statuses, s.getProcessStatus(s.relayProc, s.cfg.RelayBinary))
-	}
+	// Sync services (independent - multiple can be enabled)
+	statuses = append(statuses, s.getProcessStatusFull(
+		s.distributedSyncProc, "orly-sync-distributed", s.cfg.DistributedSyncBinary,
+		s.cfg.DistributedSyncEnabled, "sync", "Distributed event synchronization",
+	))
+	statuses = append(statuses, s.getProcessStatusFull(
+		s.clusterSyncProc, "orly-sync-cluster", s.cfg.ClusterSyncBinary,
+		s.cfg.ClusterSyncEnabled, "sync", "Cluster synchronization for HA",
+	))
+	statuses = append(statuses, s.getProcessStatusFull(
+		s.relayGroupProc, "orly-sync-relaygroup", s.cfg.RelayGroupBinary,
+		s.cfg.RelayGroupEnabled, "sync", "NIP-29 relay group synchronization",
+	))
+	statuses = append(statuses, s.getProcessStatusFull(
+		s.negentropyProc, "orly-sync-negentropy", s.cfg.NegentropyBinary,
+		s.cfg.NegentropyEnabled, "sync", "NIP-77 negentropy reconciliation",
+	))
+
+	// Certificate service (standalone)
+	statuses = append(statuses, s.getProcessStatusFull(
+		s.certsProc, "orly-certs", s.cfg.CertsBinary,
+		s.cfg.CertsEnabled, "certs", "Let's Encrypt certificate management",
+	))
+
+	// Relay process - always enabled
+	statuses = append(statuses, s.getProcessStatusFull(
+		s.relayProc, "orly", s.cfg.RelayBinary,
+		true, "relay", "Main Nostr relay server",
+	))
 
 	return statuses
 }
 
-func (s *Supervisor) getProcessStatus(p *Process, binaryPath string) ProcessStatus {
+func (s *Supervisor) getProcessStatus(p *Process, binaryPath string, enabled bool) ProcessStatus {
 	status := "stopped"
 	pid := 0
 
@@ -984,8 +1012,67 @@ func (s *Supervisor) getProcessStatus(p *Process, binaryPath string) ProcessStat
 		Binary:   binaryPath,
 		Version:  "", // Will be filled by caller if needed
 		Status:   status,
+		Enabled:  enabled,
 		PID:      pid,
 		Restarts: p.restarts,
+	}
+}
+
+// getProcessStatusOrDisabled returns the status of a process, or a disabled status if the process is nil.
+func (s *Supervisor) getProcessStatusOrDisabled(p *Process, name, binaryPath string, enabled bool) ProcessStatus {
+	if p != nil {
+		return s.getProcessStatus(p, binaryPath, enabled)
+	}
+
+	// Process doesn't exist - show as disabled or stopped
+	status := "stopped"
+	if !enabled {
+		status = "disabled"
+	}
+
+	return ProcessStatus{
+		Name:    name,
+		Binary:  binaryPath,
+		Status:  status,
+		Enabled: enabled,
+	}
+}
+
+// getProcessStatusFull returns the status of a process with category and description.
+func (s *Supervisor) getProcessStatusFull(p *Process, name, binaryPath string, enabled bool, category, description string) ProcessStatus {
+	status := "disabled"
+	pid := 0
+	restarts := 0
+
+	if enabled {
+		status = "stopped"
+	}
+
+	if p != nil {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+
+		if p.cmd != nil && p.cmd.Process != nil {
+			select {
+			case <-p.exited:
+				status = "stopped"
+			default:
+				status = "running"
+				pid = p.cmd.Process.Pid
+			}
+		}
+		restarts = p.restarts
+	}
+
+	return ProcessStatus{
+		Name:        name,
+		Binary:      binaryPath,
+		Status:      status,
+		Enabled:     enabled,
+		Category:    category,
+		Description: description,
+		PID:         pid,
+		Restarts:    restarts,
 	}
 }
 
@@ -1151,6 +1238,156 @@ func (s *Supervisor) RestartService(serviceName string) ([]string, error) {
 
 	log.I.F("restarted services: %v", restarted)
 	return restarted, nil
+}
+
+// StartService starts a specific service if it's not already running.
+func (s *Supervisor) StartService(serviceName string) error {
+	log.I.F("starting service: %s", serviceName)
+
+	switch serviceName {
+	case "orly-db", "db":
+		if err := s.startDB(); err != nil {
+			return fmt.Errorf("failed to start db: %w", err)
+		}
+		if err := s.waitForDBReady(s.cfg.DBReadyTimeout); err != nil {
+			return fmt.Errorf("db not ready: %w", err)
+		}
+
+	case "orly-acl", "acl":
+		if !s.cfg.ACLEnabled {
+			return fmt.Errorf("ACL is not enabled in configuration")
+		}
+		if err := s.startACL(); err != nil {
+			return fmt.Errorf("failed to start acl: %w", err)
+		}
+		if err := s.waitForACLReady(s.cfg.ACLReadyTimeout); err != nil {
+			return fmt.Errorf("acl not ready: %w", err)
+		}
+
+	case "orly-sync-distributed", "distributed-sync":
+		if !s.cfg.DistributedSyncEnabled {
+			return fmt.Errorf("distributed sync is not enabled in configuration")
+		}
+		if err := s.startDistributedSync(); err != nil {
+			return fmt.Errorf("failed to start distributed sync: %w", err)
+		}
+
+	case "orly-sync-cluster", "cluster-sync":
+		if !s.cfg.ClusterSyncEnabled {
+			return fmt.Errorf("cluster sync is not enabled in configuration")
+		}
+		if err := s.startClusterSync(); err != nil {
+			return fmt.Errorf("failed to start cluster sync: %w", err)
+		}
+
+	case "orly-sync-relaygroup", "relaygroup":
+		if !s.cfg.RelayGroupEnabled {
+			return fmt.Errorf("relaygroup is not enabled in configuration")
+		}
+		if err := s.startRelayGroup(); err != nil {
+			return fmt.Errorf("failed to start relaygroup: %w", err)
+		}
+
+	case "orly-sync-negentropy", "negentropy":
+		if !s.cfg.NegentropyEnabled {
+			return fmt.Errorf("negentropy is not enabled in configuration")
+		}
+		if err := s.startNegentropy(); err != nil {
+			return fmt.Errorf("failed to start negentropy: %w", err)
+		}
+
+	case "orly-certs", "certs":
+		if !s.cfg.CertsEnabled {
+			return fmt.Errorf("certificate service is not enabled in configuration")
+		}
+		if err := s.startCerts(); err != nil {
+			return fmt.Errorf("failed to start certificate service: %w", err)
+		}
+
+	case "orly", "relay":
+		if err := s.startRelay(); err != nil {
+			return fmt.Errorf("failed to start relay: %w", err)
+		}
+
+	default:
+		return fmt.Errorf("unknown service: %s", serviceName)
+	}
+
+	log.I.F("started service: %s", serviceName)
+	return nil
+}
+
+// StopService stops a specific service and its dependents.
+// Dependency chain: db → acl, sync services → relay
+// Stopping a service will first stop all services that depend on it.
+func (s *Supervisor) StopService(serviceName string) error {
+	log.I.F("stopping service: %s", serviceName)
+
+	switch serviceName {
+	case "orly-db", "db":
+		// DB is the root - everything depends on it
+		// Stop in reverse dependency order: relay, sync, acl, then db
+		log.I.F("stopping relay (depends on db)")
+		s.stopProcess(s.relayProc, 5*time.Second)
+
+		log.I.F("stopping sync services (depend on db)")
+		s.stopSyncServices()
+
+		if s.cfg.ACLEnabled && s.aclProc != nil {
+			log.I.F("stopping acl (depends on db)")
+			s.stopProcess(s.aclProc, 5*time.Second)
+		}
+
+		log.I.F("stopping db")
+		s.stopProcess(s.dbProc, s.cfg.StopTimeout)
+
+	case "orly-acl", "acl":
+		// Relay depends on ACL when ACL is enabled
+		if s.cfg.ACLEnabled {
+			log.I.F("stopping relay (depends on acl)")
+			s.stopProcess(s.relayProc, 5*time.Second)
+		}
+		if s.aclProc != nil {
+			s.stopProcess(s.aclProc, 5*time.Second)
+		}
+
+	case "orly-sync-distributed", "distributed-sync":
+		// Relay may depend on sync services
+		if s.distributedSyncProc != nil {
+			s.stopProcess(s.distributedSyncProc, 5*time.Second)
+		}
+
+	case "orly-sync-cluster", "cluster-sync":
+		if s.clusterSyncProc != nil {
+			s.stopProcess(s.clusterSyncProc, 5*time.Second)
+		}
+
+	case "orly-sync-relaygroup", "relaygroup":
+		if s.relayGroupProc != nil {
+			s.stopProcess(s.relayGroupProc, 5*time.Second)
+		}
+
+	case "orly-sync-negentropy", "negentropy":
+		if s.negentropyProc != nil {
+			s.stopProcess(s.negentropyProc, 5*time.Second)
+		}
+
+	case "orly-certs", "certs":
+		// Certs is independent
+		if s.certsProc != nil {
+			s.stopProcess(s.certsProc, 5*time.Second)
+		}
+
+	case "orly", "relay":
+		// Relay is a leaf - nothing depends on it
+		s.stopProcess(s.relayProc, 5*time.Second)
+
+	default:
+		return fmt.Errorf("unknown service: %s", serviceName)
+	}
+
+	log.I.F("stopped service: %s", serviceName)
+	return nil
 }
 
 // RestartAll stops all processes and starts them again.
