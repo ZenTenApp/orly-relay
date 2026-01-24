@@ -147,7 +147,9 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 			},
 			Global: Rule{
 				Description: "Global rule applies to all kinds",
-				WriteAllow:  []string{hex.Enc(testPubkey)},
+				AccessControl: AccessControl{
+					WriteAllow: []string{hex.Enc(testPubkey)},
+				},
 			},
 			rules: map[int]Rule{
 				1: {Description: "Rule for kind 1"},
@@ -259,7 +261,9 @@ func TestKindWhitelistRealWorld(t *testing.T) {
 				},
 				30023: {
 					Description: "Long-form content",
-					WriteAllow:  []string{hex.Enc(testPubkey)}, // Only specific user can write
+					AccessControl: AccessControl{
+						WriteAllow: []string{hex.Enc(testPubkey)}, // Only specific user can write
+					},
 				},
 			},
 		}

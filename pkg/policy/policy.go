@@ -72,111 +72,105 @@ type Kinds struct {
 // For pubkey allow/deny lists: whitelist takes precedence over blacklist.
 // If whitelist has entries, only whitelisted pubkeys are allowed.
 // If only blacklist has entries, all pubkeys except blacklisted ones are allowed.
-type Rule struct {
-	// Description is a human-readable description of the rule.
-	Description string `json:"description"`
-	// Script is a path to a script that will be used to determine if the event should be allowed to be written to the relay. The script should be a standard bash script or whatever is native to the platform. The script will return its opinion to be one of the criteria that must be met for the event to be allowed to be written to the relay (AND).
-	Script string `json:"script,omitempty"`
-	// WriteAllow is a list of pubkeys that are allowed to write this event kind to the relay. If any are present, implicitly all others are denied.
+// =============================================================================
+// Rule Sub-Components (Value Objects)
+// =============================================================================
+
+// AccessControl defines who can read/write events.
+// This is a value object that encapsulates access control configuration.
+type AccessControl struct {
+	// WriteAllow is a list of pubkeys allowed to write. If any present, all others denied.
 	WriteAllow []string `json:"write_allow,omitempty"`
-	// WriteDeny is a list of pubkeys that are not allowed to write this event kind to the relay. If any are present, implicitly all others are allowed. Only takes effect in the absence of a WriteAllow.
+	// WriteDeny is a list of pubkeys denied write. Only effective without WriteAllow.
 	WriteDeny []string `json:"write_deny,omitempty"`
-	// ReadAllow is a list of pubkeys that are allowed to read this event kind from the relay. If any are present, implicitly all others are denied.
+	// ReadAllow is a list of pubkeys allowed to read. If any present, all others denied.
 	ReadAllow []string `json:"read_allow,omitempty"`
-	// ReadDeny is a list of pubkeys that are not allowed to read this event kind from the relay. If any are present, implicitly all others are allowed. Only takes effect in the absence of a ReadAllow.
+	// ReadDeny is a list of pubkeys denied read. Only effective without ReadAllow.
 	ReadDeny []string `json:"read_deny,omitempty"`
-	// MaxExpiry is the maximum expiry time in seconds for events written to the relay. If 0, there is no maximum expiry. Events must have an expiry time if this is set, and it must be no more than this value in the future compared to the event's created_at time.
-	// Deprecated: Use MaxExpiryDuration instead for human-readable duration strings.
-	MaxExpiry *int64 `json:"max_expiry,omitempty"` //nolint:staticcheck // Intentional backward compatibility
-	// MaxExpiryDuration is the maximum expiry time in ISO-8601 duration format.
-	// Format: P[n]Y[n]M[n]W[n]DT[n]H[n]M[n]S (e.g., "P7D" for 7 days, "PT1H" for 1 hour, "P1DT12H" for 1 day 12 hours).
-	// Parsed into maxExpirySeconds at load time.
-	MaxExpiryDuration string `json:"max_expiry_duration,omitempty"`
-	// MustHaveTags is a list of tag key letters that must be present on the event for it to be allowed to be written to the relay.
-	MustHaveTags []string `json:"must_have_tags,omitempty"`
-	// SizeLimit is the maximum size in bytes for the event's total serialized size.
-	SizeLimit *int64 `json:"size_limit,omitempty"`
-	// ContentLimit is the maximum size in bytes for the event's content field.
-	ContentLimit *int64 `json:"content_limit,omitempty"`
-	// Privileged means that this event is either authored by the authenticated pubkey, or has a p tag that contains the authenticated pubkey. This type of event is only sent to users who are authenticated and are party to the event.
-	Privileged bool `json:"privileged,omitempty"`
-	// RateLimit is the amount of data can be written to the relay per second by the authenticated pubkey. If 0, there is no rate limit. This is applied via the use of an EWMA of the event publication history on the authenticated connection
-	RateLimit *int64 `json:"rate_limit,omitempty"`
-	// MaxAgeOfEvent is the offset in seconds that is the oldest timestamp allowed for an event's created_at time. If 0, there is no maximum age. Events must have a created_at time if this is set, and it must be no more than this value in the past compared to the current time.
-	MaxAgeOfEvent *int64 `json:"max_age_of_event,omitempty"`
-	// MaxAgeEventInFuture is the offset in seconds that is the newest timestamp allowed for an event's created_at time ahead of the current time.
-	MaxAgeEventInFuture *int64 `json:"max_age_event_in_future,omitempty"`
-
-	// WriteAllowFollows grants BOTH read and write access to policy admin follows when enabled.
-	// Requires PolicyFollowWhitelistEnabled=true at the policy level.
+	// WriteAllowFollows grants access to policy admin follows when enabled.
 	WriteAllowFollows bool `json:"write_allow_follows,omitempty"`
-
-	// FollowsWhitelistAdmins specifies admin pubkeys (hex-encoded) whose follows are whitelisted for this rule.
-	// Unlike WriteAllowFollows which uses the global PolicyAdmins, this allows per-rule admin configuration.
-	// If set, the relay will fail to start if these admins don't have follow list events (kind 3) in the database.
-	// This provides explicit control over which admin's follow list controls access for specific kinds.
+	// FollowsWhitelistAdmins specifies admin pubkeys whose follows are whitelisted.
 	// DEPRECATED: Use ReadFollowsWhitelist and WriteFollowsWhitelist instead.
 	FollowsWhitelistAdmins []string `json:"follows_whitelist_admins,omitempty"`
-
-	// ReadFollowsWhitelist specifies pubkeys (hex-encoded) whose follows are allowed to READ events.
-	// The relay will fail to start if these pubkeys don't have follow list events (kind 3) in the database.
-	// When present, only the follows of these pubkeys (plus the pubkeys themselves) can read.
-	// This restricts read access - without it, read is permissive by default (except for privileged events).
+	// ReadFollowsWhitelist specifies pubkeys whose follows can READ events.
 	ReadFollowsWhitelist []string `json:"read_follows_whitelist,omitempty"`
-
-	// WriteFollowsWhitelist specifies pubkeys (hex-encoded) whose follows are allowed to WRITE events.
-	// The relay will fail to start if these pubkeys don't have follow list events (kind 3) in the database.
-	// When present, only the follows of these pubkeys (plus the pubkeys themselves) can write.
-	// Without this, write permission is allowed by default.
+	// WriteFollowsWhitelist specifies pubkeys whose follows can WRITE events.
 	WriteFollowsWhitelist []string `json:"write_follows_whitelist,omitempty"`
-
-	// TagValidation is a map of tag_name -> regex pattern for validating tag values.
-	// Each tag present in the event must match its corresponding regex pattern.
-	// Example: {"d": "^[a-z0-9-]{1,64}$", "t": "^[a-z0-9-]{1,32}$"}
-	TagValidation map[string]string `json:"tag_validation,omitempty"`
-
-	// ProtectedRequired when true requires events to have a "-" tag (NIP-70 protected events).
-	// Protected events signal that they should only be published to relays that enforce access control.
-	ProtectedRequired bool `json:"protected_required,omitempty"`
-
-	// IdentifierRegex is a regex pattern that "d" tag identifiers must conform to.
-	// This is a convenience field - equivalent to setting TagValidation["d"] = pattern.
-	// Example: "^[a-z0-9-]{1,64}$" requires lowercase alphanumeric with hyphens, max 64 chars.
-	IdentifierRegex string `json:"identifier_regex,omitempty"`
-
-	// ReadAllowPermissive when set on a GLOBAL rule, allows read access for ALL kinds,
-	// even when a kind whitelist is configured. This allows the kind whitelist to
-	// restrict WRITE operations while keeping reads permissive.
-	// When true:
-	// - READ: Allowed for all kinds (global rule still applies for other read restrictions)
-	// - WRITE: Kind whitelist/blacklist applies as normal
-	// Only meaningful on the Global rule - ignored on kind-specific rules.
+	// ReadAllowPermissive allows read access for ALL kinds on GLOBAL rule.
 	ReadAllowPermissive bool `json:"read_allow_permissive,omitempty"`
-
-	// WriteAllowPermissive when set on a GLOBAL rule, allows write access for kinds
-	// that don't have specific rules defined, bypassing the implicit kind whitelist.
-	// When true:
-	// - Kinds without specific rules apply global rule constraints only
-	// - Kind whitelist still blocks reads for unlisted kinds (unless ReadAllowPermissive is also set)
-	// Only meaningful on the Global rule - ignored on kind-specific rules.
+	// WriteAllowPermissive allows write access bypassing kind whitelist on GLOBAL rule.
 	WriteAllowPermissive bool `json:"write_allow_permissive,omitempty"`
 
-	// Binary caches for faster comparison (populated from hex strings above)
-	// These are not exported and not serialized to JSON
+	// Binary caches (internal, not serialized)
 	writeAllowBin              [][]byte
 	writeDenyBin               [][]byte
 	readAllowBin               [][]byte
 	readDenyBin                [][]byte
-	maxExpirySeconds           *int64         // Parsed from MaxExpiryDuration or copied from MaxExpiry
-	identifierRegexCache       *regexp.Regexp // Compiled regex for IdentifierRegex
-	followsWhitelistAdminsBin  [][]byte       // Binary cache for FollowsWhitelistAdmins pubkeys (DEPRECATED)
-	followsWhitelistFollowsBin [][]byte       // Cached follow list from FollowsWhitelistAdmins (loaded at startup, DEPRECATED)
+	followsWhitelistAdminsBin  [][]byte
+	followsWhitelistFollowsBin [][]byte
+	readFollowsWhitelistBin    [][]byte
+	writeFollowsWhitelistBin   [][]byte
+	readFollowsFollowsBin      [][]byte
+	writeFollowsFollowsBin     [][]byte
+}
 
-	// Binary caches for ReadFollowsWhitelist and WriteFollowsWhitelist
-	readFollowsWhitelistBin  [][]byte // Binary cache for ReadFollowsWhitelist pubkeys
-	writeFollowsWhitelistBin [][]byte // Binary cache for WriteFollowsWhitelist pubkeys
-	readFollowsFollowsBin    [][]byte // Cached follow list from ReadFollowsWhitelist pubkeys
-	writeFollowsFollowsBin   [][]byte // Cached follow list from WriteFollowsWhitelist pubkeys
+// Constraints defines limits and restrictions on events.
+// This is a value object that encapsulates event constraints.
+type Constraints struct {
+	// MaxExpiry is the maximum expiry time in seconds.
+	// Deprecated: Use MaxExpiryDuration instead.
+	MaxExpiry *int64 `json:"max_expiry,omitempty"` //nolint:staticcheck
+	// MaxExpiryDuration is the max expiry in ISO-8601 duration format.
+	MaxExpiryDuration string `json:"max_expiry_duration,omitempty"`
+	// SizeLimit is the maximum total serialized size in bytes.
+	SizeLimit *int64 `json:"size_limit,omitempty"`
+	// ContentLimit is the maximum content field size in bytes.
+	ContentLimit *int64 `json:"content_limit,omitempty"`
+	// RateLimit is the write rate limit in bytes per second.
+	RateLimit *int64 `json:"rate_limit,omitempty"`
+	// MaxAgeOfEvent is the max age in seconds for created_at timestamps.
+	MaxAgeOfEvent *int64 `json:"max_age_of_event,omitempty"`
+	// MaxAgeEventInFuture is the max future offset for created_at timestamps.
+	MaxAgeEventInFuture *int64 `json:"max_age_event_in_future,omitempty"`
+	// ProtectedRequired requires events to have a "-" tag (NIP-70).
+	ProtectedRequired bool `json:"protected_required,omitempty"`
+	// Privileged means event is only sent to authenticated parties.
+	Privileged bool `json:"privileged,omitempty"`
+
+	// Parsed cache (internal, not serialized)
+	maxExpirySeconds *int64
+}
+
+// TagValidationConfig defines tag validation rules.
+// This is a value object that encapsulates tag validation configuration.
+type TagValidationConfig struct {
+	// MustHaveTags is a list of tag key letters that must be present.
+	MustHaveTags []string `json:"must_have_tags,omitempty"`
+	// TagValidation is a map of tag_name -> regex pattern for validation.
+	TagValidation map[string]string `json:"tag_validation,omitempty"`
+	// IdentifierRegex is a regex pattern for "d" tag identifiers.
+	IdentifierRegex string `json:"identifier_regex,omitempty"`
+
+	// Compiled cache (internal, not serialized)
+	identifierRegexCache *regexp.Regexp
+}
+
+// =============================================================================
+// Rule (Composed from Sub-Components)
+// =============================================================================
+
+// Rule defines policies for a specific event kind or as a global default.
+// It is composed of sub-value objects for cleaner organization.
+type Rule struct {
+	// Description is a human-readable description of the rule.
+	Description string `json:"description"`
+	// Script is a path to a validation script.
+	Script string `json:"script,omitempty"`
+
+	// Embedded sub-components (fields are flattened in JSON for backward compatibility)
+	AccessControl
+	Constraints
+	TagValidationConfig
 }
 
 // hasAnyRules checks if the rule has any constraints configured

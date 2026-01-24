@@ -47,9 +47,13 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 			rules: map[int]Rule{
 				100: {
 					Description: "Deny overrides allow and privileged",
-					WriteAllow:  []string{hex.Enc(alicePubkey)}, // Alice in allow list
-					WriteDeny:   []string{hex.Enc(alicePubkey)}, // But also in deny list
-					Privileged:  true,                            // And it's privileged
+					AccessControl: AccessControl{
+						WriteAllow: []string{hex.Enc(alicePubkey)}, // Alice in allow list
+						WriteDeny:  []string{hex.Enc(alicePubkey)}, // But also in deny list
+					},
+					Constraints: Constraints{
+						Privileged: true, // And it's privileged
+					},
 				},
 			},
 		}
@@ -78,8 +82,12 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 			rules: map[int]Rule{
 				200: {
 					Description: "Privileged with allow list",
-					ReadAllow:   []string{hex.Enc(bobPubkey)}, // Only Bob in allow list
-					Privileged:  true,
+					AccessControl: AccessControl{
+						ReadAllow: []string{hex.Enc(bobPubkey)}, // Only Bob in allow list
+					},
+					Constraints: Constraints{
+						Privileged: true,
+					},
 				},
 			},
 		}
@@ -131,7 +139,9 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 			rules: map[int]Rule{
 				300: {
 					Description: "Privileged without allow list",
-					Privileged:  true,
+					Constraints: Constraints{
+						Privileged: true,
+					},
 					// NO ReadAllow or WriteAllow specified
 				},
 			},
@@ -186,7 +196,9 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 			rules: map[int]Rule{
 				400: {
 					Description: "Allow list only",
-					WriteAllow:  []string{hex.Enc(alicePubkey)}, // Only Alice
+					AccessControl: AccessControl{
+						WriteAllow: []string{hex.Enc(alicePubkey)}, // Only Alice
+					},
 					// NO Privileged flag
 				},
 			},
@@ -226,9 +238,13 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 			rules: map[int]Rule{
 				500: {
 					Description: "Complex rules",
-					WriteAllow:  []string{hex.Enc(alicePubkey), hex.Enc(bobPubkey)},
-					WriteDeny:   []string{hex.Enc(bobPubkey)}, // Bob denied despite being in allow
-					Privileged:  true,
+					AccessControl: AccessControl{
+						WriteAllow: []string{hex.Enc(alicePubkey), hex.Enc(bobPubkey)},
+						WriteDeny:  []string{hex.Enc(bobPubkey)}, // Bob denied despite being in allow
+					},
+					Constraints: Constraints{
+						Privileged: true,
+					},
 				},
 			},
 		}
@@ -316,7 +332,9 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 			DefaultPolicy: "allow", // Allow default
 			rules: map[int]Rule{
 				700: {
-					WriteAllow: []string{hex.Enc(bobPubkey)}, // Only Bob
+					AccessControl: AccessControl{
+						WriteAllow: []string{hex.Enc(bobPubkey)}, // Only Bob
+					},
 				},
 			},
 		}

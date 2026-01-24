@@ -9,6 +9,8 @@ import (
 
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/kind"
+
+	"next.orly.dev/pkg/domain/events"
 )
 
 // Result contains the outcome of event processing.
@@ -85,6 +87,12 @@ type ClusterManager interface {
 	HandleMembershipEvent(ev *event.E) error
 }
 
+// DomainEventDispatcher abstracts domain event publishing.
+type DomainEventDispatcher interface {
+	// PublishAsync queues an event for asynchronous processing.
+	PublishAsync(event events.DomainEvent) bool
+}
+
 // Config holds configuration for the processing service.
 type Config struct {
 	Admins       [][]byte
@@ -101,14 +109,15 @@ func DefaultConfig() *Config {
 
 // Service implements event processing.
 type Service struct {
-	cfg            *Config
-	db             Database
-	publisher      Publisher
-	rateLimiter    RateLimiter
-	syncManager    SyncManager
-	aclRegistry    ACLRegistry
-	relayGroupMgr  RelayGroupManager
-	clusterManager ClusterManager
+	cfg             *Config
+	db              Database
+	publisher       Publisher
+	rateLimiter     RateLimiter
+	syncManager     SyncManager
+	aclRegistry     ACLRegistry
+	relayGroupMgr   RelayGroupManager
+	clusterManager  ClusterManager
+	eventDispatcher DomainEventDispatcher
 }
 
 // New creates a new processing service.
@@ -146,6 +155,11 @@ func (s *Service) SetRelayGroupManager(rgm RelayGroupManager) {
 // SetClusterManager sets the cluster manager.
 func (s *Service) SetClusterManager(cm ClusterManager) {
 	s.clusterManager = cm
+}
+
+// SetEventDispatcher sets the domain event dispatcher.
+func (s *Service) SetEventDispatcher(d DomainEventDispatcher) {
+	s.eventDispatcher = d
 }
 
 // Process saves an event and triggers delivery.
@@ -211,6 +225,14 @@ func (s *Service) deliver(ev *event.E) {
 
 // runPostSaveHooks handles side effects after event persistence.
 func (s *Service) runPostSaveHooks(ev *event.E) {
+	isAdmin := s.isAdminPubkey(ev.Pubkey)
+	isOwner := s.isOwnerPubkey(ev.Pubkey)
+
+	// Dispatch domain event for saved event
+	if s.eventDispatcher != nil {
+		s.eventDispatcher.PublishAsync(events.NewEventSaved(ev, 0, isAdmin, isOwner))
+	}
+
 	// Handle relay group configuration events
 	if s.relayGroupMgr != nil {
 		if err := s.relayGroupMgr.ValidateRelayGroupEvent(ev); err == nil {
@@ -231,7 +253,7 @@ func (s *Service) runPostSaveHooks(ev *event.E) {
 	}
 
 	// ACL reconfiguration for admin events
-	if s.isAdminEvent(ev) {
+	if isAdmin || isOwner {
 		if ev.Kind == kind.FollowList.K || ev.Kind == kind.RelayListMetadata.K {
 			if s.aclRegistry != nil {
 				go s.aclRegistry.Configure()
@@ -240,15 +262,20 @@ func (s *Service) runPostSaveHooks(ev *event.E) {
 	}
 }
 
-// isAdminEvent checks if event is from admin or owner.
-func (s *Service) isAdminEvent(ev *event.E) bool {
+// isAdminPubkey checks if pubkey is an admin.
+func (s *Service) isAdminPubkey(pubkey []byte) bool {
 	for _, admin := range s.cfg.Admins {
-		if fastEqual(admin, ev.Pubkey) {
+		if fastEqual(admin, pubkey) {
 			return true
 		}
 	}
+	return false
+}
+
+// isOwnerPubkey checks if pubkey is an owner.
+func (s *Service) isOwnerPubkey(pubkey []byte) bool {
 	for _, owner := range s.cfg.Owners {
-		if fastEqual(owner, ev.Pubkey) {
+		if fastEqual(owner, pubkey) {
 			return true
 		}
 	}

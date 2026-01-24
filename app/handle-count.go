@@ -29,7 +29,7 @@ func (l *Listener) HandleCount(msg []byte) (err error) {
 	log.D.C(func() string { return fmt.Sprintf("COUNT sub=%s filters=%d", env.Subscription, len(env.Filters)) })
 
 	// If ACL is active, auth is required, or AuthToWrite is enabled, send a challenge (same as REQ path)
-	if len(l.authedPubkey.Load()) != schnorr.PubKeyBytesLen && (acl.Registry.Active.Load() != "none" || l.Config.AuthRequired || l.Config.AuthToWrite) {
+	if len(l.authedPubkey.Load()) != schnorr.PubKeyBytesLen && (acl.Registry.GetMode() != "none" || l.Config.AuthRequired || l.Config.AuthToWrite) {
 		if err = authenvelope.NewChallengeWith(l.challenge.Load()).Write(l); chk.E(err) {
 			return
 		}
@@ -47,7 +47,7 @@ func (l *Listener) HandleCount(msg []byte) (err error) {
 	if l.Config.AuthToWrite && len(l.authedPubkey.Load()) == 0 {
 		// Allow unauthenticated COUNT when AuthToWrite is enabled
 		// but still respect ACL access levels if ACL is active
-		if acl.Registry.Active.Load() != "none" {
+		if acl.Registry.GetMode() != "none" {
 			switch accessLevel {
 			case "none", "blocked", "banned":
 				return errors.New("auth required: user not authed or has no read access")

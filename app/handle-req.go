@@ -98,7 +98,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 	}
 
 	// send a challenge to the client to auth if an ACL is active, auth is required, or AuthToWrite is enabled
-	if len(l.authedPubkey.Load()) == 0 && (acl.Registry.Active.Load() != "none" || l.Config.AuthRequired || l.Config.AuthToWrite) {
+	if len(l.authedPubkey.Load()) == 0 && (acl.Registry.GetMode() != "none" || l.Config.AuthRequired || l.Config.AuthToWrite) {
 		if err = authenvelope.NewChallengeWith(l.challenge.Load()).
 			Write(l); chk.E(err) {
 			return
@@ -123,7 +123,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 	if l.Config.AuthToWrite && len(l.authedPubkey.Load()) == 0 {
 		// Allow unauthenticated REQ when AuthToWrite is enabled
 		// but still respect ACL access levels if ACL is active
-		if acl.Registry.Active.Load() != "none" {
+		if acl.Registry.GetMode() != "none" {
 			switch accessLevel {
 			case "none", "blocked", "banned":
 				if err = closedenvelope.NewFrom(
@@ -507,7 +507,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		// When ACL is "none", skip privileged filtering to allow open access
 		// Privileged events should only be sent to users who are authenticated and
 		// are either the event author or listed in p tags
-		aclActive := acl.Registry.Active.Load() != "none"
+		aclActive := acl.Registry.GetMode() != "none"
 		if kind.IsPrivileged(ev.Kind) && aclActive && accessLevel != "admin" { // admins can see all events
 			log.T.C(
 				func() string {
@@ -589,7 +589,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 	}
 
 	// Apply managed ACL filtering for read access if managed ACL is active
-	if acl.Registry.Active.Load() == "managed" {
+	if acl.Registry.GetMode() == "managed" {
 		var aclFilteredEvents event.S
 		for _, ev := range events {
 			// Check if event is banned
@@ -621,9 +621,9 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 	}
 
 	// Apply curating ACL filtering for read access if curating ACL is active
-	if acl.Registry.Active.Load() == "curating" {
+	if acl.Registry.GetMode() == "curating" {
 		// Find the curating ACL instance
-		for _, aclInstance := range acl.Registry.ACL {
+		for _, aclInstance := range acl.Registry.ACLs() {
 			if aclInstance.Type() == "curating" {
 				if curatingACL, ok := aclInstance.(*acl.Curating); ok {
 					var curatingFilteredEvents event.S
@@ -825,7 +825,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 
 		// Register subscription with publisher
 		// Set AuthRequired based on ACL mode - when ACL is "none", don't require auth for privileged events
-		authRequired := acl.Registry.Active.Load() != "none"
+		authRequired := acl.Registry.GetMode() != "none"
 		l.publishers.Receive(
 			&W{
 				Conn:         l.conn,

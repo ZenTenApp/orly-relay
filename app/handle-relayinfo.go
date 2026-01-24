@@ -142,7 +142,7 @@ func (s *Server) HandleRelayInfo(w http.ResponseWriter, r *http.Request) {
 	// Override with managed ACL config if in managed mode
 	if s.Config.ACLMode == "managed" {
 		// Get managed ACL instance
-		for _, aclInstance := range acl.Registry.ACL {
+		for _, aclInstance := range acl.Registry.ACLs() {
 			if aclInstance.Type() == "managed" {
 				if managed, ok := aclInstance.(*acl.Managed); ok {
 					managedACL := managed.GetManagedACL()

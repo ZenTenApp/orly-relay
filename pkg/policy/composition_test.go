@@ -549,7 +549,9 @@ func TestPolicyAdminContributionValidation(t *testing.T) {
 		rules: map[int]Rule{
 			1: {
 				Description: "Text notes",
-				SizeLimit:   ptr(int64(10000)),
+				Constraints: Constraints{
+					SizeLimit: ptr(int64(10000)),
+				},
 			},
 		},
 	}
@@ -633,7 +635,9 @@ func TestPolicyAdminContributionValidation(t *testing.T) {
 				RulesAdd: map[int]Rule{
 					30023: {
 						Description: "Long-form content",
-						SizeLimit:   ptr(int64(100000)),
+						Constraints: Constraints{
+							SizeLimit: ptr(int64(100000)),
+						},
 					},
 				},
 			},

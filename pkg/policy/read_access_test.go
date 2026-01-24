@@ -29,7 +29,9 @@ func TestReadAllowLogic(t *testing.T) {
 		rules: map[int]Rule{
 			30166: {
 				Description: "Private server heartbeat events",
-				ReadAllow:   []string{hex.Enc(bobPubkey)}, // Only Bob can read
+				AccessControl: AccessControl{
+					ReadAllow: []string{hex.Enc(bobPubkey)}, // Only Bob can read
+				},
 			},
 		},
 	}
@@ -97,7 +99,9 @@ func TestReadDenyLogic(t *testing.T) {
 		rules: map[int]Rule{
 			1: {
 				Description: "Test events",
-				ReadDeny:    []string{hex.Enc(charliePubkey)}, // Charlie cannot read
+				AccessControl: AccessControl{
+					ReadDeny: []string{hex.Enc(charliePubkey)}, // Charlie cannot read
+				},
 			},
 		},
 	}
@@ -308,8 +312,12 @@ func TestReadAllowWithPrivileged(t *testing.T) {
 		rules: map[int]Rule{
 			100: {
 				Description: "Privileged with read_allow",
-				Privileged:  true,
-				ReadAllow:   []string{hex.Enc(bobPubkey)}, // Only Bob can read
+				Constraints: Constraints{
+					Privileged: true,
+				},
+				AccessControl: AccessControl{
+					ReadAllow: []string{hex.Enc(bobPubkey)}, // Only Bob can read
+				},
 			},
 		},
 	}
@@ -382,8 +390,10 @@ func TestReadAllowWriteAllowIndependent(t *testing.T) {
 		rules: map[int]Rule{
 			200: {
 				Description: "Write/Read separation test",
-				WriteAllow:  []string{hex.Enc(alicePubkey)}, // Only Alice can write
-				ReadAllow:   []string{hex.Enc(bobPubkey)},   // Only Bob can read
+				AccessControl: AccessControl{
+					WriteAllow: []string{hex.Enc(alicePubkey)}, // Only Alice can write
+					ReadAllow:  []string{hex.Enc(bobPubkey)},   // Only Bob can read
+				},
 			},
 		},
 	}
@@ -475,7 +485,9 @@ func TestReadAccessEdgeCases(t *testing.T) {
 		rules: map[int]Rule{
 			300: {
 				Description: "Test edge cases",
-				ReadAllow:   []string{"somepubkey"}, // Non-empty ReadAllow
+				AccessControl: AccessControl{
+					ReadAllow: []string{"somepubkey"}, // Non-empty ReadAllow
+				},
 			},
 		},
 	}

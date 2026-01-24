@@ -50,11 +50,17 @@ func BenchmarkCheckRulePolicy(b *testing.B) {
 	testEvent := createTestEventBench(b, signer, "test content", 1)
 
 	rule := Rule{
-		Description:  "test rule",
-		WriteAllow:   []string{hex.Enc(pubkey)},
-		SizeLimit:    int64Ptr(10000),
-		ContentLimit: int64Ptr(1000),
-		MustHaveTags: []string{"p"},
+		Description: "test rule",
+		AccessControl: AccessControl{
+			WriteAllow: []string{hex.Enc(pubkey)},
+		},
+		Constraints: Constraints{
+			SizeLimit:    int64Ptr(10000),
+			ContentLimit: int64Ptr(1000),
+		},
+		TagValidationConfig: TagValidationConfig{
+			MustHaveTags: []string{"p"},
+		},
 	}
 
 	policy := &P{}
@@ -77,7 +83,9 @@ func BenchmarkCheckPolicy(b *testing.B) {
 		rules: map[int]Rule{
 			1: {
 				Description: "test rule",
-				WriteAllow:  []string{hex.Enc(pubkey)},
+				AccessControl: AccessControl{
+					WriteAllow: []string{hex.Enc(pubkey)},
+				},
 			},
 		},
 	}
@@ -195,7 +203,9 @@ func BenchmarkCheckPolicyMultipleKinds(b *testing.B) {
 	for i := 1; i <= 100; i++ {
 		rules[i] = Rule{
 			Description: "test rule",
-			WriteAllow:  []string{"test-pubkey"},
+			AccessControl: AccessControl{
+				WriteAllow: []string{"test-pubkey"},
+			},
 		}
 	}
 
@@ -285,12 +295,18 @@ func BenchmarkCheckPolicyComplexRule(b *testing.B) {
 	}
 
 	rule := Rule{
-		Description:  "complex rule",
-		WriteAllow:   []string{hex.Enc(pubkey)},
-		SizeLimit:    int64Ptr(100000),
-		ContentLimit: int64Ptr(10000),
-		MustHaveTags: []string{"p", "e"},
-		Privileged:   true,
+		Description: "complex rule",
+		AccessControl: AccessControl{
+			WriteAllow: []string{hex.Enc(pubkey)},
+		},
+		Constraints: Constraints{
+			SizeLimit:    int64Ptr(100000),
+			ContentLimit: int64Ptr(10000),
+			Privileged:   true,
+		},
+		TagValidationConfig: TagValidationConfig{
+			MustHaveTags: []string{"p", "e"},
+		},
 	}
 
 	policy := &P{}
@@ -309,9 +325,11 @@ func BenchmarkCheckPolicyLargeEvent(b *testing.B) {
 		Kind: Kinds{},
 		rules: map[int]Rule{
 			1: {
-				Description:  "size limit test",
-				SizeLimit:    int64Ptr(200000), // 200KB limit
-				ContentLimit: int64Ptr(200000), // 200KB content limit
+				Description: "size limit test",
+				Constraints: Constraints{
+					SizeLimit:    int64Ptr(200000), // 200KB limit
+					ContentLimit: int64Ptr(200000), // 200KB content limit
+				},
 			},
 		},
 	}

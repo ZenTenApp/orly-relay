@@ -189,7 +189,9 @@ func TestCheckKindsPolicy(t *testing.T) {
 			policy: &P{
 				Kind: Kinds{},
 				Global: Rule{
-					WriteAllow: []string{"test"}, // Global rule exists
+					AccessControl: AccessControl{
+						WriteAllow: []string{"test"}, // Global rule exists
+					},
 				},
 				rules: map[int]Rule{}, // No specific rules
 			},
@@ -278,7 +280,9 @@ func TestCheckKindsPolicy(t *testing.T) {
 					Whitelist: []int{1, 3, 5},
 				},
 				Global: Rule{
-					ReadAllowPermissive: true,
+					AccessControl: AccessControl{
+						ReadAllowPermissive: true,
+					},
 				},
 			},
 			access:   "read",
@@ -292,7 +296,9 @@ func TestCheckKindsPolicy(t *testing.T) {
 					Whitelist: []int{1, 3, 5},
 				},
 				Global: Rule{
-					ReadAllowPermissive: true,
+					AccessControl: AccessControl{
+						ReadAllowPermissive: true,
+					},
 				},
 			},
 			access:   "write",
@@ -306,7 +312,9 @@ func TestCheckKindsPolicy(t *testing.T) {
 					Whitelist: []int{1, 3, 5},
 				},
 				Global: Rule{
-					WriteAllowPermissive: true,
+					AccessControl: AccessControl{
+						WriteAllowPermissive: true,
+					},
 				},
 			},
 			access:   "write",
@@ -320,7 +328,9 @@ func TestCheckKindsPolicy(t *testing.T) {
 					Whitelist: []int{1, 3, 5},
 				},
 				Global: Rule{
-					WriteAllowPermissive: true,
+					AccessControl: AccessControl{
+						WriteAllowPermissive: true,
+					},
 				},
 			},
 			access:   "read",
@@ -334,8 +344,10 @@ func TestCheckKindsPolicy(t *testing.T) {
 					Blacklist: []int{2, 4, 6},
 				},
 				Global: Rule{
-					ReadAllowPermissive:  true,
-					WriteAllowPermissive: true,
+					AccessControl: AccessControl{
+						ReadAllowPermissive:  true,
+						WriteAllowPermissive: true,
+					},
 				},
 			},
 			access:   "write",
@@ -390,7 +402,9 @@ func TestCheckRulePolicy(t *testing.T) {
 			event:  testEvent,
 			rule: Rule{
 				Description: "pubkey allowed",
-				WriteAllow:  []string{hex.Enc(testEvent.Pubkey)},
+				AccessControl: AccessControl{
+					WriteAllow: []string{hex.Enc(testEvent.Pubkey)},
+				},
 			},
 			loggedInPubkey: eventPubkey,
 			expected:       true,
@@ -401,7 +415,9 @@ func TestCheckRulePolicy(t *testing.T) {
 			event:  testEvent,
 			rule: Rule{
 				Description: "pubkey not allowed",
-				WriteAllow:  []string{hex.Enc(pTagPubkey)}, // Different pubkey
+				AccessControl: AccessControl{
+					WriteAllow: []string{hex.Enc(pTagPubkey)}, // Different pubkey
+				},
 			},
 			loggedInPubkey: eventPubkey,
 			expected:       false,
@@ -412,7 +428,9 @@ func TestCheckRulePolicy(t *testing.T) {
 			event:  testEvent,
 			rule: Rule{
 				Description: "size limit",
-				SizeLimit:   int64Ptr(10000),
+				Constraints: Constraints{
+					SizeLimit: int64Ptr(10000),
+				},
 			},
 			loggedInPubkey: eventPubkey,
 			expected:       true,
@@ -423,7 +441,9 @@ func TestCheckRulePolicy(t *testing.T) {
 			event:  testEvent,
 			rule: Rule{
 				Description: "size limit exceeded",
-				SizeLimit:   int64Ptr(10),
+				Constraints: Constraints{
+					SizeLimit: int64Ptr(10),
+				},
 			},
 			loggedInPubkey: eventPubkey,
 			expected:       false,
@@ -433,8 +453,10 @@ func TestCheckRulePolicy(t *testing.T) {
 			access: "write",
 			event:  testEvent,
 			rule: Rule{
-				Description:  "content limit",
-				ContentLimit: int64Ptr(1000),
+				Description: "content limit",
+				Constraints: Constraints{
+					ContentLimit: int64Ptr(1000),
+				},
 			},
 			loggedInPubkey: eventPubkey,
 			expected:       true,
@@ -444,8 +466,10 @@ func TestCheckRulePolicy(t *testing.T) {
 			access: "write",
 			event:  testEvent,
 			rule: Rule{
-				Description:  "content limit exceeded",
-				ContentLimit: int64Ptr(5),
+				Description: "content limit exceeded",
+				Constraints: Constraints{
+					ContentLimit: int64Ptr(5),
+				},
 			},
 			loggedInPubkey: eventPubkey,
 			expected:       false,
@@ -455,8 +479,10 @@ func TestCheckRulePolicy(t *testing.T) {
 			access: "write",
 			event:  testEvent,
 			rule: Rule{
-				Description:  "required tags",
-				MustHaveTags: []string{"p"},
+				Description: "required tags",
+				TagValidationConfig: TagValidationConfig{
+					MustHaveTags: []string{"p"},
+				},
 			},
 			loggedInPubkey: eventPubkey,
 			expected:       true,
@@ -466,8 +492,10 @@ func TestCheckRulePolicy(t *testing.T) {
 			access: "write",
 			event:  testEvent,
 			rule: Rule{
-				Description:  "required tags missing",
-				MustHaveTags: []string{"e"},
+				Description: "required tags missing",
+				TagValidationConfig: TagValidationConfig{
+					MustHaveTags: []string{"e"},
+				},
 			},
 			loggedInPubkey: eventPubkey,
 			expected:       false,
@@ -478,7 +506,9 @@ func TestCheckRulePolicy(t *testing.T) {
 			event:  testEvent,
 			rule: Rule{
 				Description: "privileged event",
-				Privileged:  true,
+				Constraints: Constraints{
+					Privileged: true,
+				},
 			},
 			loggedInPubkey: testEvent.Pubkey,
 			expected:       true, // Privileged doesn't restrict write, uses default (allow)
@@ -489,7 +519,9 @@ func TestCheckRulePolicy(t *testing.T) {
 			event:  testEvent,
 			rule: Rule{
 				Description: "privileged event with p tag",
-				Privileged:  true,
+				Constraints: Constraints{
+					Privileged: true,
+				},
 			},
 			loggedInPubkey: pTagPubkey,
 			expected:       true, // Privileged doesn't restrict write, uses default (allow)
@@ -500,7 +532,9 @@ func TestCheckRulePolicy(t *testing.T) {
 			event:  testEvent,
 			rule: Rule{
 				Description: "privileged event not authenticated",
-				Privileged:  true,
+				Constraints: Constraints{
+					Privileged: true,
+				},
 			},
 			loggedInPubkey: nil,
 			expected:       true, // Privileged doesn't restrict write, uses default (allow)
@@ -511,7 +545,9 @@ func TestCheckRulePolicy(t *testing.T) {
 			event:  testEvent,
 			rule: Rule{
 				Description: "privileged event unauthorized user",
-				Privileged:  true,
+				Constraints: Constraints{
+					Privileged: true,
+				},
 			},
 			loggedInPubkey: unauthorizedPubkey,
 			expected:       true, // Privileged doesn't restrict write, uses default (allow)
@@ -522,7 +558,9 @@ func TestCheckRulePolicy(t *testing.T) {
 			event:  testEvent,
 			rule: Rule{
 				Description: "privileged event read access",
-				Privileged:  true,
+				Constraints: Constraints{
+					Privileged: true,
+				},
 			},
 			loggedInPubkey: testEvent.Pubkey,
 			expected:       true,
@@ -533,7 +571,9 @@ func TestCheckRulePolicy(t *testing.T) {
 			event:  testEvent,
 			rule: Rule{
 				Description: "privileged event read access with p tag",
-				Privileged:  true,
+				Constraints: Constraints{
+					Privileged: true,
+				},
 			},
 			loggedInPubkey: pTagPubkey,
 			expected:       true,
@@ -544,7 +584,9 @@ func TestCheckRulePolicy(t *testing.T) {
 			event:  testEvent,
 			rule: Rule{
 				Description: "privileged event read access not authenticated",
-				Privileged:  true,
+				Constraints: Constraints{
+					Privileged: true,
+				},
 			},
 			loggedInPubkey: nil,
 			expected:       false,
@@ -555,7 +597,9 @@ func TestCheckRulePolicy(t *testing.T) {
 			event:  testEvent,
 			rule: Rule{
 				Description: "privileged event read access unauthorized user",
-				Privileged:  true,
+				Constraints: Constraints{
+					Privileged: true,
+				},
 			},
 			loggedInPubkey: unauthorizedPubkey,
 			expected:       false,
@@ -631,7 +675,9 @@ func TestCheckPolicy(t *testing.T) {
 				rules: map[int]Rule{
 					1: {
 						Description: "block test",
-						WriteDeny:   []string{hex.Enc(testEvent.Pubkey)},
+						AccessControl: AccessControl{
+							WriteDeny: []string{hex.Enc(testEvent.Pubkey)},
+						},
 					},
 				},
 			},
@@ -1047,9 +1093,11 @@ func TestEdgeCasesLargeEvent(t *testing.T) {
 		Kind: Kinds{},
 		rules: map[int]Rule{
 			1: {
-				Description:  "size limit test",
-				SizeLimit:    int64Ptr(50000), // 50KB limit
-				ContentLimit: int64Ptr(10000), // 10KB content limit
+				Description: "size limit test",
+				Constraints: Constraints{
+					SizeLimit:    int64Ptr(50000), // 50KB limit
+					ContentLimit: int64Ptr(10000), // 10KB content limit
+				},
 			},
 		},
 	}
@@ -1174,7 +1222,9 @@ func TestCheckGlobalRulePolicy(t *testing.T) {
 		{
 			name: "global rule with write allow - submitter allowed",
 			globalRule: Rule{
-				WriteAllow: []string{hex.Enc(loggedInPubkey)}, // Allow the submitter
+				AccessControl: AccessControl{
+					WriteAllow: []string{hex.Enc(loggedInPubkey)}, // Allow the submitter
+				},
 			},
 			event:          createTestEvent(t, eventSigner, "test content", 1),
 			loggedInPubkey: loggedInPubkey,
@@ -1183,7 +1233,9 @@ func TestCheckGlobalRulePolicy(t *testing.T) {
 		{
 			name: "global rule with write deny - submitter denied",
 			globalRule: Rule{
-				WriteDeny: []string{hex.Enc(loggedInPubkey)}, // Deny the submitter
+				AccessControl: AccessControl{
+					WriteDeny: []string{hex.Enc(loggedInPubkey)}, // Deny the submitter
+				},
 			},
 			event:          createTestEvent(t, eventSigner, "test content", 1),
 			loggedInPubkey: loggedInPubkey,
@@ -1192,7 +1244,9 @@ func TestCheckGlobalRulePolicy(t *testing.T) {
 		{
 			name: "global rule with size limit - event too large",
 			globalRule: Rule{
-				SizeLimit: func() *int64 { v := int64(10); return &v }(),
+				Constraints: Constraints{
+					SizeLimit: func() *int64 { v := int64(10); return &v }(),
+				},
 			},
 			event:          createTestEvent(t, eventSigner, "this is a very long content that exceeds the size limit", 1),
 			loggedInPubkey: loggedInPubkey,
@@ -1201,7 +1255,9 @@ func TestCheckGlobalRulePolicy(t *testing.T) {
 		{
 			name: "global rule with max age of event - event too old",
 			globalRule: Rule{
-				MaxAgeOfEvent: func() *int64 { v := int64(3600); return &v }(), // 1 hour
+				Constraints: Constraints{
+					MaxAgeOfEvent: func() *int64 { v := int64(3600); return &v }(), // 1 hour
+				},
 			},
 			event: func() *event.E {
 				ev := createTestEvent(t, eventSigner, "test content", 1)
@@ -1214,7 +1270,9 @@ func TestCheckGlobalRulePolicy(t *testing.T) {
 		{
 			name: "global rule with max age event in future - event too far in future",
 			globalRule: Rule{
-				MaxAgeEventInFuture: func() *int64 { v := int64(3600); return &v }(), // 1 hour
+				Constraints: Constraints{
+					MaxAgeEventInFuture: func() *int64 { v := int64(3600); return &v }(), // 1 hour
+				},
 			},
 			event: func() *event.E {
 				ev := createTestEvent(t, eventSigner, "test content", 1)
@@ -1248,14 +1306,18 @@ func TestCheckPolicyWithGlobalRule(t *testing.T) {
 	// Test that global rule is applied first
 	policy := &P{
 		Global: Rule{
-			WriteDeny: []string{hex.Enc(eventPubkey)}, // Deny event pubkey globally
+			AccessControl: AccessControl{
+				WriteDeny: []string{hex.Enc(eventPubkey)}, // Deny event pubkey globally
+			},
 		},
 		Kind: Kinds{
 			Whitelist: []int{1}, // Allow kind 1
 		},
 		rules: map[int]Rule{
 			1: {
-				WriteAllow: []string{hex.Enc(eventPubkey)}, // Allow event pubkey for kind 1
+				AccessControl: AccessControl{
+					WriteAllow: []string{hex.Enc(eventPubkey)}, // Allow event pubkey for kind 1
+				},
 			},
 		},
 	}
@@ -1288,7 +1350,9 @@ func TestMaxAgeChecks(t *testing.T) {
 		{
 			name: "max age of event - event within allowed age",
 			rule: Rule{
-				MaxAgeOfEvent: func() *int64 { v := int64(3600); return &v }(), // 1 hour
+				Constraints: Constraints{
+					MaxAgeOfEvent: func() *int64 { v := int64(3600); return &v }(), // 1 hour
+				},
 			},
 			event: func() *event.E {
 				ev := createTestEvent(t, eventSigner, "test content", 1)
@@ -1301,7 +1365,9 @@ func TestMaxAgeChecks(t *testing.T) {
 		{
 			name: "max age of event - event too old",
 			rule: Rule{
-				MaxAgeOfEvent: func() *int64 { v := int64(3600); return &v }(), // 1 hour
+				Constraints: Constraints{
+					MaxAgeOfEvent: func() *int64 { v := int64(3600); return &v }(), // 1 hour
+				},
 			},
 			event: func() *event.E {
 				ev := createTestEvent(t, eventSigner, "test content", 1)
@@ -1314,7 +1380,9 @@ func TestMaxAgeChecks(t *testing.T) {
 		{
 			name: "max age event in future - event within allowed future time",
 			rule: Rule{
-				MaxAgeEventInFuture: func() *int64 { v := int64(3600); return &v }(), // 1 hour
+				Constraints: Constraints{
+					MaxAgeEventInFuture: func() *int64 { v := int64(3600); return &v }(), // 1 hour
+				},
 			},
 			event: func() *event.E {
 				ev := createTestEvent(t, eventSigner, "test content", 1)
@@ -1327,7 +1395,9 @@ func TestMaxAgeChecks(t *testing.T) {
 		{
 			name: "max age event in future - event too far in future",
 			rule: Rule{
-				MaxAgeEventInFuture: func() *int64 { v := int64(3600); return &v }(), // 1 hour
+				Constraints: Constraints{
+					MaxAgeEventInFuture: func() *int64 { v := int64(3600); return &v }(), // 1 hour
+				},
 			},
 			event: func() *event.E {
 				ev := createTestEvent(t, eventSigner, "test content", 1)
@@ -1340,8 +1410,10 @@ func TestMaxAgeChecks(t *testing.T) {
 		{
 			name: "both age checks - event within both limits",
 			rule: Rule{
-				MaxAgeOfEvent:       func() *int64 { v := int64(3600); return &v }(), // 1 hour
-				MaxAgeEventInFuture: func() *int64 { v := int64(1800); return &v }(), // 30 minutes
+				Constraints: Constraints{
+					MaxAgeOfEvent:       func() *int64 { v := int64(3600); return &v }(), // 1 hour
+					MaxAgeEventInFuture: func() *int64 { v := int64(1800); return &v }(), // 30 minutes
+				},
 			},
 			event: func() *event.E {
 				ev := createTestEvent(t, eventSigner, "test content", 1)
@@ -1518,7 +1590,9 @@ func TestDefaultPolicyWithSpecificRule(t *testing.T) {
 		rules: map[int]Rule{
 			1: {
 				Description: "allow kind 1",
-				WriteAllow:  []string{}, // Allow all for kind 1
+				AccessControl: AccessControl{
+					WriteAllow: []string{}, // Allow all for kind 1
+				},
 			},
 		},
 	}
@@ -1632,11 +1706,15 @@ func TestDefaultPolicyLogicWithRules(t *testing.T) {
 		rules: map[int]Rule{
 			1: {
 				Description: "allow all for kind 1",
-				WriteAllow:  []string{}, // Empty means allow all
+				AccessControl: AccessControl{
+					WriteAllow: []string{}, // Empty means allow all
+				},
 			},
 			2: {
 				Description: "deny specific pubkey for kind 2",
-				WriteDeny:   []string{hex.Enc(deniedPubkey)},
+				AccessControl: AccessControl{
+					WriteDeny: []string{hex.Enc(deniedPubkey)},
+				},
 			},
 			// No rule for kind 3
 		},
@@ -1691,7 +1769,9 @@ func TestDefaultPolicyLogicWithRules(t *testing.T) {
 		rules: map[int]Rule{
 			1: {
 				Description: "deny specific pubkey for kind 1",
-				WriteDeny:   []string{hex.Enc(deniedPubkey)},
+				AccessControl: AccessControl{
+					WriteDeny: []string{hex.Enc(deniedPubkey)},
+				},
 			},
 			// No rules for kind 2, 3
 		},

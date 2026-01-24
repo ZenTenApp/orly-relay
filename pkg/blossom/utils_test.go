@@ -38,7 +38,7 @@ func testSetup(t *testing.T) (*Server, func()) {
 
 	// Create ACL registry and set to "none" mode for tests
 	aclRegistry := acl.Registry
-	aclRegistry.Active.Store("none") // Allow all access for tests
+	aclRegistry.SetMode("none") // Allow all access for tests
 
 	// Create server
 	cfg := &Config{

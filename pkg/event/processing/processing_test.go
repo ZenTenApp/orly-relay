@@ -284,26 +284,26 @@ func TestIsAdminEvent(t *testing.T) {
 
 	s := New(cfg, &mockDatabase{}, &mockPublisher{})
 
-	// Admin event
-	ev := event.New()
-	ev.Pubkey = adminPubkey
-	if !s.isAdminEvent(ev) {
-		t.Error("should recognize admin event")
+	// Admin pubkey
+	if !s.isAdminPubkey(adminPubkey) {
+		t.Error("should recognize admin pubkey")
 	}
 
-	// Owner event
-	ev.Pubkey = ownerPubkey
-	if !s.isAdminEvent(ev) {
-		t.Error("should recognize owner event")
+	// Owner pubkey
+	if !s.isOwnerPubkey(ownerPubkey) {
+		t.Error("should recognize owner pubkey")
 	}
 
-	// Regular event
-	ev.Pubkey = make([]byte, 32)
-	for i := range ev.Pubkey {
-		ev.Pubkey[i] = byte(i + 100)
+	// Regular pubkey
+	regularPubkey := make([]byte, 32)
+	for i := range regularPubkey {
+		regularPubkey[i] = byte(i + 100)
 	}
-	if s.isAdminEvent(ev) {
-		t.Error("should not recognize regular event as admin")
+	if s.isAdminPubkey(regularPubkey) {
+		t.Error("should not recognize regular pubkey as admin")
+	}
+	if s.isOwnerPubkey(regularPubkey) {
+		t.Error("should not recognize regular pubkey as owner")
 	}
 }
 

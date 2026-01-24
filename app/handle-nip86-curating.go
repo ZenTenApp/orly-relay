@@ -21,7 +21,7 @@ func (s *Server) handleCuratingNIP86Request(w http.ResponseWriter, r *http.Reque
 
 	// Get the curating ACL instance
 	var curatingACL *acl.Curating
-	for _, aclInstance := range acl.Registry.ACL {
+	for _, aclInstance := range acl.Registry.ACLs() {
 		if aclInstance.Type() == "curating" {
 			if curating, ok := aclInstance.(*acl.Curating); ok {
 				curatingACL = curating

@@ -308,7 +308,7 @@ func (l *Listener) messageProcessor() {
 // getManagedACL returns the managed ACL instance if available
 func (l *Listener) getManagedACL() *database.ManagedACL {
 	// Get the managed ACL instance from the ACL registry
-	for _, aclInstance := range acl.Registry.ACL {
+	for _, aclInstance := range acl.Registry.ACLs() {
 		if aclInstance.Type() == "managed" {
 			if managed, ok := aclInstance.(*acl.Managed); ok {
 				return managed.GetManagedACL()
@@ -322,11 +322,11 @@ func (l *Listener) getManagedACL() *database.ManagedACL {
 // Returns 0 if not in follows mode, throttle is disabled, or user is exempt.
 func (l *Listener) getFollowsThrottleDelay(ev *event.E) time.Duration {
 	// Only applies to follows ACL mode
-	if acl.Registry.Active.Load() != "follows" {
+	if acl.Registry.GetMode() != "follows" {
 		return 0
 	}
 	// Find the Follows ACL instance and get the throttle delay
-	for _, aclInstance := range acl.Registry.ACL {
+	for _, aclInstance := range acl.Registry.ACLs() {
 		if follows, ok := aclInstance.(*acl.Follows); ok {
 			return follows.GetThrottleDelay(ev.Pubkey, l.remote)
 		}

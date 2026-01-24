@@ -70,7 +70,7 @@ func (s *Server) handleNIP86Management(w http.ResponseWriter, r *http.Request) {
 
 	// Get the managed ACL instance
 	var managedACL *database.ManagedACL
-	for _, aclInstance := range acl.Registry.ACL {
+	for _, aclInstance := range acl.Registry.ACLs() {
 		if aclInstance.Type() == "managed" {
 			if managed, ok := aclInstance.(*acl.Managed); ok {
 				managedACL = managed.GetManagedACL()

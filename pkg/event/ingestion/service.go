@@ -90,16 +90,30 @@ type Config struct {
 
 	// SpecialKinds is the registry for special kind handlers.
 	SpecialKinds *specialkinds.Registry
+
+	// ACLMode is the current ACL mode (used for NIP-70 validation).
+	ACLMode func() string
+
+	// DeleteHandler handles deletion events.
+	DeleteHandler DeleteHandler
+}
+
+// DeleteHandler processes delete events (kind 5).
+type DeleteHandler interface {
+	// HandleDelete processes a delete event after it's been saved.
+	HandleDelete(ctx context.Context, ev *event.E) error
 }
 
 // Service orchestrates the event ingestion pipeline.
 type Service struct {
-	validator   *validation.Service
-	authorizer  *authorization.Service
-	router      *routing.DefaultRouter
-	processor   *processing.Service
-	sprocket    SprocketChecker
-	specialKinds *specialkinds.Registry
+	validator     *validation.Service
+	authorizer    *authorization.Service
+	router        *routing.DefaultRouter
+	processor     *processing.Service
+	sprocket      SprocketChecker
+	specialKinds  *specialkinds.Registry
+	aclMode       func() string
+	deleteHandler DeleteHandler
 }
 
 // NewService creates a new ingestion service.
@@ -111,12 +125,14 @@ func NewService(
 	cfg Config,
 ) *Service {
 	return &Service{
-		validator:    validator,
-		authorizer:   authorizer,
-		router:       router,
-		processor:    processor,
-		sprocket:     cfg.SprocketChecker,
-		specialKinds: cfg.SpecialKinds,
+		validator:     validator,
+		authorizer:    authorizer,
+		router:        router,
+		processor:     processor,
+		sprocket:      cfg.SprocketChecker,
+		specialKinds:  cfg.SpecialKinds,
+		aclMode:       cfg.ACLMode,
+		deleteHandler: cfg.DeleteHandler,
 	}
 }
 
@@ -188,7 +204,14 @@ func (s *Service) Ingest(ctx context.Context, ev *event.E, connCtx *ConnectionCo
 		return Rejected(decision.DenyReason)
 	}
 
-	// Stage 5: Routing (ephemeral events, etc.)
+	// Stage 5: NIP-70 protected tag validation (only when ACL is active)
+	if s.aclMode != nil && s.aclMode() != "none" {
+		if result := s.validator.ValidateProtectedTag(ev, connCtx.AuthedPubkey); !result.Valid {
+			return Rejected(result.Msg)
+		}
+	}
+
+	// Stage 6: Routing (ephemeral events, etc.)
 	if routeResult := s.router.Route(ev, connCtx.AuthedPubkey); routeResult.Action != routing.Continue {
 		if routeResult.Action == routing.Handled {
 			return AcceptedNotSaved(routeResult.Message)
@@ -198,7 +221,7 @@ func (s *Service) Ingest(ctx context.Context, ev *event.E, connCtx *ConnectionCo
 		}
 	}
 
-	// Stage 6: Processing (save, hooks, delivery)
+	// Stage 7: Processing (save, hooks, delivery)
 	procResult := s.processor.Process(ctx, ev)
 	if procResult.Blocked {
 		return Rejected(procResult.BlockMsg)
@@ -207,10 +230,16 @@ func (s *Service) Ingest(ctx context.Context, ev *event.E, connCtx *ConnectionCo
 		return Errored(procResult.Error)
 	}
 
-	return Result{
-		Accepted: true,
-		Saved:    true,
+	// Stage 8: Delete event post-processing
+	const kindEventDeletion = 5
+	if ev.Kind == kindEventDeletion && s.deleteHandler != nil {
+		if err := s.deleteHandler.HandleDelete(ctx, ev); err != nil {
+			// Log but don't fail - the delete event is already saved
+			// Return success since the event was stored
+		}
 	}
+
+	return Accepted("")
 }
 
 // IngestWithRawValidation includes raw JSON validation before unmarshaling.

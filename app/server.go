@@ -18,11 +18,16 @@ import (
 	"next.orly.dev/app/branding"
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/acl"
+	acliface "next.orly.dev/pkg/interfaces/acl"
 	"next.orly.dev/pkg/blossom"
 	"next.orly.dev/pkg/database"
+	domainevents "next.orly.dev/pkg/domain/events"
+	"next.orly.dev/pkg/domain/events/subscribers"
 	"next.orly.dev/pkg/event/authorization"
+	"next.orly.dev/pkg/event/ingestion"
 	"next.orly.dev/pkg/event/processing"
 	"next.orly.dev/pkg/event/routing"
+	"next.orly.dev/pkg/event/specialkinds"
 	"next.orly.dev/pkg/event/validation"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
@@ -95,10 +100,14 @@ type Server struct {
 	db                database.Database // Changed from *database.D to interface
 
 	// Domain services for event handling
-	eventValidator   *validation.Service
-	eventAuthorizer  *authorization.Service
-	eventRouter      *routing.DefaultRouter
-	eventProcessor   *processing.Service
+	eventValidator    *validation.Service
+	eventAuthorizer   *authorization.Service
+	eventRouter       *routing.DefaultRouter
+	eventProcessor    *processing.Service
+	eventDispatcher   *domainevents.Dispatcher
+	ingestionService  *ingestion.Service
+	specialKinds      *specialkinds.Registry
+	aclRegistry       acliface.Registry
 
 	// WireGuard VPN and NIP-46 Bunker
 	wireguardServer *wireguard.Server
@@ -161,6 +170,12 @@ func (s *Server) IsOwner(pubkey []byte) bool {
 	return false
 }
 
+// ACLRegistry returns the ACL registry instance.
+// This enables dependency injection for testing and removes reliance on global state.
+func (s *Server) ACLRegistry() acliface.Registry {
+	return s.aclRegistry
+}
+
 // isIPBlacklisted checks if an IP address is blacklisted using the managed ACL system
 func (s *Server) isIPBlacklisted(remote string) bool {
 	// Extract IP from remote address (e.g., "192.168.1.1:12345" -> "192.168.1.1")
@@ -178,7 +193,7 @@ func (s *Server) isIPBlacklisted(remote string) bool {
 
 	// Check if managed ACL is available and active
 	if s.Config.ACLMode == "managed" {
-		for _, aclInstance := range acl.Registry.ACL {
+		for _, aclInstance := range acl.Registry.ACLs() {
 			if aclInstance.Type() == "managed" {
 				if managed, ok := aclInstance.(*acl.Managed); ok {
 					return managed.IsIPBlocked(remoteIP)
@@ -933,7 +948,7 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Skip authentication and permission checks when ACL is "none" (open relay mode)
-	if acl.Registry.Active.Load() != "none" {
+	if acl.Registry.GetMode() != "none" {
 		// Validate NIP-98 authentication
 		valid, pubkey, err := httpauth.CheckAuth(r)
 		if chk.E(err) || !valid {
@@ -1111,7 +1126,7 @@ func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Skip authentication and permission checks when ACL is "none" (open relay mode)
-	if acl.Registry.Active.Load() != "none" {
+	if acl.Registry.GetMode() != "none" {
 		// Validate NIP-98 authentication
 		valid, pubkey, err := httpauth.CheckAuth(r)
 		if chk.E(err) || !valid {
@@ -1520,7 +1535,7 @@ func (s *Server) validatePeerRequest(
 // updatePeerAdminACL grants admin access to peer relay identity pubkeys
 func (s *Server) updatePeerAdminACL(peerPubkey []byte) {
 	// Find the managed ACL instance and update peer admins
-	for _, aclInstance := range acl.Registry.ACL {
+	for _, aclInstance := range acl.Registry.ACLs() {
 		if aclInstance.Type() == "managed" {
 			if managed, ok := aclInstance.(*acl.Managed); ok {
 				// Collect all current peer pubkeys
@@ -1596,6 +1611,73 @@ func (s *Server) InitEventServices() {
 		s.eventProcessor.SetClusterManager(s.wrapClusterManager())
 	}
 	s.eventProcessor.SetACLRegistry(s.wrapACLRegistry())
+
+	// Initialize domain event dispatcher
+	s.eventDispatcher = domainevents.NewDispatcher(domainevents.DefaultDispatcherConfig())
+
+	// Register logging subscriber for analytics
+	logLevel := "debug"
+	if s.Config.LogLevel == "trace" {
+		logLevel = "trace"
+	} else if s.Config.LogLevel == "info" || s.Config.LogLevel == "warn" || s.Config.LogLevel == "error" {
+		logLevel = "info"
+	}
+	s.eventDispatcher.Subscribe(subscribers.NewLoggingSubscriber(logLevel))
+
+	// Wire dispatcher to processing service
+	s.eventProcessor.SetEventDispatcher(s.eventDispatcher)
+
+	// Initialize special kinds registry and register handlers
+	s.specialKinds = specialkinds.NewRegistry()
+	s.registerSpecialKindHandlers()
+
+	// Initialize ingestion service
+	s.ingestionService = ingestion.NewService(
+		s.eventValidator,
+		s.eventAuthorizer,
+		s.eventRouter,
+		s.eventProcessor,
+		ingestion.Config{
+			SprocketChecker: s.wrapSprocketChecker(),
+			SpecialKinds:    s.specialKinds,
+			ACLMode:         acl.Registry.GetMode,
+		},
+	)
+}
+
+// SprocketChecker wrapper for ingestion.SprocketChecker interface
+type sprocketCheckerWrapper struct {
+	sm *SprocketManager
+}
+
+func (s *Server) wrapSprocketChecker() ingestion.SprocketChecker {
+	if s.sprocketManager == nil {
+		return nil
+	}
+	return &sprocketCheckerWrapper{sm: s.sprocketManager}
+}
+
+func (w *sprocketCheckerWrapper) IsEnabled() bool {
+	return w.sm != nil && w.sm.IsEnabled()
+}
+
+func (w *sprocketCheckerWrapper) IsDisabled() bool {
+	return w.sm.IsDisabled()
+}
+
+func (w *sprocketCheckerWrapper) IsRunning() bool {
+	return w.sm.IsRunning()
+}
+
+func (w *sprocketCheckerWrapper) ProcessEvent(ev *event.E) (*ingestion.SprocketResponse, error) {
+	resp, err := w.sm.ProcessEvent(ev)
+	if err != nil {
+		return nil, err
+	}
+	return &ingestion.SprocketResponse{
+		Action: resp.Action,
+		Msg:    resp.Msg,
+	}, nil
 }
 
 // Database wrapper for processing.Database interface
@@ -1690,7 +1772,7 @@ func (w *processingACLRegistryWrapper) Configure(cfg ...any) error {
 }
 
 func (w *processingACLRegistryWrapper) Active() string {
-	return acl.Registry.Active.Load()
+	return acl.Registry.GetMode()
 }
 
 // =============================================================================
@@ -1713,7 +1795,7 @@ func (w *authACLRegistryWrapper) CheckPolicy(ev *event.E) (bool, error) {
 }
 
 func (w *authACLRegistryWrapper) Active() string {
-	return acl.Registry.Active.Load()
+	return acl.Registry.GetMode()
 }
 
 // PolicyManager wrapper for authorization.PolicyManager interface

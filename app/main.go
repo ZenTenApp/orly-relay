@@ -88,6 +88,7 @@ func Run(
 		cfg:         cfg,
 		db:          db,
 		connPerIP:   make(map[string]int),
+		aclRegistry: acl.Registry, // Inject ACL registry (transitional from global)
 	}
 
 	// Initialize branding/white-label manager if enabled
@@ -270,7 +271,7 @@ func Run(
 				l.spiderManager.SetCallbacks(
 					func() []string {
 						// Get admin relays from follows ACL if available
-						for _, aclInstance := range acl.Registry.ACL {
+						for _, aclInstance := range acl.Registry.ACLs() {
 							if aclInstance.Type() == "follows" {
 								if follows, ok := aclInstance.(*acl.Follows); ok {
 									return follows.AdminRelays()
@@ -281,7 +282,7 @@ func Run(
 					},
 					func() [][]byte {
 						// Get followed pubkeys from follows ACL if available
-						for _, aclInstance := range acl.Registry.ACL {
+						for _, aclInstance := range acl.Registry.ACLs() {
 							if aclInstance.Type() == "follows" {
 								if follows, ok := aclInstance.(*acl.Follows); ok {
 									return follows.GetFollowedPubkeys()
@@ -300,7 +301,7 @@ func Run(
 
 				// Hook up follow list update notifications from ACL to spider
 				if cfg.SpiderMode == "follows" {
-					for _, aclInstance := range acl.Registry.ACL {
+					for _, aclInstance := range acl.Registry.ACLs() {
 						if aclInstance.Type() == "follows" {
 							if follows, ok := aclInstance.(*acl.Follows); ok {
 								follows.SetFollowListUpdateCallback(func() {
@@ -331,7 +332,7 @@ func Run(
 			l.directorySpider.SetSeedCallback(func() [][]byte {
 				var pubkeys [][]byte
 				// Get followed pubkeys from follows ACL if available
-				for _, aclInstance := range acl.Registry.ACL {
+				for _, aclInstance := range acl.Registry.ACLs() {
 					if aclInstance.Type() == "follows" {
 						if follows, ok := aclInstance.(*acl.Follows); ok {
 							pubkeys = append(pubkeys, follows.GetFollowedPubkeys()...)

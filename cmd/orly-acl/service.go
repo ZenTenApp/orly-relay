@@ -78,7 +78,7 @@ func (s *ACLService) Ready(ctx context.Context, req *orlyaclv1.Empty) (*orlyaclv
 
 func (s *ACLService) GetThrottleDelay(ctx context.Context, req *orlyaclv1.ThrottleDelayRequest) (*orlyaclv1.ThrottleDelayResponse, error) {
 	// Get the active ACL and check if it's Follows
-	for _, i := range acl.Registry.ACL {
+	for _, i := range acl.Registry.ACLs() {
 		if i.Type() == "follows" {
 			if follows, ok := i.(*acl.Follows); ok {
 				delay := follows.GetThrottleDelay(req.Pubkey, req.Ip)
@@ -95,7 +95,7 @@ func (s *ACLService) AddFollow(ctx context.Context, req *orlyaclv1.AddFollowRequ
 }
 
 func (s *ACLService) GetFollowedPubkeys(ctx context.Context, req *orlyaclv1.Empty) (*orlyaclv1.FollowedPubkeysResponse, error) {
-	for _, i := range acl.Registry.ACL {
+	for _, i := range acl.Registry.ACLs() {
 		if i.Type() == "follows" {
 			if follows, ok := i.(*acl.Follows); ok {
 				pubkeys := follows.GetFollowedPubkeys()
@@ -107,7 +107,7 @@ func (s *ACLService) GetFollowedPubkeys(ctx context.Context, req *orlyaclv1.Empt
 }
 
 func (s *ACLService) GetAdminRelays(ctx context.Context, req *orlyaclv1.Empty) (*orlyaclv1.AdminRelaysResponse, error) {
-	for _, i := range acl.Registry.ACL {
+	for _, i := range acl.Registry.ACLs() {
 		if i.Type() == "follows" {
 			if follows, ok := i.(*acl.Follows); ok {
 				urls := follows.AdminRelays()
@@ -767,7 +767,7 @@ func (s *ACLService) ScanAllPubkeys(ctx context.Context, req *orlyaclv1.Empty) (
 // === Helper Methods ===
 
 func (s *ACLService) getManagedACL() *acl.Managed {
-	for _, i := range acl.Registry.ACL {
+	for _, i := range acl.Registry.ACLs() {
 		if i.Type() == "managed" {
 			if managed, ok := i.(*acl.Managed); ok {
 				return managed
@@ -778,7 +778,7 @@ func (s *ACLService) getManagedACL() *acl.Managed {
 }
 
 func (s *ACLService) getCuratingACL() *acl.Curating {
-	for _, i := range acl.Registry.ACL {
+	for _, i := range acl.Registry.ACLs() {
 		if i.Type() == "curating" {
 			if curating, ok := i.(*acl.Curating); ok {
 				return curating
