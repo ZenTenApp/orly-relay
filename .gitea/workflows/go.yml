@@ -189,7 +189,7 @@ jobs:
 
       - name: Create Gitea Release
         env:
-          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GITEA_TOKEN: ${{ secrets.GITEATOKEN }}
         run: |
           set -e
           cd ${GITHUB_WORKSPACE}
