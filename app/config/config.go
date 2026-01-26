@@ -120,20 +120,20 @@ type C struct {
 	QueryCacheDisabled  bool   `env:"ORLY_QUERY_CACHE_DISABLED" default:"true" usage:"disable query cache to reduce memory usage (trades memory for query performance)"`
 
 	// gRPC database client settings (only used when ORLY_DB_TYPE=grpc)
-	GRPCServerAddress  string        `env:"ORLY_GRPC_SERVER" usage:"address of remote gRPC database server (only used when ORLY_DB_TYPE=grpc)"`
+	GRPCServerAddress  string        `env:"ORLY_GRPC_SERVER" default:"127.0.0.1:50051" usage:"address of remote gRPC database server (only used when ORLY_DB_TYPE=grpc)"`
 	GRPCConnectTimeout time.Duration `env:"ORLY_GRPC_CONNECT_TIMEOUT" default:"10s" usage:"gRPC connection timeout (only used when ORLY_DB_TYPE=grpc)"`
 
 	// gRPC ACL client settings (only used when ORLY_ACL_TYPE=grpc)
 	ACLType               string        `env:"ORLY_ACL_TYPE" default:"local" usage:"ACL backend: local (in-process) or grpc (remote ACL server)"`
-	GRPCACLServerAddress  string        `env:"ORLY_GRPC_ACL_SERVER" usage:"address of remote gRPC ACL server (only used when ORLY_ACL_TYPE=grpc)"`
+	GRPCACLServerAddress  string        `env:"ORLY_GRPC_ACL_SERVER" default:"127.0.0.1:50052" usage:"address of remote gRPC ACL server (only used when ORLY_ACL_TYPE=grpc)"`
 	GRPCACLConnectTimeout time.Duration `env:"ORLY_GRPC_ACL_TIMEOUT" default:"10s" usage:"gRPC ACL connection timeout (only used when ORLY_ACL_TYPE=grpc)"`
 
 	// gRPC Sync client settings (only used when ORLY_SYNC_TYPE=grpc)
 	SyncType                     string        `env:"ORLY_SYNC_TYPE" default:"local" usage:"sync backend: local (in-process) or grpc (remote sync services)"`
-	GRPCSyncDistributedAddress   string        `env:"ORLY_GRPC_SYNC_DISTRIBUTED" usage:"address of gRPC distributed sync server"`
-	GRPCSyncClusterAddress       string        `env:"ORLY_GRPC_SYNC_CLUSTER" usage:"address of gRPC cluster sync server"`
-	GRPCSyncRelayGroupAddress    string        `env:"ORLY_GRPC_SYNC_RELAYGROUP" usage:"address of gRPC relay group server"`
-	GRPCSyncNegentropyAddress    string        `env:"ORLY_GRPC_SYNC_NEGENTROPY" usage:"address of gRPC negentropy server"`
+	GRPCSyncDistributedAddress   string        `env:"ORLY_GRPC_SYNC_DISTRIBUTED" default:"127.0.0.1:50053" usage:"address of gRPC distributed sync server"`
+	GRPCSyncClusterAddress       string        `env:"ORLY_GRPC_SYNC_CLUSTER" default:"127.0.0.1:50054" usage:"address of gRPC cluster sync server"`
+	GRPCSyncRelayGroupAddress    string        `env:"ORLY_GRPC_SYNC_RELAYGROUP" default:"127.0.0.1:50055" usage:"address of gRPC relay group server"`
+	GRPCSyncNegentropyAddress    string        `env:"ORLY_GRPC_SYNC_NEGENTROPY" default:"127.0.0.1:50056" usage:"address of gRPC negentropy server"`
 	GRPCSyncConnectTimeout       time.Duration `env:"ORLY_GRPC_SYNC_TIMEOUT" default:"10s" usage:"gRPC sync connection timeout"`
 	NegentropyEnabled            bool          `env:"ORLY_NEGENTROPY_ENABLED" default:"false" usage:"enable NIP-77 negentropy set reconciliation"`
 

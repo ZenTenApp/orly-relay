@@ -5,9 +5,12 @@ package relay
 
 import (
 	"fmt"
-	"os"
 
+	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
+	"next.orly.dev/app/config"
+	relaycore "next.orly.dev/pkg/relay"
+	"next.orly.dev/pkg/version"
 )
 
 // Run executes the relay subcommand.
@@ -25,11 +28,17 @@ func Run(args []string) {
 		return
 	}
 
-	// For now, redirect to the main binary
-	// In the future, this will contain the relay logic directly
-	log.I.F("Relay not yet implemented via unified binary subcommand")
-	log.I.F("Use the main binary: orly (in project root)")
-	os.Exit(1)
+	// Load configuration
+	cfg, err := config.New()
+	if chk.T(err) {
+		return
+	}
+	log.I.F("starting %s %s (unified binary)", cfg.AppName, version.V)
+
+	// Use shared relay startup logic
+	if err := relaycore.RunWithSignals(cfg); err != nil {
+		log.F.F("relay error: %v", err)
+	}
 }
 
 func printRelayHelp() {
@@ -51,17 +60,27 @@ The relay is the main Nostr server that:
 Environment variables:
   ORLY_PORT                 Server port (default: 3334)
   ORLY_LOG_LEVEL            Logging level
-  ORLY_DB_TYPE              Database type (badger, neo4j, grpc)
-  ORLY_ACL_MODE             ACL mode (none, follows, managed)
+  ORLY_DB_TYPE              Database type: badger, neo4j, grpc (default: badger)
+  ORLY_ACL_MODE             ACL mode: none, follows, managed, curating (default: none)
   ORLY_TLS_DOMAINS          Let's Encrypt domains
   ORLY_AUTH_TO_WRITE        Require auth for writes
 
-For split-mode deployment:
-  ORLY_DB_TYPE=grpc         Use gRPC database server
-  ORLY_DB_GRPC_SERVER       gRPC database server address
-  ORLY_ACL_GRPC_SERVER      gRPC ACL server address
+gRPC Backend Configuration (for split-mode deployment):
+  ORLY_DB_TYPE=grpc              Use remote gRPC database server
+  ORLY_GRPC_SERVER               Database server address (default: 127.0.0.1:50051)
 
-Example:
-  orly                      Start the relay (default mode)
-  orly relay                Start the relay (explicit)`)
+  ORLY_ACL_TYPE=grpc             Use remote gRPC ACL server
+  ORLY_GRPC_ACL_SERVER           ACL server address (default: 127.0.0.1:50052)
+
+  ORLY_SYNC_TYPE=grpc            Use remote gRPC sync services
+  ORLY_GRPC_SYNC_NEGENTROPY      Negentropy server address (default: 127.0.0.1:50056)
+  ORLY_GRPC_SYNC_DISTRIBUTED     Distributed sync address (default: 127.0.0.1:50053)
+  ORLY_GRPC_SYNC_CLUSTER         Cluster sync address (default: 127.0.0.1:50054)
+
+Examples:
+  orly                                    Start relay (monolithic mode)
+  orly relay                              Start relay (explicit)
+  ORLY_DB_TYPE=grpc orly                  Connect to gRPC database at 127.0.0.1:50051
+  ORLY_ACL_TYPE=grpc orly                 Connect to gRPC ACL at 127.0.0.1:50052
+  ORLY_DB_TYPE=grpc ORLY_ACL_TYPE=grpc orly   Full split mode`)
 }

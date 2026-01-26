@@ -56,7 +56,14 @@ If no argument provided, default to `patch`.
     ```
     Note: setcap must be re-applied after each binary rebuild to allow binding to ports 80/443.
 
-12. **Report completion** with the new version and commit hash
+12. **Build and deploy monolithic binary** (ARM64):
+    Build the unified `orly` binary which includes all subcommands (db, acl, sync, launcher, relay) in a single binary:
+    ```bash
+    ssh relay.orly.dev 'cd ~/src/next.orly.dev && GOPATH=$HOME CGO_ENABLED=0 ~/go/bin/go build -o ~/.local/bin/orly ./cmd/orly && ~/.local/bin/orly version'
+    ```
+    This provides the unified binary for split-mode deployments where a single binary can run any component via subcommands.
+
+13. **Report completion** with the new version and commit hash
 
 ## Important:
 - Do NOT push to github remote (only origin and gitea)
