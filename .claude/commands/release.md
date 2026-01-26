@@ -49,21 +49,25 @@ If no argument provided, default to `patch`.
     GIT_SSH_COMMAND="ssh -i ~/.ssh/gitmlekudev" git push ssh://mleku@git.mleku.dev:2222/mleku/next.orly.dev.git main --tags
     ```
 
-11. **Deploy to relay.orly.dev** (ARM64):
+11. **Deploy monolithic binary to relay.orly.dev** (ARM64):
+    Build and deploy the unified `orly` binary - a fully self-contained relay with all components embedded:
+    - Embedded Badger/Neo4j database
+    - Embedded ACL engine (follows, managed, curating modes)
+    - Embedded NIP-77 negentropy sync
+    - All subcommands (db, acl, relay) for split-mode if needed
+
     Build on remote (faster than uploading cross-compiled binary due to slow local bandwidth):
     ```bash
-    ssh relay.orly.dev 'cd ~/src/next.orly.dev && git pull origin main && GOPATH=$HOME CGO_ENABLED=0 ~/go/bin/go build -o ~/.local/bin/next.orly.dev && sudo /usr/sbin/setcap cap_net_bind_service=+ep ~/.local/bin/next.orly.dev && sudo systemctl restart orly && ~/.local/bin/next.orly.dev version'
+    ssh relay.orly.dev 'cd ~/src/next.orly.dev && git pull origin main && GOPATH=$HOME CGO_ENABLED=0 ~/go/bin/go build -o ~/.local/bin/orly ./cmd/orly'
+    ssh root@relay.orly.dev '/usr/sbin/setcap cap_net_bind_service=+ep /home/mleku/.local/bin/orly && systemctl restart orly'
+    ssh relay.orly.dev '~/.local/bin/orly version'
     ```
+
     Note: setcap must be re-applied after each binary rebuild to allow binding to ports 80/443.
+    This is the recommended binary - just run `orly` for a complete monolithic relay,
+    or use subcommands (`orly db`, `orly acl`) for split-mode architecture.
 
-12. **Build and deploy monolithic binary** (ARM64):
-    Build the unified `orly` binary which includes all subcommands (db, acl, sync, launcher, relay) in a single binary:
-    ```bash
-    ssh relay.orly.dev 'cd ~/src/next.orly.dev && GOPATH=$HOME CGO_ENABLED=0 ~/go/bin/go build -o ~/.local/bin/orly ./cmd/orly && ~/.local/bin/orly version'
-    ```
-    This provides the unified binary for split-mode deployments where a single binary can run any component via subcommands.
-
-13. **Report completion** with the new version and commit hash
+12. **Report completion** with the new version and commit hash
 
 ## Important:
 - Do NOT push to github remote (only origin and gitea)
