@@ -13,8 +13,8 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/envelopes/eventenvelope"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
+	negentropyiface "next.orly.dev/pkg/interfaces/negentropy"
 	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
-	negentropygrpc "next.orly.dev/pkg/sync/negentropy/grpc"
 )
 
 // NIP-77 Negentropy envelope constants
@@ -25,13 +25,13 @@ const (
 	NegErrLabel   = "NEG-ERR"
 )
 
-// negentropyClient is the gRPC client for negentropy operations
-// This should be set via Server.SetNegentropyClient() when using gRPC mode
-var negentropyClient *negentropygrpc.Client
+// negentropyHandler handles NIP-77 negentropy operations
+// This can be either a gRPC client or an embedded handler
+var negentropyHandler negentropyiface.Handler
 
-// SetNegentropyClient sets the negentropy gRPC client for NIP-77 WebSocket handling
-func SetNegentropyClient(client *negentropygrpc.Client) {
-	negentropyClient = client
+// SetNegentropyHandler sets the negentropy handler for NIP-77 WebSocket handling
+func SetNegentropyHandler(handler negentropyiface.Handler) {
+	negentropyHandler = handler
 }
 
 // IsNegentropyEnvelope checks if a message starts with a NEG-* envelope type
@@ -63,7 +63,7 @@ func IdentifyNegentropyEnvelope(msg []byte) (envelopeType string, ok bool) {
 // Format: ["NEG-OPEN", subscription_id, filter, initial_message?]
 func (l *Listener) HandleNegOpen(msg []byte) error {
 	log.I.F("HandleNegOpen called from %s", l.connectionID)
-	if negentropyClient == nil {
+	if negentropyHandler == nil {
 		log.E.F("negentropy client is nil")
 		return l.sendNegErr("", "negentropy not enabled")
 	}
@@ -109,7 +109,7 @@ func (l *Listener) HandleNegOpen(msg []byte) error {
 
 	// Call gRPC service
 	ctx := context.Background()
-	respMsg, haveIDs, needIDs, complete, errStr, err := negentropyClient.HandleNegOpen(
+	respMsg, haveIDs, needIDs, complete, errStr, err := negentropyHandler.HandleNegOpen(
 		ctx,
 		l.connectionID,
 		subscriptionID,
@@ -153,7 +153,7 @@ func (l *Listener) HandleNegOpen(msg []byte) error {
 // HandleNegMsg processes NEG-MSG messages
 // Format: ["NEG-MSG", subscription_id, message]
 func (l *Listener) HandleNegMsg(msg []byte) error {
-	if negentropyClient == nil {
+	if negentropyHandler == nil {
 		return l.sendNegErr("", "negentropy not enabled")
 	}
 
@@ -187,7 +187,7 @@ func (l *Listener) HandleNegMsg(msg []byte) error {
 
 	// Call gRPC service
 	ctx := context.Background()
-	respMsg, haveIDs, needIDs, complete, errStr, err := negentropyClient.HandleNegMsg(
+	respMsg, haveIDs, needIDs, complete, errStr, err := negentropyHandler.HandleNegMsg(
 		ctx,
 		l.connectionID,
 		subscriptionID,
@@ -230,7 +230,7 @@ func (l *Listener) HandleNegMsg(msg []byte) error {
 // HandleNegClose processes NEG-CLOSE messages
 // Format: ["NEG-CLOSE", subscription_id]
 func (l *Listener) HandleNegClose(msg []byte) error {
-	if negentropyClient == nil {
+	if negentropyHandler == nil {
 		return nil // Silently ignore if not enabled
 	}
 
@@ -252,7 +252,7 @@ func (l *Listener) HandleNegClose(msg []byte) error {
 
 	// Call gRPC service to close the session
 	ctx := context.Background()
-	if err := negentropyClient.HandleNegClose(ctx, l.connectionID, subscriptionID); err != nil {
+	if err := negentropyHandler.HandleNegClose(ctx, l.connectionID, subscriptionID); err != nil {
 		log.E.F("NEG-CLOSE gRPC error: %v", err)
 	}
 
@@ -390,19 +390,19 @@ func filterToProto(f *filter.F) *commonv1.Filter {
 // CloseAllNegentropySessions closes all negentropy sessions for a connection
 // Called when a WebSocket connection is closed
 func (l *Listener) CloseAllNegentropySessions() {
-	if negentropyClient == nil {
+	if negentropyHandler == nil {
 		return
 	}
 
 	ctx := context.Background()
-	sessions, err := negentropyClient.ListSessions(ctx)
+	sessions, err := negentropyHandler.ListSessions(ctx)
 	if chk.E(err) {
 		return
 	}
 
 	for _, sess := range sessions {
 		if sess.ConnectionID == l.connectionID {
-			negentropyClient.CloseSession(ctx, l.connectionID, sess.SubscriptionID)
+			negentropyHandler.CloseSession(ctx, l.connectionID, sess.SubscriptionID)
 		}
 	}
 }

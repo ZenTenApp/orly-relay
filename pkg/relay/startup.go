@@ -29,6 +29,7 @@ import (
 	_ "next.orly.dev/pkg/database/grpc" // Import for grpc factory registration
 	neo4jdb "next.orly.dev/pkg/neo4j"
 	"next.orly.dev/pkg/ratelimit"
+	"next.orly.dev/pkg/sync/negentropy"
 	negentropygrpc "next.orly.dev/pkg/sync/negentropy/grpc"
 	"next.orly.dev/pkg/utils/interrupt"
 )
@@ -71,8 +72,8 @@ func Startup(cfg *config.C) (*StartupResult, error) {
 		return nil, fmt.Errorf("failed to initialize ACL: %w", err)
 	}
 
-	// Initialize negentropy client if enabled
-	initializeNegentropy(ctx, cfg)
+	// Initialize negentropy handler (embedded or gRPC client)
+	initializeNegentropy(ctx, cfg, db)
 
 	// Create rate limiter
 	limiter := createRateLimiter(cfg, db)
@@ -294,11 +295,16 @@ func initializeACL(ctx context.Context, cfg *config.C, db database.Database) err
 	return nil
 }
 
-// initializeNegentropy sets up the negentropy gRPC client if enabled.
-func initializeNegentropy(ctx context.Context, cfg *config.C) {
+// initializeNegentropy sets up negentropy handling (embedded or gRPC client).
+func initializeNegentropy(ctx context.Context, cfg *config.C, db database.Database) {
 	syncType, _, _, _, negentropyAddr, syncTimeout, negentropyEnabled := cfg.GetGRPCSyncConfigValues()
 
-	if negentropyEnabled && syncType == "grpc" && negentropyAddr != "" {
+	if !negentropyEnabled {
+		return
+	}
+
+	if syncType == "grpc" && negentropyAddr != "" {
+		// Use gRPC client to connect to remote negentropy server
 		log.I.F("connecting to gRPC negentropy server at %s", negentropyAddr)
 		negClient, err := negentropygrpc.New(ctx, &negentropygrpc.ClientConfig{
 			ServerAddress:  negentropyAddr,
@@ -313,12 +319,22 @@ func initializeNegentropy(ctx context.Context, cfg *config.C) {
 		select {
 		case <-negClient.Ready():
 			log.I.F("gRPC negentropy client connected")
-			app.SetNegentropyClient(negClient)
+			app.SetNegentropyHandler(negClient)
 		case <-time.After(30 * time.Second):
 			log.W.F("timeout waiting for gRPC negentropy server (NIP-77 disabled)")
 		}
-	} else if negentropyEnabled {
-		log.I.F("negentropy enabled but sync type is %q, skipping gRPC client", syncType)
+	} else {
+		// Use embedded negentropy handler (monolithic mode)
+		log.I.F("initializing embedded negentropy handler")
+		negHandler := negentropy.NewEmbeddedHandler(db, &negentropy.Config{
+			SyncInterval:         60 * time.Second,
+			FrameSize:            128 * 1024,
+			IDSize:               16,
+			ClientSessionTimeout: 5 * time.Minute,
+		})
+		negHandler.Start()
+		app.SetNegentropyHandler(negHandler)
+		log.I.F("embedded negentropy handler initialized (NIP-77 enabled)")
 	}
 }
 

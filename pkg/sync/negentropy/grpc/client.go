@@ -10,9 +10,13 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"lol.mleku.dev/log"
 
+	negentropyiface "next.orly.dev/pkg/interfaces/negentropy"
 	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
 	negentropyv1 "next.orly.dev/pkg/proto/orlysync/negentropy/v1"
 )
+
+// Verify Client implements the Handler interface
+var _ negentropyiface.Handler = (*Client)(nil)
 
 // Client is a gRPC client for the negentropy sync service.
 type Client struct {
@@ -293,25 +297,16 @@ func (c *Client) GetPeerSyncState(ctx context.Context, peerURL string) (*PeerSyn
 	}, true, nil
 }
 
-// ClientSession represents an active client negentropy session.
-type ClientSession struct {
-	SubscriptionID string
-	ConnectionID   string
-	CreatedAt      int64
-	LastActivity   int64
-	RoundCount     int32
-}
-
 // ListSessions returns active client negentropy sessions.
-func (c *Client) ListSessions(ctx context.Context) ([]*ClientSession, error) {
+func (c *Client) ListSessions(ctx context.Context) ([]*negentropyiface.ClientSession, error) {
 	resp, err := c.client.ListSessions(ctx, &commonv1.Empty{})
 	if err != nil {
 		return nil, err
 	}
 
-	sessions := make([]*ClientSession, 0, len(resp.Sessions))
+	sessions := make([]*negentropyiface.ClientSession, 0, len(resp.Sessions))
 	for _, s := range resp.Sessions {
-		sessions = append(sessions, &ClientSession{
+		sessions = append(sessions, &negentropyiface.ClientSession{
 			SubscriptionID: s.SubscriptionId,
 			ConnectionID:   s.ConnectionId,
 			CreatedAt:      s.CreatedAt,
