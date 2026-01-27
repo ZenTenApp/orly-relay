@@ -111,6 +111,30 @@ func safePrefix(s string, n int) string {
 	return s[:n]
 }
 
+// buildNaddr creates the naddr coordinate string for addressable events.
+// Format: pubkey:kind:dtag (colon-delimited)
+// Returns empty string for non-addressable events.
+// This is used for the naddr_unique constraint in Neo4j.
+func buildNaddr(ev *event.E) string {
+	// Only for addressable events (kinds 30000-39999)
+	if ev.Kind < 30000 || ev.Kind >= 40000 {
+		return ""
+	}
+
+	pubkey := hex.Enc(ev.Pubkey[:])
+	kind := strconv.FormatInt(int64(ev.Kind), 10)
+
+	// Get d-tag value (empty string if not present)
+	dValue := ""
+	if ev.Tags != nil {
+		if dTag := ev.Tags.GetFirst([]byte{'d'}); dTag != nil && len(dTag.T) >= 2 {
+			dValue = string(dTag.T[1])
+		}
+	}
+
+	return pubkey + ":" + kind + ":" + dValue
+}
+
 // buildBaseEventCypher constructs a Cypher query to create just the base event node and author.
 // Tags are added separately in batches to prevent stack overflow with large tag sets.
 // This creates:
@@ -142,6 +166,16 @@ func (n *N) buildBaseEventCypher(ev *event.E, serial uint64) (string, map[string
 	}
 	params["expiration"] = expirationTs
 
+	// Compute naddr for addressable events (kinds 30000-39999)
+	// Format: pubkey:kind:dtag - NULL for non-addressable events
+	// NULL allows multiple non-addressable events while maintaining uniqueness for naddr values
+	naddr := buildNaddr(ev)
+	if naddr != "" {
+		params["naddr"] = naddr
+	} else {
+		params["naddr"] = nil
+	}
+
 	// Serialize tags as JSON string for storage
 	// Handle nil tags gracefully - nil means empty tags "[]"
 	var tagsJSON []byte
@@ -160,7 +194,7 @@ func (n *N) buildBaseEventCypher(ev *event.E, serial uint64) (string, map[string
 MERGE (a:NostrUser {pubkey: $pubkey})
 ON CREATE SET a.created_at = timestamp(), a.first_seen_event = $eventId
 
-// Create event node with expiration for NIP-40 support
+// Create event node with expiration for NIP-40 support and naddr for NIP-33 addressable events
 CREATE (e:Event {
   id: $eventId,
   serial: $serial,
@@ -170,7 +204,8 @@ CREATE (e:Event {
   sig: $sig,
   pubkey: $pubkey,
   tags: $tags,
-  expiration: $expiration
+  expiration: $expiration,
+  naddr: $naddr
 })
 
 // Link event to author

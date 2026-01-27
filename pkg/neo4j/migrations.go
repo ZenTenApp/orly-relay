@@ -35,6 +35,11 @@ var migrations = []Migration{
 		Description: "Deduplicate REPORTS relationships by (reporter, reported, report_type)",
 		Migrate:     migrateDeduplicateReports,
 	},
+	{
+		Version:     "v5",
+		Description: "Add naddr property to addressable Event nodes (kinds 30000-39999)",
+		Migrate:     migrateAddNaddr,
+	},
 }
 
 // RunMigrations executes all pending migrations
@@ -593,5 +598,80 @@ func migrateDeduplicateReports(ctx context.Context, n *N) error {
 	}
 
 	n.Logger.Infof("REPORTS deduplication migration completed successfully")
+	return nil
+}
+
+// migrateAddNaddr adds the naddr property to existing addressable Event nodes (kinds 30000-39999).
+// The naddr format is: pubkey:kind:dtag (colon-delimited coordinate)
+// This enables direct lookups and uniqueness constraints for parameterized replaceable events.
+func migrateAddNaddr(ctx context.Context, n *N) error {
+	// Step 1: Count addressable events without naddr
+	countCypher := `
+		MATCH (e:Event)
+		WHERE e.kind >= 30000 AND e.kind < 40000
+		  AND e.naddr IS NULL
+		RETURN count(e) AS count
+	`
+	result, err := n.ExecuteRead(ctx, countCypher, nil)
+	if err != nil {
+		return fmt.Errorf("failed to count addressable events: %w", err)
+	}
+
+	var eventCount int64
+	if result.Next(ctx) {
+		if count, ok := result.Record().Values[0].(int64); ok {
+			eventCount = count
+		}
+	}
+
+	if eventCount == 0 {
+		n.Logger.Infof("no addressable events without naddr found, migration complete")
+		return nil
+	}
+
+	n.Logger.Infof("found %d addressable events to update with naddr", eventCount)
+
+	// Step 2: Update events in batches
+	// For each event, compute naddr from pubkey + kind + d-tag
+	// The d-tag value is obtained from the Tag node via TAGGED_WITH relationship
+	updateCypher := `
+		MATCH (e:Event)
+		WHERE e.kind >= 30000 AND e.kind < 40000
+		  AND e.naddr IS NULL
+		WITH e LIMIT 1000
+
+		// Get d-tag value via TAGGED_WITH relationship
+		OPTIONAL MATCH (e)-[:TAGGED_WITH]->(t:Tag {type: 'd'})
+		WITH e, COALESCE(t.value, '') AS dValue
+
+		// Build naddr: pubkey:kind:dValue
+		SET e.naddr = e.pubkey + ':' + toString(e.kind) + ':' + dValue
+
+		RETURN count(e) AS updated
+	`
+
+	// Run migration in batches until no more events to update
+	totalUpdated := int64(0)
+	for {
+		writeResult, err := n.ExecuteWrite(ctx, updateCypher, nil)
+		if err != nil {
+			return fmt.Errorf("failed to update addressable events batch: %w", err)
+		}
+
+		var batchUpdated int64
+		if writeResult.Next(ctx) {
+			if count, ok := writeResult.Record().Values[0].(int64); ok {
+				batchUpdated = count
+			}
+		}
+
+		if batchUpdated == 0 {
+			break
+		}
+		totalUpdated += batchUpdated
+		n.Logger.Infof("updated %d addressable events with naddr (total: %d)", batchUpdated, totalUpdated)
+	}
+
+	n.Logger.Infof("naddr migration completed: updated %d addressable events", totalUpdated)
 	return nil
 }

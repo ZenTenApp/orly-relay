@@ -44,6 +44,16 @@ func (n *N) applySchema(ctx context.Context) error {
 		"CREATE CONSTRAINT nostrUser_pubkey IF NOT EXISTS FOR (n:NostrUser) REQUIRE n.pubkey IS UNIQUE",
 
 		// ============================================================
+		// === OPTIONAL: Addressable Event Support (NIP-33) ===
+		// These support parameterized replaceable events (kinds 30000-39999)
+		// ============================================================
+
+		// OPTIONAL (NIP-33): naddr uniqueness for addressable events
+		// Format: pubkey:kind:dtag (colon-delimited coordinate)
+		// Ensures only one event per author+kind+d-tag combination
+		"CREATE CONSTRAINT naddr_unique IF NOT EXISTS FOR (e:Event) REQUIRE e.naddr IS UNIQUE",
+
+		// ============================================================
 		// === OPTIONAL: Internal Relay Operations ===
 		// These are used for relay state management, not NIP-01 queries
 		// ============================================================
@@ -115,6 +125,15 @@ func (n *N) applySchema(ctx context.Context) error {
 		// RECOMMENDED: Composite index for common query patterns (kind + created_at)
 		// Optimizes queries like: {"kinds": [1], "since": <ts>, "until": <ts>}
 		"CREATE INDEX event_kind_created_at IF NOT EXISTS FOR (e:Event) ON (e.kind, e.created_at)",
+
+		// ============================================================
+		// === OPTIONAL: Addressable Event Indexes (NIP-33) ===
+		// Support parameterized replaceable events (kinds 30000-39999)
+		// ============================================================
+
+		// OPTIONAL (NIP-33): Event.naddr index for addressable event lookups
+		// Enables fast queries by naddr coordinate (pubkey:kind:dtag)
+		"CREATE INDEX event_naddr IF NOT EXISTS FOR (e:Event) ON (e.naddr)",
 
 		// ============================================================
 		// === OPTIONAL: Internal Relay Operation Indexes ===
@@ -205,6 +224,9 @@ func (n *N) dropAll(ctx context.Context) error {
 		// Legacy constraint (removed in migration)
 		"DROP CONSTRAINT author_pubkey_unique IF EXISTS",
 
+		// OPTIONAL (NIP-33) constraints
+		"DROP CONSTRAINT naddr_unique IF EXISTS",
+
 		// OPTIONAL (Internal) constraints
 		"DROP CONSTRAINT marker_key_unique IF EXISTS",
 
@@ -231,6 +253,9 @@ func (n *N) dropAll(ctx context.Context) error {
 
 		// RECOMMENDED (Performance) indexes
 		"DROP INDEX event_kind_created_at IF EXISTS",
+
+		// OPTIONAL (NIP-33) indexes
+		"DROP INDEX event_naddr IF EXISTS",
 
 		// OPTIONAL (Internal) indexes
 		"DROP INDEX event_serial IF EXISTS",
