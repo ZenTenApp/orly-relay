@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	currentVersion uint32 = 8
+	currentVersion uint32 = 9
 )
 
 func (d *D) RunMigrations() {
@@ -123,6 +123,15 @@ func (d *D) RunMigrations() {
 		d.BackfillETagGraph()
 		// bump to version 8
 		_ = d.writeVersionTag(8)
+	}
+	if dbVersion < 9 {
+		log.I.F("migrating to version 9...")
+		// Backfill SerialEventId mappings for legacy events that were skipped
+		// during the v6 compact format migration because their ID starts with 0x01
+		// (which was mistakenly interpreted as CompactFormatVersion)
+		d.BackfillMissingSerialEventIdMappings()
+		// bump to version 9
+		_ = d.writeVersionTag(9)
 	}
 }
 
@@ -1267,4 +1276,244 @@ func (d *D) BackfillETagGraph() {
 	}
 
 	log.I.F("e-tag graph backfill complete: created %d bidirectional edges", createdEdges)
+}
+
+// BackfillMissingSerialEventIdMappings finds legacy events that were incorrectly
+// skipped during the v6 compact format migration and creates their SerialEventId
+// mappings. This fixes events whose ID happens to start with byte 0x01, which was
+// mistakenly interpreted as CompactFormatVersion during the original migration.
+//
+// The v6 migration had this check:
+//
+//	if len(eventData) > 0 && eventData[0] == CompactFormatVersion { continue }
+//
+// This caused legacy events with IDs starting with 0x01 to be skipped, leaving
+// them without sei mappings and causing "Key not found" errors when fetching.
+func (d *D) BackfillMissingSerialEventIdMappings() {
+	log.I.F("backfilling missing SerialEventId mappings for legacy events...")
+	var err error
+
+	type LegacyEvent struct {
+		Serial    uint64
+		EventData []byte
+		IsInline  bool // true if from sev, false if from evt
+	}
+
+	var legacyEvents []LegacyEvent
+	var alreadyHasMapping int
+	var skippedCompact int
+
+	// First pass: find legacy events that don't have sei mappings
+	if err = d.View(func(txn *badger.Txn) error {
+		// Process evt (large events) table
+		evtPrf := new(bytes.Buffer)
+		if err = indexes.EventEnc(nil).MarshalWrite(evtPrf); chk.E(err) {
+			return err
+		}
+		it := txn.NewIterator(badger.IteratorOptions{Prefix: evtPrf.Bytes()})
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			key := item.KeyCopy(nil)
+
+			// Extract serial from key
+			ser := indexes.EventVars()
+			if err = indexes.EventDec(ser).UnmarshalRead(bytes.NewBuffer(key)); chk.E(err) {
+				continue
+			}
+
+			// Check if this serial already has an sei mapping
+			seiKey := new(bytes.Buffer)
+			if err = indexes.SerialEventIdEnc(ser).MarshalWrite(seiKey); err == nil {
+				if _, getErr := txn.Get(seiKey.Bytes()); getErr == nil {
+					// Already has mapping
+					alreadyHasMapping++
+					continue
+				}
+			}
+
+			var val []byte
+			if val, err = item.ValueCopy(nil); chk.E(err) {
+				continue
+			}
+
+			// Only process if first byte is 0x01 (these were the ones skipped)
+			// Events with other first bytes would have been migrated correctly
+			if len(val) == 0 || val[0] != CompactFormatVersion {
+				continue
+			}
+
+			// Verify this is actually legacy format by checking size
+			// Legacy format: 32 (ID) + 32 (Pubkey) + varints + 64 (Sig) = ~135+ bytes minimum
+			// Compact format is smaller, typically < 100 bytes for simple events
+			if len(val) < 130 {
+				// Likely actually compact format, skip
+				skippedCompact++
+				continue
+			}
+
+			legacyEvents = append(legacyEvents, LegacyEvent{
+				Serial:    ser.Get(),
+				EventData: val,
+				IsInline:  false,
+			})
+		}
+		it.Close()
+
+		// Process sev (small inline events) table
+		sevPrf := new(bytes.Buffer)
+		if err = indexes.SmallEventEnc(nil).MarshalWrite(sevPrf); chk.E(err) {
+			return err
+		}
+		it2 := txn.NewIterator(badger.IteratorOptions{Prefix: sevPrf.Bytes()})
+		defer it2.Close()
+
+		for it2.Rewind(); it2.Valid(); it2.Next() {
+			item := it2.Item()
+			key := item.KeyCopy(nil)
+
+			// Extract serial and data from inline key
+			if len(key) <= 8+2 {
+				continue
+			}
+
+			// Extract serial
+			ser := new(types.Uint40)
+			if err = ser.UnmarshalRead(bytes.NewReader(key[3:8])); chk.E(err) {
+				continue
+			}
+
+			// Check if this serial already has an sei mapping
+			seiKey := new(bytes.Buffer)
+			if err = indexes.SerialEventIdEnc(ser).MarshalWrite(seiKey); err == nil {
+				if _, getErr := txn.Get(seiKey.Bytes()); getErr == nil {
+					// Already has mapping
+					alreadyHasMapping++
+					continue
+				}
+			}
+
+			// Extract size and data
+			sizeIdx := 8
+			size := int(key[sizeIdx])<<8 | int(key[sizeIdx+1])
+			dataStart := sizeIdx + 2
+			if len(key) < dataStart+size {
+				continue
+			}
+			eventData := key[dataStart : dataStart+size]
+
+			// Only process if first byte is 0x01
+			if len(eventData) == 0 || eventData[0] != CompactFormatVersion {
+				continue
+			}
+
+			// Verify this is actually legacy format by checking size
+			if len(eventData) < 130 {
+				skippedCompact++
+				continue
+			}
+
+			legacyEvents = append(legacyEvents, LegacyEvent{
+				Serial:    ser.Get(),
+				EventData: eventData,
+				IsInline:  true,
+			})
+		}
+
+		return nil
+	}); chk.E(err) {
+		log.E.F("failed to scan for legacy events: %v", err)
+		return
+	}
+
+	log.I.F("found %d legacy events needing sei mappings (%d already have mappings, %d skipped as compact)",
+		len(legacyEvents), alreadyHasMapping, skippedCompact)
+
+	if len(legacyEvents) == 0 {
+		log.I.F("no legacy events need sei mapping backfill")
+		return
+	}
+
+	// Create resolver for potential compact conversion
+	resolver := NewDatabaseSerialResolver(d, d.serialCache)
+
+	// Process each event
+	var successCount, failCount int
+	var convertedToCompact int
+
+	for i, le := range legacyEvents {
+		if err = d.Update(func(txn *badger.Txn) error {
+			// Decode the legacy event to get the ID
+			ev := new(event.E)
+			if err = ev.UnmarshalBinary(bytes.NewBuffer(le.EventData)); err != nil {
+				log.D.F("backfill: failed to decode event serial %d as legacy format: %v", le.Serial, err)
+				failCount++
+				return nil // Continue with next event
+			}
+
+			// Verify the event ID actually starts with 0x01
+			if len(ev.ID) < 1 || ev.ID[0] != 0x01 {
+				log.D.F("backfill: event serial %d doesn't have ID starting with 0x01, skipping", le.Serial)
+				return nil
+			}
+
+			// Store SerialEventId mapping
+			if err = d.StoreEventIdSerial(txn, le.Serial, ev.ID); chk.E(err) {
+				log.W.F("backfill: failed to store sei mapping for serial %d: %v", le.Serial, err)
+				failCount++
+				return nil
+			}
+
+			// Cache the mapping
+			d.serialCache.CacheEventId(le.Serial, ev.ID)
+
+			// Also convert to compact format if not already done
+			ser := new(types.Uint40)
+			if err = ser.Set(le.Serial); err != nil {
+				successCount++
+				return nil
+			}
+
+			// Check if cmp entry exists
+			cmpKey := new(bytes.Buffer)
+			if err = indexes.CompactEventEnc(ser).MarshalWrite(cmpKey); err == nil {
+				if _, getErr := txn.Get(cmpKey.Bytes()); getErr == nil {
+					// Already has compact entry
+					successCount++
+					return nil
+				}
+			}
+
+			// Create compact format entry
+			compactData, encErr := MarshalCompactEvent(ev, resolver)
+			if encErr != nil {
+				log.D.F("backfill: failed to encode compact event for serial %d: %v", le.Serial, encErr)
+				successCount++ // sei mapping was successful, just couldn't convert
+				return nil
+			}
+
+			if err = txn.Set(cmpKey.Bytes(), compactData); chk.E(err) {
+				log.D.F("backfill: failed to store compact event for serial %d: %v", le.Serial, err)
+				successCount++ // sei mapping was successful
+				return nil
+			}
+
+			convertedToCompact++
+			successCount++
+			return nil
+		}); chk.E(err) {
+			log.W.F("backfill: transaction failed for serial %d: %v", le.Serial, err)
+			failCount++
+			continue
+		}
+
+		// Log progress every 1000 events
+		if (i+1)%1000 == 0 {
+			log.I.F("backfill progress: %d/%d events processed", i+1, len(legacyEvents))
+		}
+	}
+
+	log.I.F("SerialEventId backfill complete: %d successful, %d failed, %d also converted to compact format",
+		successCount, failCount, convertedToCompact)
 }

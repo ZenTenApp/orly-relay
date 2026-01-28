@@ -41,15 +41,17 @@ func (d *D) FetchEventBySerial(ser *types.Uint40) (ev *event.E, err error) {
 					if len(key) >= dataStart+size {
 						eventData := key[dataStart : dataStart+size]
 
-						// Check if this is compact format
+						// Check if this is compact format (starts with version byte 1)
+						// Note: Legacy events whose ID starts with 0x01 will also match this check,
+						// so we fall back to legacy format if the SerialEventId mapping doesn't exist.
 						if len(eventData) > 0 && eventData[0] == CompactFormatVersion {
 							eventId, idErr := d.GetEventIdBySerial(ser)
-							if idErr != nil {
-								// Cannot decode compact format without event ID - return error
-								// DO NOT fall back to legacy unmarshal as compact format is not valid legacy format
-								return nil, fmt.Errorf("compact format inline but no event ID mapping for serial %d: %w", ser.Get(), idErr)
+							if idErr == nil {
+								// SerialEventId mapping exists - this is compact format
+								return UnmarshalCompactEvent(eventData, eventId, resolver)
 							}
-							return UnmarshalCompactEvent(eventData, eventId, resolver)
+							// No SerialEventId mapping - this is likely a legacy event whose ID starts with 0x01
+							// Fall through to legacy unmarshal
 						}
 
 						// Legacy binary format
@@ -106,17 +108,18 @@ func (d *D) FetchEventBySerial(ser *types.Uint40) (ev *event.E, err error) {
 				return
 			}
 
-			// Check if this is compact format
+			// Check if this is compact format (starts with version byte 1)
+			// Note: Legacy events whose ID starts with 0x01 will also match this check,
+			// so we fall back to legacy format if the SerialEventId mapping doesn't exist.
 			if len(v) > 0 && v[0] == CompactFormatVersion {
 				eventId, idErr := d.GetEventIdBySerial(ser)
-				if idErr != nil {
-					// Cannot decode compact format without event ID - return error
-					// DO NOT fall back to legacy unmarshal as compact format is not valid legacy format
-					err = fmt.Errorf("compact format evt but no event ID mapping for serial %d: %w", ser.Get(), idErr)
+				if idErr == nil {
+					// SerialEventId mapping exists - this is compact format
+					ev, err = UnmarshalCompactEvent(v, eventId, resolver)
 					return
 				}
-				ev, err = UnmarshalCompactEvent(v, eventId, resolver)
-				return
+				// No SerialEventId mapping - this is likely a legacy event whose ID starts with 0x01
+				// Fall through to legacy unmarshal
 			}
 
 			// Check if we have valid data before attempting to unmarshal

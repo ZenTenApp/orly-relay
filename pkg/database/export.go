@@ -50,14 +50,17 @@ func (d *D) Export(c context.Context, w io.Writer, pubkeys ...[]byte) {
 	// Helper function to unmarshal event data (handles both legacy and compact formats)
 	unmarshalEventData := func(val []byte, ser *types.Uint40) (*event.E, error) {
 		// Check if this is compact format (starts with version byte 1)
+		// Note: Legacy events whose ID starts with 0x01 will also match this check,
+		// so we fall back to legacy format if the SerialEventId mapping doesn't exist.
 		if len(val) > 0 && val[0] == CompactFormatVersion {
-			// Get event ID from SerialEventId table
+			// Try to get event ID mapping - if it exists, this is truly compact format
 			eventId, idErr := d.GetEventIdBySerial(ser)
-			if idErr != nil {
-				// Can't decode without event ID - skip
-				return nil, idErr
+			if idErr == nil {
+				// SerialEventId mapping exists - this is compact format
+				return UnmarshalCompactEvent(val, eventId, resolver)
 			}
-			return UnmarshalCompactEvent(val, eventId, resolver)
+			// No SerialEventId mapping - this is likely a legacy event whose ID starts with 0x01
+			// Fall through to legacy unmarshal
 		}
 
 		// Legacy binary format

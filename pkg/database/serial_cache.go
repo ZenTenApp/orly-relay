@@ -246,7 +246,9 @@ func (d *D) GetEventIdBySerial(ser *types.Uint40) (eventId []byte, err error) {
 
 	err = d.View(func(txn *badger.Txn) error {
 		item, gerr := txn.Get(keyBuf.Bytes())
-		if chk.E(gerr) {
+		if gerr != nil {
+			// Don't log ErrKeyNotFound - it's expected for legacy events
+			// that don't have SerialEventId mappings
 			return gerr
 		}
 

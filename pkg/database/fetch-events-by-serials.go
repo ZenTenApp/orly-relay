@@ -111,17 +111,19 @@ func (d *D) fetchSmallEventWithIterator(txn *badger.Txn, ser *types.Uint40, it *
 	eventData := key[dataStart : dataStart+size]
 
 	// Check if this is compact format (starts with version byte 1)
+	// Note: Legacy events whose ID starts with 0x01 will also match this check,
+	// so we fall back to legacy format if the SerialEventId mapping doesn't exist.
 	if len(eventData) > 0 && eventData[0] == CompactFormatVersion {
-		// This is compact format stored in sev - need to decode with resolver
-		resolver := NewDatabaseSerialResolver(d, d.serialCache)
+		// Try to get event ID mapping - if it exists, this is truly compact format
 		eventId, idErr := d.GetEventIdBySerial(ser)
-		if idErr != nil {
-			// Cannot decode compact format without event ID - return error
-			// DO NOT fall back to legacy unmarshal as compact format is not valid legacy format
-			log.W.F("fetchSmallEventWithIterator: compact format but no event ID mapping for serial %d: %v", ser.Get(), idErr)
-			return nil, idErr
+		if idErr == nil {
+			// SerialEventId mapping exists - this is compact format
+			resolver := NewDatabaseSerialResolver(d, d.serialCache)
+			return UnmarshalCompactEvent(eventData, eventId, resolver)
 		}
-		return UnmarshalCompactEvent(eventData, eventId, resolver)
+		// No SerialEventId mapping - this is likely a legacy event whose ID starts with 0x01
+		// Fall through to legacy unmarshal
+		log.T.F("fetchSmallEventWithIterator: no sei mapping for serial %d, trying legacy format", ser.Get())
 	}
 
 	// Legacy binary format
@@ -207,17 +209,19 @@ func (d *D) fetchSmallEvent(txn *badger.Txn, ser *types.Uint40) (ev *event.E, er
 	eventData := key[dataStart : dataStart+size]
 
 	// Check if this is compact format (starts with version byte 1)
+	// Note: Legacy events whose ID starts with 0x01 will also match this check,
+	// so we fall back to legacy format if the SerialEventId mapping doesn't exist.
 	if len(eventData) > 0 && eventData[0] == CompactFormatVersion {
-		// This is compact format stored in sev - need to decode with resolver
-		resolver := NewDatabaseSerialResolver(d, d.serialCache)
+		// Try to get event ID mapping - if it exists, this is truly compact format
 		eventId, idErr := d.GetEventIdBySerial(ser)
-		if idErr != nil {
-			// Cannot decode compact format without event ID - return error
-			// DO NOT fall back to legacy unmarshal as compact format is not valid legacy format
-			log.W.F("fetchSmallEvent: compact format but no event ID mapping for serial %d: %v", ser.Get(), idErr)
-			return nil, idErr
+		if idErr == nil {
+			// SerialEventId mapping exists - this is compact format
+			resolver := NewDatabaseSerialResolver(d, d.serialCache)
+			return UnmarshalCompactEvent(eventData, eventId, resolver)
 		}
-		return UnmarshalCompactEvent(eventData, eventId, resolver)
+		// No SerialEventId mapping - this is likely a legacy event whose ID starts with 0x01
+		// Fall through to legacy unmarshal
+		log.T.F("fetchSmallEvent: no sei mapping for serial %d, trying legacy format", ser.Get())
 	}
 
 	// Legacy binary format
@@ -252,17 +256,19 @@ func (d *D) fetchLegacyEvent(txn *badger.Txn, ser *types.Uint40) (ev *event.E, e
 	}
 
 	// Check if this is compact format (starts with version byte 1)
+	// Note: Legacy events whose ID starts with 0x01 will also match this check,
+	// so we fall back to legacy format if the SerialEventId mapping doesn't exist.
 	if len(v) > 0 && v[0] == CompactFormatVersion {
-		// This is compact format stored in evt - need to decode with resolver
-		resolver := NewDatabaseSerialResolver(d, d.serialCache)
+		// Try to get event ID mapping - if it exists, this is truly compact format
 		eventId, idErr := d.GetEventIdBySerial(ser)
-		if idErr != nil {
-			// Cannot decode compact format without event ID - return error
-			// DO NOT fall back to legacy unmarshal as compact format is not valid legacy format
-			log.W.F("fetchLegacyEvent: compact format but no event ID mapping for serial %d: %v", ser.Get(), idErr)
-			return nil, idErr
+		if idErr == nil {
+			// SerialEventId mapping exists - this is compact format
+			resolver := NewDatabaseSerialResolver(d, d.serialCache)
+			return UnmarshalCompactEvent(v, eventId, resolver)
 		}
-		return UnmarshalCompactEvent(v, eventId, resolver)
+		// No SerialEventId mapping - this is likely a legacy event whose ID starts with 0x01
+		// Fall through to legacy unmarshal
+		log.T.F("fetchLegacyEvent: no sei mapping for serial %d, trying legacy format", ser.Get())
 	}
 
 	// Legacy binary format
