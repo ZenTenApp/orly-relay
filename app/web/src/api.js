@@ -43,9 +43,9 @@ export async function createNIP98Auth(signer, pubkey, method, url) {
             hasSig: !!signedEvent.sig
         });
 
-        // Use URL-safe base64 encoding (replace + with -, / with _)
+        // Use standard base64 encoding per BUD-01/NIP-98 spec
         const json = JSON.stringify(signedEvent);
-        const base64 = btoa(json).replace(/\+/g, '-').replace(/\//g, '_');
+        const base64 = btoa(json);
         return base64;
     } catch (error) {
         console.error("createNIP98Auth: Error:", error);

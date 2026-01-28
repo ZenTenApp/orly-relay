@@ -77,8 +77,8 @@
             };
 
             const signedEvent = await signer.signEvent(authEvent);
-            // Use URL-safe base64 encoding (replace + with -, / with _)
-            return btoa(JSON.stringify(signedEvent)).replace(/\+/g, '-').replace(/\//g, '_');
+            // Use standard base64 encoding per BUD-01 spec
+            return btoa(JSON.stringify(signedEvent));
         } catch (err) {
             console.error("Error creating Blossom auth:", err);
             return null;
@@ -99,8 +99,12 @@
     }
 
     async function loadBlobs() {
-        if (!userPubkey) return;
+        if (!userPubkey) {
+            console.log("loadBlobs: no userPubkey, skipping");
+            return;
+        }
 
+        console.log("loadBlobs: starting, userSigner available:", !!userSigner);
         isLoading = true;
         error = "";
 
@@ -117,8 +121,9 @@
 
             const data = await response.json();
             // API returns 'uploaded' timestamp per BUD-02 spec
-            blobs = Array.isArray(data) ? data : [];
-            blobs.sort((a, b) => (b.uploaded || 0) - (a.uploaded || 0));
+            // Use spread + sort to ensure Svelte reactivity triggers
+            const blobList = Array.isArray(data) ? data : [];
+            blobs = [...blobList].sort((a, b) => (b.uploaded || 0) - (a.uploaded || 0));
             console.log("Loaded blobs:", blobs);
         } catch (err) {
             console.error("Error loading blobs:", err);
@@ -241,7 +246,9 @@
                 throw new Error(`Failed to delete: ${response.statusText}`);
             }
 
+            console.log("Delete successful, removing blob from list:", blob.sha256);
             blobs = blobs.filter(b => b.sha256 !== blob.sha256);
+            console.log("Blobs after filter:", blobs.length);
             if (selectedBlob?.sha256 === blob.sha256) {
                 closeModal();
             }
@@ -304,7 +311,9 @@
         if (fileInput) fileInput.value = "";
 
         if (uploaded.length > 0) {
+            console.log("Upload complete, refreshing blob list...");
             await loadBlobs();
+            console.log("Blob list refresh complete, blobs count:", blobs.length);
         }
 
         if (failed.length > 0) {
@@ -375,8 +384,8 @@
                 throw new Error(`Failed to load user blobs: ${response.statusText}`);
             }
 
-            selectedUserBlobs = await response.json();
-            selectedUserBlobs.sort((a, b) => (b.uploaded || 0) - (a.uploaded || 0));
+            const userBlobData = await response.json();
+            selectedUserBlobs = [...userBlobData].sort((a, b) => (b.uploaded || 0) - (a.uploaded || 0));
         } catch (err) {
             console.error("Error loading user blobs:", err);
             error = err.message || "Failed to load user blobs";

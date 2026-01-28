@@ -87,7 +87,7 @@ require (
 	github.com/baidubce/bce-sdk-go v0.9.256 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
-	github.com/btcsuite/btcd/btcec/v2 v2.3.4 // indirect
+	github.com/btcsuite/btcd/btcec/v2 v2.3.6 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
 	github.com/bytedance/sonic v1.13.1 // indirect
 	github.com/bytedance/sonic/loader v0.2.4 // indirect
@@ -266,7 +266,9 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gvisor.dev/gvisor v0.0.0-20250503011706-39ed1f5ac29c // indirect
-	p256k1.mleku.dev v1.0.3 // indirect
+	p256k1.mleku.dev v1.0.5 // indirect
 )
 
 retract v1.0.3
+
+replace p256k1.mleku.dev => /home/mleku/src/p256k1.mleku.dev

@@ -76,8 +76,8 @@
             };
 
             const signedEvent = await userSigner.signEvent(authEvent);
-            // Use URL-safe base64 encoding (replace + with -, / with _)
-            return btoa(JSON.stringify(signedEvent)).replace(/\+/g, '-').replace(/\//g, '_');
+            // Use standard base64 encoding per BUD-01 spec
+            return btoa(JSON.stringify(signedEvent));
         } catch (err) {
             console.error("Error creating auth header:", err);
             return null;
