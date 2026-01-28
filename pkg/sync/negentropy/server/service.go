@@ -74,31 +74,27 @@ func (s *Service) HandleNegOpen(ctx context.Context, req *negentropyv1.NegOpenRe
 	// Store in session for later use
 	session.SetNegentropy(neg, storage)
 
-	// If we have an initial message from client, process it
-	var respMsg []byte
-	var complete bool
-	if len(req.InitialMessage) > 0 {
-		respMsg, complete, err = neg.Reconcile(req.InitialMessage)
-		if err != nil {
-			log.E.F("NEG-OPEN: reconcile failed: %v", err)
-			return &negentropyv1.NegOpenResponse{
-				Message: nil,
-				Error:   fmt.Sprintf("reconcile failed: %v", err),
-			}, nil
-		}
-		log.I.F("NEG-OPEN: reconcile complete=%v, response len=%d", complete, len(respMsg))
-	} else {
-		// No initial message, start as server (initiator)
-		respMsg, err = neg.Start()
-		if err != nil {
-			log.E.F("NEG-OPEN: failed to start: %v", err)
-			return &negentropyv1.NegOpenResponse{
-				Message: nil,
-				Error:   fmt.Sprintf("failed to start: %v", err),
-			}, nil
-		}
-		log.D.F("NEG-OPEN: started negentropy, initial msg len=%d", len(respMsg))
+	// The client (initiator) MUST provide an initial message in NEG-OPEN.
+	// Per NIP-77: The relay acts as responder and calls reconcile() with
+	// the client's initial message.
+	if len(req.InitialMessage) == 0 {
+		log.E.F("NEG-OPEN: missing initial message from client")
+		return &negentropyv1.NegOpenResponse{
+			Message: nil,
+			Error:   "blocked: NEG-OPEN requires initialMessage from initiator",
+		}, nil
 	}
+
+	// Process the client's initial message
+	respMsg, complete, err := neg.Reconcile(req.InitialMessage)
+	if err != nil {
+		log.E.F("NEG-OPEN: reconcile failed: %v", err)
+		return &negentropyv1.NegOpenResponse{
+			Message: nil,
+			Error:   fmt.Sprintf("reconcile failed: %v", err),
+		}, nil
+	}
+	log.I.F("NEG-OPEN: reconcile complete=%v, response len=%d", complete, len(respMsg))
 
 	// Collect IDs we have that client needs (to send as events)
 	haveIDs := neg.CollectHaves()

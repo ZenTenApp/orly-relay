@@ -12,7 +12,9 @@ import (
 
 	"git.mleku.dev/mleku/nostr/encoders/envelopes/eventenvelope"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/timestamp"
 	negentropyiface "next.orly.dev/pkg/interfaces/negentropy"
 	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
 )
@@ -84,9 +86,10 @@ func (l *Listener) HandleNegOpen(msg []byte) error {
 		return l.sendNegErr("", fmt.Sprintf("invalid subscription_id: %v", err))
 	}
 
-	// Extract filter
-	var f filter.F
-	if err := json.Unmarshal(parts[2], &f); err != nil {
+	// Extract filter - use custom parsing because filter.F's kinds field
+	// doesn't support standard JSON array unmarshaling
+	f, err := parseNegentropyFilter(parts[2])
+	if err != nil {
 		return l.sendNegErr(subscriptionID, fmt.Sprintf("invalid filter: %v", err))
 	}
 
@@ -105,7 +108,7 @@ func (l *Listener) HandleNegOpen(msg []byte) error {
 	}
 
 	// Convert filter to proto format
-	protoFilter := filterToProto(&f)
+	protoFilter := filterToProto(f)
 
 	// Call gRPC service
 	ctx := context.Background()
@@ -127,7 +130,7 @@ func (l *Listener) HandleNegOpen(msg []byte) error {
 
 	// Log need_ids (events client should send us)
 	if len(needIDs) > 0 {
-		log.D.F("NEG-OPEN: client needs to send %d events", len(needIDs))
+		log.D.F("NEG-OPEN: relay needs %d events from client", len(needIDs))
 	}
 
 	// Send NEG-MSG response FIRST (before events)
@@ -135,15 +138,14 @@ func (l *Listener) HandleNegOpen(msg []byte) error {
 		return err
 	}
 
-	// If reconciliation is complete, log it
+	// If reconciliation is complete, send events we have that client needs.
+	// Per NIP-77: The haves/needs are only final when reconcile returns complete=true.
 	if complete {
-		log.D.F("NEG-OPEN: reconciliation complete for %s", subscriptionID)
-	}
-
-	// AFTER sending response, send events for IDs we have that client needs
-	if len(haveIDs) > 0 {
-		if err := l.sendEventsForIDs(subscriptionID, haveIDs); err != nil {
-			log.E.F("failed to send events for NEG-OPEN: %v", err)
+		log.D.F("NEG-OPEN: reconciliation complete for %s, sending %d events", subscriptionID, len(haveIDs))
+		if len(haveIDs) > 0 {
+			if err := l.sendEventsForIDs(subscriptionID, haveIDs); err != nil {
+				log.E.F("failed to send events for NEG-OPEN: %v", err)
+			}
 		}
 	}
 
@@ -204,7 +206,7 @@ func (l *Listener) HandleNegMsg(msg []byte) error {
 
 	// Log need_ids (events client should send us)
 	if len(needIDs) > 0 {
-		log.D.F("NEG-MSG: client needs to send %d events", len(needIDs))
+		log.D.F("NEG-MSG: relay needs %d events from client", len(needIDs))
 	}
 
 	// Send NEG-MSG response FIRST (before events)
@@ -212,15 +214,14 @@ func (l *Listener) HandleNegMsg(msg []byte) error {
 		return err
 	}
 
-	// If reconciliation is complete, log it
+	// If reconciliation is complete, send events we have that client needs.
+	// Per NIP-77: The haves/needs are only final when reconcile returns complete=true.
 	if complete {
-		log.D.F("NEG-MSG: reconciliation complete for %s", subscriptionID)
-	}
-
-	// AFTER sending response, send events for IDs we have that client needs
-	if len(haveIDs) > 0 {
-		if err := l.sendEventsForIDs(subscriptionID, haveIDs); err != nil {
-			log.E.F("failed to send events for NEG-MSG: %v", err)
+		log.D.F("NEG-MSG: reconciliation complete for %s, sending %d events", subscriptionID, len(haveIDs))
+		if len(haveIDs) > 0 {
+			if err := l.sendEventsForIDs(subscriptionID, haveIDs); err != nil {
+				log.E.F("failed to send events for NEG-MSG: %v", err)
+			}
 		}
 	}
 
@@ -385,6 +386,82 @@ func filterToProto(f *filter.F) *commonv1.Filter {
 	// This is a simplified implementation
 
 	return pf
+}
+
+// parseNegentropyFilter parses a NIP-01 filter from JSON.
+// This is needed because filter.F uses kind.S which doesn't implement
+// json.Unmarshaler, so we parse manually and construct the filter.
+func parseNegentropyFilter(data []byte) (*filter.F, error) {
+	// Parse into a generic map first
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	f := filter.New()
+
+	// Parse kinds array
+	if kindsRaw, ok := raw["kinds"]; ok {
+		var kinds []int
+		if err := json.Unmarshal(kindsRaw, &kinds); err != nil {
+			return nil, fmt.Errorf("invalid kinds: %v", err)
+		}
+		f.Kinds = kind.FromIntSlice(kinds)
+	}
+
+	// Parse authors array (hex pubkeys)
+	if authorsRaw, ok := raw["authors"]; ok {
+		var authors []string
+		if err := json.Unmarshal(authorsRaw, &authors); err != nil {
+			return nil, fmt.Errorf("invalid authors: %v", err)
+		}
+		f.Authors = tag.NewWithCap(len(authors))
+		for _, a := range authors {
+			if decoded, err := hex.DecodeString(a); err == nil {
+				f.Authors.T = append(f.Authors.T, decoded)
+			}
+		}
+	}
+
+	// Parse ids array (hex event IDs)
+	if idsRaw, ok := raw["ids"]; ok {
+		var ids []string
+		if err := json.Unmarshal(idsRaw, &ids); err != nil {
+			return nil, fmt.Errorf("invalid ids: %v", err)
+		}
+		f.Ids = tag.NewWithCap(len(ids))
+		for _, id := range ids {
+			if decoded, err := hex.DecodeString(id); err == nil {
+				f.Ids.T = append(f.Ids.T, decoded)
+			}
+		}
+	}
+
+	// Parse since timestamp
+	if sinceRaw, ok := raw["since"]; ok {
+		var since int64
+		if err := json.Unmarshal(sinceRaw, &since); err == nil {
+			f.Since = timestamp.FromUnix(since)
+		}
+	}
+
+	// Parse until timestamp
+	if untilRaw, ok := raw["until"]; ok {
+		var until int64
+		if err := json.Unmarshal(untilRaw, &until); err == nil {
+			f.Until = timestamp.FromUnix(until)
+		}
+	}
+
+	// Parse limit
+	if limitRaw, ok := raw["limit"]; ok {
+		var limit uint
+		if err := json.Unmarshal(limitRaw, &limit); err == nil {
+			f.Limit = &limit
+		}
+	}
+
+	return f, nil
 }
 
 // CloseAllNegentropySessions closes all negentropy sessions for a connection

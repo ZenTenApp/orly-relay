@@ -2,6 +2,13 @@
 
 // Package sync implements the "orly sync" subcommand for sync service operations.
 // Supports both one-shot CLI sync (like strfry sync) and running as a gRPC service.
+//
+// Two modes of operation:
+// 1. Direct mode: Opens database directly (like strfry sync)
+// 2. Client mode: Connects to running orly-sync-negentropy service via gRPC
+//
+// Client mode allows you to use a running ORLY relay's database without
+// needing direct filesystem access to the database files.
 package sync
 
 import (
@@ -22,6 +29,8 @@ import (
 	"next.orly.dev/pkg/database"
 	pkgsync "next.orly.dev/pkg/sync"
 	"next.orly.dev/pkg/sync/negentropy"
+	negentropygrpc "next.orly.dev/pkg/sync/negentropy/grpc"
+	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
 )
 
 // SyncDirection specifies which direction to sync
@@ -35,11 +44,14 @@ const (
 
 // CLISyncConfig holds configuration for one-shot CLI sync
 type CLISyncConfig struct {
-	RelayURL  string
-	Filter    *filter.F
-	Direction SyncDirection
-	DataDir   string
-	Verbose   bool
+	RelayURL      string
+	Filter        *filter.F
+	Direction     SyncDirection
+	DataDir       string
+	Verbose       bool
+	// Client mode: connect to running service instead of direct DB access
+	ServerAddress string // gRPC address of orly-sync-negentropy service
+	UseClientMode bool   // If true, use gRPC client instead of direct DB
 }
 
 // Run executes the sync subcommand.
@@ -52,6 +64,7 @@ func Run(args []string) {
 	var direction string = "down"
 	var dataDir string
 	var verbose bool
+	var serverAddress string
 
 	// Parse arguments - look for either service mode (--driver) or CLI mode (relay URL)
 	positionalArgs := []string{}
@@ -77,6 +90,11 @@ func Run(args []string) {
 			dataDir = strings.TrimPrefix(arg, "--data-dir=")
 		} else if arg == "--data-dir" && i+1 < len(args) {
 			dataDir = args[i+1]
+			i++
+		} else if strings.HasPrefix(arg, "--server=") {
+			serverAddress = strings.TrimPrefix(arg, "--server=")
+		} else if arg == "--server" && i+1 < len(args) {
+			serverAddress = args[i+1]
 			i++
 		} else if arg == "--list-drivers" || arg == "-l" {
 			listDrivers = true
@@ -111,13 +129,20 @@ func Run(args []string) {
 	// Check if this is CLI sync mode (relay URL provided)
 	if len(positionalArgs) > 0 && (strings.HasPrefix(positionalArgs[0], "ws://") || strings.HasPrefix(positionalArgs[0], "wss://")) {
 		relayURL = positionalArgs[0]
-		runCLISync(&CLISyncConfig{
-			RelayURL:  relayURL,
-			Filter:    parseFilterJSON(filterJSON),
-			Direction: SyncDirection(direction),
-			DataDir:   dataDir,
-			Verbose:   verbose,
-		})
+		cfg := &CLISyncConfig{
+			RelayURL:      relayURL,
+			Filter:        parseFilterJSON(filterJSON),
+			Direction:     SyncDirection(direction),
+			DataDir:       dataDir,
+			Verbose:       verbose,
+			ServerAddress: serverAddress,
+			UseClientMode: serverAddress != "",
+		}
+		if cfg.UseClientMode {
+			runClientModeSync(cfg)
+		} else {
+			runDirectModeSync(cfg)
+		}
 		return
 	}
 
@@ -194,8 +219,9 @@ func parseFilterJSON(jsonStr string) *filter.F {
 	return f
 }
 
-// runCLISync performs a one-shot negentropy sync with a remote relay
-func runCLISync(cfg *CLISyncConfig) {
+// runDirectModeSync performs a one-shot negentropy sync with a remote relay
+// using direct database access (like strfry sync)
+func runDirectModeSync(cfg *CLISyncConfig) {
 	if cfg.Verbose {
 		log.I.F("CLI sync starting with %s (direction: %s)", cfg.RelayURL, cfg.Direction)
 	}
@@ -267,6 +293,135 @@ func runCLISync(cfg *CLISyncConfig) {
 	}
 }
 
+// runClientModeSync performs a one-shot negentropy sync with a remote relay
+// by connecting to a running orly-sync-negentropy service via gRPC.
+// This allows you to sync using a relay's database without direct filesystem access.
+func runClientModeSync(cfg *CLISyncConfig) {
+	if cfg.Verbose {
+		log.I.F("Client mode sync starting with %s via server %s (direction: %s)",
+			cfg.RelayURL, cfg.ServerAddress, cfg.Direction)
+	}
+
+	// Set up signal handling
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\nInterrupted, closing...")
+		cancel()
+	}()
+
+	// Connect to the sync service via gRPC
+	fmt.Printf("Connecting to sync service at %s...\n", cfg.ServerAddress)
+	client, err := negentropygrpc.New(ctx, &negentropygrpc.ClientConfig{
+		ServerAddress:  cfg.ServerAddress,
+		ConnectTimeout: 30 * time.Second,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: failed to connect to sync service: %v\n", err)
+		os.Exit(1)
+	}
+	defer client.Close()
+
+	// Wait for the service to be ready
+	select {
+	case <-client.Ready():
+		fmt.Println("Connected to sync service")
+	case <-time.After(30 * time.Second):
+		fmt.Fprintf(os.Stderr, "error: sync service not ready\n")
+		os.Exit(1)
+	}
+
+	// Convert filter to proto format
+	var protoFilter *commonv1.Filter
+	if cfg.Filter != nil {
+		protoFilter = filterToProto(cfg.Filter)
+	}
+
+	// Start sync with the peer
+	startTime := time.Now()
+	fmt.Printf("Requesting sync with %s...\n", cfg.RelayURL)
+
+	progressCh, err := client.SyncWithPeer(ctx, cfg.RelayURL, protoFilter, 0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: failed to start sync: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Display progress updates
+	var lastProgress *negentropygrpc.SyncProgress
+	for progress := range progressCh {
+		lastProgress = progress
+		if progress.Error != "" {
+			fmt.Fprintf(os.Stderr, "Sync error: %s\n", progress.Error)
+			os.Exit(1)
+		}
+		if cfg.Verbose || progress.Complete {
+			fmt.Printf("Round %d: have=%d need=%d fetched=%d sent=%d\n",
+				progress.Round, progress.HaveCount, progress.NeedCount,
+				progress.FetchedCount, progress.SentCount)
+		}
+	}
+
+	elapsed := time.Since(startTime)
+	if lastProgress != nil && lastProgress.Complete {
+		fmt.Printf("Sync complete in %v\n", elapsed)
+	} else {
+		fmt.Printf("Sync finished in %v (may be incomplete)\n", elapsed)
+	}
+}
+
+// filterToProto converts a nostr filter to proto format
+func filterToProto(f *filter.F) *commonv1.Filter {
+	if f == nil {
+		return nil
+	}
+
+	pf := &commonv1.Filter{}
+
+	// Convert kinds
+	if f.Kinds != nil && f.Kinds.Len() > 0 {
+		for _, k := range f.Kinds.ToUint16() {
+			pf.Kinds = append(pf.Kinds, uint32(k))
+		}
+	}
+
+	// Convert authors (binary to bytes)
+	if f.Authors != nil && f.Authors.Len() > 0 {
+		for _, author := range f.Authors.T {
+			pf.Authors = append(pf.Authors, author)
+		}
+	}
+
+	// Convert IDs (binary to bytes)
+	if f.Ids != nil && f.Ids.Len() > 0 {
+		for _, id := range f.Ids.T {
+			pf.Ids = append(pf.Ids, id)
+		}
+	}
+
+	// Convert timestamps
+	if f.Since != nil {
+		since := f.Since.V
+		pf.Since = &since
+	}
+	if f.Until != nil {
+		until := f.Until.V
+		pf.Until = &until
+	}
+
+	// Convert limit
+	if f.Limit != nil {
+		limit := uint32(*f.Limit)
+		pf.Limit = &limit
+	}
+
+	return pf
+}
+
 func runSyncService(driver string, args []string) {
 	log.I.F("Sync service with driver=%s not yet implemented via unified binary", driver)
 	log.I.F("Use the standalone binary: orly-sync-%s", driver)
@@ -277,13 +432,15 @@ func printSyncHelp() {
 	fmt.Println(`orly sync - Sync operations (NIP-77 negentropy)
 
 Usage:
-  orly sync <relay_url> [options]     One-shot sync with relay (like strfry sync)
-  orly sync --driver=NAME [options]   Run as sync service
+  orly sync <relay_url> [options]           One-shot sync with relay
+  orly sync <relay_url> --server=ADDR       Sync via running service
+  orly sync --driver=NAME [options]         Run as sync service
 
 One-shot sync options:
   --filter=JSON      Nostr filter JSON (e.g. '{"kinds": [0, 3, 1984]}')
   --dir=DIRECTION    Sync direction: down, up, both (default: down)
   --data-dir=PATH    Database directory (default: ~/.local/share/ORLY)
+  --server=ADDR      Connect to running sync service (e.g. 127.0.0.1:50064)
   --verbose, -v      Verbose output
 
 Service mode options:
@@ -306,11 +463,22 @@ Environment variables:
   ORLY_SYNC_TARGET_RELAYS       Comma-separated target relay URLs
 
 Examples:
-  # One-shot sync (like strfry sync)
+  # One-shot sync with local database (like strfry sync)
   orly sync wss://relay.example.com --filter '{"kinds": [0, 3, 1984]}' --dir down
   orly sync wss://wot.grapevine.network --filter '{"kinds": [3, 1984, 10000]}' --dir down
 
+  # Sync via running ORLY service (no direct DB access needed)
+  orly sync wss://relay.example.com --server 127.0.0.1:50064 --filter '{"kinds": [1]}' --dir both
+
   # Service mode
   orly sync --driver=negentropy   Run negentropy sync service
-  orly sync --list-drivers        List available drivers`)
+  orly sync --list-drivers        List available drivers
+
+Client mode (--server):
+  When using --server, the CLI connects to a running orly-sync-negentropy
+  service via gRPC instead of opening the database directly. This allows
+  you to sync from a remote machine without filesystem access to the DB.
+
+  The server address is typically 127.0.0.1:50064 (or as configured in
+  ORLY_LAUNCHER_SYNC_NEGENTROPY_LISTEN).`)
 }

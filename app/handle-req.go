@@ -820,6 +820,9 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		// Track this subscription so we can cancel it on CLOSE or connection close
 		subID := string(env.Subscription)
 		l.subscriptionsMu.Lock()
+		if l.subscriptions == nil {
+			l.subscriptions = make(map[string]context.CancelFunc)
+		}
 		l.subscriptions[subID] = subCancel
 		l.subscriptionsMu.Unlock()
 
