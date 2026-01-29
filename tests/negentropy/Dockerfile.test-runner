@@ -1,0 +1,25 @@
+# Test Runner Dockerfile with event generator and test tools
+
+FROM golang:1.24-alpine AS builder
+
+RUN apk add --no-cache git make
+
+WORKDIR /build
+COPY . .
+
+# Build event generator as a static binary (use vendored deps for local replace directives)
+RUN GOTOOLCHAIN=auto CGO_ENABLED=0 go build -mod=vendor -ldflags='-extldflags=-static' -o event-generator ./tests/negentropy/event-generator
+
+# Runtime image
+FROM alpine:3.21
+
+RUN apk add --no-cache ca-certificates curl jq bash
+
+# Install websocat binary
+RUN curl -L -o /usr/local/bin/websocat https://github.com/vi/websocat/releases/download/v1.13.0/websocat.x86_64-unknown-linux-musl && \
+    chmod +x /usr/local/bin/websocat
+
+# Copy event-generator binary
+COPY --from=builder /build/event-generator /usr/local/bin/
+
+CMD ["bash"]

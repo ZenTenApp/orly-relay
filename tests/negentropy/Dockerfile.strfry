@@ -43,8 +43,11 @@ RUN apt-get update && apt-get install -y \
     libssl3 \
     curl \
     jq \
-    websocat \
     && rm -rf /var/lib/apt/lists/*
+
+# Install websocat binary (not available in apt)
+RUN curl -L -o /usr/local/bin/websocat https://github.com/vi/websocat/releases/download/v1.13.0/websocat.x86_64-unknown-linux-musl && \
+    chmod +x /usr/local/bin/websocat
 
 WORKDIR /app
 COPY --from=builder /build/strfry /app/

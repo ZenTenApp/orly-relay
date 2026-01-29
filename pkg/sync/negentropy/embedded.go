@@ -84,6 +84,15 @@ func (h *EmbeddedHandler) HandleNegOpen(ctx context.Context, connectionID, subsc
 			return nil, nil, nil, false, fmt.Sprintf("reconcile failed: %v", err), nil
 		}
 		log.I.F("NEG-OPEN: reconcile complete=%v, response len=%d", complete, len(respMsg))
+		// Debug: dump first bytes and initial message first bytes
+		if len(respMsg) > 0 {
+			end := 64
+			if end > len(respMsg) {
+				end = len(respMsg)
+			}
+			log.D.F("NEG-OPEN: initial msg first 64 bytes: %x", initialMessage[:min(64, len(initialMessage))])
+			log.D.F("NEG-OPEN: response first 64 bytes: %x", respMsg[:end])
+		}
 	} else {
 		// No initial message, start as server (initiator)
 		respMsg, err = neg.Start()

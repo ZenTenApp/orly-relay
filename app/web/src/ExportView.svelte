@@ -2,6 +2,7 @@
     export let isLoggedIn = false;
     export let currentEffectiveRole = "";
     export let aclMode = "";
+    export let isExporting = false;
 
     import { createEventDispatcher } from "svelte";
     const dispatch = createEventDispatcher();
@@ -28,8 +29,12 @@
         <div class="export-section">
             <h3>Export My Events</h3>
             <p>Download your personal events as a JSONL file.</p>
-            <button class="export-btn" on:click={exportMyEvents}>
-                📤 Export My Events
+            <button class="export-btn" on:click={exportMyEvents} disabled={isExporting}>
+                {#if isExporting}
+                    Exporting...
+                {:else}
+                    Export My Events
+                {/if}
             </button>
         </div>
     {/if}
@@ -40,8 +45,12 @@
                 Download the complete database as a JSONL file. This includes
                 all events from all users.
             </p>
-            <button class="export-btn" on:click={exportAllEvents}>
-                📤 Export All Events
+            <button class="export-btn" on:click={exportAllEvents} disabled={isExporting}>
+                {#if isExporting}
+                    Exporting...
+                {:else}
+                    Export All Events
+                {/if}
             </button>
         </div>
     {/if}
@@ -89,8 +98,13 @@
         transition: background-color 0.2s;
     }
 
-    .export-btn:hover {
+    .export-btn:hover:not(:disabled) {
         background-color: var(--accent-hover-color);
+    }
+
+    .export-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
     }
 
     .login-prompt {

@@ -2291,6 +2291,8 @@
     }
 
     // Export functionality
+    let isExporting = false;
+
     async function exportEvents(pubkeys = []) {
         // Skip login check when ACL is "none" (open relay mode)
         if (aclMode !== "none" && !isLoggedIn) {
@@ -2310,18 +2312,35 @@
             return;
         }
 
+        // For open relays (no auth needed), use a direct GET which lets the
+        // browser handle the download natively via Content-Disposition header.
+        if (aclMode === "none" || !isLoggedIn) {
+            const base = getApiBase();
+            let url = `${base}/api/export`;
+            if (pubkeys.length > 0) {
+                const params = pubkeys.map(pk => `pubkey=${encodeURIComponent(pk)}`).join("&");
+                url += `?${params}`;
+            }
+            // Use a hidden iframe/link to trigger native browser download
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            return;
+        }
+
+        // Authenticated export via fetch with NIP-98
+        isExporting = true;
         try {
-            // Build headers - only include auth when ACL is not "none"
+            const exportUrl = `${getApiBase()}/api/export`;
             const headers = {
                 "Content-Type": "application/json",
             };
-            if (aclMode !== "none" && isLoggedIn) {
-                headers.Authorization = await createNIP98AuthHeader(
-                    `${getApiBase()}/api/export`,
-                    "POST",
-                );
-            }
-            const response = await fetch(`${getApiBase()}/api/export`, {
+            headers.Authorization = await createNIP98AuthHeader(exportUrl, "POST");
+
+            const response = await fetch(exportUrl, {
                 method: "POST",
                 headers,
                 body: JSON.stringify({ pubkeys }),
@@ -2359,11 +2378,13 @@
         } catch (error) {
             console.error("Export failed:", error);
             alert("Export failed: " + error.message);
+        } finally {
+            isExporting = false;
         }
     }
 
     async function exportAllEvents() {
-        await exportEvents([]); // Empty array means export all events
+        await exportEvents([]);
     }
 
     async function exportMyEvents() {
@@ -2692,39 +2713,23 @@
         if (!isLoggedIn || !userPubkey) {
             throw new Error("Not logged in");
         }
+        if (!userSigner) {
+            throw new Error("No valid signer available");
+        }
 
         // Create NIP-98 auth event
         const authEvent = {
             kind: 27235,
             created_at: Math.floor(Date.now() / 1000),
             tags: [
-                ["u", url],  // URL should already be absolute
+                ["u", url],
                 ["method", method.toUpperCase()],
             ],
             content: "",
             pubkey: userPubkey,
         };
 
-        let signedEvent;
-
-        if (userSigner && authMethod === "extension") {
-            // Use the signer from the extension
-            try {
-                signedEvent = await userSigner.signEvent(authEvent);
-            } catch (error) {
-                throw new Error(
-                    "Failed to sign with extension: " + error.message,
-                );
-            }
-        } else if (authMethod === "nsec") {
-            // For nsec method, we need to implement proper signing
-            // For now, create a mock signature (in production, use proper crypto)
-            authEvent.id = "mock-id-" + Date.now();
-            authEvent.sig = "mock-signature-" + Date.now();
-            signedEvent = authEvent;
-        } else {
-            throw new Error("No valid signer available");
-        }
+        const signedEvent = await userSigner.signEvent(authEvent);
 
         // Encode as base64
         const eventJson = JSON.stringify(signedEvent);
@@ -2738,39 +2743,23 @@
         if (!isLoggedIn || !userPubkey) {
             throw new Error("Not logged in");
         }
+        if (!userSigner) {
+            throw new Error("No valid signer available");
+        }
 
         // Create NIP-98 auth event
         const authEvent = {
             kind: 27235,
             created_at: Math.floor(Date.now() / 1000),
             tags: [
-                ["u", url],  // URL should already be absolute
+                ["u", url],
                 ["method", method.toUpperCase()],
             ],
             content: "",
             pubkey: userPubkey,
         };
 
-        let signedEvent;
-
-        if (userSigner && authMethod === "extension") {
-            // Use the signer from the extension
-            try {
-                signedEvent = await userSigner.signEvent(authEvent);
-            } catch (error) {
-                throw new Error(
-                    "Failed to sign with extension: " + error.message,
-                );
-            }
-        } else if (authMethod === "nsec") {
-            // For nsec method, we need to implement proper signing
-            // For now, create a mock signature (in production, use proper crypto)
-            authEvent.id = "mock-id-" + Date.now();
-            authEvent.sig = "mock-signature-" + Date.now();
-            signedEvent = authEvent;
-        } else {
-            throw new Error("No valid signer available");
-        }
+        const signedEvent = await userSigner.signEvent(authEvent);
 
         // Encode as base64
         const eventJson = JSON.stringify(signedEvent);
@@ -3024,6 +3013,7 @@
                 {isLoggedIn}
                 {currentEffectiveRole}
                 {aclMode}
+                {isExporting}
                 on:exportMyEvents={exportMyEvents}
                 on:exportAllEvents={exportAllEvents}
                 on:openLoginModal={openLoginModal}

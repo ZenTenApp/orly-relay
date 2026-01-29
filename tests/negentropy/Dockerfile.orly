@@ -7,9 +7,8 @@ RUN apk add --no-cache git make
 WORKDIR /build
 COPY . .
 
-# Build orly relay binary (main.go in project root) and sync binary
-RUN GOTOOLCHAIN=auto CGO_ENABLED=0 go build -o orly . && \
-    GOTOOLCHAIN=auto CGO_ENABLED=0 go build -o orly-sync ./cmd/orly
+# Build orly relay binary (use vendored deps for local replace directives)
+RUN GOTOOLCHAIN=auto CGO_ENABLED=0 go build -mod=vendor -o orly .
 
 # Runtime image
 FROM alpine:3.19
@@ -18,19 +17,17 @@ RUN apk add --no-cache ca-certificates curl jq
 
 WORKDIR /app
 COPY --from=builder /build/orly /app/
-COPY --from=builder /build/orly-sync /app/
 
 RUN mkdir -p /data
 
 EXPOSE 3334
 
-# Environment variables
 ENV ORLY_PORT=3334
 ENV ORLY_DATA_DIR=/data
 ENV ORLY_LOG_LEVEL=info
+ENV ORLY_NEGENTROPY_ENABLED=true
 
 HEALTHCHECK --interval=5s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:3334 || exit 1
 
-# Run orly relay
 CMD ["/app/orly"]

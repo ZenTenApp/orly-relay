@@ -1,24 +1,38 @@
-# Docker Compose for negentropy interop testing between strfry and orly
+# Negentropy (NIP-77) Interop Test Infrastructure
 #
-# Usage:
+# Tests NIP-77 negentropy sync between strfry (client) and ORLY (server).
+#
+# Strfry initiates sync using its built-in `strfry sync` command.
+# ORLY serves NIP-77 via embedded negentropy handler.
+#
+# Usage (from this directory):
 #   docker compose build
 #   docker compose up -d
-#   ./test-sync.sh
+#   ./comprehensive-test.sh
 #   docker compose down -v
 
 services:
+  # Strfry relay - has native negentropy support and sync command
   strfry:
-    image: dockurr/strfry:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.strfry
     ports:
       - "7777:7777"
     volumes:
       - strfry-data:/strfry-db
       - ./strfry.conf:/etc/strfry.conf:ro
-    command: ["/app/strfry", "relay", "--config=/etc/strfry.conf"]
     networks:
       - negentropy-test
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:7777"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
-  orly:
+  # ORLY relay with embedded negentropy (NIP-77 server)
+  orly-relay-1:
     build:
       context: ../..
       dockerfile: tests/negentropy/Dockerfile.orly
@@ -27,41 +41,39 @@ services:
     environment:
       - ORLY_PORT=3334
       - ORLY_DATA_DIR=/data
-      - ORLY_LOG_LEVEL=info
+      - ORLY_LOG_LEVEL=debug
+      - ORLY_NEGENTROPY_ENABLED=true
     volumes:
-      - orly-data:/data
+      - orly-data-1:/data
+    networks:
+      - negentropy-test
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3334"]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
-    depends_on:
-      - strfry
-    networks:
-      - negentropy-test
 
-  # Utility container for running sync commands
-  sync-runner:
+  # Test runner with event-generator and websocat
+  test-runner:
     build:
       context: ../..
-      dockerfile: tests/negentropy/Dockerfile.orly
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["sleep infinity"]
+      dockerfile: tests/negentropy/Dockerfile.test-runner
     environment:
-      - ORLY_DATA_DIR=/data
-    volumes:
-      - sync-data:/data
+      - STRFRY_URL=ws://strfry:7777
+      - ORLY1_URL=ws://orly-relay-1:3334
     depends_on:
-      - strfry
-      - orly
+      strfry:
+        condition: service_healthy
+      orly-relay-1:
+        condition: service_healthy
     networks:
       - negentropy-test
+    command: ["sleep", "infinity"]
 
 volumes:
   strfry-data:
-  orly-data:
-  sync-data:
+  orly-data-1:
 
 networks:
   negentropy-test:

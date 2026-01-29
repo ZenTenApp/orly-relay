@@ -1,0 +1,25 @@
+# gRPC Negentropy Sync Service Dockerfile
+
+FROM golang:1.24-alpine AS builder
+
+RUN apk add --no-cache git make
+
+WORKDIR /build
+COPY . .
+
+# Build the sync service binary
+RUN GOTOOLCHAIN=auto CGO_ENABLED=0 go build -o orly-sync-negentropy ./cmd/orly-sync-negentropy
+
+# Runtime image
+FROM alpine:3.19
+
+RUN apk add --no-cache ca-certificates
+
+WORKDIR /app
+COPY --from=builder /build/orly-sync-negentropy /app/
+
+# Skip grpc-health-probe - not essential for testing
+
+EXPOSE 50064
+
+CMD ["/app/orly-sync-negentropy"]

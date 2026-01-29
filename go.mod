@@ -269,3 +269,5 @@ require (
 )
 
 retract v1.0.3
+
+replace git.mleku.dev/mleku/nostr => ../git.mleku.dev/mleku/nostr
