@@ -147,6 +147,7 @@
     // Compose tab state
     let composeEventJson = "";
     let composePublishError = "";
+    let composeLocalOnly = true;
 
     // Recovery tab state
     let recoverySelectedKind = null;
@@ -2879,9 +2880,18 @@
 
             if (result.success) {
                 composePublishError = "";
-                alert("Event published successfully to ORLY relay!");
-                // Optionally clear the editor after successful publish
-                // composeEventJson = '';
+
+                if (!composeLocalOnly) {
+                    // Also broadcast to configured relays
+                    try {
+                        await nostrClient.publish(event);
+                    } catch (broadcastErr) {
+                        console.warn("Broadcast to other relays failed:", broadcastErr);
+                    }
+                    alert("Event published and broadcast to relays!");
+                } else {
+                    alert("Event published to this relay only.");
+                }
             } else {
                 // Parse the error reason and provide helpful guidance
                 const reason = result.reason || "Unknown error";
@@ -3064,6 +3074,7 @@
         {:else if selectedTab === "compose"}
             <ComposeView
                 bind:composeEventJson
+                bind:localOnly={composeLocalOnly}
                 {userPubkey}
                 {userRole}
                 {policyEnabled}

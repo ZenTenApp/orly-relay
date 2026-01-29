@@ -4,6 +4,7 @@
     export let userRole = "";
     export let policyEnabled = false;
     export let publishError = "";
+    export let localOnly = true;
 
     import { createEventDispatcher } from "svelte";
     import EventTemplateSelector from "./EventTemplateSelector.svelte";
@@ -53,6 +54,10 @@
             >Reformat</button
         >
         <button class="compose-btn sign-btn" on:click={signEvent}>Sign</button>
+        <label class="local-only-label">
+            <input type="checkbox" bind:checked={localOnly} />
+            This relay only
+        </label>
         <button class="compose-btn publish-btn" on:click={publishEvent}
             >Publish</button
         >
@@ -147,6 +152,24 @@
     .sign-btn:hover {
         background: var(--warning);
         filter: brightness(0.9);
+    }
+
+    .local-only-label {
+        display: flex;
+        align-items: center;
+        gap: 0.35em;
+        font-size: 0.85rem;
+        color: var(--text-color);
+        cursor: pointer;
+        user-select: none;
+        margin-left: auto;
+        padding: 0 0.5em;
+        white-space: nowrap;
+    }
+
+    .local-only-label input[type="checkbox"] {
+        cursor: pointer;
+        accent-color: var(--accent-color);
     }
 
     .publish-btn {
