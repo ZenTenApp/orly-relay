@@ -733,9 +733,15 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 	// Record access for returned events (for GC access-based ranking)
 	if l.accessTracker != nil && len(events) > 0 {
 		go func(evts event.S, connID string) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.W.F("access tracker panic (recovered): %v", r)
+				}
+			}()
 			for _, ev := range evts {
 				// Validate event ID before calling GetSerialById
-				if len(ev.ID) != 32 {
+				// Check both length and capacity to catch corrupted slice headers
+				if len(ev.ID) != 32 || cap(ev.ID) < 32 {
 					continue
 				}
 				if ser, err := l.DB.GetSerialById(ev.ID); err == nil && ser != nil {
