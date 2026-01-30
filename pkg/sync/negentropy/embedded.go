@@ -8,6 +8,9 @@ import (
 	"lol.mleku.dev/log"
 
 	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/timestamp"
 	negentropylib "git.mleku.dev/mleku/nostr/negentropy"
 	"next.orly.dev/pkg/database"
 	negentropyiface "next.orly.dev/pkg/interfaces/negentropy"
@@ -251,6 +254,35 @@ func protoToFilter(pf *commonv1.Filter) *filter.F {
 	}
 
 	f := &filter.F{}
+
+	// Convert IDs (binary 32-byte event IDs)
+	if len(pf.Ids) > 0 {
+		f.Ids = &tag.T{T: pf.Ids}
+	}
+
+	// Convert Kinds (uint32 → kind.K with uint16)
+	if len(pf.Kinds) > 0 {
+		ks := kind.NewWithCap(len(pf.Kinds))
+		for _, k := range pf.Kinds {
+			ks.K = append(ks.K, kind.New(k))
+		}
+		f.Kinds = ks
+	}
+
+	// Convert Authors (binary 32-byte pubkeys)
+	if len(pf.Authors) > 0 {
+		f.Authors = &tag.T{T: pf.Authors}
+	}
+
+	// Convert Since
+	if pf.Since != nil {
+		f.Since = timestamp.New(*pf.Since)
+	}
+
+	// Convert Until
+	if pf.Until != nil {
+		f.Until = timestamp.New(*pf.Until)
+	}
 
 	// Convert Limit
 	if pf.Limit != nil {

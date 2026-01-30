@@ -1,55 +1,47 @@
 # Comprehensive Negentropy Sync Test Suite
 
-This test suite validates NIP-77 negentropy synchronization between ORLY and strfry relays in all possible configurations.
+Tests NIP-77 negentropy synchronization between ORLY and strfry relays.
 
 ## Test Scenarios
 
-### 1. Orly as Relay, Strfry as Client
+### 1. strfry as Client, ORLY as Server (Phases 1-6)
 Uses `strfry sync` command to test:
 - **Push**: strfry → orly-relay-1
 - **Pull**: strfry ← orly-relay-1
 - **Bidirectional**: strfry ↔ orly-relay-1
 
-### 2. Strfry as Relay, Orly as Client
-Uses `orly sync` with gRPC client mode:
-- **Push**: orly-relay-2 → strfry
-- **Pull**: orly-relay-2 ← strfry
-- **Bidirectional**: orly-relay-2 ↔ strfry
-
-### 3. Dual Orly with gRPC Control
-Two ORLY relays synchronized via gRPC sync services:
-- **orly-relay-1** ↔ **orly-relay-2** via gRPC-controlled sync
+### 2. ORLY as Client, ORLY as Server (Phases 7-10)
+Uses `orly sync` CLI with a temporary Badger DB as a bridge:
+- **relay-1 → relay-2**: orly CLI pulls from relay-1, pushes to relay-2
+- **relay-2 → relay-1**: orly CLI pushes relay-2 events to relay-1
+- **Three-way consistency**: strfry, relay-1, relay-2 converge
 
 ## Infrastructure
 
 ```
-┌─────────────┐         ┌─────────────┐
-│   strfry    │◄───────►│ orly-relay-1│
-│  (7777)     │  NIP-77 │   (3334)    │
-└──────┬──────┘         └──────┬──────┘
-       │                       │
-       │                       │ gRPC
-       │                 ┌─────┴──────┐
-       │                 │ orly-sync-1│
-       │                 │ (50064)    │
-       │                 └────────────┘
-       │
-       │ NIP-77          ┌─────────────┐
-       └────────────────►│ orly-relay-2│
-                         │   (3335)    │
-                         └──────┬──────┘
-                                │ gRPC
-                          ┌─────┴──────┐
-                          │ orly-sync-2│
-                          │ (50064)    │
-                          └────────────┘
+┌─────────────┐  NIP-77   ┌──────────────┐
+│   strfry    │◄─────────►│ orly-relay-1 │
+│  (7777)     │           │   (3334)     │
+└─────────────┘           └──────┬───────┘
+                                 │
+                          orly sync CLI
+                          (bridge DB in
+                           test-runner)
+                                 │
+                          ┌──────┴───────┐
+                          │ orly-relay-2 │
+                          │   (3335)     │
+                          └──────────────┘
 ```
+
+The `orly sync` CLI runs inside the test-runner container. It opens a
+temporary Badger database and uses NIP-77 negentropy to sync with each
+relay, effectively bridging events between the two ORLY instances.
 
 ## Quick Start
 
 ### Prerequisites
 - Docker and Docker Compose
-- Go 1.24+ (for local event generator builds)
 
 ### Run All Tests
 
@@ -63,41 +55,39 @@ docker compose build
 docker compose up -d
 
 # Run comprehensive tests
-docker compose exec test-runner /tests/comprehensive-test.sh
+./comprehensive-test.sh
 
 # Or with verbose output
-docker compose exec test-runner /tests/comprehensive-test.sh --verbose
+./comprehensive-test.sh --verbose
 
 # Clean up
 docker compose down -v
 ```
 
-### Run Individual Test Phases
+### Manual Operations
 
 ```bash
-# Enter test runner container
-docker compose exec test-runner bash
+# Generate events
+docker compose exec -T test-runner event-generator -count 500 -relay ws://strfry:7777
 
-# Check relay status
-echo "Strfry events: $(count_events ws://strfry:7777 '{"limit": 1000}')"
-echo "Orly-1 events: $(count_events ws://orly-relay-1:3334 '{"limit": 1000}')"
-echo "Orly-2 events: $(count_events ws://orly-relay-2:3335 '{"limit": 1000}')"
+# strfry sync (strfry as client, ORLY as server)
+docker compose exec -T strfry /app/strfry --config=/etc/strfry.conf sync ws://orly-relay-1:3334 --dir down
 
-# Generate events manually
-event-generator -count 500 -relay ws://strfry:7777
+# orly sync (orly CLI as client, any relay as server)
+docker compose exec -T test-runner orly sync ws://orly-relay-1:3334 --data-dir /tmp/sync-db
 
-# Test strfry as client (pull)
-docker compose exec strfry /app/strfry sync ws://orly-relay-1:3334 --dir down
-
-# Test orly as client via gRPC (pull)
-orly sync ws://strfry:7777 --server orly-sync-2:50064 --dir down --verbose
+# Manual event inspection
+echo '["REQ", "test", {"limit": 10}]' | websocat ws://localhost:7777
+echo '["REQ", "test", {"limit": 10}]' | websocat ws://localhost:3334
+echo '["REQ", "test", {"limit": 10}]' | websocat ws://localhost:3335
 ```
 
 ## Test Parameters
 
-- **Total Events**: 1200+ per seed operation
-- **Event Kinds**: 0, 1, 3, 1984, 10000, 10001, 30023, 30078
-- **Batch Size**: 100 events per batch
+- **Seed Events**: 200 per relay
+- **Extra Events**: 100
+- **Event Kinds**: 0, 1, 3, 1984, 10000, 10001, 30023
+- **Batch Size**: 50 events per batch
 - **Authors**: 3 test keypairs (alice, bob, carol)
 
 ### Event Distribution
@@ -112,33 +102,6 @@ orly sync ws://strfry:7777 --server orly-sync-2:50064 --dir down --verbose
 | 10001| 3%         | Pin lists |
 | 30023| 2%         | Long-form articles |
 
-## Filter Testing
-
-The test suite validates sync with various filters:
-
-```bash
-# Kind filter
-'{"kinds": [1, 3]}'
-
-# Time range
-'{"since": 1700000000, "until": 1800000000}'
-
-# Limit
-'{"limit": 100}'
-
-# Combined
-'{"kinds": [1], "since": 1700000000, "limit": 500}'
-```
-
-## Verification
-
-Tests verify:
-1. Event counts match expected values
-2. Bidirectional sync achieves consistency
-3. Filtered sync respects constraints
-4. Different event kinds sync correctly
-5. No data corruption during sync
-
 ## Troubleshooting
 
 ### Check service health
@@ -146,15 +109,7 @@ Tests verify:
 docker compose ps
 docker compose logs -f strfry
 docker compose logs -f orly-relay-1
-```
-
-### Manual event inspection
-```bash
-# Get events from strfry
-echo '["REQ", "test", {"limit": 10}]' | websocat ws://localhost:7777
-
-# Get events from orly
-echo '["REQ", "test", {"limit": 10}]' | websocat ws://localhost:3334
+docker compose logs -f orly-relay-2
 ```
 
 ### Reset test data
@@ -168,18 +123,14 @@ docker compose up -d
 ### Strfry
 - Image: Built from source (Dockerfile.strfry)
 - Port: 7777
-- Features: Full NIP-77 negentropy support
+- Features: Full NIP-77 negentropy support, `strfry sync` CLI
 
-### Orly Relay
+### ORLY Relay
 - Image: Built from project (Dockerfile.orly)
-- Ports: 3334, 3335
-- Features: NIP-77 negentropy + gRPC database interface
-
-### Orly Sync Service
-- Image: Built from cmd/orly-sync-negentropy
-- Ports: 50064, 50065
-- Features: gRPC-controlled negentropy sync
+- Ports: 3334 (relay-1), 3335 (relay-2)
+- Features: NIP-77 negentropy via embedded handler
+- Note: `ORLY_QUERY_RESULT_LIMIT=10000` set for testing (default is 256)
 
 ### Test Runner
-- Image: Built with all test tools
-- Features: event-generator, websocat, orly CLI
+- Image: Alpine with test tools (Dockerfile.test-runner)
+- Features: event-generator, orly CLI, websocat, curl, jq

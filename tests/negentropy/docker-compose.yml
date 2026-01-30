@@ -1,9 +1,8 @@
 # Negentropy (NIP-77) Interop Test Infrastructure
 #
-# Tests NIP-77 negentropy sync between strfry (client) and ORLY (server).
-#
-# Strfry initiates sync using its built-in `strfry sync` command.
-# ORLY serves NIP-77 via embedded negentropy handler.
+# Tests NIP-77 negentropy sync between:
+#   - strfry (client) <-> ORLY (server)
+#   - ORLY (client) <-> ORLY (server) via orly sync CLI
 #
 # Usage (from this directory):
 #   docker compose build
@@ -31,7 +30,7 @@ services:
       retries: 10
       start_period: 10s
 
-  # ORLY relay with embedded negentropy (NIP-77 server)
+  # ORLY relay 1 with embedded negentropy (NIP-77 server)
   orly-relay-1:
     build:
       context: ../..
@@ -43,6 +42,7 @@ services:
       - ORLY_DATA_DIR=/data
       - ORLY_LOG_LEVEL=debug
       - ORLY_NEGENTROPY_ENABLED=true
+      - ORLY_QUERY_RESULT_LIMIT=10000
     volumes:
       - orly-data-1:/data
     networks:
@@ -54,7 +54,31 @@ services:
       retries: 10
       start_period: 10s
 
-  # Test runner with event-generator and websocat
+  # ORLY relay 2 with embedded negentropy (for orly<->orly sync testing)
+  orly-relay-2:
+    build:
+      context: ../..
+      dockerfile: tests/negentropy/Dockerfile.orly
+    ports:
+      - "3335:3335"
+    environment:
+      - ORLY_PORT=3335
+      - ORLY_DATA_DIR=/data
+      - ORLY_LOG_LEVEL=debug
+      - ORLY_NEGENTROPY_ENABLED=true
+      - ORLY_QUERY_RESULT_LIMIT=10000
+    volumes:
+      - orly-data-2:/data
+    networks:
+      - negentropy-test
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3335"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Test runner with event-generator, orly CLI, and websocat
   test-runner:
     build:
       context: ../..
@@ -62,10 +86,13 @@ services:
     environment:
       - STRFRY_URL=ws://strfry:7777
       - ORLY1_URL=ws://orly-relay-1:3334
+      - ORLY2_URL=ws://orly-relay-2:3335
     depends_on:
       strfry:
         condition: service_healthy
       orly-relay-1:
+        condition: service_healthy
+      orly-relay-2:
         condition: service_healthy
     networks:
       - negentropy-test
@@ -74,6 +101,7 @@ services:
 volumes:
   strfry-data:
   orly-data-1:
+  orly-data-2:
 
 networks:
   negentropy-test:

@@ -260,16 +260,12 @@ func (m *Manager) performNegentropy(ctx context.Context, peerURL string) (int64,
 	var eventsSynced int64
 	var needIDs []string
 	var haveIDs []string
-	var waitingForEvents bool
-	var expectedEvents int
-	var receivedEvents int64
 
-	// Exchange messages until complete
-	for i := 0; i < 20; i++ { // Max 20 rounds
-		// Read response
+	// Phase 1: Reconciliation - exchange NEG-MSG until complete
+	for i := 0; i < 20; i++ { // Max 20 reconciliation rounds
 		_, msgBytes, err := conn.ReadMessage()
 		if err != nil {
-			return eventsSynced, fmt.Errorf("failed to read message: %w", err)
+			return eventsSynced, fmt.Errorf("failed to read message during reconciliation: %w", err)
 		}
 
 		var msg []json.RawMessage
@@ -310,27 +306,18 @@ func (m *Manager) performNegentropy(ctx context.Context, peerURL string) (int64,
 			needIDs = append(needIDs, neg.CollectHaveNots()...)
 			haveIDs = append(haveIDs, neg.CollectHaves()...)
 
-			if complete {
-				log.I.F("negentropy: reconciliation complete, waiting for %d events from peer", len(needIDs))
-				// Don't send NEG-CLOSE yet - wait for EVENT messages
-				// The server will send events we need after this
-				waitingForEvents = true
-				expectedEvents = len(needIDs)
-				if expectedEvents == 0 {
-					// No events to receive, close now
-					negClose := []any{"NEG-CLOSE", subID}
-					conn.WriteJSON(negClose)
-					goto done
+			// Always send the response to the server, even when complete.
+			// The server needs this to finalize its own reconciliation and send events.
+			if len(response) > 0 {
+				negMsgResp := []any{"NEG-MSG", subID, hex.EncodeToString(response)}
+				if err := conn.WriteJSON(negMsgResp); err != nil {
+					return eventsSynced, fmt.Errorf("failed to send NEG-MSG: %w", err)
 				}
-				// Set a read deadline to avoid waiting forever
-				conn.SetReadDeadline(time.Now().Add(30 * time.Second))
-				continue
 			}
 
-			// Send NEG-MSG response
-			negMsgResp := []any{"NEG-MSG", subID, hex.EncodeToString(response)}
-			if err := conn.WriteJSON(negMsgResp); err != nil {
-				return eventsSynced, fmt.Errorf("failed to send NEG-MSG: %w", err)
+			if complete {
+				log.I.F("negentropy: reconciliation complete, need %d events, have %d to push", len(needIDs), len(haveIDs))
+				goto fetchAndPush
 			}
 
 		case "NEG-ERR":
@@ -339,34 +326,35 @@ func (m *Manager) performNegentropy(ctx context.Context, peerURL string) (int64,
 				json.Unmarshal(msg[2], &errMsg)
 			}
 			return eventsSynced, fmt.Errorf("peer returned error: %s", errMsg)
-
-		case "EVENT":
-			// Peer is sending us an event
-			if len(msg) >= 3 {
-				if err := m.storeEventFromJSON(ctx, msg[2]); err != nil {
-					log.W.F("negentropy: failed to store event from peer: %v", err)
-				} else {
-					eventsSynced++
-					receivedEvents++
-				}
-			}
-			// If we've received all expected events (or more), we can close
-			if waitingForEvents && receivedEvents >= int64(expectedEvents) {
-				negClose := []any{"NEG-CLOSE", subID}
-				conn.WriteJSON(negClose)
-				goto done
-			}
 		}
 	}
 
-done:
+fetchAndPush:
+	// Send NEG-CLOSE to end the negentropy session
+	{
+		negClose := []any{"NEG-CLOSE", subID}
+		conn.WriteJSON(negClose)
+	}
+	// Clear any read deadline from the negotiation phase
+	conn.SetReadDeadline(time.Time{})
+
 	log.I.F("negentropy: need %d events, have %d events to send", len(needIDs), len(haveIDs))
+
+	// Phase 2: Fetch events we need from the peer via REQ
+	// The negentropy library only populates haves/haveNots on the initiator (client) side.
+	// The server (responder) does not know which events to push. The client must
+	// actively fetch needed events using standard NIP-01 REQ with ID prefixes.
 	if len(needIDs) > 0 {
-		log.I.F("negentropy: first few need IDs: %v", needIDs[:min(len(needIDs), 3)])
+		fetched, err := m.fetchEventsFromPeer(ctx, conn, subID, needIDs)
+		if err != nil {
+			log.W.F("negentropy: failed to fetch events: %v", err)
+		} else {
+			log.I.F("negentropy: fetched %d events from peer", fetched)
+			eventsSynced += int64(fetched)
+		}
 	}
 
-	// PUSH events we have to the peer (haveIDs)
-	// This is more reliable than trying to PULL events using ID prefixes
+	// Phase 3: Push events we have to the peer
 	if len(haveIDs) > 0 {
 		pushed, err := m.pushEventsToPeer(ctx, conn, haveIDs)
 		if err != nil {
@@ -376,10 +364,6 @@ done:
 			eventsSynced += int64(pushed)
 		}
 	}
-
-	// NOTE: Events we need (needIDs) will be pushed to us by the peer's sync process
-	// The peer runs the same negentropy sync and will identify these events as "haves"
-	// to push to us. We don't need to explicitly fetch them.
 
 	return eventsSynced, nil
 }

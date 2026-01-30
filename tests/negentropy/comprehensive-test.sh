@@ -1,10 +1,13 @@
 #!/bin/bash
 #
 # Comprehensive Negentropy Sync Test Suite
-# Tests NIP-77 negentropy sync between strfry (client) and ORLY (server).
+# Tests NIP-77 negentropy sync between:
+#   - strfry (client) <-> ORLY (server)
+#   - ORLY (client) <-> ORLY (server) via orly sync CLI bridge
 #
 # Strfry has a built-in `sync` command that uses the negentropy protocol.
 # ORLY serves NIP-77 via its embedded negentropy handler.
+# The orly CLI can sync between its local Badger DB and a remote relay.
 #
 # This script runs from the HOST and uses `docker compose exec` to
 # interact with containers.
@@ -14,8 +17,12 @@
 #   2. Strfry pushes events to ORLY (strfry --dir up)
 #   3. Seed ORLY with new events
 #   4. Strfry pulls events from ORLY (strfry --dir down)
-#   5. Bidirectional sync
-#   6. Final consistency verification
+#   5. Bidirectional sync (strfry <-> ORLY)
+#   6. strfry <-> ORLY consistency verification
+#   7. Seed orly-relay-2 with events
+#   8. orly CLI bridge: relay-1 -> relay-2
+#   9. orly CLI bridge: relay-2 -> relay-1
+#  10. Three-way consistency verification
 #
 # Usage:
 #   cd tests/negentropy
@@ -32,6 +39,8 @@ cd "$(dirname "$0")"
 # Configuration
 STRFRY_WS="ws://strfry:7777"
 ORLY_WS="ws://orly-relay-1:3334"
+ORLY2_WS="ws://orly-relay-2:3335"
+BRIDGE_DB="/tmp/orly-bridge-db"
 SEED_COUNT=200
 EXTRA_COUNT=100
 VERBOSE="${VERBOSE:-false}"
@@ -105,7 +114,7 @@ generate_events() {
 wait_for_services() {
     log_info "Checking service health..."
 
-    local services=("strfry" "orly-relay-1" "test-runner")
+    local services=("strfry" "orly-relay-1" "orly-relay-2" "test-runner")
     for svc in "${services[@]}"; do
         local status
         status=$(docker compose ps --format '{{.Health}}' "$svc" 2>/dev/null || echo "unknown")
@@ -257,16 +266,16 @@ phase5_bidirectional() {
 }
 
 # ============================================================
-# Phase 6: Final verification
+# Phase 6: strfry <-> ORLY consistency verification
 # ============================================================
-phase6_final_verification() {
-    log_phase "6. FINAL VERIFICATION"
+phase6_strfry_orly_verification() {
+    log_phase "6. STRFRY <-> ORLY VERIFICATION"
 
     local strfry_total orly_total
     strfry_total=$(count_events "$STRFRY_WS" '{"limit":10000}')
     orly_total=$(count_events "$ORLY_WS" '{"limit":10000}')
 
-    log_info "Final event counts:"
+    log_info "Event counts:"
     log_info "  strfry:       $strfry_total"
     log_info "  orly-relay-1: $orly_total"
 
@@ -280,9 +289,143 @@ phase6_final_verification() {
     # Check consistency
     local diff=$((strfry_total - orly_total))
     if [ "${diff#-}" -le 50 ]; then
-        log_pass "Relays are consistent (diff: $diff)"
+        log_pass "strfry and ORLY are consistent (diff: $diff)"
     else
-        log_warn "Relays differ by $diff events"
+        log_warn "strfry and ORLY differ by $diff events"
+    fi
+}
+
+# ============================================================
+# Phase 7: Seed orly-relay-2 with events
+# ============================================================
+phase7_seed_orly2() {
+    log_phase "7. SEED ORLY-RELAY-2 - Generate $SEED_COUNT events"
+
+    generate_events "$ORLY2_WS" "$SEED_COUNT"
+
+    local count
+    count=$(count_events "$ORLY2_WS" '{"limit":10000}')
+    log_info "orly-relay-2 has $count events"
+
+    local min_expected=$((SEED_COUNT / 2))
+    if [ "$count" -ge "$min_expected" ]; then
+        log_pass "orly-relay-2 seeded with $count events (sent $SEED_COUNT, some replaceable)"
+    else
+        log_fail "orly-relay-2 only has $count events (expected >= $min_expected)"
+    fi
+}
+
+# ============================================================
+# Phase 8: orly CLI bridge: relay-1 -> relay-2
+# Uses orly sync CLI with a temporary Badger DB to bridge events
+# from orly-relay-1 to orly-relay-2 (tests orly as NIP-77 client
+# against orly as NIP-77 server).
+# ============================================================
+phase8_orly_bridge_r1_to_r2() {
+    log_phase "8. ORLY CLI BRIDGE - relay-1 -> relay-2"
+
+    local orly2_before
+    orly2_before=$(count_events "$ORLY2_WS" '{"limit":10000}')
+    log_info "orly-relay-2 has $orly2_before events before bridge sync"
+
+    # Clean bridge DB
+    run_test "rm -rf $BRIDGE_DB" || true
+
+    # Step 1: Pull events from relay-1 into bridge DB
+    log_info "Step 1: orly sync (pull from relay-1 into bridge DB)"
+    run_test "ORLY_LOG_LEVEL=info orly sync $ORLY_WS --data-dir $BRIDGE_DB" 2>&1 || true
+
+    sleep 3
+
+    # Step 2: Push bridge DB events to relay-2
+    log_info "Step 2: orly sync (push bridge DB to relay-2)"
+    run_test "ORLY_LOG_LEVEL=info orly sync $ORLY2_WS --data-dir $BRIDGE_DB" 2>&1 || true
+
+    sleep 5
+
+    local orly2_after
+    orly2_after=$(count_events "$ORLY2_WS" '{"limit":10000}')
+    log_info "orly-relay-2 has $orly2_after events after bridge sync (was $orly2_before)"
+
+    if [ "$orly2_after" -gt "$orly2_before" ]; then
+        local synced=$((orly2_after - orly2_before))
+        log_pass "Bridged $synced events from relay-1 to relay-2 via orly CLI"
+    else
+        log_fail "No events bridged to relay-2 (still $orly2_after)"
+    fi
+}
+
+# ============================================================
+# Phase 9: orly CLI bridge: relay-2 -> relay-1
+# The bridge DB already has relay-2 events from Phase 8 (bidirectional
+# sync picked them up). Sync with relay-1 to push relay-2's events.
+# ============================================================
+phase9_orly_bridge_r2_to_r1() {
+    log_phase "9. ORLY CLI BRIDGE - relay-2 -> relay-1"
+
+    local orly1_before
+    orly1_before=$(count_events "$ORLY_WS" '{"limit":10000}')
+    log_info "orly-relay-1 has $orly1_before events before bridge sync"
+
+    # Bridge DB already has relay-2 events from Phase 8 step 2 (bidirectional).
+    # Sync with relay-1 to push those events.
+    log_info "Syncing bridge DB with relay-1 (pushes relay-2 events)"
+    run_test "ORLY_LOG_LEVEL=info orly sync $ORLY_WS --data-dir $BRIDGE_DB" 2>&1 || true
+
+    sleep 5
+
+    local orly1_after
+    orly1_after=$(count_events "$ORLY_WS" '{"limit":10000}')
+    log_info "orly-relay-1 has $orly1_after events after bridge sync (was $orly1_before)"
+
+    if [ "$orly1_after" -gt "$orly1_before" ]; then
+        local synced=$((orly1_after - orly1_before))
+        log_pass "Bridged $synced events from relay-2 to relay-1 via orly CLI"
+    else
+        log_fail "No events bridged to relay-1 (still $orly1_after)"
+    fi
+
+    # Clean up bridge DB
+    run_test "rm -rf $BRIDGE_DB" || true
+}
+
+# ============================================================
+# Phase 10: Three-way consistency verification
+# ============================================================
+phase10_three_way_verification() {
+    log_phase "10. THREE-WAY CONSISTENCY VERIFICATION"
+
+    local strfry_total orly1_total orly2_total
+    strfry_total=$(count_events "$STRFRY_WS" '{"limit":10000}')
+    orly1_total=$(count_events "$ORLY_WS" '{"limit":10000}')
+    orly2_total=$(count_events "$ORLY2_WS" '{"limit":10000}')
+
+    log_info "Final event counts:"
+    log_info "  strfry:       $strfry_total"
+    log_info "  orly-relay-1: $orly1_total"
+    log_info "  orly-relay-2: $orly2_total"
+
+    # All three should have events
+    if [ "$strfry_total" -gt 0 ] && [ "$orly1_total" -gt 0 ] && [ "$orly2_total" -gt 0 ]; then
+        log_pass "All three relays have events"
+    else
+        log_fail "One or more relays are empty"
+    fi
+
+    # Check orly-relay-1 vs orly-relay-2 consistency
+    local diff_orly=$((orly1_total - orly2_total))
+    if [ "${diff_orly#-}" -le 50 ]; then
+        log_pass "orly-relay-1 and orly-relay-2 are consistent (diff: $diff_orly)"
+    else
+        log_fail "orly relays differ significantly (diff: $diff_orly)"
+    fi
+
+    # Check strfry vs orly-relay-1 consistency
+    local diff_strfry=$((strfry_total - orly1_total))
+    if [ "${diff_strfry#-}" -le 50 ]; then
+        log_pass "strfry and orly-relay-1 are consistent (diff: $diff_strfry)"
+    else
+        log_warn "strfry and orly-relay-1 differ by $diff_strfry events"
     fi
 }
 
@@ -292,7 +435,7 @@ phase6_final_verification() {
 main() {
     echo "========================================"
     echo "Negentropy (NIP-77) Interop Test Suite"
-    echo "strfry (client) <-> ORLY (server)"
+    echo "strfry <-> ORLY <-> ORLY"
     echo "========================================"
     echo ""
     echo "Config:"
@@ -302,12 +445,19 @@ main() {
 
     wait_for_services
 
+    # Part 1: strfry <-> ORLY interop (phases 1-6)
     phase1_seed_strfry
     phase2_strfry_push_to_orly
     phase3_seed_orly
     phase4_strfry_pull_from_orly
     phase5_bidirectional
-    phase6_final_verification
+    phase6_strfry_orly_verification
+
+    # Part 2: ORLY <-> ORLY interop via CLI bridge (phases 7-10)
+    phase7_seed_orly2
+    phase8_orly_bridge_r1_to_r2
+    phase9_orly_bridge_r2_to_r1
+    phase10_three_way_verification
 
     echo ""
     echo "========================================"
