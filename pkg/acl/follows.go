@@ -15,7 +15,6 @@ import (
 	"lol.mleku.dev/log"
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/database/indexes/types"
 	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
 	"git.mleku.dev/mleku/nostr/encoders/envelopes"
 	"git.mleku.dev/mleku/nostr/encoders/envelopes/eoseenvelope"
@@ -104,7 +103,8 @@ func (f *Follows) Configure(cfg ...any) (err error) {
 		newOwnersSet[hex.EncodeToString(own)] = struct{}{}
 	}
 
-	// find admin follow lists (database I/O happens here, but no lock held)
+	// parse admin pubkeys
+	var adminBinaries [][]byte
 	for _, admin := range f.cfg.Admins {
 		var adm []byte
 		if a, e := bech32encoding.NpubOrHexToPublicKeyBinary(admin); chk.E(e) {
@@ -114,39 +114,36 @@ func (f *Follows) Configure(cfg ...any) (err error) {
 		}
 		newAdmins = append(newAdmins, adm)
 		newAdminsSet[hex.EncodeToString(adm)] = struct{}{}
+		adminBinaries = append(adminBinaries, adm)
+	}
 
+	// Batch query all admin follow lists in a single DB call
+	// Kind 3 is replaceable, so QueryEvents returns only the latest per author
+	if len(adminBinaries) > 0 {
+		ctx := f.Ctx
+		if ctx == nil {
+			ctx = context.Background()
+		}
 		fl := &filter.F{
-			Authors: tag.NewFromAny(adm),
+			Authors: tag.NewFromBytesSlice(adminBinaries...),
 			Kinds:   kind.NewS(kind.New(kind.FollowList.K)),
+			Limit:   values.ToUintPointer(uint(len(adminBinaries))),
 		}
-		var idxs []database.Range
-		if idxs, err = database.GetIndexesFromFilter(fl); chk.E(err) {
-			return
+		var evs event.S
+		if evs, err = f.db.QueryEvents(ctx, fl); err != nil {
+			log.W.F("follows ACL: error querying admin follow lists: %v", err)
+			err = nil // Don't fail Configure on query error
 		}
-		var sers types.Uint40s
-		for _, idx := range idxs {
-			var s types.Uint40s
-			if s, err = f.db.GetSerialsByRange(idx); chk.E(err) {
-				continue
-			}
-			sers = append(sers, s...)
-		}
-		if len(sers) > 0 {
-			for _, s := range sers {
-				var ev *event.E
-				if ev, err = f.db.FetchEventBySerial(s); chk.E(err) {
+		for _, ev := range evs {
+			for _, v := range ev.Tags.GetAll([]byte("p")) {
+				// ValueHex() automatically handles both binary and hex storage formats
+				if b, e := hex.DecodeString(string(v.ValueHex())); chk.E(e) {
 					continue
-				}
-				for _, v := range ev.Tags.GetAll([]byte("p")) {
-					// ValueHex() automatically handles both binary and hex storage formats
-					if b, e := hex.DecodeString(string(v.ValueHex())); chk.E(e) {
-						continue
-					} else {
-						hexKey := hex.EncodeToString(b)
-						if _, exists := newFollowsSet[hexKey]; !exists {
-							newFollows = append(newFollows, b)
-							newFollowsSet[hexKey] = struct{}{}
-						}
+				} else {
+					hexKey := hex.EncodeToString(b)
+					if _, exists := newFollowsSet[hexKey]; !exists {
+						newFollows = append(newFollows, b)
+						newFollowsSet[hexKey] = struct{}{}
 					}
 				}
 			}
@@ -294,29 +291,23 @@ func (f *Follows) adminRelays() (urls []string) {
 		}
 	}
 
-	// First, try to get relay URLs from admin kind 10002 events
-	for _, adm := range admins {
+	// Batch query all admin relay list events in a single DB call
+	// Kind 10002 is replaceable, so QueryEvents returns only the latest per author
+	if len(admins) > 0 {
+		ctx := f.Ctx
+		if ctx == nil {
+			ctx = context.Background()
+		}
 		fl := &filter.F{
-			Authors: tag.NewFromAny(adm),
+			Authors: tag.NewFromBytesSlice(admins...),
 			Kinds:   kind.NewS(kind.New(kind.RelayListMetadata.K)),
+			Limit:   values.ToUintPointer(uint(len(admins))),
 		}
-		idxs, err := database.GetIndexesFromFilter(fl)
-		if chk.E(err) {
-			continue
+		evs, qerr := f.db.QueryEvents(ctx, fl)
+		if qerr != nil {
+			log.W.F("follows ACL: error querying admin relay lists: %v", qerr)
 		}
-		var sers types.Uint40s
-		for _, idx := range idxs {
-			s, err := f.db.GetSerialsByRange(idx)
-			if chk.E(err) {
-				continue
-			}
-			sers = append(sers, s...)
-		}
-		for _, s := range sers {
-			ev, err := f.db.FetchEventBySerial(s)
-			if chk.E(err) || ev == nil {
-				continue
-			}
+		for _, ev := range evs {
 			for _, v := range ev.Tags.GetAll([]byte("r")) {
 				u := string(v.Value())
 				n := string(normalize.URL(u))

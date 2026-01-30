@@ -129,8 +129,9 @@ func main() {
 	// Create and configure server
 	srv := server.New(db, serverCfg, ownsDB)
 	if err := srv.ConfigureACL(ctx); chk.E(err) {
-		log.E.F("failed to configure ACL: %v", err)
-		os.Exit(1)
+		// Don't exit on configure error - the syncer will populate follows from
+		// external relays. This handles empty databases gracefully.
+		log.W.F("ACL configure returned error (will start with 0 follows): %v", err)
 	}
 
 	// Start server
