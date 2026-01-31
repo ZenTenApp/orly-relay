@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
-	"golang.org/x/crypto/acme/autocert"
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
 	"next.orly.dev/app/branding"
@@ -32,9 +30,12 @@ import (
 	"next.orly.dev/pkg/spider"
 	"next.orly.dev/pkg/storage"
 	dsync "next.orly.dev/pkg/sync"
+	"next.orly.dev/pkg/transport"
+	"next.orly.dev/pkg/transport/tcp"
+	tlstransport "next.orly.dev/pkg/transport/tls"
+	tortransport "next.orly.dev/pkg/transport/tor"
 	"next.orly.dev/pkg/wireguard"
 	"next.orly.dev/pkg/archive"
-	"next.orly.dev/pkg/tor"
 
 	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 )
@@ -616,32 +617,20 @@ func Run(
 		log.I.F("archive relay manager initialized with %d relays", len(archiveRelays))
 	}
 
-	// Initialize Tor hidden service if enabled (spawns tor subprocess)
+	// Build transport manager
+	l.transportMgr = transport.NewManager()
+
+	// Add Tor transport if enabled (can start before db is ready)
 	torEnabled, torPort, torDataDir, torBinary, torSOCKSPort := cfg.GetTorConfigValues()
 	if torEnabled {
-		torCfg := &tor.Config{
+		tt := tortransport.New(&tortransport.Config{
 			Port:      torPort,
 			DataDir:   torDataDir,
 			Binary:    torBinary,
 			SOCKSPort: torSOCKSPort,
 			Handler:   l,
-		}
-		var err error
-		l.torService, err = tor.New(torCfg)
-		if err != nil {
-			log.W.F("Tor disabled: %v", err)
-		} else {
-			if err = l.torService.Start(); err != nil {
-				log.W.F("failed to start Tor service: %v", err)
-				l.torService = nil
-			} else {
-				if addr := l.torService.OnionWSAddress(); addr != "" {
-					log.I.F("Tor hidden service listening on port %d, address: %s", torPort, addr)
-				} else {
-					log.I.F("Tor hidden service listening on port %d (waiting for .onion address)", torPort)
-				}
-			}
-		}
+		})
+		l.transportMgr.Add(tt)
 	}
 
 	// Start rate limiter if enabled
@@ -653,81 +642,26 @@ func Run(
 	// Wait for database to be ready before accepting requests
 	log.I.F("waiting for database warmup to complete...")
 	<-db.Ready()
-	log.I.F("database ready, starting HTTP servers")
+	log.I.F("database ready, starting transports")
 
-	// Check if TLS is enabled
-	var tlsEnabled bool
-	var tlsServer *http.Server
-	var httpServer *http.Server
-
+	// Add TLS or plain TCP transport (mutually exclusive)
 	if len(cfg.TLSDomains) > 0 {
-		// Validate TLS configuration
-		if err = ValidateTLSConfig(cfg.TLSDomains, cfg.Certs); chk.E(err) {
-			log.E.F("invalid TLS configuration: %v", err)
-		} else {
-			tlsEnabled = true
-			log.I.F("TLS enabled for domains: %v", cfg.TLSDomains)
-
-			// Create cache directory for autocert
-			cacheDir := filepath.Join(cfg.DataDir, "autocert")
-			if err = os.MkdirAll(cacheDir, 0700); chk.E(err) {
-				log.E.F("failed to create autocert cache directory: %v", err)
-				tlsEnabled = false
-			} else {
-				// Set up autocert manager
-				m := &autocert.Manager{
-					Prompt:     autocert.AcceptTOS,
-					Cache:      autocert.DirCache(cacheDir),
-					HostPolicy: autocert.HostWhitelist(cfg.TLSDomains...),
-				}
-
-				// Create TLS server on port 443
-				tlsServer = &http.Server{
-					Addr:      ":443",
-					Handler:   l,
-					TLSConfig: TLSConfig(m, cfg.Certs...),
-				}
-
-				// Create HTTP server for ACME challenges and redirects on port 80
-				httpServer = &http.Server{
-					Addr:    ":80",
-					Handler: m.HTTPHandler(nil),
-				}
-
-				// Start TLS server
-				go func() {
-					log.I.F("starting TLS listener on https://:443")
-					if err := tlsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-						log.E.F("TLS server error: %v", err)
-					}
-				}()
-
-				// Start HTTP server for ACME challenges
-				go func() {
-					log.I.F("starting HTTP listener on http://:80 for ACME challenges")
-					if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-						log.E.F("HTTP server error: %v", err)
-					}
-				}()
-			}
-		}
+		l.transportMgr.Add(tlstransport.New(&tlstransport.Config{
+			Domains: cfg.TLSDomains,
+			Certs:   cfg.Certs,
+			DataDir: cfg.DataDir,
+			Handler: l,
+		}))
+	} else {
+		l.transportMgr.Add(tcp.New(&tcp.Config{
+			Addr:    fmt.Sprintf("%s:%d", cfg.Listen, cfg.Port),
+			Handler: l,
+		}))
 	}
 
-	// Start regular HTTP server if TLS is not enabled or as fallback
-	if !tlsEnabled {
-		addr := fmt.Sprintf("%s:%d", cfg.Listen, cfg.Port)
-		log.I.F("starting listener on http://%s", addr)
-
-		httpServer = &http.Server{
-			Addr:    addr,
-			Handler: l,
-		}
-
-		go func() {
-			if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.E.F("HTTP server error: %v", err)
-			}
-		}()
+	// Start all transports
+	if err := l.transportMgr.StartAll(ctx); err != nil {
+		log.E.F("transport startup failed: %v", err)
 	}
 
 	// Graceful shutdown handler
@@ -757,12 +691,6 @@ func Run(
 		if l.archiveManager != nil {
 			l.archiveManager.Stop()
 			log.I.F("archive manager stopped")
-		}
-
-		// Stop Tor service if running
-		if l.torService != nil {
-			l.torService.Stop()
-			log.I.F("Tor service stopped")
 		}
 
 		// Stop garbage collector if running
@@ -795,25 +723,12 @@ func Run(
 			log.I.F("WireGuard server stopped")
 		}
 
-		// Create shutdown context with timeout
-		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancelShutdown()
-
-		// Shutdown TLS server if running
-		if tlsServer != nil {
-			if err := tlsServer.Shutdown(shutdownCtx); err != nil {
-				log.E.F("TLS server shutdown error: %v", err)
-			} else {
-				log.I.F("TLS server shutdown completed")
-			}
-		}
-
-		// Shutdown HTTP server
-		if httpServer != nil {
-			if err := httpServer.Shutdown(shutdownCtx); err != nil {
-				log.E.F("HTTP server shutdown error: %v", err)
-			} else {
-				log.I.F("HTTP server shutdown completed")
+		// Stop all transports (TCP/TLS/Tor)
+		if l.transportMgr != nil {
+			shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancelShutdown()
+			if err := l.transportMgr.StopAll(shutdownCtx); err != nil {
+				log.E.F("transport shutdown error: %v", err)
 			}
 		}
 

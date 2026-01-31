@@ -47,7 +47,7 @@ import (
 	dsync "next.orly.dev/pkg/sync"
 	"next.orly.dev/pkg/wireguard"
 	"next.orly.dev/pkg/archive"
-	"next.orly.dev/pkg/tor"
+	"next.orly.dev/pkg/transport"
 )
 
 type Server struct {
@@ -122,8 +122,8 @@ type Server struct {
 	accessTracker    *storage.AccessTracker
 	garbageCollector *storage.GarbageCollector
 
-	// Tor hidden service
-	torService *tor.Service
+	// Transport manager for network transports (TCP, TLS, Tor, etc.)
+	transportMgr *transport.Manager
 
 	// Branding/white-label customization
 	brandingMgr *branding.Manager

@@ -200,11 +200,9 @@ func (s *Server) HandleRelayInfo(w http.ResponseWriter, r *http.Request) {
 		addresses = append(addresses, s.Config.RelayAddresses...)
 	}
 
-	// Add Tor hidden service address if available
-	if s.torService != nil {
-		if onionAddr := s.torService.OnionWSAddress(); onionAddr != "" {
-			addresses = append(addresses, onionAddr)
-		}
+	// Add addresses from all transports (Tor .onion, etc.)
+	if s.transportMgr != nil {
+		addresses = append(addresses, s.transportMgr.Addresses()...)
 	}
 
 	// Build graph query config if enabled
