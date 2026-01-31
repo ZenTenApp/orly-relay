@@ -66,9 +66,17 @@ app/
   config/            → Environment configuration (go-simpler.org/env)
   web/               → Svelte frontend (embedded via go:embed)
 pkg/
+  interfaces/
+    transport/       → Transport interface (pluggable network transports)
+  transport/
+    manager.go       → Transport lifecycle manager (ordered start/stop)
+    tcp/             → Plain HTTP transport
+    tls/             → TLS/ACME transport (autocert + manual certs)
+    tor/             → Tor hidden service transport (wraps pkg/tor)
   database/          → Database interface + Badger implementation
   neo4j/             → Neo4j backend with WoT extensions
   wasmdb/            → WebAssembly IndexedDB backend
+  tor/               → Tor subprocess management and hostname watching
   protocol/          → Nostr protocol (ws/, auth/, publish/)
   encoders/          → Optimized JSON encoding with buffer pools
   policy/            → Event filtering/validation
@@ -109,7 +117,7 @@ pubkeyHex := hex.Enc(ev.Pubkey[:])
 
 - **Define interfaces in `pkg/interfaces/<name>/`** - prevents circular deps
 - **Never use interface literals** in type assertions: `.(interface{ Method() })` is forbidden
-- Existing: `acl/`, `neterr/`, `resultiter/`, `store/`, `publisher/`, `typer/`
+- Existing: `acl/`, `neterr/`, `resultiter/`, `store/`, `publisher/`, `transport/`, `typer/`
 
 ### 4. Constants
 
@@ -249,6 +257,68 @@ if (isValidNsec(nsec)) { ... }
 | Neo4j schema changes | `pkg/neo4j/MODIFYING_SCHEMA.md` |
 | Event kinds database | `app/web/src/eventKinds.js` |
 | Nsec encryption | `app/web/src/nsec-crypto.js` |
+
+## Transport System
+
+Network transports are pluggable via `pkg/interfaces/transport.Transport`:
+
+```go
+type Transport interface {
+    Name() string
+    Start(ctx context.Context) error
+    Stop(ctx context.Context) error
+    Addresses() []string
+}
+```
+
+**Current transports**: `tcp`, `tls`, `tor`. TCP and TLS are mutually exclusive (TLS replaces TCP when `ORLY_TLS_DOMAINS` is set). Tor runs in parallel.
+
+**Adding a new transport** (e.g., QUIC):
+1. Create `pkg/transport/quic/quic.go` implementing the interface
+2. Add `l.transportMgr.Add(quicTransport)` in `app/main.go`
+
+The transport manager handles ordered startup (Start fails fast, rolls back) and reverse-order shutdown. Addresses from all transports are aggregated for NIP-11 relay info.
+
+## Deploying to relay.orly.dev
+
+- **Architecture**: x86_64 (amd64)
+- **OS**: Ubuntu 24.04 LTS
+- **SSH**: `ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71`
+- **Service**: `systemctl {start|stop|restart|status} orly`
+- **Logs**: `journalctl -u orly -f`
+- **Binaries**: `/home/mleku/.local/bin/` (orly, orly-db-badger, orly-acl-follows, orly-launcher)
+- **Mode**: Split IPC (orly-launcher manages orly + orly-db-badger + orly-acl-follows)
+
+### Build & Deploy (blue-green)
+
+```bash
+# 1. Build for amd64
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly .
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly-db-badger ./cmd/orly-db-badger
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly-acl-follows ./cmd/orly-acl-follows
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly-launcher ./cmd/orly-launcher
+
+# 2. Stop service
+ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 'systemctl stop orly'
+
+# 3. Deploy binaries
+rsync -avz --compress -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
+  orly orly-db-badger orly-acl-follows orly-launcher \
+  root@69.164.249.71:/home/mleku/.local/bin/
+
+# 4. Fix ownership
+ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 \
+  'chown mleku:mleku /home/mleku/.local/bin/orly*'
+
+# 5. Start service
+ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 'systemctl start orly'
+
+# 6. Verify
+ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 \
+  'sleep 3 && systemctl status orly'
+```
+
+**Future improvements**: Build on VPS directly (git pull + go build) to avoid slow binary transfers. Implement proper blue-green with symlink swap between `/opt/orly/blue/` and `/opt/orly/green/` dirs, with instant rollback via symlink flip.
 
 ## Dependencies
 
