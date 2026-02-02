@@ -268,6 +268,4 @@ require (
 	gvisor.dev/gvisor v0.0.0-20250503011706-39ed1f5ac29c // indirect
 )
 
-replace git.mleku.dev/mleku/nostr => /home/mleku/src/git.mleku.dev/mleku/nostr
-
 retract v1.0.3

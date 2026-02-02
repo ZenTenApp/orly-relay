@@ -320,6 +320,13 @@ ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 \
 
 **Future improvements**: Build on VPS directly (git pull + go build) to avoid slow binary transfers. Implement proper blue-green with symlink swap between `/opt/orly/blue/` and `/opt/orly/green/` dirs, with instant rollback via symlink flip.
 
+## Git Remotes
+
+Only one remote exists:
+- **origin**: `ssh://git@git.nostrdev.com:29418/mleku/next.orly.dev.git`
+
+There is no `gitea` or `git.mleku.dev` remote configured for this repo. Do not attempt to push to `gitea`.
+
 ## Dependencies
 
 - `github.com/dgraph-io/badger/v4` - Badger DB (LSM, SSD-optimized)
