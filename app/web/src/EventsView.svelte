@@ -121,8 +121,7 @@
 </script>
 
 <div class="events-view-container">
-    {#if isLoggedIn && (userRole === "read" || userRole === "write" || userRole === "admin" || userRole === "owner")}
-        <div class="events-view-content" on:scroll={handleScroll}>
+    <div class="events-view-content" on:scroll={handleScroll}>
             {#if filteredEvents.length > 0}
                 {#each filteredEvents as event}
                     <div
@@ -230,15 +229,6 @@
                 </div>
             {/if}
         </div>
-    {:else}
-        <div class="permission-denied">
-            <p>
-                ❌ Read, write, admin, or owner permission required to view all
-                events.
-            </p>
-        </div>
-    {/if}
-    {#if isLoggedIn && (userRole === "read" || userRole === "write" || userRole === "admin" || userRole === "owner")}
         <div class="events-view-footer">
             <!-- Filter Builder Slide-up Panel -->
             <div class="filter-panel" class:open={showFilterBuilder}>
@@ -307,7 +297,6 @@
                 </div>
             </div>
         </div>
-    {/if}
 </div>
 
 <style>
@@ -554,14 +543,6 @@
         }
     }
 
-    .permission-denied {
-        text-align: center;
-        padding: 2em;
-        background-color: var(--card-bg);
-        border-radius: 8px;
-        border: 1px solid var(--border-color);
-        color: var(--text-color);
-    }
 
     .events-view-footer {
         position: relative;

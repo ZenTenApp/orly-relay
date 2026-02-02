@@ -38,6 +38,7 @@
 
     $: canAccess = isLoggedIn && userPubkey;
     $: isAdmin = currentEffectiveRole === "admin" || currentEffectiveRole === "owner";
+    $: displayBlobs = selectedAdminUser ? selectedUserBlobs : blobs;
 
     // Track if we've loaded once to prevent repeated loads
     let hasLoadedOnce = false;
@@ -429,12 +430,7 @@
         }
     }
 
-    function getDisplayBlobs() {
-        if (selectedAdminUser) {
-            return selectedUserBlobs;
-        }
-        return blobs;
-    }
+
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -549,15 +545,15 @@
             {/if}
         {:else}
             <!-- Normal blob list view (own files or selected user's files) -->
-            {#if isLoading && getDisplayBlobs().length === 0}
+            {#if isLoading && displayBlobs.length === 0}
                 <div class="loading">Loading blobs...</div>
-            {:else if getDisplayBlobs().length === 0}
+            {:else if displayBlobs.length === 0}
                 <div class="empty-state">
                     <p>{selectedAdminUser ? "No files found for this user." : "No files found in your Blossom storage."}</p>
                 </div>
             {:else}
                 <div class="blob-list">
-                    {#each getDisplayBlobs() as blob}
+                    {#each displayBlobs as blob}
                         <div
                             class="blob-item"
                             on:click={() => openModal(blob)}

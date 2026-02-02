@@ -911,9 +911,9 @@
     async function loadRelayData() {
         // Fetch user role for already logged in users
         if (isLoggedIn) {
-            fetchUserRole();
+            await fetchUserRole();
         }
-        fetchACLMode();
+        await fetchACLMode();
 
         // Load sprocket configuration
         loadSprocketConfig();
@@ -1966,6 +1966,14 @@
         // Fetch user role/permissions
         await fetchUserRole();
         await fetchACLMode();
+
+        // Trigger event loading if currently on events tab
+        if (selectedTab === "events") {
+            hasAttemptedEventLoad = false;
+            const authors =
+                showOnlyMyEvents && userPubkey ? [userPubkey] : null;
+            loadAllEvents(true, authors);
+        }
     }
 
     function handleLogout() {
@@ -3040,27 +3048,38 @@
                 on:openLoginModal={openLoginModal}
             />
         {:else if selectedTab === "events"}
-            <EventsView
-                {isLoggedIn}
-                {userRole}
-                {userPubkey}
-                {filteredEvents}
-                {expandedEvents}
-                {isLoadingEvents}
-                {showOnlyMyEvents}
-                {showFilterBuilder}
-                on:scroll={handleScroll}
-                on:toggleEventExpansion={(e) => toggleEventExpansion(e.detail)}
-                on:deleteEvent={(e) => deleteEvent(e.detail)}
-                on:copyEventToClipboard={(e) =>
-                    copyEventToClipboard(e.detail.event, e.detail.e)}
-                on:toggleChange={handleToggleChange}
-                on:loadAllEvents={(e) =>
-                    loadAllEvents(e.detail.refresh, e.detail.authors)}
-                on:toggleFilterBuilder={toggleFilterBuilder}
-                on:filterApply={handleFilterApply}
-                on:filterClear={handleFilterClear}
-            />
+            {#if isLoggedIn && (userRole === "read" || userRole === "write" || userRole === "admin" || userRole === "owner")}
+                <EventsView
+                    {isLoggedIn}
+                    {userRole}
+                    {userPubkey}
+                    {filteredEvents}
+                    {expandedEvents}
+                    {isLoadingEvents}
+                    {showOnlyMyEvents}
+                    {showFilterBuilder}
+                    on:scroll={handleScroll}
+                    on:toggleEventExpansion={(e) => toggleEventExpansion(e.detail)}
+                    on:deleteEvent={(e) => deleteEvent(e.detail)}
+                    on:copyEventToClipboard={(e) =>
+                        copyEventToClipboard(e.detail.event, e.detail.e)}
+                    on:toggleChange={handleToggleChange}
+                    on:loadAllEvents={(e) =>
+                        loadAllEvents(e.detail.refresh, e.detail.authors)}
+                    on:toggleFilterBuilder={toggleFilterBuilder}
+                    on:filterApply={handleFilterApply}
+                    on:filterClear={handleFilterClear}
+                />
+            {:else if isLoggedIn && !userRole}
+                <div class="events-loading-permissions">
+                    <div class="spinner"></div>
+                    <p>Checking permissions...</p>
+                </div>
+            {:else}
+                <div class="permission-denied">
+                    <p>Read, write, admin, or owner permission required to view events.</p>
+                </div>
+            {/if}
         {:else if selectedTab === "blossom"}
             {#key $relayUrl}
                 <BlossomView
@@ -3851,10 +3870,9 @@
         background-color: var(--bg-color);
         color: var(--text-color);
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         justify-content: flex-start;
         flex-direction: column;
-        display: flex;
     }
 
     .welcome-message {
@@ -4796,5 +4814,29 @@
 
     .change-relay-btn:hover {
         background: #00acc1;
+    }
+
+    /* Centered permission/login prompts within main-content */
+    .events-loading-permissions,
+    .permission-denied,
+    .access-denied {
+        margin: auto;
+        text-align: center;
+        color: var(--text-color);
+    }
+
+    .main-content :global(.login-prompt),
+    .main-content :global(.permission-denied) {
+        margin: auto;
+    }
+
+    .events-loading-permissions .spinner {
+        width: 24px;
+        height: 24px;
+        border: 2px solid var(--border-color);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1em;
     }
 </style>

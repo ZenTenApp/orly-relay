@@ -183,9 +183,11 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	// Optional authorization validation (do this BEFORE ACL check)
 	// For upload, we don't pass sha256Hash because upload auth events don't have 'x' tags
 	// (the hash isn't known at auth event creation time)
-	if r.Header.Get(AuthorizationHeader) != "" {
+	authHeader := r.Header.Get(AuthorizationHeader)
+	if authHeader != "" {
 		authEv, err := ValidateAuthEvent(r, "upload", nil)
 		if err != nil {
+			log.W.F("blossom upload: auth validation failed: %v", err)
 			s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
 			return
 		}
