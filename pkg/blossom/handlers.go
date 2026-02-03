@@ -223,11 +223,16 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	// Note: pubkey may be nil for anonymous uploads if ACL allows it
 	// The storage layer will handle anonymous uploads appropriately
 
-	// Detect MIME type
+	// Detect MIME type from header, extension, or content sniffing
 	mimeType := DetectMimeType(
 		r.Header.Get("Content-Type"),
 		GetFileExtensionFromPath(r.URL.Path),
 	)
+	if mimeType == "application/octet-stream" && len(body) > 0 {
+		if sniffed := http.DetectContentType(body); sniffed != "application/octet-stream" {
+			mimeType = sniffed
+		}
+	}
 
 	// Extract extension from path or infer from MIME type
 	ext := GetFileExtensionFromPath(r.URL.Path)
@@ -469,9 +474,10 @@ func (s *Server) handleListBlobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set URLs for descriptors
+	// Set URLs for descriptors (include file extension for proper MIME handling)
 	for _, desc := range descriptors {
-		desc.URL = BuildBlobURL(s.getBaseURL(r), desc.SHA256, "")
+		ext := GetExtensionFromMimeType(desc.Type)
+		desc.URL = BuildBlobURL(s.getBaseURL(r), desc.SHA256, ext)
 	}
 
 	// Return JSON array
@@ -663,11 +669,16 @@ func (s *Server) handleMirror(w http.ResponseWriter, r *http.Request) {
 
 	// Note: pubkey may be nil for anonymous uploads if ACL allows it
 
-	// Detect MIME type from remote response
+	// Detect MIME type from remote response, extension, or content sniffing
 	mimeType := DetectMimeType(
 		resp.Header.Get("Content-Type"),
 		GetFileExtensionFromPath(mirrorURL.Path),
 	)
+	if mimeType == "application/octet-stream" && len(body) > 0 {
+		if sniffed := http.DetectContentType(body); sniffed != "application/octet-stream" {
+			mimeType = sniffed
+		}
+	}
 
 	// Extract extension from path or infer from MIME type
 	ext := GetFileExtensionFromPath(mirrorURL.Path)
@@ -748,11 +759,18 @@ func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 
 	// Note: pubkey may be nil for anonymous uploads if ACL allows it
 
-	// Optimize media (placeholder - actual optimization would be implemented here)
+	// Detect MIME type from header, extension, or content sniffing
 	originalMimeType := DetectMimeType(
 		r.Header.Get("Content-Type"),
 		GetFileExtensionFromPath(r.URL.Path),
 	)
+	if originalMimeType == "application/octet-stream" && len(body) > 0 {
+		if sniffed := http.DetectContentType(body); sniffed != "application/octet-stream" {
+			originalMimeType = sniffed
+		}
+	}
+
+	// Optimize media (placeholder - actual optimization would be implemented here)
 	optimizedData, mimeType := OptimizeMedia(body, originalMimeType)
 
 	// Extract extension from path or infer from MIME type

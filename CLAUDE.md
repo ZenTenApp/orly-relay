@@ -322,10 +322,10 @@ ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 \
 
 ## Git Remotes
 
-Only one remote exists:
-- **origin**: `ssh://git@git.nostrdev.com:29418/mleku/next.orly.dev.git`
+- **origin**: `ssh://git@git.nostrdev.com:29418/mleku/next.orly.dev.git` (contract work)
+- **gitea**: `ssh://mleku@git.mleku.dev:2222/mleku/next.orly.dev.git` (primary, mleku's own host)
 
-There is no `gitea` or `git.mleku.dev` remote configured for this repo. Do not attempt to push to `gitea`.
+Push to both remotes. Use `GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519"` for gitea.
 
 ## Dependencies
 
