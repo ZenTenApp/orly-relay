@@ -30,24 +30,24 @@ func (m *Manager) Add(t iface.Transport) {
 }
 
 // StartAll starts all registered transports in order.
-// If any transport fails to start, previously started transports are stopped.
+// If a transport fails to start, it is logged and skipped.
+// Returns an error only if no transports started successfully.
 func (m *Manager) StartAll(ctx context.Context) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	for i, t := range m.transports {
+	started := 0
+	for _, t := range m.transports {
 		log.I.F("starting transport: %s", t.Name())
 		if err := t.Start(ctx); err != nil {
-			// Stop previously started transports in reverse order
-			for j := i - 1; j >= 0; j-- {
-				if stopErr := m.transports[j].Stop(ctx); stopErr != nil {
-					log.E.F("failed to stop transport %s during rollback: %v",
-						m.transports[j].Name(), stopErr)
-				}
-			}
-			return fmt.Errorf("transport %s failed to start: %w", t.Name(), err)
+			log.E.F("transport %s failed to start: %v (skipping)", t.Name(), err)
+			continue
 		}
 		log.I.F("transport started: %s", t.Name())
+		started++
+	}
+	if started == 0 {
+		return fmt.Errorf("no transports started successfully")
 	}
 	return nil
 }
