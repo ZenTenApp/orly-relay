@@ -273,6 +273,58 @@ func ValidateAuthEventForGet(
 	return
 }
 
+// ValidateAuthEventForDelete validates authorization for DELETE requests (BUD-02)
+// If requireServerTag is true, the auth event must include a 'server' tag matching the serverURL
+// This prevents cross-server replay attacks where a malicious server replays delete auth events
+func ValidateAuthEventForDelete(
+	r *http.Request, serverURL string, sha256Hash []byte, requireServerTag bool,
+) (authEv *AuthEvent, err error) {
+	// First do the standard validation
+	if authEv, err = ValidateAuthEvent(r, "delete", sha256Hash); chk.E(err) {
+		return
+	}
+
+	// If server tag is not required, we're done
+	if !requireServerTag {
+		return
+	}
+
+	// Extract event again to check server tags
+	var ev *event.E
+	if ev, err = ExtractAuthEvent(r); chk.E(err) {
+		return
+	}
+
+	// Check for server tag
+	serverTags := ev.Tags.GetAll([]byte("server"))
+	if len(serverTags) == 0 {
+		err = errorf.E(
+			"delete authorization requires 'server' tag for replay protection",
+		)
+		return
+	}
+
+	// Verify at least one server tag matches
+	found := false
+	for _, serverTag := range serverTags {
+		serverTagValue := string(serverTag.Value())
+		if strings.HasPrefix(serverURL, serverTagValue) {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		err = errorf.E(
+			"no 'server' tag matches this server URL '%s'",
+			serverURL,
+		)
+		return
+	}
+
+	return
+}
+
 // GetPubkeyFromRequest extracts pubkey from Authorization header if present
 func GetPubkeyFromRequest(r *http.Request) (pubkey []byte, err error) {
 	authHeader := r.Header.Get(AuthorizationHeader)

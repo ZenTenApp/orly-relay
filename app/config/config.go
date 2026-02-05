@@ -82,6 +82,9 @@ type C struct {
 	BlossomDailyLimitMB     int64 `env:"ORLY_BLOSSOM_DAILY_LIMIT_MB" default:"10" usage:"daily upload limit in MB for non-followed users (EMA averaged)"`
 	BlossomBurstLimitMB     int64 `env:"ORLY_BLOSSOM_BURST_LIMIT_MB" default:"50" usage:"max burst upload in MB (bucket cap)"`
 
+	// Blossom delete replay protection (proposed BUD enhancement)
+	BlossomDeleteRequireServerTag bool `env:"ORLY_BLOSSOM_DELETE_REQUIRE_SERVER_TAG" default:"false" usage:"require server tag in delete auth events to prevent cross-server replay attacks (not yet ratified in spec)"`
+
 	// Web UI and dev mode settings
 	WebDisableEmbedded bool   `env:"ORLY_WEB_DISABLE" default:"false" usage:"disable serving the embedded web UI; useful for hot-reload during development"`
 	WebDevProxyURL     string `env:"ORLY_WEB_DEV_PROXY_URL" usage:"when ORLY_WEB_DISABLE is true, reverse-proxy non-API paths to this dev server URL (e.g. http://localhost:5173)"`

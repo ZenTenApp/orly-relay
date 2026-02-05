@@ -281,7 +281,7 @@ The transport manager handles ordered startup (Start fails fast, rolls back) and
 
 ## Deploying to relay.orly.dev
 
-- **Architecture**: x86_64 (amd64)
+- **Architecture**: **x86_64 (amd64)** — NOT arm64, always use `GOARCH=amd64`
 - **OS**: Ubuntu 24.04 LTS
 - **SSH**: `ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71`
 - **Service**: `systemctl {start|stop|restart|status} orly`

@@ -26,6 +26,8 @@ func initializeBlossomServer(
 		RateLimitEnabled: cfg.BlossomRateLimitEnabled,
 		DailyLimitMB:     cfg.BlossomDailyLimitMB,
 		BurstLimitMB:     cfg.BlossomBurstLimitMB,
+		// Delete replay protection (proposed BUD enhancement)
+		DeleteRequireServerTag: cfg.BlossomDeleteRequireServerTag,
 	}
 
 	// Create blossom server with relay's ACL registry

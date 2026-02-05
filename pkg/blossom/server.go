@@ -16,9 +16,10 @@ type Server struct {
 	baseURL string
 
 	// Configuration
-	maxBlobSize      int64
-	allowedMimeTypes map[string]bool
-	requireAuth      bool
+	maxBlobSize            int64
+	allowedMimeTypes       map[string]bool
+	requireAuth            bool
+	deleteRequireServerTag bool
 
 	// Rate limiting for uploads
 	bandwidthLimiter *BandwidthLimiter
@@ -35,6 +36,10 @@ type Config struct {
 	RateLimitEnabled bool
 	DailyLimitMB     int64
 	BurstLimitMB     int64
+
+	// Delete replay protection (proposed BUD enhancement)
+	// When true, DELETE auth events must include a 'server' tag matching this server
+	DeleteRequireServerTag bool
 }
 
 // NewServer creates a new Blossom server instance
@@ -71,14 +76,15 @@ func NewServer(db database.Database, aclRegistry *acl.S, cfg *Config) *Server {
 	}
 
 	return &Server{
-		db:               db,
-		storage:          storage,
-		acl:              aclRegistry,
-		baseURL:          cfg.BaseURL,
-		maxBlobSize:      cfg.MaxBlobSize,
-		allowedMimeTypes: allowedMap,
-		requireAuth:      cfg.RequireAuth,
-		bandwidthLimiter: bwLimiter,
+		db:                     db,
+		storage:                storage,
+		acl:                    aclRegistry,
+		baseURL:                cfg.BaseURL,
+		maxBlobSize:            cfg.MaxBlobSize,
+		allowedMimeTypes:       allowedMap,
+		requireAuth:            cfg.RequireAuth,
+		deleteRequireServerTag: cfg.DeleteRequireServerTag,
+		bandwidthLimiter:       bwLimiter,
 	}
 }
 

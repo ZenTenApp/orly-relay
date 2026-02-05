@@ -542,7 +542,10 @@ func (s *Server) handleDeleteBlob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Authorization required for delete
-	authEv, err := ValidateAuthEvent(r, "delete", sha256Hash)
+	// Use ValidateAuthEventForDelete which optionally requires server tag for replay protection
+	authEv, err := ValidateAuthEventForDelete(
+		r, s.getBaseURL(r), sha256Hash, s.deleteRequireServerTag,
+	)
 	if err != nil {
 		s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
 		return
