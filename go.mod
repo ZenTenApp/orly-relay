@@ -3,7 +3,7 @@ module next.orly.dev
 go 1.25.3
 
 require (
-	git.mleku.dev/mleku/nostr v1.0.17
+	git.mleku.dev/mleku/nostr v1.0.20
 	github.com/adrg/xdg v0.5.3
 	github.com/alexflint/go-arg v1.6.1
 	github.com/aperturerobotics/go-indexeddb v0.2.3
@@ -266,6 +266,9 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gvisor.dev/gvisor v0.0.0-20250503011706-39ed1f5ac29c // indirect
+	p256k1.mleku.dev v1.1.2 // indirect
 )
+
+replace p256k1.mleku.dev => git.mleku.dev/mleku/p256k1.git v1.1.2
 
 retract v1.0.3
