@@ -266,9 +266,9 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gvisor.dev/gvisor v0.0.0-20250503011706-39ed1f5ac29c // indirect
-	p256k1.mleku.dev v1.1.2 // indirect
+	p256k1.mleku.dev v1.1.3 // indirect
 )
 
-replace p256k1.mleku.dev => git.mleku.dev/mleku/p256k1 v1.1.2
+replace p256k1.mleku.dev => git.mleku.dev/mleku/p256k1 v1.1.3
 
 retract v1.0.3

@@ -40,8 +40,8 @@ cloud.google.com/go/storage v1.10.0/go.mod h1:FLPqc6j+Ki4BU591ie1oL6qBQGu2Bl/tZ9
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
 git.mleku.dev/mleku/nostr v1.0.20 h1:V+o/x5H+6omfKybug/UI4Z7HOHNH5lB0ZiyoCed6GAE=
 git.mleku.dev/mleku/nostr v1.0.20/go.mod h1:ntNYMKecDOXZZZnVAR/7Kzz0gNCTvI/PVR1VAY5sdVY=
-git.mleku.dev/mleku/p256k1 v1.1.2 h1:L9qbdrbfD8PWoJJv+fbZn2/8ppQBWbUbCirN3MVXUGg=
-git.mleku.dev/mleku/p256k1 v1.1.2/go.mod h1:5iegFlEfqPvOAYHGx3ck/A9AtxGglZMXwhQqMwcj9JY=
+git.mleku.dev/mleku/p256k1 v1.1.3 h1:yPCJhTzYres9RFDNGt4t+AxqpUk6wolMT1wBeOFzr34=
+git.mleku.dev/mleku/p256k1 v1.1.3/go.mod h1:5iegFlEfqPvOAYHGx3ck/A9AtxGglZMXwhQqMwcj9JY=
 github.com/AdamSLevy/jsonrpc2/v14 v14.1.0 h1:Dy3M9aegiI7d7PF1LUdjbVigJReo+QOceYsMyFh9qoE=
 github.com/AdamSLevy/jsonrpc2/v14 v14.1.0/go.mod h1:ZakZtbCXxCz82NJvq7MoREtiQesnDfrtF6RFUGzQfLo=
 github.com/Azure/azure-sdk-for-go v68.0.0+incompatible h1:fcYLmCpyNYRnvJbPerq7U0hS+6+I79yEDJBqVNcqUzU=
