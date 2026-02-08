@@ -567,3 +567,165 @@ func getExtensionFromMimeType(mimeType string) string {
 	}
 	return "" // No extension for unknown types
 }
+
+// getMimeTypeFromExtension returns a MIME type for a file extension
+func getMimeTypeFromExtension(ext string) string {
+	extToMime := map[string]string{
+		".png":  "image/png",
+		".jpg":  "image/jpeg",
+		".jpeg": "image/jpeg",
+		".gif":  "image/gif",
+		".webp": "image/webp",
+		".svg":  "image/svg+xml",
+		".bmp":  "image/bmp",
+		".tiff": "image/tiff",
+		".mp4":  "video/mp4",
+		".webm": "video/webm",
+		".ogv":  "video/ogg",
+		".mov":  "video/quicktime",
+		".avi":  "video/x-msvideo",
+		".mp3":  "audio/mpeg",
+		".wav":  "audio/wav",
+		".ogg":  "audio/ogg",
+		".flac": "audio/flac",
+		".pdf":  "application/pdf",
+		".txt":  "text/plain",
+		".html": "text/html",
+		".css":  "text/css",
+		".js":   "text/javascript",
+		".json": "application/json",
+	}
+
+	if mime, ok := extToMime[ext]; ok {
+		return mime
+	}
+	return "application/octet-stream"
+}
+
+// ReconcileBlobMetadata scans the blossom directory for blob files that
+// don't have corresponding metadata in the database and creates entries for them.
+// This is useful for recovering from situations where blob files exist but
+// their metadata was lost or never created.
+func (d *D) ReconcileBlobMetadata() (reconciled int, err error) {
+	blobDir := d.getBlobDir()
+
+	// Scan directory for blob files
+	entries, err := os.ReadDir(blobDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.I.F("blossom directory does not exist, nothing to reconcile")
+			return 0, nil
+		}
+		return 0, errorf.E("failed to read blossom directory: %w", err)
+	}
+
+	log.I.F("scanning %d files in blossom directory for reconciliation", len(entries))
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		filename := entry.Name()
+
+		// Parse filename: sha256hex.extension
+		ext := filepath.Ext(filename)
+		sha256Hex := strings.TrimSuffix(filename, ext)
+
+		// Validate it looks like a SHA256 hex (64 characters)
+		if len(sha256Hex) != 64 {
+			continue
+		}
+
+		_, decErr := hex.Dec(sha256Hex)
+		if decErr != nil {
+			continue
+		}
+
+		// Check if metadata already exists
+		metaKey := prefixBlobMeta + sha256Hex
+		var exists bool
+		if viewErr := d.View(func(txn *badger.Txn) error {
+			_, err := txn.Get([]byte(metaKey))
+			if err == badger.ErrKeyNotFound {
+				exists = false
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			exists = true
+			return nil
+		}); viewErr != nil {
+			log.W.F("error checking metadata for %s: %v", sha256Hex, viewErr)
+			continue
+		}
+
+		if exists {
+			// Metadata already exists, skip
+			continue
+		}
+
+		// Get file info for size
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			log.W.F("error getting file info for %s: %v", filename, infoErr)
+			continue
+		}
+
+		// Create metadata entry
+		mimeType := getMimeTypeFromExtension(ext)
+		metadata := &BlobMetadata{
+			Pubkey:    nil, // Unknown owner - will be nil/empty
+			MimeType:  mimeType,
+			Uploaded:  info.ModTime().Unix(), // Use file modification time
+			Size:      info.Size(),
+			Extension: ext,
+		}
+
+		metaData, marshalErr := json.Marshal(metadata)
+		if marshalErr != nil {
+			log.W.F("error marshaling metadata for %s: %v", sha256Hex, marshalErr)
+			continue
+		}
+
+		// Store metadata in database
+		if updateErr := d.Update(func(txn *badger.Txn) error {
+			return txn.Set([]byte(metaKey), metaData)
+		}); updateErr != nil {
+			log.W.F("error saving metadata for %s: %v", sha256Hex, updateErr)
+			continue
+		}
+
+		log.I.F("reconciled blob metadata: %s (%s, %d bytes)", sha256Hex, mimeType, info.Size())
+		reconciled++
+
+		// Also create an index entry with empty pubkey for anonymous ownership
+		indexKey := prefixBlobIndex + "anonymous:" + sha256Hex
+		if indexErr := d.Update(func(txn *badger.Txn) error {
+			// Check if any index exists for this blob already
+			opts := badger.DefaultIteratorOptions
+			opts.Prefix = []byte(prefixBlobIndex)
+			opts.PrefetchValues = false
+			it := txn.NewIterator(opts)
+			defer it.Close()
+
+			suffix := ":" + sha256Hex
+			for it.Rewind(); it.Valid(); it.Next() {
+				key := string(it.Item().Key())
+				if strings.HasSuffix(key, suffix) {
+					// Found an existing index, don't create anonymous one
+					return nil
+				}
+			}
+
+			// No index found, create anonymous one
+			return txn.Set([]byte(indexKey), []byte{1})
+		}); indexErr != nil {
+			log.W.F("error creating index for %s: %v", sha256Hex, indexErr)
+		}
+	}
+
+	log.I.F("blob metadata reconciliation complete: %d files reconciled", reconciled)
+	return reconciled, nil
+}

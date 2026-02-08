@@ -92,7 +92,13 @@ func (c *Client) waitForReady(ctx context.Context) {
 // === Lifecycle Methods ===
 
 func (c *Client) Path() string {
-	return c.path
+	// Get the actual database path from the server so blossom can find blob files
+	resp, err := c.client.GetPath(context.Background(), &orlydbv1.Empty{})
+	if err != nil {
+		log.W.F("failed to get path from database server: %v, using local path", err)
+		return c.path
+	}
+	return resp.Path
 }
 
 func (c *Client) Init(path string) error {
@@ -824,6 +830,14 @@ func (c *Client) ListAllBlobUserStats() ([]*database.UserBlobStats, error) {
 		return nil, err
 	}
 	return orlydbv1.ProtoToUserBlobStatsList(resp.Stats), nil
+}
+
+func (c *Client) ReconcileBlobMetadata() (reconciled int, err error) {
+	resp, err := c.client.ReconcileBlobMetadata(context.Background(), &orlydbv1.Empty{})
+	if err != nil {
+		return 0, err
+	}
+	return int(resp.Reconciled), nil
 }
 
 // === Utility ===

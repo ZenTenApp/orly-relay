@@ -698,6 +698,16 @@ func (s *DatabaseService) ListAllBlobUserStats(ctx context.Context, req *orlydbv
 	}, nil
 }
 
+func (s *DatabaseService) ReconcileBlobMetadata(ctx context.Context, req *orlydbv1.Empty) (*orlydbv1.ReconcileBlobMetadataResponse, error) {
+	reconciled, err := s.db.ReconcileBlobMetadata()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "reconcile blob metadata failed: %v", err)
+	}
+	return &orlydbv1.ReconcileBlobMetadataResponse{
+		Reconciled: int32(reconciled),
+	}, nil
+}
+
 // === Helper Methods ===
 
 // streamEvents is a helper to stream events in batches.

@@ -242,6 +242,9 @@ service DatabaseService {
   // ListAllBlobUserStats gets storage statistics for all users
   rpc ListAllBlobUserStats(Empty) returns (ListAllBlobUserStatsResponse);
 
+  // ReconcileBlobMetadata scans the blossom directory and creates metadata for orphan blobs
+  rpc ReconcileBlobMetadata(Empty) returns (ReconcileBlobMetadataResponse);
+
   // === Utility ===
 
   // EventIdsBySerial gets event IDs by serial range
@@ -665,4 +668,8 @@ message UserBlobStats {
 
 message ListAllBlobUserStatsResponse {
   repeated UserBlobStats stats = 1;
+}
+
+message ReconcileBlobMetadataResponse {
+  int32 reconciled = 1;
 }

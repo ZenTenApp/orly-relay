@@ -55,3 +55,8 @@ func (n *N) SaveBlobReport(sha256Hash []byte, reportData []byte) error {
 func (n *N) ListAllBlobUserStats() ([]*database.UserBlobStats, error) {
 	return nil, errBlobNotSupported
 }
+
+// ReconcileBlobMetadata is not supported in Neo4j backend
+func (n *N) ReconcileBlobMetadata() (int, error) {
+	return 0, errBlobNotSupported
+}

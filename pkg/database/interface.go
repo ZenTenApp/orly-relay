@@ -127,4 +127,5 @@ type Database interface {
 	GetTotalBlobStorageUsed(pubkey []byte) (totalMB int64, err error)
 	SaveBlobReport(sha256Hash []byte, reportData []byte) error
 	ListAllBlobUserStats() ([]*UserBlobStats, error)
+	ReconcileBlobMetadata() (reconciled int, err error)
 }

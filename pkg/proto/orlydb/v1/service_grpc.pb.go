@@ -89,6 +89,7 @@ const (
 	DatabaseService_GetTotalBlobStorageUsed_FullMethodName        = "/orlydb.v1.DatabaseService/GetTotalBlobStorageUsed"
 	DatabaseService_SaveBlobReport_FullMethodName                 = "/orlydb.v1.DatabaseService/SaveBlobReport"
 	DatabaseService_ListAllBlobUserStats_FullMethodName           = "/orlydb.v1.DatabaseService/ListAllBlobUserStats"
+	DatabaseService_ReconcileBlobMetadata_FullMethodName          = "/orlydb.v1.DatabaseService/ReconcileBlobMetadata"
 	DatabaseService_EventIdsBySerial_FullMethodName               = "/orlydb.v1.DatabaseService/EventIdsBySerial"
 	DatabaseService_RunMigrations_FullMethodName                  = "/orlydb.v1.DatabaseService/RunMigrations"
 )
@@ -239,6 +240,8 @@ type DatabaseServiceClient interface {
 	SaveBlobReport(ctx context.Context, in *SaveBlobReportRequest, opts ...grpc.CallOption) (*Empty, error)
 	// ListAllBlobUserStats gets storage statistics for all users
 	ListAllBlobUserStats(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ListAllBlobUserStatsResponse, error)
+	// ReconcileBlobMetadata scans the blossom directory and creates metadata for orphan blobs
+	ReconcileBlobMetadata(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ReconcileBlobMetadataResponse, error)
 	// EventIdsBySerial gets event IDs by serial range
 	EventIdsBySerial(ctx context.Context, in *EventIdsBySerialRequest, opts ...grpc.CallOption) (*EventIdsBySerialResponse, error)
 	// RunMigrations runs database migrations
@@ -1001,6 +1004,16 @@ func (c *databaseServiceClient) ListAllBlobUserStats(ctx context.Context, in *Em
 	return out, nil
 }
 
+func (c *databaseServiceClient) ReconcileBlobMetadata(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ReconcileBlobMetadataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReconcileBlobMetadataResponse)
+	err := c.cc.Invoke(ctx, DatabaseService_ReconcileBlobMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *databaseServiceClient) EventIdsBySerial(ctx context.Context, in *EventIdsBySerialRequest, opts ...grpc.CallOption) (*EventIdsBySerialResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(EventIdsBySerialResponse)
@@ -1167,6 +1180,8 @@ type DatabaseServiceServer interface {
 	SaveBlobReport(context.Context, *SaveBlobReportRequest) (*Empty, error)
 	// ListAllBlobUserStats gets storage statistics for all users
 	ListAllBlobUserStats(context.Context, *Empty) (*ListAllBlobUserStatsResponse, error)
+	// ReconcileBlobMetadata scans the blossom directory and creates metadata for orphan blobs
+	ReconcileBlobMetadata(context.Context, *Empty) (*ReconcileBlobMetadataResponse, error)
 	// EventIdsBySerial gets event IDs by serial range
 	EventIdsBySerial(context.Context, *EventIdsBySerialRequest) (*EventIdsBySerialResponse, error)
 	// RunMigrations runs database migrations
@@ -1390,6 +1405,9 @@ func (UnimplementedDatabaseServiceServer) SaveBlobReport(context.Context, *SaveB
 }
 func (UnimplementedDatabaseServiceServer) ListAllBlobUserStats(context.Context, *Empty) (*ListAllBlobUserStatsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListAllBlobUserStats not implemented")
+}
+func (UnimplementedDatabaseServiceServer) ReconcileBlobMetadata(context.Context, *Empty) (*ReconcileBlobMetadataResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReconcileBlobMetadata not implemented")
 }
 func (UnimplementedDatabaseServiceServer) EventIdsBySerial(context.Context, *EventIdsBySerialRequest) (*EventIdsBySerialResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EventIdsBySerial not implemented")
@@ -2632,6 +2650,24 @@ func _DatabaseService_ListAllBlobUserStats_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DatabaseService_ReconcileBlobMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DatabaseServiceServer).ReconcileBlobMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DatabaseService_ReconcileBlobMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DatabaseServiceServer).ReconcileBlobMetadata(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DatabaseService_EventIdsBySerial_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(EventIdsBySerialRequest)
 	if err := dec(in); err != nil {
@@ -2930,6 +2966,10 @@ var DatabaseService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListAllBlobUserStats",
 			Handler:    _DatabaseService_ListAllBlobUserStats_Handler,
+		},
+		{
+			MethodName: "ReconcileBlobMetadata",
+			Handler:    _DatabaseService_ReconcileBlobMetadata_Handler,
 		},
 		{
 			MethodName: "EventIdsBySerial",

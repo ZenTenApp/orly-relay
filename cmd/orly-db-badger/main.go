@@ -82,6 +82,13 @@ func main() {
 	<-db.Ready()
 	log.I.F("database ready")
 
+	// Reconcile any orphaned blob files (files on disk without metadata)
+	if reconciled, err := db.ReconcileBlobMetadata(); err != nil {
+		log.W.F("blob metadata reconciliation failed: %v", err)
+	} else if reconciled > 0 {
+		log.I.F("reconciled %d blob metadata entries", reconciled)
+	}
+
 	// Create and start gRPC server
 	serverCfg := &server.Config{
 		Listen:          cfg.Listen,

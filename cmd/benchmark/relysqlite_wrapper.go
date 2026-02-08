@@ -317,6 +317,9 @@ func (w *RelySQLiteWrapper) SaveBlobReport(sha256Hash []byte, reportData []byte)
 func (w *RelySQLiteWrapper) ListAllBlobUserStats() ([]*database.UserBlobStats, error) {
 	return nil, fmt.Errorf("not implemented")
 }
+func (w *RelySQLiteWrapper) ReconcileBlobMetadata() (int, error) {
+	return 0, fmt.Errorf("not implemented")
+}
 
 // Helper function to check if a kind is replaceable
 func isReplaceableKind(kind int) bool {
