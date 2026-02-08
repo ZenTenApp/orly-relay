@@ -17,6 +17,7 @@ import (
 )
 
 // handleGetBlob handles GET /<sha256> requests (BUD-01)
+// Uses http.ServeFile for efficient streaming with zero-copy sendfile(2)
 func (s *Server) handleGetBlob(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/")
 
@@ -34,24 +35,10 @@ func (s *Server) handleGetBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if blob exists
-	exists, err := s.storage.HasBlob(sha256Hash)
-	if err != nil {
-		log.E.F("error checking blob existence: %v", err)
-		s.setErrorResponse(w, http.StatusInternalServerError, "internal server error")
-		return
-	}
-
-	if !exists {
-		s.setErrorResponse(w, http.StatusNotFound, "blob not found")
-		return
-	}
-
-	// Get blob metadata
+	// Get blob metadata (also confirms existence)
 	metadata, err := s.storage.GetBlobMetadata(sha256Hash)
 	if err != nil {
-		log.E.F("error getting blob metadata: %v", err)
-		s.setErrorResponse(w, http.StatusInternalServerError, "internal server error")
+		s.setErrorResponse(w, http.StatusNotFound, "blob not found")
 		return
 	}
 
@@ -68,37 +55,24 @@ func (s *Server) handleGetBlob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get blob data
-	blobData, _, err := s.storage.GetBlob(sha256Hash)
-	if err != nil {
-		log.E.F("error getting blob: %v", err)
-		s.setErrorResponse(w, http.StatusInternalServerError, "internal server error")
-		return
-	}
+	// Get blob file path
+	blobPath := s.storage.GetBlobPath(sha256Hex, metadata.Extension)
 
-	// Set headers
+	// Set caching headers - content-addressed blobs are immutable
+	// Cache for 1 year (max recommended), immutable since SHA256 is content hash
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.Header().Set("ETag", `"`+sha256Hex+`"`)
+
+	// Set Content-Type before ServeFile (it won't override if already set)
 	mimeType := DetectMimeType(metadata.MimeType, ext)
 	w.Header().Set("Content-Type", mimeType)
-	w.Header().Set("Content-Length", strconv.FormatInt(int64(len(blobData)), 10))
-	w.Header().Set("Accept-Ranges", "bytes")
 
-	// Handle range requests (RFC 7233)
-	rangeHeader := r.Header.Get("Range")
-	if rangeHeader != "" {
-		start, end, valid, err := ParseRangeHeader(rangeHeader, int64(len(blobData)))
-		if err != nil {
-			s.setErrorResponse(w, http.StatusRequestedRangeNotSatisfiable, err.Error())
-			return
-		}
-		if valid {
-			WriteRangeResponse(w, blobData, start, end, int64(len(blobData)))
-			return
-		}
-	}
-
-	// Send full blob
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(blobData)
+	// Use http.ServeFile for efficient streaming with:
+	// - Automatic range request handling (RFC 7233)
+	// - Zero-copy sendfile(2) on supported platforms
+	// - Proper Last-Modified headers
+	// - No full blob load into memory
+	http.ServeFile(w, r, blobPath)
 }
 
 // handleHeadBlob handles HEAD /<sha256> requests (BUD-01)
@@ -119,24 +93,10 @@ func (s *Server) handleHeadBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if blob exists
-	exists, err := s.storage.HasBlob(sha256Hash)
-	if err != nil {
-		log.E.F("error checking blob existence: %v", err)
-		s.setErrorResponse(w, http.StatusInternalServerError, "internal server error")
-		return
-	}
-
-	if !exists {
-		s.setErrorResponse(w, http.StatusNotFound, "blob not found")
-		return
-	}
-
-	// Get blob metadata
+	// Get blob metadata (also confirms existence)
 	metadata, err := s.storage.GetBlobMetadata(sha256Hash)
 	if err != nil {
-		log.E.F("error getting blob metadata: %v", err)
-		s.setErrorResponse(w, http.StatusInternalServerError, "internal server error")
+		s.setErrorResponse(w, http.StatusNotFound, "blob not found")
 		return
 	}
 
@@ -152,6 +112,10 @@ func (s *Server) handleHeadBlob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	// Set caching headers - content-addressed blobs are immutable
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.Header().Set("ETag", `"`+sha256Hex+`"`)
 
 	// Set headers (same as GET but no body)
 	mimeType := DetectMimeType(metadata.MimeType, ext)

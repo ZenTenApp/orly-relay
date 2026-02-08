@@ -91,6 +91,13 @@ func (s *Storage) ListBlobs(pubkey []byte, since, until int64) ([]*BlobDescripto
 	return descriptors, nil
 }
 
+// GetBlobPath returns the filesystem path for a blob given its hash and extension.
+// This is used by handlers that need to serve files directly via http.ServeFile.
+func (s *Storage) GetBlobPath(sha256Hex string, extension string) string {
+	filename := sha256Hex + extension
+	return filepath.Join(s.blobDir, filename)
+}
+
 // GetBlobMetadata retrieves only metadata for a blob.
 func (s *Storage) GetBlobMetadata(sha256Hash []byte) (*BlobMetadata, error) {
 	dbMeta, err := s.db.GetBlobMetadata(sha256Hash)
