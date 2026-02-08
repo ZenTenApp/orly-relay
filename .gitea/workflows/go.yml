@@ -1,7 +1,7 @@
 # This workflow builds and releases ORLY binaries for Gitea
 #
-# NOTE: All builds use CGO_ENABLED=0 since p8k library uses purego (not CGO)
-#       The library dynamically loads libsecp256k1 at runtime via purego
+# NOTE: All builds use CGO_ENABLED=0. The secp256k1 crypto is provided by
+#       p256k1.mleku.dev which is pure Go with optional BMI2 assembly acceleration.
 #
 # Release Process:
 # 1. Update the version in the pkg/version/version file (e.g. v1.2.3)
@@ -102,7 +102,6 @@ jobs:
           export PATH=/usr/local/go/bin:$PATH
           cd ${GITHUB_WORKSPACE}
           echo "Running tests..."
-          # Note: libsecp256k1.so is loaded at runtime via purego, not needed for tests
           CGO_ENABLED=0 go test -v $(go list ./... | grep -v '/cmd/benchmark/external/' | xargs -n1 sh -c 'ls $0/*_test.go 1>/dev/null 2>&1 && echo $0' | grep .) || echo "Some tests failed, continuing..."
 
       - name: Build Release Binaries
@@ -148,12 +147,6 @@ jobs:
             GOEXPERIMENT=greenteagc,jsonv2 GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
               go build -ldflags "-s -w" -o "release-binaries/${name}-${VERSION}-linux-arm64" "${path}"
           done
-
-          # Copy libsecp256k1 libraries (with schnorr/musig2 support)
-          cp lib/secp256k1/libsecp256k1-linux-amd64.so release-binaries/
-          cp lib/secp256k1/libsecp256k1-linux-arm64.so release-binaries/
-          chmod +x release-binaries/libsecp256k1-*.so
-          echo "Copied libsecp256k1.so for AMD64 and ARM64"
 
           # Create checksums
           cd release-binaries
@@ -216,7 +209,6 @@ jobs:
           * orly-launcher - Process supervisor with admin UI
           * orly-sync-negentropy - Negentropy sync service
           * orly-certs - DNS-01 wildcard certificate manager
-          * libsecp256k1 - AMD64 and ARM64, with schnorr/musig2 support
 
           ### Architectures
           * Linux AMD64 (x86_64)
@@ -225,8 +217,7 @@ jobs:
           ### Installation
           1. Download the appropriate binaries for your architecture
           2. Make them executable: chmod +x orly-*
-          3. Copy libsecp256k1 to /usr/local/lib/ and run ldconfig
-          4. Run with: ./orly-launcher (for split mode) or ./orly (standalone)
+          3. Run with: ./orly-launcher (for split mode) or ./orly (standalone)
           RELEASEBODY
           )
 
