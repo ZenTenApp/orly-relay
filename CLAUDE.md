@@ -212,6 +212,21 @@ if chk.E(err) { return }   // Log + check error
 
 **Profiling**: `ORLY_PPROF=cpu ./orly` or `ORLY_PPROF_HTTP=true` for :6060
 
+## Versioning
+
+**The version file `pkg/version/version` must be updated when tagging releases.**
+
+```bash
+# When releasing a new version:
+echo "v0.58.15" > pkg/version/version  # Update to match the git tag
+git add pkg/version/version
+git commit -m "Bump version to v0.58.15"
+git tag v0.58.15
+git push origin main --tags
+```
+
+The web UI reads this file to display the relay version. Forgetting to update it will show stale version info.
+
 ## Commit Format
 
 ```
