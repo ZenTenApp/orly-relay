@@ -18,6 +18,7 @@ import (
 
 // handleGetBlob handles GET /<sha256> requests (BUD-01)
 // Uses http.ServeFile for efficient streaming with zero-copy sendfile(2)
+// Supports ?thumb=1 or ?w=N query params for thumbnails
 func (s *Server) handleGetBlob(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/")
 
@@ -55,6 +56,22 @@ func (s *Server) handleGetBlob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Check for thumbnail request: ?thumb=1 or ?w=N
+	thumbSize := 0
+	if r.URL.Query().Get("thumb") == "1" {
+		thumbSize = ThumbnailSize
+	} else if wStr := r.URL.Query().Get("w"); wStr != "" {
+		if w, err := strconv.Atoi(wStr); err == nil && w > 0 && w <= 512 {
+			thumbSize = w
+		}
+	}
+
+	// Serve thumbnail if requested and it's an image
+	if thumbSize > 0 && IsImageMimeType(metadata.MimeType) {
+		s.serveThumbnail(w, r, sha256Hash, sha256Hex, metadata, thumbSize)
+		return
+	}
+
 	// Get blob file path
 	blobPath := s.storage.GetBlobPath(sha256Hex, metadata.Extension)
 
@@ -73,6 +90,50 @@ func (s *Server) handleGetBlob(w http.ResponseWriter, r *http.Request) {
 	// - Proper Last-Modified headers
 	// - No full blob load into memory
 	http.ServeFile(w, r, blobPath)
+}
+
+// serveThumbnail generates or serves a cached thumbnail for an image blob
+func (s *Server) serveThumbnail(w http.ResponseWriter, r *http.Request, sha256Hash []byte, sha256Hex string, metadata *BlobMetadata, size int) {
+	// Try to get cached thumbnail first
+	thumbKey := fmt.Sprintf("%s_thumb_%d", sha256Hex, size)
+	thumbData, err := s.storage.GetThumbnail(thumbKey)
+	if err == nil && len(thumbData) > 0 {
+		// Serve cached thumbnail
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Header().Set("ETag", `"`+thumbKey+`"`)
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Content-Length", strconv.Itoa(len(thumbData)))
+		w.Write(thumbData)
+		return
+	}
+
+	// Generate thumbnail from original blob
+	blobData, _, err := s.storage.GetBlob(sha256Hash)
+	if err != nil {
+		s.setErrorResponse(w, http.StatusNotFound, "blob not found")
+		return
+	}
+
+	thumbData, thumbMime, err := GenerateThumbnail(blobData, metadata.MimeType, size)
+	if err != nil {
+		log.W.F("failed to generate thumbnail for %s: %v", sha256Hex, err)
+		// Fall back to serving original
+		blobPath := s.storage.GetBlobPath(sha256Hex, metadata.Extension)
+		http.ServeFile(w, r, blobPath)
+		return
+	}
+
+	// Cache the thumbnail for future requests
+	if err := s.storage.SaveThumbnail(thumbKey, thumbData); err != nil {
+		log.W.F("failed to cache thumbnail %s: %v", thumbKey, err)
+	}
+
+	// Serve the thumbnail
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.Header().Set("ETag", `"`+thumbKey+`"`)
+	w.Header().Set("Content-Type", thumbMime)
+	w.Header().Set("Content-Length", strconv.Itoa(len(thumbData)))
+	w.Write(thumbData)
 }
 
 // handleHeadBlob handles HEAD /<sha256> requests (BUD-01)
@@ -818,6 +879,111 @@ func (s *Server) handleMediaHead(w http.ResponseWriter, r *http.Request) {
 	// Similar to handleUploadRequirements but for media
 	// Return 200 OK if media optimization is available
 	w.WriteHeader(http.StatusOK)
+}
+
+// handleGenerateThumbnails handles POST /admin/generate-thumbnails (batch thumbnail generation)
+func (s *Server) handleGenerateThumbnails(w http.ResponseWriter, r *http.Request) {
+	// Authorization required
+	authEv, err := ValidateAuthEvent(r, "admin", nil)
+	if err != nil {
+		s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+	if authEv == nil {
+		s.setErrorResponse(w, http.StatusUnauthorized, "authorization required")
+		return
+	}
+
+	// Check admin ACL
+	remoteAddr := s.getRemoteAddr(r)
+	if !s.checkACL(authEv.Pubkey, remoteAddr, "admin") {
+		s.setErrorResponse(w, http.StatusForbidden, "admin access required")
+		return
+	}
+
+	// Get all image blobs
+	images, err := s.storage.ListImageBlobs()
+	if err != nil {
+		log.E.F("failed to list image blobs: %v", err)
+		s.setErrorResponse(w, http.StatusInternalServerError, "failed to list blobs")
+		return
+	}
+
+	// Generate thumbnails for each
+	type result struct {
+		SHA256  string `json:"sha256"`
+		Success bool   `json:"success"`
+		Error   string `json:"error,omitempty"`
+	}
+	results := make([]result, 0, len(images))
+
+	generated := 0
+	skipped := 0
+	failed := 0
+
+	for _, img := range images {
+		sha256Hex := img.SHA256
+		thumbKey := fmt.Sprintf("%s_thumb_%d", sha256Hex, ThumbnailSize)
+
+		// Check if thumbnail already exists
+		if thumbData, _ := s.storage.GetThumbnail(thumbKey); len(thumbData) > 0 {
+			skipped++
+			continue
+		}
+
+		// Get the blob data
+		sha256Hash, err := hex.Dec(sha256Hex)
+		if err != nil {
+			results = append(results, result{SHA256: sha256Hex, Success: false, Error: "invalid hash"})
+			failed++
+			continue
+		}
+
+		blobData, metadata, err := s.storage.GetBlob(sha256Hash)
+		if err != nil {
+			results = append(results, result{SHA256: sha256Hex, Success: false, Error: "blob not found"})
+			failed++
+			continue
+		}
+
+		// Generate thumbnail
+		thumbData, _, err := GenerateThumbnail(blobData, metadata.MimeType, ThumbnailSize)
+		if err != nil {
+			results = append(results, result{SHA256: sha256Hex, Success: false, Error: err.Error()})
+			failed++
+			continue
+		}
+
+		// Save thumbnail
+		if err := s.storage.SaveThumbnail(thumbKey, thumbData); err != nil {
+			results = append(results, result{SHA256: sha256Hex, Success: false, Error: "failed to save"})
+			failed++
+			continue
+		}
+
+		results = append(results, result{SHA256: sha256Hex, Success: true})
+		generated++
+	}
+
+	log.I.F("thumbnail generation complete: %d generated, %d skipped, %d failed", generated, skipped, failed)
+
+	// Return summary
+	response := struct {
+		Total     int      `json:"total"`
+		Generated int      `json:"generated"`
+		Skipped   int      `json:"skipped"`
+		Failed    int      `json:"failed"`
+		Results   []result `json:"results,omitempty"`
+	}{
+		Total:     len(images),
+		Generated: generated,
+		Skipped:   skipped,
+		Failed:    failed,
+		Results:   results,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 // handleReport handles PUT /report requests (BUD-09)

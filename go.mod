@@ -25,6 +25,7 @@ require (
 	go-simpler.org/env v0.12.0
 	go.uber.org/atomic v1.11.0
 	golang.org/x/crypto v0.46.0
+	golang.org/x/image v0.35.0
 	golang.org/x/lint v0.0.0-20241112194109-818c5a804067
 	golang.org/x/term v0.38.0
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
@@ -253,7 +254,7 @@ require (
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
-	golang.org/x/text v0.32.0 // indirect
+	golang.org/x/text v0.33.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/tools v0.40.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect

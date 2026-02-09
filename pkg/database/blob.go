@@ -729,3 +729,87 @@ func (d *D) ReconcileBlobMetadata() (reconciled int, err error) {
 	log.I.F("blob metadata reconciliation complete: %d files reconciled", reconciled)
 	return reconciled, nil
 }
+
+// ListAllBlobs returns all blob descriptors in the database
+func (d *D) ListAllBlobs() (descriptors []*BlobDescriptor, err error) {
+	descriptors = make([]*BlobDescriptor, 0)
+
+	if err = d.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = []byte(prefixBlobMeta)
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			key := item.Key()
+
+			// Extract SHA256 from key: prefixBlobMeta + sha256Hex
+			sha256Hex := string(key[len(prefixBlobMeta):])
+
+			var metadata *BlobMetadata
+			if errVal := item.Value(func(val []byte) error {
+				metadata = &BlobMetadata{}
+				return json.Unmarshal(val, metadata)
+			}); errVal != nil {
+				continue
+			}
+
+			// Verify blob file exists
+			blobPath := d.getBlobPath(sha256Hex, metadata.Extension)
+			if _, errStat := os.Stat(blobPath); errStat != nil {
+				continue
+			}
+
+			mimeType := metadata.MimeType
+			if mimeType == "" {
+				mimeType = "application/octet-stream"
+			}
+
+			descriptor := &BlobDescriptor{
+				SHA256:   sha256Hex,
+				Size:     metadata.Size,
+				Type:     mimeType,
+				Uploaded: metadata.Uploaded,
+			}
+
+			descriptors = append(descriptors, descriptor)
+		}
+
+		return nil
+	}); chk.E(err) {
+		return
+	}
+
+	return
+}
+
+const prefixThumbnail = "blob:thumb:"
+
+// GetThumbnail retrieves a cached thumbnail by key
+func (d *D) GetThumbnail(key string) (data []byte, err error) {
+	thumbKey := prefixThumbnail + key
+
+	err = d.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte(thumbKey))
+		if err != nil {
+			return err
+		}
+		return item.Value(func(val []byte) error {
+			data = make([]byte, len(val))
+			copy(data, val)
+			return nil
+		})
+	})
+
+	return
+}
+
+// SaveThumbnail caches a thumbnail with the given key
+func (d *D) SaveThumbnail(key string, data []byte) error {
+	thumbKey := prefixThumbnail + key
+
+	return d.Update(func(txn *badger.Txn) error {
+		return txn.Set([]byte(thumbKey), data)
+	})
+}

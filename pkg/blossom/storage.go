@@ -149,3 +149,37 @@ type UserBlobStats struct {
 	BlobCount      int64  `json:"blob_count"`
 	TotalSizeBytes int64  `json:"total_size_bytes"`
 }
+
+// GetThumbnail retrieves a cached thumbnail by key.
+func (s *Storage) GetThumbnail(key string) ([]byte, error) {
+	return s.db.GetThumbnail(key)
+}
+
+// SaveThumbnail caches a thumbnail with the given key.
+func (s *Storage) SaveThumbnail(key string, data []byte) error {
+	return s.db.SaveThumbnail(key, data)
+}
+
+// ListImageBlobs returns all image blobs that could have thumbnails generated.
+func (s *Storage) ListImageBlobs() ([]*BlobDescriptor, error) {
+	// Get all blobs
+	dbDescriptors, err := s.db.ListAllBlobs()
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter to images only
+	var images []*BlobDescriptor
+	for _, d := range dbDescriptors {
+		if IsImageMimeType(d.Type) {
+			images = append(images, &BlobDescriptor{
+				URL:      d.URL,
+				SHA256:   d.SHA256,
+				Size:     d.Size,
+				Type:     d.Type,
+				Uploaded: d.Uploaded,
+			})
+		}
+	}
+	return images, nil
+}

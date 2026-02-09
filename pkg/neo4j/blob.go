@@ -60,3 +60,18 @@ func (n *N) ListAllBlobUserStats() ([]*database.UserBlobStats, error) {
 func (n *N) ReconcileBlobMetadata() (int, error) {
 	return 0, errBlobNotSupported
 }
+
+// ListAllBlobs returns all blobs (not supported in Neo4j)
+func (n *N) ListAllBlobs() ([]*database.BlobDescriptor, error) {
+	return nil, errBlobNotSupported
+}
+
+// GetThumbnail retrieves a cached thumbnail (not supported in Neo4j)
+func (n *N) GetThumbnail(key string) ([]byte, error) {
+	return nil, errBlobNotSupported
+}
+
+// SaveThumbnail caches a thumbnail (not supported in Neo4j)
+func (n *N) SaveThumbnail(key string, data []byte) error {
+	return errBlobNotSupported
+}

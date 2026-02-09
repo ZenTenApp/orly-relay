@@ -228,6 +228,13 @@
         return `${getApiBase()}/blossom/${blob.sha256}`;
     }
 
+    function getThumbnailUrl(blob) {
+        // Get thumbnail URL for images (adds ?thumb=1 query param)
+        const baseUrl = getBlobUrl(blob);
+        const sep = baseUrl.includes('?') ? '&' : '?';
+        return `${baseUrl}${sep}thumb=1`;
+    }
+
     function openLoginModal() {
         dispatch("openLoginModal");
     }
@@ -430,6 +437,45 @@
         }
     }
 
+    let isGeneratingThumbnails = false;
+    let thumbnailProgress = "";
+
+    async function generateAllThumbnails() {
+        if (!confirm("Generate thumbnails for all images? This may take a while.")) return;
+
+        isGeneratingThumbnails = true;
+        thumbnailProgress = "Starting...";
+        error = "";
+
+        try {
+            const url = `${getApiBase()}/blossom/admin/generate-thumbnails`;
+            const authHeader = await createBlossomAuth(userSigner, "admin");
+
+            const response = await fetch(url, {
+                method: "POST",
+                headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+            });
+
+            if (!response.ok) {
+                const reason = response.headers.get("X-Reason") || response.statusText;
+                throw new Error(reason);
+            }
+
+            const result = await response.json();
+            thumbnailProgress = `Done! Generated: ${result.generated}, Skipped: ${result.skipped}, Failed: ${result.failed}`;
+
+            // Show result for 5 seconds
+            setTimeout(() => {
+                thumbnailProgress = "";
+            }, 5000);
+        } catch (err) {
+            console.error("Error generating thumbnails:", err);
+            error = err.message || "Failed to generate thumbnails";
+        } finally {
+            isGeneratingThumbnails = false;
+        }
+    }
+
 
 </script>
 
@@ -502,6 +548,20 @@
         {/if}
 
         {#if isAdminView && !selectedAdminUser}
+            <!-- Admin actions -->
+            <div class="admin-actions">
+                <button
+                    class="generate-thumbnails-btn"
+                    on:click={generateAllThumbnails}
+                    disabled={isGeneratingThumbnails}
+                >
+                    {isGeneratingThumbnails ? "Generating..." : "Generate All Thumbnails"}
+                </button>
+                {#if thumbnailProgress}
+                    <span class="thumbnail-progress">{thumbnailProgress}</span>
+                {/if}
+            </div>
+
             <!-- Admin users list view -->
             {#if isLoadingAdmin}
                 <div class="loading">Loading user statistics...</div>
@@ -563,7 +623,7 @@
                         >
                             <div class="blob-thumbnail">
                                 {#if getMimeCategory(blob.type) === "image"}
-                                    <img src={getBlobUrl(blob)} alt="" class="thumbnail-img" />
+                                    <img src={getThumbnailUrl(blob)} alt="" class="thumbnail-img" loading="lazy" />
                                 {:else if getMimeCategory(blob.type) === "video"}
                                     <video src={getBlobUrl(blob)} class="thumbnail-video" muted preload="metadata"></video>
                                 {:else}
@@ -1356,5 +1416,40 @@
             flex-direction: column;
             gap: 0.25em;
         }
+    }
+
+    /* Admin actions */
+    .admin-actions {
+        display: flex;
+        align-items: center;
+        gap: 1em;
+        margin-bottom: 1em;
+        padding: 0.75em;
+        background: var(--bg-secondary, #f5f5f5);
+        border-radius: 8px;
+    }
+
+    .generate-thumbnails-btn {
+        padding: 0.5em 1em;
+        border: none;
+        border-radius: 4px;
+        background: var(--accent, #5a67d8);
+        color: white;
+        cursor: pointer;
+        font-size: 0.9em;
+    }
+
+    .generate-thumbnails-btn:hover:not(:disabled) {
+        opacity: 0.9;
+    }
+
+    .generate-thumbnails-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .thumbnail-progress {
+        font-size: 0.85em;
+        color: var(--text-secondary, #666);
     }
 </style>

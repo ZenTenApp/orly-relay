@@ -350,6 +350,17 @@ func (w *RelySQLiteWrapper) GetNRCConnectionURI(conn *database.NRCConnection, re
 	return "", fmt.Errorf("not implemented")
 }
 
+// Thumbnail stubs - not needed for benchmarking
+func (w *RelySQLiteWrapper) ListAllBlobs() ([]*database.BlobDescriptor, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) GetThumbnail(key string) ([]byte, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) SaveThumbnail(key string, data []byte) error {
+	return fmt.Errorf("not implemented")
+}
+
 // Helper function to check if a kind is replaceable
 func isReplaceableKind(kind int) bool {
 	return (kind >= 10000 && kind < 20000) || kind == 0 || kind == 3

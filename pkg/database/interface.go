@@ -123,11 +123,16 @@ type Database interface {
 	HasBlob(sha256Hash []byte) (exists bool, err error)
 	DeleteBlob(sha256Hash []byte, pubkey []byte) error
 	ListBlobs(pubkey []byte, since, until int64) ([]*BlobDescriptor, error)
+	ListAllBlobs() ([]*BlobDescriptor, error)
 	GetBlobMetadata(sha256Hash []byte) (*BlobMetadata, error)
 	GetTotalBlobStorageUsed(pubkey []byte) (totalMB int64, err error)
 	SaveBlobReport(sha256Hash []byte, reportData []byte) error
 	ListAllBlobUserStats() ([]*UserBlobStats, error)
 	ReconcileBlobMetadata() (reconciled int, err error)
+
+	// Thumbnail caching
+	GetThumbnail(key string) (data []byte, err error)
+	SaveThumbnail(key string, data []byte) error
 
 	// NRC (Nostr Relay Connect) client management
 	CreateNRCConnection(label string, createdBy []byte) (*NRCConnection, error)

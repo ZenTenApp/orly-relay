@@ -4,6 +4,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -839,6 +840,21 @@ func (c *Client) ReconcileBlobMetadata() (reconciled int, err error) {
 		return 0, err
 	}
 	return int(resp.Reconciled), nil
+}
+
+func (c *Client) ListAllBlobs() ([]*database.BlobDescriptor, error) {
+	// Not implemented in gRPC protocol yet - thumbnails handled locally
+	return nil, errors.New("ListAllBlobs not implemented in gRPC client")
+}
+
+func (c *Client) GetThumbnail(key string) ([]byte, error) {
+	// Not implemented in gRPC protocol yet - thumbnails handled locally
+	return nil, errors.New("GetThumbnail not implemented in gRPC client")
+}
+
+func (c *Client) SaveThumbnail(key string, data []byte) error {
+	// Not implemented in gRPC protocol yet - thumbnails handled locally
+	return errors.New("SaveThumbnail not implemented in gRPC client")
 }
 
 // === Utility ===

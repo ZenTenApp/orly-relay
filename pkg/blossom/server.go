@@ -145,6 +145,14 @@ func (s *Server) Handler() http.Handler {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 
+		case path == "admin/generate-thumbnails":
+			if r.Method == http.MethodPost {
+				s.handleGenerateThumbnails(w, r)
+				return
+			}
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+
 		case strings.HasPrefix(path, "list/"):
 			if r.Method == http.MethodGet {
 				s.handleListBlobs(w, r)
