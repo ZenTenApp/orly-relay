@@ -12,16 +12,16 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"git.mleku.dev/mleku/nostr/httpauth"
 	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/database"
 )
 
 // NRCConnectionResponse is the response structure for NRC connection API.
 type NRCConnectionResponse struct {
-	ID        string `json:"id"`
-	Label     string `json:"label"`
-	CreatedAt int64  `json:"created_at"`
-	LastUsed  int64  `json:"last_used"`
-	URI       string `json:"uri,omitempty"` // Only included when specifically requested
+	ID            string `json:"id"`
+	Label         string `json:"label"`
+	RendezvousURL string `json:"rendezvous_url"`
+	CreatedAt     int64  `json:"created_at"`
+	LastUsed      int64  `json:"last_used"`
+	URI           string `json:"uri,omitempty"` // Only included when specifically requested
 }
 
 // NRCConnectionsResponse is the response for listing all connections.
@@ -39,7 +39,8 @@ type NRCConfigResponse struct {
 
 // NRCCreateRequest is the request body for creating a connection.
 type NRCCreateRequest struct {
-	Label string `json:"label"`
+	Label         string `json:"label"`
+	RendezvousURL string `json:"rendezvous_url"` // WebSocket URL of the rendezvous relay
 }
 
 // handleNRCConnections handles GET /api/nrc/connections
@@ -67,15 +68,14 @@ func (s *Server) handleNRCConnections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get database (must be Badger)
-	badgerDB, ok := s.DB.(*database.D)
-	if !ok {
-		http.Error(w, "NRC requires Badger database backend", http.StatusServiceUnavailable)
+	// Check if event store is available
+	if s.nrcEventStore == nil {
+		http.Error(w, "NRC not configured", http.StatusServiceUnavailable)
 		return
 	}
 
 	// Get all connections
-	conns, err := badgerDB.GetAllNRCConnections()
+	conns, err := s.nrcEventStore.GetAllNRCConnections()
 	if chk.E(err) {
 		http.Error(w, "Failed to get connections", http.StatusInternalServerError)
 		return
@@ -104,10 +104,11 @@ func (s *Server) handleNRCConnections(w http.ResponseWriter, r *http.Request) {
 
 	for _, conn := range conns {
 		response.Connections = append(response.Connections, NRCConnectionResponse{
-			ID:        conn.ID,
-			Label:     conn.Label,
-			CreatedAt: conn.CreatedAt,
-			LastUsed:  conn.LastUsed,
+			ID:            conn.ID,
+			Label:         conn.Label,
+			RendezvousURL: conn.RendezvousURL,
+			CreatedAt:     conn.CreatedAt,
+			LastUsed:      conn.LastUsed,
 		})
 	}
 
@@ -140,10 +141,9 @@ func (s *Server) handleNRCCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get database (must be Badger)
-	badgerDB, ok := s.DB.(*database.D)
-	if !ok {
-		http.Error(w, "NRC requires Badger database backend", http.StatusServiceUnavailable)
+	// Check if event store is available
+	if s.nrcEventStore == nil {
+		http.Error(w, "NRC not configured", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -161,8 +161,15 @@ func (s *Server) handleNRCCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate rendezvous URL
+	req.RendezvousURL = strings.TrimSpace(req.RendezvousURL)
+	if req.RendezvousURL == "" {
+		http.Error(w, "Rendezvous URL is required", http.StatusBadRequest)
+		return
+	}
+
 	// Create the connection (pass the creator's pubkey for tracking)
-	conn, err := badgerDB.CreateNRCConnection(req.Label, pubkey)
+	conn, err := s.nrcEventStore.CreateNRCConnection(req.Label, req.RendezvousURL, pubkey)
 	if chk.E(err) {
 		http.Error(w, "Failed to create connection", http.StatusInternalServerError)
 		return
@@ -176,25 +183,23 @@ func (s *Server) handleNRCCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	relayPubkey, _ := keys.SecretBytesToPubKeyBytes(relaySecretKey)
 
-	// Get NRC config values
-	_, nrcRendezvousURL, _, _ := s.Config.GetNRCConfigValues()
-
-	// Generate URI
-	uri, err := badgerDB.GetNRCConnectionURI(conn, relayPubkey, nrcRendezvousURL)
+	// Generate URI (uses rendezvous URL stored in connection)
+	uri, err := s.nrcEventStore.GetNRCConnectionURI(conn, relayPubkey)
 	if chk.E(err) {
 		log.W.F("failed to generate URI for new connection: %v", err)
 	}
 
 	// Update bridge authorized secrets if bridge is running
-	s.updateNRCBridgeSecrets(badgerDB)
+	s.updateNRCBridgeSecretsFromEventStore()
 
 	// Build response with URI
 	response := NRCConnectionResponse{
-		ID:        conn.ID,
-		Label:     conn.Label,
-		CreatedAt: conn.CreatedAt,
-		LastUsed:  conn.LastUsed,
-		URI:       uri,
+		ID:            conn.ID,
+		Label:         conn.Label,
+		RendezvousURL: conn.RendezvousURL,
+		CreatedAt:     conn.CreatedAt,
+		LastUsed:      conn.LastUsed,
+		URI:           uri,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -227,10 +232,9 @@ func (s *Server) handleNRCDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get database (must be Badger)
-	badgerDB, ok := s.DB.(*database.D)
-	if !ok {
-		http.Error(w, "NRC requires Badger database backend", http.StatusServiceUnavailable)
+	// Check if event store is available
+	if s.nrcEventStore == nil {
+		http.Error(w, "NRC not configured", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -244,13 +248,13 @@ func (s *Server) handleNRCDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete the connection
-	if err := badgerDB.DeleteNRCConnection(connID); chk.E(err) {
+	if err := s.nrcEventStore.DeleteNRCConnection(connID); chk.E(err) {
 		http.Error(w, "Failed to delete connection", http.StatusInternalServerError)
 		return
 	}
 
 	// Update bridge authorized secrets if bridge is running
-	s.updateNRCBridgeSecrets(badgerDB)
+	s.updateNRCBridgeSecretsFromEventStore()
 
 	log.I.F("deleted NRC connection: %s", connID)
 
@@ -283,10 +287,9 @@ func (s *Server) handleNRCGetURI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get database (must be Badger)
-	badgerDB, ok := s.DB.(*database.D)
-	if !ok {
-		http.Error(w, "NRC requires Badger database backend", http.StatusServiceUnavailable)
+	// Check if event store is available
+	if s.nrcEventStore == nil {
+		http.Error(w, "NRC not configured", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -301,7 +304,7 @@ func (s *Server) handleNRCGetURI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the connection
-	conn, err := badgerDB.GetNRCConnection(connID)
+	conn, err := s.nrcEventStore.GetNRCConnection(connID)
 	if err != nil {
 		http.Error(w, "Connection not found", http.StatusNotFound)
 		return
@@ -315,11 +318,8 @@ func (s *Server) handleNRCGetURI(w http.ResponseWriter, r *http.Request) {
 	}
 	relayPubkey, _ := keys.SecretBytesToPubKeyBytes(relaySecretKey)
 
-	// Get NRC config values
-	_, nrcRendezvousURL, _, _ := s.Config.GetNRCConfigValues()
-
-	// Generate URI
-	uri, err := badgerDB.GetNRCConnectionURI(conn, relayPubkey, nrcRendezvousURL)
+	// Generate URI (uses rendezvous URL stored in connection)
+	uri, err := s.nrcEventStore.GetNRCConnectionURI(conn, relayPubkey)
 	if chk.E(err) {
 		http.Error(w, "Failed to generate URI", http.StatusInternalServerError)
 		return
@@ -329,20 +329,20 @@ func (s *Server) handleNRCGetURI(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"uri": uri})
 }
 
-// updateNRCBridgeSecrets updates the NRC bridge with current authorized secrets from database.
-func (s *Server) updateNRCBridgeSecrets(badgerDB *database.D) {
-	if s.nrcBridge == nil {
+// updateNRCBridgeSecretsFromEventStore updates the NRC bridge with current authorized secrets from event store.
+func (s *Server) updateNRCBridgeSecretsFromEventStore() {
+	if s.nrcBridge == nil || s.nrcEventStore == nil {
 		return
 	}
 
-	secrets, err := badgerDB.GetNRCAuthorizedSecrets()
+	secrets, err := s.nrcEventStore.GetNRCAuthorizedSecrets()
 	if chk.E(err) {
 		log.W.F("failed to get NRC authorized secrets: %v", err)
 		return
 	}
 
 	s.nrcBridge.UpdateAuthorizedSecrets(secrets)
-	log.D.F("updated NRC bridge with %d authorized secrets", len(secrets))
+	log.D.F("updated NRC bridge with %d authorized secrets from event store", len(secrets))
 }
 
 // handleNRCConnectionsRouter routes NRC connection requests.
@@ -382,17 +382,20 @@ func (s *Server) handleNRCConfig(w http.ResponseWriter, r *http.Request) {
 	// Get NRC config values
 	nrcEnabled, nrcRendezvousURL, _, _ := s.Config.GetNRCConfigValues()
 
-	// Check if Badger is available (NRC requires Badger)
-	_, badgerAvailable := s.DB.(*database.D)
+	// Check if NRC bridge is actually running
+	bridgeRunning := s.nrcBridge != nil
+
+	// Check if event store is available for connection management
+	eventStoreAvailable := s.nrcEventStore != nil
 
 	response := struct {
-		Enabled        bool   `json:"enabled"`
-		BadgerRequired bool   `json:"badger_required"`
-		RendezvousURL  string `json:"rendezvous_url,omitempty"`
+		Enabled           bool   `json:"enabled"`
+		ConnectionMgmtOK  bool   `json:"connection_mgmt_ok"`
+		RendezvousURL     string `json:"rendezvous_url,omitempty"`
 	}{
-		Enabled:        nrcEnabled && badgerAvailable,
-		BadgerRequired: !badgerAvailable,
-		RendezvousURL:  nrcRendezvousURL,
+		Enabled:          nrcEnabled && bridgeRunning,
+		ConnectionMgmtOK: eventStoreAvailable,
+		RendezvousURL:    nrcRendezvousURL,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

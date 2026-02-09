@@ -29,6 +29,7 @@ type NRCConnection struct {
 	Label         string `json:"label"`           // Human-readable label (e.g., "Phone", "Laptop")
 	Secret        []byte `json:"secret"`          // 32-byte secret for client authentication
 	DerivedPubkey []byte `json:"derived_pubkey"`  // Pubkey derived from secret (for efficient lookups)
+	RendezvousURL string `json:"rendezvous_url"`  // WebSocket URL of the rendezvous relay
 	CreatedAt     int64  `json:"created_at"`      // Unix timestamp
 	LastUsed      int64  `json:"last_used"`       // Unix timestamp of last connection (0 if never)
 	CreatedBy     []byte `json:"created_by"`      // Pubkey of admin who created this connection
