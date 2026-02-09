@@ -4,6 +4,7 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -886,4 +887,45 @@ func protoToUint40s(resp *orlydbv1.SerialList) indextypes.Uint40s {
 		result = append(result, u)
 	}
 	return result
+}
+
+// NRC (Nostr Relay Connect) stubs - not supported in gRPC client
+// NRC management must be done on the database server side
+
+var errNRCNotSupportedGRPC = fmt.Errorf("NRC not supported in gRPC client - manage directly on database server")
+
+func (c *Client) CreateNRCConnection(label string, createdBy []byte) (*database.NRCConnection, error) {
+	return nil, errNRCNotSupportedGRPC
+}
+
+func (c *Client) GetNRCConnection(id string) (*database.NRCConnection, error) {
+	return nil, errNRCNotSupportedGRPC
+}
+
+func (c *Client) GetNRCConnectionByDerivedPubkey(derivedPubkey []byte) (*database.NRCConnection, error) {
+	return nil, errNRCNotSupportedGRPC
+}
+
+func (c *Client) SaveNRCConnection(conn *database.NRCConnection) error {
+	return errNRCNotSupportedGRPC
+}
+
+func (c *Client) DeleteNRCConnection(id string) error {
+	return errNRCNotSupportedGRPC
+}
+
+func (c *Client) GetAllNRCConnections() ([]*database.NRCConnection, error) {
+	return nil, errNRCNotSupportedGRPC
+}
+
+func (c *Client) GetNRCAuthorizedSecrets() (map[string]string, error) {
+	return nil, errNRCNotSupportedGRPC
+}
+
+func (c *Client) UpdateNRCConnectionLastUsed(id string) error {
+	return errNRCNotSupportedGRPC
+}
+
+func (c *Client) GetNRCConnectionURI(conn *database.NRCConnection, relayPubkey []byte, rendezvousURL string) (string, error) {
+	return "", errNRCNotSupportedGRPC
 }

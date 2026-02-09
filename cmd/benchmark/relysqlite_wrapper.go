@@ -321,6 +321,35 @@ func (w *RelySQLiteWrapper) ReconcileBlobMetadata() (int, error) {
 	return 0, fmt.Errorf("not implemented")
 }
 
+// NRC (Nostr Relay Connect) stubs - not needed for benchmarking
+func (w *RelySQLiteWrapper) CreateNRCConnection(label string, createdBy []byte) (*database.NRCConnection, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) GetNRCConnection(id string) (*database.NRCConnection, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) GetNRCConnectionByDerivedPubkey(derivedPubkey []byte) (*database.NRCConnection, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) SaveNRCConnection(conn *database.NRCConnection) error {
+	return fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) DeleteNRCConnection(id string) error {
+	return fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) GetAllNRCConnections() ([]*database.NRCConnection, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) GetNRCAuthorizedSecrets() (map[string]string, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) UpdateNRCConnectionLastUsed(id string) error {
+	return fmt.Errorf("not implemented")
+}
+func (w *RelySQLiteWrapper) GetNRCConnectionURI(conn *database.NRCConnection, relayPubkey []byte, rendezvousURL string) (string, error) {
+	return "", fmt.Errorf("not implemented")
+}
+
 // Helper function to check if a kind is replaceable
 func isReplaceableKind(kind int) bool {
 	return (kind >= 10000 && kind < 20000) || kind == 0 || kind == 3

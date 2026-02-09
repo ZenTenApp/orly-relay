@@ -523,3 +523,44 @@ func (n *N) FetchSize() int {
 func (n *N) MaxConnPoolSize() int {
 	return n.maxConnPoolSize
 }
+
+// NRC (Nostr Relay Connect) stubs - not supported in Neo4j backend
+// NRC requires Badger for key-value storage of connection secrets
+
+var errNRCNotSupported = fmt.Errorf("NRC not supported in Neo4j backend")
+
+func (n *N) CreateNRCConnection(label string, createdBy []byte) (*database.NRCConnection, error) {
+	return nil, errNRCNotSupported
+}
+
+func (n *N) GetNRCConnection(id string) (*database.NRCConnection, error) {
+	return nil, errNRCNotSupported
+}
+
+func (n *N) GetNRCConnectionByDerivedPubkey(derivedPubkey []byte) (*database.NRCConnection, error) {
+	return nil, errNRCNotSupported
+}
+
+func (n *N) SaveNRCConnection(conn *database.NRCConnection) error {
+	return errNRCNotSupported
+}
+
+func (n *N) DeleteNRCConnection(id string) error {
+	return errNRCNotSupported
+}
+
+func (n *N) GetAllNRCConnections() ([]*database.NRCConnection, error) {
+	return nil, errNRCNotSupported
+}
+
+func (n *N) GetNRCAuthorizedSecrets() (map[string]string, error) {
+	return nil, errNRCNotSupported
+}
+
+func (n *N) UpdateNRCConnectionLastUsed(id string) error {
+	return errNRCNotSupported
+}
+
+func (n *N) GetNRCConnectionURI(conn *database.NRCConnection, relayPubkey []byte, rendezvousURL string) (string, error) {
+	return "", errNRCNotSupported
+}

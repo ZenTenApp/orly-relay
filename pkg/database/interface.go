@@ -128,4 +128,15 @@ type Database interface {
 	SaveBlobReport(sha256Hash []byte, reportData []byte) error
 	ListAllBlobUserStats() ([]*UserBlobStats, error)
 	ReconcileBlobMetadata() (reconciled int, err error)
+
+	// NRC (Nostr Relay Connect) client management
+	CreateNRCConnection(label string, createdBy []byte) (*NRCConnection, error)
+	GetNRCConnection(id string) (*NRCConnection, error)
+	GetNRCConnectionByDerivedPubkey(derivedPubkey []byte) (*NRCConnection, error)
+	SaveNRCConnection(conn *NRCConnection) error
+	DeleteNRCConnection(id string) error
+	GetAllNRCConnections() ([]*NRCConnection, error)
+	GetNRCAuthorizedSecrets() (map[string]string, error)
+	UpdateNRCConnectionLastUsed(id string) error
+	GetNRCConnectionURI(conn *NRCConnection, relayPubkey []byte, rendezvousURL string) (string, error)
 }

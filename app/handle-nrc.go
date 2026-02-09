@@ -161,8 +161,8 @@ func (s *Server) handleNRCCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create the connection
-	conn, err := badgerDB.CreateNRCConnection(req.Label)
+	// Create the connection (pass the creator's pubkey for tracking)
+	conn, err := badgerDB.CreateNRCConnection(req.Label, pubkey)
 	if chk.E(err) {
 		http.Error(w, "Failed to create connection", http.StatusInternalServerError)
 		return

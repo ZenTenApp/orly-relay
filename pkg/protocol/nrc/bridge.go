@@ -31,6 +31,17 @@ const (
 	MaxChunkSize = 40000
 )
 
+// NRCAuthorizer defines the interface for NRC authorization lookups.
+// This allows the bridge to look up authorized clients dynamically from the database.
+type NRCAuthorizer interface {
+	// GetNRCClientByPubkey looks up an authorized client by their derived pubkey.
+	// Returns the client ID, label, and whether the client was found.
+	// If not found, returns empty strings and false.
+	GetNRCClientByPubkey(derivedPubkey []byte) (id string, label string, found bool, err error)
+	// UpdateNRCClientLastUsed updates the last used timestamp for tracking.
+	UpdateNRCClientLastUsed(id string) error
+}
+
 // BridgeConfig holds configuration for the NRC bridge.
 type BridgeConfig struct {
 	// RendezvousURL is the WebSocket URL of the public relay.
@@ -40,7 +51,11 @@ type BridgeConfig struct {
 	// Signer is the relay's signer for signing response events.
 	Signer signer.I
 	// AuthorizedSecrets maps derived pubkeys to device names (secret-based auth).
+	// Used when Authorizer is nil.
 	AuthorizedSecrets map[string]string
+	// Authorizer provides dynamic NRC authorization lookups from database.
+	// If set, this takes precedence over AuthorizedSecrets.
+	Authorizer NRCAuthorizer
 	// SessionTimeout is the inactivity timeout for sessions.
 	SessionTimeout time.Duration
 }
@@ -266,7 +281,32 @@ func (b *Bridge) authorize(ctx context.Context, ev *event.E) (conversationKey []
 	clientPubkey := ev.Pubkey[:]
 	clientPubkeyHex := string(hex.Enc(clientPubkey))
 
-	// Secret-based authentication: check if client pubkey is in authorized list
+	// Try database-backed authorization first (if Authorizer is set)
+	if b.config.Authorizer != nil {
+		clientID, clientLabel, found, authErr := b.config.Authorizer.GetNRCClientByPubkey(clientPubkey)
+		if authErr == nil && found {
+			// Client is authorized via database
+			conversationKey, err = encryption.GenerateConversationKey(
+				b.config.Signer.Sec(),
+				clientPubkey,
+			)
+			if chk.E(err) {
+				return
+			}
+			authMode = AuthModeSecret
+			deviceName = clientLabel
+
+			// Update last used timestamp in background
+			go func() {
+				if updateErr := b.config.Authorizer.UpdateNRCClientLastUsed(clientID); updateErr != nil {
+					log.W.F("failed to update NRC client last used: %v", updateErr)
+				}
+			}()
+			return
+		}
+	}
+
+	// Fallback to static map (for backwards compatibility)
 	if name, ok := b.config.AuthorizedSecrets[clientPubkeyHex]; ok {
 		// Secret auth uses ECDH between relay key and client's derived key
 		conversationKey, err = encryption.GenerateConversationKey(
