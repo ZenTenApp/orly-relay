@@ -4,6 +4,7 @@
     import { SimplePool } from "nostr-tools/pool";
     import { fetchUserProfile, nostrClient } from "./nostr.js";
     import { getApiBase, getRelayUrls } from "./config.js";
+    import { publishEventWithAuth } from "./websocket-auth.js";
 
     export let isLoggedIn = false;
     export let userPubkey = "";
@@ -35,6 +36,8 @@
     let isLoadingVariants = false;
     let copiedVariant = null;
     let isDeletingVariants = false;
+    let responsiveBlobs = new Set();  // Original hashes that have variants
+    let variantHashes = new Set();    // Variant hashes to filter from list
 
     // Admin view state
     let isAdminView = false;
@@ -50,9 +53,11 @@
     $: canAccess = isLoggedIn && userPubkey;
     $: isAdmin = currentEffectiveRole === "admin" || currentEffectiveRole === "owner";
 
-    // Sort and display blobs
+    // Sort and display blobs (filter out variants)
+    // Note: variantHashes.size forces reactivity when Set changes
     $: rawBlobs = selectedAdminUser ? selectedUserBlobs : blobs;
-    $: displayBlobs = sortBlobs(rawBlobs, sortBy, sortOrder);
+    $: filteredBlobs = (variantHashes.size, rawBlobs.filter(b => !variantHashes.has(b.sha256)));
+    $: displayBlobs = sortBlobs(filteredBlobs, sortBy, sortOrder);
 
     function sortBlobs(blobList, by, order) {
         if (!blobList || blobList.length === 0) return blobList;
@@ -136,6 +141,45 @@
         loadBlobs();
     }
 
+    async function loadResponsiveBlobs(pubkey, merge = false) {
+        try {
+            const relays = getRelayUrls();
+            const pool = nostrClient.getPool();
+            const filter = {
+                kinds: [30063],
+                authors: [pubkey],
+            };
+
+            const events = await pool.querySync(relays, filter);
+            console.log("Binding events from relay:", events.length, "relays:", relays);
+            const originals = merge ? new Set(responsiveBlobs) : new Set();
+            const variants = merge ? new Set(variantHashes) : new Set();
+
+            for (const ev of events) {
+                const dTag = ev.tags.find(t => t[0] === "d");
+                const originalHash = dTag?.[1];
+                if (originalHash) {
+                    originals.add(originalHash);
+                    for (const tag of ev.tags) {
+                        if (tag[0] === "x" && tag[1] && tag[1] !== originalHash) {
+                            variants.add(tag[1]);
+                        }
+                    }
+                }
+            }
+
+            responsiveBlobs = originals;
+            variantHashes = variants;
+            console.log("Found responsive blobs:", originals.size, "variants to hide:", variants.size);
+        } catch (err) {
+            console.warn("Failed to load responsive blob info:", err);
+            if (!merge) {
+                responsiveBlobs = new Set();
+                variantHashes = new Set();
+            }
+        }
+    }
+
     async function loadBlobs() {
         if (!userPubkey) {
             console.log("loadBlobs: no userPubkey, skipping");
@@ -147,6 +191,8 @@
         error = "";
 
         try {
+            await loadResponsiveBlobs(userPubkey, true);
+
             const url = `${getApiBase()}/blossom/list/${userPubkey}`;
             const authHeader = await createBlossomAuth(userSigner, "list");
             const response = await fetch(url, {
@@ -158,8 +204,6 @@
             }
 
             const data = await response.json();
-            // API returns 'uploaded' timestamp per BUD-02 spec
-            // Server-side filtering already removes variants
             const blobList = Array.isArray(data) ? data : [];
             blobs = [...blobList].sort((a, b) => (b.uploaded || 0) - (a.uploaded || 0));
             console.log("Loaded blobs:", blobs.length);
@@ -248,10 +292,15 @@
         return fields;
     }
 
+    // Track current variant fetch to prevent race conditions
+    let currentVariantFetch = null;
+
     /**
      * Fetch kind 30063 binding events for a blob hash
      */
     async function fetchBlobVariants(sha256Hex) {
+        // Store this request's hash to check later
+        currentVariantFetch = sha256Hex;
         isLoadingVariants = true;
         blobVariants = [];
 
@@ -273,6 +322,13 @@
 
             console.log("Querying for variants with filter:", JSON.stringify(filter));
             let events = await pool.querySync(relays, filter);
+
+            // Check if this is still the current request (user might have switched blobs)
+            if (currentVariantFetch !== sha256Hex) {
+                console.log("Variant fetch cancelled - different blob selected");
+                return;
+            }
+
             console.log(`Found ${events.length} binding events from relay`);
 
             // If no events from relay, check local cache as fallback
@@ -288,6 +344,11 @@
                 } catch (cacheErr) {
                     console.warn("Failed to query cache:", cacheErr);
                 }
+            }
+
+            // Check again after cache query
+            if (currentVariantFetch !== sha256Hex) {
+                return;
             }
 
             if (events.length === 0) {
@@ -321,6 +382,11 @@
                 });
             }
 
+            // Final check before updating state
+            if (currentVariantFetch !== sha256Hex) {
+                return;
+            }
+
             // Sort by width (smallest first)
             variants.sort((a, b) => a.width - b.width);
             blobVariants = variants;
@@ -329,7 +395,9 @@
             console.error("Failed to fetch variants:", err);
         }
 
-        isLoadingVariants = false;
+        if (currentVariantFetch === sha256Hex) {
+            isLoadingVariants = false;
+        }
     }
 
     /**
@@ -484,6 +552,172 @@
         fileInput?.click();
     }
 
+    // Static image types that should get variants (excludes animated formats)
+    const STATIC_IMAGE_TYPES = [
+        "image/jpeg",
+        "image/png",
+        "image/webp",  // Can be animated but usually static
+        "image/bmp",
+        "image/tiff",
+        "image/avif",
+        "image/heic",
+        "image/heif",
+    ];
+
+    function isStaticImage(mimeType) {
+        return STATIC_IMAGE_TYPES.includes(mimeType);
+    }
+
+    /**
+     * Generate variants for a file and upload all (original + variants).
+     * Order: generate variants -> publish binding event -> upload blobs
+     */
+    async function uploadWithVariants(file, fileIndex, totalFiles) {
+        const baseProgress = `[${fileIndex + 1}/${totalFiles}] ${file.name}`;
+        const uploadUrl = `${getApiBase()}/blossom/upload`;
+
+        // Step 1: Compute original hash
+        uploadProgress = `${baseProgress}: Computing hash...`;
+        const originalData = await file.arrayBuffer();
+        const originalHash = await computeSHA256(originalData);
+
+        // Step 2: Create ImageBitmap and generate all variants in memory
+        uploadProgress = `${baseProgress}: Processing image...`;
+        const imageBitmap = await createImageBitmap(file);
+        const originalWidth = imageBitmap.width;
+        const originalHeight = imageBitmap.height;
+
+        const variantBlobs = [];
+        for (const { name, maxWidth } of VARIANT_SIZES) {
+            if (originalWidth <= maxWidth) continue;
+
+            uploadProgress = `${baseProgress}: Creating ${name} variant...`;
+            const resized = await resizeImage(imageBitmap, maxWidth);
+            const resizedData = await resized.blob.arrayBuffer();
+            const variantHash = await computeSHA256(resizedData);
+
+            variantBlobs.push({
+                name,
+                blob: resized.blob,
+                hash: variantHash,
+                width: resized.width,
+                height: resized.height,
+            });
+        }
+        imageBitmap.close();
+
+        // Step 3: Build variant metadata for binding event
+        const variants = [
+            {
+                variant: "original",
+                sha256: originalHash,
+                url: `${getApiBase()}/blossom/${originalHash}`,
+                width: originalWidth,
+                height: originalHeight,
+                mimeType: file.type || "image/jpeg",
+                size: file.size,
+            },
+            ...variantBlobs.map(v => ({
+                variant: v.name,
+                sha256: v.hash,
+                url: `${getApiBase()}/blossom/${v.hash}.jpg`,
+                width: v.width,
+                height: v.height,
+                mimeType: "image/jpeg",
+                size: v.blob.size,
+            })),
+        ];
+
+        console.log("Variants created:", variants.length, variants.map(v => v.variant));
+
+        // Step 4: Publish binding event FIRST (before uploading blobs)
+        if (variants.length > 1) {
+            uploadProgress = `${baseProgress}: Publishing binding event...`;
+
+            const bindingEvent = {
+                kind: 30063,
+                created_at: Math.floor(Date.now() / 1000),
+                content: "",
+                tags: [
+                    ["d", originalHash],
+                    ...variants.map(v => [
+                        "imeta",
+                        `url ${v.url}`,
+                        `x ${v.sha256}`,
+                        `m ${v.mimeType}`,
+                        `dim ${v.width}x${v.height}`,
+                        `variant ${v.variant}`,
+                        `size ${v.size}`,
+                    ]),
+                    ...variants.map(v => ["x", v.sha256]),
+                ],
+            };
+
+            const signedEvent = await userSigner.signEvent(bindingEvent);
+
+            // Use websocket auth for proper NIP-42 handling
+            const relayUrl = getRelayUrls()[0];
+            const result = await publishEventWithAuth(relayUrl, signedEvent, userSigner, userPubkey);
+            console.log("Binding event published:", signedEvent.id, result);
+
+            // Update local sets immediately
+            responsiveBlobs = new Set([...responsiveBlobs, originalHash]);
+            const newVariantHashes = variants
+                .filter(v => v.sha256 !== originalHash)
+                .map(v => v.sha256);
+            variantHashes = new Set([...variantHashes, ...newVariantHashes]);
+        }
+
+        // Step 5: Upload original blob
+        uploadProgress = `${baseProgress}: Uploading original...`;
+        const originalAuth = await createBlossomAuth(userSigner, "upload", originalHash);
+
+        const originalResponse = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: {
+                "Content-Type": file.type || "application/octet-stream",
+                "X-SHA-256": originalHash,
+                ...(originalAuth ? { Authorization: `Nostr ${originalAuth}` } : {}),
+            },
+            body: file,
+        });
+
+        if (!originalResponse.ok) {
+            const reason = originalResponse.headers.get("X-Reason") || originalResponse.statusText;
+            throw new Error(reason);
+        }
+
+        const descriptor = await originalResponse.json();
+
+        // Step 6: Upload variant blobs
+        for (const v of variantBlobs) {
+            uploadProgress = `${baseProgress}: Uploading ${v.name}...`;
+
+            // Check if variant already exists
+            const checkUrl = `${getApiBase()}/blossom/${v.hash}`;
+            const headResponse = await fetch(checkUrl, { method: "HEAD" });
+
+            if (!headResponse.ok) {
+                const variantAuth = await createBlossomAuth(userSigner, "upload", v.hash);
+                const variantResponse = await fetch(uploadUrl, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "image/jpeg",
+                        "X-SHA-256": v.hash,
+                        ...(variantAuth ? { Authorization: `Nostr ${variantAuth}` } : {}),
+                    },
+                    body: v.blob,
+                });
+
+                if (!variantResponse.ok) {
+                    console.warn(`Failed to upload ${v.name} variant:`, variantResponse.statusText);
+                }
+            }
+        }
+
+        return descriptor;
+    }
+
     async function uploadFiles() {
         if (selectedFiles.length === 0) return;
 
@@ -494,29 +728,37 @@
 
         for (let i = 0; i < selectedFiles.length; i++) {
             const file = selectedFiles[i];
-            uploadProgress = `Uploading ${i + 1}/${selectedFiles.length}: ${file.name}`;
 
             try {
-                const url = `${getApiBase()}/blossom/upload`;
-                const authHeader = await createBlossomAuth(userSigner, "upload");
+                if (isStaticImage(file.type)) {
+                    // Upload with variant generation for static images
+                    const descriptor = await uploadWithVariants(file, i, selectedFiles.length);
+                    console.log("Upload with variants complete:", descriptor);
+                    uploaded.push(descriptor);
+                } else {
+                    // Regular upload for non-images
+                    uploadProgress = `Uploading ${i + 1}/${selectedFiles.length}: ${file.name}`;
+                    const url = `${getApiBase()}/blossom/upload`;
+                    const authHeader = await createBlossomAuth(userSigner, "upload");
 
-                const response = await fetch(url, {
-                    method: "PUT",
-                    headers: {
-                        "Content-Type": file.type || "application/octet-stream",
-                        ...(authHeader ? { Authorization: `Nostr ${authHeader}` } : {}),
-                    },
-                    body: file,
-                });
+                    const response = await fetch(url, {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": file.type || "application/octet-stream",
+                            ...(authHeader ? { Authorization: `Nostr ${authHeader}` } : {}),
+                        },
+                        body: file,
+                    });
 
-                if (!response.ok) {
-                    const reason = response.headers.get("X-Reason") || response.statusText;
-                    throw new Error(reason);
+                    if (!response.ok) {
+                        const reason = response.headers.get("X-Reason") || response.statusText;
+                        throw new Error(reason);
+                    }
+
+                    const descriptor = await response.json();
+                    console.log("Upload response:", descriptor);
+                    uploaded.push(descriptor);
                 }
-
-                const descriptor = await response.json();
-                console.log("Upload response:", descriptor);
-                uploaded.push(descriptor);
             } catch (err) {
                 console.error(`Error uploading ${file.name}:`, err);
                 failed.push({ name: file.name, error: err.message });
@@ -647,16 +889,9 @@
         }
     }
 
-    let isGeneratingThumbnails = false;
-    let thumbnailProgress = "";
-
     // Generate variants state (for single image)
     let isGeneratingVariants = false;
     let generatingProgress = "";
-
-    // Remove all variants state
-    let isRemovingAllVariants = false;
-    let removeVariantsProgress = "";
 
     // Selection state for bulk delete
     let selectedHashes = new Set();
@@ -729,42 +964,6 @@
         }
     }
 
-    async function generateAllThumbnails() {
-        if (!confirm("Generate thumbnails for all images? This may take a while.")) return;
-
-        isGeneratingThumbnails = true;
-        thumbnailProgress = "Starting...";
-        error = "";
-
-        try {
-            const url = `${getApiBase()}/blossom/admin/generate-thumbnails`;
-            const authHeader = await createBlossomAuth(userSigner, "admin");
-
-            const response = await fetch(url, {
-                method: "POST",
-                headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
-            });
-
-            if (!response.ok) {
-                const reason = response.headers.get("X-Reason") || response.statusText;
-                throw new Error(reason);
-            }
-
-            const result = await response.json();
-            thumbnailProgress = `Done! Generated: ${result.generated}, Skipped: ${result.skipped}, Failed: ${result.failed}`;
-
-            // Show result for 5 seconds
-            setTimeout(() => {
-                thumbnailProgress = "";
-            }, 5000);
-        } catch (err) {
-            console.error("Error generating thumbnails:", err);
-            error = err.message || "Failed to generate thumbnails";
-        } finally {
-            isGeneratingThumbnails = false;
-        }
-    }
-
     // Variant size definitions
     const VARIANT_SIZES = [
         { name: "thumb", maxWidth: 128 },
@@ -833,11 +1032,7 @@
 
     /**
      * Generate responsive variants for a single image.
-     * All processing done client-side using Canvas API with GPU acceleration.
-     * 1. Fetches the original image
-     * 2. Uses Canvas to resize to different variants
-     * 3. Uploads each variant as a new blob
-     * 4. Creates a kind 30063 binding event linking all variants
+     * Order: generate variants -> publish binding event -> upload blobs
      */
     async function generateVariants(blob) {
         if (!confirm(`Generate responsive variants for this image?\n\nThis will create thumb (128px), mobile (512px), desktop (1280px), and original variants.`)) {
@@ -863,85 +1058,64 @@
             const originalWidth = imageBitmap.width;
             const originalHeight = imageBitmap.height;
 
-            // Step 2: Generate variants using Canvas (GPU accelerated)
-            const uploadedVariants = [];
-
-            // Add original as a variant
-            const originalData = await imageBlob.arrayBuffer();
-            uploadedVariants.push({
-                variant: "original",
-                sha256: blob.sha256,
-                url: imageUrl,
-                width: originalWidth,
-                height: originalHeight,
-                mimeType: blob.type || "image/jpeg",
-                size: imageBlob.size,
-            });
-
-            // Generate resized variants
+            // Step 2: Generate all variants in memory (don't upload yet)
+            const variantBlobs = [];
             for (let i = 0; i < VARIANT_SIZES.length; i++) {
                 const { name, maxWidth } = VARIANT_SIZES[i];
-                generatingProgress = `Creating ${name}... (${i + 1}/${VARIANT_SIZES.length})`;
+                if (originalWidth <= maxWidth) continue;
 
-                // Skip if original is smaller than target
-                if (originalWidth <= maxWidth) {
-                    continue;
-                }
-
+                generatingProgress = `Creating ${name}...`;
                 const resized = await resizeImage(imageBitmap, maxWidth);
                 const resizedData = await resized.blob.arrayBuffer();
                 const variantHash = await computeSHA256(resizedData);
 
-                // Check if variant already exists
-                const checkUrl = `${getApiBase()}/blossom/${variantHash}`;
-                const headResponse = await fetch(checkUrl, { method: "HEAD" });
-
-                if (!headResponse.ok) {
-                    // Upload the variant
-                    generatingProgress = `Uploading ${name}...`;
-                    const uploadUrl = `${getApiBase()}/blossom/upload`;
-                    const uploadAuth = await createBlossomAuth(userSigner, "upload", variantHash);
-
-                    const uploadResponse = await fetch(uploadUrl, {
-                        method: "PUT",
-                        headers: {
-                            "Content-Type": "image/jpeg",
-                            "X-SHA-256": variantHash,
-                            ...(uploadAuth ? { Authorization: `Nostr ${uploadAuth}` } : {}),
-                        },
-                        body: resized.blob,
-                    });
-
-                    if (!uploadResponse.ok) {
-                        const reason = uploadResponse.headers.get("X-Reason") || uploadResponse.statusText;
-                        console.warn(`Failed to upload variant ${name}: ${reason}`);
-                        continue;
-                    }
-                }
-
-                uploadedVariants.push({
-                    variant: name,
-                    sha256: variantHash,
-                    url: `${getApiBase()}/blossom/${variantHash}.jpg`,
+                variantBlobs.push({
+                    name,
+                    blob: resized.blob,
+                    hash: variantHash,
                     width: resized.width,
                     height: resized.height,
-                    mimeType: "image/jpeg",
-                    size: resized.blob.size,
                 });
             }
-
-            // Clean up
             imageBitmap.close();
 
-            // Step 3: Create kind 30063 binding event
-            generatingProgress = "Creating binding event...";
+            // Step 3: Build variant metadata for binding event
+            const variants = [
+                {
+                    variant: "original",
+                    sha256: blob.sha256,
+                    url: imageUrl,
+                    width: originalWidth,
+                    height: originalHeight,
+                    mimeType: blob.type || "image/jpeg",
+                    size: imageBlob.size,
+                },
+                ...variantBlobs.map(v => ({
+                    variant: v.name,
+                    sha256: v.hash,
+                    url: `${getApiBase()}/blossom/${v.hash}.jpg`,
+                    width: v.width,
+                    height: v.height,
+                    mimeType: "image/jpeg",
+                    size: v.blob.size,
+                })),
+            ];
+
+            if (variants.length <= 1) {
+                generatingProgress = "Image too small for variants";
+                setTimeout(() => { generatingProgress = ""; }, 2000);
+                return;
+            }
+
+            // Step 4: Publish binding event FIRST with proper auth
+            generatingProgress = "Publishing binding event...";
             const bindingEvent = {
                 kind: 30063,
                 created_at: Math.floor(Date.now() / 1000),
                 content: "",
                 tags: [
-                    ["d", blob.sha256],  // d tag for addressability
-                    ...uploadedVariants.map(v => [
+                    ["d", blob.sha256],
+                    ...variants.map(v => [
                         "imeta",
                         `url ${v.url}`,
                         `x ${v.sha256}`,
@@ -950,210 +1124,60 @@
                         `variant ${v.variant}`,
                         `size ${v.size}`,
                     ]),
-                    ...uploadedVariants.map(v => ["x", v.sha256]),  // x tags for queries
+                    ...variants.map(v => ["x", v.sha256]),
                 ],
             };
 
-            // Sign and publish the event via nostr protocol
             const signedEvent = await userSigner.signEvent(bindingEvent);
+            const relayUrl = getRelayUrls()[0];
+            const result = await publishEventWithAuth(relayUrl, signedEvent, userSigner, userPubkey);
+            console.log("Binding event published:", signedEvent.id, result);
 
-            let publishSuccess = false;
-            try {
-                const result = await nostrClient.publish(signedEvent);
-                console.log("Binding event published:", signedEvent.id, result);
-                publishSuccess = result.success && result.okCount > 0;
-            } catch (publishErr) {
-                console.warn("Failed to publish binding event:", publishErr);
+            // Update local sets
+            responsiveBlobs = new Set([...responsiveBlobs, blob.sha256]);
+            const newVariantHashes = variants
+                .filter(v => v.sha256 !== blob.sha256)
+                .map(v => v.sha256);
+            variantHashes = new Set([...variantHashes, ...newVariantHashes]);
+
+            // Step 5: Upload variant blobs
+            const uploadUrl = `${getApiBase()}/blossom/upload`;
+            for (const v of variantBlobs) {
+                generatingProgress = `Uploading ${v.name}...`;
+
+                // Check if already exists
+                const checkUrl = `${getApiBase()}/blossom/${v.hash}`;
+                const headResponse = await fetch(checkUrl, { method: "HEAD" });
+
+                if (!headResponse.ok) {
+                    const uploadAuth = await createBlossomAuth(userSigner, "upload", v.hash);
+                    const uploadResponse = await fetch(uploadUrl, {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": "image/jpeg",
+                            "X-SHA-256": v.hash,
+                            ...(uploadAuth ? { Authorization: `Nostr ${uploadAuth}` } : {}),
+                        },
+                        body: v.blob,
+                    });
+
+                    if (!uploadResponse.ok) {
+                        console.warn(`Failed to upload ${v.name}:`, uploadResponse.statusText);
+                    }
+                }
             }
 
             generatingProgress = "Done!";
 
-            // Small delay to allow relay to index the event before querying
-            if (publishSuccess) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-
             // Reload variants for the modal
             await fetchBlobVariants(blob.sha256);
 
-            // Clear progress after 2 seconds
-            setTimeout(() => {
-                generatingProgress = "";
-            }, 2000);
+            setTimeout(() => { generatingProgress = ""; }, 2000);
         } catch (err) {
             console.error("Error generating variants:", err);
             error = err.message || "Failed to generate variants";
         } finally {
             isGeneratingVariants = false;
-        }
-    }
-
-    /**
-     * Remove all responsive variants and binding events.
-     * 1. Query all kind 30063 binding events for this user
-     * 2. Delete all variant blobs (non-originals)
-     * 3. Delete the binding events by publishing kind 5 deletion events
-     */
-    async function removeAllVariants() {
-        if (!confirm("Remove ALL responsive variants and binding events?\n\nThis will:\n- Delete all generated variant blobs (thumb, mobile, desktop)\n- Delete all binding events (kind 30063)\n- Keep only original images\n\nThis cannot be undone!")) {
-            return;
-        }
-
-        isRemovingAllVariants = true;
-        removeVariantsProgress = "Finding binding events...";
-        error = "";
-
-        try {
-            const relays = getRelayUrls();
-            const pool = nostrClient.getPool();
-
-            // Query for all kind 30063 events by this user
-            const filter = {
-                kinds: [30063],
-                authors: [userPubkey],
-                limit: 1000
-            };
-
-            console.log("Querying for all binding events with filter:", JSON.stringify(filter));
-            let events = await pool.querySync(relays, filter);
-            console.log(`Found ${events.length} binding events from relay`);
-
-            // Also check local cache for any events not on the relay
-            try {
-                const { queryEventsFromDB } = await import('./nostr.js');
-                const cachedEvents = await queryEventsFromDB([filter]);
-                if (cachedEvents.length > 0) {
-                    console.log(`Found ${cachedEvents.length} binding events in cache`);
-                    // Merge and dedupe by event id
-                    const eventIds = new Set(events.map(e => e.id));
-                    for (const cached of cachedEvents) {
-                        if (!eventIds.has(cached.id)) {
-                            events.push(cached);
-                        }
-                    }
-                }
-            } catch (cacheErr) {
-                console.warn("Failed to query cache:", cacheErr);
-            }
-
-            if (events.length === 0) {
-                removeVariantsProgress = "No binding events found.";
-                setTimeout(() => { removeVariantsProgress = ""; }, 3000);
-                return;
-            }
-
-            removeVariantsProgress = `Found ${events.length} binding events...`;
-
-            // Collect all variant hashes and original hashes
-            const variantHashes = new Set();
-            const originalHashes = new Set();
-            const eventIds = [];
-
-            for (const ev of events) {
-                eventIds.push(ev.id);
-
-                // Get original hash from d tag
-                let originalHash = null;
-                for (const tag of ev.tags) {
-                    if (tag[0] === "d" && tag[1]) {
-                        originalHash = tag[1].toLowerCase();
-                        originalHashes.add(originalHash);
-                        break;
-                    }
-                }
-
-                // Get variant hashes from imeta tags
-                for (const tag of ev.tags) {
-                    if (tag[0] !== "imeta") continue;
-
-                    let variantHash = null;
-                    let variantName = null;
-
-                    for (let i = 1; i < tag.length; i++) {
-                        const part = tag[i];
-                        if (part.startsWith("x ")) {
-                            variantHash = part.substring(2).toLowerCase();
-                        } else if (part.startsWith("variant ")) {
-                            variantName = part.substring(8);
-                        }
-                    }
-
-                    // Only add non-original variants
-                    if (variantHash && variantName !== "original" && variantHash !== originalHash) {
-                        variantHashes.add(variantHash);
-                    }
-                }
-            }
-
-            // Delete variant blobs
-            let deletedBlobs = 0;
-            let failedBlobs = 0;
-            const variantArray = Array.from(variantHashes);
-
-            for (let i = 0; i < variantArray.length; i++) {
-                const hash = variantArray[i];
-                removeVariantsProgress = `Deleting variant ${i + 1}/${variantArray.length}...`;
-
-                try {
-                    const url = `${getApiBase()}/blossom/${hash}`;
-                    const authHeader = await createBlossomAuth(userSigner, "delete", hash);
-                    const response = await fetch(url, {
-                        method: "DELETE",
-                        headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
-                    });
-
-                    if (response.ok || response.status === 404) {
-                        deletedBlobs++;
-                    } else {
-                        failedBlobs++;
-                    }
-                } catch (err) {
-                    console.warn(`Failed to delete variant ${hash}:`, err);
-                    failedBlobs++;
-                }
-            }
-
-            // Delete binding events by publishing kind 5 deletion events
-            removeVariantsProgress = `Deleting ${eventIds.length} binding events...`;
-
-            for (let i = 0; i < eventIds.length; i++) {
-                const eventId = eventIds[i];
-                removeVariantsProgress = `Deleting event ${i + 1}/${eventIds.length}...`;
-
-                try {
-                    // Create kind 5 deletion event
-                    const deleteEvent = {
-                        kind: 5,
-                        created_at: Math.floor(Date.now() / 1000),
-                        content: "Removing responsive image binding",
-                        tags: [
-                            ["e", eventId],
-                            ["k", "30063"],
-                        ],
-                    };
-
-                    const signedDelete = await userSigner.signEvent(deleteEvent);
-
-                    // Publish to relay via nostr protocol
-                    await nostrClient.publish(signedDelete);
-                } catch (err) {
-                    console.warn(`Failed to delete event ${eventId}:`, err);
-                }
-            }
-
-            removeVariantsProgress = `Done! Deleted ${deletedBlobs} variants, ${eventIds.length} events.`;
-
-            // Refresh blob list
-            await loadBlobs();
-
-            setTimeout(() => {
-                removeVariantsProgress = "";
-            }, 5000);
-        } catch (err) {
-            console.error("Error removing variants:", err);
-            error = err.message || "Failed to remove variants";
-        } finally {
-            isRemovingAllVariants = false;
         }
     }
 
@@ -1238,18 +1262,6 @@
                 </button>
             </div>
 
-            <div class="variants-actions">
-                <button
-                    class="remove-variants-btn"
-                    on:click={removeAllVariants}
-                    disabled={isRemovingAllVariants}
-                >
-                    {isRemovingAllVariants ? "Removing..." : "Remove All Variants"}
-                </button>
-                {#if removeVariantsProgress}
-                    <span class="variants-progress">{removeVariantsProgress}</span>
-                {/if}
-            </div>
         {/if}
 
         {#if error}
@@ -1259,20 +1271,6 @@
         {/if}
 
         {#if isAdminView && !selectedAdminUser}
-            <!-- Admin actions -->
-            <div class="admin-actions">
-                <button
-                    class="generate-thumbnails-btn"
-                    on:click={generateAllThumbnails}
-                    disabled={isGeneratingThumbnails}
-                >
-                    {isGeneratingThumbnails ? "Generating..." : "Generate All Thumbnails"}
-                </button>
-                {#if thumbnailProgress}
-                    <span class="thumbnail-progress">{thumbnailProgress}</span>
-                {/if}
-            </div>
-
             <!-- Admin users list view -->
             {#if isLoadingAdmin}
                 <div class="loading">Loading user statistics...</div>
@@ -1358,6 +1356,9 @@
                                     <span class="blob-size">{formatSize(blob.size)}</span>
                                     <span class="blob-type">{blob.type || "unknown"}</span>
                                     <span class="blob-date">{formatDate(blob.uploaded)}</span>
+                                    {#if responsiveBlobs.has(blob.sha256)}
+                                        <span class="responsive-chip">responsive</span>
+                                    {/if}
                                 </div>
                             </div>
                             <button
@@ -1520,6 +1521,9 @@
     .blossom-view {
         padding: 1em;
         box-sizing: border-box;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
     }
 
     .header-section {
@@ -1752,6 +1756,8 @@
         border-radius: 6px;
         cursor: pointer;
         transition: background-color 0.2s;
+        min-width: 0;
+        overflow: hidden;
     }
 
     .blob-item:hover,
@@ -1793,20 +1799,33 @@
     .blob-info {
         flex: 1;
         min-width: 0;
+        overflow: hidden;
     }
 
     .blob-hash {
         font-family: monospace;
         font-size: 0.9em;
         color: var(--text-color);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .hash-full {
-        display: inline;
+        display: none;
     }
 
     .hash-truncated {
-        display: none;
+        display: inline;
+    }
+
+    @media (min-width: 900px) {
+        .hash-full {
+            display: inline;
+        }
+        .hash-truncated {
+            display: none;
+        }
     }
 
     .blob-meta {
@@ -1820,6 +1839,16 @@
     }
 
     .blob-meta .blob-date {
+        white-space: nowrap;
+    }
+
+    .responsive-chip {
+        background: var(--success, #22c55e);
+        color: white;
+        padding: 0.1em 0.5em;
+        border-radius: 4px;
+        font-size: 0.85em;
+        font-weight: 500;
         white-space: nowrap;
     }
 
@@ -1956,8 +1985,8 @@
     /* Modal styles */
     .modal-overlay {
         position: fixed;
-        top: 0;
-        left: 0;
+        top: 3em;
+        left: 200px;
         right: 0;
         bottom: 0;
         background-color: rgba(0, 0, 0, 0.8);
@@ -1965,13 +1994,16 @@
         align-items: center;
         justify-content: center;
         z-index: 1000;
+        padding: 1em;
+        box-sizing: border-box;
     }
 
     .modal-content {
         background-color: var(--bg-color);
         border-radius: 8px;
-        max-width: 90vw;
-        max-height: 90vh;
+        max-width: 100%;
+        max-height: 100%;
+        width: 100%;
         display: flex;
         flex-direction: column;
         overflow: hidden;
@@ -2325,6 +2357,12 @@
             flex-wrap: wrap;
         }
 
+        .modal-overlay {
+            left: 0;
+            top: 0;
+            padding: 0.5em;
+        }
+
         .modal-footer {
             flex-direction: column;
             gap: 0.75em;
@@ -2334,76 +2372,6 @@
             flex-direction: column;
             gap: 0.25em;
         }
-    }
-
-    /* Admin actions */
-    .admin-actions {
-        display: flex;
-        align-items: center;
-        gap: 1em;
-        margin-bottom: 1em;
-        padding: 0.75em;
-        background: var(--bg-secondary, #f5f5f5);
-        border-radius: 8px;
-    }
-
-    .generate-thumbnails-btn {
-        padding: 0.5em 1em;
-        border: none;
-        border-radius: 4px;
-        background: var(--accent, #5a67d8);
-        color: white;
-        cursor: pointer;
-        font-size: 0.9em;
-    }
-
-    .generate-thumbnails-btn:hover:not(:disabled) {
-        opacity: 0.9;
-    }
-
-    .generate-thumbnails-btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-    }
-
-    .thumbnail-progress {
-        font-size: 0.85em;
-        color: var(--text-secondary, #666);
-    }
-
-    /* Variants actions */
-    .variants-actions {
-        display: flex;
-        align-items: center;
-        gap: 1em;
-        margin-bottom: 1em;
-        padding: 0.75em;
-        background: var(--bg-secondary, #f5f5f5);
-        border-radius: 8px;
-    }
-
-    .remove-variants-btn {
-        padding: 0.5em 1em;
-        border: none;
-        border-radius: 4px;
-        background: var(--warning, #dc3545);
-        color: white;
-        cursor: pointer;
-        font-size: 0.9em;
-    }
-
-    .remove-variants-btn:hover:not(:disabled) {
-        opacity: 0.9;
-    }
-
-    .remove-variants-btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-    }
-
-    .variants-progress {
-        font-size: 0.85em;
-        color: var(--text-secondary, #666);
     }
 
 </style>

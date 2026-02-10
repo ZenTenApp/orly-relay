@@ -20,6 +20,24 @@ All application logic belongs in the **client** (Svelte web UI in `app/web/`):
 
 If you think server changes are needed, **ASK FIRST** - the answer is probably "do it client-side".
 
+## CRITICAL: NIP-42 Authentication in Client Code
+
+**The client MUST handle NIP-42 AUTH challenges automatically.** When a relay sends an AUTH challenge (for reads or writes), the client should:
+
+1. Detect the AUTH challenge from the relay
+2. Sign the AUTH event using the user's signer
+3. Send the signed AUTH event back to the relay
+4. Retry the original operation
+
+**Never ask the user whether to authenticate** - if a relay requires auth, the operation simply won't work without it. Users connecting to auth-required relays expect authentication to happen automatically.
+
+This applies to:
+- Publishing events (kind 30063 binding events, etc.)
+- Querying events that require auth
+- Any relay interaction that receives an "auth-required" response
+
+The `nostrClient` in `app/web/src/nostr.js` must implement automatic AUTH handling for all relay connections.
+
 ## Quick Reference
 
 ```bash

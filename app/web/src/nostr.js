@@ -20,6 +20,7 @@ class NostrClient {
     this.eventStore = new EventStore();
     this.isConnected = false;
     this.signer = null;
+    this.authenticatedRelays = new Set();  // Track relays we've authed to
     // Use dynamic relay list (supports standalone mode)
     this.relays = [...getDefaultRelays()];
   }
@@ -124,42 +125,113 @@ class NostrClient {
     this.isConnected = false;
   }
 
-  // Publish an event
+  // Authenticate to a relay using NIP-42
+  async authenticateToRelay(relayUrl) {
+    if (!this.signer) {
+      console.warn("No signer available for auth");
+      return false;
+    }
+    if (this.authenticatedRelays.has(relayUrl)) {
+      return true;  // Already authenticated
+    }
+
+    try {
+      const relay = await this.pool.ensureRelay(relayUrl);
+
+      // Create NIP-42 AUTH event
+      const authEvent = {
+        kind: 22242,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ["relay", relayUrl],
+          ["challenge", relay.challenge || ""],
+        ],
+        content: "",
+      };
+
+      const signedAuth = await this.signer.signEvent(authEvent);
+
+      // Send AUTH message
+      await relay.auth(signedAuth);
+      this.authenticatedRelays.add(relayUrl);
+      console.log("✓ Authenticated to relay:", relayUrl);
+      return true;
+    } catch (err) {
+      console.warn("✗ Failed to authenticate to relay:", relayUrl, err);
+      return false;
+    }
+  }
+
+  // Publish an event with automatic auth handling
   async publish(event, specificRelays = null) {
     if (!this.isConnected) {
       console.warn("Not connected to any relays, attempting to connect first");
       await this.connect();
     }
 
-    try {
-      const relaysToUse = specificRelays || this.relays;
-      const promises = this.pool.publish(relaysToUse, event);
-      const results = await Promise.allSettled(promises);
+    const relaysToUse = specificRelays || this.relays;
 
-      // Count successes and failures
-      let okCount = 0;
-      let errorCount = 0;
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          okCount++;
-          console.log("✓ Event accepted by relay");
-        } else {
-          errorCount++;
-          console.warn("✗ Relay rejected event:", result.reason);
+    // First attempt
+    let results = await this._tryPublish(event, relaysToUse);
+
+    // Check for auth-required errors and retry
+    const authRequiredRelays = [];
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status === 'rejected' &&
+          result.reason?.message?.includes('auth-required')) {
+        authRequiredRelays.push(relaysToUse[i]);
+      }
+    }
+
+    // If any relays need auth, authenticate and retry
+    if (authRequiredRelays.length > 0 && this.signer) {
+      console.log("Auth required for relays:", authRequiredRelays);
+      for (const relayUrl of authRequiredRelays) {
+        await this.authenticateToRelay(relayUrl);
+      }
+      // Retry publish to auth-required relays
+      const retryResults = await this._tryPublish(event, authRequiredRelays);
+      // Merge retry results back
+      for (let i = 0; i < authRequiredRelays.length; i++) {
+        const originalIdx = relaysToUse.indexOf(authRequiredRelays[i]);
+        if (originalIdx >= 0) {
+          results[originalIdx] = retryResults[i];
         }
       }
+    }
 
-      if (okCount === 0) {
-        throw new Error(`Event rejected by all ${errorCount} relays`);
+    // Count successes and failures
+    let okCount = 0;
+    let errorCount = 0;
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        okCount++;
+        console.log("✓ Event accepted by relay");
+      } else {
+        errorCount++;
+        console.warn("✗ Relay rejected event:", result.reason);
       }
+    }
 
-      console.log(`✓ Event published: ${okCount} OK, ${errorCount} failed`);
+    if (okCount === 0) {
+      throw new Error(`Event rejected by all ${errorCount} relays`);
+    }
 
-      // Store the published event in IndexedDB
-      await putEvents([event]);
-      console.log("Event stored in IndexedDB");
+    console.log(`✓ Event published: ${okCount} OK, ${errorCount} failed`);
 
-      return { success: true, okCount, errorCount, event };
+    // Store the published event in IndexedDB
+    await putEvents([event]);
+    console.log("Event stored in IndexedDB");
+
+    return { success: true, okCount, errorCount, event };
+  }
+
+  // Internal: try publishing to relays
+  async _tryPublish(event, relays) {
+    try {
+      const promises = this.pool.publish(relays, event);
+      return await Promise.allSettled(promises);
     } catch (error) {
       console.error("✗ Failed to publish event:", error);
       throw error;
