@@ -684,11 +684,15 @@
 
         selectedHashes.clear();
         selectedHashes = selectedHashes;
-        isDeletingSelected = false;
 
-        if (deleted > 0) {
+        // Refresh the list
+        if (selectedAdminUser) {
+            await loadUserBlobs(selectedAdminUser.pubkey);
+        } else {
             await loadBlobs();
         }
+
+        isDeletingSelected = false;
 
         if (failed > 0) {
             error = `Deleted ${deleted}, failed ${failed}`;
