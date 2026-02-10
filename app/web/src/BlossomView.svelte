@@ -43,9 +43,39 @@
     let selectedAdminUser = null;
     let selectedUserBlobs = [];
 
+    // Sort state
+    let sortBy = "date"; // "date" or "size"
+    let sortOrder = "desc"; // "asc" or "desc"
+
     $: canAccess = isLoggedIn && userPubkey;
     $: isAdmin = currentEffectiveRole === "admin" || currentEffectiveRole === "owner";
-    $: displayBlobs = selectedAdminUser ? selectedUserBlobs : blobs;
+
+    // Sort and display blobs
+    $: rawBlobs = selectedAdminUser ? selectedUserBlobs : blobs;
+    $: displayBlobs = sortBlobs(rawBlobs, sortBy, sortOrder);
+
+    function sortBlobs(blobList, by, order) {
+        if (!blobList || blobList.length === 0) return blobList;
+        const sorted = [...blobList].sort((a, b) => {
+            let cmp = 0;
+            if (by === "date") {
+                cmp = (a.uploaded || 0) - (b.uploaded || 0);
+            } else if (by === "size") {
+                cmp = (a.size || 0) - (b.size || 0);
+            }
+            return order === "desc" ? -cmp : cmp;
+        });
+        return sorted;
+    }
+
+    function toggleSort(newSortBy) {
+        if (sortBy === newSortBy) {
+            sortOrder = sortOrder === "desc" ? "asc" : "desc";
+        } else {
+            sortBy = newSortBy;
+            sortOrder = "desc";
+        }
+    }
 
     // Track if we've loaded once to prevent repeated loads
     let hasLoadedOnce = false;
@@ -1042,6 +1072,15 @@
             {/if}
 
             <div class="header-buttons">
+                {#if !isAdminView || selectedAdminUser}
+                    <select class="sort-select" bind:value={sortBy}>
+                        <option value="date">Date {sortBy === "date" ? (sortOrder === "desc" ? "↓" : "↑") : ""}</option>
+                        <option value="size">Size {sortBy === "size" ? (sortOrder === "desc" ? "↓" : "↑") : ""}</option>
+                    </select>
+                    <button class="sort-order-btn" on:click={() => sortOrder = sortOrder === "desc" ? "asc" : "desc"} title="Toggle sort order">
+                        {sortOrder === "desc" ? "↓" : "↑"}
+                    </button>
+                {/if}
                 {#if isAdmin && !isAdminView && !selectedAdminUser}
                     <button class="admin-btn" on:click={enterAdminView} disabled={isLoading}>
                         Admin
@@ -1373,6 +1412,36 @@
         display: flex;
         align-items: center;
         gap: 0.5em;
+    }
+
+    .sort-select {
+        padding: 0.4em 0.6em;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background-color: var(--card-bg);
+        color: var(--text-color);
+        font-size: 0.9em;
+        cursor: pointer;
+    }
+
+    .sort-select:focus {
+        outline: none;
+        border-color: var(--primary);
+    }
+
+    .sort-order-btn {
+        padding: 0.4em 0.6em;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background-color: var(--card-bg);
+        color: var(--text-color);
+        font-size: 0.9em;
+        cursor: pointer;
+        min-width: 2em;
+    }
+
+    .sort-order-btn:hover {
+        background-color: var(--sidebar-bg);
     }
 
     .back-btn {
