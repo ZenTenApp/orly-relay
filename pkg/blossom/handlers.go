@@ -1425,6 +1425,41 @@ func (s *Server) doMigrateResponsive(w http.ResponseWriter, r *http.Request, tar
 			continue
 		}
 
+		// Check if all variants already exist with proper markers
+		// If so, just mark as migrated and skip (don't create duplicate events)
+		allVariantsExist := true
+		for _, v := range variants {
+			if string(v.Variant) == "original" {
+				continue // Skip original, we're checking variants
+			}
+			variantHash := computeSHA256(v.Data)
+			variantHex := hex.Enc(variantHash)
+
+			// Check blob exists
+			exists, _ := s.storage.HasBlob(variantHash)
+			if !exists {
+				allVariantsExist = false
+				break
+			}
+
+			// Check variantof marker exists and points to this original
+			variantKey := "variantof:" + variantHex
+			markerData, _ := s.storage.GetThumbnail(variantKey)
+			if len(markerData) == 0 || strings.ToLower(string(markerData)) != strings.ToLower(sha256Hex) {
+				allVariantsExist = false
+				break
+			}
+		}
+
+		if allVariantsExist {
+			// All variants already exist with proper markers - just mark as migrated and skip
+			migratedKey := "migrated:" + sha256Hex
+			s.storage.SaveThumbnail(migratedKey, []byte("existing"))
+			skipped++
+			log.D.F("skipping %s: all variants already exist", sha256Hex)
+			continue
+		}
+
 		// Save each variant as a new blob and build imeta tags
 		type uploadedVariant struct {
 			Variant  ImageVariant
