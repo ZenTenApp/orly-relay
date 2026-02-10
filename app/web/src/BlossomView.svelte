@@ -489,9 +489,85 @@
     }
 
     async function deleteBlob(blob) {
-        if (!confirm(`Delete blob ${truncateHash(blob.sha256)}?`)) return;
+        const hasVariants = responsiveBlobs.has(blob.sha256) || blobVariants.length > 0;
+        const confirmMsg = hasVariants
+            ? `Delete blob ${truncateHash(blob.sha256)} and all its responsive variants?`
+            : `Delete blob ${truncateHash(blob.sha256)}?`;
+
+        if (!confirm(confirmMsg)) return;
 
         try {
+            // If this blob has variants, delete them first
+            if (hasVariants) {
+                // Get variant hashes from blobVariants if available, otherwise query
+                let variantHashesToDelete = blobVariants
+                    .filter(v => v.sha256 !== blob.sha256)
+                    .map(v => v.sha256);
+
+                // If we don't have variants loaded, query for them
+                if (variantHashesToDelete.length === 0 && responsiveBlobs.has(blob.sha256)) {
+                    try {
+                        const relays = getRelayUrls();
+                        const pool = nostrClient.getPool();
+                        const filter = {
+                            kinds: [30063],
+                            "#d": [blob.sha256],
+                            authors: userPubkey ? [userPubkey] : undefined,
+                            limit: 1
+                        };
+                        const events = await pool.querySync(relays, filter);
+                        if (events.length > 0) {
+                            const bindingEvent = events[0];
+                            for (const tag of bindingEvent.tags) {
+                                if (tag[0] === "x" && tag[1] && tag[1] !== blob.sha256) {
+                                    variantHashesToDelete.push(tag[1]);
+                                }
+                            }
+                        }
+                    } catch (err) {
+                        console.warn("Failed to query variants for deletion:", err);
+                    }
+                }
+
+                // Delete variant blobs
+                for (const variantHash of variantHashesToDelete) {
+                    try {
+                        const variantUrl = `${getApiBase()}/blossom/${variantHash}`;
+                        const variantAuth = await createBlossomAuth(userSigner, "delete", variantHash);
+                        await fetch(variantUrl, {
+                            method: "DELETE",
+                            headers: variantAuth ? { Authorization: `Nostr ${variantAuth}` } : {},
+                        });
+                        console.log("Deleted variant:", variantHash);
+                    } catch (err) {
+                        console.warn("Failed to delete variant:", variantHash, err);
+                    }
+                }
+
+                // Publish a deletion event for the binding event (kind 5)
+                try {
+                    const deleteEvent = {
+                        kind: 5,
+                        created_at: Math.floor(Date.now() / 1000),
+                        content: "Deleted responsive variants",
+                        tags: [
+                            ["a", `30063:${userPubkey}:${blob.sha256}`],
+                        ],
+                    };
+                    const signedDelete = await userSigner.signEvent(deleteEvent);
+                    const relayUrl = getRelayUrls()[0];
+                    await publishEventWithAuth(relayUrl, signedDelete, userSigner, userPubkey);
+                    console.log("Published deletion event for binding:", signedDelete.id);
+                } catch (err) {
+                    console.warn("Failed to publish deletion event:", err);
+                }
+
+                // Update local state
+                responsiveBlobs = new Set([...responsiveBlobs].filter(h => h !== blob.sha256));
+                variantHashes = new Set([...variantHashes].filter(h => !variantHashesToDelete.includes(h)));
+            }
+
+            // Delete the original blob
             const url = `${getApiBase()}/blossom/${blob.sha256}`;
             const authHeader = await createBlossomAuth(userSigner, "delete", blob.sha256);
             const response = await fetch(url, {
@@ -2296,6 +2372,9 @@
     }
 
     .action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         padding: 0.5em 1em;
         background-color: var(--primary);
         color: var(--text-color);
@@ -2304,6 +2383,8 @@
         cursor: pointer;
         text-decoration: none;
         font-size: 0.9em;
+        line-height: 1.2;
+        box-sizing: border-box;
     }
 
     .action-btn:hover {
