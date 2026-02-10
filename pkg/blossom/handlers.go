@@ -3,7 +3,6 @@ package blossom
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1106,121 +1105,6 @@ func (s *Server) handleMediaHead(w http.ResponseWriter, r *http.Request) {
 	// Similar to handleUploadRequirements but for media
 	// Return 200 OK if media optimization is available
 	w.WriteHeader(http.StatusOK)
-}
-
-// handleGenerateVariants handles POST /generate-variants/<sha256>
-// Generates responsive image variants for a single blob and returns them.
-// The CLIENT is responsible for uploading the variants and creating the binding event.
-// This endpoint only does image processing - no protocol-level operations.
-func (s *Server) handleGenerateVariants(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/")
-
-	// Extract sha256 from path: generate-variants/<sha256>
-	if !strings.HasPrefix(path, "generate-variants/") {
-		s.setErrorResponse(w, http.StatusBadRequest, "invalid path")
-		return
-	}
-
-	sha256Hex := strings.TrimPrefix(path, "generate-variants/")
-	// Remove extension if present
-	if idx := strings.LastIndex(sha256Hex, "."); idx != -1 {
-		sha256Hex = sha256Hex[:idx]
-	}
-
-	if len(sha256Hex) != 64 {
-		s.setErrorResponse(w, http.StatusBadRequest, "invalid sha256 format")
-		return
-	}
-
-	// Authorization required (write access to generate variants)
-	authEv, err := ValidateAuthEvent(r, "upload", nil)
-	if err != nil {
-		s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
-		return
-	}
-	if authEv == nil {
-		s.setErrorResponse(w, http.StatusUnauthorized, "authorization required")
-		return
-	}
-
-	// Check write ACL
-	remoteAddr := s.getRemoteAddr(r)
-	if !s.checkACL(authEv.Pubkey, remoteAddr, "write") {
-		s.setErrorResponse(w, http.StatusForbidden, "write access required")
-		return
-	}
-
-	// Get the blob
-	sha256Hash, err := hex.Dec(sha256Hex)
-	if err != nil {
-		s.setErrorResponse(w, http.StatusBadRequest, "invalid sha256 format")
-		return
-	}
-
-	blobData, metadata, err := s.storage.GetBlob(sha256Hash)
-	if err != nil {
-		s.setErrorResponse(w, http.StatusNotFound, "blob not found")
-		return
-	}
-
-	// Verify the blob belongs to the authenticated user
-	if !utils.FastEqual(metadata.Pubkey, authEv.Pubkey) {
-		s.setErrorResponse(w, http.StatusForbidden, "not your blob")
-		return
-	}
-
-	// Generate responsive variants
-	variants, err := GenerateResponsiveVariants(blobData, metadata.MimeType)
-	if err != nil {
-		s.setErrorResponse(w, http.StatusInternalServerError, "failed to generate variants: "+err.Error())
-		return
-	}
-
-	// Build response with variant data
-	type variantResponse struct {
-		Variant  string `json:"variant"`
-		Width    int    `json:"width"`
-		Height   int    `json:"height"`
-		MimeType string `json:"mime_type"`
-		Size     int    `json:"size"`
-		SHA256   string `json:"sha256"`
-		Data     string `json:"data"` // Base64 encoded
-	}
-
-	response := struct {
-		OriginalSHA256 string            `json:"original_sha256"`
-		Variants       []variantResponse `json:"variants"`
-	}{
-		OriginalSHA256: sha256Hex,
-		Variants:       make([]variantResponse, 0, len(variants)),
-	}
-
-	for _, v := range variants {
-		variantHash := computeSHA256(v.Data)
-		response.Variants = append(response.Variants, variantResponse{
-			Variant:  string(v.Variant),
-			Width:    v.Width,
-			Height:   v.Height,
-			MimeType: v.MimeType,
-			Size:     len(v.Data),
-			SHA256:   hex.Enc(variantHash),
-			Data:     encodeBase64(v.Data),
-		})
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-// mustDecodeHex decodes hex or returns nil
-func mustDecodeHex(s string) []byte {
-	b, _ := hex.Dec(s)
-	return b
-}
-
-// encodeBase64 encodes bytes to base64 string
-func encodeBase64(data []byte) string {
-	return base64.StdEncoding.EncodeToString(data)
 }
 
 // newTagFilter creates a tag.S for use in filter.F.Tags

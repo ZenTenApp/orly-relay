@@ -638,11 +638,79 @@
         }
     }
 
+    // Variant size definitions
+    const VARIANT_SIZES = [
+        { name: "thumb", maxWidth: 128 },
+        { name: "mobile", maxWidth: 512 },
+        { name: "desktop", maxWidth: 1280 },
+    ];
+
+    /**
+     * Compute SHA256 hash of ArrayBuffer using Web Crypto API
+     */
+    async function computeSHA256(data) {
+        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    /**
+     * Resize image using Canvas API (GPU accelerated)
+     * Uses createImageBitmap for hardware acceleration when available
+     */
+    async function resizeImage(imageBitmap, maxWidth, quality = 0.85) {
+        const { width, height } = imageBitmap;
+
+        // Calculate new dimensions maintaining aspect ratio
+        let newWidth = width;
+        let newHeight = height;
+        if (width > maxWidth) {
+            newWidth = maxWidth;
+            newHeight = Math.round((height * maxWidth) / width);
+        }
+
+        // Use OffscreenCanvas if available (better performance)
+        let canvas;
+        let ctx;
+        if (typeof OffscreenCanvas !== "undefined") {
+            canvas = new OffscreenCanvas(newWidth, newHeight);
+            ctx = canvas.getContext("2d", { alpha: false });
+        } else {
+            canvas = document.createElement("canvas");
+            canvas.width = newWidth;
+            canvas.height = newHeight;
+            ctx = canvas.getContext("2d", { alpha: false });
+        }
+
+        // Enable image smoothing for quality scaling
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+
+        // Draw scaled image
+        ctx.drawImage(imageBitmap, 0, 0, newWidth, newHeight);
+
+        // Convert to blob
+        let blob;
+        if (typeof OffscreenCanvas !== "undefined" && canvas instanceof OffscreenCanvas) {
+            blob = await canvas.convertToBlob({ type: "image/jpeg", quality });
+        } else {
+            blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", quality));
+        }
+
+        return {
+            blob,
+            width: newWidth,
+            height: newHeight,
+        };
+    }
+
     /**
      * Generate responsive variants for a single image.
-     * 1. Calls the server to generate variants (image processing)
-     * 2. Uploads each variant as a new blob
-     * 3. Creates a kind 30063 binding event linking all variants
+     * All processing done client-side using Canvas API with GPU acceleration.
+     * 1. Fetches the original image
+     * 2. Uses Canvas to resize to different variants
+     * 3. Uploads each variant as a new blob
+     * 4. Creates a kind 30063 binding event linking all variants
      */
     async function generateVariants(blob) {
         if (!confirm(`Generate responsive variants for this image?\n\nThis will create thumb (128px), mobile (512px), desktop (1280px), and original variants.`)) {
@@ -650,71 +718,91 @@
         }
 
         isGeneratingVariants = true;
-        generatingProgress = "Generating...";
+        generatingProgress = "Loading image...";
         error = "";
 
         try {
-            // Step 1: Call server to generate variants
-            generatingProgress = "Processing image...";
-            const generateUrl = `${getApiBase()}/blossom/generate-variants/${blob.sha256}`;
-            const authHeader = await createBlossomAuth(userSigner, "upload");
+            // Step 1: Fetch the original image
+            const imageUrl = getBlobUrl(blob);
+            const imageResponse = await fetch(imageUrl);
+            if (!imageResponse.ok) {
+                throw new Error("Failed to fetch original image");
+            }
+            const imageBlob = await imageResponse.blob();
 
-            const response = await fetch(generateUrl, {
-                method: "POST",
-                headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+            // Create ImageBitmap for hardware-accelerated processing
+            generatingProgress = "Processing image...";
+            const imageBitmap = await createImageBitmap(imageBlob);
+            const originalWidth = imageBitmap.width;
+            const originalHeight = imageBitmap.height;
+
+            // Step 2: Generate variants using Canvas (GPU accelerated)
+            const uploadedVariants = [];
+
+            // Add original as a variant
+            const originalData = await imageBlob.arrayBuffer();
+            uploadedVariants.push({
+                variant: "original",
+                sha256: blob.sha256,
+                url: imageUrl,
+                width: originalWidth,
+                height: originalHeight,
+                mimeType: blob.type || "image/jpeg",
+                size: imageBlob.size,
             });
 
-            if (!response.ok) {
-                const reason = response.headers.get("X-Reason") || response.statusText;
-                throw new Error(reason);
-            }
+            // Generate resized variants
+            for (let i = 0; i < VARIANT_SIZES.length; i++) {
+                const { name, maxWidth } = VARIANT_SIZES[i];
+                generatingProgress = `Creating ${name}... (${i + 1}/${VARIANT_SIZES.length})`;
 
-            const result = await response.json();
-            const variants = result.variants;
+                // Skip if original is smaller than target
+                if (originalWidth <= maxWidth) {
+                    continue;
+                }
 
-            // Step 2: Upload each variant (except original which already exists)
-            const uploadedVariants = [];
-            for (let i = 0; i < variants.length; i++) {
-                const v = variants[i];
-                generatingProgress = `Uploading ${v.variant}... (${i + 1}/${variants.length})`;
+                const resized = await resizeImage(imageBitmap, maxWidth);
+                const resizedData = await resized.blob.arrayBuffer();
+                const variantHash = await computeSHA256(resizedData);
 
-                // Decode base64 data
-                const binaryData = Uint8Array.from(atob(v.data), c => c.charCodeAt(0));
-
-                // Check if this variant already exists (skip upload if so)
-                const checkUrl = `${getApiBase()}/blossom/${v.sha256}`;
+                // Check if variant already exists
+                const checkUrl = `${getApiBase()}/blossom/${variantHash}`;
                 const headResponse = await fetch(checkUrl, { method: "HEAD" });
 
                 if (!headResponse.ok) {
                     // Upload the variant
+                    generatingProgress = `Uploading ${name}...`;
                     const uploadUrl = `${getApiBase()}/blossom/upload`;
-                    const uploadAuth = await createBlossomAuth(userSigner, "upload", v.sha256);
+                    const uploadAuth = await createBlossomAuth(userSigner, "upload", variantHash);
 
                     const uploadResponse = await fetch(uploadUrl, {
                         method: "PUT",
                         headers: {
-                            "Content-Type": v.mime_type,
-                            "X-SHA-256": v.sha256,
+                            "Content-Type": "image/jpeg",
                             ...(uploadAuth ? { Authorization: `Nostr ${uploadAuth}` } : {}),
                         },
-                        body: binaryData,
+                        body: resized.blob,
                     });
 
                     if (!uploadResponse.ok) {
-                        console.warn(`Failed to upload variant ${v.variant}:`, uploadResponse.statusText);
+                        console.warn(`Failed to upload variant ${name}:`, uploadResponse.statusText);
+                        continue;
                     }
                 }
 
                 uploadedVariants.push({
-                    variant: v.variant,
-                    sha256: v.sha256,
-                    url: `${getApiBase()}/blossom/${v.sha256}.jpg`,
-                    width: v.width,
-                    height: v.height,
-                    mimeType: v.mime_type,
-                    size: v.size,
+                    variant: name,
+                    sha256: variantHash,
+                    url: `${getApiBase()}/blossom/${variantHash}.jpg`,
+                    width: resized.width,
+                    height: resized.height,
+                    mimeType: "image/jpeg",
+                    size: resized.blob.size,
                 });
             }
+
+            // Clean up
+            imageBitmap.close();
 
             // Step 3: Create kind 30063 binding event
             generatingProgress = "Creating binding event...";
