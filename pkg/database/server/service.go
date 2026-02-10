@@ -708,6 +708,35 @@ func (s *DatabaseService) ReconcileBlobMetadata(ctx context.Context, req *orlydb
 	}, nil
 }
 
+func (s *DatabaseService) ListAllBlobs(ctx context.Context, req *orlydbv1.Empty) (*orlydbv1.ListBlobsResponse, error) {
+	descriptors, err := s.db.ListAllBlobs()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "list all blobs failed: %v", err)
+	}
+	return &orlydbv1.ListBlobsResponse{
+		Descriptors: orlydbv1.BlobDescriptorListToProto(descriptors),
+	}, nil
+}
+
+func (s *DatabaseService) GetThumbnail(ctx context.Context, req *orlydbv1.GetThumbnailRequest) (*orlydbv1.GetThumbnailResponse, error) {
+	data, err := s.db.GetThumbnail(req.Key)
+	if err != nil {
+		// Not found is a valid response, not an error
+		return &orlydbv1.GetThumbnailResponse{Found: false}, nil
+	}
+	return &orlydbv1.GetThumbnailResponse{
+		Found: true,
+		Data:  data,
+	}, nil
+}
+
+func (s *DatabaseService) SaveThumbnail(ctx context.Context, req *orlydbv1.SaveThumbnailRequest) (*orlydbv1.Empty, error) {
+	if err := s.db.SaveThumbnail(req.Key, req.Data); err != nil {
+		return nil, status.Errorf(codes.Internal, "save thumbnail failed: %v", err)
+	}
+	return &orlydbv1.Empty{}, nil
+}
+
 // === Helper Methods ===
 
 // streamEvents is a helper to stream events in batches.

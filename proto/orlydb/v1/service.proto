@@ -245,6 +245,15 @@ service DatabaseService {
   // ReconcileBlobMetadata scans the blossom directory and creates metadata for orphan blobs
   rpc ReconcileBlobMetadata(Empty) returns (ReconcileBlobMetadataResponse);
 
+  // ListAllBlobs returns all blob descriptors (for admin thumbnail generation)
+  rpc ListAllBlobs(Empty) returns (ListBlobsResponse);
+
+  // GetThumbnail retrieves a cached thumbnail by key
+  rpc GetThumbnail(GetThumbnailRequest) returns (GetThumbnailResponse);
+
+  // SaveThumbnail stores a cached thumbnail
+  rpc SaveThumbnail(SaveThumbnailRequest) returns (Empty);
+
   // === Utility ===
 
   // EventIdsBySerial gets event IDs by serial range
@@ -672,4 +681,19 @@ message ListAllBlobUserStatsResponse {
 
 message ReconcileBlobMetadataResponse {
   int32 reconciled = 1;
+}
+
+// Thumbnail caching messages
+message GetThumbnailRequest {
+  string key = 1;
+}
+
+message GetThumbnailResponse {
+  bool found = 1;
+  bytes data = 2;
+}
+
+message SaveThumbnailRequest {
+  string key = 1;
+  bytes data = 2;
 }

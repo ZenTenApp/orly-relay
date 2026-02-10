@@ -90,6 +90,9 @@ const (
 	DatabaseService_SaveBlobReport_FullMethodName                 = "/orlydb.v1.DatabaseService/SaveBlobReport"
 	DatabaseService_ListAllBlobUserStats_FullMethodName           = "/orlydb.v1.DatabaseService/ListAllBlobUserStats"
 	DatabaseService_ReconcileBlobMetadata_FullMethodName          = "/orlydb.v1.DatabaseService/ReconcileBlobMetadata"
+	DatabaseService_ListAllBlobs_FullMethodName                   = "/orlydb.v1.DatabaseService/ListAllBlobs"
+	DatabaseService_GetThumbnail_FullMethodName                   = "/orlydb.v1.DatabaseService/GetThumbnail"
+	DatabaseService_SaveThumbnail_FullMethodName                  = "/orlydb.v1.DatabaseService/SaveThumbnail"
 	DatabaseService_EventIdsBySerial_FullMethodName               = "/orlydb.v1.DatabaseService/EventIdsBySerial"
 	DatabaseService_RunMigrations_FullMethodName                  = "/orlydb.v1.DatabaseService/RunMigrations"
 )
@@ -242,6 +245,12 @@ type DatabaseServiceClient interface {
 	ListAllBlobUserStats(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ListAllBlobUserStatsResponse, error)
 	// ReconcileBlobMetadata scans the blossom directory and creates metadata for orphan blobs
 	ReconcileBlobMetadata(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ReconcileBlobMetadataResponse, error)
+	// ListAllBlobs returns all blob descriptors (for admin thumbnail generation)
+	ListAllBlobs(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ListBlobsResponse, error)
+	// GetThumbnail retrieves a cached thumbnail by key
+	GetThumbnail(ctx context.Context, in *GetThumbnailRequest, opts ...grpc.CallOption) (*GetThumbnailResponse, error)
+	// SaveThumbnail stores a cached thumbnail
+	SaveThumbnail(ctx context.Context, in *SaveThumbnailRequest, opts ...grpc.CallOption) (*Empty, error)
 	// EventIdsBySerial gets event IDs by serial range
 	EventIdsBySerial(ctx context.Context, in *EventIdsBySerialRequest, opts ...grpc.CallOption) (*EventIdsBySerialResponse, error)
 	// RunMigrations runs database migrations
@@ -1014,6 +1023,36 @@ func (c *databaseServiceClient) ReconcileBlobMetadata(ctx context.Context, in *E
 	return out, nil
 }
 
+func (c *databaseServiceClient) ListAllBlobs(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ListBlobsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListBlobsResponse)
+	err := c.cc.Invoke(ctx, DatabaseService_ListAllBlobs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *databaseServiceClient) GetThumbnail(ctx context.Context, in *GetThumbnailRequest, opts ...grpc.CallOption) (*GetThumbnailResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetThumbnailResponse)
+	err := c.cc.Invoke(ctx, DatabaseService_GetThumbnail_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *databaseServiceClient) SaveThumbnail(ctx context.Context, in *SaveThumbnailRequest, opts ...grpc.CallOption) (*Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, DatabaseService_SaveThumbnail_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *databaseServiceClient) EventIdsBySerial(ctx context.Context, in *EventIdsBySerialRequest, opts ...grpc.CallOption) (*EventIdsBySerialResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(EventIdsBySerialResponse)
@@ -1182,6 +1221,12 @@ type DatabaseServiceServer interface {
 	ListAllBlobUserStats(context.Context, *Empty) (*ListAllBlobUserStatsResponse, error)
 	// ReconcileBlobMetadata scans the blossom directory and creates metadata for orphan blobs
 	ReconcileBlobMetadata(context.Context, *Empty) (*ReconcileBlobMetadataResponse, error)
+	// ListAllBlobs returns all blob descriptors (for admin thumbnail generation)
+	ListAllBlobs(context.Context, *Empty) (*ListBlobsResponse, error)
+	// GetThumbnail retrieves a cached thumbnail by key
+	GetThumbnail(context.Context, *GetThumbnailRequest) (*GetThumbnailResponse, error)
+	// SaveThumbnail stores a cached thumbnail
+	SaveThumbnail(context.Context, *SaveThumbnailRequest) (*Empty, error)
 	// EventIdsBySerial gets event IDs by serial range
 	EventIdsBySerial(context.Context, *EventIdsBySerialRequest) (*EventIdsBySerialResponse, error)
 	// RunMigrations runs database migrations
@@ -1408,6 +1453,15 @@ func (UnimplementedDatabaseServiceServer) ListAllBlobUserStats(context.Context, 
 }
 func (UnimplementedDatabaseServiceServer) ReconcileBlobMetadata(context.Context, *Empty) (*ReconcileBlobMetadataResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReconcileBlobMetadata not implemented")
+}
+func (UnimplementedDatabaseServiceServer) ListAllBlobs(context.Context, *Empty) (*ListBlobsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAllBlobs not implemented")
+}
+func (UnimplementedDatabaseServiceServer) GetThumbnail(context.Context, *GetThumbnailRequest) (*GetThumbnailResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetThumbnail not implemented")
+}
+func (UnimplementedDatabaseServiceServer) SaveThumbnail(context.Context, *SaveThumbnailRequest) (*Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method SaveThumbnail not implemented")
 }
 func (UnimplementedDatabaseServiceServer) EventIdsBySerial(context.Context, *EventIdsBySerialRequest) (*EventIdsBySerialResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EventIdsBySerial not implemented")
@@ -2668,6 +2722,60 @@ func _DatabaseService_ReconcileBlobMetadata_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DatabaseService_ListAllBlobs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DatabaseServiceServer).ListAllBlobs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DatabaseService_ListAllBlobs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DatabaseServiceServer).ListAllBlobs(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DatabaseService_GetThumbnail_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetThumbnailRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DatabaseServiceServer).GetThumbnail(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DatabaseService_GetThumbnail_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DatabaseServiceServer).GetThumbnail(ctx, req.(*GetThumbnailRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DatabaseService_SaveThumbnail_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveThumbnailRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DatabaseServiceServer).SaveThumbnail(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DatabaseService_SaveThumbnail_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DatabaseServiceServer).SaveThumbnail(ctx, req.(*SaveThumbnailRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DatabaseService_EventIdsBySerial_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(EventIdsBySerialRequest)
 	if err := dec(in); err != nil {
@@ -2970,6 +3078,18 @@ var DatabaseService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReconcileBlobMetadata",
 			Handler:    _DatabaseService_ReconcileBlobMetadata_Handler,
+		},
+		{
+			MethodName: "ListAllBlobs",
+			Handler:    _DatabaseService_ListAllBlobs_Handler,
+		},
+		{
+			MethodName: "GetThumbnail",
+			Handler:    _DatabaseService_GetThumbnail_Handler,
+		},
+		{
+			MethodName: "SaveThumbnail",
+			Handler:    _DatabaseService_SaveThumbnail_Handler,
 		},
 		{
 			MethodName: "EventIdsBySerial",

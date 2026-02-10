@@ -843,18 +843,32 @@ func (c *Client) ReconcileBlobMetadata() (reconciled int, err error) {
 }
 
 func (c *Client) ListAllBlobs() ([]*database.BlobDescriptor, error) {
-	// Not implemented in gRPC protocol yet - thumbnails handled locally
-	return nil, errors.New("ListAllBlobs not implemented in gRPC client")
+	resp, err := c.client.ListAllBlobs(context.Background(), &orlydbv1.Empty{})
+	if err != nil {
+		return nil, err
+	}
+	return orlydbv1.ProtoToBlobDescriptorList(resp.Descriptors), nil
 }
 
 func (c *Client) GetThumbnail(key string) ([]byte, error) {
-	// Not implemented in gRPC protocol yet - thumbnails handled locally
-	return nil, errors.New("GetThumbnail not implemented in gRPC client")
+	resp, err := c.client.GetThumbnail(context.Background(), &orlydbv1.GetThumbnailRequest{
+		Key: key,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Found {
+		return nil, errors.New("thumbnail not found")
+	}
+	return resp.Data, nil
 }
 
 func (c *Client) SaveThumbnail(key string, data []byte) error {
-	// Not implemented in gRPC protocol yet - thumbnails handled locally
-	return errors.New("SaveThumbnail not implemented in gRPC client")
+	_, err := c.client.SaveThumbnail(context.Background(), &orlydbv1.SaveThumbnailRequest{
+		Key:  key,
+		Data: data,
+	})
+	return err
 }
 
 // === Utility ===
