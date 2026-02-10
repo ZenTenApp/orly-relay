@@ -2375,15 +2375,15 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        padding: 0.5em 1em;
+        height: 2.2em;
+        padding: 0 1em;
         background-color: var(--primary);
         color: var(--text-color);
-        border: none;
+        border: 1px solid transparent;
         border-radius: 4px;
         cursor: pointer;
         text-decoration: none;
         font-size: 0.9em;
-        line-height: 1.2;
         box-sizing: border-box;
     }
 
@@ -2393,7 +2393,7 @@
 
     .action-btn.danger {
         background-color: transparent;
-        border: 1px solid var(--warning);
+        border-color: var(--warning);
         color: var(--warning);
     }
 
@@ -2404,7 +2404,7 @@
 
     .action-btn.warning {
         background-color: transparent;
-        border: 1px solid #f59e0b;
+        border-color: #f59e0b;
         color: #f59e0b;
     }
 
