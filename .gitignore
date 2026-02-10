@@ -80,14 +80,6 @@ cmd/benchmark/data
 !.github/**
 !.github/workflows/**
 !.claude/**
-!app/web/dist/**
-!app/web/dist/*.js
-!app/web/dist/*.js.map
-!app/web/dist/*.css
-!app/web/dist/*.html
-!app/web/dist/*.ico
-!app/web/dist/*.png
-!app/web/dist/*.svg
 !Dockerfile*
 !.dockerignore
 !libsecp256k1.so

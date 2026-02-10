@@ -1,7 +1,9 @@
 package blossom
 
 import (
+	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,10 +14,10 @@ import (
 	"time"
 
 	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"git.mleku.dev/mleku/nostr/encoders/timestamp"
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/utils"
 )
@@ -504,8 +506,8 @@ func (s *Server) handleListBlobs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Filter out variant blobs - only show originals
-	// Check for variant markers set during migration
-	variantHashes := s.getVariantHashes(descriptors)
+	// Query kind 30063 binding events to find variants
+	variantHashes := s.getVariantHashes(r.Context())
 
 	// Filter descriptors
 	filtered := make([]*BlobDescriptor, 0, len(descriptors))
@@ -532,16 +534,63 @@ func (s *Server) handleListBlobs(w http.ResponseWriter, r *http.Request) {
 }
 
 // getVariantHashes returns a set of SHA256 hashes that are variant blobs (not originals).
-// It checks the storage for "variantof:" markers set during migration.
-func (s *Server) getVariantHashes(blobs []*BlobDescriptor) map[string]bool {
+// It queries kind 30063 binding events to find which blobs are variants.
+func (s *Server) getVariantHashes(ctx context.Context) map[string]bool {
 	variantHashes := make(map[string]bool)
 
-	// Check each blob for a variant marker
-	for _, blob := range blobs {
-		variantKey := "variantof:" + strings.ToLower(blob.SHA256)
-		if data, _ := s.storage.GetThumbnail(variantKey); len(data) > 0 {
-			// This blob is a variant - mark it for filtering
-			variantHashes[strings.ToLower(blob.SHA256)] = true
+	// Query for all kind 30063 (responsive image binding) events
+	limit := uint(10000)
+	f := &filter.F{
+		Kinds: kind.NewS(kind.New(30063)),
+		Limit: &limit,
+	}
+
+	events, err := s.db.QueryEvents(ctx, f)
+	if err != nil {
+		log.W.F("failed to query binding events: %v", err)
+		return variantHashes
+	}
+
+	// Parse each binding event to extract variant hashes
+	// The event has imeta tags with url fields containing variant hashes
+	for _, ev := range events {
+		// Get the original hash from the d tag
+		var originalHash string
+		for _, t := range *ev.Tags {
+			if len(t.T) >= 2 && string(t.T[0]) == "d" {
+				originalHash = strings.ToLower(string(t.T[1]))
+				break
+			}
+		}
+
+		if originalHash == "" {
+			continue
+		}
+
+		// Extract variant hashes from imeta tags
+		// Format: ["imeta", "url <url>", "x <sha256>", "m <mime>", "dim <WxH>", "variant <name>"]
+		for _, t := range *ev.Tags {
+			if len(t.T) < 2 || string(t.T[0]) != "imeta" {
+				continue
+			}
+
+			var variantHash string
+			var variantName string
+
+			// Parse imeta tag parts
+			for i := 1; i < len(t.T); i++ {
+				part := string(t.T[i])
+				if strings.HasPrefix(part, "x ") {
+					variantHash = strings.ToLower(strings.TrimPrefix(part, "x "))
+				} else if strings.HasPrefix(part, "variant ") {
+					variantName = strings.TrimPrefix(part, "variant ")
+				}
+			}
+
+			// Mark non-original variants for filtering
+			if variantHash != "" && variantName != "original" && variantHash != originalHash {
+				variantHashes[variantHash] = true
+			}
 		}
 	}
 
@@ -549,7 +598,7 @@ func (s *Server) getVariantHashes(blobs []*BlobDescriptor) map[string]bool {
 }
 
 // handleDeleteVariants handles DELETE /delete-variants/<sha256> requests
-// Deletes all variant blobs associated with an original image
+// Deletes all variant blobs associated with an original image by querying binding events
 func (s *Server) handleDeleteVariants(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/")
 
@@ -604,47 +653,27 @@ func (s *Server) handleDeleteVariants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find all variant blobs by checking markers
-	blobs, err := s.storage.ListBlobs(metadata.Pubkey, 0, 0)
-	if err != nil {
-		s.setErrorResponse(w, http.StatusInternalServerError, "failed to list blobs")
-		return
-	}
+	// Find variants by querying kind 30063 binding events with d tag matching original hash
+	ctx := r.Context()
+	variantHashes := s.getVariantHashesForOriginal(ctx, originalHashHex)
 
 	deleted := 0
 	failed := 0
 
-	for _, blob := range blobs {
-		blobHashLower := strings.ToLower(blob.SHA256)
-		variantKey := "variantof:" + blobHashLower
-
-		// Check if this blob is a variant of our original
-		if data, _ := s.storage.GetThumbnail(variantKey); len(data) > 0 {
-			storedOriginal := strings.ToLower(string(data))
-			if storedOriginal == originalHashHex {
-				// This is a variant of our original - delete it
-				blobHash, err := hex.Dec(blob.SHA256)
-				if err != nil {
-					failed++
-					continue
-				}
-
-				if err := s.storage.DeleteBlob(blobHash, metadata.Pubkey); err != nil {
-					log.W.F("failed to delete variant %s: %v", blob.SHA256, err)
-					failed++
-					continue
-				}
-
-				// Delete the variant marker
-				s.storage.SaveThumbnail(variantKey, nil)
-				deleted++
-			}
+	for variantHash := range variantHashes {
+		blobHash, err := hex.Dec(variantHash)
+		if err != nil {
+			failed++
+			continue
 		}
-	}
 
-	// Clear migration marker
-	migratedKey := "migrated:" + originalHashHex
-	s.storage.SaveThumbnail(migratedKey, nil)
+		if err := s.storage.DeleteBlob(blobHash, metadata.Pubkey); err != nil {
+			log.W.F("failed to delete variant %s: %v", variantHash, err)
+			failed++
+			continue
+		}
+		deleted++
+	}
 
 	// Return result
 	response := struct {
@@ -662,6 +691,53 @@ func (s *Server) handleDeleteVariants(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
+}
+
+// getVariantHashesForOriginal queries binding events to find variant hashes for a specific original
+func (s *Server) getVariantHashesForOriginal(ctx context.Context, originalHash string) map[string]bool {
+	variantHashes := make(map[string]bool)
+
+	// Query for kind 30063 events with #d tag matching the original hash
+	limit := uint(100)
+	f := &filter.F{
+		Kinds: kind.NewS(kind.New(30063)),
+		Tags:  newTagFilter("#d", originalHash),
+		Limit: &limit,
+	}
+
+	events, err := s.db.QueryEvents(ctx, f)
+	if err != nil {
+		log.W.F("failed to query binding events for %s: %v", originalHash, err)
+		return variantHashes
+	}
+
+	// Extract variant hashes from imeta tags
+	for _, ev := range events {
+		for _, t := range *ev.Tags {
+			if len(t.T) < 2 || string(t.T[0]) != "imeta" {
+				continue
+			}
+
+			var variantHash string
+			var variantName string
+
+			for i := 1; i < len(t.T); i++ {
+				part := string(t.T[i])
+				if strings.HasPrefix(part, "x ") {
+					variantHash = strings.ToLower(strings.TrimPrefix(part, "x "))
+				} else if strings.HasPrefix(part, "variant ") {
+					variantName = strings.TrimPrefix(part, "variant ")
+				}
+			}
+
+			// Include non-original variants for deletion
+			if variantHash != "" && variantName != "original" && variantHash != originalHash {
+				variantHashes[variantHash] = true
+			}
+		}
+	}
+
+	return variantHashes
 }
 
 // handleAdminListUsers handles GET /admin/users requests (admin only)
@@ -1032,11 +1108,32 @@ func (s *Server) handleMediaHead(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// handleRepairVariants handles POST /admin/repair-variants
-// Rebuilds variantof markers for existing migrated images
-func (s *Server) handleRepairVariants(w http.ResponseWriter, r *http.Request) {
-	// Authorization required
-	authEv, err := ValidateAuthEvent(r, "admin", nil)
+// handleGenerateVariants handles POST /generate-variants/<sha256>
+// Generates responsive image variants for a single blob and returns them.
+// The CLIENT is responsible for uploading the variants and creating the binding event.
+// This endpoint only does image processing - no protocol-level operations.
+func (s *Server) handleGenerateVariants(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/")
+
+	// Extract sha256 from path: generate-variants/<sha256>
+	if !strings.HasPrefix(path, "generate-variants/") {
+		s.setErrorResponse(w, http.StatusBadRequest, "invalid path")
+		return
+	}
+
+	sha256Hex := strings.TrimPrefix(path, "generate-variants/")
+	// Remove extension if present
+	if idx := strings.LastIndex(sha256Hex, "."); idx != -1 {
+		sha256Hex = sha256Hex[:idx]
+	}
+
+	if len(sha256Hex) != 64 {
+		s.setErrorResponse(w, http.StatusBadRequest, "invalid sha256 format")
+		return
+	}
+
+	// Authorization required (write access to generate variants)
+	authEv, err := ValidateAuthEvent(r, "upload", nil)
 	if err != nil {
 		s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
 		return
@@ -1046,117 +1143,69 @@ func (s *Server) handleRepairVariants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check admin ACL
+	// Check write ACL
 	remoteAddr := s.getRemoteAddr(r)
-	if !s.checkACL(authEv.Pubkey, remoteAddr, "admin") {
-		s.setErrorResponse(w, http.StatusForbidden, "admin access required")
+	if !s.checkACL(authEv.Pubkey, remoteAddr, "write") {
+		s.setErrorResponse(w, http.StatusForbidden, "write access required")
 		return
 	}
 
-	// Get all image blobs
-	images, err := s.storage.ListImageBlobs()
+	// Get the blob
+	sha256Hash, err := hex.Dec(sha256Hex)
 	if err != nil {
-		log.E.F("failed to list image blobs: %v", err)
-		s.setErrorResponse(w, http.StatusInternalServerError, "failed to list blobs")
+		s.setErrorResponse(w, http.StatusBadRequest, "invalid sha256 format")
 		return
 	}
 
-	// Build a map of all blob hashes
-	allHashes := make(map[string]bool)
-	for _, img := range images {
-		allHashes[strings.ToLower(img.SHA256)] = true
+	blobData, metadata, err := s.storage.GetBlob(sha256Hash)
+	if err != nil {
+		s.setErrorResponse(w, http.StatusNotFound, "blob not found")
+		return
 	}
 
-	repaired := 0
-	checked := 0
-
-	// For each image, check if it's a migrated original
-	for _, img := range images {
-		sha256Hex := strings.ToLower(img.SHA256)
-		migratedKey := "migrated:" + sha256Hex
-
-		// Check if this is a migrated original
-		eventIDData, _ := s.storage.GetThumbnail(migratedKey)
-		if len(eventIDData) == 0 {
-			continue
-		}
-
-		checked++
-
-		// This is a migrated original - find its variants
-		// Variants typically have the same owner and were uploaded during migration
-		// We'll scan for blobs that have variantof markers or should have them
-
-		// For now, scan all blobs and check if they should be variants of this original
-		// Variants are named with predictable patterns in the binding events
-		// Since we can't easily query events, we'll rely on naming conventions or
-		// just mark blobs that aren't themselves originals
-
-		// Actually, we need a different approach - let's check what blobs exist
-		// and mark those that appear to be variants based on owner matching
-		// and not having their own migrated marker
-
-		// For each image that ISN'T migrated, check if it could be a variant
-		// by looking for variantof marker or creating one if owner matches
+	// Verify the blob belongs to the authenticated user
+	if !utils.FastEqual(metadata.Pubkey, authEv.Pubkey) {
+		s.setErrorResponse(w, http.StatusForbidden, "not your blob")
+		return
 	}
 
-	// Second pass: for each NON-migrated image, mark as variant if owner matches an original
-	for _, img := range images {
-		sha256Hex := strings.ToLower(img.SHA256)
-		migratedKey := "migrated:" + sha256Hex
-		variantKey := "variantof:" + sha256Hex
-
-		// Skip if this is a migrated original
-		if eventIDData, _ := s.storage.GetThumbnail(migratedKey); len(eventIDData) > 0 {
-			continue
-		}
-
-		// Skip if already has a variantof marker
-		if data, _ := s.storage.GetThumbnail(variantKey); len(data) > 0 {
-			continue
-		}
-
-		// This image is not an original and not yet marked as variant
-		// Try to find its original by checking if any migrated original has same owner
-		_, metadata, err := s.storage.GetBlob(mustDecodeHex(img.SHA256))
-		if err != nil {
-			continue
-		}
-
-		// Look for a migrated original with the same owner
-		for _, possibleOriginal := range images {
-			if possibleOriginal.SHA256 == img.SHA256 {
-				continue
-			}
-
-			origMigratedKey := "migrated:" + strings.ToLower(possibleOriginal.SHA256)
-			if eventIDData, _ := s.storage.GetThumbnail(origMigratedKey); len(eventIDData) == 0 {
-				continue
-			}
-
-			// This is a migrated original - check if same owner
-			_, origMeta, err := s.storage.GetBlob(mustDecodeHex(possibleOriginal.SHA256))
-			if err != nil {
-				continue
-			}
-
-			if utils.FastEqual(metadata.Pubkey, origMeta.Pubkey) {
-				// Same owner - mark this as a variant of the original
-				s.storage.SaveThumbnail(variantKey, []byte(strings.ToLower(possibleOriginal.SHA256)))
-				repaired++
-				break
-			}
-		}
+	// Generate responsive variants
+	variants, err := GenerateResponsiveVariants(blobData, metadata.MimeType)
+	if err != nil {
+		s.setErrorResponse(w, http.StatusInternalServerError, "failed to generate variants: "+err.Error())
+		return
 	}
 
-	log.I.F("repair variants: checked %d originals, repaired %d markers", checked, repaired)
+	// Build response with variant data
+	type variantResponse struct {
+		Variant  string `json:"variant"`
+		Width    int    `json:"width"`
+		Height   int    `json:"height"`
+		MimeType string `json:"mime_type"`
+		Size     int    `json:"size"`
+		SHA256   string `json:"sha256"`
+		Data     string `json:"data"` // Base64 encoded
+	}
 
 	response := struct {
-		Checked  int `json:"checked"`
-		Repaired int `json:"repaired"`
+		OriginalSHA256 string            `json:"original_sha256"`
+		Variants       []variantResponse `json:"variants"`
 	}{
-		Checked:  checked,
-		Repaired: repaired,
+		OriginalSHA256: sha256Hex,
+		Variants:       make([]variantResponse, 0, len(variants)),
+	}
+
+	for _, v := range variants {
+		variantHash := computeSHA256(v.Data)
+		response.Variants = append(response.Variants, variantResponse{
+			Variant:  string(v.Variant),
+			Width:    v.Width,
+			Height:   v.Height,
+			MimeType: v.MimeType,
+			Size:     len(v.Data),
+			SHA256:   hex.Enc(variantHash),
+			Data:     encodeBase64(v.Data),
+		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1167,6 +1216,16 @@ func (s *Server) handleRepairVariants(w http.ResponseWriter, r *http.Request) {
 func mustDecodeHex(s string) []byte {
 	b, _ := hex.Dec(s)
 	return b
+}
+
+// encodeBase64 encodes bytes to base64 string
+func encodeBase64(data []byte) string {
+	return base64.StdEncoding.EncodeToString(data)
+}
+
+// newTagFilter creates a tag.S for use in filter.F.Tags
+func newTagFilter(tagName, value string) *tag.S {
+	return tag.NewS(tag.NewFromAny(tagName, value))
 }
 
 // handleGenerateThumbnails handles POST /admin/generate-thumbnails (batch thumbnail generation)
@@ -1274,330 +1333,6 @@ func (s *Server) handleGenerateThumbnails(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(response)
 }
 
-// handleMigrateResponsive handles POST /migrate-responsive
-// Generates responsive image variants for the authenticated user's own blobs.
-// Requires write-level access.
-func (s *Server) handleMigrateResponsive(w http.ResponseWriter, r *http.Request) {
-	// Authorization required
-	authEv, err := ValidateAuthEvent(r, "upload", nil)
-	if err != nil {
-		s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
-		return
-	}
-	if authEv == nil {
-		s.setErrorResponse(w, http.StatusUnauthorized, "authorization required")
-		return
-	}
-
-	// Check write ACL (user migrates their own blobs)
-	remoteAddr := s.getRemoteAddr(r)
-	if !s.checkACL(authEv.Pubkey, remoteAddr, "write") {
-		s.setErrorResponse(w, http.StatusForbidden, "write access required")
-		return
-	}
-
-	// Use authenticated user's pubkey
-	targetPubkey := authEv.Pubkey
-	targetPubkeyHex := hex.Enc(targetPubkey)
-
-	s.doMigrateResponsive(w, r, targetPubkey, targetPubkeyHex)
-}
-
-// handleAdminMigrateResponsive handles POST /admin/migrate-responsive/{pubkey}
-// Admin version that can migrate any user's blobs.
-func (s *Server) handleAdminMigrateResponsive(w http.ResponseWriter, r *http.Request) {
-	// Authorization required
-	authEv, err := ValidateAuthEvent(r, "admin", nil)
-	if err != nil {
-		s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
-		return
-	}
-	if authEv == nil {
-		s.setErrorResponse(w, http.StatusUnauthorized, "authorization required")
-		return
-	}
-
-	// Check admin ACL
-	remoteAddr := s.getRemoteAddr(r)
-	if !s.checkACL(authEv.Pubkey, remoteAddr, "admin") {
-		s.setErrorResponse(w, http.StatusForbidden, "admin access required")
-		return
-	}
-
-	// Extract target pubkey from path: admin/migrate-responsive/{pubkey}
-	path := strings.TrimPrefix(r.URL.Path, "/")
-	parts := strings.Split(path, "/")
-	if len(parts) < 3 {
-		s.setErrorResponse(w, http.StatusBadRequest, "missing pubkey in path")
-		return
-	}
-	targetPubkeyHex := parts[2]
-
-	targetPubkey, err := hex.Dec(targetPubkeyHex)
-	if err != nil || len(targetPubkey) != 32 {
-		s.setErrorResponse(w, http.StatusBadRequest, "invalid pubkey format")
-		return
-	}
-
-	s.doMigrateResponsive(w, r, targetPubkey, targetPubkeyHex)
-}
-
-// doMigrateResponsive is the shared implementation for responsive image migration.
-func (s *Server) doMigrateResponsive(w http.ResponseWriter, r *http.Request, targetPubkey []byte, targetPubkeyHex string) {
-
-	// Get relay identity secret for signing events
-	relaySecret, err := s.db.GetOrCreateRelayIdentitySecret()
-	if err != nil {
-		log.E.F("failed to get relay identity: %v", err)
-		s.setErrorResponse(w, http.StatusInternalServerError, "relay identity unavailable")
-		return
-	}
-
-	// Initialize signer
-	sign := p8k.MustNew()
-	if err := sign.InitSec(relaySecret); err != nil {
-		log.E.F("failed to init signer: %v", err)
-		s.setErrorResponse(w, http.StatusInternalServerError, "signer initialization failed")
-		return
-	}
-
-	// Get all blobs for this user
-	blobs, err := s.storage.ListBlobs(targetPubkey, 0, 0)
-	if err != nil {
-		log.E.F("failed to list blobs for %s: %v", targetPubkeyHex, err)
-		s.setErrorResponse(w, http.StatusInternalServerError, "failed to list blobs")
-		return
-	}
-
-	// Filter to images only
-	var images []*BlobDescriptor
-	for _, b := range blobs {
-		if IsImageMimeType(b.Type) {
-			images = append(images, b)
-		}
-	}
-
-	// Process each image
-	type result struct {
-		SHA256  string `json:"sha256"`
-		Success bool   `json:"success"`
-		Error   string `json:"error,omitempty"`
-		EventID string `json:"event_id,omitempty"`
-	}
-	results := make([]result, 0, len(images))
-
-	processed := 0
-	skipped := 0
-	failed := 0
-
-	baseURL := s.getBaseURL(r)
-
-	for _, img := range images {
-		sha256Hex := img.SHA256
-
-		// Check if already migrated (check for existing kind 1063 with this hash)
-		migratedKey := "migrated:" + sha256Hex
-		if thumbData, _ := s.storage.GetThumbnail(migratedKey); len(thumbData) > 0 {
-			skipped++
-			continue
-		}
-
-		// Get the original blob data
-		sha256Hash, err := hex.Dec(sha256Hex)
-		if err != nil {
-			results = append(results, result{SHA256: sha256Hex, Success: false, Error: "invalid hash"})
-			failed++
-			continue
-		}
-
-		blobData, metadata, err := s.storage.GetBlob(sha256Hash)
-		if err != nil {
-			results = append(results, result{SHA256: sha256Hex, Success: false, Error: "blob not found"})
-			failed++
-			continue
-		}
-
-		// Generate responsive variants using Lanczos
-		variants, err := GenerateResponsiveVariants(blobData, metadata.MimeType)
-		if err != nil {
-			results = append(results, result{SHA256: sha256Hex, Success: false, Error: err.Error()})
-			failed++
-			continue
-		}
-
-		// Check if all variants already exist with proper markers
-		// If so, just mark as migrated and skip (don't create duplicate events)
-		allVariantsExist := true
-		for _, v := range variants {
-			if string(v.Variant) == "original" {
-				continue // Skip original, we're checking variants
-			}
-			variantHash := computeSHA256(v.Data)
-			variantHex := hex.Enc(variantHash)
-
-			// Check blob exists
-			exists, _ := s.storage.HasBlob(variantHash)
-			if !exists {
-				allVariantsExist = false
-				break
-			}
-
-			// Check variantof marker exists and points to this original
-			variantKey := "variantof:" + variantHex
-			markerData, _ := s.storage.GetThumbnail(variantKey)
-			if len(markerData) == 0 || strings.ToLower(string(markerData)) != strings.ToLower(sha256Hex) {
-				allVariantsExist = false
-				break
-			}
-		}
-
-		if allVariantsExist {
-			// All variants already exist with proper markers - just mark as migrated and skip
-			migratedKey := "migrated:" + sha256Hex
-			s.storage.SaveThumbnail(migratedKey, []byte("existing"))
-			skipped++
-			log.D.F("skipping %s: all variants already exist", sha256Hex)
-			continue
-		}
-
-		// Save each variant as a new blob and build imeta tags
-		type uploadedVariant struct {
-			Variant  ImageVariant
-			SHA256   string
-			URL      string
-			Width    int
-			Height   int
-			MimeType string
-			Size     int
-		}
-		uploadedVariants := make([]uploadedVariant, 0, len(variants))
-
-		variantFailed := false
-		for _, v := range variants {
-			// Compute SHA256 of variant data
-			variantHash := computeSHA256(v.Data)
-			variantHex := hex.Enc(variantHash)
-
-			// Check if this variant already exists (deduplication)
-			exists, _ := s.storage.HasBlob(variantHash)
-			if !exists {
-				// Save the variant blob
-				if err := s.storage.SaveBlob(variantHash, v.Data, targetPubkey, v.MimeType, ".jpg"); err != nil {
-					log.E.F("failed to save variant %s for %s: %v", v.Variant, sha256Hex, err)
-					variantFailed = true
-					break
-				}
-			}
-
-			// Mark this blob as a variant of the original (for filtering in listings)
-			// Skip marking the original itself
-			if string(v.Variant) != "original" {
-				variantKey := "variantof:" + variantHex
-				s.storage.SaveThumbnail(variantKey, []byte(sha256Hex))
-			}
-
-			// Construct URL for this variant
-			variantURL := baseURL + "/" + variantHex + ".jpg"
-
-			uploadedVariants = append(uploadedVariants, uploadedVariant{
-				Variant:  v.Variant,
-				SHA256:   variantHex,
-				URL:      variantURL,
-				Width:    v.Width,
-				Height:   v.Height,
-				MimeType: v.MimeType,
-				Size:     len(v.Data),
-			})
-		}
-
-		if variantFailed {
-			results = append(results, result{SHA256: sha256Hex, Success: false, Error: "variant save failed"})
-			failed++
-			continue
-		}
-
-		// Create addressable binding event (kind 30063 = 30000 + 1063)
-		// Using parameterized replaceable kind allows corrections
-		ev := event.New()
-		ev.Kind = 30063 // Addressable file metadata
-		ev.Pubkey = sign.Pub()
-		ev.CreatedAt = timestamp.Now().V
-		ev.Content = []byte{}
-		ev.Tags = tag.NewS()
-
-		// Add d tag with original hash for addressability
-		*ev.Tags = append(*ev.Tags, tag.NewFromAny("d", sha256Hex))
-
-		// Add imeta tag for each variant (ordered from smallest to largest)
-		for _, v := range uploadedVariants {
-			imetaTag := tag.NewFromAny("imeta",
-				"url "+v.URL,
-				"x "+v.SHA256,
-				"m "+v.MimeType,
-				fmt.Sprintf("dim %dx%d", v.Width, v.Height),
-				"variant "+string(v.Variant),
-				fmt.Sprintf("size %d", v.Size),
-			)
-			*ev.Tags = append(*ev.Tags, imetaTag)
-		}
-
-		// Add separate x tags for each variant hash (enables NIP-01 tag queries)
-		for _, v := range uploadedVariants {
-			*ev.Tags = append(*ev.Tags, tag.NewFromAny("x", v.SHA256))
-		}
-
-		// Sign the event
-		if err := ev.Sign(sign); err != nil {
-			log.E.F("failed to sign event for %s: %v", sha256Hex, err)
-			results = append(results, result{SHA256: sha256Hex, Success: false, Error: "sign failed"})
-			failed++
-			continue
-		}
-
-		// Save event to database
-		ctx := r.Context()
-		if _, err := s.db.SaveEvent(ctx, ev); err != nil {
-			log.E.F("failed to save event for %s: %v", sha256Hex, err)
-			results = append(results, result{SHA256: sha256Hex, Success: false, Error: "event save failed"})
-			failed++
-			continue
-		}
-
-		// Mark as migrated (store event ID as marker)
-		eventIDHex := hex.Enc(ev.ID)
-		s.storage.SaveThumbnail(migratedKey, []byte(eventIDHex))
-
-		results = append(results, result{
-			SHA256:  sha256Hex,
-			Success: true,
-			EventID: eventIDHex,
-		})
-		processed++
-
-		log.D.F("migrated %s: created %d variants, event %s", sha256Hex, len(variants), eventIDHex)
-	}
-
-	log.I.F("responsive migration for %s complete: %d processed, %d skipped, %d failed",
-		targetPubkeyHex, processed, skipped, failed)
-
-	// Return summary
-	response := struct {
-		Total     int      `json:"total"`
-		Processed int      `json:"processed"`
-		Skipped   int      `json:"skipped"`
-		Failed    int      `json:"failed"`
-		Results   []result `json:"results,omitempty"`
-	}{
-		Total:     len(images),
-		Processed: processed,
-		Skipped:   skipped,
-		Failed:    failed,
-		Results:   results,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
 
 // handleReport handles PUT /report requests (BUD-09)
 func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {

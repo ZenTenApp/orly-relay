@@ -598,13 +598,9 @@
     let isGeneratingThumbnails = false;
     let thumbnailProgress = "";
 
-    // Repair variants state
-    let isRepairingVariants = false;
-    let repairProgress = "";
-
-    // Responsive image migration state
-    let isMigratingResponsive = false;
-    let migrationProgress = "";
+    // Generate variants state (for single image)
+    let isGeneratingVariants = false;
+    let generatingProgress = "";
 
     async function generateAllThumbnails() {
         if (!confirm("Generate thumbnails for all images? This may take a while.")) return;
@@ -642,62 +638,28 @@
         }
     }
 
-    async function repairVariantMarkers() {
-        if (!confirm("Repair variant markers for all migrated images?\n\nThis will scan all images and rebuild the variant markers to fix duplicate listings.")) return;
-
-        isRepairingVariants = true;
-        repairProgress = "Repairing...";
-        error = "";
-
-        try {
-            const url = `${getApiBase()}/blossom/admin/repair-variants`;
-            const authHeader = await createBlossomAuth(userSigner, "admin");
-
-            const response = await fetch(url, {
-                method: "POST",
-                headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
-            });
-
-            if (!response.ok) {
-                const reason = response.headers.get("X-Reason") || response.statusText;
-                throw new Error(reason);
-            }
-
-            const result = await response.json();
-            repairProgress = `Done! Checked: ${result.checked} originals, Repaired: ${result.repaired} markers`;
-
-            // Show result for 5 seconds then refresh
-            setTimeout(() => {
-                repairProgress = "";
-                loadBlobs(); // Refresh the list
-            }, 3000);
-        } catch (err) {
-            console.error("Error repairing variants:", err);
-            error = err.message || "Failed to repair variants";
-        } finally {
-            isRepairingVariants = false;
-        }
-    }
-
     /**
-     * Migrate the current user's images to responsive variants
-     * Creates multiple resolution versions (thumb, mobile, desktop, original)
-     * and publishes kind 1063 binding events.
+     * Generate responsive variants for a single image.
+     * 1. Calls the server to generate variants (image processing)
+     * 2. Uploads each variant as a new blob
+     * 3. Creates a kind 30063 binding event linking all variants
      */
-    async function migrateToResponsive() {
-        if (!confirm(`Migrate your images to responsive variants?\n\nThis will:\n- Generate thumb (128px), mobile (512px), desktop (1280px), and original variants\n- Create kind 1063 events binding all variants together\n- Use Lanczos (sinc) resampling for high quality\n- Skip images that have already been migrated`)) {
+    async function generateVariants(blob) {
+        if (!confirm(`Generate responsive variants for this image?\n\nThis will create thumb (128px), mobile (512px), desktop (1280px), and original variants.`)) {
             return;
         }
 
-        isMigratingResponsive = true;
-        migrationProgress = "Starting migration...";
+        isGeneratingVariants = true;
+        generatingProgress = "Generating...";
         error = "";
 
         try {
-            const url = `${getApiBase()}/blossom/migrate-responsive`;
+            // Step 1: Call server to generate variants
+            generatingProgress = "Processing image...";
+            const generateUrl = `${getApiBase()}/blossom/generate-variants/${blob.sha256}`;
             const authHeader = await createBlossomAuth(userSigner, "upload");
 
-            const response = await fetch(url, {
+            const response = await fetch(generateUrl, {
                 method: "POST",
                 headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
             });
@@ -708,20 +670,102 @@
             }
 
             const result = await response.json();
-            migrationProgress = `Done! Processed: ${result.processed}, Skipped: ${result.skipped}, Failed: ${result.failed}`;
+            const variants = result.variants;
 
-            // Reload blobs to show new variants
-            await loadBlobs();
+            // Step 2: Upload each variant (except original which already exists)
+            const uploadedVariants = [];
+            for (let i = 0; i < variants.length; i++) {
+                const v = variants[i];
+                generatingProgress = `Uploading ${v.variant}... (${i + 1}/${variants.length})`;
 
-            // Show result for 5 seconds
+                // Decode base64 data
+                const binaryData = Uint8Array.from(atob(v.data), c => c.charCodeAt(0));
+
+                // Check if this variant already exists (skip upload if so)
+                const checkUrl = `${getApiBase()}/blossom/${v.sha256}`;
+                const headResponse = await fetch(checkUrl, { method: "HEAD" });
+
+                if (!headResponse.ok) {
+                    // Upload the variant
+                    const uploadUrl = `${getApiBase()}/blossom/upload`;
+                    const uploadAuth = await createBlossomAuth(userSigner, "upload", v.sha256);
+
+                    const uploadResponse = await fetch(uploadUrl, {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": v.mime_type,
+                            "X-SHA-256": v.sha256,
+                            ...(uploadAuth ? { Authorization: `Nostr ${uploadAuth}` } : {}),
+                        },
+                        body: binaryData,
+                    });
+
+                    if (!uploadResponse.ok) {
+                        console.warn(`Failed to upload variant ${v.variant}:`, uploadResponse.statusText);
+                    }
+                }
+
+                uploadedVariants.push({
+                    variant: v.variant,
+                    sha256: v.sha256,
+                    url: `${getApiBase()}/blossom/${v.sha256}.jpg`,
+                    width: v.width,
+                    height: v.height,
+                    mimeType: v.mime_type,
+                    size: v.size,
+                });
+            }
+
+            // Step 3: Create kind 30063 binding event
+            generatingProgress = "Creating binding event...";
+            const bindingEvent = {
+                kind: 30063,
+                created_at: Math.floor(Date.now() / 1000),
+                content: "",
+                tags: [
+                    ["d", blob.sha256],  // d tag for addressability
+                    ...uploadedVariants.map(v => [
+                        "imeta",
+                        `url ${v.url}`,
+                        `x ${v.sha256}`,
+                        `m ${v.mimeType}`,
+                        `dim ${v.width}x${v.height}`,
+                        `variant ${v.variant}`,
+                        `size ${v.size}`,
+                    ]),
+                    ...uploadedVariants.map(v => ["x", v.sha256]),  // x tags for queries
+                ],
+            };
+
+            // Sign and publish the event
+            const signedEvent = await userSigner.signEvent(bindingEvent);
+
+            // Save to relay
+            const eventUrl = `${getApiBase()}/api/event`;
+            const eventResponse = await fetch(eventUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(signedEvent),
+            });
+
+            if (!eventResponse.ok) {
+                console.warn("Failed to save binding event, but variants were uploaded");
+            }
+
+            generatingProgress = "Done!";
+
+            // Reload variants for the modal
+            await fetchBlobVariants(blob.sha256);
+
+            // Clear progress after 2 seconds
             setTimeout(() => {
-                migrationProgress = "";
-            }, 5000);
+                generatingProgress = "";
+            }, 2000);
         } catch (err) {
-            console.error("Error migrating to responsive:", err);
-            error = err.message || "Failed to migrate images";
+            console.error("Error generating variants:", err);
+            error = err.message || "Failed to generate variants";
         } finally {
-            isMigratingResponsive = false;
+            isGeneratingVariants = false;
         }
     }
 
@@ -787,20 +831,6 @@
                     Select Files
                 </button>
             </div>
-
-            <!-- Migration to responsive images -->
-            <div class="migration-section">
-                <button
-                    class="migrate-responsive-btn"
-                    on:click={migrateToResponsive}
-                    disabled={isMigratingResponsive}
-                >
-                    {isMigratingResponsive ? "Migrating..." : "Migrate Images to Responsive Variants"}
-                </button>
-                {#if migrationProgress}
-                    <span class="migration-progress">{migrationProgress}</span>
-                {/if}
-            </div>
         {/if}
 
         {#if error}
@@ -821,16 +851,6 @@
                 </button>
                 {#if thumbnailProgress}
                     <span class="thumbnail-progress">{thumbnailProgress}</span>
-                {/if}
-                <button
-                    class="repair-variants-btn"
-                    on:click={repairVariantMarkers}
-                    disabled={isRepairingVariants}
-                >
-                    {isRepairingVariants ? "Repairing..." : "Repair Variant Markers"}
-                </button>
-                {#if repairProgress}
-                    <span class="repair-progress">{repairProgress}</span>
                 {/if}
             </div>
 
@@ -1051,10 +1071,16 @@
                     <a href={getBlobUrl(selectedBlob)} target="_blank" rel="noopener noreferrer" class="action-btn">
                         Open in New Tab
                     </a>
-                    {#if getMimeCategory(selectedBlob.type) === "image" && blobVariants.length > 0}
-                        <button class="action-btn warning" on:click={() => deleteVariants(selectedBlob)} disabled={isDeletingVariants}>
-                            {isDeletingVariants ? "Deleting..." : "Delete Variants"}
-                        </button>
+                    {#if getMimeCategory(selectedBlob.type) === "image"}
+                        {#if blobVariants.length === 0}
+                            <button class="action-btn primary" on:click={() => generateVariants(selectedBlob)} disabled={isGeneratingVariants}>
+                                {isGeneratingVariants ? generatingProgress : "Generate Variants"}
+                            </button>
+                        {:else}
+                            <button class="action-btn warning" on:click={() => deleteVariants(selectedBlob)} disabled={isDeletingVariants}>
+                                {isDeletingVariants ? "Deleting..." : "Delete Variants"}
+                            </button>
+                        {/if}
                     {/if}
                     <button class="action-btn danger" on:click={() => deleteBlob(selectedBlob)}>
                         Delete
@@ -1157,17 +1183,6 @@
     }
 
     .upload-section {
-        display: flex;
-        align-items: center;
-        gap: 0.75em;
-        padding: 0.75em 1em;
-        background-color: var(--card-bg);
-        border-radius: 6px;
-        margin-bottom: 1em;
-        flex-wrap: wrap;
-    }
-
-    .migration-section {
         display: flex;
         align-items: center;
         gap: 0.75em;
@@ -1881,51 +1896,4 @@
         color: var(--text-secondary, #666);
     }
 
-    .repair-variants-btn {
-        padding: 0.5em 1em;
-        border: none;
-        border-radius: 4px;
-        background: var(--warning-bg, #ed8936);
-        color: white;
-        cursor: pointer;
-        font-size: 0.9em;
-    }
-
-    .repair-variants-btn:hover:not(:disabled) {
-        opacity: 0.9;
-    }
-
-    .repair-variants-btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-    }
-
-    .repair-progress {
-        font-size: 0.85em;
-        color: var(--text-secondary, #666);
-    }
-
-    .migrate-responsive-btn {
-        padding: 0.5em 1em;
-        border: none;
-        border-radius: 4px;
-        background: var(--success, #48bb78);
-        color: white;
-        cursor: pointer;
-        font-size: 0.9em;
-    }
-
-    .migrate-responsive-btn:hover:not(:disabled) {
-        opacity: 0.9;
-    }
-
-    .migrate-responsive-btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-    }
-
-    .migration-progress {
-        font-size: 0.85em;
-        color: var(--text-secondary, #666);
-    }
 </style>
