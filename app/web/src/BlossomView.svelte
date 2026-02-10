@@ -636,6 +636,65 @@
     let isRemovingAllVariants = false;
     let removeVariantsProgress = "";
 
+    // Selection state for bulk delete
+    let selectedHashes = new Set();
+    let isDeletingSelected = false;
+
+    function toggleSelection(hash, event) {
+        event.stopPropagation();
+        if (selectedHashes.has(hash)) {
+            selectedHashes.delete(hash);
+        } else {
+            selectedHashes.add(hash);
+        }
+        selectedHashes = selectedHashes; // trigger reactivity
+    }
+
+    function isSelected(hash) {
+        return selectedHashes.has(hash);
+    }
+
+    async function deleteSelectedBlobs() {
+        if (selectedHashes.size === 0) return;
+        if (!confirm(`Delete ${selectedHashes.size} selected file(s)? This cannot be undone.`)) return;
+
+        isDeletingSelected = true;
+        let deleted = 0;
+        let failed = 0;
+
+        for (const hash of selectedHashes) {
+            try {
+                const url = `${getApiBase()}/blossom/${hash}`;
+                const authHeader = await createBlossomAuth(userSigner, "delete", hash);
+                const response = await fetch(url, {
+                    method: "DELETE",
+                    headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+                });
+
+                if (response.ok) {
+                    deleted++;
+                } else {
+                    failed++;
+                }
+            } catch (err) {
+                console.error(`Failed to delete ${hash}:`, err);
+                failed++;
+            }
+        }
+
+        selectedHashes.clear();
+        selectedHashes = selectedHashes;
+        isDeletingSelected = false;
+
+        if (deleted > 0) {
+            await loadBlobs();
+        }
+
+        if (failed > 0) {
+            error = `Deleted ${deleted}, failed ${failed}`;
+        }
+    }
+
     async function generateAllThumbnails() {
         if (!confirm("Generate thumbnails for all images? This may take a while.")) return;
 
@@ -1073,6 +1132,15 @@
 
             <div class="header-buttons">
                 {#if !isAdminView || selectedAdminUser}
+                    {#if selectedHashes.size > 0}
+                        <button
+                            class="delete-selected-btn"
+                            on:click={deleteSelectedBlobs}
+                            disabled={isDeletingSelected}
+                        >
+                            {isDeletingSelected ? "Deleting..." : `Delete Selected (${selectedHashes.size})`}
+                        </button>
+                    {/if}
                     <select class="sort-select" bind:value={sortBy}>
                         <option value="date">Date {sortBy === "date" ? (sortOrder === "desc" ? "↓" : "↑") : ""}</option>
                         <option value="size">Size {sortBy === "size" ? (sortOrder === "desc" ? "↓" : "↑") : ""}</option>
@@ -1206,11 +1274,19 @@
                     {#each displayBlobs as blob}
                         <div
                             class="blob-item"
+                            class:selected={isSelected(blob.sha256)}
                             on:click={() => openModal(blob)}
                             on:keypress={(e) => e.key === "Enter" && openModal(blob)}
                             role="button"
                             tabindex="0"
                         >
+                            <input
+                                type="checkbox"
+                                class="blob-checkbox"
+                                checked={isSelected(blob.sha256)}
+                                on:click={(e) => toggleSelection(blob.sha256, e)}
+                                on:keypress|stopPropagation
+                            />
                             <div class="blob-thumbnail">
                                 {#if getMimeCategory(blob.type) === "image"}
                                     <img src={getThumbnailUrl(blob)} alt="" class="thumbnail-img" loading="lazy" />
@@ -1228,10 +1304,8 @@
                                 <div class="blob-meta">
                                     <span class="blob-size">{formatSize(blob.size)}</span>
                                     <span class="blob-type">{blob.type || "unknown"}</span>
+                                    <span class="blob-date">{formatDate(blob.uploaded)}</span>
                                 </div>
-                            </div>
-                            <div class="blob-date">
-                                {formatDate(blob.uploaded)}
                             </div>
                             <button
                                 class="delete-btn"
@@ -1444,6 +1518,25 @@
         background-color: var(--sidebar-bg);
     }
 
+    .delete-selected-btn {
+        padding: 0.4em 0.8em;
+        border: none;
+        border-radius: 4px;
+        background-color: var(--warning, #dc3545);
+        color: white;
+        cursor: pointer;
+        font-size: 0.9em;
+    }
+
+    .delete-selected-btn:hover:not(:disabled) {
+        opacity: 0.9;
+    }
+
+    .delete-selected-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
     .back-btn {
         background: transparent;
         border: 1px solid var(--border-color);
@@ -1608,8 +1701,17 @@
         transition: background-color 0.2s;
     }
 
-    .blob-item:hover {
+    .blob-item:hover,
+    .blob-item.selected {
         background-color: var(--sidebar-bg);
+    }
+
+    .blob-checkbox {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+        cursor: pointer;
+        accent-color: var(--primary);
     }
 
     .blob-thumbnail {
@@ -1661,12 +1763,10 @@
         color: var(--text-color);
         opacity: 0.7;
         margin-top: 0.25em;
+        flex-wrap: wrap;
     }
 
-    .blob-date {
-        font-size: 0.85em;
-        color: var(--text-color);
-        opacity: 0.6;
+    .blob-meta .blob-date {
         white-space: nowrap;
     }
 
@@ -2170,12 +2270,6 @@
     @media (max-width: 600px) {
         .blob-item {
             flex-wrap: wrap;
-        }
-
-        .blob-date {
-            width: 100%;
-            margin-top: 0.5em;
-            padding-left: 3.5em;
         }
 
         .modal-footer {
