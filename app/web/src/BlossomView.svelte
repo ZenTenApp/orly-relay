@@ -59,6 +59,9 @@
     $: filteredBlobs = (variantHashes.size, rawBlobs.filter(b => !variantHashes.has(b.sha256)));
     $: displayBlobs = sortBlobs(filteredBlobs, sortBy, sortOrder);
 
+    // Force Svelte to track selectedHashes changes for checkbox reactivity
+    $: selectedHashesSize = selectedHashes.size;
+
     function sortBlobs(blobList, by, order) {
         if (!blobList || blobList.length === 0) return blobList;
         const sorted = [...blobList].sort((a, b) => {
@@ -1325,7 +1328,7 @@
                     {#each displayBlobs as blob}
                         <div
                             class="blob-item"
-                            class:selected={isSelected(blob.sha256)}
+                            class:selected={(selectedHashesSize, selectedHashes.has(blob.sha256))}
                             on:click={() => openModal(blob)}
                             on:keypress={(e) => e.key === "Enter" && openModal(blob)}
                             role="button"
@@ -1334,8 +1337,8 @@
                             <input
                                 type="checkbox"
                                 class="blob-checkbox"
-                                checked={isSelected(blob.sha256)}
-                                on:click={(e) => toggleSelection(blob.sha256, e)}
+                                checked={(selectedHashesSize, selectedHashes.has(blob.sha256))}
+                                on:change={(e) => toggleSelection(blob.sha256, e)}
                                 on:keypress|stopPropagation
                             />
                             <div class="blob-thumbnail">
