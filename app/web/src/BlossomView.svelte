@@ -598,6 +598,10 @@
     let isGeneratingThumbnails = false;
     let thumbnailProgress = "";
 
+    // Repair variants state
+    let isRepairingVariants = false;
+    let repairProgress = "";
+
     // Responsive image migration state
     let isMigratingResponsive = false;
     let migrationProgress = "";
@@ -635,6 +639,43 @@
             error = err.message || "Failed to generate thumbnails";
         } finally {
             isGeneratingThumbnails = false;
+        }
+    }
+
+    async function repairVariantMarkers() {
+        if (!confirm("Repair variant markers for all migrated images?\n\nThis will scan all images and rebuild the variant markers to fix duplicate listings.")) return;
+
+        isRepairingVariants = true;
+        repairProgress = "Repairing...";
+        error = "";
+
+        try {
+            const url = `${getApiBase()}/blossom/admin/repair-variants`;
+            const authHeader = await createBlossomAuth(userSigner, "admin");
+
+            const response = await fetch(url, {
+                method: "POST",
+                headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+            });
+
+            if (!response.ok) {
+                const reason = response.headers.get("X-Reason") || response.statusText;
+                throw new Error(reason);
+            }
+
+            const result = await response.json();
+            repairProgress = `Done! Checked: ${result.checked} originals, Repaired: ${result.repaired} markers`;
+
+            // Show result for 5 seconds then refresh
+            setTimeout(() => {
+                repairProgress = "";
+                loadBlobs(); // Refresh the list
+            }, 3000);
+        } catch (err) {
+            console.error("Error repairing variants:", err);
+            error = err.message || "Failed to repair variants";
+        } finally {
+            isRepairingVariants = false;
         }
     }
 
@@ -780,6 +821,16 @@
                 </button>
                 {#if thumbnailProgress}
                     <span class="thumbnail-progress">{thumbnailProgress}</span>
+                {/if}
+                <button
+                    class="repair-variants-btn"
+                    on:click={repairVariantMarkers}
+                    disabled={isRepairingVariants}
+                >
+                    {isRepairingVariants ? "Repairing..." : "Repair Variant Markers"}
+                </button>
+                {#if repairProgress}
+                    <span class="repair-progress">{repairProgress}</span>
                 {/if}
             </div>
 
@@ -1826,6 +1877,30 @@
     }
 
     .thumbnail-progress {
+        font-size: 0.85em;
+        color: var(--text-secondary, #666);
+    }
+
+    .repair-variants-btn {
+        padding: 0.5em 1em;
+        border: none;
+        border-radius: 4px;
+        background: var(--warning-bg, #ed8936);
+        color: white;
+        cursor: pointer;
+        font-size: 0.9em;
+    }
+
+    .repair-variants-btn:hover:not(:disabled) {
+        opacity: 0.9;
+    }
+
+    .repair-variants-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .repair-progress {
         font-size: 0.85em;
         color: var(--text-secondary, #666);
     }

@@ -1032,6 +1032,143 @@ func (s *Server) handleMediaHead(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// handleRepairVariants handles POST /admin/repair-variants
+// Rebuilds variantof markers for existing migrated images
+func (s *Server) handleRepairVariants(w http.ResponseWriter, r *http.Request) {
+	// Authorization required
+	authEv, err := ValidateAuthEvent(r, "admin", nil)
+	if err != nil {
+		s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+	if authEv == nil {
+		s.setErrorResponse(w, http.StatusUnauthorized, "authorization required")
+		return
+	}
+
+	// Check admin ACL
+	remoteAddr := s.getRemoteAddr(r)
+	if !s.checkACL(authEv.Pubkey, remoteAddr, "admin") {
+		s.setErrorResponse(w, http.StatusForbidden, "admin access required")
+		return
+	}
+
+	// Get all image blobs
+	images, err := s.storage.ListImageBlobs()
+	if err != nil {
+		log.E.F("failed to list image blobs: %v", err)
+		s.setErrorResponse(w, http.StatusInternalServerError, "failed to list blobs")
+		return
+	}
+
+	// Build a map of all blob hashes
+	allHashes := make(map[string]bool)
+	for _, img := range images {
+		allHashes[strings.ToLower(img.SHA256)] = true
+	}
+
+	repaired := 0
+	checked := 0
+
+	// For each image, check if it's a migrated original
+	for _, img := range images {
+		sha256Hex := strings.ToLower(img.SHA256)
+		migratedKey := "migrated:" + sha256Hex
+
+		// Check if this is a migrated original
+		eventIDData, _ := s.storage.GetThumbnail(migratedKey)
+		if len(eventIDData) == 0 {
+			continue
+		}
+
+		checked++
+
+		// This is a migrated original - find its variants
+		// Variants typically have the same owner and were uploaded during migration
+		// We'll scan for blobs that have variantof markers or should have them
+
+		// For now, scan all blobs and check if they should be variants of this original
+		// Variants are named with predictable patterns in the binding events
+		// Since we can't easily query events, we'll rely on naming conventions or
+		// just mark blobs that aren't themselves originals
+
+		// Actually, we need a different approach - let's check what blobs exist
+		// and mark those that appear to be variants based on owner matching
+		// and not having their own migrated marker
+
+		// For each image that ISN'T migrated, check if it could be a variant
+		// by looking for variantof marker or creating one if owner matches
+	}
+
+	// Second pass: for each NON-migrated image, mark as variant if owner matches an original
+	for _, img := range images {
+		sha256Hex := strings.ToLower(img.SHA256)
+		migratedKey := "migrated:" + sha256Hex
+		variantKey := "variantof:" + sha256Hex
+
+		// Skip if this is a migrated original
+		if eventIDData, _ := s.storage.GetThumbnail(migratedKey); len(eventIDData) > 0 {
+			continue
+		}
+
+		// Skip if already has a variantof marker
+		if data, _ := s.storage.GetThumbnail(variantKey); len(data) > 0 {
+			continue
+		}
+
+		// This image is not an original and not yet marked as variant
+		// Try to find its original by checking if any migrated original has same owner
+		_, metadata, err := s.storage.GetBlob(mustDecodeHex(img.SHA256))
+		if err != nil {
+			continue
+		}
+
+		// Look for a migrated original with the same owner
+		for _, possibleOriginal := range images {
+			if possibleOriginal.SHA256 == img.SHA256 {
+				continue
+			}
+
+			origMigratedKey := "migrated:" + strings.ToLower(possibleOriginal.SHA256)
+			if eventIDData, _ := s.storage.GetThumbnail(origMigratedKey); len(eventIDData) == 0 {
+				continue
+			}
+
+			// This is a migrated original - check if same owner
+			_, origMeta, err := s.storage.GetBlob(mustDecodeHex(possibleOriginal.SHA256))
+			if err != nil {
+				continue
+			}
+
+			if utils.FastEqual(metadata.Pubkey, origMeta.Pubkey) {
+				// Same owner - mark this as a variant of the original
+				s.storage.SaveThumbnail(variantKey, []byte(strings.ToLower(possibleOriginal.SHA256)))
+				repaired++
+				break
+			}
+		}
+	}
+
+	log.I.F("repair variants: checked %d originals, repaired %d markers", checked, repaired)
+
+	response := struct {
+		Checked  int `json:"checked"`
+		Repaired int `json:"repaired"`
+	}{
+		Checked:  checked,
+		Repaired: repaired,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// mustDecodeHex decodes hex or returns nil
+func mustDecodeHex(s string) []byte {
+	b, _ := hex.Dec(s)
+	return b
+}
+
 // handleGenerateThumbnails handles POST /admin/generate-thumbnails (batch thumbnail generation)
 func (s *Server) handleGenerateThumbnails(w http.ResponseWriter, r *http.Request) {
 	// Authorization required

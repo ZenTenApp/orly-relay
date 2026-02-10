@@ -153,6 +153,14 @@ func (s *Server) Handler() http.Handler {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 
+		case path == "admin/repair-variants":
+			if r.Method == http.MethodPost {
+				s.handleRepairVariants(w, r)
+				return
+			}
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+
 		case strings.HasPrefix(path, "admin/migrate-responsive/"):
 			if r.Method == http.MethodPost {
 				s.handleAdminMigrateResponsive(w, r)
