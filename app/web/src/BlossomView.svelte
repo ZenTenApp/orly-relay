@@ -1,8 +1,9 @@
 <script>
     import { createEventDispatcher, onMount } from "svelte";
     import { npubEncode } from "nostr-tools/nip19";
-    import { fetchUserProfile } from "./nostr.js";
-    import { getApiBase } from "./config.js";
+    import { SimplePool } from "nostr-tools/pool";
+    import { fetchUserProfile, nostrClient } from "./nostr.js";
+    import { getApiBase, getRelayUrls } from "./config.js";
 
     export let isLoggedIn = false;
     export let userPubkey = "";
@@ -28,6 +29,11 @@
     const MIN_ZOOM = 0.25;
     const MAX_ZOOM = 4;
     const ZOOM_STEP = 0.25;
+
+    // Responsive variants state
+    let blobVariants = [];
+    let isLoadingVariants = false;
+    let copiedVariant = null;
 
     // Admin view state
     let isAdminView = false;
@@ -178,12 +184,131 @@
         selectedBlob = blob;
         zoomLevel = 1;
         showModal = true;
+        blobVariants = [];
+        copiedVariant = null;
+        // Fetch variants for images
+        if (getMimeCategory(blob.type) === "image") {
+            fetchBlobVariants(blob.sha256);
+        }
     }
 
     function closeModal() {
         showModal = false;
         selectedBlob = null;
         zoomLevel = 1;
+        blobVariants = [];
+        copiedVariant = null;
+    }
+
+    /**
+     * Parse imeta tag fields into an object
+     */
+    function parseImetaTag(tag) {
+        const fields = {};
+        for (let i = 1; i < tag.length; i++) {
+            const part = tag[i];
+            const spaceIndex = part.indexOf(' ');
+            if (spaceIndex > 0) {
+                const key = part.substring(0, spaceIndex);
+                const value = part.substring(spaceIndex + 1);
+                fields[key] = value;
+            }
+        }
+        return fields;
+    }
+
+    /**
+     * Fetch kind 1063 binding events for a blob hash
+     */
+    async function fetchBlobVariants(sha256Hex) {
+        isLoadingVariants = true;
+        blobVariants = [];
+
+        try {
+            const relays = getRelayUrls();
+            const pool = nostrClient.getPool();
+
+            // Query for kind 1063 events with x tag matching this blob
+            const filter = {
+                kinds: [1063],
+                "#x": [sha256Hex],
+                limit: 10
+            };
+
+            const events = await pool.querySync(relays, filter);
+
+            if (events.length === 0) {
+                isLoadingVariants = false;
+                return;
+            }
+
+            // Parse variants from the most recent event
+            const latestEvent = events.reduce((a, b) =>
+                a.created_at > b.created_at ? a : b
+            );
+
+            const variants = [];
+            for (const tag of latestEvent.tags) {
+                if (tag[0] !== "imeta") continue;
+
+                const fields = parseImetaTag(tag);
+                if (!fields.url || !fields.x || !fields.dim) continue;
+
+                const dimMatch = fields.dim.match(/^(\d+)x(\d+)$/);
+                if (!dimMatch) continue;
+
+                variants.push({
+                    variant: fields.variant || "original",
+                    url: fields.url,
+                    sha256: fields.x,
+                    width: parseInt(dimMatch[1], 10),
+                    height: parseInt(dimMatch[2], 10),
+                    mimeType: fields.m || "image/jpeg",
+                    size: fields.size ? parseInt(fields.size, 10) : null
+                });
+            }
+
+            // Sort by width (smallest first)
+            variants.sort((a, b) => a.width - b.width);
+            blobVariants = variants;
+
+        } catch (err) {
+            console.error("Failed to fetch variants:", err);
+        }
+
+        isLoadingVariants = false;
+    }
+
+    /**
+     * Copy variant URL to clipboard
+     */
+    async function copyVariantUrl(variant) {
+        try {
+            await navigator.clipboard.writeText(variant.url);
+            copiedVariant = variant.sha256;
+            setTimeout(() => {
+                if (copiedVariant === variant.sha256) {
+                    copiedVariant = null;
+                }
+            }, 2000);
+        } catch (err) {
+            console.error("Failed to copy:", err);
+        }
+    }
+
+    /**
+     * Format variant label for display
+     */
+    function formatVariantLabel(variant) {
+        const labels = {
+            thumb: "Thumbnail",
+            mobile: "Mobile",
+            "mobile-lg": "Mobile+",
+            desktop: "Desktop",
+            "desktop-lg": "Desktop+",
+            original: "Original"
+        };
+        return labels[variant.variant] || variant.variant;
     }
 
     function zoomIn() {
@@ -229,10 +354,10 @@
     }
 
     function getThumbnailUrl(blob) {
-        // Get thumbnail URL for images (adds ?thumb=1 query param)
+        // Get thumbnail URL for images (128px using Lanczos scaling)
         const baseUrl = getBlobUrl(blob);
         const sep = baseUrl.includes('?') ? '&' : '?';
-        return `${baseUrl}${sep}thumb=1`;
+        return `${baseUrl}${sep}w=128`;
     }
 
     function openLoginModal() {
@@ -440,6 +565,10 @@
     let isGeneratingThumbnails = false;
     let thumbnailProgress = "";
 
+    // Responsive image migration state
+    let isMigratingResponsive = false;
+    let migrationProgress = "";
+
     async function generateAllThumbnails() {
         if (!confirm("Generate thumbnails for all images? This may take a while.")) return;
 
@@ -476,6 +605,51 @@
         }
     }
 
+    /**
+     * Migrate the current user's images to responsive variants
+     * Creates multiple resolution versions (thumb, mobile, desktop, original)
+     * and publishes kind 1063 binding events.
+     */
+    async function migrateToResponsive() {
+        if (!confirm(`Migrate your images to responsive variants?\n\nThis will:\n- Generate thumb (128px), mobile (512px), desktop (1280px), and original variants\n- Create kind 1063 events binding all variants together\n- Use Lanczos (sinc) resampling for high quality\n- Skip images that have already been migrated`)) {
+            return;
+        }
+
+        isMigratingResponsive = true;
+        migrationProgress = "Starting migration...";
+        error = "";
+
+        try {
+            const url = `${getApiBase()}/blossom/migrate-responsive`;
+            const authHeader = await createBlossomAuth(userSigner, "upload");
+
+            const response = await fetch(url, {
+                method: "POST",
+                headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+            });
+
+            if (!response.ok) {
+                const reason = response.headers.get("X-Reason") || response.statusText;
+                throw new Error(reason);
+            }
+
+            const result = await response.json();
+            migrationProgress = `Done! Processed: ${result.processed}, Skipped: ${result.skipped}, Failed: ${result.failed}`;
+
+            // Reload blobs to show new variants
+            await loadBlobs();
+
+            // Show result for 5 seconds
+            setTimeout(() => {
+                migrationProgress = "";
+            }, 5000);
+        } catch (err) {
+            console.error("Error migrating to responsive:", err);
+            error = err.message || "Failed to migrate images";
+        } finally {
+            isMigratingResponsive = false;
+        }
+    }
 
 </script>
 
@@ -538,6 +712,20 @@
                 <button class="select-btn" on:click={triggerFileInput} disabled={isUploading}>
                     Select Files
                 </button>
+            </div>
+
+            <!-- Migration to responsive images -->
+            <div class="migration-section">
+                <button
+                    class="migrate-responsive-btn"
+                    on:click={migrateToResponsive}
+                    disabled={isMigratingResponsive}
+                >
+                    {isMigratingResponsive ? "Migrating..." : "Migrate Images to Responsive Variants"}
+                </button>
+                {#if migrationProgress}
+                    <span class="migration-progress">{migrationProgress}</span>
+                {/if}
             </div>
         {/if}
 
@@ -721,6 +909,43 @@
                     <span>Size: {formatSize(selectedBlob.size)}</span>
                     <span>Uploaded: {formatDate(selectedBlob.uploaded)}</span>
                 </div>
+
+                <!-- Responsive Variants Section -->
+                {#if getMimeCategory(selectedBlob.type) === "image"}
+                    <div class="variants-section">
+                        <div class="variants-header">
+                            <span class="variants-title">Responsive Variants</span>
+                            {#if isLoadingVariants}
+                                <span class="variants-loading">Loading...</span>
+                            {/if}
+                        </div>
+                        {#if blobVariants.length > 0}
+                            <div class="variants-list">
+                                {#each blobVariants as variant}
+                                    <div class="variant-item">
+                                        <span class="variant-label">{formatVariantLabel(variant)}</span>
+                                        <span class="variant-dims">{variant.width}×{variant.height}</span>
+                                        {#if variant.size}
+                                            <span class="variant-size">{formatSize(variant.size)}</span>
+                                        {/if}
+                                        <button
+                                            class="variant-copy-btn"
+                                            class:copied={copiedVariant === variant.sha256}
+                                            on:click={() => copyVariantUrl(variant)}
+                                        >
+                                            {copiedVariant === variant.sha256 ? "Copied!" : "Copy URL"}
+                                        </button>
+                                    </div>
+                                {/each}
+                            </div>
+                        {:else if !isLoadingVariants}
+                            <div class="variants-empty">
+                                No responsive variants found. Use "Migrate Images" to create them.
+                            </div>
+                        {/if}
+                    </div>
+                {/if}
+
                 <div class="blob-url-section">
                     <input
                         type="text"
@@ -843,6 +1068,17 @@
     }
 
     .upload-section {
+        display: flex;
+        align-items: center;
+        gap: 0.75em;
+        padding: 0.75em 1em;
+        background-color: var(--card-bg);
+        border-radius: 6px;
+        margin-bottom: 1em;
+        flex-wrap: wrap;
+    }
+
+    .migration-section {
         display: flex;
         align-items: center;
         gap: 0.75em;
@@ -1310,6 +1546,93 @@
         opacity: 0.7;
     }
 
+    /* Responsive variants section */
+    .variants-section {
+        padding: 0.75em;
+        background-color: var(--bg-secondary, rgba(0,0,0,0.05));
+        border-radius: 6px;
+        margin: 0.5em 0;
+    }
+
+    .variants-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5em;
+    }
+
+    .variants-title {
+        font-weight: 600;
+        font-size: 0.9em;
+        color: var(--text-color);
+    }
+
+    .variants-loading {
+        font-size: 0.8em;
+        color: var(--text-secondary, #888);
+        font-style: italic;
+    }
+
+    .variants-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4em;
+    }
+
+    .variant-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75em;
+        padding: 0.4em 0.6em;
+        background-color: var(--card-bg);
+        border-radius: 4px;
+        font-size: 0.85em;
+    }
+
+    .variant-label {
+        font-weight: 500;
+        color: var(--text-color);
+        min-width: 80px;
+    }
+
+    .variant-dims {
+        color: var(--text-secondary, #888);
+        font-family: monospace;
+        font-size: 0.9em;
+    }
+
+    .variant-size {
+        color: var(--text-secondary, #888);
+        font-size: 0.85em;
+        margin-left: auto;
+    }
+
+    .variant-copy-btn {
+        padding: 0.25em 0.6em;
+        background-color: var(--primary);
+        color: var(--text-on-primary, #fff);
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 0.8em;
+        transition: background-color 0.2s, transform 0.1s;
+    }
+
+    .variant-copy-btn:hover {
+        opacity: 0.9;
+    }
+
+    .variant-copy-btn.copied {
+        background-color: #28a745;
+    }
+
+    .variants-empty {
+        font-size: 0.85em;
+        color: var(--text-secondary, #888);
+        font-style: italic;
+        padding: 0.5em 0;
+    }
+
     .blob-url-section {
         display: flex;
         gap: 0.5em;
@@ -1449,6 +1772,30 @@
     }
 
     .thumbnail-progress {
+        font-size: 0.85em;
+        color: var(--text-secondary, #666);
+    }
+
+    .migrate-responsive-btn {
+        padding: 0.5em 1em;
+        border: none;
+        border-radius: 4px;
+        background: var(--success, #48bb78);
+        color: white;
+        cursor: pointer;
+        font-size: 0.9em;
+    }
+
+    .migrate-responsive-btn:hover:not(:disabled) {
+        opacity: 0.9;
+    }
+
+    .migrate-responsive-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .migration-progress {
         font-size: 0.85em;
         color: var(--text-secondary, #666);
     }
