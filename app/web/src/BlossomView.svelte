@@ -13,8 +13,6 @@
     const dispatch = createEventDispatcher();
 
     let blobs = [];
-    let allBlobs = []; // All blobs from API
-    let variantHashes = new Set(); // SHA256 hashes of variant blobs (to filter out)
     let isLoading = false;
     let error = "";
 
@@ -36,6 +34,7 @@
     let blobVariants = [];
     let isLoadingVariants = false;
     let copiedVariant = null;
+    let isDeletingVariants = false;
 
     // Admin view state
     let isAdminView = false;
@@ -107,47 +106,6 @@
         loadBlobs();
     }
 
-    /**
-     * Fetch variant hashes from kind 1063 binding events
-     * These are the sha256 hashes of variant blobs (not originals)
-     */
-    async function fetchVariantHashes(pubkey) {
-        const variants = new Set();
-        try {
-            const relays = getRelayUrls();
-            const pool = nostrClient.getPool();
-
-            // Query for kind 1063 events by this user
-            const filter = {
-                kinds: [1063],
-                authors: [pubkey],
-                limit: 500
-            };
-
-            const events = await pool.querySync(relays, filter);
-
-            for (const event of events) {
-                // Get the original hash from x tag
-                const xTag = event.tags.find(t => t[0] === 'x');
-                const originalHash = xTag ? xTag[1] : null;
-
-                // Parse imeta tags to find variant hashes
-                for (const tag of event.tags) {
-                    if (tag[0] !== 'imeta') continue;
-
-                    const fields = parseImetaTag(tag);
-                    // If this imeta has a different hash than original, it's a variant
-                    if (fields.x && fields.x !== originalHash) {
-                        variants.add(fields.x.toLowerCase());
-                    }
-                }
-            }
-        } catch (err) {
-            console.warn("Failed to fetch variant hashes:", err);
-        }
-        return variants;
-    }
-
     async function loadBlobs() {
         if (!userPubkey) {
             console.log("loadBlobs: no userPubkey, skipping");
@@ -159,36 +117,22 @@
         error = "";
 
         try {
-            // Fetch variant hashes in parallel with blob list
-            const [blobResponse, variants] = await Promise.all([
-                (async () => {
-                    const url = `${getApiBase()}/blossom/list/${userPubkey}`;
-                    const authHeader = await createBlossomAuth(userSigner, "list");
-                    return fetch(url, {
-                        headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
-                    });
-                })(),
-                fetchVariantHashes(userPubkey)
-            ]);
-
-            if (!blobResponse.ok) {
-                throw new Error(`Failed to load blobs: ${blobResponse.statusText}`);
-            }
-
-            const data = await blobResponse.json();
-            const blobList = Array.isArray(data) ? data : [];
-
-            // Store all blobs and variant hashes
-            allBlobs = [...blobList].sort((a, b) => (b.uploaded || 0) - (a.uploaded || 0));
-            variantHashes = variants;
-
-            // Filter out variant blobs - only show originals
-            blobs = allBlobs.filter(blob => {
-                const hash = blob.sha256?.toLowerCase();
-                return !hash || !variantHashes.has(hash);
+            const url = `${getApiBase()}/blossom/list/${userPubkey}`;
+            const authHeader = await createBlossomAuth(userSigner, "list");
+            const response = await fetch(url, {
+                headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
             });
 
-            console.log(`Loaded ${allBlobs.length} blobs, showing ${blobs.length} originals (filtered ${variantHashes.size} variants)`);
+            if (!response.ok) {
+                throw new Error(`Failed to load blobs: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            // API returns 'uploaded' timestamp per BUD-02 spec
+            // Server-side filtering already removes variants
+            const blobList = Array.isArray(data) ? data : [];
+            blobs = [...blobList].sort((a, b) => (b.uploaded || 0) - (a.uploaded || 0));
+            console.log("Loaded blobs:", blobs.length);
         } catch (err) {
             console.error("Error loading blobs:", err);
             error = err.message || "Failed to load blobs";
@@ -438,7 +382,6 @@
 
             console.log("Delete successful, removing blob from list:", blob.sha256);
             blobs = blobs.filter(b => b.sha256 !== blob.sha256);
-            allBlobs = allBlobs.filter(b => b.sha256 !== blob.sha256);
             console.log("Blobs after filter:", blobs.length);
             if (selectedBlob?.sha256 === blob.sha256) {
                 closeModal();
@@ -446,6 +389,38 @@
         } catch (err) {
             console.error("Error deleting blob:", err);
             alert(`Failed to delete blob: ${err.message}`);
+        }
+    }
+
+    async function deleteVariants(blob) {
+        if (!confirm(`Delete all responsive variants for this image?\n\nThis will remove all generated sizes (thumbnail, mobile, desktop) but keep the original.`)) return;
+
+        isDeletingVariants = true;
+
+        try {
+            const url = `${getApiBase()}/blossom/delete-variants/${blob.sha256}`;
+            const authHeader = await createBlossomAuth(userSigner, "delete", blob.sha256);
+            const response = await fetch(url, {
+                method: "DELETE",
+                headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+            });
+
+            if (!response.ok) {
+                const reason = response.headers.get("X-Reason") || response.statusText;
+                throw new Error(reason);
+            }
+
+            const result = await response.json();
+            console.log("Delete variants result:", result);
+
+            // Clear variants list and refresh
+            blobVariants = [];
+            alert(`Deleted ${result.deleted} variants.`);
+        } catch (err) {
+            console.error("Error deleting variants:", err);
+            alert(`Failed to delete variants: ${err.message}`);
+        } finally {
+            isDeletingVariants = false;
         }
     }
 
@@ -1025,6 +1000,11 @@
                     <a href={getBlobUrl(selectedBlob)} target="_blank" rel="noopener noreferrer" class="action-btn">
                         Open in New Tab
                     </a>
+                    {#if getMimeCategory(selectedBlob.type) === "image" && blobVariants.length > 0}
+                        <button class="action-btn warning" on:click={() => deleteVariants(selectedBlob)} disabled={isDeletingVariants}>
+                            {isDeletingVariants ? "Deleting..." : "Delete Variants"}
+                        </button>
+                    {/if}
                     <button class="action-btn danger" on:click={() => deleteBlob(selectedBlob)}>
                         Delete
                     </button>
@@ -1757,6 +1737,22 @@
     .action-btn.danger:hover {
         background-color: var(--warning);
         color: var(--text-color);
+    }
+
+    .action-btn.warning {
+        background-color: transparent;
+        border: 1px solid #f59e0b;
+        color: #f59e0b;
+    }
+
+    .action-btn.warning:hover:not(:disabled) {
+        background-color: #f59e0b;
+        color: #fff;
+    }
+
+    .action-btn.warning:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
     }
 
     @media (max-width: 720px) {

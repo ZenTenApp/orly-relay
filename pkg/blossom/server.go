@@ -177,6 +177,14 @@ func (s *Server) Handler() http.Handler {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 
+		case strings.HasPrefix(path, "delete-variants/"):
+			if r.Method == http.MethodDelete {
+				s.handleDeleteVariants(w, r)
+				return
+			}
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+
 		case r.Method == http.MethodGet:
 			// Handle GET /<sha256>
 			s.handleGetBlob(w, r)

@@ -503,6 +503,20 @@ func (s *Server) handleListBlobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Filter out variant blobs - only show originals
+	// Check for variant markers set during migration
+	variantHashes := s.getVariantHashes(descriptors)
+
+	// Filter descriptors
+	filtered := make([]*BlobDescriptor, 0, len(descriptors))
+	for _, desc := range descriptors {
+		hashLower := strings.ToLower(desc.SHA256)
+		if !variantHashes[hashLower] {
+			filtered = append(filtered, desc)
+		}
+	}
+	descriptors = filtered
+
 	// Set URLs for descriptors (include file extension for proper MIME handling)
 	for _, desc := range descriptors {
 		ext := GetExtensionFromMimeType(desc.Type)
@@ -515,6 +529,139 @@ func (s *Server) handleListBlobs(w http.ResponseWriter, r *http.Request) {
 	if err = json.NewEncoder(w).Encode(descriptors); err != nil {
 		log.E.F("error encoding response: %v", err)
 	}
+}
+
+// getVariantHashes returns a set of SHA256 hashes that are variant blobs (not originals).
+// It checks the storage for "variantof:" markers set during migration.
+func (s *Server) getVariantHashes(blobs []*BlobDescriptor) map[string]bool {
+	variantHashes := make(map[string]bool)
+
+	// Check each blob for a variant marker
+	for _, blob := range blobs {
+		variantKey := "variantof:" + strings.ToLower(blob.SHA256)
+		if data, _ := s.storage.GetThumbnail(variantKey); len(data) > 0 {
+			// This blob is a variant - mark it for filtering
+			variantHashes[strings.ToLower(blob.SHA256)] = true
+		}
+	}
+
+	return variantHashes
+}
+
+// handleDeleteVariants handles DELETE /delete-variants/<sha256> requests
+// Deletes all variant blobs associated with an original image
+func (s *Server) handleDeleteVariants(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/")
+
+	// Extract original sha256 from path: delete-variants/<sha256>
+	if !strings.HasPrefix(path, "delete-variants/") {
+		s.setErrorResponse(w, http.StatusBadRequest, "invalid path")
+		return
+	}
+
+	originalHashHex := strings.TrimPrefix(path, "delete-variants/")
+	// Remove any extension
+	if idx := strings.Index(originalHashHex, "."); idx >= 0 {
+		originalHashHex = originalHashHex[:idx]
+	}
+	originalHashHex = strings.ToLower(originalHashHex)
+
+	if len(originalHashHex) != 64 {
+		s.setErrorResponse(w, http.StatusBadRequest, "invalid sha256 format")
+		return
+	}
+
+	// Authorization required
+	authEv, err := ValidateAuthEvent(r, "delete", nil)
+	if err != nil {
+		s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+	if authEv == nil {
+		s.setErrorResponse(w, http.StatusUnauthorized, "authorization required")
+		return
+	}
+
+	// Get requesting user's pubkey
+	requestPubkey := authEv.Pubkey
+
+	// Get the original blob to verify ownership
+	originalHash, err := hex.Dec(originalHashHex)
+	if err != nil {
+		s.setErrorResponse(w, http.StatusBadRequest, "invalid sha256")
+		return
+	}
+
+	_, metadata, err := s.storage.GetBlob(originalHash)
+	if err != nil {
+		s.setErrorResponse(w, http.StatusNotFound, "original blob not found")
+		return
+	}
+
+	// Check ownership or admin
+	if !utils.FastEqual(metadata.Pubkey, requestPubkey) && !s.checkACL(requestPubkey, s.getRemoteAddr(r), "admin") {
+		s.setErrorResponse(w, http.StatusForbidden, "insufficient permissions")
+		return
+	}
+
+	// Find all variant blobs by checking markers
+	blobs, err := s.storage.ListBlobs(metadata.Pubkey, 0, 0)
+	if err != nil {
+		s.setErrorResponse(w, http.StatusInternalServerError, "failed to list blobs")
+		return
+	}
+
+	deleted := 0
+	failed := 0
+
+	for _, blob := range blobs {
+		blobHashLower := strings.ToLower(blob.SHA256)
+		variantKey := "variantof:" + blobHashLower
+
+		// Check if this blob is a variant of our original
+		if data, _ := s.storage.GetThumbnail(variantKey); len(data) > 0 {
+			storedOriginal := strings.ToLower(string(data))
+			if storedOriginal == originalHashHex {
+				// This is a variant of our original - delete it
+				blobHash, err := hex.Dec(blob.SHA256)
+				if err != nil {
+					failed++
+					continue
+				}
+
+				if err := s.storage.DeleteBlob(blobHash, metadata.Pubkey); err != nil {
+					log.W.F("failed to delete variant %s: %v", blob.SHA256, err)
+					failed++
+					continue
+				}
+
+				// Delete the variant marker
+				s.storage.SaveThumbnail(variantKey, nil)
+				deleted++
+			}
+		}
+	}
+
+	// Clear migration marker
+	migratedKey := "migrated:" + originalHashHex
+	s.storage.SaveThumbnail(migratedKey, nil)
+
+	// Return result
+	response := struct {
+		Original string `json:"original"`
+		Deleted  int    `json:"deleted"`
+		Failed   int    `json:"failed"`
+	}{
+		Original: originalHashHex,
+		Deleted:  deleted,
+		Failed:   failed,
+	}
+
+	log.I.F("deleted variants for %s: %d deleted, %d failed", originalHashHex, deleted, failed)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
 }
 
 // handleAdminListUsers handles GET /admin/users requests (admin only)
@@ -1170,6 +1317,13 @@ func (s *Server) doMigrateResponsive(w http.ResponseWriter, r *http.Request, tar
 				}
 			}
 
+			// Mark this blob as a variant of the original (for filtering in listings)
+			// Skip marking the original itself
+			if string(v.Variant) != "original" {
+				variantKey := "variantof:" + variantHex
+				s.storage.SaveThumbnail(variantKey, []byte(sha256Hex))
+			}
+
 			// Construct URL for this variant
 			variantURL := baseURL + "/" + variantHex + ".jpg"
 
@@ -1190,13 +1344,17 @@ func (s *Server) doMigrateResponsive(w http.ResponseWriter, r *http.Request, tar
 			continue
 		}
 
-		// Create kind 1063 binding event
+		// Create addressable binding event (kind 30063 = 30000 + 1063)
+		// Using parameterized replaceable kind allows corrections
 		ev := event.New()
-		ev.Kind = 1063
+		ev.Kind = 30063 // Addressable file metadata
 		ev.Pubkey = sign.Pub()
 		ev.CreatedAt = timestamp.Now().V
 		ev.Content = []byte{}
 		ev.Tags = tag.NewS()
+
+		// Add d tag with original hash for addressability
+		*ev.Tags = append(*ev.Tags, tag.NewFromAny("d", sha256Hex))
 
 		// Add imeta tag for each variant (ordered from smallest to largest)
 		for _, v := range uploadedVariants {
