@@ -249,7 +249,7 @@
     }
 
     /**
-     * Fetch kind 1063 binding events for a blob hash
+     * Fetch kind 30063 binding events for a blob hash
      */
     async function fetchBlobVariants(sha256Hex) {
         isLoadingVariants = true;
@@ -259,14 +259,36 @@
             const relays = getRelayUrls();
             const pool = nostrClient.getPool();
 
-            // Query for kind 30063 (responsive image binding) events with d tag matching this blob
+            // Build filter - include authors for proper NIP-33 addressable query when we have userPubkey
             const filter = {
                 kinds: [30063],
                 "#d": [sha256Hex],
                 limit: 10
             };
 
-            const events = await pool.querySync(relays, filter);
+            // Add authors filter if we have the user's pubkey (enables O(1) addressable lookup)
+            if (userPubkey) {
+                filter.authors = [userPubkey];
+            }
+
+            console.log("Querying for variants with filter:", JSON.stringify(filter));
+            let events = await pool.querySync(relays, filter);
+            console.log(`Found ${events.length} binding events from relay`);
+
+            // If no events from relay, check local cache as fallback
+            if (events.length === 0) {
+                console.log("No events from relay, checking local cache...");
+                try {
+                    const { queryEventsFromDB } = await import('./nostr.js');
+                    const cachedEvents = await queryEventsFromDB([filter]);
+                    if (cachedEvents.length > 0) {
+                        console.log(`Found ${cachedEvents.length} binding events in cache`);
+                        events = cachedEvents;
+                    }
+                } catch (cacheErr) {
+                    console.warn("Failed to query cache:", cacheErr);
+                }
+            }
 
             if (events.length === 0) {
                 isLoadingVariants = false;
@@ -935,14 +957,21 @@
             // Sign and publish the event via nostr protocol
             const signedEvent = await userSigner.signEvent(bindingEvent);
 
+            let publishSuccess = false;
             try {
-                await nostrClient.publish(signedEvent);
-                console.log("Binding event published:", signedEvent.id);
+                const result = await nostrClient.publish(signedEvent);
+                console.log("Binding event published:", signedEvent.id, result);
+                publishSuccess = result.success && result.okCount > 0;
             } catch (publishErr) {
                 console.warn("Failed to publish binding event:", publishErr);
             }
 
             generatingProgress = "Done!";
+
+            // Small delay to allow relay to index the event before querying
+            if (publishSuccess) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
 
             // Reload variants for the modal
             await fetchBlobVariants(blob.sha256);
@@ -985,7 +1014,27 @@
                 limit: 1000
             };
 
-            const events = await pool.querySync(relays, filter);
+            console.log("Querying for all binding events with filter:", JSON.stringify(filter));
+            let events = await pool.querySync(relays, filter);
+            console.log(`Found ${events.length} binding events from relay`);
+
+            // Also check local cache for any events not on the relay
+            try {
+                const { queryEventsFromDB } = await import('./nostr.js');
+                const cachedEvents = await queryEventsFromDB([filter]);
+                if (cachedEvents.length > 0) {
+                    console.log(`Found ${cachedEvents.length} binding events in cache`);
+                    // Merge and dedupe by event id
+                    const eventIds = new Set(events.map(e => e.id));
+                    for (const cached of cachedEvents) {
+                        if (!eventIds.has(cached.id)) {
+                            events.push(cached);
+                        }
+                    }
+                }
+            } catch (cacheErr) {
+                console.warn("Failed to query cache:", cacheErr);
+            }
 
             if (events.length === 0) {
                 removeVariantsProgress = "No binding events found.";

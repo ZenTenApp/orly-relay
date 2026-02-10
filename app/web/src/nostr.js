@@ -130,16 +130,36 @@ class NostrClient {
       console.warn("Not connected to any relays, attempting to connect first");
       await this.connect();
     }
-    
+
     try {
       const relaysToUse = specificRelays || this.relays;
       const promises = this.pool.publish(relaysToUse, event);
-      await Promise.allSettled(promises);
-      console.log("✓ Event published successfully");
+      const results = await Promise.allSettled(promises);
+
+      // Count successes and failures
+      let okCount = 0;
+      let errorCount = 0;
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          okCount++;
+          console.log("✓ Event accepted by relay");
+        } else {
+          errorCount++;
+          console.warn("✗ Relay rejected event:", result.reason);
+        }
+      }
+
+      if (okCount === 0) {
+        throw new Error(`Event rejected by all ${errorCount} relays`);
+      }
+
+      console.log(`✓ Event published: ${okCount} OK, ${errorCount} failed`);
+
       // Store the published event in IndexedDB
       await putEvents([event]);
       console.log("Event stored in IndexedDB");
-      return { success: true, okCount: 1, errorCount: 0 };
+
+      return { success: true, okCount, errorCount, event };
     } catch (error) {
       console.error("✗ Failed to publish event:", error);
       throw error;

@@ -23,18 +23,23 @@ If you think server changes are needed, **ASK FIRST** - the answer is probably "
 ## Quick Reference
 
 ```bash
-# Build
-CGO_ENABLED=0 go build -o orly
-./scripts/update-embedded-web.sh  # With web UI
+# Build - IMPORTANT: Use cmd/orly for unified binary with subcommands
+CGO_ENABLED=0 go build -o orly ./cmd/orly    # Unified binary (launcher, db, acl, relay)
+CGO_ENABLED=0 go build -o orly .              # Relay-only (NO subcommand support)
+./scripts/update-embedded-web.sh              # Build with embedded web UI
 
 # Test
 ./scripts/test.sh
 go test -v -run TestName ./pkg/package
 
-# Run
-./orly                    # Start relay
+# Run (unified binary)
+./orly                    # Start relay (default subcommand)
+./orly launcher           # Start with process supervisor (split IPC mode)
+./orly db --driver=badger # Start database server
+./orly acl --driver=follows # Start ACL server
 ./orly identity           # Show relay pubkey
 ./orly version            # Show version
+./orly help               # Show all subcommands
 
 # Web UI dev (hot reload)
 ORLY_WEB_DISABLE=true ORLY_WEB_DEV_PROXY_URL=http://localhost:5173 ./orly &
@@ -77,7 +82,19 @@ See `./orly help` for all options. **All env vars MUST be defined in `app/config
 ## Architecture
 
 ```
-main.go              → Entry point
+main.go              → Relay-only entry point (no subcommands)
+cmd/
+  orly/              → Unified binary entry point (WITH subcommands)
+    main.go          → Subcommand router (db, acl, sync, launcher, relay)
+    db/              → Database server subcommand
+    acl/             → ACL server subcommand
+    sync/            → Sync service subcommand
+    launcher/        → Process supervisor (self-exec pattern)
+    relay/           → Main relay subcommand
+  nurl/              → NIP-98 HTTP debugging tool
+  vainstr/           → Vanity npub generator
+  relay-tester/      → Protocol compliance testing
+  benchmark/         → Performance testing
 app/
   server.go          → HTTP/WebSocket server
   handle-*.go        → Nostr message handlers (EVENT, REQ, AUTH, etc.)
@@ -99,9 +116,6 @@ pkg/
   encoders/          → Optimized JSON encoding with buffer pools
   policy/            → Event filtering/validation
   acl/               → Access control (none/follows/managed)
-cmd/
-  relay-tester/      → Protocol compliance testing
-  benchmark/         → Performance testing
 ```
 
 ## Critical Rules
@@ -319,39 +333,44 @@ The transport manager handles ordered startup (Start fails fast, rolls back) and
 - **SSH**: `ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71`
 - **Service**: `systemctl {start|stop|restart|status} orly`
 - **Logs**: `journalctl -u orly -f`
-- **Binaries**: `/home/mleku/.local/bin/` (orly, orly-db-badger, orly-acl-follows, orly-launcher)
-- **Mode**: Split IPC (orly-launcher manages orly + orly-db-badger + orly-acl-follows)
+- **Binary**: `/home/mleku/.local/bin/orly` (unified binary with subcommands)
+- **Mode**: Split IPC via `orly launcher` (self-exec spawns db, acl, relay subprocesses)
 
-### Build & Deploy (blue-green)
+### Build & Deploy
+
+**CRITICAL**: Build from `./cmd/orly` for the unified binary. Building from root (`go build .`) creates a relay-only binary WITHOUT the launcher subcommand, causing deployment failures.
 
 ```bash
-# 1. Build for amd64
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly .
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly-db-badger ./cmd/orly-db-badger
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly-acl-follows ./cmd/orly-acl-follows
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly-launcher ./cmd/orly-launcher
+# 1. Build unified binary for amd64 (includes web UI)
+./scripts/update-embedded-web.sh
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly ./cmd/orly
 
 # 2. Stop service
 ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 'systemctl stop orly'
 
-# 3. Deploy binaries
+# 3. Deploy binary
 rsync -avz --compress -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
-  orly orly-db-badger orly-acl-follows orly-launcher \
-  root@69.164.249.71:/home/mleku/.local/bin/
+  orly root@69.164.249.71:/home/mleku/.local/bin/
 
-# 4. Fix ownership
+# 4. Fix ownership and start
 ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 \
-  'chown mleku:mleku /home/mleku/.local/bin/orly*'
+  'chown mleku:mleku /home/mleku/.local/bin/orly && systemctl start orly'
 
-# 5. Start service
-ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 'systemctl start orly'
-
-# 6. Verify
+# 5. Verify (should show launcher + db + acl + relay subprocesses)
 ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 \
-  'sleep 3 && systemctl status orly'
+  'sleep 5 && systemctl status orly'
 ```
 
-**Future improvements**: Build on VPS directly (git pull + go build) to avoid slow binary transfers. Implement proper blue-green with symlink swap between `/opt/orly/blue/` and `/opt/orly/green/` dirs, with instant rollback via symlink flip.
+### Launcher Mode (Split IPC)
+
+The systemd service runs `orly launcher` which uses self-exec to spawn:
+- `orly db --driver=badger` (gRPC database server on :50051)
+- `orly acl --driver=follows` (gRPC ACL server on :50052)
+- `orly` (main relay connecting to both via gRPC)
+
+This provides process isolation and allows independent restarts. The unified binary eliminates ~100MB of duplicate Go runtime compared to separate binaries.
+
+**Future improvements**: Build on VPS directly (git pull + go build) to avoid slow binary transfers.
 
 ## Git Remotes
 
