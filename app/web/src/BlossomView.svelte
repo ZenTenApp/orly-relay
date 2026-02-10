@@ -659,10 +659,13 @@
         if (!confirm(`Delete ${selectedHashes.size} selected file(s)? This cannot be undone.`)) return;
 
         isDeletingSelected = true;
+        error = "";
         let deleted = 0;
         let failed = 0;
 
-        for (const hash of selectedHashes) {
+        const hashesToDelete = Array.from(selectedHashes);
+
+        for (const hash of hashesToDelete) {
             try {
                 const url = `${getApiBase()}/blossom/${hash}`;
                 const authHeader = await createBlossomAuth(userSigner, "delete", hash);
@@ -674,6 +677,7 @@
                 if (response.ok) {
                     deleted++;
                 } else {
+                    console.error(`Delete failed for ${hash}: ${response.status} ${response.statusText}`);
                     failed++;
                 }
             } catch (err) {
@@ -682,14 +686,18 @@
             }
         }
 
-        selectedHashes.clear();
-        selectedHashes = selectedHashes;
+        // Clear selection
+        selectedHashes = new Set();
 
         // Refresh the list
-        if (selectedAdminUser) {
-            await loadUserBlobs(selectedAdminUser.pubkey);
-        } else {
-            await loadBlobs();
+        try {
+            if (selectedAdminUser) {
+                await loadUserBlobs(selectedAdminUser.pubkey);
+            } else {
+                await loadBlobs();
+            }
+        } catch (err) {
+            console.error("Failed to refresh blobs:", err);
         }
 
         isDeletingSelected = false;
@@ -876,13 +884,15 @@
                         method: "PUT",
                         headers: {
                             "Content-Type": "image/jpeg",
+                            "X-SHA-256": variantHash,
                             ...(uploadAuth ? { Authorization: `Nostr ${uploadAuth}` } : {}),
                         },
                         body: resized.blob,
                     });
 
                     if (!uploadResponse.ok) {
-                        console.warn(`Failed to upload variant ${name}:`, uploadResponse.statusText);
+                        const reason = uploadResponse.headers.get("X-Reason") || uploadResponse.statusText;
+                        console.warn(`Failed to upload variant ${name}: ${reason}`);
                         continue;
                     }
                 }
