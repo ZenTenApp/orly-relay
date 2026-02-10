@@ -2,6 +2,24 @@
 
 ORLY is a high-performance Nostr relay in Go with Badger/Neo4j/WasmDB backends, Svelte web UI, and purego-based secp256k1 crypto.
 
+## CRITICAL: Server-Side Changes Prohibited
+
+**DO NOT modify the relay (ORLY) code (Go files in `app/`, `pkg/`, `cmd/`) unless the user EXPLICITLY states the changes should go into "the relay" or "orly".**
+
+The relay (ORLY) implements standard Nostr protocol and Blossom blob storage. It should:
+- Store and serve events via WebSocket (NIP-01)
+- Store and serve blobs via HTTP (Blossom BUD-01/02)
+- **Nothing else**
+
+All application logic belongs in the **client** (Svelte web UI in `app/web/`):
+- Use `nostrClient.publish()` for publishing events via WebSocket
+- Use Blossom HTTP endpoints only for blob upload/download/delete
+- Query events via nostr protocol, not custom HTTP endpoints
+- No adding HTTP endpoints to the relay
+- No server-side event processing or filtering logic
+
+If you think server changes are needed, **ASK FIRST** - the answer is probably "do it client-side".
+
 ## Quick Reference
 
 ```bash
