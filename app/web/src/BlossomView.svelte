@@ -602,6 +602,10 @@
     let isGeneratingVariants = false;
     let generatingProgress = "";
 
+    // Remove all variants state
+    let isRemovingAllVariants = false;
+    let removeVariantsProgress = "";
+
     async function generateAllThumbnails() {
         if (!confirm("Generate thumbnails for all images? This may take a while.")) return;
 
@@ -857,6 +861,160 @@
         }
     }
 
+    /**
+     * Remove all responsive variants and binding events.
+     * 1. Query all kind 30063 binding events for this user
+     * 2. Delete all variant blobs (non-originals)
+     * 3. Delete the binding events by publishing kind 5 deletion events
+     */
+    async function removeAllVariants() {
+        if (!confirm("Remove ALL responsive variants and binding events?\n\nThis will:\n- Delete all generated variant blobs (thumb, mobile, desktop)\n- Delete all binding events (kind 30063)\n- Keep only original images\n\nThis cannot be undone!")) {
+            return;
+        }
+
+        isRemovingAllVariants = true;
+        removeVariantsProgress = "Finding binding events...";
+        error = "";
+
+        try {
+            const relays = getRelayUrls();
+            const pool = nostrClient.getPool();
+
+            // Query for all kind 30063 events by this user
+            const filter = {
+                kinds: [30063],
+                authors: [userPubkey],
+                limit: 1000
+            };
+
+            const events = await pool.querySync(relays, filter);
+
+            if (events.length === 0) {
+                removeVariantsProgress = "No binding events found.";
+                setTimeout(() => { removeVariantsProgress = ""; }, 3000);
+                return;
+            }
+
+            removeVariantsProgress = `Found ${events.length} binding events...`;
+
+            // Collect all variant hashes and original hashes
+            const variantHashes = new Set();
+            const originalHashes = new Set();
+            const eventIds = [];
+
+            for (const ev of events) {
+                eventIds.push(ev.id);
+
+                // Get original hash from d tag
+                let originalHash = null;
+                for (const tag of ev.tags) {
+                    if (tag[0] === "d" && tag[1]) {
+                        originalHash = tag[1].toLowerCase();
+                        originalHashes.add(originalHash);
+                        break;
+                    }
+                }
+
+                // Get variant hashes from imeta tags
+                for (const tag of ev.tags) {
+                    if (tag[0] !== "imeta") continue;
+
+                    let variantHash = null;
+                    let variantName = null;
+
+                    for (let i = 1; i < tag.length; i++) {
+                        const part = tag[i];
+                        if (part.startsWith("x ")) {
+                            variantHash = part.substring(2).toLowerCase();
+                        } else if (part.startsWith("variant ")) {
+                            variantName = part.substring(8);
+                        }
+                    }
+
+                    // Only add non-original variants
+                    if (variantHash && variantName !== "original" && variantHash !== originalHash) {
+                        variantHashes.add(variantHash);
+                    }
+                }
+            }
+
+            // Delete variant blobs
+            let deletedBlobs = 0;
+            let failedBlobs = 0;
+            const variantArray = Array.from(variantHashes);
+
+            for (let i = 0; i < variantArray.length; i++) {
+                const hash = variantArray[i];
+                removeVariantsProgress = `Deleting variant ${i + 1}/${variantArray.length}...`;
+
+                try {
+                    const url = `${getApiBase()}/blossom/${hash}`;
+                    const authHeader = await createBlossomAuth(userSigner, "delete", hash);
+                    const response = await fetch(url, {
+                        method: "DELETE",
+                        headers: authHeader ? { Authorization: `Nostr ${authHeader}` } : {},
+                    });
+
+                    if (response.ok || response.status === 404) {
+                        deletedBlobs++;
+                    } else {
+                        failedBlobs++;
+                    }
+                } catch (err) {
+                    console.warn(`Failed to delete variant ${hash}:`, err);
+                    failedBlobs++;
+                }
+            }
+
+            // Delete binding events by publishing kind 5 deletion events
+            removeVariantsProgress = `Deleting ${eventIds.length} binding events...`;
+
+            for (let i = 0; i < eventIds.length; i++) {
+                const eventId = eventIds[i];
+                removeVariantsProgress = `Deleting event ${i + 1}/${eventIds.length}...`;
+
+                try {
+                    // Create kind 5 deletion event
+                    const deleteEvent = {
+                        kind: 5,
+                        created_at: Math.floor(Date.now() / 1000),
+                        content: "Removing responsive image binding",
+                        tags: [
+                            ["e", eventId],
+                            ["k", "30063"],
+                        ],
+                    };
+
+                    const signedDelete = await userSigner.signEvent(deleteEvent);
+
+                    // Publish to relay
+                    const eventUrl = `${getApiBase()}/api/event`;
+                    await fetch(eventUrl, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(signedDelete),
+                    });
+                } catch (err) {
+                    console.warn(`Failed to delete event ${eventId}:`, err);
+                }
+            }
+
+            removeVariantsProgress = `Done! Deleted ${deletedBlobs} variants, ${eventIds.length} events.`;
+
+            // Refresh blob list
+            await loadBlobs();
+
+            setTimeout(() => {
+                removeVariantsProgress = "";
+            }, 5000);
+        } catch (err) {
+            console.error("Error removing variants:", err);
+            error = err.message || "Failed to remove variants";
+        } finally {
+            isRemovingAllVariants = false;
+        }
+    }
+
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -918,6 +1076,19 @@
                 <button class="select-btn" on:click={triggerFileInput} disabled={isUploading}>
                     Select Files
                 </button>
+            </div>
+
+            <div class="variants-actions">
+                <button
+                    class="remove-variants-btn"
+                    on:click={removeAllVariants}
+                    disabled={isRemovingAllVariants}
+                >
+                    {isRemovingAllVariants ? "Removing..." : "Remove All Variants"}
+                </button>
+                {#if removeVariantsProgress}
+                    <span class="variants-progress">{removeVariantsProgress}</span>
+                {/if}
             </div>
         {/if}
 
@@ -1980,6 +2151,41 @@
     }
 
     .thumbnail-progress {
+        font-size: 0.85em;
+        color: var(--text-secondary, #666);
+    }
+
+    /* Variants actions */
+    .variants-actions {
+        display: flex;
+        align-items: center;
+        gap: 1em;
+        margin-bottom: 1em;
+        padding: 0.75em;
+        background: var(--bg-secondary, #f5f5f5);
+        border-radius: 8px;
+    }
+
+    .remove-variants-btn {
+        padding: 0.5em 1em;
+        border: none;
+        border-radius: 4px;
+        background: var(--warning, #dc3545);
+        color: white;
+        cursor: pointer;
+        font-size: 0.9em;
+    }
+
+    .remove-variants-btn:hover:not(:disabled) {
+        opacity: 0.9;
+    }
+
+    .remove-variants-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .variants-progress {
         font-size: 0.85em;
         color: var(--text-secondary, #666);
     }
