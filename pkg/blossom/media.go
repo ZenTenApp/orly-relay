@@ -3,16 +3,47 @@ package blossom
 import (
 	"bytes"
 	"image"
-	"image/gif"
 	"image/jpeg"
-	"image/png"
 	"strings"
 
-	"golang.org/x/image/draw"
+	"github.com/disintegration/imaging"
 )
 
-// ThumbnailSize defines the maximum dimension for thumbnails
-const ThumbnailSize = 96
+// ThumbnailSize defines the maximum dimension for thumbnails (used for list display)
+const ThumbnailSize = 128
+
+// ImageVariant represents a responsive image size category
+type ImageVariant string
+
+const (
+	VariantThumb   ImageVariant = "thumb"    // 128px - list display, previews
+	VariantMobile  ImageVariant = "mobile"   // 512px - mobile viewing
+	VariantDesktop ImageVariant = "desktop"  // 1280px - desktop viewing
+	VariantOriginal ImageVariant = "original" // unchanged size, EXIF stripped
+)
+
+// VariantSpec defines the target width and JPEG quality for a variant
+type VariantSpec struct {
+	Width   int
+	Quality int
+}
+
+// VariantSpecs maps variant types to their specifications
+var VariantSpecs = map[ImageVariant]VariantSpec{
+	VariantThumb:    {Width: 128, Quality: 75},
+	VariantMobile:   {Width: 512, Quality: 80},
+	VariantDesktop:  {Width: 1280, Quality: 85},
+	VariantOriginal: {Width: 0, Quality: 90}, // Width 0 means keep original
+}
+
+// ScaledImage represents a generated image variant
+type ScaledImage struct {
+	Variant  ImageVariant
+	Data     []byte
+	Width    int
+	Height   int
+	MimeType string
+}
 
 // OptimizeMedia optimizes media content (BUD-05)
 // This is a placeholder implementation - actual optimization would use
@@ -31,7 +62,7 @@ func OptimizeMedia(data []byte, mimeType string) (optimizedData []byte, optimize
 	return
 }
 
-// GenerateThumbnail creates a thumbnail from image data.
+// GenerateThumbnail creates a thumbnail from image data using Lanczos resampling.
 // Returns the thumbnail data, MIME type, and any error.
 // Thumbnails are always JPEG for smaller file sizes.
 func GenerateThumbnail(data []byte, mimeType string, maxSize int) ([]byte, string, error) {
@@ -39,29 +70,13 @@ func GenerateThumbnail(data []byte, mimeType string, maxSize int) ([]byte, strin
 		maxSize = ThumbnailSize
 	}
 
-	// Decode the image based on MIME type
-	var img image.Image
-	var err error
-
+	// Decode using imaging library (automatically strips EXIF)
 	reader := bytes.NewReader(data)
-
-	switch {
-	case strings.HasPrefix(mimeType, "image/jpeg"):
-		img, err = jpeg.Decode(reader)
-	case strings.HasPrefix(mimeType, "image/png"):
-		img, err = png.Decode(reader)
-	case strings.HasPrefix(mimeType, "image/gif"):
-		img, err = gif.Decode(reader)
-	default:
-		// Try generic decode
-		img, _, err = image.Decode(reader)
-	}
-
+	img, err := imaging.Decode(reader, imaging.AutoOrientation(true))
 	if err != nil {
 		return nil, "", err
 	}
 
-	// Calculate new dimensions maintaining aspect ratio
 	bounds := img.Bounds()
 	origWidth := bounds.Dx()
 	origHeight := bounds.Dy()
@@ -76,6 +91,7 @@ func GenerateThumbnail(data []byte, mimeType string, maxSize int) ([]byte, strin
 		return buf.Bytes(), "image/jpeg", nil
 	}
 
+	// Calculate new dimensions maintaining aspect ratio
 	var newWidth, newHeight int
 	if origWidth > origHeight {
 		newWidth = maxSize
@@ -93,9 +109,8 @@ func GenerateThumbnail(data []byte, mimeType string, maxSize int) ([]byte, strin
 		newHeight = 1
 	}
 
-	// Create the thumbnail using high-quality CatmullRom interpolation
-	thumb := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
-	draw.CatmullRom.Scale(thumb, thumb.Bounds(), img, bounds, draw.Over, nil)
+	// Resize using Lanczos (sinc-based) for highest quality
+	thumb := imaging.Resize(img, newWidth, newHeight, imaging.Lanczos)
 
 	// Encode as JPEG for smaller file size
 	var buf bytes.Buffer
@@ -104,6 +119,66 @@ func GenerateThumbnail(data []byte, mimeType string, maxSize int) ([]byte, strin
 	}
 
 	return buf.Bytes(), "image/jpeg", nil
+}
+
+// GenerateResponsiveVariants creates multiple resolution variants of an image.
+// Uses Lanczos resampling for high-quality downscaling.
+// Returns variants from smallest to largest: thumb, mobile, desktop, original.
+// EXIF metadata is automatically stripped from all variants.
+func GenerateResponsiveVariants(data []byte, mimeType string) ([]ScaledImage, error) {
+	// Decode using imaging library (automatically strips EXIF and handles orientation)
+	reader := bytes.NewReader(data)
+	img, err := imaging.Decode(reader, imaging.AutoOrientation(true))
+	if err != nil {
+		return nil, err
+	}
+
+	bounds := img.Bounds()
+	origWidth := bounds.Dx()
+	origHeight := bounds.Dy()
+
+	// Order of variants from smallest to largest
+	variantOrder := []ImageVariant{VariantThumb, VariantMobile, VariantDesktop, VariantOriginal}
+	variants := make([]ScaledImage, 0, len(variantOrder))
+
+	for _, variant := range variantOrder {
+		spec := VariantSpecs[variant]
+
+		var resized image.Image
+		var newWidth, newHeight int
+
+		if spec.Width == 0 || origWidth <= spec.Width {
+			// Original variant or image smaller than target - just compress
+			resized = img
+			newWidth = origWidth
+			newHeight = origHeight
+		} else {
+			// Calculate height maintaining aspect ratio
+			newWidth = spec.Width
+			newHeight = (origHeight * spec.Width) / origWidth
+			if newHeight < 1 {
+				newHeight = 1
+			}
+			// Resize using Lanczos for highest quality
+			resized = imaging.Resize(img, newWidth, newHeight, imaging.Lanczos)
+		}
+
+		// Encode as JPEG
+		var buf bytes.Buffer
+		if err := jpeg.Encode(&buf, resized, &jpeg.Options{Quality: spec.Quality}); err != nil {
+			return nil, err
+		}
+
+		variants = append(variants, ScaledImage{
+			Variant:  variant,
+			Data:     buf.Bytes(),
+			Width:    newWidth,
+			Height:   newHeight,
+			MimeType: "image/jpeg",
+		})
+	}
+
+	return variants, nil
 }
 
 // IsImageMimeType returns true if the MIME type is a supported image format

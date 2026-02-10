@@ -204,7 +204,7 @@ type C struct {
 	TorSOCKS    int    `env:"ORLY_TOR_SOCKS" default:"0" usage:"SOCKS port for outbound Tor connections (0=disabled)"`
 
 	// Nostr Relay Connect (NRC) configuration - tunnel private relay through public relay
-	NRCEnabled          bool   `env:"ORLY_NRC_ENABLED" default:"false" usage:"enable NRC bridge to expose this relay through a public rendezvous relay"`
+	NRCEnabled          bool   `env:"ORLY_NRC_ENABLED" default:"true" usage:"enable NRC bridge to expose this relay through a public rendezvous relay"`
 	NRCRendezvousURL    string `env:"ORLY_NRC_RENDEZVOUS_URL" usage:"WebSocket URL of the public relay to use as rendezvous point (e.g., wss://relay.example.com)"`
 	NRCAuthorizedKeys   string `env:"ORLY_NRC_AUTHORIZED_KEYS" usage:"comma-separated list of authorized client pubkeys (hex) for secret-based auth"`
 	NRCSessionTimeout   string `env:"ORLY_NRC_SESSION_TIMEOUT" default:"30m" usage:"inactivity timeout for NRC sessions"`
@@ -832,8 +832,14 @@ func (cfg *C) GetNRCConfigValues() (
 		}
 	}
 
+	// Use explicit rendezvous URL if set, otherwise use relay's own address for self-rendezvous
+	rendezvousURL = cfg.NRCRendezvousURL
+	if rendezvousURL == "" && len(cfg.RelayAddresses) > 0 {
+		rendezvousURL = cfg.RelayAddresses[0]
+	}
+
 	return cfg.NRCEnabled,
-		cfg.NRCRendezvousURL,
+		rendezvousURL,
 		authorizedKeys,
 		sessionTimeout
 }

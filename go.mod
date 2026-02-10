@@ -8,6 +8,7 @@ require (
 	github.com/alexflint/go-arg v1.6.1
 	github.com/aperturerobotics/go-indexeddb v0.2.3
 	github.com/dgraph-io/badger/v4 v4.8.0
+	github.com/disintegration/imaging v1.6.2
 	github.com/go-acme/lego/v4 v4.31.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
@@ -25,7 +26,6 @@ require (
 	go-simpler.org/env v0.12.0
 	go.uber.org/atomic v1.11.0
 	golang.org/x/crypto v0.46.0
-	golang.org/x/image v0.35.0
 	golang.org/x/lint v0.0.0-20241112194109-818c5a804067
 	golang.org/x/term v0.38.0
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
@@ -249,6 +249,7 @@ require (
 	golang.org/x/arch v0.15.0 // indirect
 	golang.org/x/exp v0.0.0-20251209150349-8475f28825e9 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20251023183803-a4bb9ffd2546 // indirect
+	golang.org/x/image v0.35.0 // indirect
 	golang.org/x/mod v0.31.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect

@@ -249,21 +249,21 @@ func Run(
 					SessionTimeout:    nrcSessionTimeout,
 				}
 
-				// Add database authorizer if using BadgerDB
-				// This allows dynamic NRC client management via the web UI
-				if badgerDB, ok := db.(*database.D); ok {
-					bridgeConfig.Authorizer = database.NewNRCAuthorizer(badgerDB)
-					log.D.F("NRC bridge using database-backed authorization")
-				}
+				// Create event-based NRC store for dynamic connection management
+				// This works with any database backend
+				l.nrcEventStore = database.NewNRCEventStore(db, relaySigner)
+				bridgeConfig.Authorizer = database.NewNRCEventAuthorizer(l.nrcEventStore)
+				log.D.F("NRC bridge using event-based authorization")
 
 				// Create and start the bridge
 				l.nrcBridge = nrc.NewBridge(bridgeConfig)
 				if err := l.nrcBridge.Start(); err != nil {
 					log.E.F("failed to start NRC bridge: %v", err)
 					l.nrcBridge = nil
+					l.nrcEventStore = nil
 				} else {
-					log.I.F("NRC bridge started (rendezvous: %s, authorized: %d env, database: %v)",
-						nrcRendezvousURL, len(authorizedSecrets), bridgeConfig.Authorizer != nil)
+					log.I.F("NRC bridge started (rendezvous: %s, authorized: %d env, event-store: %v)",
+						nrcRendezvousURL, len(authorizedSecrets), l.nrcEventStore != nil)
 				}
 			}
 		}

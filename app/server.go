@@ -115,7 +115,8 @@ type Server struct {
 	subnetPool      *wireguard.SubnetPool
 
 	// NRC (Nostr Relay Connect) bridge for remote relay access
-	nrcBridge *nrc.Bridge
+	nrcBridge     *nrc.Bridge
+	nrcEventStore *database.NRCEventStore
 
 	// Archive relay and storage management
 	archiveManager   *archive.Manager

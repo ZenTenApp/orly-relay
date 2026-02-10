@@ -1,6 +1,7 @@
 package blossom
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,9 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"lol.mleku.dev/log"
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"git.mleku.dev/mleku/nostr/encoders/timestamp"
+	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/utils"
 )
 
@@ -986,6 +990,285 @@ func (s *Server) handleGenerateThumbnails(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(response)
 }
 
+// handleMigrateResponsive handles POST /migrate-responsive
+// Generates responsive image variants for the authenticated user's own blobs.
+// Requires write-level access.
+func (s *Server) handleMigrateResponsive(w http.ResponseWriter, r *http.Request) {
+	// Authorization required
+	authEv, err := ValidateAuthEvent(r, "upload", nil)
+	if err != nil {
+		s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+	if authEv == nil {
+		s.setErrorResponse(w, http.StatusUnauthorized, "authorization required")
+		return
+	}
+
+	// Check write ACL (user migrates their own blobs)
+	remoteAddr := s.getRemoteAddr(r)
+	if !s.checkACL(authEv.Pubkey, remoteAddr, "write") {
+		s.setErrorResponse(w, http.StatusForbidden, "write access required")
+		return
+	}
+
+	// Use authenticated user's pubkey
+	targetPubkey := authEv.Pubkey
+	targetPubkeyHex := hex.Enc(targetPubkey)
+
+	s.doMigrateResponsive(w, r, targetPubkey, targetPubkeyHex)
+}
+
+// handleAdminMigrateResponsive handles POST /admin/migrate-responsive/{pubkey}
+// Admin version that can migrate any user's blobs.
+func (s *Server) handleAdminMigrateResponsive(w http.ResponseWriter, r *http.Request) {
+	// Authorization required
+	authEv, err := ValidateAuthEvent(r, "admin", nil)
+	if err != nil {
+		s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+	if authEv == nil {
+		s.setErrorResponse(w, http.StatusUnauthorized, "authorization required")
+		return
+	}
+
+	// Check admin ACL
+	remoteAddr := s.getRemoteAddr(r)
+	if !s.checkACL(authEv.Pubkey, remoteAddr, "admin") {
+		s.setErrorResponse(w, http.StatusForbidden, "admin access required")
+		return
+	}
+
+	// Extract target pubkey from path: admin/migrate-responsive/{pubkey}
+	path := strings.TrimPrefix(r.URL.Path, "/")
+	parts := strings.Split(path, "/")
+	if len(parts) < 3 {
+		s.setErrorResponse(w, http.StatusBadRequest, "missing pubkey in path")
+		return
+	}
+	targetPubkeyHex := parts[2]
+
+	targetPubkey, err := hex.Dec(targetPubkeyHex)
+	if err != nil || len(targetPubkey) != 32 {
+		s.setErrorResponse(w, http.StatusBadRequest, "invalid pubkey format")
+		return
+	}
+
+	s.doMigrateResponsive(w, r, targetPubkey, targetPubkeyHex)
+}
+
+// doMigrateResponsive is the shared implementation for responsive image migration.
+func (s *Server) doMigrateResponsive(w http.ResponseWriter, r *http.Request, targetPubkey []byte, targetPubkeyHex string) {
+
+	// Get relay identity secret for signing events
+	relaySecret, err := s.db.GetOrCreateRelayIdentitySecret()
+	if err != nil {
+		log.E.F("failed to get relay identity: %v", err)
+		s.setErrorResponse(w, http.StatusInternalServerError, "relay identity unavailable")
+		return
+	}
+
+	// Initialize signer
+	sign := p8k.MustNew()
+	if err := sign.InitSec(relaySecret); err != nil {
+		log.E.F("failed to init signer: %v", err)
+		s.setErrorResponse(w, http.StatusInternalServerError, "signer initialization failed")
+		return
+	}
+
+	// Get all blobs for this user
+	blobs, err := s.storage.ListBlobs(targetPubkey, 0, 0)
+	if err != nil {
+		log.E.F("failed to list blobs for %s: %v", targetPubkeyHex, err)
+		s.setErrorResponse(w, http.StatusInternalServerError, "failed to list blobs")
+		return
+	}
+
+	// Filter to images only
+	var images []*BlobDescriptor
+	for _, b := range blobs {
+		if IsImageMimeType(b.Type) {
+			images = append(images, b)
+		}
+	}
+
+	// Process each image
+	type result struct {
+		SHA256  string `json:"sha256"`
+		Success bool   `json:"success"`
+		Error   string `json:"error,omitempty"`
+		EventID string `json:"event_id,omitempty"`
+	}
+	results := make([]result, 0, len(images))
+
+	processed := 0
+	skipped := 0
+	failed := 0
+
+	baseURL := s.getBaseURL(r)
+
+	for _, img := range images {
+		sha256Hex := img.SHA256
+
+		// Check if already migrated (check for existing kind 1063 with this hash)
+		migratedKey := "migrated:" + sha256Hex
+		if thumbData, _ := s.storage.GetThumbnail(migratedKey); len(thumbData) > 0 {
+			skipped++
+			continue
+		}
+
+		// Get the original blob data
+		sha256Hash, err := hex.Dec(sha256Hex)
+		if err != nil {
+			results = append(results, result{SHA256: sha256Hex, Success: false, Error: "invalid hash"})
+			failed++
+			continue
+		}
+
+		blobData, metadata, err := s.storage.GetBlob(sha256Hash)
+		if err != nil {
+			results = append(results, result{SHA256: sha256Hex, Success: false, Error: "blob not found"})
+			failed++
+			continue
+		}
+
+		// Generate responsive variants using Lanczos
+		variants, err := GenerateResponsiveVariants(blobData, metadata.MimeType)
+		if err != nil {
+			results = append(results, result{SHA256: sha256Hex, Success: false, Error: err.Error()})
+			failed++
+			continue
+		}
+
+		// Save each variant as a new blob and build imeta tags
+		type uploadedVariant struct {
+			Variant  ImageVariant
+			SHA256   string
+			URL      string
+			Width    int
+			Height   int
+			MimeType string
+			Size     int
+		}
+		uploadedVariants := make([]uploadedVariant, 0, len(variants))
+
+		variantFailed := false
+		for _, v := range variants {
+			// Compute SHA256 of variant data
+			variantHash := computeSHA256(v.Data)
+			variantHex := hex.Enc(variantHash)
+
+			// Check if this variant already exists (deduplication)
+			exists, _ := s.storage.HasBlob(variantHash)
+			if !exists {
+				// Save the variant blob
+				if err := s.storage.SaveBlob(variantHash, v.Data, targetPubkey, v.MimeType, ".jpg"); err != nil {
+					log.E.F("failed to save variant %s for %s: %v", v.Variant, sha256Hex, err)
+					variantFailed = true
+					break
+				}
+			}
+
+			// Construct URL for this variant
+			variantURL := baseURL + "/" + variantHex + ".jpg"
+
+			uploadedVariants = append(uploadedVariants, uploadedVariant{
+				Variant:  v.Variant,
+				SHA256:   variantHex,
+				URL:      variantURL,
+				Width:    v.Width,
+				Height:   v.Height,
+				MimeType: v.MimeType,
+				Size:     len(v.Data),
+			})
+		}
+
+		if variantFailed {
+			results = append(results, result{SHA256: sha256Hex, Success: false, Error: "variant save failed"})
+			failed++
+			continue
+		}
+
+		// Create kind 1063 binding event
+		ev := event.New()
+		ev.Kind = 1063
+		ev.Pubkey = sign.Pub()
+		ev.CreatedAt = timestamp.Now().V
+		ev.Content = []byte{}
+		ev.Tags = tag.NewS()
+
+		// Add imeta tag for each variant (ordered from smallest to largest)
+		for _, v := range uploadedVariants {
+			imetaTag := tag.NewFromAny("imeta",
+				"url "+v.URL,
+				"x "+v.SHA256,
+				"m "+v.MimeType,
+				fmt.Sprintf("dim %dx%d", v.Width, v.Height),
+				"variant "+string(v.Variant),
+				fmt.Sprintf("size %d", v.Size),
+			)
+			*ev.Tags = append(*ev.Tags, imetaTag)
+		}
+
+		// Add separate x tags for each variant hash (enables NIP-01 tag queries)
+		for _, v := range uploadedVariants {
+			*ev.Tags = append(*ev.Tags, tag.NewFromAny("x", v.SHA256))
+		}
+
+		// Sign the event
+		if err := ev.Sign(sign); err != nil {
+			log.E.F("failed to sign event for %s: %v", sha256Hex, err)
+			results = append(results, result{SHA256: sha256Hex, Success: false, Error: "sign failed"})
+			failed++
+			continue
+		}
+
+		// Save event to database
+		ctx := r.Context()
+		if _, err := s.db.SaveEvent(ctx, ev); err != nil {
+			log.E.F("failed to save event for %s: %v", sha256Hex, err)
+			results = append(results, result{SHA256: sha256Hex, Success: false, Error: "event save failed"})
+			failed++
+			continue
+		}
+
+		// Mark as migrated (store event ID as marker)
+		eventIDHex := hex.Enc(ev.ID)
+		s.storage.SaveThumbnail(migratedKey, []byte(eventIDHex))
+
+		results = append(results, result{
+			SHA256:  sha256Hex,
+			Success: true,
+			EventID: eventIDHex,
+		})
+		processed++
+
+		log.D.F("migrated %s: created %d variants, event %s", sha256Hex, len(variants), eventIDHex)
+	}
+
+	log.I.F("responsive migration for %s complete: %d processed, %d skipped, %d failed",
+		targetPubkeyHex, processed, skipped, failed)
+
+	// Return summary
+	response := struct {
+		Total     int      `json:"total"`
+		Processed int      `json:"processed"`
+		Skipped   int      `json:"skipped"`
+		Failed    int      `json:"failed"`
+		Results   []result `json:"results,omitempty"`
+	}{
+		Total:     len(images),
+		Processed: processed,
+		Skipped:   skipped,
+		Failed:    failed,
+		Results:   results,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // handleReport handles PUT /report requests (BUD-09)
 func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	// Check ACL
@@ -1045,4 +1328,10 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// computeSHA256 computes the SHA256 hash of data
+func computeSHA256(data []byte) []byte {
+	hash := sha256.Sum256(data)
+	return hash[:]
 }
