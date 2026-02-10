@@ -932,19 +932,14 @@
                 ],
             };
 
-            // Sign and publish the event
+            // Sign and publish the event via nostr protocol
             const signedEvent = await userSigner.signEvent(bindingEvent);
 
-            // Save to relay
-            const eventUrl = `${getApiBase()}/api/event`;
-            const eventResponse = await fetch(eventUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(signedEvent),
-            });
-
-            if (!eventResponse.ok) {
-                console.warn("Failed to save binding event, but variants were uploaded");
+            try {
+                await nostrClient.publish(signedEvent);
+                console.log("Binding event published:", signedEvent.id);
+            } catch (publishErr) {
+                console.warn("Failed to publish binding event:", publishErr);
             }
 
             generatingProgress = "Done!";
@@ -1090,13 +1085,8 @@
 
                     const signedDelete = await userSigner.signEvent(deleteEvent);
 
-                    // Publish to relay
-                    const eventUrl = `${getApiBase()}/api/event`;
-                    await fetch(eventUrl, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(signedDelete),
-                    });
+                    // Publish to relay via nostr protocol
+                    await nostrClient.publish(signedDelete);
                 } catch (err) {
                     console.warn(`Failed to delete event ${eventId}:`, err);
                 }
