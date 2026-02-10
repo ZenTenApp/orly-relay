@@ -259,10 +259,10 @@
             const relays = getRelayUrls();
             const pool = nostrClient.getPool();
 
-            // Query for kind 1063 events with x tag matching this blob
+            // Query for kind 30063 (responsive image binding) events with d tag matching this blob
             const filter = {
-                kinds: [1063],
-                "#x": [sha256Hex],
+                kinds: [30063],
+                "#d": [sha256Hex],
                 limit: 10
             };
 

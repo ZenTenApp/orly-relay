@@ -1,7 +1,6 @@
 package blossom
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -13,10 +12,7 @@ import (
 	"time"
 
 	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/encoders/kind"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/utils"
 )
@@ -504,20 +500,6 @@ func (s *Server) handleListBlobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Filter out variant blobs - only show originals
-	// Query kind 30063 binding events to find variants
-	variantHashes := s.getVariantHashes(r.Context())
-
-	// Filter descriptors
-	filtered := make([]*BlobDescriptor, 0, len(descriptors))
-	for _, desc := range descriptors {
-		hashLower := strings.ToLower(desc.SHA256)
-		if !variantHashes[hashLower] {
-			filtered = append(filtered, desc)
-		}
-	}
-	descriptors = filtered
-
 	// Set URLs for descriptors (include file extension for proper MIME handling)
 	for _, desc := range descriptors {
 		ext := GetExtensionFromMimeType(desc.Type)
@@ -530,213 +512,6 @@ func (s *Server) handleListBlobs(w http.ResponseWriter, r *http.Request) {
 	if err = json.NewEncoder(w).Encode(descriptors); err != nil {
 		log.E.F("error encoding response: %v", err)
 	}
-}
-
-// getVariantHashes returns a set of SHA256 hashes that are variant blobs (not originals).
-// It queries kind 30063 binding events to find which blobs are variants.
-func (s *Server) getVariantHashes(ctx context.Context) map[string]bool {
-	variantHashes := make(map[string]bool)
-
-	// Query for all kind 30063 (responsive image binding) events
-	limit := uint(10000)
-	f := &filter.F{
-		Kinds: kind.NewS(kind.New(30063)),
-		Limit: &limit,
-	}
-
-	events, err := s.db.QueryEvents(ctx, f)
-	if err != nil {
-		log.W.F("failed to query binding events: %v", err)
-		return variantHashes
-	}
-
-	// Parse each binding event to extract variant hashes
-	// The event has imeta tags with url fields containing variant hashes
-	for _, ev := range events {
-		// Get the original hash from the d tag
-		var originalHash string
-		for _, t := range *ev.Tags {
-			if len(t.T) >= 2 && string(t.T[0]) == "d" {
-				originalHash = strings.ToLower(string(t.T[1]))
-				break
-			}
-		}
-
-		if originalHash == "" {
-			continue
-		}
-
-		// Extract variant hashes from imeta tags
-		// Format: ["imeta", "url <url>", "x <sha256>", "m <mime>", "dim <WxH>", "variant <name>"]
-		for _, t := range *ev.Tags {
-			if len(t.T) < 2 || string(t.T[0]) != "imeta" {
-				continue
-			}
-
-			var variantHash string
-			var variantName string
-
-			// Parse imeta tag parts
-			for i := 1; i < len(t.T); i++ {
-				part := string(t.T[i])
-				if strings.HasPrefix(part, "x ") {
-					variantHash = strings.ToLower(strings.TrimPrefix(part, "x "))
-				} else if strings.HasPrefix(part, "variant ") {
-					variantName = strings.TrimPrefix(part, "variant ")
-				}
-			}
-
-			// Mark non-original variants for filtering
-			if variantHash != "" && variantName != "original" && variantHash != originalHash {
-				variantHashes[variantHash] = true
-			}
-		}
-	}
-
-	return variantHashes
-}
-
-// handleDeleteVariants handles DELETE /delete-variants/<sha256> requests
-// Deletes all variant blobs associated with an original image by querying binding events
-func (s *Server) handleDeleteVariants(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/")
-
-	// Extract original sha256 from path: delete-variants/<sha256>
-	if !strings.HasPrefix(path, "delete-variants/") {
-		s.setErrorResponse(w, http.StatusBadRequest, "invalid path")
-		return
-	}
-
-	originalHashHex := strings.TrimPrefix(path, "delete-variants/")
-	// Remove any extension
-	if idx := strings.Index(originalHashHex, "."); idx >= 0 {
-		originalHashHex = originalHashHex[:idx]
-	}
-	originalHashHex = strings.ToLower(originalHashHex)
-
-	if len(originalHashHex) != 64 {
-		s.setErrorResponse(w, http.StatusBadRequest, "invalid sha256 format")
-		return
-	}
-
-	// Authorization required
-	authEv, err := ValidateAuthEvent(r, "delete", nil)
-	if err != nil {
-		s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
-		return
-	}
-	if authEv == nil {
-		s.setErrorResponse(w, http.StatusUnauthorized, "authorization required")
-		return
-	}
-
-	// Get requesting user's pubkey
-	requestPubkey := authEv.Pubkey
-
-	// Get the original blob to verify ownership
-	originalHash, err := hex.Dec(originalHashHex)
-	if err != nil {
-		s.setErrorResponse(w, http.StatusBadRequest, "invalid sha256")
-		return
-	}
-
-	_, metadata, err := s.storage.GetBlob(originalHash)
-	if err != nil {
-		s.setErrorResponse(w, http.StatusNotFound, "original blob not found")
-		return
-	}
-
-	// Check ownership or admin
-	if !utils.FastEqual(metadata.Pubkey, requestPubkey) && !s.checkACL(requestPubkey, s.getRemoteAddr(r), "admin") {
-		s.setErrorResponse(w, http.StatusForbidden, "insufficient permissions")
-		return
-	}
-
-	// Find variants by querying kind 30063 binding events with d tag matching original hash
-	ctx := r.Context()
-	variantHashes := s.getVariantHashesForOriginal(ctx, originalHashHex)
-
-	deleted := 0
-	failed := 0
-
-	for variantHash := range variantHashes {
-		blobHash, err := hex.Dec(variantHash)
-		if err != nil {
-			failed++
-			continue
-		}
-
-		if err := s.storage.DeleteBlob(blobHash, metadata.Pubkey); err != nil {
-			log.W.F("failed to delete variant %s: %v", variantHash, err)
-			failed++
-			continue
-		}
-		deleted++
-	}
-
-	// Return result
-	response := struct {
-		Original string `json:"original"`
-		Deleted  int    `json:"deleted"`
-		Failed   int    `json:"failed"`
-	}{
-		Original: originalHashHex,
-		Deleted:  deleted,
-		Failed:   failed,
-	}
-
-	log.I.F("deleted variants for %s: %d deleted, %d failed", originalHashHex, deleted, failed)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
-}
-
-// getVariantHashesForOriginal queries binding events to find variant hashes for a specific original
-func (s *Server) getVariantHashesForOriginal(ctx context.Context, originalHash string) map[string]bool {
-	variantHashes := make(map[string]bool)
-
-	// Query for kind 30063 events with #d tag matching the original hash
-	limit := uint(100)
-	f := &filter.F{
-		Kinds: kind.NewS(kind.New(30063)),
-		Tags:  newTagFilter("#d", originalHash),
-		Limit: &limit,
-	}
-
-	events, err := s.db.QueryEvents(ctx, f)
-	if err != nil {
-		log.W.F("failed to query binding events for %s: %v", originalHash, err)
-		return variantHashes
-	}
-
-	// Extract variant hashes from imeta tags
-	for _, ev := range events {
-		for _, t := range *ev.Tags {
-			if len(t.T) < 2 || string(t.T[0]) != "imeta" {
-				continue
-			}
-
-			var variantHash string
-			var variantName string
-
-			for i := 1; i < len(t.T); i++ {
-				part := string(t.T[i])
-				if strings.HasPrefix(part, "x ") {
-					variantHash = strings.ToLower(strings.TrimPrefix(part, "x "))
-				} else if strings.HasPrefix(part, "variant ") {
-					variantName = strings.TrimPrefix(part, "variant ")
-				}
-			}
-
-			// Include non-original variants for deletion
-			if variantHash != "" && variantName != "original" && variantHash != originalHash {
-				variantHashes[variantHash] = true
-			}
-		}
-	}
-
-	return variantHashes
 }
 
 // handleAdminListUsers handles GET /admin/users requests (admin only)
@@ -1105,11 +880,6 @@ func (s *Server) handleMediaHead(w http.ResponseWriter, r *http.Request) {
 	// Similar to handleUploadRequirements but for media
 	// Return 200 OK if media optimization is available
 	w.WriteHeader(http.StatusOK)
-}
-
-// newTagFilter creates a tag.S for use in filter.F.Tags
-func newTagFilter(tagName, value string) *tag.S {
-	return tag.NewS(tag.NewFromAny(tagName, value))
 }
 
 // handleGenerateThumbnails handles POST /admin/generate-thumbnails (batch thumbnail generation)
