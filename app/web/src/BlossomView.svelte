@@ -1043,11 +1043,15 @@
         }
     }
 
-    // Variant size definitions
+    // Variant size definitions per NIP-XX
+    // Selection rule: pick smallest variant >= target width (next-larger)
     const VARIANT_SIZES = [
         { name: "thumb", maxWidth: 128 },
-        { name: "mobile", maxWidth: 512 },
-        { name: "desktop", maxWidth: 1280 },
+        { name: "mobile-sm", maxWidth: 512 },
+        { name: "mobile-lg", maxWidth: 1024 },
+        { name: "desktop-sm", maxWidth: 1536 },
+        { name: "desktop-md", maxWidth: 2048 },
+        { name: "desktop-lg", maxWidth: 2560 },
     ];
 
     /**

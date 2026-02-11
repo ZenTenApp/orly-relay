@@ -8,8 +8,8 @@ This NIP extends [NIP-94](https://github.com/nostr-protocol/nips/blob/master/94.
 
 Modern devices have vastly different display capabilities:
 - Thumbnails in feeds need only ~128px width
-- Mobile phones typically display 512-768px images
-- Desktops benefit from 1280-1920px images
+- Mobile phones typically display 512-1024px images
+- Laptops and desktops benefit from 1536-2560px images
 - Original files may be 4000px+ from modern cameras
 
 Currently, Nostr clients either:
@@ -46,10 +46,11 @@ The `variant` field identifies the resolution category:
 | Variant | Target Width | Use Case |
 |---------|--------------|----------|
 | `thumb` | 128px | Previews, galleries, feed thumbnails |
-| `mobile` | 512px | Mobile portrait viewing |
-| `mobile-lg` | 768px | Mobile landscape, small tablets |
-| `desktop` | 1280px | Laptops, small desktops |
-| `desktop-lg` | 1920px | Large displays, retina |
+| `mobile-sm` | 512px | Small mobile portrait |
+| `mobile-lg` | 1024px | Large mobile, small tablets |
+| `desktop-sm` | 1536px | Laptops |
+| `desktop-md` | 2048px | Standard desktops |
+| `desktop-lg` | 2560px | Large/HiDPI displays |
 | `original` | native | Full resolution, EXIF stripped |
 
 ### Variant Generation Rules
@@ -64,13 +65,25 @@ The `variant` field identifies the resolution category:
 
 Recommended JPEG quality settings per variant:
 - `thumb`: 70
-- `mobile`: 75
+- `mobile-sm`: 75
 - `mobile-lg`: 80
-- `desktop`: 85
+- `desktop-sm`: 85
+- `desktop-md`: 88
 - `desktop-lg`: 90
-- `original`: 90
+- `original`: 92
 
 For PNG images, use maximum compression without quality loss.
+
+### Variant Selection Rule
+
+Clients SHOULD use **next-larger selection**: pick the smallest variant >= target width.
+
+```
+targetWidth = containerWidth * devicePixelRatio
+selectedVariant = smallest variant where variant.width >= targetWidth
+```
+
+This ensures the client only needs to downscale slightly (or not at all), rather than upscaling which would cause blur. If no variant is large enough, use the largest available.
 
 ## Event Structure
 
@@ -96,21 +109,28 @@ All variants generated:
       "url https://blossom.example.com/def456abc789.jpg",
       "x def456abc789012...",
       "m image/jpeg",
-      "dim 1920x1440",
+      "dim 2560x1920",
       "variant desktop-lg"
     ],
     ["imeta",
       "url https://blossom.example.com/789abc123def.jpg",
       "x 789abc123def345...",
       "m image/jpeg",
-      "dim 1280x960",
-      "variant desktop"
+      "dim 2048x1536",
+      "variant desktop-md"
     ],
     ["imeta",
       "url https://blossom.example.com/012def456abc.jpg",
       "x 012def456abc678...",
       "m image/jpeg",
-      "dim 768x576",
+      "dim 1536x1152",
+      "variant desktop-sm"
+    ],
+    ["imeta",
+      "url https://blossom.example.com/234abc567def.jpg",
+      "x 234abc567def890...",
+      "m image/jpeg",
+      "dim 1024x768",
       "variant mobile-lg"
     ],
     ["imeta",
@@ -118,7 +138,7 @@ All variants generated:
       "x 345abc789def901...",
       "m image/jpeg",
       "dim 512x384",
-      "variant mobile"
+      "variant mobile-sm"
     ],
     ["imeta",
       "url https://blossom.example.com/678def012abc.jpg",
@@ -132,6 +152,7 @@ All variants generated:
     ["x", "def456abc789012..."],
     ["x", "789abc123def345..."],
     ["x", "012def456abc678..."],
+    ["x", "234abc567def890..."],
     ["x", "345abc789def901..."],
     ["x", "678def012abc234..."]
   ],
@@ -142,9 +163,9 @@ All variants generated:
 
 **Note**: The separate `x` tags duplicate the hashes from the `imeta` tags. This redundancy enables standard NIP-01 tag queries (`#x`) to discover the binding event by any variant hash, while the `imeta` tags provide the full metadata for each variant.
 
-### Example: Smaller Original (1000x750)
+### Example: Smaller Original (1200x900)
 
-Only smaller variants generated (no `desktop` or `desktop-lg`):
+Only smaller variants generated (no desktop variants):
 
 ```json
 {
@@ -157,14 +178,14 @@ Only smaller variants generated (no `desktop` or `desktop-lg`):
       "url https://blossom.example.com/small123.jpg",
       "x small123456789...",
       "m image/jpeg",
-      "dim 1000x750",
+      "dim 1200x900",
       "variant original"
     ],
     ["imeta",
       "url https://blossom.example.com/small456.jpg",
       "x small456789012...",
       "m image/jpeg",
-      "dim 768x576",
+      "dim 1024x768",
       "variant mobile-lg"
     ],
     ["imeta",
@@ -172,7 +193,7 @@ Only smaller variants generated (no `desktop` or `desktop-lg`):
       "x small789012345...",
       "m image/jpeg",
       "dim 512x384",
-      "variant mobile"
+      "variant mobile-sm"
     ],
     ["imeta",
       "url https://blossom.example.com/small012.jpg",

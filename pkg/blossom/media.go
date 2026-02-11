@@ -12,14 +12,18 @@ import (
 // ThumbnailSize defines the maximum dimension for thumbnails (used for list display)
 const ThumbnailSize = 128
 
-// ImageVariant represents a responsive image size category
+// ImageVariant represents a responsive image size category per NIP-XX
+// Selection rule: pick smallest variant >= target width (next-larger)
 type ImageVariant string
 
 const (
-	VariantThumb   ImageVariant = "thumb"    // 128px - list display, previews
-	VariantMobile  ImageVariant = "mobile"   // 512px - mobile viewing
-	VariantDesktop ImageVariant = "desktop"  // 1280px - desktop viewing
-	VariantOriginal ImageVariant = "original" // unchanged size, EXIF stripped
+	VariantThumb      ImageVariant = "thumb"      // 128px - list display, previews
+	VariantMobileSm   ImageVariant = "mobile-sm"  // 512px - small mobile
+	VariantMobileLg   ImageVariant = "mobile-lg"  // 1024px - large mobile, small tablets
+	VariantDesktopSm  ImageVariant = "desktop-sm" // 1536px - laptops
+	VariantDesktopMd  ImageVariant = "desktop-md" // 2048px - standard desktops
+	VariantDesktopLg  ImageVariant = "desktop-lg" // 2560px - large/HiDPI displays
+	VariantOriginal   ImageVariant = "original"   // unchanged size, EXIF stripped
 )
 
 // VariantSpec defines the target width and JPEG quality for a variant
@@ -30,10 +34,13 @@ type VariantSpec struct {
 
 // VariantSpecs maps variant types to their specifications
 var VariantSpecs = map[ImageVariant]VariantSpec{
-	VariantThumb:    {Width: 128, Quality: 75},
-	VariantMobile:   {Width: 512, Quality: 80},
-	VariantDesktop:  {Width: 1280, Quality: 85},
-	VariantOriginal: {Width: 0, Quality: 90}, // Width 0 means keep original
+	VariantThumb:     {Width: 128, Quality: 70},
+	VariantMobileSm:  {Width: 512, Quality: 75},
+	VariantMobileLg:  {Width: 1024, Quality: 80},
+	VariantDesktopSm: {Width: 1536, Quality: 85},
+	VariantDesktopMd: {Width: 2048, Quality: 88},
+	VariantDesktopLg: {Width: 2560, Quality: 90},
+	VariantOriginal:  {Width: 0, Quality: 92}, // Width 0 means keep original
 }
 
 // ScaledImage represents a generated image variant
@@ -138,7 +145,15 @@ func GenerateResponsiveVariants(data []byte, mimeType string) ([]ScaledImage, er
 	origHeight := bounds.Dy()
 
 	// Order of variants from smallest to largest
-	variantOrder := []ImageVariant{VariantThumb, VariantMobile, VariantDesktop, VariantOriginal}
+	variantOrder := []ImageVariant{
+		VariantThumb,
+		VariantMobileSm,
+		VariantMobileLg,
+		VariantDesktopSm,
+		VariantDesktopMd,
+		VariantDesktopLg,
+		VariantOriginal,
+	}
 	variants := make([]ScaledImage, 0, len(variantOrder))
 
 	for _, variant := range variantOrder {
