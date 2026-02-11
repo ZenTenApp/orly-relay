@@ -311,16 +311,19 @@
             const relays = getRelayUrls();
             const pool = nostrClient.getPool();
 
-            // Build filter - include authors for proper NIP-33 addressable query when we have userPubkey
+            // Use the correct pubkey - if viewing another user's blobs, use their pubkey
+            const targetPubkey = selectedAdminUser?.pubkey || userPubkey;
+
+            // Build filter - include authors for proper NIP-33 addressable query
             const filter = {
                 kinds: [30063],
                 "#d": [sha256Hex],
                 limit: 10
             };
 
-            // Add authors filter if we have the user's pubkey (enables O(1) addressable lookup)
-            if (userPubkey) {
-                filter.authors = [userPubkey];
+            // Add authors filter if we have a pubkey (enables O(1) addressable lookup)
+            if (targetPubkey) {
+                filter.authors = [targetPubkey];
             }
 
             console.log("Querying for variants with filter:", JSON.stringify(filter));
@@ -913,6 +916,9 @@
         error = "";
 
         try {
+            // Load the user's responsive blob info (replaces current sets)
+            await loadResponsiveBlobs(pubkeyHex, false);
+
             const url = `${getApiBase()}/blossom/list/${pubkeyHex}`;
             const authHeader = await createBlossomAuth(userSigner, "list");
             const response = await fetch(url, {
@@ -938,11 +944,15 @@
         fetchAdminUserStats();
     }
 
-    function exitAdminView() {
+    async function exitAdminView() {
         isAdminView = false;
         adminUserStats = [];
         selectedAdminUser = null;
         selectedUserBlobs = [];
+        // Reload responsive blob info for the current user's own blobs
+        if (userPubkey) {
+            await loadResponsiveBlobs(userPubkey, false);
+        }
     }
 
     async function selectUser(userStat) {
