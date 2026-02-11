@@ -148,8 +148,9 @@
         try {
             const relays = getRelayUrls();
             const pool = nostrClient.getPool();
+            // Query both kind 30063 (ORLY's replaceable) and kind 1063 (NIP-94 File Metadata from smesh)
             const filter = {
-                kinds: [30063],
+                kinds: [30063, 1063],
                 authors: [pubkey],
             };
 
@@ -159,13 +160,47 @@
             const variants = merge ? new Set(variantHashes) : new Set();
 
             for (const ev of events) {
-                const dTag = ev.tags.find(t => t[0] === "d");
-                const originalHash = dTag?.[1];
+                let originalHash = null;
+                const allHashes = [];
+
+                if (ev.kind === 30063) {
+                    // ORLY format: d tag contains original hash
+                    const dTag = ev.tags.find(t => t[0] === "d");
+                    originalHash = dTag?.[1];
+                    // Collect all x tags as variant hashes
+                    for (const tag of ev.tags) {
+                        if (tag[0] === "x" && tag[1]) {
+                            allHashes.push(tag[1]);
+                        }
+                    }
+                } else if (ev.kind === 1063) {
+                    // NIP-94/smesh format: imeta tags with variant field
+                    // Find the "original" variant's hash
+                    for (const tag of ev.tags) {
+                        if (tag[0] === "imeta") {
+                            const variantField = tag.find(f => f.startsWith("variant "));
+                            const xField = tag.find(f => f.startsWith("x "));
+                            if (xField) {
+                                const hash = xField.substring(2);
+                                allHashes.push(hash);
+                                if (variantField === "variant original") {
+                                    originalHash = hash;
+                                }
+                            }
+                        } else if (tag[0] === "x" && tag[1]) {
+                            // Also collect standalone x tags
+                            if (!allHashes.includes(tag[1])) {
+                                allHashes.push(tag[1]);
+                            }
+                        }
+                    }
+                }
+
                 if (originalHash) {
                     originals.add(originalHash);
-                    for (const tag of ev.tags) {
-                        if (tag[0] === "x" && tag[1] && tag[1] !== originalHash) {
-                            variants.add(tag[1]);
+                    for (const hash of allHashes) {
+                        if (hash !== originalHash) {
+                            variants.add(hash);
                         }
                     }
                 }
@@ -299,7 +334,7 @@
     let currentVariantFetch = null;
 
     /**
-     * Fetch kind 30063 binding events for a blob hash
+     * Fetch binding events (kind 30063 or 1063) for a blob hash
      */
     async function fetchBlobVariants(sha256Hex) {
         // Store this request's hash to check later
@@ -314,20 +349,33 @@
             // Use the correct pubkey - if viewing another user's blobs, use their pubkey
             const targetPubkey = selectedAdminUser?.pubkey || userPubkey;
 
-            // Build filter - include authors for proper NIP-33 addressable query
-            const filter = {
+            // Query for kind 30063 (ORLY format) with #d tag
+            const filter30063 = {
                 kinds: [30063],
                 "#d": [sha256Hex],
                 limit: 10
             };
-
-            // Add authors filter if we have a pubkey (enables O(1) addressable lookup)
             if (targetPubkey) {
-                filter.authors = [targetPubkey];
+                filter30063.authors = [targetPubkey];
             }
 
-            console.log("Querying for variants with filter:", JSON.stringify(filter));
-            let events = await pool.querySync(relays, filter);
+            // Query for kind 1063 (NIP-94/smesh format) with #x tag
+            const filter1063 = {
+                kinds: [1063],
+                "#x": [sha256Hex],
+                limit: 10
+            };
+            if (targetPubkey) {
+                filter1063.authors = [targetPubkey];
+            }
+
+            console.log("Querying for variants with filters:", JSON.stringify([filter30063, filter1063]));
+            // Query both filters in parallel
+            const [events30063, events1063] = await Promise.all([
+                pool.querySync(relays, filter30063),
+                pool.querySync(relays, filter1063)
+            ]);
+            let events = [...events30063, ...events1063];
 
             // Check if this is still the current request (user might have switched blobs)
             if (currentVariantFetch !== sha256Hex) {
