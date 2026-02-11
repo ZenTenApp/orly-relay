@@ -556,20 +556,39 @@
                     .map(v => v.sha256);
 
                 // If we don't have variants loaded, query for them
+                // Track the binding event for deletion
+                let bindingEventToDelete = null;
                 if (variantHashesToDelete.length === 0 && responsiveBlobs.has(blob.sha256)) {
                     try {
                         const relays = getRelayUrls();
                         const pool = nostrClient.getPool();
-                        const filter = {
+
+                        // Query both kind 30063 (ORLY legacy) and kind 1063 (NIP-94)
+                        const filter30063 = {
                             kinds: [30063],
                             "#d": [blob.sha256],
                             authors: userPubkey ? [userPubkey] : undefined,
                             limit: 1
                         };
-                        const events = await pool.querySync(relays, filter);
+                        const filter1063 = {
+                            kinds: [1063],
+                            "#x": [blob.sha256],
+                            authors: userPubkey ? [userPubkey] : undefined,
+                            limit: 1
+                        };
+
+                        const [events30063, events1063] = await Promise.all([
+                            pool.querySync(relays, filter30063),
+                            pool.querySync(relays, filter1063)
+                        ]);
+
+                        const events = [...events30063, ...events1063];
                         if (events.length > 0) {
-                            const bindingEvent = events[0];
-                            for (const tag of bindingEvent.tags) {
+                            // Use most recent event
+                            bindingEventToDelete = events.reduce((a, b) =>
+                                a.created_at > b.created_at ? a : b
+                            );
+                            for (const tag of bindingEventToDelete.tags) {
                                 if (tag[0] === "x" && tag[1] && tag[1] !== blob.sha256) {
                                     variantHashesToDelete.push(tag[1]);
                                 }
@@ -597,13 +616,25 @@
 
                 // Publish a deletion event for the binding event (kind 5)
                 try {
+                    const deleteTags = [];
+                    if (bindingEventToDelete) {
+                        if (bindingEventToDelete.kind === 30063) {
+                            // Addressable event - use 'a' tag
+                            deleteTags.push(["a", `30063:${userPubkey}:${blob.sha256}`]);
+                        } else {
+                            // Regular event (kind 1063) - use 'e' tag with event ID
+                            deleteTags.push(["e", bindingEventToDelete.id]);
+                        }
+                    } else {
+                        // Fallback to 'a' tag for legacy events
+                        deleteTags.push(["a", `30063:${userPubkey}:${blob.sha256}`]);
+                    }
+
                     const deleteEvent = {
                         kind: 5,
                         created_at: Math.floor(Date.now() / 1000),
                         content: "Deleted responsive variants",
-                        tags: [
-                            ["a", `30063:${userPubkey}:${blob.sha256}`],
-                        ],
+                        tags: deleteTags,
                     };
                     const signedDelete = await userSigner.signEvent(deleteEvent);
                     const relayUrl = getRelayUrls()[0];
@@ -764,12 +795,12 @@
         if (variants.length > 1) {
             uploadProgress = `${baseProgress}: Publishing binding event...`;
 
+            // Use kind 1063 (NIP-94 File Metadata) for binding events
             const bindingEvent = {
-                kind: 30063,
+                kind: 1063,
                 created_at: Math.floor(Date.now() / 1000),
                 content: "",
                 tags: [
-                    ["d", originalHash],
                     ...variants.map(v => [
                         "imeta",
                         `url ${v.url}`,
@@ -1249,13 +1280,13 @@
             }
 
             // Step 4: Publish binding event FIRST with proper auth
+            // Use kind 1063 (NIP-94 File Metadata) for binding events
             generatingProgress = "Publishing binding event...";
             const bindingEvent = {
-                kind: 30063,
+                kind: 1063,
                 created_at: Math.floor(Date.now() / 1000),
                 content: "",
                 tags: [
-                    ["d", blob.sha256],
                     ...variants.map(v => [
                         "imeta",
                         `url ${v.url}`,
