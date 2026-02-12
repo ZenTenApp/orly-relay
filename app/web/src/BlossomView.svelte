@@ -39,6 +39,11 @@
     let responsiveBlobs = new Set();  // Original hashes that have variants
     let variantHashes = new Set();    // Variant hashes to filter from list
 
+    // TTL cache for variant fetches - prevents stale IndexedDB fallback
+    // Map<blobHash, { timestamp: number, hasVariants: boolean }>
+    const variantFetchCache = new Map();
+    const VARIANT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
     // Admin view state
     let isAdminView = false;
     let adminUserStats = [];
@@ -385,20 +390,38 @@
 
             console.log(`Found ${events.length} binding events from relay`);
 
-            // If no events from relay, check local cache as fallback
+            // If no events from relay, check local cache as fallback - but respect TTL
             if (events.length === 0) {
-                console.log("No events from relay, checking local cache...");
-                try {
-                    const { queryEventsFromDB } = await import('./nostr.js');
-                    const cachedEvents = await queryEventsFromDB([filter]);
-                    if (cachedEvents.length > 0) {
-                        console.log(`Found ${cachedEvents.length} binding events in cache`);
-                        events = cachedEvents;
+                const cached = variantFetchCache.get(sha256Hex);
+                const now = Date.now();
+                const cacheIsFresh = cached && (now - cached.timestamp) < VARIANT_CACHE_TTL_MS;
+
+                if (cacheIsFresh) {
+                    // Cache is fresh - trust it over stale IndexedDB data
+                    // If cached says no variants, we're done; if it says has variants but relay
+                    // returned nothing, the binding event was likely deleted - trust relay
+                    console.log(`Cache is fresh (${cached.hasVariants ? 'had' : 'no'} variants), trusting relay result`);
+                } else {
+                    // Cache is stale or missing - check IndexedDB as fallback
+                    console.log("No events from relay, cache stale, checking IndexedDB...");
+                    try {
+                        const { queryEventsFromDB } = await import('./nostr.js');
+                        const cachedEvents = await queryEventsFromDB([filter30063, filter1063]);
+                        if (cachedEvents.length > 0) {
+                            console.log(`Found ${cachedEvents.length} binding events in IndexedDB cache`);
+                            events = cachedEvents;
+                        }
+                    } catch (cacheErr) {
+                        console.warn("Failed to query IndexedDB cache:", cacheErr);
                     }
-                } catch (cacheErr) {
-                    console.warn("Failed to query cache:", cacheErr);
                 }
             }
+
+            // Update the TTL cache with current result
+            variantFetchCache.set(sha256Hex, {
+                timestamp: Date.now(),
+                hasVariants: events.length > 0
+            });
 
             // Check again after cache query
             if (currentVariantFetch !== sha256Hex) {
@@ -406,6 +429,11 @@
             }
 
             if (events.length === 0) {
+                // No binding events found - remove from responsiveBlobs if present
+                if (responsiveBlobs.has(sha256Hex)) {
+                    console.log(`Removing ${sha256Hex} from responsiveBlobs (no binding events found)`);
+                    responsiveBlobs = new Set([...responsiveBlobs].filter(h => h !== sha256Hex));
+                }
                 isLoadingVariants = false;
                 return;
             }

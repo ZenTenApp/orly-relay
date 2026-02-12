@@ -139,6 +139,40 @@ func (s *Service) generateTorrc() (string, error) {
 	return torrcPath, nil
 }
 
+// killOrphanedTor finds and kills any Tor process using our torrc that was
+// orphaned from a previous run. This prevents "another Tor process is running
+// with the same data directory" errors on startup.
+func (s *Service) killOrphanedTor(torrcPath string) {
+	// Look for tor processes using our specific torrc
+	out, err := exec.Command("pgrep", "-f", s.cfg.Binary+" -f "+torrcPath).Output()
+	if err != nil {
+		// pgrep returns exit 1 when no processes found — that's fine
+		return
+	}
+
+	pids := strings.TrimSpace(string(out))
+	if pids == "" {
+		return
+	}
+
+	log.W.F("found orphaned Tor process(es) using %s: %s — killing", torrcPath, pids)
+	for _, pid := range strings.Split(pids, "\n") {
+		pid = strings.TrimSpace(pid)
+		if pid == "" {
+			continue
+		}
+		killCmd := exec.Command("kill", "-9", pid)
+		if err := killCmd.Run(); err != nil {
+			log.W.F("failed to kill orphaned Tor PID %s: %v", pid, err)
+		} else {
+			log.I.F("killed orphaned Tor PID %s", pid)
+		}
+	}
+
+	// Give the OS a moment to release the lock file
+	time.Sleep(500 * time.Millisecond)
+}
+
 // Start spawns the Tor subprocess and initializes the listener.
 func (s *Service) Start() error {
 	// Generate torrc
@@ -147,10 +181,22 @@ func (s *Service) Start() error {
 		return err
 	}
 
+	// Kill any orphaned Tor processes from a previous run before starting
+	s.killOrphanedTor(torrcPath)
+
 	log.I.F("starting Tor subprocess with config: %s", torrcPath)
 
-	// Start tor subprocess
-	s.cmd = exec.CommandContext(s.ctx, s.cfg.Binary, "-f", torrcPath)
+	// Use exec.Command (not CommandContext) so we control the shutdown
+	// sequence ourselves. CommandContext sends SIGKILL immediately on
+	// context cancel, which races with our graceful SIGTERM shutdown.
+	s.cmd = exec.Command(s.cfg.Binary, "-f", torrcPath)
+
+	// Set platform-specific process attributes. On Linux this sets
+	// Pdeathsig to SIGKILL, ensuring the kernel kills the Tor subprocess
+	// if the parent relay process dies unexpectedly.
+	if attr := sysProcAttr(); attr != nil {
+		s.cmd.SysProcAttr = attr
+	}
 
 	// Capture stdout/stderr for logging
 	s.stdout, err = s.cmd.StdoutPipe()
@@ -173,7 +219,7 @@ func (s *Service) Start() error {
 	go s.logOutput("tor", s.stdout)
 	go s.logOutput("tor", s.stderr)
 
-	// Monitor subprocess
+	// Monitor subprocess and context cancellation
 	s.wg.Add(1)
 	go s.monitorProcess()
 
@@ -262,6 +308,31 @@ func (s *Service) monitorProcess() {
 
 // Stop gracefully shuts down the Tor service.
 func (s *Service) Stop() error {
+	// Terminate Tor subprocess FIRST, before cancelling context.
+	// This avoids a race where context cancellation closes pipes/waitgroups
+	// while we're still trying to signal the process.
+	if s.cmd != nil && s.cmd.Process != nil {
+		pid := s.cmd.Process.Pid
+		log.D.F("sending SIGTERM to Tor subprocess (PID %d)", pid)
+		s.cmd.Process.Signal(os.Interrupt)
+
+		// Give it a few seconds to exit gracefully
+		done := make(chan struct{})
+		go func() {
+			s.cmd.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			log.D.F("Tor subprocess (PID %d) exited gracefully", pid)
+		case <-time.After(5 * time.Second):
+			log.W.F("Tor subprocess (PID %d) did not exit, sending SIGKILL", pid)
+			s.cmd.Process.Kill()
+		}
+	}
+
+	// Now cancel context to stop all goroutines
 	s.cancel()
 
 	// Stop hostname watcher
@@ -281,27 +352,6 @@ func (s *Service) Stop() error {
 	// Close listener
 	if s.listener != nil {
 		s.listener.Close()
-	}
-
-	// Terminate Tor subprocess
-	if s.cmd != nil && s.cmd.Process != nil {
-		log.D.F("sending SIGTERM to Tor subprocess (PID %d)", s.cmd.Process.Pid)
-		s.cmd.Process.Signal(os.Interrupt)
-
-		// Give it a few seconds to exit gracefully
-		done := make(chan struct{})
-		go func() {
-			s.cmd.Wait()
-			close(done)
-		}()
-
-		select {
-		case <-done:
-			log.D.F("Tor subprocess exited gracefully")
-		case <-time.After(5 * time.Second):
-			log.W.F("Tor subprocess did not exit, killing")
-			s.cmd.Process.Kill()
-		}
 	}
 
 	s.wg.Wait()
