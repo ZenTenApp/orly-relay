@@ -2499,7 +2499,7 @@ export const kindRanges = {
 };
 
 // Privileged kinds (require auth)
-export const privilegedKinds = [4,13,14,15,1059,1060,30078];
+export const privilegedKinds = [4,13,14,15,443,1059,1060,10051,30078];
 
 // Directory kinds (public discovery)
 export const directoryKinds = [0,3,5,1984,10002,10000,10050];
