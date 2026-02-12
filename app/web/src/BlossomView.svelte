@@ -153,67 +153,94 @@
         try {
             const relays = getRelayUrls();
             const pool = nostrClient.getPool();
-            // Query both kind 30063 (ORLY's replaceable) and kind 1063 (NIP-94 File Metadata from smesh)
-            const filter = {
-                kinds: [30063, 1063],
-                authors: [pubkey],
-            };
-
-            const events = await pool.querySync(relays, filter);
-            console.log("Binding events from relay:", events.length, "relays:", relays);
             const originals = merge ? new Set(responsiveBlobs) : new Set();
             const variants = merge ? new Set(variantHashes) : new Set();
 
-            for (const ev of events) {
-                let originalHash = null;
-                const allHashes = [];
+            // Paginate to fetch ALL binding events (relay caps at 256 per query)
+            const PAGE_SIZE = 256;
+            let until = undefined;
+            let totalEvents = 0;
 
-                if (ev.kind === 30063) {
-                    // ORLY format: d tag contains original hash
-                    const dTag = ev.tags.find(t => t[0] === "d");
-                    originalHash = dTag?.[1];
-                    // Collect all x tags as variant hashes
-                    for (const tag of ev.tags) {
-                        if (tag[0] === "x" && tag[1]) {
-                            allHashes.push(tag[1]);
-                        }
+            while (true) {
+                const filter = {
+                    kinds: [30063, 1063],
+                    authors: [pubkey],
+                    limit: PAGE_SIZE,
+                };
+                if (until !== undefined) {
+                    filter.until = until;
+                }
+
+                const events = await pool.querySync(relays, filter);
+                if (events.length === 0) break;
+
+                totalEvents += events.length;
+
+                // Find the oldest event timestamp for the next page cursor
+                let oldestTimestamp = Infinity;
+                for (const ev of events) {
+                    if (ev.created_at < oldestTimestamp) {
+                        oldestTimestamp = ev.created_at;
                     }
-                } else if (ev.kind === 1063) {
-                    // NIP-94/smesh format: imeta tags with variant field
-                    // Find the "original" variant's hash
-                    for (const tag of ev.tags) {
-                        if (tag[0] === "imeta") {
-                            const variantField = tag.find(f => f.startsWith("variant "));
-                            const xField = tag.find(f => f.startsWith("x "));
-                            if (xField) {
-                                const hash = xField.substring(2);
-                                allHashes.push(hash);
-                                if (variantField === "variant original") {
-                                    originalHash = hash;
-                                }
-                            }
-                        } else if (tag[0] === "x" && tag[1]) {
-                            // Also collect standalone x tags
-                            if (!allHashes.includes(tag[1])) {
+                }
+
+                for (const ev of events) {
+                    let originalHash = null;
+                    const allHashes = [];
+
+                    if (ev.kind === 30063) {
+                        // ORLY format: d tag contains original hash
+                        const dTag = ev.tags.find(t => t[0] === "d");
+                        originalHash = dTag?.[1];
+                        // Collect all x tags as variant hashes
+                        for (const tag of ev.tags) {
+                            if (tag[0] === "x" && tag[1]) {
                                 allHashes.push(tag[1]);
                             }
                         }
+                    } else if (ev.kind === 1063) {
+                        // NIP-94/smesh format: imeta tags with variant field
+                        // Find the "original" variant's hash
+                        for (const tag of ev.tags) {
+                            if (tag[0] === "imeta") {
+                                const variantField = tag.find(f => f.startsWith("variant "));
+                                const xField = tag.find(f => f.startsWith("x "));
+                                if (xField) {
+                                    const hash = xField.substring(2);
+                                    allHashes.push(hash);
+                                    if (variantField === "variant original") {
+                                        originalHash = hash;
+                                    }
+                                }
+                            } else if (tag[0] === "x" && tag[1]) {
+                                // Also collect standalone x tags
+                                if (!allHashes.includes(tag[1])) {
+                                    allHashes.push(tag[1]);
+                                }
+                            }
+                        }
                     }
-                }
 
-                if (originalHash) {
-                    originals.add(originalHash);
-                    for (const hash of allHashes) {
-                        if (hash !== originalHash) {
-                            variants.add(hash);
+                    if (originalHash) {
+                        originals.add(originalHash);
+                        for (const hash of allHashes) {
+                            if (hash !== originalHash) {
+                                variants.add(hash);
+                            }
                         }
                     }
                 }
+
+                // If we got fewer than PAGE_SIZE, we've fetched everything
+                if (events.length < PAGE_SIZE) break;
+
+                // Move cursor before the oldest event in this page
+                until = oldestTimestamp - 1;
             }
 
             responsiveBlobs = originals;
             variantHashes = variants;
-            console.log("Found responsive blobs:", originals.size, "variants to hide:", variants.size);
+            console.log("Found responsive blobs:", originals.size, "variants to hide:", variants.size, "total binding events:", totalEvents);
         } catch (err) {
             console.warn("Failed to load responsive blob info:", err);
             if (!merge) {
