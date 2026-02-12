@@ -1,5 +1,5 @@
 <script>
-    import { createEventDispatcher, onMount } from "svelte";
+    import { createEventDispatcher, onMount, onDestroy, tick } from "svelte";
     import { npubEncode } from "nostr-tools/nip19";
     import { SimplePool } from "nostr-tools/pool";
     import { fetchUserProfile, nostrClient } from "./nostr.js";
@@ -55,6 +55,12 @@
     let sortBy = "date"; // "date" or "size"
     let sortOrder = "desc"; // "asc" or "desc"
 
+    // Infinite scroll state
+    const SCROLL_PAGE_SIZE = 40;
+    let visibleCount = SCROLL_PAGE_SIZE;
+    let scrollSentinel;
+    let scrollObserver;
+
     $: canAccess = isLoggedIn && userPubkey;
     $: isAdmin = currentEffectiveRole === "admin" || currentEffectiveRole === "owner";
 
@@ -62,7 +68,20 @@
     // Note: variantHashes.size forces reactivity when Set changes
     $: rawBlobs = selectedAdminUser ? selectedUserBlobs : blobs;
     $: filteredBlobs = (variantHashes.size, rawBlobs.filter(b => !variantHashes.has(b.sha256)));
-    $: displayBlobs = sortBlobs(filteredBlobs, sortBy, sortOrder);
+    $: allSortedBlobs = sortBlobs(filteredBlobs, sortBy, sortOrder);
+    // Infinite scroll: only render up to visibleCount items
+    $: displayBlobs = allSortedBlobs ? allSortedBlobs.slice(0, visibleCount) : [];
+    $: hasMoreBlobs = allSortedBlobs && visibleCount < allSortedBlobs.length;
+
+    // Reset visible count when sort/filter changes (not when items are added/removed)
+    let prevSortKey = "";
+    $: {
+        const key = `${sortBy}-${sortOrder}-${selectedAdminUser?.pubkey || ""}`;
+        if (key !== prevSortKey) {
+            prevSortKey = key;
+            visibleCount = SCROLL_PAGE_SIZE;
+        }
+    }
 
     // Force Svelte to track selectedHashes changes for checkbox reactivity
     $: selectedHashesSize = selectedHashes.size;
@@ -136,11 +155,39 @@
         }
     }
 
+    function loadMoreBlobs() {
+        if (hasMoreBlobs) {
+            visibleCount += SCROLL_PAGE_SIZE;
+        }
+    }
+
+    function setupScrollObserver() {
+        if (scrollObserver) scrollObserver.disconnect();
+        if (!scrollSentinel) return;
+        // rootMargin: 150% bottom means trigger when sentinel is 1.5 viewports away
+        scrollObserver = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting) {
+                    loadMoreBlobs();
+                }
+            },
+            { rootMargin: "0px 0px 150% 0px" }
+        );
+        scrollObserver.observe(scrollSentinel);
+    }
+
+    // Re-attach observer whenever the sentinel element changes
+    $: if (scrollSentinel) { setupScrollObserver(); }
+
     onMount(() => {
         if (canAccess && !hasLoadedOnce) {
             hasLoadedOnce = true;
             loadBlobs();
         }
+    });
+
+    onDestroy(() => {
+        if (scrollObserver) scrollObserver.disconnect();
     });
 
     // Load once when canAccess becomes true (for when user logs in after mount)
@@ -149,98 +196,178 @@
         loadBlobs();
     }
 
+    // Parse a single binding event into {originalHash, variantHashes[]}
+    function parseBindingEvent(ev) {
+        let originalHash = null;
+        const allHashes = [];
+
+        if (ev.kind === 30063) {
+            const dTag = ev.tags.find(t => t[0] === "d");
+            originalHash = dTag?.[1];
+            for (const tag of ev.tags) {
+                if (tag[0] === "x" && tag[1]) {
+                    allHashes.push(tag[1]);
+                }
+            }
+        } else if (ev.kind === 1063) {
+            for (const tag of ev.tags) {
+                if (tag[0] === "imeta") {
+                    const variantField = tag.find(f => f.startsWith("variant "));
+                    const xField = tag.find(f => f.startsWith("x "));
+                    if (xField) {
+                        const hash = xField.substring(2);
+                        allHashes.push(hash);
+                        if (variantField === "variant original") {
+                            originalHash = hash;
+                        }
+                    }
+                } else if (tag[0] === "x" && tag[1]) {
+                    if (!allHashes.includes(tag[1])) {
+                        allHashes.push(tag[1]);
+                    }
+                }
+            }
+        }
+
+        return { originalHash, allHashes };
+    }
+
+    // Collect parsed binding events into originals/variants sets
+    function collectBindingEvents(events, originals, variants) {
+        for (const ev of events) {
+            const { originalHash, allHashes } = parseBindingEvent(ev);
+            if (originalHash) {
+                originals.add(originalHash);
+                for (const hash of allHashes) {
+                    if (hash !== originalHash) {
+                        variants.add(hash);
+                    }
+                }
+            }
+        }
+    }
+
+    const RELAY_LIMIT = 256;
+
     async function loadResponsiveBlobs(pubkey, merge = false) {
         try {
             const relays = getRelayUrls();
+            const relayUrl = relays[0];
             const pool = nostrClient.getPool();
             const originals = merge ? new Set(responsiveBlobs) : new Set();
             const variants = merge ? new Set(variantHashes) : new Set();
 
-            // Paginate to fetch ALL binding events (relay caps at 256 per query)
-            const PAGE_SIZE = 256;
-            let until = undefined;
-            let totalEvents = 0;
+            const baseFilter = { kinds: [30063, 1063], authors: [pubkey] };
 
-            while (true) {
-                const filter = {
-                    kinds: [30063, 1063],
-                    authors: [pubkey],
-                    limit: PAGE_SIZE,
-                };
-                if (until !== undefined) {
-                    filter.until = until;
+            // Step 1: COUNT to know total binding events
+            let totalCount;
+            try {
+                totalCount = await nostrClient.countEvents(relayUrl, baseFilter);
+                console.log("Binding event COUNT:", totalCount);
+            } catch (e) {
+                console.warn("COUNT not supported, falling back to sequential fetch:", e);
+                totalCount = null;
+            }
+
+            if (totalCount !== null && totalCount <= RELAY_LIMIT) {
+                // Fits in one query
+                const events = await pool.querySync(relays, { ...baseFilter, limit: RELAY_LIMIT });
+                collectBindingEvents(events, originals, variants);
+                console.log("Found responsive blobs:", originals.size, "variants to hide:", variants.size, "total:", events.length);
+            } else {
+                // Need parallel windowed queries. Determine how many windows we need.
+                // Use half the relay limit per window to avoid edge-case truncation.
+                const windowLimit = Math.floor(RELAY_LIMIT / 2);
+                const estimatedCount = totalCount || 512;
+                const numWindows = Math.max(2, Math.ceil(estimatedCount / windowLimit));
+
+                // Partition the time range: query the newest page first to find time bounds
+                const probeEvents = await pool.querySync(relays, { ...baseFilter, limit: RELAY_LIMIT });
+                if (probeEvents.length === 0) {
+                    responsiveBlobs = originals;
+                    variantHashes = variants;
+                    return;
                 }
 
-                const events = await pool.querySync(relays, filter);
-                if (events.length === 0) break;
-
-                totalEvents += events.length;
-
-                // Find the oldest event timestamp for the next page cursor
-                let oldestTimestamp = Infinity;
-                for (const ev of events) {
-                    if (ev.created_at < oldestTimestamp) {
-                        oldestTimestamp = ev.created_at;
-                    }
+                let newest = 0;
+                let oldest = Infinity;
+                for (const ev of probeEvents) {
+                    if (ev.created_at > newest) newest = ev.created_at;
+                    if (ev.created_at < oldest) oldest = ev.created_at;
                 }
 
-                for (const ev of events) {
-                    let originalHash = null;
-                    const allHashes = [];
+                // If probe got everything, no need for parallel queries
+                if (probeEvents.length < RELAY_LIMIT) {
+                    collectBindingEvents(probeEvents, originals, variants);
+                } else {
+                    // Build time windows spanning from oldest to newest
+                    // Extend oldest bound further back to catch events before the probe's oldest
+                    const rangeStart = oldest - (newest - oldest);
+                    const rangeEnd = newest + 1;
+                    const windowSize = Math.ceil((rangeEnd - rangeStart) / numWindows);
 
-                    if (ev.kind === 30063) {
-                        // ORLY format: d tag contains original hash
-                        const dTag = ev.tags.find(t => t[0] === "d");
-                        originalHash = dTag?.[1];
-                        // Collect all x tags as variant hashes
-                        for (const tag of ev.tags) {
-                            if (tag[0] === "x" && tag[1]) {
-                                allHashes.push(tag[1]);
+                    const windowFilters = [];
+                    for (let i = 0; i < numWindows; i++) {
+                        const since = rangeStart + (i * windowSize);
+                        const until = (i === numWindows - 1) ? rangeEnd : rangeStart + ((i + 1) * windowSize) - 1;
+                        windowFilters.push({
+                            ...baseFilter,
+                            since,
+                            until,
+                            limit: RELAY_LIMIT,
+                        });
+                    }
+
+                    // Fire all window queries in parallel
+                    const windowResults = await Promise.all(
+                        windowFilters.map(f => pool.querySync(relays, f))
+                    );
+
+                    // Collect results and track windows that hit the limit (may have more)
+                    let totalFetched = 0;
+                    const saturatedWindows = [];
+
+                    for (let i = 0; i < windowResults.length; i++) {
+                        const events = windowResults[i];
+                        totalFetched += events.length;
+                        collectBindingEvents(events, originals, variants);
+
+                        if (events.length >= RELAY_LIMIT) {
+                            // This window was truncated - find its oldest event to page from
+                            let windowOldest = Infinity;
+                            for (const ev of events) {
+                                if (ev.created_at < windowOldest) windowOldest = ev.created_at;
                             }
-                        }
-                    } else if (ev.kind === 1063) {
-                        // NIP-94/smesh format: imeta tags with variant field
-                        // Find the "original" variant's hash
-                        for (const tag of ev.tags) {
-                            if (tag[0] === "imeta") {
-                                const variantField = tag.find(f => f.startsWith("variant "));
-                                const xField = tag.find(f => f.startsWith("x "));
-                                if (xField) {
-                                    const hash = xField.substring(2);
-                                    allHashes.push(hash);
-                                    if (variantField === "variant original") {
-                                        originalHash = hash;
-                                    }
-                                }
-                            } else if (tag[0] === "x" && tag[1]) {
-                                // Also collect standalone x tags
-                                if (!allHashes.includes(tag[1])) {
-                                    allHashes.push(tag[1]);
-                                }
-                            }
+                            saturatedWindows.push({
+                                since: windowFilters[i].since,
+                                until: windowOldest - 1,
+                            });
                         }
                     }
 
-                    if (originalHash) {
-                        originals.add(originalHash);
-                        for (const hash of allHashes) {
-                            if (hash !== originalHash) {
-                                variants.add(hash);
-                            }
+                    // Mop up: re-query any saturated windows with tighter bounds
+                    if (saturatedWindows.length > 0 && (totalCount === null || totalFetched < totalCount)) {
+                        console.log("Re-querying", saturatedWindows.length, "saturated windows");
+                        const mopUpResults = await Promise.all(
+                            saturatedWindows.map(w => pool.querySync(relays, {
+                                ...baseFilter,
+                                since: w.since,
+                                until: w.until,
+                                limit: RELAY_LIMIT,
+                            }))
+                        );
+                        for (const events of mopUpResults) {
+                            totalFetched += events.length;
+                            collectBindingEvents(events, originals, variants);
                         }
                     }
+
+                    console.log("Found responsive blobs:", originals.size, "variants to hide:", variants.size, "total fetched:", totalFetched);
                 }
-
-                // If we got fewer than PAGE_SIZE, we've fetched everything
-                if (events.length < PAGE_SIZE) break;
-
-                // Move cursor before the oldest event in this page
-                until = oldestTimestamp - 1;
             }
 
             responsiveBlobs = originals;
             variantHashes = variants;
-            console.log("Found responsive blobs:", originals.size, "variants to hide:", variants.size, "total binding events:", totalEvents);
         } catch (err) {
             console.warn("Failed to load responsive blob info:", err);
             if (!merge) {
@@ -1597,6 +1724,11 @@
                             </button>
                         </div>
                     {/each}
+                    {#if hasMoreBlobs}
+                        <div class="scroll-sentinel" bind:this={scrollSentinel}>
+                            <span class="loading-more">Loading more...</span>
+                        </div>
+                    {/if}
                 </div>
             {/if}
         {/if}
@@ -1972,6 +2104,18 @@
         flex-direction: column;
         gap: 0.5em;
         width: 100%;
+    }
+
+    .scroll-sentinel {
+        display: flex;
+        justify-content: center;
+        padding: 1em;
+    }
+
+    .loading-more {
+        color: var(--text-color);
+        opacity: 0.5;
+        font-size: 0.85em;
     }
 
     .blob-item {

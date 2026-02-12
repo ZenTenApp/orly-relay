@@ -238,6 +238,12 @@ class NostrClient {
     }
   }
 
+  // NIP-45 COUNT query - returns event count for given filters
+  async countEvents(relayUrl, filters) {
+    const relay = await this.pool.ensureRelay(relayUrl);
+    return await relay.count(filters);
+  }
+
   // Get pool for advanced usage
   getPool() {
     return this.pool;
