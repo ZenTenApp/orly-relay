@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -184,12 +185,23 @@ type Limiter struct {
 	lastEmergencyCheck  atomic.Int64 // Unix nano timestamp
 	compactionTriggered atomic.Bool
 
+	// Connection-level metrics for adaptive connection acceptance
+	activeConnections atomic.Int64
+	goroutineCount    atomic.Int64
+
+	// Connection storm config (set via SetConnectionLimits)
+	maxGlobalConns    int
+	connDelayMaxMs    int
+	goroutineWarning  int
+	goroutineMax      int
+
 	// Statistics
 	totalWriteDelayMs atomic.Int64
 	totalReadDelayMs  atomic.Int64
 	writeThrottles    atomic.Int64
 	readThrottles     atomic.Int64
 	emergencyEvents   atomic.Int64
+	droppedConns      atomic.Int64
 
 	// Lifecycle
 	ctx       context.Context
@@ -296,6 +308,8 @@ func (l *Limiter) updateLoop() {
 				l.currentMetrics = metrics
 				l.metricsLock.Unlock()
 			}
+			// Sample goroutine count for connection storm detection
+			l.goroutineCount.Store(int64(runtime.NumGoroutine()))
 		}
 	}
 }
@@ -566,6 +580,122 @@ func (l *Limiter) Reset() {
 // IsEnabled returns whether rate limiting is active.
 func (l *Limiter) IsEnabled() bool {
 	return l.config.Enabled && l.monitor != nil
+}
+
+// SetConnectionLimits configures the connection storm mitigation parameters.
+func (l *Limiter) SetConnectionLimits(maxGlobal, delayMaxMs, goroutineWarn, goroutineMax int) {
+	l.maxGlobalConns = maxGlobal
+	l.connDelayMaxMs = delayMaxMs
+	l.goroutineWarning = goroutineWarn
+	l.goroutineMax = goroutineMax
+}
+
+// SetActiveConnections updates the current connection count metric.
+func (l *Limiter) SetActiveConnections(n int64) {
+	l.activeConnections.Store(n)
+}
+
+// ActiveConnections returns the current connection count.
+func (l *Limiter) ActiveConnections() int64 {
+	return l.activeConnections.Load()
+}
+
+// DroppedConnections returns the total number of connections dropped due to overload.
+func (l *Limiter) DroppedConnections() int64 {
+	return l.droppedConns.Load()
+}
+
+// systemLoadScore computes a composite load score from 0.0 (idle) to 1.0+ (overloaded).
+// It combines memory pressure, goroutine count, and connection count.
+func (l *Limiter) systemLoadScore() float64 {
+	l.metricsLock.RLock()
+	memPressure := l.currentMetrics.MemoryPressure
+	l.metricsLock.RUnlock()
+
+	goroutines := l.goroutineCount.Load()
+	conns := l.activeConnections.Load()
+
+	// Memory component (0-1, already normalized)
+	memScore := memPressure
+
+	// Goroutine component: linear from warning to max
+	var goroutineScore float64
+	if l.goroutineWarning > 0 && goroutines > int64(l.goroutineWarning) {
+		goroutineScore = float64(goroutines-int64(l.goroutineWarning)) /
+			float64(l.goroutineMax-l.goroutineWarning)
+		if goroutineScore > 1.0 {
+			goroutineScore = 1.0
+		}
+	}
+
+	// Connection component: linear from 50% to 100% of max
+	var connScore float64
+	if l.maxGlobalConns > 0 && conns > int64(l.maxGlobalConns/2) {
+		connScore = float64(conns-int64(l.maxGlobalConns/2)) /
+			float64(l.maxGlobalConns/2)
+		if connScore > 1.0 {
+			connScore = 1.0
+		}
+	}
+
+	// Weighted combination: memory 50%, goroutines 30%, connections 20%
+	return memScore*0.5 + goroutineScore*0.3 + connScore*0.2
+}
+
+// ShouldAcceptConnection returns false if the system is too overloaded to accept
+// new connections. It checks memory pressure, goroutine count, and connection count.
+func (l *Limiter) ShouldAcceptConnection() bool {
+	if !l.config.Enabled || l.monitor == nil {
+		return true
+	}
+
+	// Hard limits: refuse immediately
+	goroutines := l.goroutineCount.Load()
+	if l.goroutineMax > 0 && goroutines >= int64(l.goroutineMax) {
+		l.droppedConns.Add(1)
+		log.W.F("refusing connection: goroutine count %d >= max %d", goroutines, l.goroutineMax)
+		return false
+	}
+
+	conns := l.activeConnections.Load()
+	if l.maxGlobalConns > 0 && conns >= int64(l.maxGlobalConns) {
+		l.droppedConns.Add(1)
+		log.W.F("refusing connection: active connections %d >= max %d", conns, l.maxGlobalConns)
+		return false
+	}
+
+	// Emergency mode: refuse
+	if l.inEmergencyMode.Load() {
+		l.droppedConns.Add(1)
+		log.W.F("refusing connection: emergency mode active")
+		return false
+	}
+
+	return true
+}
+
+// ConnectionDelay returns a delay to apply before accepting a new connection.
+// Returns 0 if no delay is needed. The delay is proportional to system load.
+func (l *Limiter) ConnectionDelay() time.Duration {
+	if !l.config.Enabled || l.monitor == nil || l.connDelayMaxMs <= 0 {
+		return 0
+	}
+
+	score := l.systemLoadScore()
+
+	// No delay below 0.5 load
+	if score < 0.5 {
+		return 0
+	}
+
+	// Linear delay from 0.5 to 1.0 load
+	fraction := (score - 0.5) * 2.0 // 0.0 at 0.5, 1.0 at 1.0
+	if fraction > 1.0 {
+		fraction = 1.0
+	}
+
+	delayMs := fraction * float64(l.connDelayMaxMs)
+	return time.Duration(delayMs) * time.Millisecond
 }
 
 // UpdateConfig updates the rate limiter configuration.

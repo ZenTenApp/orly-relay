@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"lol.mleku.dev/chk"
@@ -75,6 +76,10 @@ type Server struct {
 	// Per-IP connection tracking to prevent resource exhaustion
 	connPerIPMu sync.RWMutex
 	connPerIP   map[string]int
+
+	// Global connection and subscription counters for adaptive rate limiting
+	activeConnCount         atomic.Int64
+	activeSubscriptionCount atomic.Int64
 
 	// Challenge storage for HTTP UI authentication
 	challengeMutex sync.RWMutex

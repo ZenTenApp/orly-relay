@@ -28,6 +28,7 @@ import (
 	"next.orly.dev/pkg/protocol/graph"
 	"next.orly.dev/pkg/protocol/nip43"
 	"next.orly.dev/pkg/protocol/publish"
+	"next.orly.dev/pkg/ratelimit"
 	"git.mleku.dev/mleku/nostr/utils/normalize"
 	"git.mleku.dev/mleku/nostr/utils/pointers"
 )
@@ -52,6 +53,65 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 			)
 		},
 	)
+
+	// Classify query cost for adaptive rate limiting
+	var totalAuthors, totalKinds, totalIds int
+	var hasLimit bool
+	var limitVal int
+	for _, f := range *env.Filters {
+		if f == nil {
+			continue
+		}
+		if f.Authors != nil {
+			totalAuthors += f.Authors.Len()
+		}
+		if f.Kinds != nil {
+			totalKinds += f.Kinds.Len()
+		}
+		if f.Ids != nil {
+			totalIds += f.Ids.Len()
+		}
+		if f.Limit != nil {
+			hasLimit = true
+			limitVal = int(*f.Limit)
+		}
+	}
+	qCost := ratelimit.ClassifyQuery(totalAuthors, totalKinds, totalIds, hasLimit, limitVal)
+	log.D.F("REQ %s: query cost=%s (authors=%d, kinds=%d, ids=%d, limit=%v)",
+		env.Subscription, qCost.Level, totalAuthors, totalKinds, totalIds, limitVal)
+
+	// Track accumulated cost per connection (units: multiplier * 100)
+	l.queryCostAccumulator.Add(int64(qCost.Multiplier * 100))
+
+	// Adaptive query deferral: apply cost-weighted delay under load
+	if l.rateLimiter != nil && l.rateLimiter.IsEnabled() {
+		baseDelay := l.rateLimiter.ComputeDelay(ratelimit.Read)
+		if baseDelay > 0 {
+			costDelay := time.Duration(float64(baseDelay) * qCost.Multiplier)
+			if costDelay > 0 {
+				log.D.F("REQ %s: cost-weighted delay %v (cost=%s, base=%v)",
+					env.Subscription, costDelay, qCost.Level, baseDelay)
+				select {
+				case <-l.ctx.Done():
+					return nil
+				case <-time.After(costDelay):
+				}
+			}
+		}
+
+		// In emergency mode, reject expensive queries outright
+		if l.rateLimiter.InEmergencyMode() && qCost.Level >= ratelimit.CostHeavy {
+			log.W.F("REQ %s: rejecting expensive query (cost=%s) during emergency mode",
+				env.Subscription, qCost.Level)
+			if err = closedenvelope.NewFrom(
+				env.Subscription,
+				reason.Error.F("server overloaded, please retry later"),
+			).Write(l); chk.E(err) {
+				return
+			}
+			return nil
+		}
+	}
 
 	// NIP-46 signer-based authentication:
 	// If client is not authenticated and requests kind 24133 with exactly one #p tag,
@@ -819,6 +879,28 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 	receiver := make(event.C, 32)
 	// if the subscription should be cancelled, do so
 	if !cancel {
+		// Check global subscription limit (reduced in emergency mode)
+		maxSubs := int64(l.Config.MaxSubscriptions)
+		if maxSubs <= 0 {
+			maxSubs = 10000
+		}
+		if l.rateLimiter != nil && l.rateLimiter.InEmergencyMode() {
+			maxSubs = maxSubs / 10 // Restrict to 10% during emergency
+			if maxSubs < 100 {
+				maxSubs = 100
+			}
+		}
+		if l.activeSubscriptionCount.Load() >= maxSubs {
+			log.W.F("REQ %s: rejecting subscription (active=%d, max=%d)",
+				env.Subscription, l.activeSubscriptionCount.Load(), maxSubs)
+			// Send EOSE without creating subscription
+			if err = eoseenvelope.NewFrom(env.Subscription).Write(l); chk.E(err) {
+				return
+			}
+			return nil
+		}
+		l.activeSubscriptionCount.Add(1)
+
 		// Create a dedicated context for this subscription that's independent of query context
 		// but is child of the listener context so it gets cancelled when connection closes
 		subCtx, subCancel := context.WithCancel(l.ctx)
@@ -853,6 +935,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		go func() {
 			defer func() {
 				// Clean up when subscription ends
+				l.activeSubscriptionCount.Add(-1)
 				l.subscriptionsMu.Lock()
 				delete(l.subscriptions, subID)
 				l.subscriptionsMu.Unlock()

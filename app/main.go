@@ -92,6 +92,16 @@ func Run(
 		aclRegistry: acl.Registry, // Inject ACL registry (transitional from global)
 	}
 
+	// Configure connection storm mitigation limits on the rate limiter
+	if limiter != nil {
+		limiter.SetConnectionLimits(
+			cfg.MaxGlobalConnections,
+			cfg.ConnectionDelayMaxMs,
+			cfg.GoroutineWarningCount,
+			cfg.GoroutineMaxCount,
+		)
+	}
+
 	// Initialize branding/white-label manager if enabled
 	if cfg.BrandingEnabled {
 		brandingDir := cfg.BrandingDir

@@ -47,7 +47,8 @@ type Listener struct {
 	handlerSem       chan struct{}       // Limits concurrent message handlers per connection
 	authProcessing   sync.RWMutex        // Ensures AUTH completes before other messages check authentication
 	// Flow control counters (atomic for concurrent access)
-	droppedMessages  atomic.Int64 // Messages dropped due to full queue
+	droppedMessages      atomic.Int64 // Messages dropped due to full queue
+	queryCostAccumulator atomic.Int64 // Accumulated query cost for this connection (units: multiplier * 100)
 	// Diagnostics: per-connection counters
 	msgCount   int
 	reqCount   int

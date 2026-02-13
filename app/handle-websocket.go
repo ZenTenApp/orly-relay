@@ -62,13 +62,13 @@ whitelist:
 		ip = remote[:idx]
 	}
 
-	// Check per-IP connection limit (hard limit 40, default 25)
+	// Check per-IP connection limit (hard limit 10)
 	maxConnPerIP := s.Config.MaxConnectionsPerIP
 	if maxConnPerIP <= 0 {
-		maxConnPerIP = 25
+		maxConnPerIP = 10
 	}
-	if maxConnPerIP > 40 {
-		maxConnPerIP = 40 // Hard limit
+	if maxConnPerIP > 10 {
+		maxConnPerIP = 10 // Hard limit
 	}
 
 	s.connPerIPMu.Lock()
@@ -82,8 +82,12 @@ whitelist:
 	s.connPerIP[ip]++
 	s.connPerIPMu.Unlock()
 
-	// Decrement connection count when this function returns
+	// Track global connection count
+	s.activeConnCount.Add(1)
+
+	// Decrement connection counts when this function returns
 	defer func() {
+		s.activeConnCount.Add(-1)
 		s.connPerIPMu.Lock()
 		s.connPerIP[ip]--
 		if s.connPerIP[ip] <= 0 {
@@ -91,6 +95,32 @@ whitelist:
 		}
 		s.connPerIPMu.Unlock()
 	}()
+
+	// Global adaptive load check — refuse or delay connections under load
+	if s.rateLimiter != nil && s.rateLimiter.IsEnabled() {
+		s.rateLimiter.SetActiveConnections(s.activeConnCount.Load())
+
+		if !s.rateLimiter.ShouldAcceptConnection() {
+			log.W.F("refusing connection from %s: system overloaded", ip)
+			http.Error(w, "server overloaded, try later", http.StatusServiceUnavailable)
+			return
+		}
+
+		if delay := s.rateLimiter.ConnectionDelay(); delay > 0 {
+			log.D.F("delaying connection from %s by %v (load mitigation)", ip, delay)
+			time.Sleep(delay)
+		}
+	}
+
+	// Progressive per-IP delay: each additional connection from the same IP adds delay
+	if currentConns > 0 {
+		perIPDelay := time.Duration(currentConns) * 200 * time.Millisecond
+		if perIPDelay > 2*time.Second {
+			perIPDelay = 2 * time.Second
+		}
+		log.D.F("per-IP delay for %s: %v (%d connections)", ip, perIPDelay, currentConns+1)
+		time.Sleep(perIPDelay)
+	}
 
 	// Create an independent context for this connection
 	// This context will be cancelled when the connection closes or server shuts down

@@ -160,7 +160,14 @@ type C struct {
 
 	// Connection concurrency control
 	MaxHandlersPerConnection int `env:"ORLY_MAX_HANDLERS_PER_CONN" default:"100" usage:"max concurrent message handlers per WebSocket connection (limits goroutine growth under load)"`
-	MaxConnectionsPerIP      int `env:"ORLY_MAX_CONN_PER_IP" default:"25" usage:"max WebSocket connections per IP address (prevents resource exhaustion, hard limit 40)"`
+	MaxConnectionsPerIP      int `env:"ORLY_MAX_CONN_PER_IP" default:"10" usage:"max WebSocket connections per IP address (progressive delay applied as count increases)"`
+
+	// Connection storm mitigation (adaptive, works with PID rate limiter)
+	MaxGlobalConnections  int `env:"ORLY_MAX_GLOBAL_CONNECTIONS" default:"500" usage:"maximum total WebSocket connections before refusing new ones"`
+	ConnectionDelayMaxMs  int `env:"ORLY_CONN_DELAY_MAX_MS" default:"2000" usage:"maximum delay in ms for new connections under load"`
+	GoroutineWarningCount int `env:"ORLY_GOROUTINE_WARNING" default:"5000" usage:"goroutine count at which connection acceptance slows down"`
+	GoroutineMaxCount     int `env:"ORLY_GOROUTINE_MAX" default:"10000" usage:"goroutine count at which new connections are refused"`
+	MaxSubscriptions      int `env:"ORLY_MAX_SUBSCRIPTIONS" default:"10000" usage:"maximum total active subscriptions (reduced to 1000 in emergency mode)"`
 
 	// Query result limits (prevents memory exhaustion from unbounded queries)
 	QueryResultLimit int `env:"ORLY_QUERY_RESULT_LIMIT" default:"256" usage:"max events returned per REQ filter (prevents unbounded memory usage, 0=unlimited)"`
