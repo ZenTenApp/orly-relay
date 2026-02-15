@@ -293,6 +293,9 @@ func (w *RelySQLiteWrapper) GetLeastAccessedEvents(limit int, minAgeSec int64) (
 func (w *RelySQLiteWrapper) SaveBlob(sha256Hash []byte, data []byte, pubkey []byte, mimeType string, extension string) error {
 	return fmt.Errorf("not implemented")
 }
+func (w *RelySQLiteWrapper) SaveBlobMetadata(sha256Hash []byte, size int64, pubkey []byte, mimeType string, extension string) error {
+	return fmt.Errorf("not implemented")
+}
 func (w *RelySQLiteWrapper) GetBlob(sha256Hash []byte) (data []byte, metadata *database.BlobMetadata, err error) {
 	return nil, nil, fmt.Errorf("not implemented")
 }

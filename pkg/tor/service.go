@@ -279,7 +279,10 @@ func (s *Service) logOutput(prefix string, r io.ReadCloser) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		// Filter out common noise
-		if strings.Contains(line, "Bootstrapped") {
+		if strings.Contains(line, "compression bomb") ||
+			strings.Contains(line, "abandoning stream") {
+			log.T.F("[%s] %s", prefix, line)
+		} else if strings.Contains(line, "Bootstrapped") {
 			log.I.F("[%s] %s", prefix, line)
 		} else if strings.Contains(line, "[warn]") || strings.Contains(line, "[err]") {
 			log.W.F("[%s] %s", prefix, line)

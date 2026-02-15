@@ -125,6 +125,54 @@ func (d *D) SaveBlob(
 	return
 }
 
+// SaveBlobMetadata stores only the metadata and index for a blob whose file
+// already exists on disk. This is used by the streaming upload path where the
+// file is written during hashing and then renamed into place before this call.
+func (d *D) SaveBlobMetadata(
+	sha256Hash []byte, size int64, pubkey []byte, mimeType string, extension string,
+) (err error) {
+	sha256Hex := hex.Enc(sha256Hash)
+
+	if extension == "" {
+		extension = getExtensionFromMimeType(mimeType)
+	}
+
+	metadata := &BlobMetadata{
+		Pubkey:    pubkey,
+		MimeType:  mimeType,
+		Uploaded:  time.Now().Unix(),
+		Size:      size,
+		Extension: extension,
+	}
+	if mimeType == "" {
+		metadata.MimeType = "application/octet-stream"
+	}
+
+	var metaData []byte
+	if metaData, err = json.Marshal(metadata); chk.E(err) {
+		return
+	}
+
+	if err = d.Update(func(txn *badger.Txn) error {
+		metaKey := prefixBlobMeta + sha256Hex
+		if err := txn.Set([]byte(metaKey), metaData); err != nil {
+			return err
+		}
+
+		indexKey := prefixBlobIndex + hex.Enc(pubkey) + ":" + sha256Hex
+		if err := txn.Set([]byte(indexKey), []byte{1}); err != nil {
+			return err
+		}
+
+		return nil
+	}); chk.E(err) {
+		return
+	}
+
+	log.D.F("saved blob metadata %s (%d bytes) for pubkey %s", sha256Hex, size, hex.Enc(pubkey))
+	return
+}
+
 // GetBlob retrieves blob data by SHA256 hash
 func (d *D) GetBlob(sha256Hash []byte) (data []byte, metadata *BlobMetadata, err error) {
 	sha256Hex := hex.Enc(sha256Hash)

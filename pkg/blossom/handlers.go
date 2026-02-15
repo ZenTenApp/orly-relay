@@ -1,18 +1,19 @@
 package blossom
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"github.com/minio/sha256-simd"
 	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/utils"
 )
@@ -187,28 +188,90 @@ func (s *Server) handleHeadBlob(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// streamResult holds the result of streaming a blob to a temp file.
+type streamResult struct {
+	tempPath    string // Path to the temp file (caller must clean up on error)
+	sha256Hash  []byte // Computed SHA256 hash
+	size        int64  // Total bytes written
+	sniffedMime string // MIME type detected from first 512 bytes of content
+}
+
+// streamToTempFile streams from reader to a temp file while computing the SHA256
+// hash simultaneously. Memory usage is O(32KB) regardless of blob size.
+// On success the caller owns the temp file and must either rename it or remove it.
+// On error the temp file is cleaned up automatically.
+func (s *Server) streamToTempFile(body io.Reader, maxSize int64) (result streamResult, err error) {
+	// Create temp file in the blob directory so os.Rename is atomic (same fs)
+	tmpFile, err := os.CreateTemp(s.storage.BlobDir(), "upload-*")
+	if err != nil {
+		return result, fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+
+	// Clean up on any error
+	defer func() {
+		tmpFile.Close()
+		if err != nil {
+			os.Remove(tmpPath)
+		}
+	}()
+
+	hasher := sha256.New()
+
+	// Read first 512 bytes for MIME sniffing
+	sniffBuf := make([]byte, 512)
+	n, readErr := io.ReadFull(body, sniffBuf)
+	if n == 0 {
+		if readErr != nil {
+			err = fmt.Errorf("error reading upload body: %w", readErr)
+		} else {
+			err = fmt.Errorf("empty upload body")
+		}
+		return
+	}
+	sniffBuf = sniffBuf[:n]
+	result.sniffedMime = http.DetectContentType(sniffBuf)
+
+	// Write sniffed bytes to both hasher and temp file
+	hasher.Write(sniffBuf)
+	if _, err = tmpFile.Write(sniffBuf); err != nil {
+		return result, fmt.Errorf("failed to write to temp file: %w", err)
+	}
+	result.size = int64(n)
+
+	// Stream the remainder: body → LimitReader → TeeReader(hasher) → tmpFile
+	remaining := maxSize + 1 - result.size
+	if remaining > 0 {
+		limited := io.LimitReader(body, remaining)
+		tee := io.TeeReader(limited, hasher)
+		written, copyErr := io.Copy(tmpFile, tee)
+		result.size += written
+		if copyErr != nil {
+			err = fmt.Errorf("error streaming upload: %w", copyErr)
+			return
+		}
+	}
+
+	// Check size limit (we read maxSize+1 to detect overflow)
+	if result.size > maxSize {
+		err = fmt.Errorf("blob too large: max %d bytes", maxSize)
+		return
+	}
+
+	sum := hasher.Sum(nil)
+	result.sha256Hash = sum
+	result.tempPath = tmpPath
+	return
+}
+
 // handleUpload handles PUT /upload requests (BUD-02)
+// Streams the upload to disk while hashing — memory usage is O(32KB).
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	// Get initial pubkey from request (may be updated by auth validation)
 	pubkey, _ := GetPubkeyFromRequest(r)
 	remoteAddr := s.getRemoteAddr(r)
 
-	// Read request body
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.maxBlobSize+1))
-	if err != nil {
-		s.setErrorResponse(w, http.StatusBadRequest, "error reading request body")
-		return
-	}
-
-	if int64(len(body)) > s.maxBlobSize {
-		s.setErrorResponse(w, http.StatusRequestEntityTooLarge,
-			fmt.Sprintf("blob too large: max %d bytes", s.maxBlobSize))
-		return
-	}
-
-	// Optional authorization validation (do this BEFORE ACL check)
-	// For upload, we don't pass sha256Hash because upload auth events don't have 'x' tags
-	// (the hash isn't known at auth event creation time)
+	// Validate auth BEFORE reading body (only uses headers)
 	authHeader := r.Header.Get(AuthorizationHeader)
 	if authHeader != "" {
 		authEv, err := ValidateAuthEvent(r, "upload", nil)
@@ -222,42 +285,52 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check ACL (do this AFTER getting pubkey from auth)
+	// Check ACL BEFORE reading body
 	if !s.checkACL(pubkey, remoteAddr, "write") {
 		s.setErrorResponse(w, http.StatusForbidden, "insufficient permissions")
 		return
 	}
 
-	// Check bandwidth rate limit (non-followed users)
-	if !s.checkBandwidthLimit(pubkey, remoteAddr, int64(len(body))) {
+	// Stream body to temp file while computing SHA256 hash
+	sr, err := s.streamToTempFile(r.Body, s.maxBlobSize)
+	if err != nil {
+		if strings.Contains(err.Error(), "too large") {
+			s.setErrorResponse(w, http.StatusRequestEntityTooLarge, err.Error())
+		} else {
+			s.setErrorResponse(w, http.StatusBadRequest, "error reading request body")
+		}
+		return
+	}
+	// Clean up temp file on any error from here on
+	defer func() {
+		if sr.tempPath != "" {
+			os.Remove(sr.tempPath)
+		}
+	}()
+
+	sha256Hex := hex.Enc(sr.sha256Hash)
+
+	// Check bandwidth rate limit (uses actual streamed size)
+	if !s.checkBandwidthLimit(pubkey, remoteAddr, sr.size) {
 		s.setErrorResponse(w, http.StatusTooManyRequests, "upload rate limit exceeded, try again later")
 		return
 	}
 
-	// Calculate SHA256 after auth check
-	sha256Hash := CalculateSHA256(body)
-	sha256Hex := hex.Enc(sha256Hash)
-
 	// Check if blob already exists
-	exists, err := s.storage.HasBlob(sha256Hash)
+	exists, err := s.storage.HasBlob(sr.sha256Hash)
 	if err != nil {
 		log.E.F("error checking blob existence: %v", err)
 		s.setErrorResponse(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	// Note: pubkey may be nil for anonymous uploads if ACL allows it
-	// The storage layer will handle anonymous uploads appropriately
-
-	// Detect MIME type from header, extension, or content sniffing
+	// Detect MIME type: prefer header, fall back to extension, then content sniffing
 	mimeType := DetectMimeType(
 		r.Header.Get("Content-Type"),
 		GetFileExtensionFromPath(r.URL.Path),
 	)
-	if mimeType == "application/octet-stream" && len(body) > 0 {
-		if sniffed := http.DetectContentType(body); sniffed != "application/octet-stream" {
-			mimeType = sniffed
-		}
+	if mimeType == "application/octet-stream" && sr.sniffedMime != "application/octet-stream" {
+		mimeType = sr.sniffedMime
 	}
 
 	// Extract extension from path or infer from MIME type
@@ -273,24 +346,21 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check storage quota if blob doesn't exist (new upload)
 	if !exists {
-		blobSizeMB := int64(len(body)) / (1024 * 1024)
-		if blobSizeMB == 0 && len(body) > 0 {
-			blobSizeMB = 1 // At least 1 MB for any non-zero blob
+		// Check storage quota
+		blobSizeMB := sr.size / (1024 * 1024)
+		if blobSizeMB == 0 && sr.size > 0 {
+			blobSizeMB = 1
 		}
 
-		// Get storage quota from database
 		quotaMB, err := s.db.GetBlossomStorageQuota(pubkey)
 		if err != nil {
 			log.W.F("failed to get storage quota: %v", err)
 		} else if quotaMB > 0 {
-			// Get current storage used
 			usedMB, err := s.storage.GetTotalStorageUsed(pubkey)
 			if err != nil {
 				log.W.F("failed to calculate storage used: %v", err)
 			} else {
-				// Check if upload would exceed quota
 				if usedMB+blobSizeMB > quotaMB {
 					s.setErrorResponse(w, http.StatusPaymentRequired,
 						fmt.Sprintf("storage quota exceeded: %d/%d MB used, %d MB needed",
@@ -299,25 +369,23 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-	}
 
-	// Save blob if it doesn't exist
-	if !exists {
-		if err = s.storage.SaveBlob(sha256Hash, body, pubkey, mimeType, ext); err != nil {
+		// Rename temp file to final path and save metadata (no re-hash)
+		if err = s.storage.SaveBlobFromFile(sr.sha256Hash, sr.tempPath, sr.size, pubkey, mimeType, ext); err != nil {
 			log.E.F("error saving blob: %v", err)
 			s.setErrorResponse(w, http.StatusInternalServerError, "error saving blob")
 			return
 		}
+		sr.tempPath = "" // Prevent deferred cleanup — file has been renamed
 	} else {
 		// Verify ownership
-		metadata, err := s.storage.GetBlobMetadata(sha256Hash)
+		metadata, err := s.storage.GetBlobMetadata(sr.sha256Hash)
 		if err != nil {
 			log.E.F("error getting blob metadata: %v", err)
 			s.setErrorResponse(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
-		// Allow if same pubkey or if ACL allows
 		if !utils.FastEqual(metadata.Pubkey, pubkey) && !s.checkACL(pubkey, remoteAddr, "admin") {
 			s.setErrorResponse(w, http.StatusConflict, "blob already exists")
 			return
@@ -331,7 +399,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	descriptor := NewBlobDescriptor(
 		blobURL,
 		sha256Hex,
-		int64(len(body)),
+		sr.size,
 		mimeType,
 		time.Now().Unix(),
 	)
@@ -617,7 +685,7 @@ func (s *Server) handleMirror(w http.ResponseWriter, r *http.Request) {
 	pubkey, _ := GetPubkeyFromRequest(r)
 	remoteAddr := s.getRemoteAddr(r)
 
-	// Read request body (JSON with URL)
+	// Read request body (JSON with URL — small payload, not the blob itself)
 	var req struct {
 		URL string `json:"url"`
 	}
@@ -639,6 +707,23 @@ func (s *Server) handleMirror(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate auth and ACL BEFORE downloading the remote blob
+	if r.Header.Get(AuthorizationHeader) != "" {
+		authEv, err := ValidateAuthEvent(r, "upload", nil)
+		if err != nil {
+			s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+		if authEv != nil {
+			pubkey = authEv.Pubkey
+		}
+	}
+
+	if !s.checkACL(pubkey, remoteAddr, "write") {
+		s.setErrorResponse(w, http.StatusForbidden, "insufficient permissions")
+		return
+	}
+
 	// Download blob from remote URL
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(mirrorURL.String())
@@ -654,87 +739,63 @@ func (s *Server) handleMirror(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read blob data
-	body, err := io.ReadAll(io.LimitReader(resp.Body, s.maxBlobSize+1))
+	// Stream remote blob to temp file while computing SHA256
+	sr, err := s.streamToTempFile(resp.Body, s.maxBlobSize)
 	if err != nil {
-		s.setErrorResponse(w, http.StatusBadGateway, "error reading remote blob")
-		return
-	}
-
-	if int64(len(body)) > s.maxBlobSize {
-		s.setErrorResponse(w, http.StatusRequestEntityTooLarge,
-			fmt.Sprintf("blob too large: max %d bytes", s.maxBlobSize))
-		return
-	}
-
-	// Calculate SHA256
-	sha256Hash := CalculateSHA256(body)
-	sha256Hex := hex.Enc(sha256Hash)
-
-	// Optional authorization validation (do this BEFORE ACL check)
-	// For mirror (which uses upload semantics), don't pass sha256Hash
-	if r.Header.Get(AuthorizationHeader) != "" {
-		authEv, err := ValidateAuthEvent(r, "upload", nil)
-		if err != nil {
-			s.setErrorResponse(w, http.StatusUnauthorized, err.Error())
-			return
+		if strings.Contains(err.Error(), "too large") {
+			s.setErrorResponse(w, http.StatusRequestEntityTooLarge, err.Error())
+		} else {
+			s.setErrorResponse(w, http.StatusBadGateway, "error reading remote blob")
 		}
-		if authEv != nil {
-			pubkey = authEv.Pubkey
-		}
-	}
-
-	// Check ACL (do this AFTER getting pubkey from auth)
-	if !s.checkACL(pubkey, remoteAddr, "write") {
-		s.setErrorResponse(w, http.StatusForbidden, "insufficient permissions")
 		return
 	}
+	defer func() {
+		if sr.tempPath != "" {
+			os.Remove(sr.tempPath)
+		}
+	}()
 
-	// Check bandwidth rate limit (non-followed users)
-	if !s.checkBandwidthLimit(pubkey, remoteAddr, int64(len(body))) {
+	sha256Hex := hex.Enc(sr.sha256Hash)
+
+	// Check bandwidth rate limit
+	if !s.checkBandwidthLimit(pubkey, remoteAddr, sr.size) {
 		s.setErrorResponse(w, http.StatusTooManyRequests, "upload rate limit exceeded, try again later")
 		return
 	}
-
-	// Note: pubkey may be nil for anonymous uploads if ACL allows it
 
 	// Detect MIME type from remote response, extension, or content sniffing
 	mimeType := DetectMimeType(
 		resp.Header.Get("Content-Type"),
 		GetFileExtensionFromPath(mirrorURL.Path),
 	)
-	if mimeType == "application/octet-stream" && len(body) > 0 {
-		if sniffed := http.DetectContentType(body); sniffed != "application/octet-stream" {
-			mimeType = sniffed
-		}
+	if mimeType == "application/octet-stream" && sr.sniffedMime != "application/octet-stream" {
+		mimeType = sr.sniffedMime
 	}
 
-	// Extract extension from path or infer from MIME type
 	ext := GetFileExtensionFromPath(mirrorURL.Path)
 	if ext == "" {
 		ext = GetExtensionFromMimeType(mimeType)
 	}
 
-	// Save blob
-	if err = s.storage.SaveBlob(sha256Hash, body, pubkey, mimeType, ext); err != nil {
+	// Rename temp file to final path and save metadata
+	if err = s.storage.SaveBlobFromFile(sr.sha256Hash, sr.tempPath, sr.size, pubkey, mimeType, ext); err != nil {
 		log.E.F("error saving mirrored blob: %v", err)
 		s.setErrorResponse(w, http.StatusInternalServerError, "error saving blob")
 		return
 	}
+	sr.tempPath = "" // Prevent deferred cleanup
 
 	// Build URL
 	blobURL := BuildBlobURL(s.getBaseURL(r), sha256Hex, ext)
 
-	// Create descriptor
 	descriptor := NewBlobDescriptor(
 		blobURL,
 		sha256Hex,
-		int64(len(body)),
+		sr.size,
 		mimeType,
 		time.Now().Unix(),
 	)
 
-	// Return descriptor
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err = json.NewEncoder(w).Encode(descriptor); err != nil {
@@ -743,26 +804,15 @@ func (s *Server) handleMirror(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleMediaUpload handles PUT /media requests (BUD-05)
+// Streams the upload to disk while hashing — memory usage is O(32KB).
+// NOTE: When OptimizeMedia is implemented beyond a no-op, it will need to read
+// from the temp file rather than an in-memory buffer.
 func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 	// Get initial pubkey from request (may be updated by auth validation)
 	pubkey, _ := GetPubkeyFromRequest(r)
 	remoteAddr := s.getRemoteAddr(r)
 
-	// Read request body
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.maxBlobSize+1))
-	if err != nil {
-		s.setErrorResponse(w, http.StatusBadRequest, "error reading request body")
-		return
-	}
-
-	if int64(len(body)) > s.maxBlobSize {
-		s.setErrorResponse(w, http.StatusRequestEntityTooLarge,
-			fmt.Sprintf("blob too large: max %d bytes", s.maxBlobSize))
-		return
-	}
-
-	// Optional authorization validation (do this BEFORE ACL check)
-	// For media upload, don't pass sha256Hash (similar to regular upload)
+	// Validate auth BEFORE reading body
 	if r.Header.Get(AuthorizationHeader) != "" {
 		authEv, err := ValidateAuthEvent(r, "media", nil)
 		if err != nil {
@@ -774,70 +824,72 @@ func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check ACL (do this AFTER getting pubkey from auth)
 	if !s.checkACL(pubkey, remoteAddr, "write") {
 		s.setErrorResponse(w, http.StatusForbidden, "insufficient permissions")
 		return
 	}
 
-	// Check bandwidth rate limit (non-followed users)
-	if !s.checkBandwidthLimit(pubkey, remoteAddr, int64(len(body))) {
+	// Stream body to temp file while computing SHA256
+	sr, err := s.streamToTempFile(r.Body, s.maxBlobSize)
+	if err != nil {
+		if strings.Contains(err.Error(), "too large") {
+			s.setErrorResponse(w, http.StatusRequestEntityTooLarge, err.Error())
+		} else {
+			s.setErrorResponse(w, http.StatusBadRequest, "error reading request body")
+		}
+		return
+	}
+	defer func() {
+		if sr.tempPath != "" {
+			os.Remove(sr.tempPath)
+		}
+	}()
+
+	// Check bandwidth rate limit
+	if !s.checkBandwidthLimit(pubkey, remoteAddr, sr.size) {
 		s.setErrorResponse(w, http.StatusTooManyRequests, "upload rate limit exceeded, try again later")
 		return
 	}
 
-	// Note: pubkey may be nil for anonymous uploads if ACL allows it
-
-	// Detect MIME type from header, extension, or content sniffing
-	originalMimeType := DetectMimeType(
+	// Detect MIME type
+	mimeType := DetectMimeType(
 		r.Header.Get("Content-Type"),
 		GetFileExtensionFromPath(r.URL.Path),
 	)
-	if originalMimeType == "application/octet-stream" && len(body) > 0 {
-		if sniffed := http.DetectContentType(body); sniffed != "application/octet-stream" {
-			originalMimeType = sniffed
-		}
+	if mimeType == "application/octet-stream" && sr.sniffedMime != "application/octet-stream" {
+		mimeType = sr.sniffedMime
 	}
 
-	// Optimize media (placeholder - actual optimization would be implemented here)
-	optimizedData, mimeType := OptimizeMedia(body, originalMimeType)
-
-	// Extract extension from path or infer from MIME type
 	ext := GetFileExtensionFromPath(r.URL.Path)
 	if ext == "" {
 		ext = GetExtensionFromMimeType(mimeType)
 	}
 
-	// Calculate optimized blob SHA256
-	optimizedHash := CalculateSHA256(optimizedData)
-	optimizedHex := hex.Enc(optimizedHash)
+	sha256Hex := hex.Enc(sr.sha256Hash)
 
-	// Check if optimized blob already exists
-	exists, err := s.storage.HasBlob(optimizedHash)
+	// Check if blob already exists
+	exists, err := s.storage.HasBlob(sr.sha256Hash)
 	if err != nil {
 		log.E.F("error checking blob existence: %v", err)
 		s.setErrorResponse(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	// Check storage quota if optimized blob doesn't exist (new upload)
 	if !exists {
-		blobSizeMB := int64(len(optimizedData)) / (1024 * 1024)
-		if blobSizeMB == 0 && len(optimizedData) > 0 {
-			blobSizeMB = 1 // At least 1 MB for any non-zero blob
+		// Check storage quota
+		blobSizeMB := sr.size / (1024 * 1024)
+		if blobSizeMB == 0 && sr.size > 0 {
+			blobSizeMB = 1
 		}
 
-		// Get storage quota from database
 		quotaMB, err := s.db.GetBlossomStorageQuota(pubkey)
 		if err != nil {
 			log.W.F("failed to get storage quota: %v", err)
 		} else if quotaMB > 0 {
-			// Get current storage used
 			usedMB, err := s.storage.GetTotalStorageUsed(pubkey)
 			if err != nil {
 				log.W.F("failed to calculate storage used: %v", err)
 			} else {
-				// Check if upload would exceed quota
 				if usedMB+blobSizeMB > quotaMB {
 					s.setErrorResponse(w, http.StatusPaymentRequired,
 						fmt.Sprintf("storage quota exceeded: %d/%d MB used, %d MB needed",
@@ -846,28 +898,26 @@ func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+
+		// Rename temp file to final path and save metadata
+		if err = s.storage.SaveBlobFromFile(sr.sha256Hash, sr.tempPath, sr.size, pubkey, mimeType, ext); err != nil {
+			log.E.F("error saving media blob: %v", err)
+			s.setErrorResponse(w, http.StatusInternalServerError, "error saving blob")
+			return
+		}
+		sr.tempPath = "" // Prevent deferred cleanup
 	}
 
-	// Save optimized blob
-	if err = s.storage.SaveBlob(optimizedHash, optimizedData, pubkey, mimeType, ext); err != nil {
-		log.E.F("error saving optimized blob: %v", err)
-		s.setErrorResponse(w, http.StatusInternalServerError, "error saving blob")
-		return
-	}
+	blobURL := BuildBlobURL(s.getBaseURL(r), sha256Hex, ext)
 
-	// Build URL
-	blobURL := BuildBlobURL(s.baseURL, optimizedHex, ext)
-
-	// Create descriptor
 	descriptor := NewBlobDescriptor(
 		blobURL,
-		optimizedHex,
-		int64(len(optimizedData)),
+		sha256Hex,
+		sr.size,
 		mimeType,
 		time.Now().Unix(),
 	)
 
-	// Return descriptor
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err = json.NewEncoder(w).Encode(descriptor); err != nil {
@@ -1049,8 +1099,3 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// computeSHA256 computes the SHA256 hash of data
-func computeSHA256(data []byte) []byte {
-	hash := sha256.Sum256(data)
-	return hash[:]
-}

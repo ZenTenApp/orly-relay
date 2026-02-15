@@ -1,9 +1,11 @@
 package blossom
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"lol.mleku.dev/log"
 
 	"next.orly.dev/pkg/database"
@@ -33,12 +35,42 @@ func NewStorage(db database.Database) *Storage {
 	}
 }
 
+// BlobDir returns the directory where blob files are stored.
+// Used by the streaming upload handler to create temp files on the same
+// filesystem, enabling atomic rename to the final content-addressed path.
+func (s *Storage) BlobDir() string {
+	return s.blobDir
+}
+
 // SaveBlob stores a blob with its metadata.
 // Delegates to the database interface's SaveBlob method.
 func (s *Storage) SaveBlob(
 	sha256Hash []byte, data []byte, pubkey []byte, mimeType string, extension string,
 ) error {
 	return s.db.SaveBlob(sha256Hash, data, pubkey, mimeType, extension)
+}
+
+// SaveBlobFromFile moves a completed temp file to its final content-addressed
+// path and saves metadata. The temp file must already be on the same filesystem
+// as blobDir (created via os.CreateTemp(s.BlobDir(), ...)) so that os.Rename is
+// an atomic operation. This is used by the streaming upload path where the hash
+// is computed during the write, eliminating the need to buffer the entire blob
+// in memory.
+func (s *Storage) SaveBlobFromFile(
+	sha256Hash []byte, tempPath string, size int64, pubkey []byte, mimeType string, extension string,
+) error {
+	sha256Hex := hex.Enc(sha256Hash)
+
+	// Build final path
+	finalPath := s.GetBlobPath(sha256Hex, extension)
+
+	// Rename temp file to final content-addressed path (atomic on same fs)
+	if err := os.Rename(tempPath, finalPath); err != nil {
+		return fmt.Errorf("failed to rename temp file to blob path: %w", err)
+	}
+
+	// Save metadata to database (no re-hash, no file I/O)
+	return s.db.SaveBlobMetadata(sha256Hash, size, pubkey, mimeType, extension)
 }
 
 // GetBlob retrieves blob data by SHA256 hash.

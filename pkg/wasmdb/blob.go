@@ -20,6 +20,11 @@ func (w *W) SaveBlob(sha256Hash []byte, data []byte, pubkey []byte, mimeType str
 	return errBlobNotSupported
 }
 
+// SaveBlobMetadata stores only metadata for a blob (not supported in WasmDB)
+func (w *W) SaveBlobMetadata(sha256Hash []byte, size int64, pubkey []byte, mimeType string, extension string) error {
+	return errBlobNotSupported
+}
+
 // GetBlob retrieves blob data by SHA256 hash (not supported in WasmDB)
 func (w *W) GetBlob(sha256Hash []byte) (data []byte, metadata *database.BlobMetadata, err error) {
 	return nil, nil, errBlobNotSupported

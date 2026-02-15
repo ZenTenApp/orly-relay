@@ -693,7 +693,9 @@ func (f *Follows) processCollectedEvents(relayURL string, followListEvents, meta
 	// Save follow list events to database and extract follows
 	for pubkeyHex, ev := range latestFollowLists {
 		if _, err := f.db.SaveEvent(f.Ctx, ev); err != nil {
-			if !strings.HasPrefix(err.Error(), "blocked:") {
+			if strings.Contains(err.Error(), "blocked:") {
+				log.T.F("follows syncer: skipped follow list from %s (already stored): %v", pubkeyHex, err)
+			} else {
 				log.W.F("follows syncer: failed to save follow list from %s: %v", pubkeyHex, err)
 			}
 		} else {
@@ -712,7 +714,9 @@ func (f *Follows) processCollectedEvents(relayURL string, followListEvents, meta
 	// Save metadata events to database
 	for pubkeyHex, ev := range latestMetadata {
 		if _, err := f.db.SaveEvent(f.Ctx, ev); err != nil {
-			if !strings.HasPrefix(err.Error(), "blocked:") {
+			if strings.Contains(err.Error(), "blocked:") {
+				log.T.F("follows syncer: skipped metadata from %s (already stored): %v", pubkeyHex, err)
+			} else {
 				log.W.F("follows syncer: failed to save metadata from %s: %v", pubkeyHex, err)
 			}
 		} else {
@@ -725,7 +729,9 @@ func (f *Follows) processCollectedEvents(relayURL string, followListEvents, meta
 	// Save relay list events to database
 	for pubkeyHex, ev := range latestRelayLists {
 		if _, err := f.db.SaveEvent(f.Ctx, ev); err != nil {
-			if !strings.HasPrefix(err.Error(), "blocked:") {
+			if strings.Contains(err.Error(), "blocked:") {
+				log.T.F("follows syncer: skipped relay list from %s (already stored): %v", pubkeyHex, err)
+			} else {
 				log.W.F("follows syncer: failed to save relay list from %s: %v", pubkeyHex, err)
 			}
 		} else {

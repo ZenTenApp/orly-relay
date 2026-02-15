@@ -119,6 +119,7 @@ type Database interface {
 
 	// Blob storage (Blossom)
 	SaveBlob(sha256Hash []byte, data []byte, pubkey []byte, mimeType string, extension string) error
+	SaveBlobMetadata(sha256Hash []byte, size int64, pubkey []byte, mimeType string, extension string) error
 	GetBlob(sha256Hash []byte) (data []byte, metadata *BlobMetadata, err error)
 	HasBlob(sha256Hash []byte) (exists bool, err error)
 	DeleteBlob(sha256Hash []byte, pubkey []byte) error

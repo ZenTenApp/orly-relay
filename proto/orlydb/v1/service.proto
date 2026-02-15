@@ -218,6 +218,9 @@ service DatabaseService {
   // SaveBlob stores a blob with its metadata
   rpc SaveBlob(SaveBlobRequest) returns (Empty);
 
+  // SaveBlobMetadata stores only metadata for a blob whose file is already on disk
+  rpc SaveBlobMetadata(SaveBlobMetadataRequest) returns (Empty);
+
   // GetBlob retrieves blob data and metadata
   rpc GetBlob(GetBlobRequest) returns (GetBlobResponse);
 
@@ -614,6 +617,14 @@ message BlobDescriptor {
 message SaveBlobRequest {
   bytes sha256_hash = 1;
   bytes data = 2;
+  bytes pubkey = 3;
+  string mime_type = 4;
+  string extension = 5;
+}
+
+message SaveBlobMetadataRequest {
+  bytes sha256_hash = 1;
+  int64 size = 2;
   bytes pubkey = 3;
   string mime_type = 4;
   string extension = 5;

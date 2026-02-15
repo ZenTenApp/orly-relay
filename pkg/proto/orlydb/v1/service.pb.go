@@ -3634,6 +3634,82 @@ func (x *SaveBlobRequest) GetExtension() string {
 	return ""
 }
 
+type SaveBlobMetadataRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sha256Hash    []byte                 `protobuf:"bytes,1,opt,name=sha256_hash,json=sha256Hash,proto3" json:"sha256_hash,omitempty"`
+	Size          int64                  `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
+	Pubkey        []byte                 `protobuf:"bytes,3,opt,name=pubkey,proto3" json:"pubkey,omitempty"`
+	MimeType      string                 `protobuf:"bytes,4,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
+	Extension     string                 `protobuf:"bytes,5,opt,name=extension,proto3" json:"extension,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveBlobMetadataRequest) Reset() {
+	*x = SaveBlobMetadataRequest{}
+	mi := &file_orlydb_v1_service_proto_msgTypes[74]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveBlobMetadataRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveBlobMetadataRequest) ProtoMessage() {}
+
+func (x *SaveBlobMetadataRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_orlydb_v1_service_proto_msgTypes[74]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveBlobMetadataRequest.ProtoReflect.Descriptor instead.
+func (*SaveBlobMetadataRequest) Descriptor() ([]byte, []int) {
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{74}
+}
+
+func (x *SaveBlobMetadataRequest) GetSha256Hash() []byte {
+	if x != nil {
+		return x.Sha256Hash
+	}
+	return nil
+}
+
+func (x *SaveBlobMetadataRequest) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *SaveBlobMetadataRequest) GetPubkey() []byte {
+	if x != nil {
+		return x.Pubkey
+	}
+	return nil
+}
+
+func (x *SaveBlobMetadataRequest) GetMimeType() string {
+	if x != nil {
+		return x.MimeType
+	}
+	return ""
+}
+
+func (x *SaveBlobMetadataRequest) GetExtension() string {
+	if x != nil {
+		return x.Extension
+	}
+	return ""
+}
+
 type GetBlobRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Sha256Hash    []byte                 `protobuf:"bytes,1,opt,name=sha256_hash,json=sha256Hash,proto3" json:"sha256_hash,omitempty"`
@@ -3643,7 +3719,7 @@ type GetBlobRequest struct {
 
 func (x *GetBlobRequest) Reset() {
 	*x = GetBlobRequest{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[74]
+	mi := &file_orlydb_v1_service_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3655,7 +3731,7 @@ func (x *GetBlobRequest) String() string {
 func (*GetBlobRequest) ProtoMessage() {}
 
 func (x *GetBlobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[74]
+	mi := &file_orlydb_v1_service_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3668,7 +3744,7 @@ func (x *GetBlobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBlobRequest.ProtoReflect.Descriptor instead.
 func (*GetBlobRequest) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{74}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *GetBlobRequest) GetSha256Hash() []byte {
@@ -3689,7 +3765,7 @@ type GetBlobResponse struct {
 
 func (x *GetBlobResponse) Reset() {
 	*x = GetBlobResponse{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[75]
+	mi := &file_orlydb_v1_service_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3701,7 +3777,7 @@ func (x *GetBlobResponse) String() string {
 func (*GetBlobResponse) ProtoMessage() {}
 
 func (x *GetBlobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[75]
+	mi := &file_orlydb_v1_service_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3714,7 +3790,7 @@ func (x *GetBlobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBlobResponse.ProtoReflect.Descriptor instead.
 func (*GetBlobResponse) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{75}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *GetBlobResponse) GetFound() bool {
@@ -3747,7 +3823,7 @@ type HasBlobRequest struct {
 
 func (x *HasBlobRequest) Reset() {
 	*x = HasBlobRequest{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[76]
+	mi := &file_orlydb_v1_service_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3759,7 +3835,7 @@ func (x *HasBlobRequest) String() string {
 func (*HasBlobRequest) ProtoMessage() {}
 
 func (x *HasBlobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[76]
+	mi := &file_orlydb_v1_service_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3772,7 +3848,7 @@ func (x *HasBlobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HasBlobRequest.ProtoReflect.Descriptor instead.
 func (*HasBlobRequest) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{76}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *HasBlobRequest) GetSha256Hash() []byte {
@@ -3791,7 +3867,7 @@ type HasBlobResponse struct {
 
 func (x *HasBlobResponse) Reset() {
 	*x = HasBlobResponse{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[77]
+	mi := &file_orlydb_v1_service_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3803,7 +3879,7 @@ func (x *HasBlobResponse) String() string {
 func (*HasBlobResponse) ProtoMessage() {}
 
 func (x *HasBlobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[77]
+	mi := &file_orlydb_v1_service_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3816,7 +3892,7 @@ func (x *HasBlobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HasBlobResponse.ProtoReflect.Descriptor instead.
 func (*HasBlobResponse) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{77}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *HasBlobResponse) GetExists() bool {
@@ -3836,7 +3912,7 @@ type DeleteBlobRequest struct {
 
 func (x *DeleteBlobRequest) Reset() {
 	*x = DeleteBlobRequest{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[78]
+	mi := &file_orlydb_v1_service_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3848,7 +3924,7 @@ func (x *DeleteBlobRequest) String() string {
 func (*DeleteBlobRequest) ProtoMessage() {}
 
 func (x *DeleteBlobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[78]
+	mi := &file_orlydb_v1_service_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3861,7 +3937,7 @@ func (x *DeleteBlobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteBlobRequest.ProtoReflect.Descriptor instead.
 func (*DeleteBlobRequest) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{78}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *DeleteBlobRequest) GetSha256Hash() []byte {
@@ -3889,7 +3965,7 @@ type ListBlobsRequest struct {
 
 func (x *ListBlobsRequest) Reset() {
 	*x = ListBlobsRequest{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[79]
+	mi := &file_orlydb_v1_service_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3901,7 +3977,7 @@ func (x *ListBlobsRequest) String() string {
 func (*ListBlobsRequest) ProtoMessage() {}
 
 func (x *ListBlobsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[79]
+	mi := &file_orlydb_v1_service_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3914,7 +3990,7 @@ func (x *ListBlobsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBlobsRequest.ProtoReflect.Descriptor instead.
 func (*ListBlobsRequest) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{79}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *ListBlobsRequest) GetPubkey() []byte {
@@ -3947,7 +4023,7 @@ type ListBlobsResponse struct {
 
 func (x *ListBlobsResponse) Reset() {
 	*x = ListBlobsResponse{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[80]
+	mi := &file_orlydb_v1_service_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3959,7 +4035,7 @@ func (x *ListBlobsResponse) String() string {
 func (*ListBlobsResponse) ProtoMessage() {}
 
 func (x *ListBlobsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[80]
+	mi := &file_orlydb_v1_service_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3972,7 +4048,7 @@ func (x *ListBlobsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBlobsResponse.ProtoReflect.Descriptor instead.
 func (*ListBlobsResponse) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{80}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *ListBlobsResponse) GetDescriptors() []*BlobDescriptor {
@@ -3991,7 +4067,7 @@ type GetBlobMetadataRequest struct {
 
 func (x *GetBlobMetadataRequest) Reset() {
 	*x = GetBlobMetadataRequest{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[81]
+	mi := &file_orlydb_v1_service_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4003,7 +4079,7 @@ func (x *GetBlobMetadataRequest) String() string {
 func (*GetBlobMetadataRequest) ProtoMessage() {}
 
 func (x *GetBlobMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[81]
+	mi := &file_orlydb_v1_service_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4016,7 +4092,7 @@ func (x *GetBlobMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBlobMetadataRequest.ProtoReflect.Descriptor instead.
 func (*GetBlobMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{81}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *GetBlobMetadataRequest) GetSha256Hash() []byte {
@@ -4035,7 +4111,7 @@ type GetTotalBlobStorageUsedRequest struct {
 
 func (x *GetTotalBlobStorageUsedRequest) Reset() {
 	*x = GetTotalBlobStorageUsedRequest{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[82]
+	mi := &file_orlydb_v1_service_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4047,7 +4123,7 @@ func (x *GetTotalBlobStorageUsedRequest) String() string {
 func (*GetTotalBlobStorageUsedRequest) ProtoMessage() {}
 
 func (x *GetTotalBlobStorageUsedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[82]
+	mi := &file_orlydb_v1_service_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4060,7 +4136,7 @@ func (x *GetTotalBlobStorageUsedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTotalBlobStorageUsedRequest.ProtoReflect.Descriptor instead.
 func (*GetTotalBlobStorageUsedRequest) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{82}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *GetTotalBlobStorageUsedRequest) GetPubkey() []byte {
@@ -4079,7 +4155,7 @@ type GetTotalBlobStorageUsedResponse struct {
 
 func (x *GetTotalBlobStorageUsedResponse) Reset() {
 	*x = GetTotalBlobStorageUsedResponse{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[83]
+	mi := &file_orlydb_v1_service_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4091,7 +4167,7 @@ func (x *GetTotalBlobStorageUsedResponse) String() string {
 func (*GetTotalBlobStorageUsedResponse) ProtoMessage() {}
 
 func (x *GetTotalBlobStorageUsedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[83]
+	mi := &file_orlydb_v1_service_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4104,7 +4180,7 @@ func (x *GetTotalBlobStorageUsedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTotalBlobStorageUsedResponse.ProtoReflect.Descriptor instead.
 func (*GetTotalBlobStorageUsedResponse) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{83}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *GetTotalBlobStorageUsedResponse) GetTotalMb() int64 {
@@ -4124,7 +4200,7 @@ type SaveBlobReportRequest struct {
 
 func (x *SaveBlobReportRequest) Reset() {
 	*x = SaveBlobReportRequest{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[84]
+	mi := &file_orlydb_v1_service_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4136,7 +4212,7 @@ func (x *SaveBlobReportRequest) String() string {
 func (*SaveBlobReportRequest) ProtoMessage() {}
 
 func (x *SaveBlobReportRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[84]
+	mi := &file_orlydb_v1_service_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4149,7 +4225,7 @@ func (x *SaveBlobReportRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveBlobReportRequest.ProtoReflect.Descriptor instead.
 func (*SaveBlobReportRequest) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{84}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *SaveBlobReportRequest) GetSha256Hash() []byte {
@@ -4177,7 +4253,7 @@ type UserBlobStats struct {
 
 func (x *UserBlobStats) Reset() {
 	*x = UserBlobStats{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[85]
+	mi := &file_orlydb_v1_service_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4189,7 +4265,7 @@ func (x *UserBlobStats) String() string {
 func (*UserBlobStats) ProtoMessage() {}
 
 func (x *UserBlobStats) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[85]
+	mi := &file_orlydb_v1_service_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4202,7 +4278,7 @@ func (x *UserBlobStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserBlobStats.ProtoReflect.Descriptor instead.
 func (*UserBlobStats) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{85}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *UserBlobStats) GetPubkeyHex() string {
@@ -4235,7 +4311,7 @@ type ListAllBlobUserStatsResponse struct {
 
 func (x *ListAllBlobUserStatsResponse) Reset() {
 	*x = ListAllBlobUserStatsResponse{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[86]
+	mi := &file_orlydb_v1_service_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4247,7 +4323,7 @@ func (x *ListAllBlobUserStatsResponse) String() string {
 func (*ListAllBlobUserStatsResponse) ProtoMessage() {}
 
 func (x *ListAllBlobUserStatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[86]
+	mi := &file_orlydb_v1_service_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4260,7 +4336,7 @@ func (x *ListAllBlobUserStatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAllBlobUserStatsResponse.ProtoReflect.Descriptor instead.
 func (*ListAllBlobUserStatsResponse) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{86}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *ListAllBlobUserStatsResponse) GetStats() []*UserBlobStats {
@@ -4279,7 +4355,7 @@ type ReconcileBlobMetadataResponse struct {
 
 func (x *ReconcileBlobMetadataResponse) Reset() {
 	*x = ReconcileBlobMetadataResponse{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[87]
+	mi := &file_orlydb_v1_service_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4291,7 +4367,7 @@ func (x *ReconcileBlobMetadataResponse) String() string {
 func (*ReconcileBlobMetadataResponse) ProtoMessage() {}
 
 func (x *ReconcileBlobMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[87]
+	mi := &file_orlydb_v1_service_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4304,7 +4380,7 @@ func (x *ReconcileBlobMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReconcileBlobMetadataResponse.ProtoReflect.Descriptor instead.
 func (*ReconcileBlobMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{87}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *ReconcileBlobMetadataResponse) GetReconciled() int32 {
@@ -4324,7 +4400,7 @@ type GetThumbnailRequest struct {
 
 func (x *GetThumbnailRequest) Reset() {
 	*x = GetThumbnailRequest{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[88]
+	mi := &file_orlydb_v1_service_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4336,7 +4412,7 @@ func (x *GetThumbnailRequest) String() string {
 func (*GetThumbnailRequest) ProtoMessage() {}
 
 func (x *GetThumbnailRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[88]
+	mi := &file_orlydb_v1_service_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4349,7 +4425,7 @@ func (x *GetThumbnailRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetThumbnailRequest.ProtoReflect.Descriptor instead.
 func (*GetThumbnailRequest) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{88}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *GetThumbnailRequest) GetKey() string {
@@ -4369,7 +4445,7 @@ type GetThumbnailResponse struct {
 
 func (x *GetThumbnailResponse) Reset() {
 	*x = GetThumbnailResponse{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[89]
+	mi := &file_orlydb_v1_service_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4381,7 +4457,7 @@ func (x *GetThumbnailResponse) String() string {
 func (*GetThumbnailResponse) ProtoMessage() {}
 
 func (x *GetThumbnailResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[89]
+	mi := &file_orlydb_v1_service_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4394,7 +4470,7 @@ func (x *GetThumbnailResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetThumbnailResponse.ProtoReflect.Descriptor instead.
 func (*GetThumbnailResponse) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{89}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *GetThumbnailResponse) GetFound() bool {
@@ -4421,7 +4497,7 @@ type SaveThumbnailRequest struct {
 
 func (x *SaveThumbnailRequest) Reset() {
 	*x = SaveThumbnailRequest{}
-	mi := &file_orlydb_v1_service_proto_msgTypes[90]
+	mi := &file_orlydb_v1_service_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4433,7 +4509,7 @@ func (x *SaveThumbnailRequest) String() string {
 func (*SaveThumbnailRequest) ProtoMessage() {}
 
 func (x *SaveThumbnailRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_orlydb_v1_service_proto_msgTypes[90]
+	mi := &file_orlydb_v1_service_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4446,7 +4522,7 @@ func (x *SaveThumbnailRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveThumbnailRequest.ProtoReflect.Descriptor instead.
 func (*SaveThumbnailRequest) Descriptor() ([]byte, []int) {
-	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{90}
+	return file_orlydb_v1_service_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *SaveThumbnailRequest) GetKey() string {
@@ -4669,6 +4745,13 @@ const file_orlydb_v1_service_proto_rawDesc = "" +
 	"\x04data\x18\x02 \x01(\fR\x04data\x12\x16\n" +
 	"\x06pubkey\x18\x03 \x01(\fR\x06pubkey\x12\x1b\n" +
 	"\tmime_type\x18\x04 \x01(\tR\bmimeType\x12\x1c\n" +
+	"\textension\x18\x05 \x01(\tR\textension\"\xa1\x01\n" +
+	"\x17SaveBlobMetadataRequest\x12\x1f\n" +
+	"\vsha256_hash\x18\x01 \x01(\fR\n" +
+	"sha256Hash\x12\x12\n" +
+	"\x04size\x18\x02 \x01(\x03R\x04size\x12\x16\n" +
+	"\x06pubkey\x18\x03 \x01(\fR\x06pubkey\x12\x1b\n" +
+	"\tmime_type\x18\x04 \x01(\tR\bmimeType\x12\x1c\n" +
 	"\textension\x18\x05 \x01(\tR\textension\"1\n" +
 	"\x0eGetBlobRequest\x12\x1f\n" +
 	"\vsha256_hash\x18\x01 \x01(\fR\n" +
@@ -4723,7 +4806,7 @@ const file_orlydb_v1_service_proto_rawDesc = "" +
 	"\x04data\x18\x02 \x01(\fR\x04data\"<\n" +
 	"\x14SaveThumbnailRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
-	"\x04data\x18\x02 \x01(\fR\x04data2\xb2.\n" +
+	"\x04data\x18\x02 \x01(\fR\x04data2\xfc.\n" +
 	"\x0fDatabaseService\x124\n" +
 	"\aGetPath\x12\x10.orlydb.v1.Empty\x1a\x17.orlydb.v1.PathResponse\x12*\n" +
 	"\x04Sync\x12\x10.orlydb.v1.Empty\x1a\x10.orlydb.v1.Empty\x123\n" +
@@ -4786,7 +4869,8 @@ const file_orlydb_v1_service_proto_rawDesc = "" +
 	"\x11RecordEventAccess\x12#.orlydb.v1.RecordEventAccessRequest\x1a\x10.orlydb.v1.Empty\x12a\n" +
 	"\x12GetEventAccessInfo\x12$.orlydb.v1.GetEventAccessInfoRequest\x1a%.orlydb.v1.GetEventAccessInfoResponse\x12Y\n" +
 	"\x16GetLeastAccessedEvents\x12(.orlydb.v1.GetLeastAccessedEventsRequest\x1a\x15.orlydb.v1.SerialList\x128\n" +
-	"\bSaveBlob\x12\x1a.orlydb.v1.SaveBlobRequest\x1a\x10.orlydb.v1.Empty\x12@\n" +
+	"\bSaveBlob\x12\x1a.orlydb.v1.SaveBlobRequest\x1a\x10.orlydb.v1.Empty\x12H\n" +
+	"\x10SaveBlobMetadata\x12\".orlydb.v1.SaveBlobMetadataRequest\x1a\x10.orlydb.v1.Empty\x12@\n" +
 	"\aGetBlob\x12\x19.orlydb.v1.GetBlobRequest\x1a\x1a.orlydb.v1.GetBlobResponse\x12@\n" +
 	"\aHasBlob\x12\x19.orlydb.v1.HasBlobRequest\x1a\x1a.orlydb.v1.HasBlobResponse\x12<\n" +
 	"\n" +
@@ -4815,7 +4899,7 @@ func file_orlydb_v1_service_proto_rawDescGZIP() []byte {
 	return file_orlydb_v1_service_proto_rawDescData
 }
 
-var file_orlydb_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 91)
+var file_orlydb_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 92)
 var file_orlydb_v1_service_proto_goTypes = []any{
 	(*PathResponse)(nil),                       // 0: orlydb.v1.PathResponse
 	(*ReadyResponse)(nil),                      // 1: orlydb.v1.ReadyResponse
@@ -4891,61 +4975,62 @@ var file_orlydb_v1_service_proto_goTypes = []any{
 	(*BlobMetadata)(nil),                       // 71: orlydb.v1.BlobMetadata
 	(*BlobDescriptor)(nil),                     // 72: orlydb.v1.BlobDescriptor
 	(*SaveBlobRequest)(nil),                    // 73: orlydb.v1.SaveBlobRequest
-	(*GetBlobRequest)(nil),                     // 74: orlydb.v1.GetBlobRequest
-	(*GetBlobResponse)(nil),                    // 75: orlydb.v1.GetBlobResponse
-	(*HasBlobRequest)(nil),                     // 76: orlydb.v1.HasBlobRequest
-	(*HasBlobResponse)(nil),                    // 77: orlydb.v1.HasBlobResponse
-	(*DeleteBlobRequest)(nil),                  // 78: orlydb.v1.DeleteBlobRequest
-	(*ListBlobsRequest)(nil),                   // 79: orlydb.v1.ListBlobsRequest
-	(*ListBlobsResponse)(nil),                  // 80: orlydb.v1.ListBlobsResponse
-	(*GetBlobMetadataRequest)(nil),             // 81: orlydb.v1.GetBlobMetadataRequest
-	(*GetTotalBlobStorageUsedRequest)(nil),     // 82: orlydb.v1.GetTotalBlobStorageUsedRequest
-	(*GetTotalBlobStorageUsedResponse)(nil),    // 83: orlydb.v1.GetTotalBlobStorageUsedResponse
-	(*SaveBlobReportRequest)(nil),              // 84: orlydb.v1.SaveBlobReportRequest
-	(*UserBlobStats)(nil),                      // 85: orlydb.v1.UserBlobStats
-	(*ListAllBlobUserStatsResponse)(nil),       // 86: orlydb.v1.ListAllBlobUserStatsResponse
-	(*ReconcileBlobMetadataResponse)(nil),      // 87: orlydb.v1.ReconcileBlobMetadataResponse
-	(*GetThumbnailRequest)(nil),                // 88: orlydb.v1.GetThumbnailRequest
-	(*GetThumbnailResponse)(nil),               // 89: orlydb.v1.GetThumbnailResponse
-	(*SaveThumbnailRequest)(nil),               // 90: orlydb.v1.SaveThumbnailRequest
-	(*Event)(nil),                              // 91: orlydb.v1.Event
-	(*Filter)(nil),                             // 92: orlydb.v1.Filter
-	(*Range)(nil),                              // 93: orlydb.v1.Range
-	(*Empty)(nil),                              // 94: orlydb.v1.Empty
-	(*SerialList)(nil),                         // 95: orlydb.v1.SerialList
-	(*EventBatch)(nil),                         // 96: orlydb.v1.EventBatch
-	(*IdPkTsList)(nil),                         // 97: orlydb.v1.IdPkTsList
-	(*EventMap)(nil),                           // 98: orlydb.v1.EventMap
-	(*SerialMap)(nil),                          // 99: orlydb.v1.SerialMap
-	(*IdPkTs)(nil),                             // 100: orlydb.v1.IdPkTs
-	(*Subscription)(nil),                       // 101: orlydb.v1.Subscription
-	(*PaymentList)(nil),                        // 102: orlydb.v1.PaymentList
-	(*NIP43Membership)(nil),                    // 103: orlydb.v1.NIP43Membership
-	(*PubkeyList)(nil),                         // 104: orlydb.v1.PubkeyList
+	(*SaveBlobMetadataRequest)(nil),            // 74: orlydb.v1.SaveBlobMetadataRequest
+	(*GetBlobRequest)(nil),                     // 75: orlydb.v1.GetBlobRequest
+	(*GetBlobResponse)(nil),                    // 76: orlydb.v1.GetBlobResponse
+	(*HasBlobRequest)(nil),                     // 77: orlydb.v1.HasBlobRequest
+	(*HasBlobResponse)(nil),                    // 78: orlydb.v1.HasBlobResponse
+	(*DeleteBlobRequest)(nil),                  // 79: orlydb.v1.DeleteBlobRequest
+	(*ListBlobsRequest)(nil),                   // 80: orlydb.v1.ListBlobsRequest
+	(*ListBlobsResponse)(nil),                  // 81: orlydb.v1.ListBlobsResponse
+	(*GetBlobMetadataRequest)(nil),             // 82: orlydb.v1.GetBlobMetadataRequest
+	(*GetTotalBlobStorageUsedRequest)(nil),     // 83: orlydb.v1.GetTotalBlobStorageUsedRequest
+	(*GetTotalBlobStorageUsedResponse)(nil),    // 84: orlydb.v1.GetTotalBlobStorageUsedResponse
+	(*SaveBlobReportRequest)(nil),              // 85: orlydb.v1.SaveBlobReportRequest
+	(*UserBlobStats)(nil),                      // 86: orlydb.v1.UserBlobStats
+	(*ListAllBlobUserStatsResponse)(nil),       // 87: orlydb.v1.ListAllBlobUserStatsResponse
+	(*ReconcileBlobMetadataResponse)(nil),      // 88: orlydb.v1.ReconcileBlobMetadataResponse
+	(*GetThumbnailRequest)(nil),                // 89: orlydb.v1.GetThumbnailRequest
+	(*GetThumbnailResponse)(nil),               // 90: orlydb.v1.GetThumbnailResponse
+	(*SaveThumbnailRequest)(nil),               // 91: orlydb.v1.SaveThumbnailRequest
+	(*Event)(nil),                              // 92: orlydb.v1.Event
+	(*Filter)(nil),                             // 93: orlydb.v1.Filter
+	(*Range)(nil),                              // 94: orlydb.v1.Range
+	(*Empty)(nil),                              // 95: orlydb.v1.Empty
+	(*SerialList)(nil),                         // 96: orlydb.v1.SerialList
+	(*EventBatch)(nil),                         // 97: orlydb.v1.EventBatch
+	(*IdPkTsList)(nil),                         // 98: orlydb.v1.IdPkTsList
+	(*EventMap)(nil),                           // 99: orlydb.v1.EventMap
+	(*SerialMap)(nil),                          // 100: orlydb.v1.SerialMap
+	(*IdPkTs)(nil),                             // 101: orlydb.v1.IdPkTs
+	(*Subscription)(nil),                       // 102: orlydb.v1.Subscription
+	(*PaymentList)(nil),                        // 103: orlydb.v1.PaymentList
+	(*NIP43Membership)(nil),                    // 104: orlydb.v1.NIP43Membership
+	(*PubkeyList)(nil),                         // 105: orlydb.v1.PubkeyList
 }
 var file_orlydb_v1_service_proto_depIdxs = []int32{
-	91,  // 0: orlydb.v1.SaveEventRequest.event:type_name -> orlydb.v1.Event
-	92,  // 1: orlydb.v1.GetSerialsFromFilterRequest.filter:type_name -> orlydb.v1.Filter
-	91,  // 2: orlydb.v1.WouldReplaceEventRequest.event:type_name -> orlydb.v1.Event
-	92,  // 3: orlydb.v1.QueryEventsRequest.filter:type_name -> orlydb.v1.Filter
-	92,  // 4: orlydb.v1.QueryEventsWithOptionsRequest.filter:type_name -> orlydb.v1.Filter
-	91,  // 5: orlydb.v1.FetchEventBySerialResponse.event:type_name -> orlydb.v1.Event
-	93,  // 6: orlydb.v1.GetSerialsByRangeRequest.range:type_name -> orlydb.v1.Range
-	91,  // 7: orlydb.v1.DeleteEventBySerialRequest.event:type_name -> orlydb.v1.Event
-	91,  // 8: orlydb.v1.ProcessDeleteRequest.event:type_name -> orlydb.v1.Event
-	91,  // 9: orlydb.v1.CheckForDeletedRequest.event:type_name -> orlydb.v1.Event
-	92,  // 10: orlydb.v1.GetCachedJSONRequest.filter:type_name -> orlydb.v1.Filter
-	92,  // 11: orlydb.v1.CacheMarshaledJSONRequest.filter:type_name -> orlydb.v1.Filter
-	92,  // 12: orlydb.v1.GetCachedEventsRequest.filter:type_name -> orlydb.v1.Filter
-	91,  // 13: orlydb.v1.GetCachedEventsResponse.events:type_name -> orlydb.v1.Event
-	92,  // 14: orlydb.v1.CacheEventsRequest.filter:type_name -> orlydb.v1.Filter
-	91,  // 15: orlydb.v1.CacheEventsRequest.events:type_name -> orlydb.v1.Event
+	92,  // 0: orlydb.v1.SaveEventRequest.event:type_name -> orlydb.v1.Event
+	93,  // 1: orlydb.v1.GetSerialsFromFilterRequest.filter:type_name -> orlydb.v1.Filter
+	92,  // 2: orlydb.v1.WouldReplaceEventRequest.event:type_name -> orlydb.v1.Event
+	93,  // 3: orlydb.v1.QueryEventsRequest.filter:type_name -> orlydb.v1.Filter
+	93,  // 4: orlydb.v1.QueryEventsWithOptionsRequest.filter:type_name -> orlydb.v1.Filter
+	92,  // 5: orlydb.v1.FetchEventBySerialResponse.event:type_name -> orlydb.v1.Event
+	94,  // 6: orlydb.v1.GetSerialsByRangeRequest.range:type_name -> orlydb.v1.Range
+	92,  // 7: orlydb.v1.DeleteEventBySerialRequest.event:type_name -> orlydb.v1.Event
+	92,  // 8: orlydb.v1.ProcessDeleteRequest.event:type_name -> orlydb.v1.Event
+	92,  // 9: orlydb.v1.CheckForDeletedRequest.event:type_name -> orlydb.v1.Event
+	93,  // 10: orlydb.v1.GetCachedJSONRequest.filter:type_name -> orlydb.v1.Filter
+	93,  // 11: orlydb.v1.CacheMarshaledJSONRequest.filter:type_name -> orlydb.v1.Filter
+	93,  // 12: orlydb.v1.GetCachedEventsRequest.filter:type_name -> orlydb.v1.Filter
+	92,  // 13: orlydb.v1.GetCachedEventsResponse.events:type_name -> orlydb.v1.Event
+	93,  // 14: orlydb.v1.CacheEventsRequest.filter:type_name -> orlydb.v1.Filter
+	92,  // 15: orlydb.v1.CacheEventsRequest.events:type_name -> orlydb.v1.Event
 	71,  // 16: orlydb.v1.GetBlobResponse.metadata:type_name -> orlydb.v1.BlobMetadata
 	72,  // 17: orlydb.v1.ListBlobsResponse.descriptors:type_name -> orlydb.v1.BlobDescriptor
-	85,  // 18: orlydb.v1.ListAllBlobUserStatsResponse.stats:type_name -> orlydb.v1.UserBlobStats
-	94,  // 19: orlydb.v1.DatabaseService.GetPath:input_type -> orlydb.v1.Empty
-	94,  // 20: orlydb.v1.DatabaseService.Sync:input_type -> orlydb.v1.Empty
-	94,  // 21: orlydb.v1.DatabaseService.Ready:input_type -> orlydb.v1.Empty
+	86,  // 18: orlydb.v1.ListAllBlobUserStatsResponse.stats:type_name -> orlydb.v1.UserBlobStats
+	95,  // 19: orlydb.v1.DatabaseService.GetPath:input_type -> orlydb.v1.Empty
+	95,  // 20: orlydb.v1.DatabaseService.Sync:input_type -> orlydb.v1.Empty
+	95,  // 21: orlydb.v1.DatabaseService.Ready:input_type -> orlydb.v1.Empty
 	2,   // 22: orlydb.v1.DatabaseService.SetLogLevel:input_type -> orlydb.v1.SetLogLevelRequest
 	3,   // 23: orlydb.v1.DatabaseService.SaveEvent:input_type -> orlydb.v1.SaveEventRequest
 	5,   // 24: orlydb.v1.DatabaseService.GetSerialsFromFilter:input_type -> orlydb.v1.GetSerialsFromFilterRequest
@@ -4966,15 +5051,15 @@ var file_orlydb_v1_service_proto_depIdxs = []int32{
 	20,  // 39: orlydb.v1.DatabaseService.GetFullIdPubkeyBySerials:input_type -> orlydb.v1.GetFullIdPubkeyBySerialsRequest
 	21,  // 40: orlydb.v1.DatabaseService.DeleteEvent:input_type -> orlydb.v1.DeleteEventRequest
 	22,  // 41: orlydb.v1.DatabaseService.DeleteEventBySerial:input_type -> orlydb.v1.DeleteEventBySerialRequest
-	94,  // 42: orlydb.v1.DatabaseService.DeleteExpired:input_type -> orlydb.v1.Empty
+	95,  // 42: orlydb.v1.DatabaseService.DeleteExpired:input_type -> orlydb.v1.Empty
 	23,  // 43: orlydb.v1.DatabaseService.ProcessDelete:input_type -> orlydb.v1.ProcessDeleteRequest
 	24,  // 44: orlydb.v1.DatabaseService.CheckForDeleted:input_type -> orlydb.v1.CheckForDeletedRequest
 	25,  // 45: orlydb.v1.DatabaseService.Import:input_type -> orlydb.v1.ImportChunk
 	27,  // 46: orlydb.v1.DatabaseService.Export:input_type -> orlydb.v1.ExportRequest
 	29,  // 47: orlydb.v1.DatabaseService.ImportEventsFromStrings:input_type -> orlydb.v1.ImportEventsFromStringsRequest
-	94,  // 48: orlydb.v1.DatabaseService.GetRelayIdentitySecret:input_type -> orlydb.v1.Empty
+	95,  // 48: orlydb.v1.DatabaseService.GetRelayIdentitySecret:input_type -> orlydb.v1.Empty
 	31,  // 49: orlydb.v1.DatabaseService.SetRelayIdentitySecret:input_type -> orlydb.v1.SetRelayIdentitySecretRequest
-	94,  // 50: orlydb.v1.DatabaseService.GetOrCreateRelayIdentitySecret:input_type -> orlydb.v1.Empty
+	95,  // 50: orlydb.v1.DatabaseService.GetOrCreateRelayIdentitySecret:input_type -> orlydb.v1.Empty
 	32,  // 51: orlydb.v1.DatabaseService.SetMarker:input_type -> orlydb.v1.SetMarkerRequest
 	33,  // 52: orlydb.v1.DatabaseService.GetMarker:input_type -> orlydb.v1.GetMarkerRequest
 	35,  // 53: orlydb.v1.DatabaseService.HasMarker:input_type -> orlydb.v1.HasMarkerRequest
@@ -4991,7 +5076,7 @@ var file_orlydb_v1_service_proto_depIdxs = []int32{
 	50,  // 64: orlydb.v1.DatabaseService.RemoveNIP43Member:input_type -> orlydb.v1.RemoveNIP43MemberRequest
 	51,  // 65: orlydb.v1.DatabaseService.IsNIP43Member:input_type -> orlydb.v1.IsNIP43MemberRequest
 	53,  // 66: orlydb.v1.DatabaseService.GetNIP43Membership:input_type -> orlydb.v1.GetNIP43MembershipRequest
-	94,  // 67: orlydb.v1.DatabaseService.GetAllNIP43Members:input_type -> orlydb.v1.Empty
+	95,  // 67: orlydb.v1.DatabaseService.GetAllNIP43Members:input_type -> orlydb.v1.Empty
 	54,  // 68: orlydb.v1.DatabaseService.StoreInviteCode:input_type -> orlydb.v1.StoreInviteCodeRequest
 	55,  // 69: orlydb.v1.DatabaseService.ValidateInviteCode:input_type -> orlydb.v1.ValidateInviteCodeRequest
 	57,  // 70: orlydb.v1.DatabaseService.DeleteInviteCode:input_type -> orlydb.v1.DeleteInviteCodeRequest
@@ -5000,103 +5085,105 @@ var file_orlydb_v1_service_proto_depIdxs = []int32{
 	61,  // 73: orlydb.v1.DatabaseService.CacheMarshaledJSON:input_type -> orlydb.v1.CacheMarshaledJSONRequest
 	62,  // 74: orlydb.v1.DatabaseService.GetCachedEvents:input_type -> orlydb.v1.GetCachedEventsRequest
 	64,  // 75: orlydb.v1.DatabaseService.CacheEvents:input_type -> orlydb.v1.CacheEventsRequest
-	94,  // 76: orlydb.v1.DatabaseService.InvalidateQueryCache:input_type -> orlydb.v1.Empty
+	95,  // 76: orlydb.v1.DatabaseService.InvalidateQueryCache:input_type -> orlydb.v1.Empty
 	65,  // 77: orlydb.v1.DatabaseService.RecordEventAccess:input_type -> orlydb.v1.RecordEventAccessRequest
 	66,  // 78: orlydb.v1.DatabaseService.GetEventAccessInfo:input_type -> orlydb.v1.GetEventAccessInfoRequest
 	68,  // 79: orlydb.v1.DatabaseService.GetLeastAccessedEvents:input_type -> orlydb.v1.GetLeastAccessedEventsRequest
 	73,  // 80: orlydb.v1.DatabaseService.SaveBlob:input_type -> orlydb.v1.SaveBlobRequest
-	74,  // 81: orlydb.v1.DatabaseService.GetBlob:input_type -> orlydb.v1.GetBlobRequest
-	76,  // 82: orlydb.v1.DatabaseService.HasBlob:input_type -> orlydb.v1.HasBlobRequest
-	78,  // 83: orlydb.v1.DatabaseService.DeleteBlob:input_type -> orlydb.v1.DeleteBlobRequest
-	79,  // 84: orlydb.v1.DatabaseService.ListBlobs:input_type -> orlydb.v1.ListBlobsRequest
-	81,  // 85: orlydb.v1.DatabaseService.GetBlobMetadata:input_type -> orlydb.v1.GetBlobMetadataRequest
-	82,  // 86: orlydb.v1.DatabaseService.GetTotalBlobStorageUsed:input_type -> orlydb.v1.GetTotalBlobStorageUsedRequest
-	84,  // 87: orlydb.v1.DatabaseService.SaveBlobReport:input_type -> orlydb.v1.SaveBlobReportRequest
-	94,  // 88: orlydb.v1.DatabaseService.ListAllBlobUserStats:input_type -> orlydb.v1.Empty
-	94,  // 89: orlydb.v1.DatabaseService.ReconcileBlobMetadata:input_type -> orlydb.v1.Empty
-	94,  // 90: orlydb.v1.DatabaseService.ListAllBlobs:input_type -> orlydb.v1.Empty
-	88,  // 91: orlydb.v1.DatabaseService.GetThumbnail:input_type -> orlydb.v1.GetThumbnailRequest
-	90,  // 92: orlydb.v1.DatabaseService.SaveThumbnail:input_type -> orlydb.v1.SaveThumbnailRequest
-	69,  // 93: orlydb.v1.DatabaseService.EventIdsBySerial:input_type -> orlydb.v1.EventIdsBySerialRequest
-	94,  // 94: orlydb.v1.DatabaseService.RunMigrations:input_type -> orlydb.v1.Empty
-	0,   // 95: orlydb.v1.DatabaseService.GetPath:output_type -> orlydb.v1.PathResponse
-	94,  // 96: orlydb.v1.DatabaseService.Sync:output_type -> orlydb.v1.Empty
-	1,   // 97: orlydb.v1.DatabaseService.Ready:output_type -> orlydb.v1.ReadyResponse
-	94,  // 98: orlydb.v1.DatabaseService.SetLogLevel:output_type -> orlydb.v1.Empty
-	4,   // 99: orlydb.v1.DatabaseService.SaveEvent:output_type -> orlydb.v1.SaveEventResponse
-	95,  // 100: orlydb.v1.DatabaseService.GetSerialsFromFilter:output_type -> orlydb.v1.SerialList
-	7,   // 101: orlydb.v1.DatabaseService.WouldReplaceEvent:output_type -> orlydb.v1.WouldReplaceEventResponse
-	96,  // 102: orlydb.v1.DatabaseService.QueryEvents:output_type -> orlydb.v1.EventBatch
-	96,  // 103: orlydb.v1.DatabaseService.QueryAllVersions:output_type -> orlydb.v1.EventBatch
-	96,  // 104: orlydb.v1.DatabaseService.QueryEventsWithOptions:output_type -> orlydb.v1.EventBatch
-	96,  // 105: orlydb.v1.DatabaseService.QueryDeleteEventsByTargetId:output_type -> orlydb.v1.EventBatch
-	95,  // 106: orlydb.v1.DatabaseService.QueryForSerials:output_type -> orlydb.v1.SerialList
-	97,  // 107: orlydb.v1.DatabaseService.QueryForIds:output_type -> orlydb.v1.IdPkTsList
-	11,  // 108: orlydb.v1.DatabaseService.CountEvents:output_type -> orlydb.v1.CountEventsResponse
-	13,  // 109: orlydb.v1.DatabaseService.FetchEventBySerial:output_type -> orlydb.v1.FetchEventBySerialResponse
-	98,  // 110: orlydb.v1.DatabaseService.FetchEventsBySerials:output_type -> orlydb.v1.EventMap
-	16,  // 111: orlydb.v1.DatabaseService.GetSerialById:output_type -> orlydb.v1.GetSerialByIdResponse
-	99,  // 112: orlydb.v1.DatabaseService.GetSerialsByIds:output_type -> orlydb.v1.SerialMap
-	95,  // 113: orlydb.v1.DatabaseService.GetSerialsByRange:output_type -> orlydb.v1.SerialList
-	100, // 114: orlydb.v1.DatabaseService.GetFullIdPubkeyBySerial:output_type -> orlydb.v1.IdPkTs
-	97,  // 115: orlydb.v1.DatabaseService.GetFullIdPubkeyBySerials:output_type -> orlydb.v1.IdPkTsList
-	94,  // 116: orlydb.v1.DatabaseService.DeleteEvent:output_type -> orlydb.v1.Empty
-	94,  // 117: orlydb.v1.DatabaseService.DeleteEventBySerial:output_type -> orlydb.v1.Empty
-	94,  // 118: orlydb.v1.DatabaseService.DeleteExpired:output_type -> orlydb.v1.Empty
-	94,  // 119: orlydb.v1.DatabaseService.ProcessDelete:output_type -> orlydb.v1.Empty
-	94,  // 120: orlydb.v1.DatabaseService.CheckForDeleted:output_type -> orlydb.v1.Empty
-	26,  // 121: orlydb.v1.DatabaseService.Import:output_type -> orlydb.v1.ImportResponse
-	28,  // 122: orlydb.v1.DatabaseService.Export:output_type -> orlydb.v1.ExportChunk
-	26,  // 123: orlydb.v1.DatabaseService.ImportEventsFromStrings:output_type -> orlydb.v1.ImportResponse
-	30,  // 124: orlydb.v1.DatabaseService.GetRelayIdentitySecret:output_type -> orlydb.v1.GetRelayIdentitySecretResponse
-	94,  // 125: orlydb.v1.DatabaseService.SetRelayIdentitySecret:output_type -> orlydb.v1.Empty
-	30,  // 126: orlydb.v1.DatabaseService.GetOrCreateRelayIdentitySecret:output_type -> orlydb.v1.GetRelayIdentitySecretResponse
-	94,  // 127: orlydb.v1.DatabaseService.SetMarker:output_type -> orlydb.v1.Empty
-	34,  // 128: orlydb.v1.DatabaseService.GetMarker:output_type -> orlydb.v1.GetMarkerResponse
-	36,  // 129: orlydb.v1.DatabaseService.HasMarker:output_type -> orlydb.v1.HasMarkerResponse
-	94,  // 130: orlydb.v1.DatabaseService.DeleteMarker:output_type -> orlydb.v1.Empty
-	101, // 131: orlydb.v1.DatabaseService.GetSubscription:output_type -> orlydb.v1.Subscription
-	40,  // 132: orlydb.v1.DatabaseService.IsSubscriptionActive:output_type -> orlydb.v1.IsSubscriptionActiveResponse
-	94,  // 133: orlydb.v1.DatabaseService.ExtendSubscription:output_type -> orlydb.v1.Empty
-	94,  // 134: orlydb.v1.DatabaseService.RecordPayment:output_type -> orlydb.v1.Empty
-	102, // 135: orlydb.v1.DatabaseService.GetPaymentHistory:output_type -> orlydb.v1.PaymentList
-	94,  // 136: orlydb.v1.DatabaseService.ExtendBlossomSubscription:output_type -> orlydb.v1.Empty
-	46,  // 137: orlydb.v1.DatabaseService.GetBlossomStorageQuota:output_type -> orlydb.v1.GetBlossomStorageQuotaResponse
-	48,  // 138: orlydb.v1.DatabaseService.IsFirstTimeUser:output_type -> orlydb.v1.IsFirstTimeUserResponse
-	94,  // 139: orlydb.v1.DatabaseService.AddNIP43Member:output_type -> orlydb.v1.Empty
-	94,  // 140: orlydb.v1.DatabaseService.RemoveNIP43Member:output_type -> orlydb.v1.Empty
-	52,  // 141: orlydb.v1.DatabaseService.IsNIP43Member:output_type -> orlydb.v1.IsNIP43MemberResponse
-	103, // 142: orlydb.v1.DatabaseService.GetNIP43Membership:output_type -> orlydb.v1.NIP43Membership
-	104, // 143: orlydb.v1.DatabaseService.GetAllNIP43Members:output_type -> orlydb.v1.PubkeyList
-	94,  // 144: orlydb.v1.DatabaseService.StoreInviteCode:output_type -> orlydb.v1.Empty
-	56,  // 145: orlydb.v1.DatabaseService.ValidateInviteCode:output_type -> orlydb.v1.ValidateInviteCodeResponse
-	94,  // 146: orlydb.v1.DatabaseService.DeleteInviteCode:output_type -> orlydb.v1.Empty
-	94,  // 147: orlydb.v1.DatabaseService.PublishNIP43MembershipEvent:output_type -> orlydb.v1.Empty
-	60,  // 148: orlydb.v1.DatabaseService.GetCachedJSON:output_type -> orlydb.v1.GetCachedJSONResponse
-	94,  // 149: orlydb.v1.DatabaseService.CacheMarshaledJSON:output_type -> orlydb.v1.Empty
-	63,  // 150: orlydb.v1.DatabaseService.GetCachedEvents:output_type -> orlydb.v1.GetCachedEventsResponse
-	94,  // 151: orlydb.v1.DatabaseService.CacheEvents:output_type -> orlydb.v1.Empty
-	94,  // 152: orlydb.v1.DatabaseService.InvalidateQueryCache:output_type -> orlydb.v1.Empty
-	94,  // 153: orlydb.v1.DatabaseService.RecordEventAccess:output_type -> orlydb.v1.Empty
-	67,  // 154: orlydb.v1.DatabaseService.GetEventAccessInfo:output_type -> orlydb.v1.GetEventAccessInfoResponse
-	95,  // 155: orlydb.v1.DatabaseService.GetLeastAccessedEvents:output_type -> orlydb.v1.SerialList
-	94,  // 156: orlydb.v1.DatabaseService.SaveBlob:output_type -> orlydb.v1.Empty
-	75,  // 157: orlydb.v1.DatabaseService.GetBlob:output_type -> orlydb.v1.GetBlobResponse
-	77,  // 158: orlydb.v1.DatabaseService.HasBlob:output_type -> orlydb.v1.HasBlobResponse
-	94,  // 159: orlydb.v1.DatabaseService.DeleteBlob:output_type -> orlydb.v1.Empty
-	80,  // 160: orlydb.v1.DatabaseService.ListBlobs:output_type -> orlydb.v1.ListBlobsResponse
-	71,  // 161: orlydb.v1.DatabaseService.GetBlobMetadata:output_type -> orlydb.v1.BlobMetadata
-	83,  // 162: orlydb.v1.DatabaseService.GetTotalBlobStorageUsed:output_type -> orlydb.v1.GetTotalBlobStorageUsedResponse
-	94,  // 163: orlydb.v1.DatabaseService.SaveBlobReport:output_type -> orlydb.v1.Empty
-	86,  // 164: orlydb.v1.DatabaseService.ListAllBlobUserStats:output_type -> orlydb.v1.ListAllBlobUserStatsResponse
-	87,  // 165: orlydb.v1.DatabaseService.ReconcileBlobMetadata:output_type -> orlydb.v1.ReconcileBlobMetadataResponse
-	80,  // 166: orlydb.v1.DatabaseService.ListAllBlobs:output_type -> orlydb.v1.ListBlobsResponse
-	89,  // 167: orlydb.v1.DatabaseService.GetThumbnail:output_type -> orlydb.v1.GetThumbnailResponse
-	94,  // 168: orlydb.v1.DatabaseService.SaveThumbnail:output_type -> orlydb.v1.Empty
-	70,  // 169: orlydb.v1.DatabaseService.EventIdsBySerial:output_type -> orlydb.v1.EventIdsBySerialResponse
-	94,  // 170: orlydb.v1.DatabaseService.RunMigrations:output_type -> orlydb.v1.Empty
-	95,  // [95:171] is the sub-list for method output_type
-	19,  // [19:95] is the sub-list for method input_type
+	74,  // 81: orlydb.v1.DatabaseService.SaveBlobMetadata:input_type -> orlydb.v1.SaveBlobMetadataRequest
+	75,  // 82: orlydb.v1.DatabaseService.GetBlob:input_type -> orlydb.v1.GetBlobRequest
+	77,  // 83: orlydb.v1.DatabaseService.HasBlob:input_type -> orlydb.v1.HasBlobRequest
+	79,  // 84: orlydb.v1.DatabaseService.DeleteBlob:input_type -> orlydb.v1.DeleteBlobRequest
+	80,  // 85: orlydb.v1.DatabaseService.ListBlobs:input_type -> orlydb.v1.ListBlobsRequest
+	82,  // 86: orlydb.v1.DatabaseService.GetBlobMetadata:input_type -> orlydb.v1.GetBlobMetadataRequest
+	83,  // 87: orlydb.v1.DatabaseService.GetTotalBlobStorageUsed:input_type -> orlydb.v1.GetTotalBlobStorageUsedRequest
+	85,  // 88: orlydb.v1.DatabaseService.SaveBlobReport:input_type -> orlydb.v1.SaveBlobReportRequest
+	95,  // 89: orlydb.v1.DatabaseService.ListAllBlobUserStats:input_type -> orlydb.v1.Empty
+	95,  // 90: orlydb.v1.DatabaseService.ReconcileBlobMetadata:input_type -> orlydb.v1.Empty
+	95,  // 91: orlydb.v1.DatabaseService.ListAllBlobs:input_type -> orlydb.v1.Empty
+	89,  // 92: orlydb.v1.DatabaseService.GetThumbnail:input_type -> orlydb.v1.GetThumbnailRequest
+	91,  // 93: orlydb.v1.DatabaseService.SaveThumbnail:input_type -> orlydb.v1.SaveThumbnailRequest
+	69,  // 94: orlydb.v1.DatabaseService.EventIdsBySerial:input_type -> orlydb.v1.EventIdsBySerialRequest
+	95,  // 95: orlydb.v1.DatabaseService.RunMigrations:input_type -> orlydb.v1.Empty
+	0,   // 96: orlydb.v1.DatabaseService.GetPath:output_type -> orlydb.v1.PathResponse
+	95,  // 97: orlydb.v1.DatabaseService.Sync:output_type -> orlydb.v1.Empty
+	1,   // 98: orlydb.v1.DatabaseService.Ready:output_type -> orlydb.v1.ReadyResponse
+	95,  // 99: orlydb.v1.DatabaseService.SetLogLevel:output_type -> orlydb.v1.Empty
+	4,   // 100: orlydb.v1.DatabaseService.SaveEvent:output_type -> orlydb.v1.SaveEventResponse
+	96,  // 101: orlydb.v1.DatabaseService.GetSerialsFromFilter:output_type -> orlydb.v1.SerialList
+	7,   // 102: orlydb.v1.DatabaseService.WouldReplaceEvent:output_type -> orlydb.v1.WouldReplaceEventResponse
+	97,  // 103: orlydb.v1.DatabaseService.QueryEvents:output_type -> orlydb.v1.EventBatch
+	97,  // 104: orlydb.v1.DatabaseService.QueryAllVersions:output_type -> orlydb.v1.EventBatch
+	97,  // 105: orlydb.v1.DatabaseService.QueryEventsWithOptions:output_type -> orlydb.v1.EventBatch
+	97,  // 106: orlydb.v1.DatabaseService.QueryDeleteEventsByTargetId:output_type -> orlydb.v1.EventBatch
+	96,  // 107: orlydb.v1.DatabaseService.QueryForSerials:output_type -> orlydb.v1.SerialList
+	98,  // 108: orlydb.v1.DatabaseService.QueryForIds:output_type -> orlydb.v1.IdPkTsList
+	11,  // 109: orlydb.v1.DatabaseService.CountEvents:output_type -> orlydb.v1.CountEventsResponse
+	13,  // 110: orlydb.v1.DatabaseService.FetchEventBySerial:output_type -> orlydb.v1.FetchEventBySerialResponse
+	99,  // 111: orlydb.v1.DatabaseService.FetchEventsBySerials:output_type -> orlydb.v1.EventMap
+	16,  // 112: orlydb.v1.DatabaseService.GetSerialById:output_type -> orlydb.v1.GetSerialByIdResponse
+	100, // 113: orlydb.v1.DatabaseService.GetSerialsByIds:output_type -> orlydb.v1.SerialMap
+	96,  // 114: orlydb.v1.DatabaseService.GetSerialsByRange:output_type -> orlydb.v1.SerialList
+	101, // 115: orlydb.v1.DatabaseService.GetFullIdPubkeyBySerial:output_type -> orlydb.v1.IdPkTs
+	98,  // 116: orlydb.v1.DatabaseService.GetFullIdPubkeyBySerials:output_type -> orlydb.v1.IdPkTsList
+	95,  // 117: orlydb.v1.DatabaseService.DeleteEvent:output_type -> orlydb.v1.Empty
+	95,  // 118: orlydb.v1.DatabaseService.DeleteEventBySerial:output_type -> orlydb.v1.Empty
+	95,  // 119: orlydb.v1.DatabaseService.DeleteExpired:output_type -> orlydb.v1.Empty
+	95,  // 120: orlydb.v1.DatabaseService.ProcessDelete:output_type -> orlydb.v1.Empty
+	95,  // 121: orlydb.v1.DatabaseService.CheckForDeleted:output_type -> orlydb.v1.Empty
+	26,  // 122: orlydb.v1.DatabaseService.Import:output_type -> orlydb.v1.ImportResponse
+	28,  // 123: orlydb.v1.DatabaseService.Export:output_type -> orlydb.v1.ExportChunk
+	26,  // 124: orlydb.v1.DatabaseService.ImportEventsFromStrings:output_type -> orlydb.v1.ImportResponse
+	30,  // 125: orlydb.v1.DatabaseService.GetRelayIdentitySecret:output_type -> orlydb.v1.GetRelayIdentitySecretResponse
+	95,  // 126: orlydb.v1.DatabaseService.SetRelayIdentitySecret:output_type -> orlydb.v1.Empty
+	30,  // 127: orlydb.v1.DatabaseService.GetOrCreateRelayIdentitySecret:output_type -> orlydb.v1.GetRelayIdentitySecretResponse
+	95,  // 128: orlydb.v1.DatabaseService.SetMarker:output_type -> orlydb.v1.Empty
+	34,  // 129: orlydb.v1.DatabaseService.GetMarker:output_type -> orlydb.v1.GetMarkerResponse
+	36,  // 130: orlydb.v1.DatabaseService.HasMarker:output_type -> orlydb.v1.HasMarkerResponse
+	95,  // 131: orlydb.v1.DatabaseService.DeleteMarker:output_type -> orlydb.v1.Empty
+	102, // 132: orlydb.v1.DatabaseService.GetSubscription:output_type -> orlydb.v1.Subscription
+	40,  // 133: orlydb.v1.DatabaseService.IsSubscriptionActive:output_type -> orlydb.v1.IsSubscriptionActiveResponse
+	95,  // 134: orlydb.v1.DatabaseService.ExtendSubscription:output_type -> orlydb.v1.Empty
+	95,  // 135: orlydb.v1.DatabaseService.RecordPayment:output_type -> orlydb.v1.Empty
+	103, // 136: orlydb.v1.DatabaseService.GetPaymentHistory:output_type -> orlydb.v1.PaymentList
+	95,  // 137: orlydb.v1.DatabaseService.ExtendBlossomSubscription:output_type -> orlydb.v1.Empty
+	46,  // 138: orlydb.v1.DatabaseService.GetBlossomStorageQuota:output_type -> orlydb.v1.GetBlossomStorageQuotaResponse
+	48,  // 139: orlydb.v1.DatabaseService.IsFirstTimeUser:output_type -> orlydb.v1.IsFirstTimeUserResponse
+	95,  // 140: orlydb.v1.DatabaseService.AddNIP43Member:output_type -> orlydb.v1.Empty
+	95,  // 141: orlydb.v1.DatabaseService.RemoveNIP43Member:output_type -> orlydb.v1.Empty
+	52,  // 142: orlydb.v1.DatabaseService.IsNIP43Member:output_type -> orlydb.v1.IsNIP43MemberResponse
+	104, // 143: orlydb.v1.DatabaseService.GetNIP43Membership:output_type -> orlydb.v1.NIP43Membership
+	105, // 144: orlydb.v1.DatabaseService.GetAllNIP43Members:output_type -> orlydb.v1.PubkeyList
+	95,  // 145: orlydb.v1.DatabaseService.StoreInviteCode:output_type -> orlydb.v1.Empty
+	56,  // 146: orlydb.v1.DatabaseService.ValidateInviteCode:output_type -> orlydb.v1.ValidateInviteCodeResponse
+	95,  // 147: orlydb.v1.DatabaseService.DeleteInviteCode:output_type -> orlydb.v1.Empty
+	95,  // 148: orlydb.v1.DatabaseService.PublishNIP43MembershipEvent:output_type -> orlydb.v1.Empty
+	60,  // 149: orlydb.v1.DatabaseService.GetCachedJSON:output_type -> orlydb.v1.GetCachedJSONResponse
+	95,  // 150: orlydb.v1.DatabaseService.CacheMarshaledJSON:output_type -> orlydb.v1.Empty
+	63,  // 151: orlydb.v1.DatabaseService.GetCachedEvents:output_type -> orlydb.v1.GetCachedEventsResponse
+	95,  // 152: orlydb.v1.DatabaseService.CacheEvents:output_type -> orlydb.v1.Empty
+	95,  // 153: orlydb.v1.DatabaseService.InvalidateQueryCache:output_type -> orlydb.v1.Empty
+	95,  // 154: orlydb.v1.DatabaseService.RecordEventAccess:output_type -> orlydb.v1.Empty
+	67,  // 155: orlydb.v1.DatabaseService.GetEventAccessInfo:output_type -> orlydb.v1.GetEventAccessInfoResponse
+	96,  // 156: orlydb.v1.DatabaseService.GetLeastAccessedEvents:output_type -> orlydb.v1.SerialList
+	95,  // 157: orlydb.v1.DatabaseService.SaveBlob:output_type -> orlydb.v1.Empty
+	95,  // 158: orlydb.v1.DatabaseService.SaveBlobMetadata:output_type -> orlydb.v1.Empty
+	76,  // 159: orlydb.v1.DatabaseService.GetBlob:output_type -> orlydb.v1.GetBlobResponse
+	78,  // 160: orlydb.v1.DatabaseService.HasBlob:output_type -> orlydb.v1.HasBlobResponse
+	95,  // 161: orlydb.v1.DatabaseService.DeleteBlob:output_type -> orlydb.v1.Empty
+	81,  // 162: orlydb.v1.DatabaseService.ListBlobs:output_type -> orlydb.v1.ListBlobsResponse
+	71,  // 163: orlydb.v1.DatabaseService.GetBlobMetadata:output_type -> orlydb.v1.BlobMetadata
+	84,  // 164: orlydb.v1.DatabaseService.GetTotalBlobStorageUsed:output_type -> orlydb.v1.GetTotalBlobStorageUsedResponse
+	95,  // 165: orlydb.v1.DatabaseService.SaveBlobReport:output_type -> orlydb.v1.Empty
+	87,  // 166: orlydb.v1.DatabaseService.ListAllBlobUserStats:output_type -> orlydb.v1.ListAllBlobUserStatsResponse
+	88,  // 167: orlydb.v1.DatabaseService.ReconcileBlobMetadata:output_type -> orlydb.v1.ReconcileBlobMetadataResponse
+	81,  // 168: orlydb.v1.DatabaseService.ListAllBlobs:output_type -> orlydb.v1.ListBlobsResponse
+	90,  // 169: orlydb.v1.DatabaseService.GetThumbnail:output_type -> orlydb.v1.GetThumbnailResponse
+	95,  // 170: orlydb.v1.DatabaseService.SaveThumbnail:output_type -> orlydb.v1.Empty
+	70,  // 171: orlydb.v1.DatabaseService.EventIdsBySerial:output_type -> orlydb.v1.EventIdsBySerialResponse
+	95,  // 172: orlydb.v1.DatabaseService.RunMigrations:output_type -> orlydb.v1.Empty
+	96,  // [96:173] is the sub-list for method output_type
+	19,  // [19:96] is the sub-list for method input_type
 	19,  // [19:19] is the sub-list for extension type_name
 	19,  // [19:19] is the sub-list for extension extendee
 	0,   // [0:19] is the sub-list for field type_name
@@ -5114,7 +5201,7 @@ func file_orlydb_v1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_orlydb_v1_service_proto_rawDesc), len(file_orlydb_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   91,
+			NumMessages:   92,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

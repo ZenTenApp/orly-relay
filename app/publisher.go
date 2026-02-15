@@ -193,6 +193,13 @@ func (p *P) Deliver(ev *event.E) {
 			},
 		)
 	}
+	// Track subscriptions that timeout so we can remove them afterward
+	type stuckSub struct {
+		w  *websocket.Conn
+		id string
+	}
+	var stuckSubs []stuckSub
+
 	for _, d := range deliveries {
 		// If the event is privileged, enforce that the subscriber's authed pubkey matches
 		// either the event pubkey or appears in any 'p' tag of the event.
@@ -272,13 +279,26 @@ func (p *P) Deliver(ev *event.E) {
 				hex.Enc(ev.ID), d.sub.remote, d.id,
 			)
 		case <-time.After(DefaultWriteTimeout):
-			log.E.F(
-				"subscription delivery TIMEOUT: event=%s to=%s sub=%s",
+			log.W.F(
+				"subscription delivery TIMEOUT: event=%s to=%s sub=%s — removing stuck subscription",
 				hex.Enc(ev.ID), d.sub.remote, d.id,
 			)
-			// Receiver channel is full - subscription consumer is stuck or slow
-			// The subscription should be removed by the cleanup logic
+			stuckSubs = append(stuckSubs, stuckSub{w: d.w, id: d.id})
 		}
+	}
+
+	// Remove stuck subscriptions to prevent repeated timeouts
+	if len(stuckSubs) > 0 {
+		p.Mx.Lock()
+		for _, s := range stuckSubs {
+			if subs, ok := p.Map[s.w]; ok {
+				delete(subs, s.id)
+				if len(subs) == 0 {
+					delete(p.Map, s.w)
+				}
+			}
+		}
+		p.Mx.Unlock()
 	}
 }
 

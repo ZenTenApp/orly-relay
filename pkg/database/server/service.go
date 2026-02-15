@@ -627,6 +627,13 @@ func (s *DatabaseService) SaveBlob(ctx context.Context, req *orlydbv1.SaveBlobRe
 	return &orlydbv1.Empty{}, nil
 }
 
+func (s *DatabaseService) SaveBlobMetadata(ctx context.Context, req *orlydbv1.SaveBlobMetadataRequest) (*orlydbv1.Empty, error) {
+	if err := s.db.SaveBlobMetadata(req.Sha256Hash, req.Size, req.Pubkey, req.MimeType, req.Extension); err != nil {
+		return nil, status.Errorf(codes.Internal, "save blob metadata failed: %v", err)
+	}
+	return &orlydbv1.Empty{}, nil
+}
+
 func (s *DatabaseService) GetBlob(ctx context.Context, req *orlydbv1.GetBlobRequest) (*orlydbv1.GetBlobResponse, error) {
 	data, metadata, err := s.db.GetBlob(req.Sha256Hash)
 	if err != nil {

@@ -755,6 +755,17 @@ func (c *Client) SaveBlob(sha256Hash []byte, data []byte, pubkey []byte, mimeTyp
 	return err
 }
 
+func (c *Client) SaveBlobMetadata(sha256Hash []byte, size int64, pubkey []byte, mimeType string, extension string) error {
+	_, err := c.client.SaveBlobMetadata(context.Background(), &orlydbv1.SaveBlobMetadataRequest{
+		Sha256Hash: sha256Hash,
+		Size:       size,
+		Pubkey:     pubkey,
+		MimeType:   mimeType,
+		Extension:  extension,
+	})
+	return err
+}
+
 func (c *Client) GetBlob(sha256Hash []byte) (data []byte, metadata *database.BlobMetadata, err error) {
 	resp, err := c.client.GetBlob(context.Background(), &orlydbv1.GetBlobRequest{
 		Sha256Hash: sha256Hash,

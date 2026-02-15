@@ -81,6 +81,7 @@ const (
 	DatabaseService_GetEventAccessInfo_FullMethodName             = "/orlydb.v1.DatabaseService/GetEventAccessInfo"
 	DatabaseService_GetLeastAccessedEvents_FullMethodName         = "/orlydb.v1.DatabaseService/GetLeastAccessedEvents"
 	DatabaseService_SaveBlob_FullMethodName                       = "/orlydb.v1.DatabaseService/SaveBlob"
+	DatabaseService_SaveBlobMetadata_FullMethodName               = "/orlydb.v1.DatabaseService/SaveBlobMetadata"
 	DatabaseService_GetBlob_FullMethodName                        = "/orlydb.v1.DatabaseService/GetBlob"
 	DatabaseService_HasBlob_FullMethodName                        = "/orlydb.v1.DatabaseService/HasBlob"
 	DatabaseService_DeleteBlob_FullMethodName                     = "/orlydb.v1.DatabaseService/DeleteBlob"
@@ -227,6 +228,8 @@ type DatabaseServiceClient interface {
 	GetLeastAccessedEvents(ctx context.Context, in *GetLeastAccessedEventsRequest, opts ...grpc.CallOption) (*SerialList, error)
 	// SaveBlob stores a blob with its metadata
 	SaveBlob(ctx context.Context, in *SaveBlobRequest, opts ...grpc.CallOption) (*Empty, error)
+	// SaveBlobMetadata stores only metadata for a blob whose file is already on disk
+	SaveBlobMetadata(ctx context.Context, in *SaveBlobMetadataRequest, opts ...grpc.CallOption) (*Empty, error)
 	// GetBlob retrieves blob data and metadata
 	GetBlob(ctx context.Context, in *GetBlobRequest, opts ...grpc.CallOption) (*GetBlobResponse, error)
 	// HasBlob checks if a blob exists
@@ -933,6 +936,16 @@ func (c *databaseServiceClient) SaveBlob(ctx context.Context, in *SaveBlobReques
 	return out, nil
 }
 
+func (c *databaseServiceClient) SaveBlobMetadata(ctx context.Context, in *SaveBlobMetadataRequest, opts ...grpc.CallOption) (*Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, DatabaseService_SaveBlobMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *databaseServiceClient) GetBlob(ctx context.Context, in *GetBlobRequest, opts ...grpc.CallOption) (*GetBlobResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetBlobResponse)
@@ -1203,6 +1216,8 @@ type DatabaseServiceServer interface {
 	GetLeastAccessedEvents(context.Context, *GetLeastAccessedEventsRequest) (*SerialList, error)
 	// SaveBlob stores a blob with its metadata
 	SaveBlob(context.Context, *SaveBlobRequest) (*Empty, error)
+	// SaveBlobMetadata stores only metadata for a blob whose file is already on disk
+	SaveBlobMetadata(context.Context, *SaveBlobMetadataRequest) (*Empty, error)
 	// GetBlob retrieves blob data and metadata
 	GetBlob(context.Context, *GetBlobRequest) (*GetBlobResponse, error)
 	// HasBlob checks if a blob exists
@@ -1426,6 +1441,9 @@ func (UnimplementedDatabaseServiceServer) GetLeastAccessedEvents(context.Context
 }
 func (UnimplementedDatabaseServiceServer) SaveBlob(context.Context, *SaveBlobRequest) (*Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method SaveBlob not implemented")
+}
+func (UnimplementedDatabaseServiceServer) SaveBlobMetadata(context.Context, *SaveBlobMetadataRequest) (*Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method SaveBlobMetadata not implemented")
 }
 func (UnimplementedDatabaseServiceServer) GetBlob(context.Context, *GetBlobRequest) (*GetBlobResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetBlob not implemented")
@@ -2560,6 +2578,24 @@ func _DatabaseService_SaveBlob_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DatabaseService_SaveBlobMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveBlobMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DatabaseServiceServer).SaveBlobMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DatabaseService_SaveBlobMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DatabaseServiceServer).SaveBlobMetadata(ctx, req.(*SaveBlobMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DatabaseService_GetBlob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetBlobRequest)
 	if err := dec(in); err != nil {
@@ -3042,6 +3078,10 @@ var DatabaseService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SaveBlob",
 			Handler:    _DatabaseService_SaveBlob_Handler,
+		},
+		{
+			MethodName: "SaveBlobMetadata",
+			Handler:    _DatabaseService_SaveBlobMetadata_Handler,
 		},
 		{
 			MethodName: "GetBlob",
