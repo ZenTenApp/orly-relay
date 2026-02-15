@@ -483,6 +483,323 @@ go test ./pkg/neo4j/...
 docker rm -f neo4j-test
 ```
 
+## Bolt+S External Access (Remote Cypher Queries)
+
+### What Is Bolt+S?
+
+Bolt+S is Neo4j's encrypted Bolt protocol — the same wire protocol used by `cypher-shell`, Neo4j Browser, and client drivers, but wrapped in TLS. By default, the ORLY relay's Neo4j instance only listens on `localhost` and is not accessible from the network. Enabling bolt+s exposes Neo4j on a public port with TLS encryption, allowing external tools to run Cypher queries against the relay's graph database.
+
+This is useful for:
+- Running ad-hoc Cypher queries from Neo4j Browser or Desktop
+- Connecting knowledge graph tools (e.g., Brainstorm) to the relay's social graph
+- Exploring the event graph, author relationships, and tag networks
+- Running analytics queries that aren't exposed through the Nostr protocol
+
+### How It Works
+
+The ORLY relay manages Neo4j's bolt+s configuration through its web admin UI:
+
+1. The relay reads and writes `neo4j.conf` directly (path configured via `ORLY_NEO4J_CONF_PATH`)
+2. When an owner toggles bolt+s on/off, the relay modifies the relevant TLS and connector settings in `neo4j.conf`
+3. The relay then restarts Neo4j via a configurable shell command (default: `sudo systemctl restart neo4j`)
+4. The web UI displays the resulting `bolt+s://` connection URI
+
+The admin UI is only visible when `ORLY_DB_TYPE=neo4j` and only accessible to users with owner-level permissions.
+
+### Prerequisites
+
+Before enabling bolt+s, you need:
+
+1. **Neo4j installed and running** as a systemd service (or equivalent)
+2. **TLS certificates** — typically from Let's Encrypt, but any valid cert/key pair works
+3. **The relay user must be able to restart Neo4j** — via passwordless sudo
+4. **Neo4j must be able to read the TLS certificates** — file permissions
+5. **The bolt port must be open** in your firewall
+
+### Step-by-Step Setup
+
+#### 1. Set the TLS Certificate Directory
+
+Tell the relay where your TLS certificates live. For Let's Encrypt:
+
+```bash
+ORLY_NEO4J_TLS_CERT_DIR=/etc/letsencrypt/live/relay.example.com
+```
+
+This directory must contain:
+- `privkey.pem` — the private key
+- `fullchain.pem` — the certificate chain
+
+If you're using Let's Encrypt with Caddy or certbot, these files are created automatically. The relay configures Neo4j to use these exact filenames.
+
+#### 2. Grant the Relay User Permission to Restart Neo4j
+
+The relay needs to run `sudo systemctl restart neo4j` after modifying the config. Create a sudoers rule so this works without a password:
+
+```bash
+echo 'mleku ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart neo4j' | sudo tee /etc/sudoers.d/orly-neo4j
+sudo chmod 440 /etc/sudoers.d/orly-neo4j
+```
+
+Replace `mleku` with the user running the relay. This grants permission only for `systemctl restart neo4j` — nothing else.
+
+#### 3. Ensure Neo4j Can Read the TLS Certificates
+
+Let's Encrypt certificates are typically owned by root with restricted permissions. Neo4j (which runs as the `neo4j` user) needs read access:
+
+```bash
+sudo chmod -R 755 /etc/letsencrypt/live/ /etc/letsencrypt/archive/
+```
+
+Alternatively, copy the certificates to a directory Neo4j owns:
+
+```bash
+sudo mkdir -p /var/lib/neo4j/certificates/bolt
+sudo cp /etc/letsencrypt/live/relay.example.com/privkey.pem /var/lib/neo4j/certificates/bolt/
+sudo cp /etc/letsencrypt/live/relay.example.com/fullchain.pem /var/lib/neo4j/certificates/bolt/
+sudo chown -R neo4j:neo4j /var/lib/neo4j/certificates/bolt
+```
+
+If you copy certificates, set `ORLY_NEO4J_TLS_CERT_DIR=/var/lib/neo4j/certificates/bolt` and remember to update the copies when certificates renew.
+
+#### 4. Open the Bolt Port in Your Firewall
+
+The default bolt port is 7687. If you're using `ufw`:
+
+```bash
+sudo ufw allow 7687/tcp
+```
+
+If you're using a cloud provider's firewall (AWS security groups, DigitalOcean firewall, etc.), add an inbound rule for TCP port 7687.
+
+To use a non-default port:
+
+```bash
+ORLY_NEO4J_BOLT_PORT=7688
+```
+
+#### 5. Restart the Relay
+
+The relay reads `ORLY_NEO4J_TLS_CERT_DIR` at startup. After setting it, restart the relay:
+
+```bash
+sudo systemctl restart orly
+```
+
+#### 6. Enable Bolt+S via the Web UI
+
+1. Log in to the relay's admin dashboard with an owner account
+2. Click the **Neo4j** tab in the sidebar
+3. Click **Load Configuration** to see the current bolt+s status
+4. Toggle the **Bolt+S** switch to enabled
+5. Click **Apply & Restart Neo4j**
+6. The connection URI (e.g., `bolt+s://relay.example.com:7687`) appears once enabled
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ORLY_NEO4J_CONF_PATH` | `/etc/neo4j/neo4j.conf` | Path to neo4j.conf. The relay reads and writes this file to manage bolt+s settings. |
+| `ORLY_NEO4J_RESTART_CMD` | `sudo systemctl restart neo4j` | Shell command to restart Neo4j after config changes. Must succeed without interactive input. |
+| `ORLY_NEO4J_TLS_CERT_DIR` | *(empty)* | Directory containing `privkey.pem` and `fullchain.pem`. Must be set before bolt+s can be enabled. |
+| `ORLY_NEO4J_BOLT_PORT` | `7687` | The external port Neo4j listens on for bolt connections. Used in both `neo4j.conf` and the displayed connection URI. |
+
+### What the Relay Modifies in neo4j.conf
+
+When enabling bolt+s, the relay sets these keys in `neo4j.conf`:
+
+```ini
+# Require TLS for all bolt connections
+dbms.connector.bolt.tls_level=REQUIRED
+
+# Listen on all interfaces (not just localhost)
+dbms.connector.bolt.listen_address=0.0.0.0:7687
+
+# Enable the bolt SSL policy
+dbms.ssl.policy.bolt.enabled=true
+dbms.ssl.policy.bolt.base_directory=/etc/letsencrypt/live/relay.example.com
+dbms.ssl.policy.bolt.private_key=privkey.pem
+dbms.ssl.policy.bolt.public_certificate=fullchain.pem
+dbms.ssl.policy.bolt.client_auth=NONE
+```
+
+When disabling, `tls_level` is set to `DISABLED`, `bolt.enabled` to `false`, and the certificate settings are commented out. The relay handles both Neo4j 4.x (`dbms.connector.bolt.*`) and 5.x (`server.bolt.*`) config key formats.
+
+### Connecting to the Database
+
+Once bolt+s is enabled, connect with any Neo4j client:
+
+**cypher-shell:**
+```bash
+cypher-shell -a bolt+s://relay.example.com:7687 -u neo4j -p <password>
+```
+
+**Neo4j Browser:**
+1. Open Neo4j Browser (Desktop or web)
+2. Enter connection URL: `bolt+s://relay.example.com:7687`
+3. Enter credentials (same as `ORLY_NEO4J_USER` / `ORLY_NEO4J_PASSWORD`)
+
+**Neo4j Python driver:**
+```python
+from neo4j import GraphDatabase
+
+driver = GraphDatabase.driver(
+    "bolt+s://relay.example.com:7687",
+    auth=("neo4j", "password")
+)
+
+with driver.session() as session:
+    result = session.run("MATCH (e:Event) RETURN count(e) AS total")
+    print(result.single()["total"])
+```
+
+**Neo4j JavaScript driver:**
+```javascript
+import neo4j from "neo4j-driver";
+
+const driver = neo4j.driver(
+    "bolt+s://relay.example.com:7687",
+    neo4j.auth.basic("neo4j", "password")
+);
+
+const session = driver.session();
+const result = await session.run("MATCH (a:Author) RETURN count(a) AS total");
+console.log(result.records[0].get("total"));
+await session.close();
+```
+
+### Example Queries
+
+Once connected, you can query the relay's graph directly:
+
+```cypher
+-- Count all events
+MATCH (e:Event) RETURN count(e) AS total;
+
+-- Find the most referenced authors
+MATCH (e:Event)-[:MENTIONS]->(a:Author)
+RETURN a.pubkey, count(e) AS mentions
+ORDER BY mentions DESC LIMIT 20;
+
+-- Social graph: who follows whom (kind 3 contact lists)
+MATCH (e:Event {kind: 3})-[:AUTHORED_BY]->(a:Author)
+MATCH (e)-[:MENTIONS]->(followed:Author)
+RETURN a.pubkey AS follower, followed.pubkey AS follows
+LIMIT 100;
+
+-- Event references (reply chains)
+MATCH path = (reply:Event)-[:REFERENCES*1..5]->(root:Event)
+WHERE root.id = $eventId
+RETURN path;
+
+-- Tag popularity
+MATCH (e:Event)-[:TAGGED_WITH]->(t:Tag {type: 't'})
+RETURN t.value, count(e) AS usage
+ORDER BY usage DESC LIMIT 50;
+```
+
+### Security Considerations
+
+- **Neo4j credentials are separate from Nostr identities.** Anyone with the Neo4j username and password has full read/write access to the database. Do not share credentials publicly.
+- **Bolt+s encrypts the connection** but does not restrict who can connect. Use firewall rules to limit access by IP if needed.
+- **The relay's owner toggle is protected by NIP-98 authentication.** Only users with owner-level ACL permissions can enable or disable bolt+s.
+- **Consider read-only access.** Neo4j supports role-based access control. You can create a read-only user for external clients:
+
+```cypher
+CREATE USER reader SET PASSWORD 'readonly123' SET PASSWORD CHANGE NOT REQUIRED;
+GRANT ROLE reader TO reader;
+GRANT READ {*} ON GRAPH * TO reader;
+```
+
+### Troubleshooting
+
+#### "TLS cert dir must be set before enabling bolt+s"
+
+Set `ORLY_NEO4J_TLS_CERT_DIR` in your environment and restart the relay. The toggle is disabled until this is configured.
+
+#### "Config updated but Neo4j restart failed"
+
+The relay modified `neo4j.conf` successfully but couldn't restart Neo4j. Check:
+
+1. **Sudoers**: Verify the relay user can run the restart command:
+   ```bash
+   sudo -n systemctl restart neo4j
+   ```
+   If this prompts for a password, the sudoers rule is missing or incorrect.
+
+2. **Neo4j service exists**:
+   ```bash
+   systemctl status neo4j
+   ```
+
+3. **Restart command override**: If Neo4j isn't managed by systemd, set a custom command:
+   ```bash
+   ORLY_NEO4J_RESTART_CMD="sudo /usr/local/bin/restart-neo4j.sh"
+   ```
+
+#### Cannot connect after enabling bolt+s
+
+1. **Check Neo4j is running**:
+   ```bash
+   systemctl status neo4j
+   journalctl -u neo4j -n 50
+   ```
+
+2. **Check Neo4j logs for TLS errors** — common causes:
+   - Certificate files not readable by the `neo4j` user
+   - Certificate and key don't match
+   - Certificate expired
+
+3. **Check the port is open**:
+   ```bash
+   ss -tlnp | grep 7687
+   ```
+
+4. **Check firewall**:
+   ```bash
+   sudo ufw status | grep 7687
+   ```
+
+5. **Test connectivity from the client machine**:
+   ```bash
+   openssl s_client -connect relay.example.com:7687
+   ```
+
+#### Certificate renewal
+
+If you're using Let's Encrypt, certificates renew automatically but Neo4j needs a restart to pick up the new files. Add a renewal hook:
+
+```bash
+# /etc/letsencrypt/renewal-hooks/deploy/restart-neo4j.sh
+#!/bin/bash
+systemctl restart neo4j
+```
+
+```bash
+sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/restart-neo4j.sh
+```
+
+#### Rolling back (disabling bolt+s)
+
+Toggle bolt+s off in the web UI and click **Apply & Restart Neo4j**. This sets `tls_level=DISABLED`, comments out the certificate settings, and restarts Neo4j. Bolt connections will revert to unencrypted localhost-only access.
+
+You can also manually revert by editing `neo4j.conf`:
+
+```bash
+sudo sed -i 's/^dbms.connector.bolt.tls_level=REQUIRED/dbms.connector.bolt.tls_level=DISABLED/' /etc/neo4j/neo4j.conf
+sudo systemctl restart neo4j
+```
+
+### API Endpoints
+
+The bolt+s management feature exposes three HTTP endpoints:
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/neo4j/config` | GET | None | Returns `{ "db_type": "neo4j" }`. Used by the UI to decide whether to show the Neo4j tab. |
+| `/api/neo4j/bolt` | GET | Owner (NIP-98) | Returns current bolt+s status, config path, port, cert dir, and connection URI. |
+| `/api/neo4j/bolt/toggle` | POST | Owner (NIP-98) | Accepts `{ "enabled": true/false }`. Modifies neo4j.conf and restarts Neo4j. |
+
 ## Future Enhancements
 
 1. **Full-text Search**: Leverage Neo4j's full-text indexes for content search

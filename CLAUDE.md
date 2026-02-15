@@ -318,6 +318,8 @@ if (isValidNsec(nsec)) { ... }
 |-------|----------|
 | Policy config | `docs/POLICY_CONFIGURATION_REFERENCE.md` |
 | Policy guide | `docs/POLICY_USAGE_GUIDE.md` |
+| Neo4j backend guide | `docs/NEO4J_BACKEND.md` |
+| Neo4j bolt+s setup | `docs/NEO4J_BACKEND.md#bolts-external-access-remote-cypher-queries` |
 | Neo4j WoT schema | `pkg/neo4j/WOT_SPEC.md` |
 | Neo4j schema changes | `pkg/neo4j/MODIFYING_SCHEMA.md` |
 | Event kinds database | `app/web/src/eventKinds.js` |
