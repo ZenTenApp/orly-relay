@@ -31,6 +31,7 @@ type ExtendedRelayInfo struct {
 	GraphQuery     *GraphQueryConfig `json:"graph_query,omitempty"`
 	Theme          string            `json:"theme,omitempty"`
 	BlossomEnabled bool              `json:"blossom_enabled,omitempty"`
+	DBType         string            `json:"db_type,omitempty"`
 }
 
 // HandleRelayInfo generates and returns a relay information document in JSON
@@ -226,13 +227,15 @@ func (s *Server) HandleRelayInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	// Blossom is only available if the server is actually initialized (requires Badger backend)
 	blossomEnabled := s.blossomServer != nil
-	if len(addresses) > 0 || graphConfig != nil || theme != "auto" || blossomEnabled {
+	dbType := s.Config.DBType
+	if len(addresses) > 0 || graphConfig != nil || theme != "auto" || blossomEnabled || dbType != "badger" {
 		extInfo := &ExtendedRelayInfo{
 			T:              info,
 			Addresses:      addresses,
 			GraphQuery:     graphConfig,
 			Theme:          theme,
 			BlossomEnabled: blossomEnabled,
+			DBType:         dbType,
 		}
 		if err := json.NewEncoder(w).Encode(extInfo); chk.E(err) {
 		}

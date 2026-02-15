@@ -154,6 +154,12 @@ type C struct {
 	Neo4jMaxTxRetrySeconds int `env:"ORLY_NEO4J_MAX_TX_RETRY_SEC" default:"30" usage:"max seconds for retryable transaction attempts"`
 	Neo4jQueryResultLimit  int `env:"ORLY_NEO4J_QUERY_RESULT_LIMIT" default:"10000" usage:"max results returned per query (prevents unbounded memory usage, 0=unlimited)"`
 
+	// Neo4j bolt+s management (only used when ORLY_DB_TYPE=neo4j)
+	Neo4jConfPath   string `env:"ORLY_NEO4J_CONF_PATH" default:"/etc/neo4j/neo4j.conf" usage:"path to neo4j.conf for bolt+s management (only used when ORLY_DB_TYPE=neo4j)"`
+	Neo4jRestartCmd string `env:"ORLY_NEO4J_RESTART_CMD" default:"sudo systemctl restart neo4j" usage:"command to restart Neo4j after config changes (only used when ORLY_DB_TYPE=neo4j)"`
+	Neo4jTLSCertDir string `env:"ORLY_NEO4J_TLS_CERT_DIR" usage:"directory containing TLS certs for bolt+s (e.g., /etc/letsencrypt/live/example.com; only used when ORLY_DB_TYPE=neo4j)"`
+	Neo4jBoltPort   int    `env:"ORLY_NEO4J_BOLT_PORT" default:"7687" usage:"external bolt port for bolt+s connections (only used when ORLY_DB_TYPE=neo4j)"`
+
 	// Advanced database tuning (increase for large archives to reduce cache misses)
 	SerialCachePubkeys  int `env:"ORLY_SERIAL_CACHE_PUBKEYS" default:"250000" usage:"max pubkeys to cache for compact event storage (~8MB memory, increase for large archives)"`
 	SerialCacheEventIds int `env:"ORLY_SERIAL_CACHE_EVENT_IDS" default:"1000000" usage:"max event IDs to cache for compact event storage (~32MB memory, increase for large archives)"`
