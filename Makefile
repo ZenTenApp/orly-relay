@@ -5,6 +5,7 @@
 .PHONY: orly-sync-negentropy all-sync arm64-sync
 .PHONY: orly-certs
 .PHONY: quick-deploy quick-deploy-restart deploy-both deploy-both-restart deploy-new list-releases rollback
+.PHONY: upgrade upgrade-dry-run upgrade-no-restart upgrade-build
 .PHONY: orly-unified arm64-unified
 .PHONY: launcher-web orly-launcher-no-web
 
@@ -164,7 +165,7 @@ all-sync: proto orly orly-db orly-acl orly-launcher orly-sync-negentropy
 arm64-sync:
 	$(MAKE) GOOS=linux GOARCH=arm64 all-sync
 
-# Quick deploy: build ARM64 and deploy to relay.orly.dev
+# Quick deploy: build amd64 unified binary and deploy to relay.orly.dev
 quick-deploy:
 	./scripts/build-and-deploy.sh relay.orly.dev
 
@@ -191,6 +192,24 @@ list-releases:
 # Rollback to previous release
 rollback:
 	./scripts/deploy-orly.sh --host relay.orly.dev --rollback --restart
+
+# === Upgrade (Version-Driven Deploy) ===
+
+# Full upgrade: build unified binary + web UI, deploy to relay.orly.dev, restart
+upgrade:
+	./scripts/upgrade.sh
+
+# Dry run: show what would happen without executing
+upgrade-dry-run:
+	./scripts/upgrade.sh --dry-run
+
+# Deploy without restarting (for staged rollouts)
+upgrade-no-restart:
+	./scripts/upgrade.sh --no-restart
+
+# Build only (no deploy, no restart)
+upgrade-build:
+	./scripts/upgrade.sh --build-only
 
 # Help
 help:
@@ -245,7 +264,13 @@ help:
 	@echo "    orly-unified db repair --dry-run  - Preview database repairs"
 	@echo "    orly-unified acl --driver=follows - Run follows ACL server"
 	@echo ""
-	@echo "  Quick Deployment (symlink-based):"
+	@echo "  Upgrade (Recommended — version-driven deploy):"
+	@echo "    upgrade              - Build unified amd64 binary + web UI, deploy, restart"
+	@echo "    upgrade-dry-run      - Show what would happen without executing"
+	@echo "    upgrade-no-restart   - Deploy without restarting the service"
+	@echo "    upgrade-build        - Build locally without deploying"
+	@echo ""
+	@echo "  Quick Deployment (legacy symlink-based):"
 	@echo "    quick-deploy         - Build ARM64 and deploy to relay.orly.dev"
 	@echo "    quick-deploy-restart - Build, deploy, and restart service"
 	@echo "    deploy-both          - Deploy to both relay.orly.dev and new.orly.dev"

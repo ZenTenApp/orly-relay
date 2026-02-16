@@ -1,12 +1,23 @@
 #!/bin/bash
-# Build ARM64 binaries and deploy to relay
-# Usage: ./scripts/build-and-deploy.sh [relay.orly.dev|new.orly.dev|both] [--restart]
+# Build and deploy ORLY relay binaries
+#
+# IMPORTANT: relay.orly.dev is amd64 (x86_64), NOT arm64.
+# This script builds the UNIFIED binary (./cmd/orly) which includes
+# launcher, db, acl, and relay subcommands.
+#
+# For the recommended single-command upgrade flow, use:
+#   ./scripts/upgrade.sh
+#
+# This script is retained for deploying to multiple hosts or custom targets.
+#
+# Usage:
+#   ./scripts/build-and-deploy.sh [relay.orly.dev|new.orly.dev|both] [--restart]
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-BUILD_DIR="$PROJECT_DIR/build-arm64"
+BUILD_DIR="$PROJECT_DIR/build-amd64"
 
 # Colors
 GREEN='\033[0;32m'
@@ -23,32 +34,30 @@ if [[ "$2" == "--restart" ]] || [[ "$1" == "--restart" ]]; then
     RESTART_FLAG="--restart"
 fi
 
-# Build for ARM64
-log_info "Building ARM64 binaries..."
+# Read version
+VERSION=$(cat "$PROJECT_DIR/pkg/version/version" | tr -d '[:space:]')
+log_info "Version: $VERSION"
+
+# Build for amd64 (relay.orly.dev is x86_64)
+log_info "Building amd64 unified binary..."
 cd "$PROJECT_DIR"
 mkdir -p "$BUILD_DIR"
 
 export CGO_ENABLED=0
 export GOOS=linux
-export GOARCH=arm64
+export GOARCH=amd64
 
-# Build all binaries
-log_info "Building orly (main relay)..."
-go build -o "$BUILD_DIR/orly" .
+# Build web UI if bun is available
+if command -v bun &>/dev/null && [[ -d "app/web" ]]; then
+    log_info "Building web UI..."
+    (cd app/web && bun install --silent && bun run build)
+fi
 
-log_info "Building orly-db..."
-go build -o "$BUILD_DIR/orly-db" ./cmd/orly-db
+# Build unified binary (includes launcher, db, acl subcommands)
+log_info "Building orly (unified binary with subcommands)..."
+go build -ldflags "-s -w" -o "$BUILD_DIR/orly" ./cmd/orly
 
-log_info "Building orly-acl..."
-go build -o "$BUILD_DIR/orly-acl" ./cmd/orly-acl
-
-log_info "Building orly-launcher..."
-go build -o "$BUILD_DIR/orly-launcher" ./cmd/orly-launcher
-
-log_info "Building orly-sync-negentropy..."
-go build -o "$BUILD_DIR/orly-sync-negentropy" ./cmd/orly-sync-negentropy
-
-log_info "Build complete. Binaries in $BUILD_DIR"
+log_info "Build complete. Binary in $BUILD_DIR"
 ls -la "$BUILD_DIR"
 
 # Deploy function
@@ -77,4 +86,4 @@ case "$TARGET" in
         ;;
 esac
 
-log_info "Done!"
+log_info "Done! Version $VERSION deployed."
