@@ -507,10 +507,8 @@ func (s *Server) UserInterface() {
 	s.mux.HandleFunc("/api/nrc/connections/", s.handleNRCConnectionsRouter)
 	s.mux.HandleFunc("/api/nrc/config", s.handleNRCConfig)
 
-	// Neo4j management endpoints (bolt+s configuration)
+	// Neo4j configuration status endpoint
 	s.mux.HandleFunc("/api/neo4j/config", s.handleNeo4jConfig)
-	s.mux.HandleFunc("/api/neo4j/bolt", s.handleNeo4jBoltConfig)
-	s.mux.HandleFunc("/api/neo4j/bolt/toggle", s.handleNeo4jBoltToggle)
 }
 
 // handleFavicon serves favicon.png as favicon.ico

@@ -15,7 +15,6 @@
     import BlossomView from "./BlossomView.svelte";
     import LogView from "./LogView.svelte";
     import RelayConnectView from "./RelayConnectView.svelte";
-    import Neo4jView from "./Neo4jView.svelte";
     import SearchResultsView from "./SearchResultsView.svelte";
     import FilterDisplay from "./FilterDisplay.svelte";
     import RelayConnectModal from "./RelayConnectModal.svelte";
@@ -131,13 +130,6 @@
 
     // NRC (Nostr Relay Connect) state
     let nrcEnabled = false;
-
-    // Neo4j state
-    let neo4jEnabled = false; // true when ORLY_DB_TYPE=neo4j
-    let neo4jBoltConfig = null;
-    let isLoadingNeo4j = false;
-    let neo4jMessage = "";
-    let neo4jMessageType = "info";
 
     // Blossom (blob storage) state
     let blossomEnabled = true; // Default to true for backward compatibility
@@ -932,9 +924,6 @@
         // Load policy configuration
         loadPolicyConfig();
 
-        // Load Neo4j configuration
-        loadNeo4jConfig();
-
         // Load relay version
         fetchRelayVersion();
     }
@@ -1172,53 +1161,6 @@
         } catch (error) {
             // Non-ORLY relay or network error - policy not available
             policyEnabled = false;
-        }
-    }
-
-    async function loadNeo4jConfig() {
-        try {
-            const config = await api.fetchNeo4jConfig();
-            neo4jEnabled = config.db_type === "neo4j";
-        } catch (error) {
-            // Non-ORLY relay or network error - Neo4j not available
-            neo4jEnabled = false;
-        }
-    }
-
-    async function loadNeo4jBoltConfig() {
-        if (!isLoggedIn || userRole !== "owner" || !neo4jEnabled) return;
-        try {
-            isLoadingNeo4j = true;
-            neo4jMessage = "";
-            neo4jBoltConfig = await api.fetchNeo4jBoltConfig(userSigner, userPubkey);
-        } catch (error) {
-            neo4jMessage = error.message;
-            neo4jMessageType = "error";
-        } finally {
-            isLoadingNeo4j = false;
-        }
-    }
-
-    async function handleNeo4jBoltToggle(event) {
-        const { enabled } = event.detail;
-        try {
-            isLoadingNeo4j = true;
-            neo4jMessage = "";
-            const result = await api.toggleNeo4jBolt(userSigner, userPubkey, enabled);
-            if (result.success) {
-                neo4jMessage = result.message;
-                neo4jMessageType = "success";
-                // Reload bolt config to get updated state
-                await loadNeo4jBoltConfig();
-            } else {
-                neo4jMessage = result.message;
-                neo4jMessageType = "error";
-            }
-        } catch (error) {
-            neo4jMessage = error.message;
-            neo4jMessageType = "error";
-        } finally {
-            isLoadingNeo4j = false;
         }
     }
 
@@ -1886,7 +1828,6 @@
         { id: "policy", icon: "📜", label: "Policy", requiresOwner: true },
         { id: "relay-connect", icon: "🔗", label: "Relay Connect", requiresOwner: true },
         { id: "logs", icon: "📋", label: "Logs", requiresOwner: true },
-        { id: "neo4j", icon: "🔷", label: "Neo4j", requiresOwner: true },
     ];
 
     // Filter tabs based on current effective role (including view-as setting)
@@ -1907,7 +1848,7 @@
             return false;
         }
         // Hide ORLY-specific tabs when connected to a non-ORLY relay
-        const orlyOnlyTabs = ["sprocket", "policy", "managed-acl", "curation", "logs", "relay-connect", "neo4j"];
+        const orlyOnlyTabs = ["sprocket", "policy", "managed-acl", "curation", "logs", "relay-connect"];
         if (orlyOnlyTabs.includes(tab.id) && !$isOrlyRelay) {
             return false;
         }
@@ -1933,10 +1874,6 @@
         }
         // Hide blossom tab if not enabled
         if (tab.id === "blossom" && !blossomEnabled) {
-            return false;
-        }
-        // Hide neo4j tab if db_type is not neo4j
-        if (tab.id === "neo4j" && !neo4jEnabled) {
             return false;
         }
         // Debug logging for tab filtering
@@ -1976,17 +1913,6 @@
         ) {
             loadSprocketStatus();
             loadVersions();
-        }
-
-        // Load Neo4j bolt config when switching to neo4j tab
-        if (
-            tabId === "neo4j" &&
-            isLoggedIn &&
-            userRole === "owner" &&
-            neo4jEnabled &&
-            !neo4jBoltConfig
-        ) {
-            loadNeo4jBoltConfig();
         }
 
         savePersistentState();
@@ -3308,20 +3234,6 @@
                     {isLoggedIn}
                     {userRole}
                     {userSigner}
-                    on:openLoginModal={openLoginModal}
-                />
-            {/key}
-        {:else if selectedTab === "neo4j"}
-            {#key $relayUrl}
-                <Neo4jView
-                    {isLoggedIn}
-                    {userRole}
-                    boltConfig={neo4jBoltConfig}
-                    isLoading={isLoadingNeo4j}
-                    message={neo4jMessage}
-                    messageType={neo4jMessageType}
-                    on:loadBoltConfig={loadNeo4jBoltConfig}
-                    on:toggleBolt={handleNeo4jBoltToggle}
                     on:openLoginModal={openLoginModal}
                 />
             {/key}
