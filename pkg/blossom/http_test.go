@@ -713,19 +713,29 @@ func TestConcurrentUploads(t *testing.T) {
 	server, cleanup := testSetup(t)
 	defer cleanup()
 
-	_, signer := createTestKeypair(t)
-
+	// Prepare all auth events sequentially to avoid race in p256k1.TaggedHash
+	// (the package-level SHA256 hasher is not safe for concurrent Sign() calls).
+	// The test is about concurrent HTTP uploads, not concurrent signing.
 	const numUploads = 10
+	type uploadPrep struct {
+		data    []byte
+		authHdr string
+	}
+	preps := make([]uploadPrep, numUploads)
+	for i := range preps {
+		_, signer := createTestKeypair(t)
+		data := []byte("concurrent test " + string(rune('A'+i)))
+		sha256Hash := CalculateSHA256(data)
+		authEv := createAuthEvent(t, signer, "upload", sha256Hash, 3600)
+		preps[i] = uploadPrep{data: data, authHdr: createAuthHeader(authEv)}
+	}
+
 	done := make(chan error, numUploads)
 
 	for i := 0; i < numUploads; i++ {
 		go func(id int) {
-			testData := []byte("concurrent test " + string(rune('A'+id)))
-			sha256Hash := CalculateSHA256(testData)
-			authEv := createAuthEvent(t, signer, "upload", sha256Hash, 3600)
-
-			req := httptest.NewRequest("PUT", "/upload", bytes.NewReader(testData))
-			req.Header.Set("Authorization", createAuthHeader(authEv))
+			req := httptest.NewRequest("PUT", "/upload", bytes.NewReader(preps[id].data))
+			req.Header.Set("Authorization", preps[id].authHdr)
 
 			w := httptest.NewRecorder()
 			server.Handler().ServeHTTP(w, req)

@@ -691,21 +691,35 @@ func TestServerConcurrentOperations(t *testing.T) {
 	httpServer := httptest.NewServer(server.Handler())
 	defer httpServer.Close()
 
-	_, signer := createTestKeypair(t)
-
+	// Prepare all auth events sequentially to avoid race in p256k1.TaggedHash
+	// (the package-level SHA256 hasher is not safe for concurrent Sign() calls).
+	// The test is about concurrent HTTP operations, not concurrent signing.
 	const numOps = 20
+	type opPrep struct {
+		data      []byte
+		sha256Hex string
+		authHdr   string
+	}
+	preps := make([]opPrep, numOps)
+	for i := range preps {
+		_, signer := createTestKeypair(t)
+		data := []byte(fmt.Sprintf("concurrent op %d", i))
+		sha256Hash := CalculateSHA256(data)
+		authEv := createAuthEvent(t, signer, "upload", sha256Hash, 3600)
+		preps[i] = opPrep{
+			data:      data,
+			sha256Hex: hex.Enc(sha256Hash),
+			authHdr:   createAuthHeader(authEv),
+		}
+	}
+
 	done := make(chan error, numOps)
 
 	for i := 0; i < numOps; i++ {
 		go func(id int) {
-			testData := []byte(fmt.Sprintf("concurrent op %d", id))
-			sha256Hash := CalculateSHA256(testData)
-			sha256Hex := hex.Enc(sha256Hash)
-
 			// Upload
-			authEv := createAuthEvent(t, signer, "upload", sha256Hash, 3600)
-			req, _ := http.NewRequest("PUT", httpServer.URL+"/upload", bytes.NewReader(testData))
-			req.Header.Set("Authorization", createAuthHeader(authEv))
+			req, _ := http.NewRequest("PUT", httpServer.URL+"/upload", bytes.NewReader(preps[id].data))
+			req.Header.Set("Authorization", preps[id].authHdr)
 
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
@@ -720,7 +734,7 @@ func TestServerConcurrentOperations(t *testing.T) {
 			}
 
 			// Get
-			req2, _ := http.NewRequest("GET", httpServer.URL+"/"+sha256Hex, nil)
+			req2, _ := http.NewRequest("GET", httpServer.URL+"/"+preps[id].sha256Hex, nil)
 			resp2, err := http.DefaultClient.Do(req2)
 			if err != nil {
 				done <- err
