@@ -25,6 +25,13 @@ type NIP43Membership struct {
 	InviteCode string
 }
 
+// WordToken represents a normalized word with its truncated hash for indexing.
+// Used by TokenWords() for NIP-50 word search across database backends.
+type WordToken struct {
+	Word string // normalized lowercase word (e.g., "bitcoin")
+	Hash []byte // 8-byte truncated SHA-256
+}
+
 // BlobMetadata stores metadata about a blob in the database
 type BlobMetadata struct {
 	Pubkey    []byte `json:"pubkey"`

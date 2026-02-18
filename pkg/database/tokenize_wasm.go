@@ -8,7 +8,8 @@ import (
 	"unicode"
 )
 
-// TokenHashes extracts unique word hashes (8-byte truncated sha256) from content.
+// TokenWords extracts unique word tokens from content, returning both the
+// normalized word text and its 8-byte truncated SHA-256 hash.
 // Rules:
 // - Unicode-aware: words are sequences of letters or numbers.
 // - Lowercased using unicode case mapping.
@@ -16,9 +17,9 @@ import (
 // - Ignore nostr: URIs and #[n] mentions.
 // - Ignore words shorter than 2 runes.
 // - Exclude 64-character hexadecimal strings (likely IDs/pubkeys).
-func TokenHashes(content []byte) [][]byte {
+func TokenWords(content []byte) []WordToken {
 	s := string(content)
-	var out [][]byte
+	var out []WordToken
 	seen := make(map[string]struct{})
 
 	i := 0
@@ -89,9 +90,20 @@ func TokenHashes(content []byte) [][]byte {
 			if _, ok := seen[w]; !ok {
 				seen[w] = struct{}{}
 				h := sha256.Sum256([]byte(w))
-				out = append(out, h[:8])
+				out = append(out, WordToken{Word: w, Hash: h[:8]})
 			}
 		}
+	}
+	return out
+}
+
+// TokenHashes extracts unique word hashes (8-byte truncated sha256) from content.
+// This is a convenience wrapper around TokenWords that returns only the hashes.
+func TokenHashes(content []byte) [][]byte {
+	tokens := TokenWords(content)
+	out := make([][]byte, len(tokens))
+	for i, t := range tokens {
+		out[i] = t.Hash
 	}
 	return out
 }

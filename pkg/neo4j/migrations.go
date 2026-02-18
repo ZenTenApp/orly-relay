@@ -2,7 +2,11 @@ package neo4j
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+
+	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"next.orly.dev/pkg/database"
 )
 
 // Migration represents a database migration with a version identifier
@@ -39,6 +43,11 @@ var migrations = []Migration{
 		Version:     "v5",
 		Description: "Add naddr property to addressable Event nodes (kinds 30000-39999)",
 		Migrate:     migrateAddNaddr,
+	},
+	{
+		Version:     "v6",
+		Description: "Backfill Word nodes and HAS_WORD relationships for NIP-50 search",
+		Migrate:     migrateBackfillWords,
 	},
 }
 
@@ -673,5 +682,123 @@ func migrateAddNaddr(ctx context.Context, n *N) error {
 	}
 
 	n.Logger.Infof("naddr migration completed: updated %d addressable events", totalUpdated)
+	return nil
+}
+
+// migrateBackfillWords creates Word nodes and HAS_WORD relationships for all
+// existing Event nodes that don't have them yet. This enables NIP-50 word search
+// for events saved before word indexing was added to SaveEvent.
+func migrateBackfillWords(ctx context.Context, n *N) error {
+	// Count events without word index
+	countCypher := `
+		MATCH (e:Event)
+		WHERE NOT (e)-[:HAS_WORD]->(:Word)
+		RETURN count(e) AS count
+	`
+	result, err := n.ExecuteRead(ctx, countCypher, nil)
+	if err != nil {
+		return fmt.Errorf("failed to count events: %w", err)
+	}
+
+	var eventCount int64
+	if result.Next(ctx) {
+		if count, ok := result.Record().Values[0].(int64); ok {
+			eventCount = count
+		}
+	}
+
+	if eventCount == 0 {
+		n.Logger.Infof("no events to backfill word index for")
+		return nil
+	}
+
+	n.Logger.Infof("backfilling word index for %d events...", eventCount)
+
+	// Process events in batches: fetch content+tags, tokenize in Go, write Word nodes back
+	const fetchBatchSize = 500
+	totalProcessed := int64(0)
+
+	for {
+		fetchCypher := `
+			MATCH (e:Event)
+			WHERE NOT (e)-[:HAS_WORD]->(:Word)
+			RETURN e.id AS id, e.content AS content, e.tags AS tags
+			LIMIT $batchSize
+		`
+		batchResult, err := n.ExecuteRead(ctx, fetchCypher, map[string]any{
+			"batchSize": fetchBatchSize,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to fetch events batch: %w", err)
+		}
+
+		var batchCount int64
+		for batchResult.Next(ctx) {
+			record := batchResult.Record()
+			if record == nil {
+				continue
+			}
+
+			idRaw, _ := record.Get("id")
+			contentRaw, _ := record.Get("content")
+			tagsRaw, _ := record.Get("tags")
+
+			eventID, _ := idRaw.(string)
+			content, _ := contentRaw.(string)
+			tagsStr, _ := tagsRaw.(string)
+
+			// Collect unique word tokens from content and tags
+			seen := make(map[string]struct{})
+			var words []database.WordToken
+
+			if len(content) > 0 {
+				for _, wt := range database.TokenWords([]byte(content)) {
+					hashHex := hex.EncodeToString(wt.Hash)
+					if _, ok := seen[hashHex]; !ok {
+						seen[hashHex] = struct{}{}
+						words = append(words, wt)
+					}
+				}
+			}
+
+			if tagsStr != "" {
+				tags := tag.NewS()
+				if err := tags.UnmarshalJSON([]byte(tagsStr)); err == nil && tags != nil {
+					for _, t := range *tags {
+						for _, field := range t.T {
+							if len(field) == 0 {
+								continue
+							}
+							for _, wt := range database.TokenWords(field) {
+								hashHex := hex.EncodeToString(wt.Hash)
+								if _, ok := seen[hashHex]; !ok {
+									seen[hashHex] = struct{}{}
+									words = append(words, wt)
+								}
+							}
+						}
+					}
+				}
+			}
+
+			if len(words) > 0 {
+				if err := n.addWordsInBatches(ctx, eventID, words); err != nil {
+					n.Logger.Warningf("failed to backfill words for event %s: %v",
+						safePrefix(eventID, 16), err)
+				}
+			}
+
+			batchCount++
+		}
+
+		if batchCount == 0 {
+			break
+		}
+
+		totalProcessed += batchCount
+		n.Logger.Infof("backfilled word index: %d/%d events processed", totalProcessed, eventCount)
+	}
+
+	n.Logger.Infof("word index backfill complete: %d events processed", totalProcessed)
 	return nil
 }

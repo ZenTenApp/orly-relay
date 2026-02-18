@@ -2,7 +2,9 @@ package neo4j
 
 import (
 	"context"
+	stdhex "encoding/hex"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/kind"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/database/indexes/types"
 	"next.orly.dev/pkg/interfaces/store"
 )
@@ -34,6 +37,11 @@ func (n *N) QueryAllVersions(c context.Context, f *filter.F) (evs event.S, err e
 func (n *N) QueryEventsWithOptions(
 	c context.Context, f *filter.F, includeDeleteEvents bool, showAllVersions bool,
 ) (evs event.S, err error) {
+	// NIP-50 search queries use a separate path with relevance scoring
+	if len(f.Search) > 0 {
+		return n.QuerySearchEvents(c, f)
+	}
+
 	// Build Cypher query from Nostr filter
 	cypher, params := n.buildCypherQuery(f, includeDeleteEvents)
 
@@ -125,6 +133,11 @@ func (n *N) QueryEventsWithOptions(
 // buildCypherQuery constructs a Cypher query from a Nostr filter
 // This is the core translation layer between Nostr's REQ filter format and Neo4j's Cypher
 func (n *N) buildCypherQuery(f *filter.F, includeDeleteEvents bool) (string, map[string]any) {
+	// NIP-50 search: delegate to word-based graph query
+	if len(f.Search) > 0 {
+		return n.buildSearchCypherQuery(f, includeDeleteEvents)
+	}
+
 	params := make(map[string]any)
 	var whereClauses []string
 
@@ -600,6 +613,310 @@ func (n *N) QueryForIds(c context.Context, f *filter.F) (
 	}
 
 	return idPkTs, nil
+}
+
+// buildSearchCypherQuery constructs a Cypher query for NIP-50 word search.
+// It matches events via HAS_WORD relationships to Word nodes, counts matches
+// per event, and returns matchCount for Go-side relevance scoring.
+func (n *N) buildSearchCypherQuery(f *filter.F, includeDeleteEvents bool) (string, map[string]any) {
+	params := make(map[string]any)
+
+	// Tokenize the search string using the same tokenizer as indexing
+	searchTokens := database.TokenWords(f.Search)
+	if len(searchTokens) == 0 {
+		// No valid search tokens — return query that matches nothing
+		return "MATCH (e:Event) WHERE false RETURN e.id AS id, e.kind AS kind, e.created_at AS created_at, e.content AS content, e.sig AS sig, e.pubkey AS pubkey, e.tags AS tags, e.serial AS serial, 0 AS matchCount", params
+	}
+
+	wordHashes := make([]string, len(searchTokens))
+	for i, wt := range searchTokens {
+		wordHashes[i] = stdhex.EncodeToString(wt.Hash)
+	}
+	params["wordHashes"] = wordHashes
+
+	// Build WHERE clauses for additional filters (authors, kinds, time, tags)
+	var whereClauses []string
+
+	// Authors filter
+	if f.Authors != nil && len(f.Authors.T) > 0 {
+		authorConditions := make([]string, 0, len(f.Authors.T))
+		for i, author := range f.Authors.T {
+			if len(author) == 0 {
+				continue
+			}
+			paramName := fmt.Sprintf("author_%d", i)
+			hexAuthor := NormalizePubkeyHex(author)
+			if hexAuthor == "" {
+				continue
+			}
+			if len(hexAuthor) < 64 {
+				authorConditions = append(authorConditions, fmt.Sprintf("e.pubkey STARTS WITH $%s", paramName))
+			} else {
+				authorConditions = append(authorConditions, fmt.Sprintf("e.pubkey = $%s", paramName))
+			}
+			params[paramName] = hexAuthor
+		}
+		if len(authorConditions) > 0 {
+			whereClauses = append(whereClauses, "("+strings.Join(authorConditions, " OR ")+")")
+		}
+	}
+
+	// Kinds filter
+	if f.Kinds != nil && len(f.Kinds.K) > 0 {
+		kinds := make([]int64, len(f.Kinds.K))
+		for i, k := range f.Kinds.K {
+			kinds[i] = int64(k.K)
+		}
+		params["kinds"] = kinds
+		whereClauses = append(whereClauses, "e.kind IN $kinds")
+	}
+
+	// Time range filters
+	if f.Since != nil && f.Since.V > 0 {
+		params["since"] = f.Since.V
+		whereClauses = append(whereClauses, "e.created_at >= $since")
+	}
+	if f.Until != nil && f.Until.V > 0 {
+		params["until"] = f.Until.V
+		whereClauses = append(whereClauses, "e.created_at <= $until")
+	}
+
+	// Tag filters
+	tagIndex := 0
+	if f.Tags != nil {
+		for _, tagValues := range *f.Tags {
+			if len(tagValues.T) > 0 {
+				tagTypeParam := fmt.Sprintf("tagType_%d", tagIndex)
+				tagValuesParam := fmt.Sprintf("tagValues_%d", tagIndex)
+
+				tagTypeBytes := tagValues.T[0]
+				var tagType string
+				if len(tagTypeBytes) > 0 && tagTypeBytes[0] == '#' {
+					tagType = string(tagTypeBytes[1:])
+				} else {
+					tagType = string(tagTypeBytes)
+				}
+
+				tagValueStrings := make([]string, 0, len(tagValues.T)-1)
+				for _, tv := range tagValues.T[1:] {
+					if tagType == "e" || tagType == "p" {
+						normalized := NormalizePubkeyHex(tv)
+						if normalized != "" {
+							tagValueStrings = append(tagValueStrings, normalized)
+						}
+					} else {
+						tagValueStrings = append(tagValueStrings, string(tv))
+					}
+				}
+
+				if len(tagValueStrings) == 0 {
+					continue
+				}
+
+				params[tagTypeParam] = tagType
+				params[tagValuesParam] = tagValueStrings
+				whereClauses = append(whereClauses,
+					fmt.Sprintf("EXISTS { MATCH (e)-[:TAGGED_WITH]->(t:Tag) WHERE t.type = $%s AND t.value IN $%s }",
+						tagTypeParam, tagValuesParam))
+				tagIndex++
+			}
+		}
+	}
+
+	// Exclude delete events
+	if !includeDeleteEvents {
+		whereClauses = append(whereClauses, "e.kind <> 5")
+	}
+
+	// Expiration filter (NIP-40)
+	hasExplicitIds := f.Ids != nil && len(f.Ids.T) > 0
+	if !hasExplicitIds {
+		params["now"] = time.Now().Unix()
+		whereClauses = append(whereClauses, "(e.expiration = 0 OR e.expiration > $now)")
+	}
+
+	// Build additional WHERE string
+	additionalWhere := ""
+	if len(whereClauses) > 0 {
+		additionalWhere = " AND " + strings.Join(whereClauses, " AND ")
+	}
+
+	// Limit
+	effectiveLimit := 0
+	if f.Limit != nil && *f.Limit > 0 {
+		effectiveLimit = int(*f.Limit)
+	}
+	if n.queryResultLimit > 0 {
+		if effectiveLimit == 0 || effectiveLimit > n.queryResultLimit {
+			effectiveLimit = n.queryResultLimit
+		}
+	}
+
+	limitClause := ""
+	if effectiveLimit > 0 {
+		params["limit"] = effectiveLimit
+		limitClause = "\nLIMIT $limit"
+	}
+
+	// Core search query: traverse word graph, count matches per event
+	cypher := `
+MATCH (e:Event)-[:HAS_WORD]->(w:Word)
+WHERE w.hash IN $wordHashes` + additionalWhere + `
+WITH e, count(DISTINCT w) AS matchCount
+RETURN e.id AS id,
+       e.kind AS kind,
+       e.created_at AS created_at,
+       e.content AS content,
+       e.sig AS sig,
+       e.pubkey AS pubkey,
+       e.tags AS tags,
+       e.serial AS serial,
+       matchCount
+ORDER BY matchCount DESC, e.created_at DESC` + limitClause
+
+	log.T.F("Neo4j search query: %s", cypher)
+
+	return cypher, params
+}
+
+// searchScoredEvent pairs a parsed event with its search match count for scoring.
+type searchScoredEvent struct {
+	Event      *event.E
+	MatchCount int
+}
+
+// QuerySearchEvents performs a NIP-50 word search query with relevance scoring.
+// Events are scored using a 50/50 blend of match count and recency, matching
+// the Badger backend's scoring algorithm.
+func (n *N) QuerySearchEvents(c context.Context, f *filter.F) (evs event.S, err error) {
+	cypher, params := n.buildSearchCypherQuery(f, false)
+
+	result, err := n.ExecuteRead(c, cypher, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute search query: %w", err)
+	}
+
+	// Parse results with match counts
+	var scored []searchScoredEvent
+	ctx := context.Background()
+
+	for result.Next(ctx) {
+		record := result.Record()
+		if record == nil {
+			continue
+		}
+
+		// Parse event fields (same as parseEventsFromResult)
+		idRaw, _ := record.Get("id")
+		kindRaw, _ := record.Get("kind")
+		createdAtRaw, _ := record.Get("created_at")
+		contentRaw, _ := record.Get("content")
+		sigRaw, _ := record.Get("sig")
+		pubkeyRaw, _ := record.Get("pubkey")
+		tagsRaw, _ := record.Get("tags")
+		matchCountRaw, _ := record.Get("matchCount")
+
+		idStr, _ := idRaw.(string)
+		kindVal, _ := kindRaw.(int64)
+		createdAt, _ := createdAtRaw.(int64)
+		content, _ := contentRaw.(string)
+		sigStr, _ := sigRaw.(string)
+		pubkeyStr, _ := pubkeyRaw.(string)
+		tagsStr, _ := tagsRaw.(string)
+		matchCount, _ := matchCountRaw.(int64)
+
+		id, err := hex.Dec(idStr)
+		if err != nil {
+			continue
+		}
+		sig, err := hex.Dec(sigStr)
+		if err != nil {
+			continue
+		}
+		pubkey, err := hex.Dec(pubkeyStr)
+		if err != nil {
+			continue
+		}
+
+		tags := tag.NewS()
+		if tagsStr != "" {
+			_ = tags.UnmarshalJSON([]byte(tagsStr))
+		}
+
+		e := &event.E{
+			ID:        id,
+			Pubkey:    pubkey,
+			Kind:      uint16(kindVal),
+			CreatedAt: createdAt,
+			Content:   []byte(content),
+			Tags:      tags,
+			Sig:       sig,
+		}
+
+		scored = append(scored, searchScoredEvent{Event: e, MatchCount: int(matchCount)})
+	}
+
+	if err := result.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating search results: %w", err)
+	}
+
+	if len(scored) == 0 {
+		return nil, nil
+	}
+
+	// Apply 50/50 relevance scoring (match count + recency)
+	maxCount := 0
+	var minTs, maxTs int64
+	for i, s := range scored {
+		if s.MatchCount > maxCount {
+			maxCount = s.MatchCount
+		}
+		ts := s.Event.CreatedAt
+		if i == 0 {
+			minTs, maxTs = ts, ts
+		} else {
+			if ts < minTs {
+				minTs = ts
+			}
+			if ts > maxTs {
+				maxTs = ts
+			}
+		}
+	}
+
+	tsSpan := float64(maxTs - minTs)
+
+	sort.Slice(scored, func(i, j int) bool {
+		ci := float64(scored[i].MatchCount) / math.Max(float64(maxCount), 1)
+		cj := float64(scored[j].MatchCount) / math.Max(float64(maxCount), 1)
+
+		var ai, aj float64
+		if tsSpan > 0 {
+			ai = float64(scored[i].Event.CreatedAt-minTs) / tsSpan
+			aj = float64(scored[j].Event.CreatedAt-minTs) / tsSpan
+		}
+
+		si := 0.5*ci + 0.5*ai
+		sj := 0.5*cj + 0.5*aj
+
+		if si == sj {
+			return scored[i].Event.CreatedAt > scored[j].Event.CreatedAt
+		}
+		return si > sj
+	})
+
+	// Extract sorted events
+	evs = make(event.S, len(scored))
+	for i, s := range scored {
+		evs[i] = s.Event
+	}
+
+	// Apply limit
+	if f.Limit != nil && len(evs) > int(*f.Limit) {
+		evs = evs[:*f.Limit]
+	}
+
+	return evs, nil
 }
 
 // CountEvents counts events matching a filter

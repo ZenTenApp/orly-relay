@@ -2,12 +2,14 @@ package neo4j
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	nostrHex "git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/database/indexes/types"
 )
 
@@ -15,6 +17,9 @@ import (
 func parseInt64(s string) (int64, error) {
 	return strconv.ParseInt(s, 10, 64)
 }
+
+// wordBatchSize is the maximum number of words to process in a single transaction
+const wordBatchSize = 500
 
 // tagBatchSize is the maximum number of tags to process in a single transaction
 // This prevents Neo4j stack overflow errors with events that have thousands of tags
@@ -30,7 +35,7 @@ const tagBatchSize = 500
 // To prevent Neo4j stack overflow errors with events containing thousands of tags,
 // tags are processed in batches using UNWIND instead of generating inline Cypher.
 func (n *N) SaveEvent(c context.Context, ev *event.E) (exists bool, err error) {
-	eventID := hex.Enc(ev.ID[:])
+	eventID := nostrHex.Enc(ev.ID[:])
 
 	// Check if event already exists
 	checkCypher := "MATCH (e:Event {id: $id}) RETURN e.id AS id"
@@ -85,6 +90,11 @@ func (n *N) SaveEvent(c context.Context, ev *event.E) (exists bool, err error) {
 		}
 	}
 
+	// Step 3: Process word tokens for NIP-50 full-text search
+	if err := n.addWordsForEvent(c, eventID, ev); err != nil {
+		n.Logger.Errorf("failed to add word tokens for event %s: %v", safePrefix(eventID, 16), err)
+	}
+
 	// Process social graph events (kinds 0, 3, 1984, 10000)
 	// This creates NostrUser nodes and social relationships (FOLLOWS, MUTES, REPORTS)
 	// with event traceability for diff-based updates
@@ -121,7 +131,7 @@ func buildNaddr(ev *event.E) string {
 		return ""
 	}
 
-	pubkey := hex.Enc(ev.Pubkey[:])
+	pubkey := nostrHex.Enc(ev.Pubkey[:])
 	kind := strconv.FormatInt(int64(ev.Kind), 10)
 
 	// Get d-tag value (empty string if not present)
@@ -144,15 +154,15 @@ func (n *N) buildBaseEventCypher(ev *event.E, serial uint64) (string, map[string
 	params := make(map[string]any)
 
 	// Event properties
-	eventID := hex.Enc(ev.ID[:])
-	authorPubkey := hex.Enc(ev.Pubkey[:])
+	eventID := nostrHex.Enc(ev.ID[:])
+	authorPubkey := nostrHex.Enc(ev.Pubkey[:])
 
 	params["eventId"] = eventID
 	params["serial"] = serial
 	params["kind"] = int64(ev.Kind)
 	params["createdAt"] = ev.CreatedAt
 	params["content"] = string(ev.Content)
-	params["sig"] = hex.Enc(ev.Sig[:])
+	params["sig"] = nostrHex.Enc(ev.Sig[:])
 	params["pubkey"] = authorPubkey
 
 	// Check for expiration tag (NIP-40)
@@ -395,6 +405,87 @@ CREATE (e)-[:TAGGED_WITH]->(t)`
 	return nil
 }
 
+// addWordsForEvent tokenizes event content and all tag field values,
+// then creates Word nodes and HAS_WORD relationships in batches.
+func (n *N) addWordsForEvent(c context.Context, eventID string, ev *event.E) error {
+	seen := make(map[string]struct{})
+	var words []database.WordToken
+
+	// Tokenize content
+	if len(ev.Content) > 0 {
+		for _, wt := range database.TokenWords(ev.Content) {
+			hashHex := hex.EncodeToString(wt.Hash)
+			if _, ok := seen[hashHex]; !ok {
+				seen[hashHex] = struct{}{}
+				words = append(words, wt)
+			}
+		}
+	}
+
+	// Tokenize all tag field values
+	if ev.Tags != nil {
+		for _, t := range *ev.Tags {
+			for _, field := range t.T {
+				if len(field) == 0 {
+					continue
+				}
+				for _, wt := range database.TokenWords(field) {
+					hashHex := hex.EncodeToString(wt.Hash)
+					if _, ok := seen[hashHex]; !ok {
+						seen[hashHex] = struct{}{}
+						words = append(words, wt)
+					}
+				}
+			}
+		}
+	}
+
+	if len(words) == 0 {
+		return nil
+	}
+
+	return n.addWordsInBatches(c, eventID, words)
+}
+
+// addWordsInBatches creates Word nodes and HAS_WORD relationships using UNWIND.
+// Word nodes are keyed by their hex-encoded 8-byte SHA-256 hash and store
+// the normalized lowercase word text as a readable label.
+func (n *N) addWordsInBatches(c context.Context, eventID string, words []database.WordToken) error {
+	for i := 0; i < len(words); i += wordBatchSize {
+		end := i + wordBatchSize
+		if end > len(words) {
+			end = len(words)
+		}
+		batch := words[i:end]
+
+		wordMaps := make([]map[string]string, len(batch))
+		for j, wt := range batch {
+			wordMaps[j] = map[string]string{
+				"hash": hex.EncodeToString(wt.Hash),
+				"text": wt.Word,
+			}
+		}
+
+		cypher := `
+MATCH (e:Event {id: $eventId})
+UNWIND $words AS word
+MERGE (w:Word {hash: word.hash})
+ON CREATE SET w.text = word.text
+CREATE (e)-[:HAS_WORD]->(w)`
+
+		params := map[string]any{
+			"eventId": eventID,
+			"words":   wordMaps,
+		}
+
+		if _, err := n.ExecuteWrite(c, cypher, params); err != nil {
+			return fmt.Errorf("word batch %d-%d: %w", i, end, err)
+		}
+	}
+
+	return nil
+}
+
 // GetSerialsFromFilter returns event serials matching a filter
 func (n *N) GetSerialsFromFilter(f *filter.F) (serials types.Uint40s, err error) {
 	// Use QueryForSerials with background context
@@ -415,7 +506,7 @@ func (n *N) WouldReplaceEvent(ev *event.E) (bool, types.Uint40s, error) {
 		return false, nil, nil
 	}
 
-	authorPubkey := hex.Enc(ev.Pubkey[:])
+	authorPubkey := nostrHex.Enc(ev.Pubkey[:])
 	ctx := context.Background()
 
 	var cypher string
@@ -493,7 +584,7 @@ ORDER BY e.created_at DESC`
 // (kinds 30000-39999) that have the same pubkey, kind, and d-tag value.
 // This is called before saving a new event to ensure only the latest version is stored.
 func (n *N) deleteOlderParameterizedReplaceable(c context.Context, ev *event.E) error {
-	authorPubkey := hex.Enc(ev.Pubkey[:])
+	authorPubkey := nostrHex.Enc(ev.Pubkey[:])
 
 	// Get the d-tag value
 	dTag := ev.Tags.GetFirst([]byte{'d'})

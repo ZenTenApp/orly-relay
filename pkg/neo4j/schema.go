@@ -80,6 +80,16 @@ func (n *N) applySchema(ctx context.Context) error {
 		// NOTE: NostrUser constraint is defined above in MANDATORY section
 		// It serves both NIP-01 (author tracking) and WoT (social graph) purposes
 
+		// ============================================================
+		// === OPTIONAL: NIP-50 Word Search Index ===
+		// Supports full-text search via Word nodes linked to events
+		// ============================================================
+
+		// OPTIONAL (NIP-50): Word.hash uniqueness for word search index
+		// Word nodes store 8-byte truncated SHA-256 hashes (hex-encoded) as keys
+		// with the normalized word text as a readable label
+		"CREATE CONSTRAINT word_hash_unique IF NOT EXISTS FOR (w:Word) REQUIRE w.hash IS UNIQUE",
+
 		// OPTIONAL (WoT): Container for WoT metrics cards per observee
 		"CREATE CONSTRAINT setOfNostrUserWotMetricsCards_observee_pubkey IF NOT EXISTS FOR (n:SetOfNostrUserWotMetricsCards) REQUIRE n.observee_pubkey IS UNIQUE",
 
@@ -229,6 +239,9 @@ func (n *N) dropAll(ctx context.Context) error {
 
 		// OPTIONAL (Internal) constraints
 		"DROP CONSTRAINT marker_key_unique IF EXISTS",
+
+		// OPTIONAL (NIP-50) constraints
+		"DROP CONSTRAINT word_hash_unique IF EXISTS",
 
 		// OPTIONAL (Social Graph) constraints
 		"DROP CONSTRAINT processedSocialEvent_event_id IF EXISTS",
