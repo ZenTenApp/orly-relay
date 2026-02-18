@@ -66,6 +66,14 @@ The Neo4j database backend provides a graph-native storage solution for the ORLY
 })
 ```
 
+**Word Node** (NIP-50 search index)
+```cypher
+(:Word {
+  hash: string,         // 8-byte truncated SHA-256, hex-encoded (16 chars)
+  text: string          // Normalized lowercase word (e.g., "bitcoin")
+})
+```
+
 **Marker Node** (for metadata)
 ```cypher
 (:Marker {
@@ -80,6 +88,7 @@ The Neo4j database backend provides a graph-native storage solution for the ORLY
 - `(:Event)-[:REFERENCES]->(:Event)` - Event references (e-tags)
 - `(:Event)-[:MENTIONS]->(:Author)` - Author mentions (p-tags)
 - `(:Event)-[:TAGGED_WITH]->(:Tag)` - Generic tag associations
+- `(:Event)-[:HAS_WORD]->(:Word)` - Word search index (NIP-50)
 
 ## How Nostr REQ Messages Are Implemented
 
@@ -145,7 +154,23 @@ WHERE t0.type = $tagType_0 AND t0.value IN $tagValues_0
 
 This leverages Neo4j's native graph traversal for efficient tag queries!
 
-#### 6. Combined Filters
+#### 6. NIP-50 Word Search
+```json
+{"search": "bitcoin lightning"}
+```
+Becomes:
+```cypher
+MATCH (e:Event)-[:HAS_WORD]->(w:Word)
+WHERE w.hash IN $wordHashes
+WITH e, count(DISTINCT w) AS matchCount
+RETURN e.id, e.kind, e.created_at, e.content, e.sig, e.pubkey, e.tags, matchCount
+ORDER BY matchCount DESC, e.created_at DESC
+LIMIT $limit
+```
+
+Search can be combined with any other filter (kinds, authors, since/until, tags). See the [NIP-50 Search](#nip-50-word-search-1) section below for full details.
+
+#### 7. Combined Filters
 ```json
 {
   "kinds": [1],
@@ -800,14 +825,262 @@ The bolt+s management feature exposes three HTTP endpoints:
 | `/api/neo4j/bolt` | GET | Owner (NIP-98) | Returns current bolt+s status, config path, port, cert dir, and connection URI. |
 | `/api/neo4j/bolt/toggle` | POST | Owner (NIP-98) | Accepts `{ "enabled": true/false }`. Modifies neo4j.conf and restarts Neo4j. |
 
+## NIP-50 Word Search
+
+The Neo4j backend supports full-text word search via [NIP-50](https://github.com/nostr-protocol/nips/blob/master/50.md), using a graph-based inverted index. This is the same approach used by the Badger backend — words are stored as graph nodes linked to events, enabling efficient set-intersection queries via graph traversal.
+
+### How It Works
+
+When an event is saved, its content and tag values are tokenized into individual words. Each unique word becomes a `(:Word)` node in the graph, linked to the event via a `(:Event)-[:HAS_WORD]->(:Word)` relationship. Searching for words is then a graph traversal from Word nodes back to Events.
+
+**Indexing pipeline:**
+1. Event content is split into words (Unicode-aware word boundaries)
+2. Tag values from all tags (subjects, hashtags, etc.) are also tokenized
+3. Each word is normalized to lowercase ASCII (decorative Unicode → ASCII via NFKD)
+4. Words shorter than 2 characters are discarded
+5. URLs, Nostr URIs (`nostr:...`), and 64-character hex strings are skipped entirely
+6. Each word is hashed with SHA-256, truncated to 8 bytes, and hex-encoded (16 chars)
+7. A `(:Word {hash, text})` node is MERGE'd (created if new, reused if existing)
+8. A `[:HAS_WORD]` relationship is created from the event to the word
+
+**The hash serves as the unique key** (~10^19 possible values — far beyond all human language words). The `text` property stores the readable word for debugging and direct Cypher queries.
+
+### Deployment: Upgrading to v0.60.5+
+
+To enable word search on an existing Neo4j deployment:
+
+1. **Update the relay binary** to v0.60.5 or later
+2. **Restart the relay** — no config changes needed
+3. **Wait for migration v6** to complete
+
+On startup, the relay automatically:
+- Creates the `Word` uniqueness constraint and index
+- Runs migration v6 to backfill Word nodes for all existing events
+
+**Monitoring migration progress** — watch the relay logs:
+```
+[INFO] applying migration v6: Backfill Word nodes and HAS_WORD relationships for NIP-50 search
+[INFO] backfilling word index for 50000 events...
+[INFO] backfilled word index: 500/50000 events processed
+[INFO] backfilled word index: 1000/50000 events processed
+...
+[INFO] word index backfill complete: 50000 events processed
+[INFO] migration v6 completed successfully
+```
+
+The migration processes events in batches of 500. For a relay with 50,000 events, expect it to take a few minutes. For a relay with millions of events, it may take longer but runs non-blocking — the relay serves requests during migration, search results will simply be incomplete until it finishes.
+
+**Verifying migration completion** — check for the Migration marker node:
+```cypher
+MATCH (m:Migration {version: "v6"})
+RETURN m.version, m.description, m.applied_at
+```
+
+**Verifying word index health:**
+```cypher
+-- Count indexed events and unique words
+MATCH (e:Event)-[:HAS_WORD]->(w:Word)
+RETURN count(DISTINCT e) AS events_indexed,
+       count(DISTINCT w) AS unique_words
+
+-- Check a specific word exists
+MATCH (w:Word {text: "bitcoin"})
+RETURN w.hash, w.text
+```
+
+### Querying via NIP-50 (Nostr Protocol)
+
+Clients send a standard NIP-50 `REQ` message with a `search` field in the filter:
+
+```json
+["REQ", "sub-id", {"search": "bitcoin lightning", "limit": 20}]
+```
+
+The relay tokenizes the search string using the same pipeline as indexing (lowercase, ASCII normalization, hash lookup), then traverses the word graph to find matching events.
+
+**Search can be combined with any standard NIP-01 filter:**
+
+```json
+["REQ", "sub-id", {
+  "search": "bitcoin",
+  "kinds": [1],
+  "authors": ["abc123..."],
+  "since": 1700000000,
+  "#t": ["cryptocurrency"],
+  "limit": 50
+}]
+```
+
+All filter clauses are applied as additional `WHERE` conditions on the search query, so the index is used for both word matching and filter narrowing in a single graph traversal.
+
+#### Relevance Scoring
+
+Results are ranked using a **50/50 blend** of match relevance and recency:
+
+```
+score = 0.5 × (matchCount / maxMatchCount) + 0.5 × (recencyRatio)
+```
+
+Where:
+- `matchCount` = number of search terms matched by this event
+- `maxMatchCount` = highest match count across all results
+- `recencyRatio` = `(event.created_at - oldest) / (newest - oldest)`
+
+This means an event matching all search terms AND being recent ranks highest, while an event matching fewer terms or being older ranks lower. Events with equal scores are ordered by `created_at DESC`.
+
+#### Example: Multi-Term Search
+
+For `"bitcoin lightning network"`:
+- An event containing all 3 words → matchCount = 3 (highest relevance)
+- An event containing "bitcoin" and "lightning" → matchCount = 2
+- An event containing only "bitcoin" → matchCount = 1
+- An event containing none → not returned
+
+### Querying via Bolt+S (Direct Cypher)
+
+If bolt+s is enabled (see [Bolt+S External Access](#bolts-external-access-remote-cypher-queries)), you can query the word index directly with Cypher. This is useful for analytics, debugging, and building custom search experiences outside the Nostr protocol.
+
+#### Find Events Containing a Word
+
+```cypher
+MATCH (e:Event)-[:HAS_WORD]->(w:Word {text: "bitcoin"})
+RETURN e.id, e.content, e.created_at
+ORDER BY e.created_at DESC
+LIMIT 20
+```
+
+#### Multi-Word Intersection (AND Logic)
+
+Find events containing ALL specified words:
+
+```cypher
+WITH ["bitcoin", "lightning", "network"] AS searchTerms
+MATCH (e:Event)-[:HAS_WORD]->(w:Word)
+WHERE w.text IN searchTerms
+WITH e, count(DISTINCT w) AS matchCount, size(searchTerms) AS totalTerms
+WHERE matchCount = totalTerms
+RETURN e.id, e.content, e.created_at
+ORDER BY e.created_at DESC
+LIMIT 20
+```
+
+#### Multi-Word Union with Ranking (OR Logic)
+
+Find events containing ANY of the words, ranked by how many they match:
+
+```cypher
+WITH ["bitcoin", "lightning", "network"] AS searchTerms
+MATCH (e:Event)-[:HAS_WORD]->(w:Word)
+WHERE w.text IN searchTerms
+WITH e, count(DISTINCT w) AS matchCount
+RETURN e.id, e.content, e.created_at, matchCount
+ORDER BY matchCount DESC, e.created_at DESC
+LIMIT 50
+```
+
+#### Word Co-Occurrence Analysis
+
+Find words that frequently appear alongside "bitcoin":
+
+```cypher
+MATCH (e:Event)-[:HAS_WORD]->(w1:Word {text: "bitcoin"})
+MATCH (e)-[:HAS_WORD]->(w2:Word)
+WHERE w2.text <> "bitcoin"
+RETURN w2.text AS related_word, count(e) AS co_occurrences
+ORDER BY co_occurrences DESC
+LIMIT 20
+```
+
+#### Author's Vocabulary Profile
+
+Find the most-used words by a specific author:
+
+```cypher
+MATCH (e:Event {pubkey: $pubkey})-[:HAS_WORD]->(w:Word)
+RETURN w.text, count(e) AS usage
+ORDER BY usage DESC
+LIMIT 50
+```
+
+#### Trending Words Over Time
+
+Find words that appeared most in the last 24 hours:
+
+```cypher
+MATCH (e:Event)-[:HAS_WORD]->(w:Word)
+WHERE e.created_at > (timestamp() / 1000 - 86400)
+RETURN w.text, count(e) AS mentions
+ORDER BY mentions DESC
+LIMIT 30
+```
+
+#### Hash-Based Queries
+
+For programmatic access, you can query by hash directly (avoiding normalization edge cases):
+
+```cypher
+MATCH (e:Event)-[:HAS_WORD]->(w:Word)
+WHERE w.hash IN ["a1b2c3d4e5f6a7b8", "f8e7d6c5b4a39281"]
+RETURN e.id, e.content, count(DISTINCT w) AS matchCount
+ORDER BY matchCount DESC
+LIMIT 20
+```
+
+The hash is the first 8 bytes of `SHA-256(lowercase_word)`, hex-encoded to 16 characters.
+
+### What Gets Indexed (and What Doesn't)
+
+| Content Type | Indexed? | Example |
+|-------------|----------|---------|
+| Regular words | Yes | "Bitcoin is great" → `bitcoin`, `is`, `great` |
+| Tag values | Yes | `["t", "cryptocurrency"]` → `cryptocurrency` |
+| Subject tags | Yes | `["subject", "decentralized finance"]` → `decentralized`, `finance` |
+| URLs | **No** | `https://example.com/page` → skipped entirely |
+| Nostr URIs | **No** | `nostr:npub1abc...` → skipped entirely |
+| Hex strings (64 chars) | **No** | Event IDs, pubkeys → skipped |
+| Single characters | **No** | "a", "I" → too short (< 2 chars) |
+| Mixed case | Normalized | "BITCOIN", "Bitcoin" → `bitcoin` |
+| Decorative Unicode | Normalized | "𝗕𝗶𝘁𝗰𝗼𝗶𝗻" → `bitcoin` |
+| Emoji | **No** | Emoji are not alphabetic words |
+
+### Performance Characteristics
+
+The word search index uses Neo4j's native graph traversal rather than a Lucene-based fulltext index. This has specific trade-offs:
+
+**Strengths:**
+- Consistent with the Badger backend's approach (same tokenization, same scoring)
+- Word nodes are naturally deduplicated — "bitcoin" is one node regardless of how many events reference it
+- Combining search with graph traversals (authors, tags, kinds) is a single query
+- Adding new events is O(words) — each word is a MERGE + relationship CREATE
+
+**Considerations:**
+- Each word adds a node and relationship to the graph, so the database size grows proportional to total word count
+- Very common words (stopwords like "the", "is") create high-degree Word nodes — Neo4j handles these well but they add little search value
+- The 8-byte hash provides ~10^19 possible values, sufficient for all human languages combined
+
+### Migration Details (v6)
+
+The v6 migration backfills Word nodes for all events that existed before upgrading:
+
+1. Finds all events without any `HAS_WORD` relationships
+2. Processes them in batches of 500
+3. For each event: tokenizes content + all tag values
+4. Creates Word nodes and HAS_WORD relationships using `UNWIND` batch pattern
+5. Logs progress every batch
+
+The migration is **idempotent** — it only processes events missing word relationships, so it's safe to restart mid-migration. If the relay crashes during migration, it will resume from where it left off on the next startup.
+
+The migration marker is stored as a `(:Migration {version: "v6"})` node. Once this node exists, the migration is skipped on subsequent startups.
+
 ## Future Enhancements
 
-1. **Full-text Search**: Leverage Neo4j's full-text indexes for content search
+1. ~~**Full-text Search**: Leverage Neo4j's full-text indexes for content search~~ — **Done in v0.60.5** (graph-based word index via NIP-50)
 2. **Graph Analytics**: Implement social graph metrics (centrality, communities)
-3. **Advanced Queries**: Support NIP-50 search via Cypher full-text capabilities
+3. ~~**Advanced Queries**: Support NIP-50 search via Cypher full-text capabilities~~ — **Done in v0.60.5**
 4. **Clustering**: Deploy Neo4j cluster for high availability
 5. **APOC Procedures**: Utilize APOC library for advanced graph algorithms
 6. **Caching Layer**: Implement query result caching similar to Badger backend
+7. **Stopword Filtering**: Optionally skip indexing high-frequency words ("the", "is", "and") to reduce graph size
 
 ## Troubleshooting
 
