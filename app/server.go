@@ -48,6 +48,7 @@ import (
 	dsync "next.orly.dev/pkg/sync"
 	"next.orly.dev/pkg/wireguard"
 	"next.orly.dev/pkg/archive"
+	emailbridge "next.orly.dev/pkg/bridge"
 	"next.orly.dev/pkg/httpguard"
 	"next.orly.dev/pkg/transport"
 )
@@ -137,6 +138,9 @@ type Server struct {
 
 	// HTTP guard (bot blocking + rate limiting)
 	httpGuard *httpguard.Guard
+
+	// Email bridge (Marmot DM to SMTP)
+	emailBridge *emailbridge.Bridge
 }
 
 // =============================================================================
@@ -521,6 +525,13 @@ func (s *Server) UserInterface() {
 
 	// Neo4j Cypher query proxy (NIP-98 owner-gated)
 	s.mux.HandleFunc("/api/neo4j/cypher", s.handleNeo4jCypher)
+
+	// Email bridge compose and decrypt pages
+	if s.emailBridge != nil {
+		s.mux.HandleFunc("/compose", emailbridge.ComposeHandler())
+		s.mux.HandleFunc("/decrypt", emailbridge.DecryptHandler())
+		log.Printf("Email bridge compose/decrypt pages enabled at /compose and /decrypt")
+	}
 }
 
 // handleFavicon serves favicon.png as favicon.ico

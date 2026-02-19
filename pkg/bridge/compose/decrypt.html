@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marmot Email Bridge - Decrypt Attachment</title>
+<style>
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --border: #0f3460;
+  --text: #e4e4e4;
+  --muted: #8888aa;
+  --accent: #e94560;
+  --accent-hover: #ff6b81;
+  --success: #2ecc71;
+  --input-bg: #0f1729;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Courier New', monospace;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.container {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+h1 {
+  font-size: 1.4rem;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+
+.subtitle {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-bottom: 2rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-bottom: 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+input {
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  border-radius: 4px;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+button {
+  padding: 0.7rem 1.5rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--accent);
+  color: white;
+  margin-top: 1rem;
+}
+
+button:hover {
+  background: var(--accent-hover);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.status {
+  margin-top: 1rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  display: none;
+}
+
+.status.success {
+  display: block;
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+
+.status.error {
+  display: block;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.status.info {
+  display: block;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.progress {
+  margin-top: 1rem;
+  display: none;
+}
+
+.progress.visible {
+  display: block;
+}
+
+.progress-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+
+.info-box {
+  margin-top: 2rem;
+  padding: 1rem;
+  background: var(--surface);
+  border-left: 3px solid var(--accent);
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Marmot Email Bridge</h1>
+  <p class="subtitle">Decrypt an attachment from a Nostr DM</p>
+
+  <div class="form-group">
+    <label for="url">Attachment URL (with #key fragment)</label>
+    <input type="text" id="url" placeholder="https://blossom.example.com/abc123#decryptionkey">
+  </div>
+
+  <button onclick="decryptAndDownload()" id="decrypt-btn">Decrypt & Download</button>
+
+  <div class="progress" id="progress">
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="info-box">
+    <strong>How this works:</strong> The URL contains a Blossom blob address and an
+    encryption key after the # symbol. The key never leaves your browser — the server
+    only sees an opaque encrypted blob. This page downloads the blob, decrypts it
+    locally using ChaCha20-Poly1305, and offers the decrypted file for download.
+    <br><br>
+    <strong>Privacy:</strong> The encryption key (after #) is never sent to any server.
+    Per RFC 3986, URL fragments are client-side only.
+  </div>
+</div>
+
+<script>
+// Parse URL from fragment on page load
+(function() {
+  const hash = window.location.hash.substring(1);
+  if (hash && hash.includes('http')) {
+    document.getElementById('url').value = hash;
+  }
+})();
+
+async function decryptAndDownload() {
+  const btn = document.getElementById('decrypt-btn');
+  const urlInput = document.getElementById('url').value.trim();
+
+  if (!urlInput) {
+    showStatus('Please enter a URL.', 'error');
+    return;
+  }
+
+  // Parse URL and fragment key
+  const hashIdx = urlInput.indexOf('#');
+  if (hashIdx === -1) {
+    showStatus('URL must contain a #key fragment for decryption.', 'error');
+    return;
+  }
+
+  const blobURL = urlInput.substring(0, hashIdx);
+  const keyHex = urlInput.substring(hashIdx + 1);
+
+  if (keyHex.length !== 64) {
+    showStatus('Invalid key: expected 64 hex characters, got ' + keyHex.length, 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  showProgress(10);
+  showStatus('Downloading encrypted blob...', 'info');
+
+  try {
+    // Download the encrypted blob
+    const response = await fetch(blobURL);
+    if (!response.ok) {
+      throw new Error('Download failed: ' + response.status + ' ' + response.statusText);
+    }
+
+    showProgress(50);
+    showStatus('Decrypting...', 'info');
+
+    const encrypted = new Uint8Array(await response.arrayBuffer());
+
+    // Decode hex key
+    const key = hexToBytes(keyHex);
+
+    // Import key for AES-256-GCM (WebCrypto fallback since ChaCha20 isn't natively supported)
+    // NOTE: The bridge uses ChaCha20-Poly1305. Since WebCrypto doesn't support it,
+    // we implement it here using a minimal JS implementation.
+    const decrypted = await decryptChaCha20Poly1305(key, encrypted);
+
+    showProgress(90);
+
+    // Create download
+    const blob = new Blob([decrypted], { type: 'application/zip' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'attachment.zip';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showProgress(100);
+    showStatus('Decrypted successfully! Check your downloads.', 'success');
+
+  } catch (err) {
+    showStatus('Error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  }
+  return bytes;
+}
+
+function showProgress(pct) {
+  const el = document.getElementById('progress');
+  const fill = document.getElementById('progress-fill');
+  el.classList.add('visible');
+  fill.style.width = pct + '%';
+}
+
+function showStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+
+// ============================================================
+// ChaCha20-Poly1305 AEAD decryption (pure JS)
+// Nonce is prepended to ciphertext (12 bytes nonce + ciphertext + 16 bytes tag)
+// ============================================================
+
+async function decryptChaCha20Poly1305(key, data) {
+  // Nonce size for ChaCha20-Poly1305 is 12 bytes
+  const NONCE_SIZE = 12;
+  const TAG_SIZE = 16;
+
+  if (data.length < NONCE_SIZE + TAG_SIZE) {
+    throw new Error('Data too short for ChaCha20-Poly1305');
+  }
+
+  const nonce = data.slice(0, NONCE_SIZE);
+  const ciphertextWithTag = data.slice(NONCE_SIZE);
+
+  // Since WebCrypto doesn't support ChaCha20-Poly1305 natively,
+  // we use a pure JS implementation. For production, consider inlining
+  // a well-audited library like @stablelib/chacha20poly1305.
+  //
+  // Fallback: use Web Crypto AES-256-GCM if the bridge is configured
+  // to use AES-GCM instead. For now, we provide the ChaCha20 implementation.
+
+  // Minimal ChaCha20-Poly1305 implementation follows.
+  // This is a straightforward port of the RFC 7539 reference.
+
+  const ciphertext = ciphertextWithTag.slice(0, ciphertextWithTag.length - TAG_SIZE);
+  const tag = ciphertextWithTag.slice(ciphertextWithTag.length - TAG_SIZE);
+
+  // Generate Poly1305 key (first 32 bytes of ChaCha20 keystream with counter=0)
+  const polyKey = chacha20Block(key, nonce, 0).slice(0, 32);
+
+  // Verify Poly1305 tag
+  const aad = new Uint8Array(0); // no additional authenticated data
+  const expectedTag = poly1305Mac(polyKey, aad, ciphertext);
+
+  if (!constantTimeEqual(tag, expectedTag)) {
+    throw new Error('Authentication failed: invalid tag');
+  }
+
+  // Decrypt with ChaCha20 (counter starts at 1 for encryption)
+  const plaintext = chacha20Encrypt(key, nonce, 1, ciphertext);
+
+  return plaintext;
+}
+
+// ChaCha20 quarter round
+function quarterRound(state, a, b, c, d) {
+  state[a] = (state[a] + state[b]) | 0; state[d] ^= state[a]; state[d] = rotl32(state[d], 16);
+  state[c] = (state[c] + state[d]) | 0; state[b] ^= state[c]; state[b] = rotl32(state[b], 12);
+  state[a] = (state[a] + state[b]) | 0; state[d] ^= state[a]; state[d] = rotl32(state[d], 8);
+  state[c] = (state[c] + state[d]) | 0; state[b] ^= state[c]; state[b] = rotl32(state[b], 7);
+}
+
+function rotl32(v, n) {
+  return ((v << n) | (v >>> (32 - n))) | 0;
+}
+
+function chacha20Block(key, nonce, counter) {
+  const state = new Int32Array(16);
+
+  // "expand 32-byte k"
+  state[0] = 0x61707865; state[1] = 0x3320646e;
+  state[2] = 0x79622d32; state[3] = 0x6b206574;
+
+  // Key
+  const kv = new DataView(key.buffer, key.byteOffset, 32);
+  for (let i = 0; i < 8; i++) state[4 + i] = kv.getInt32(i * 4, true);
+
+  // Counter
+  state[12] = counter;
+
+  // Nonce
+  const nv = new DataView(nonce.buffer, nonce.byteOffset, 12);
+  state[13] = nv.getInt32(0, true);
+  state[14] = nv.getInt32(4, true);
+  state[15] = nv.getInt32(8, true);
+
+  const working = new Int32Array(state);
+
+  for (let i = 0; i < 10; i++) {
+    quarterRound(working, 0, 4, 8, 12);
+    quarterRound(working, 1, 5, 9, 13);
+    quarterRound(working, 2, 6, 10, 14);
+    quarterRound(working, 3, 7, 11, 15);
+    quarterRound(working, 0, 5, 10, 15);
+    quarterRound(working, 1, 6, 11, 12);
+    quarterRound(working, 2, 7, 8, 13);
+    quarterRound(working, 3, 4, 9, 14);
+  }
+
+  const output = new Uint8Array(64);
+  const dv = new DataView(output.buffer);
+  for (let i = 0; i < 16; i++) {
+    dv.setInt32(i * 4, (working[i] + state[i]) | 0, true);
+  }
+
+  return output;
+}
+
+function chacha20Encrypt(key, nonce, startCounter, input) {
+  const output = new Uint8Array(input.length);
+  let counter = startCounter;
+
+  for (let offset = 0; offset < input.length; offset += 64) {
+    const block = chacha20Block(key, nonce, counter);
+    const remaining = Math.min(64, input.length - offset);
+    for (let i = 0; i < remaining; i++) {
+      output[offset + i] = input[offset + i] ^ block[i];
+    }
+    counter++;
+  }
+
+  return output;
+}
+
+// Poly1305 MAC (RFC 7539)
+function poly1305Mac(key, aad, ciphertext) {
+  // Poly1305 operates on 130-bit numbers. We use BigInt for correctness.
+  const r = clampR(readLE(key.slice(0, 16)));
+  const s = readLE(key.slice(16, 32));
+  const p = (1n << 130n) - 5n;
+
+  let acc = 0n;
+
+  // Process AAD
+  acc = poly1305Process(acc, r, p, aad);
+  // Process ciphertext
+  acc = poly1305Process(acc, r, p, ciphertext);
+
+  // Construct length block: le64(aad.length) || le64(ciphertext.length)
+  const lenBlock = new Uint8Array(16);
+  const lv = new DataView(lenBlock.buffer);
+  lv.setUint32(0, aad.length, true);
+  lv.setUint32(8, ciphertext.length, true);
+  acc = poly1305ProcessBlock(acc, r, p, lenBlock, 16);
+
+  // Final: acc + s
+  acc = (acc + s) & ((1n << 128n) - 1n);
+
+  // Output as 16 bytes little-endian
+  const tag = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) {
+    tag[i] = Number((acc >> BigInt(i * 8)) & 0xFFn);
+  }
+  return tag;
+}
+
+function poly1305Process(acc, r, p, data) {
+  // Pad each 16-byte block
+  for (let i = 0; i < data.length; i += 16) {
+    const blockSize = Math.min(16, data.length - i);
+    const block = data.slice(i, i + blockSize);
+    acc = poly1305ProcessBlock(acc, r, p, block, blockSize);
+  }
+  return acc;
+}
+
+function poly1305ProcessBlock(acc, r, p, block, blockSize) {
+  // Read block as little-endian number, append 0x01 byte
+  let n = 0n;
+  for (let j = blockSize - 1; j >= 0; j--) {
+    n = (n << 8n) | BigInt(block[j]);
+  }
+  n |= (1n << BigInt(blockSize * 8));
+  acc = ((acc + n) * r) % p;
+  return acc;
+}
+
+function clampR(r) {
+  // Clear bits: 4,8,12,16 of each 32-bit word, and top 4 bits of word 1,2,3
+  return r & 0x0ffffffc0ffffffc0ffffffc0fffffffn;
+}
+
+function readLE(bytes) {
+  let n = 0n;
+  for (let i = bytes.length - 1; i >= 0; i--) {
+    n = (n << 8n) | BigInt(bytes[i]);
+  }
+  return n;
+}
+
+function constantTimeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a[i] ^ b[i];
+  }
+  return diff === 0;
+}
+</script>
+</body>
+</html>

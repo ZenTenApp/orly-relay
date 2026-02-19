@@ -35,6 +35,7 @@ import (
 	"os"
 
 	"next.orly.dev/cmd/orly/acl"
+	"next.orly.dev/cmd/orly/bridge"
 	"next.orly.dev/cmd/orly/db"
 	"next.orly.dev/cmd/orly/launcher"
 	"next.orly.dev/cmd/orly/relay"
@@ -56,6 +57,8 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "bridge":
+		bridge.Run(os.Args[2:])
 	case "db":
 		db.Run(os.Args[2:])
 	case "acl":
@@ -96,6 +99,8 @@ Usage:
   orly [command] [options]
 
 Commands:
+  bridge    Nostr-Email bridge (Marmot DM to SMTP)
+
   db        Database server operations
             --driver=NAME    Select database driver (badger, neo4j)
             --list-drivers   List available database drivers
@@ -131,6 +136,9 @@ Environment variables:
   ORLY_DB_LISTEN             Database server listen address
   ORLY_ACL_LISTEN            ACL server listen address
   ORLY_LOG_LEVEL             Logging level (trace, debug, info, warn, error)
+  ORLY_BRIDGE_ENABLED        Enable bridge in monolithic mode
+  ORLY_BRIDGE_DOMAIN         Email domain for the bridge
+  ORLY_BRIDGE_RELAY_URL      Relay WebSocket URL (standalone mode)
 
 See 'orly [command] --help' for command-specific options.`)
 }

@@ -137,6 +137,10 @@ type Config struct {
 	// Certificate service configuration
 	CertsEnabled bool
 
+	// Bridge configuration
+	BridgeEnabled bool
+	BridgeDomain  string
+
 	// ServicesEnabled controls whether to start the DB, relay, and other services
 	// When false, only the admin UI runs (useful for initial setup/updates)
 	ServicesEnabled bool
@@ -197,6 +201,10 @@ func loadConfig() (*Config, error) {
 
 		// Certificate service configuration
 		CertsEnabled: boolEnvOrFile("ORLY_LAUNCHER_CERTS_ENABLED", cf.CertsEnabled, false),
+
+		// Bridge configuration
+		BridgeEnabled: getEnvOrDefault("ORLY_BRIDGE_ENABLED", "false") == "true",
+		BridgeDomain:  getEnvOrDefault("ORLY_BRIDGE_DOMAIN", ""),
 
 		// Services enabled (default true for backwards compatibility)
 		ServicesEnabled: getEnvOrDefault("ORLY_LAUNCHER_SERVICES_ENABLED", "true") == "true",

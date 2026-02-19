@@ -251,6 +251,20 @@ type C struct {
 	GCIntervalSec   int   `env:"ORLY_GC_INTERVAL_SEC" default:"60" usage:"seconds between GC runs when storage exceeds limit"`
 	GCBatchSize     int   `env:"ORLY_GC_BATCH_SIZE" default:"1000" usage:"number of events to consider per GC run"`
 
+	// Email bridge configuration
+	BridgeEnabled bool   `env:"ORLY_BRIDGE_ENABLED" default:"false" usage:"enable Nostr-Email bridge (Marmot DM to SMTP)"`
+	BridgeDomain  string `env:"ORLY_BRIDGE_DOMAIN" usage:"email domain for the bridge (e.g., relay.example.com)"`
+	BridgeNSEC    string `env:"ORLY_BRIDGE_NSEC" usage:"bridge identity nsec (default: use relay identity from database)"`
+	BridgeRelayURL string `env:"ORLY_BRIDGE_RELAY_URL" usage:"WebSocket relay URL for standalone mode (e.g., wss://relay.example.com)"`
+	BridgeSMTPPort int    `env:"ORLY_BRIDGE_SMTP_PORT" default:"2525" usage:"SMTP server listen port"`
+	BridgeSMTPHost string `env:"ORLY_BRIDGE_SMTP_HOST" default:"0.0.0.0" usage:"SMTP server listen address"`
+	BridgeDataDir  string `env:"ORLY_BRIDGE_DATA_DIR" usage:"bridge data directory (default: $ORLY_DATA_DIR/bridge)"`
+	BridgeDKIMKeyPath string `env:"ORLY_BRIDGE_DKIM_KEY" usage:"path to DKIM private key PEM file"`
+	BridgeDKIMSelector string `env:"ORLY_BRIDGE_DKIM_SELECTOR" default:"marmot" usage:"DKIM selector for DNS TXT record"`
+	BridgeNWCURI    string `env:"ORLY_BRIDGE_NWC_URI" usage:"NWC connection string for subscription payments (falls back to ORLY_NWC_URI)"`
+	BridgeMonthlyPriceSats int64 `env:"ORLY_BRIDGE_MONTHLY_PRICE_SATS" default:"2100" usage:"price in sats for one month bridge subscription"`
+	BridgeComposeURL string `env:"ORLY_BRIDGE_COMPOSE_URL" usage:"public URL of the compose form (e.g., https://relay.example.com/compose)"`
+
 	// ServeMode is set programmatically by the 'serve' subcommand to grant full owner
 	// access to all users (no env tag - internal use only)
 	ServeMode bool
@@ -917,4 +931,44 @@ func (cfg *C) GetGRPCSyncConfigValues() (
 		cfg.GRPCSyncNegentropyAddress,
 		cfg.GRPCSyncConnectTimeout,
 		cfg.NegentropyEnabled
+}
+
+// GetBridgeConfigValues returns the email bridge configuration values.
+// This avoids circular imports with pkg/bridge while allowing main.go to construct
+// the bridge configuration.
+func (cfg *C) GetBridgeConfigValues() (
+	enabled bool,
+	domain string,
+	nsec string,
+	relayURL string,
+	smtpPort int,
+	smtpHost string,
+	dataDir string,
+	dkimKeyPath string,
+	dkimSelector string,
+	nwcURI string,
+	monthlyPriceSats int64,
+	composeURL string,
+) {
+	dataDir = cfg.BridgeDataDir
+	if dataDir == "" {
+		dataDir = filepath.Join(cfg.DataDir, "bridge")
+	}
+	// Fall back to relay NWC URI if bridge-specific not set
+	nwcURI = cfg.BridgeNWCURI
+	if nwcURI == "" {
+		nwcURI = cfg.NWCUri
+	}
+	return cfg.BridgeEnabled,
+		cfg.BridgeDomain,
+		cfg.BridgeNSEC,
+		cfg.BridgeRelayURL,
+		cfg.BridgeSMTPPort,
+		cfg.BridgeSMTPHost,
+		dataDir,
+		cfg.BridgeDKIMKeyPath,
+		cfg.BridgeDKIMSelector,
+		nwcURI,
+		cfg.BridgeMonthlyPriceSats,
+		cfg.BridgeComposeURL
 }

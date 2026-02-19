@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marmot Email Bridge - Compose</title>
+<style>
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --border: #0f3460;
+  --text: #e4e4e4;
+  --muted: #8888aa;
+  --accent: #e94560;
+  --accent-hover: #ff6b81;
+  --success: #2ecc71;
+  --input-bg: #0f1729;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Courier New', monospace;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.container {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+h1 {
+  font-size: 1.4rem;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+
+.subtitle {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-bottom: 2rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-bottom: 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+input, textarea {
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  border-radius: 4px;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+textarea {
+  min-height: 200px;
+  resize: vertical;
+}
+
+.actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+button {
+  padding: 0.7rem 1.5rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text);
+}
+
+.btn-secondary:hover {
+  background: var(--surface);
+}
+
+.preview {
+  margin-top: 2rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  display: none;
+}
+
+.preview.visible {
+  display: block;
+}
+
+.preview-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+
+.status {
+  margin-top: 1rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  display: none;
+}
+
+.status.success {
+  display: block;
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+
+.status.error {
+  display: block;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.info {
+  margin-top: 2rem;
+  padding: 1rem;
+  background: var(--surface);
+  border-left: 3px solid var(--accent);
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Marmot Email Bridge</h1>
+  <p class="subtitle">Compose an outbound email via Nostr DM</p>
+
+  <div class="form-group">
+    <label for="to">To</label>
+    <input type="text" id="to" placeholder="recipient@example.com">
+  </div>
+
+  <div class="form-group">
+    <label for="cc">CC (optional)</label>
+    <input type="text" id="cc" placeholder="cc@example.com">
+  </div>
+
+  <div class="form-group">
+    <label for="subject">Subject</label>
+    <input type="text" id="subject" placeholder="Your subject line">
+  </div>
+
+  <div class="form-group">
+    <label for="body">Message</label>
+    <textarea id="body" placeholder="Write your message here..."></textarea>
+  </div>
+
+  <div class="actions">
+    <button class="btn-primary" onclick="copyToClipboard()">Copy as DM</button>
+    <button class="btn-secondary" onclick="togglePreview()">Preview</button>
+    <button class="btn-secondary" onclick="clearForm()">Clear</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="preview" id="preview">
+    <div class="preview-label">DM Preview (paste this to the bridge)</div>
+    <div id="preview-content"></div>
+  </div>
+
+  <div class="info">
+    <strong>How to use:</strong> Fill in the fields, click "Copy as DM", then paste
+    the formatted message as a DM to the bridge's Nostr identity. The bridge will
+    parse the headers and send it as a standard email. Separate multiple recipients
+    with commas or spaces.
+  </div>
+</div>
+
+<script>
+// Read pre-populated values from URL fragment
+// Format: #to=alice@example.com&subject=Re: Hello
+(function() {
+  const hash = window.location.hash.substring(1);
+  if (!hash) return;
+
+  const params = new URLSearchParams(hash);
+
+  if (params.has('to'))      document.getElementById('to').value = params.get('to');
+  if (params.has('cc'))      document.getElementById('cc').value = params.get('cc');
+  if (params.has('subject')) document.getElementById('subject').value = params.get('subject');
+  if (params.has('body'))    document.getElementById('body').value = params.get('body');
+})();
+
+function buildDM() {
+  const to = document.getElementById('to').value.trim();
+  const cc = document.getElementById('cc').value.trim();
+  const subject = document.getElementById('subject').value.trim();
+  const body = document.getElementById('body').value.trim();
+
+  if (!to) {
+    showStatus('At least one recipient is required.', 'error');
+    return null;
+  }
+
+  let dm = '';
+  dm += 'To: ' + to + '\n';
+  if (cc) dm += 'Cc: ' + cc + '\n';
+  if (subject) dm += 'Subject: ' + subject + '\n';
+  dm += '\n';
+  dm += body;
+
+  return dm;
+}
+
+async function copyToClipboard() {
+  const dm = buildDM();
+  if (!dm) return;
+
+  try {
+    await navigator.clipboard.writeText(dm);
+    showStatus('Copied to clipboard! Paste this as a DM to the bridge.', 'success');
+  } catch (err) {
+    // Fallback for non-HTTPS contexts
+    const textarea = document.createElement('textarea');
+    textarea.value = dm;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+    showStatus('Copied to clipboard! Paste this as a DM to the bridge.', 'success');
+  }
+}
+
+function togglePreview() {
+  const dm = buildDM();
+  if (!dm) return;
+
+  const preview = document.getElementById('preview');
+  const content = document.getElementById('preview-content');
+
+  if (preview.classList.contains('visible')) {
+    preview.classList.remove('visible');
+  } else {
+    content.textContent = dm;
+    preview.classList.add('visible');
+  }
+}
+
+function clearForm() {
+  document.getElementById('to').value = '';
+  document.getElementById('cc').value = '';
+  document.getElementById('subject').value = '';
+  document.getElementById('body').value = '';
+  document.getElementById('preview').classList.remove('visible');
+  document.getElementById('status').style.display = 'none';
+}
+
+function showStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+</script>
+</body>
+</html>

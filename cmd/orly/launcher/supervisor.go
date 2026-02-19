@@ -41,6 +41,9 @@ type Supervisor struct {
 	// Certificate service process
 	certsProc *Process
 
+	// Email bridge process
+	bridgeProc *Process
+
 	wg     sync.WaitGroup
 	mu     sync.Mutex
 	closed bool
@@ -163,7 +166,19 @@ func (s *Supervisor) Start() error {
 		return fmt.Errorf("failed to start relay: %w", err)
 	}
 
-	// 6. Start certificate service if enabled
+	// 6. Start bridge if enabled (connects to relay via WebSocket)
+	if s.cfg.BridgeEnabled {
+		// Give the relay a moment to start accepting connections
+		time.Sleep(2 * time.Second)
+		if err := s.startBridge(); err != nil {
+			log.W.F("failed to start bridge: %v", err)
+			// Don't fail startup - bridge is independent
+		} else {
+			log.I.F("bridge started")
+		}
+	}
+
+	// 7. Start certificate service if enabled
 	if s.cfg.CertsEnabled {
 		if err := s.startCerts(); err != nil {
 			log.W.F("failed to start certificate service: %v", err)
@@ -193,6 +208,9 @@ func (s *Supervisor) Start() error {
 	if s.cfg.CertsEnabled {
 		monitorCount++
 	}
+	if s.cfg.BridgeEnabled {
+		monitorCount++
+	}
 
 	s.wg.Add(monitorCount)
 	go s.monitorProcess(s.dbProc, "db", s.startDB)
@@ -214,6 +232,9 @@ func (s *Supervisor) Start() error {
 	if s.cfg.CertsEnabled {
 		go s.monitorProcess(s.certsProc, "certs", s.startCerts)
 	}
+	if s.cfg.BridgeEnabled {
+		go s.monitorProcess(s.bridgeProc, "bridge", s.startBridge)
+	}
 	go s.monitorProcess(s.relayProc, "relay", s.startRelay)
 
 	return nil
@@ -229,7 +250,13 @@ func (s *Supervisor) Stop() error {
 	s.closed = true
 	s.mu.Unlock()
 
-	// Stop certificate service first (independent, nothing depends on it)
+	// Stop bridge first (it connects to relay, must stop before relay)
+	if s.cfg.BridgeEnabled && s.bridgeProc != nil {
+		log.I.F("stopping bridge...")
+		s.stopProcess(s.bridgeProc, 5*time.Second)
+	}
+
+	// Stop certificate service (independent, nothing depends on it)
 	if s.cfg.CertsEnabled && s.certsProc != nil {
 		log.I.F("stopping certificate service...")
 		s.stopProcess(s.certsProc, 5*time.Second)
@@ -986,6 +1013,12 @@ func (s *Supervisor) GetProcessStatuses() []ProcessStatus {
 		"Let's Encrypt certificate management",
 	))
 
+	// Bridge
+	statuses = append(statuses, s.getProcessStatusFull(
+		s.bridgeProc, "orly-bridge", s.cfg.BridgeEnabled, "bridge",
+		"Nostr-Email bridge (Marmot)",
+	))
+
 	// Relay process - always enabled
 	statuses = append(statuses, s.getProcessStatusFull(
 		s.relayProc, "orly", true, "relay",
@@ -1030,4 +1063,48 @@ func (s *Supervisor) getProcessStatusFull(p *Process, name string, enabled bool,
 		PID:         pid,
 		Restarts:    restarts,
 	}
+}
+
+func (s *Supervisor) startBridge() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Build environment for bridge process
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("ORLY_LOG_LEVEL=%s", s.cfg.LogLevel))
+	env = append(env, fmt.Sprintf("ORLY_DATA_DIR=%s", s.cfg.DataDir))
+	if s.cfg.BridgeDomain != "" {
+		env = append(env, fmt.Sprintf("ORLY_BRIDGE_DOMAIN=%s", s.cfg.BridgeDomain))
+	}
+
+	// The bridge connects to the relay via WebSocket. Construct the local URL.
+	// Use ws://localhost:<port> since relay is on the same host.
+	relayPort := getEnvOrDefault("ORLY_PORT", "3334")
+	env = append(env, fmt.Sprintf("ORLY_BRIDGE_RELAY_URL=ws://localhost:%s", relayPort))
+
+	// Self-exec: orly bridge
+	cmd := exec.CommandContext(s.ctx, s.selfPath, "bridge")
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); chk.E(err) {
+		return err
+	}
+
+	exited := make(chan struct{})
+	s.bridgeProc = &Process{
+		name:   "orly-bridge",
+		cmd:    cmd,
+		exited: exited,
+	}
+
+	go func() {
+		cmd.Wait()
+		close(exited)
+	}()
+
+	log.I.F("started bridge (pid %d) via self-exec: %s bridge",
+		cmd.Process.Pid, s.selfPath)
+	return nil
 }

@@ -36,6 +36,7 @@ import (
 	tortransport "next.orly.dev/pkg/transport/tor"
 	"next.orly.dev/pkg/wireguard"
 	"next.orly.dev/pkg/archive"
+	emailbridge "next.orly.dev/pkg/bridge"
 	"next.orly.dev/pkg/httpguard"
 
 	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
@@ -464,6 +465,42 @@ func Run(
 		log.I.F("Blossom server disabled via ORLY_BLOSSOM_ENABLED=false")
 	}
 
+	// Initialize Nostr-Email bridge if enabled
+	bridgeEnabled, bridgeDomain, bridgeNSEC, bridgeRelayURL,
+		bridgeSMTPPort, bridgeSMTPHost, bridgeDataDir,
+		bridgeDKIMKeyPath, bridgeDKIMSelector,
+		bridgeNWCURI, bridgeMonthlyPriceSats, bridgeComposeURL := cfg.GetBridgeConfigValues()
+
+	if bridgeEnabled {
+		bridgeCfg := &emailbridge.Config{
+			Domain:           bridgeDomain,
+			NSEC:             bridgeNSEC,
+			RelayURL:         bridgeRelayURL,
+			SMTPPort:         bridgeSMTPPort,
+			SMTPHost:         bridgeSMTPHost,
+			DataDir:          bridgeDataDir,
+			DKIMKeyPath:      bridgeDKIMKeyPath,
+			DKIMSelector:     bridgeDKIMSelector,
+			NWCURI:           bridgeNWCURI,
+			MonthlyPriceSats: bridgeMonthlyPriceSats,
+			ComposeURL:       bridgeComposeURL,
+		}
+
+		// In monolithic mode, provide a database getter for identity resolution
+		dbGetter := func() ([]byte, error) {
+			return db.GetOrCreateRelayIdentitySecret()
+		}
+
+		l.emailBridge = emailbridge.New(bridgeCfg, dbGetter)
+		if err := l.emailBridge.Start(ctx); err != nil {
+			log.E.F("failed to start email bridge: %v", err)
+			l.emailBridge = nil
+		} else {
+			log.I.F("email bridge started (domain: %s, SMTP: %s:%d)",
+				bridgeDomain, bridgeSMTPHost, bridgeSMTPPort)
+		}
+	}
+
 	// Initialize WireGuard VPN and NIP-46 Bunker (only for Badger backend)
 	// Requires ACL mode 'follows' or 'managed' - no point for open relays
 	if badgerDB, ok := db.(*database.D); ok && cfg.WGEnabled && cfg.ACLMode != "none" {
@@ -744,6 +781,12 @@ func Run(
 		if l.bunkerServer != nil {
 			l.bunkerServer.Stop()
 			log.I.F("bunker server stopped")
+		}
+
+		// Stop email bridge if running
+		if l.emailBridge != nil {
+			l.emailBridge.Stop()
+			log.I.F("email bridge stopped")
 		}
 
 		// Stop NRC bridge if running
