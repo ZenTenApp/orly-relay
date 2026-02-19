@@ -154,6 +154,11 @@ type C struct {
 	Neo4jMaxTxRetrySeconds int `env:"ORLY_NEO4J_MAX_TX_RETRY_SEC" default:"30" usage:"max seconds for retryable transaction attempts"`
 	Neo4jQueryResultLimit  int `env:"ORLY_NEO4J_QUERY_RESULT_LIMIT" default:"10000" usage:"max results returned per query (prevents unbounded memory usage, 0=unlimited)"`
 
+	// Neo4j Cypher query proxy (NIP-98 owner-gated HTTP endpoint)
+	Neo4jCypherEnabled    bool `env:"ORLY_NEO4J_CYPHER_ENABLED" default:"false" usage:"enable POST /api/neo4j/cypher endpoint for owner-gated read-only Cypher queries"`
+	Neo4jCypherTimeoutSec int  `env:"ORLY_NEO4J_CYPHER_TIMEOUT" default:"30" usage:"default timeout in seconds for Cypher queries (max 120)"`
+	Neo4jCypherMaxRows    int  `env:"ORLY_NEO4J_CYPHER_MAX_ROWS" default:"10000" usage:"max result rows returned per Cypher query (0=unlimited)"`
+
 	// Advanced database tuning (increase for large archives to reduce cache misses)
 	SerialCachePubkeys  int `env:"ORLY_SERIAL_CACHE_PUBKEYS" default:"250000" usage:"max pubkeys to cache for compact event storage (~8MB memory, increase for large archives)"`
 	SerialCacheEventIds int `env:"ORLY_SERIAL_CACHE_EVENT_IDS" default:"1000000" usage:"max event IDs to cache for compact event storage (~32MB memory, increase for large archives)"`
@@ -168,6 +173,12 @@ type C struct {
 	GoroutineWarningCount int `env:"ORLY_GOROUTINE_WARNING" default:"5000" usage:"goroutine count at which connection acceptance slows down"`
 	GoroutineMaxCount     int `env:"ORLY_GOROUTINE_MAX" default:"10000" usage:"goroutine count at which new connections are refused"`
 	MaxSubscriptions      int `env:"ORLY_MAX_SUBSCRIPTIONS" default:"10000" usage:"maximum total active subscriptions (reduced to 1000 in emergency mode)"`
+
+	// HTTP guard (application-level bot blocking + rate limiting for Cloudron/nginx-less deployments)
+	HTTPGuardEnabled  bool `env:"ORLY_HTTP_GUARD_ENABLED" default:"true" usage:"enable HTTP guard (bot blocking + per-IP rate limiting)"`
+	HTTPGuardRPM      int  `env:"ORLY_HTTP_GUARD_RPM" default:"120" usage:"max HTTP requests per minute per IP"`
+	HTTPGuardWSPerMin int  `env:"ORLY_HTTP_GUARD_WS_PER_MIN" default:"10" usage:"max WebSocket upgrade requests per minute per IP"`
+	HTTPGuardBotBlock bool `env:"ORLY_HTTP_GUARD_BOT_BLOCK" default:"true" usage:"block known scraper/bot User-Agents (SemrushBot, AhrefsBot, GPTBot, etc.)"`
 
 	// Query result limits (prevents memory exhaustion from unbounded queries)
 	QueryResultLimit int `env:"ORLY_QUERY_RESULT_LIMIT" default:"256" usage:"max events returned per REQ filter (prevents unbounded memory usage, 0=unlimited)"`

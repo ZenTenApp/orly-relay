@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"io"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -10,6 +12,7 @@ import (
 	"lol.mleku.dev/log"
 
 	"next.orly.dev/pkg/database"
+	"next.orly.dev/pkg/interfaces/store"
 	orlydbv1 "next.orly.dev/pkg/proto/orlydb/v1"
 )
 
@@ -742,6 +745,58 @@ func (s *DatabaseService) SaveThumbnail(ctx context.Context, req *orlydbv1.SaveT
 		return nil, status.Errorf(codes.Internal, "save thumbnail failed: %v", err)
 	}
 	return &orlydbv1.Empty{}, nil
+}
+
+// === Cypher Query ===
+
+const (
+	cypherDefaultTimeout = 30 * time.Second
+	cypherMaxTimeout     = 120 * time.Second
+)
+
+func (s *DatabaseService) ExecuteCypherRead(ctx context.Context, req *orlydbv1.CypherReadRequest) (*orlydbv1.CypherReadResponse, error) {
+	executor, ok := s.db.(store.CypherExecutor)
+	if !ok {
+		return nil, status.Errorf(codes.Unimplemented, "database backend does not support Cypher queries")
+	}
+
+	// Decode JSON-encoded params
+	params := make(map[string]any, len(req.Params))
+	for k, v := range req.Params {
+		var decoded any
+		if err := json.Unmarshal(v, &decoded); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid JSON for param %q: %v", k, err)
+		}
+		params[k] = decoded
+	}
+
+	// Enforce timeout
+	timeout := cypherDefaultTimeout
+	if req.TimeoutSeconds > 0 {
+		timeout = time.Duration(req.TimeoutSeconds) * time.Second
+		if timeout > cypherMaxTimeout {
+			timeout = cypherMaxTimeout
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	records, err := executor.ExecuteCypherRead(ctx, req.Cypher, params)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "cypher query failed: %v", err)
+	}
+
+	// Encode each record as JSON bytes
+	encoded := make([][]byte, 0, len(records))
+	for _, rec := range records {
+		b, err := json.Marshal(rec)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to marshal record: %v", err)
+		}
+		encoded = append(encoded, b)
+	}
+
+	return &orlydbv1.CypherReadResponse{Records: encoded}, nil
 }
 
 // === Helper Methods ===

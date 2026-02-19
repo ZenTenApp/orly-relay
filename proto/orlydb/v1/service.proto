@@ -264,6 +264,11 @@ service DatabaseService {
 
   // RunMigrations runs database migrations
   rpc RunMigrations(Empty) returns (Empty);
+
+  // === Cypher Query Proxy (Neo4j only) ===
+
+  // ExecuteCypherRead executes a read-only Cypher query against Neo4j
+  rpc ExecuteCypherRead(CypherReadRequest) returns (CypherReadResponse);
 }
 
 // === Request/Response Messages ===
@@ -707,4 +712,16 @@ message GetThumbnailResponse {
 message SaveThumbnailRequest {
   string key = 1;
   bytes data = 2;
+}
+
+// Cypher Query Proxy
+message CypherReadRequest {
+  string cypher = 1;
+  map<string, bytes> params = 2;  // JSON-encoded parameter values
+  int32 timeout_seconds = 3;       // query timeout (0 = use default)
+}
+
+message CypherReadResponse {
+  repeated bytes records = 1;  // each record is a JSON-encoded map
+  string error = 2;
 }

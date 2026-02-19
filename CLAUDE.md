@@ -97,6 +97,8 @@ NOSTR_SECRET_KEY=nsec1... ./nurl https://relay.example.com/api/logs/clear
 
 See `./orly help` for all options. **All env vars MUST be defined in `app/config/config.go`**.
 
+**REMINDER: Cloudron Deployment Script** — When making changes to the Neo4j driver (`pkg/neo4j/`), remind mleku to check the cloudron-orly deployment at `https://git.nostrdev.com/stuff/cloudron-orly`. The Dockerfile downloads specific ORLY binaries by version tag, and changes to Neo4j schema, config, or driver behavior may require corresponding updates to `neo4j.conf`, `start.sh`, `supervisord.conf`, or environment variables in that repo.
+
 ## Architecture
 
 ```
@@ -320,6 +322,8 @@ if (isValidNsec(nsec)) { ... }
 | Policy guide | `docs/POLICY_USAGE_GUIDE.md` |
 | Neo4j backend guide | `docs/NEO4J_BACKEND.md` |
 | Neo4j bolt+s setup | `docs/NEO4J_BACKEND.md#bolts-external-access-remote-cypher-queries` |
+| Neo4j Cypher proxy | `docs/NEO4J_BACKEND.md#cypher-query-proxy-http-endpoint` |
+| HTTP guard (bot/rate) | `docs/HTTP_GUARD.md` |
 | Neo4j WoT schema | `pkg/neo4j/WOT_SPEC.md` |
 | Neo4j schema changes | `pkg/neo4j/MODIFYING_SCHEMA.md` |
 | Event kinds database | `app/web/src/eventKinds.js` |

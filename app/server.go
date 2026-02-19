@@ -48,6 +48,7 @@ import (
 	dsync "next.orly.dev/pkg/sync"
 	"next.orly.dev/pkg/wireguard"
 	"next.orly.dev/pkg/archive"
+	"next.orly.dev/pkg/httpguard"
 	"next.orly.dev/pkg/transport"
 )
 
@@ -133,6 +134,9 @@ type Server struct {
 
 	// Branding/white-label customization
 	brandingMgr *branding.Manager
+
+	// HTTP guard (bot blocking + rate limiting)
+	httpGuard *httpguard.Guard
 }
 
 // =============================================================================
@@ -238,6 +242,11 @@ func (s *Server) isAllowedCORSOrigin(origin string) bool {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// HTTP guard: bot blocking + per-IP rate limiting (before any routing)
+	if s.httpGuard != nil && !s.httpGuard.Allow(w, r) {
+		return
+	}
+
 	// Check if this is a blossom-related path (needs CORS headers)
 	path := r.URL.Path
 	isBlossomPath := path == "/upload" || path == "/media" ||
@@ -509,6 +518,9 @@ func (s *Server) UserInterface() {
 
 	// Neo4j configuration status endpoint
 	s.mux.HandleFunc("/api/neo4j/config", s.handleNeo4jConfig)
+
+	// Neo4j Cypher query proxy (NIP-98 owner-gated)
+	s.mux.HandleFunc("/api/neo4j/cypher", s.handleNeo4jCypher)
 }
 
 // handleFavicon serves favicon.png as favicon.ico

@@ -36,6 +36,7 @@ import (
 	tortransport "next.orly.dev/pkg/transport/tor"
 	"next.orly.dev/pkg/wireguard"
 	"next.orly.dev/pkg/archive"
+	"next.orly.dev/pkg/httpguard"
 
 	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 )
@@ -100,6 +101,17 @@ func Run(
 			cfg.GoroutineWarningCount,
 			cfg.GoroutineMaxCount,
 		)
+	}
+
+	// Initialize HTTP guard (bot blocking + per-IP rate limiting)
+	if cfg.HTTPGuardEnabled {
+		l.httpGuard = httpguard.New(httpguard.Config{
+			Enabled:     true,
+			BotBlock:    cfg.HTTPGuardBotBlock,
+			RPM:         cfg.HTTPGuardRPM,
+			WSPerMin:    cfg.HTTPGuardWSPerMin,
+			IPBlacklist: cfg.IPBlacklist,
+		})
 	}
 
 	// Initialize branding/white-label manager if enabled
@@ -702,6 +714,12 @@ func Run(
 		if l.rateLimiter != nil && l.rateLimiter.IsEnabled() {
 			l.rateLimiter.Stop()
 			log.I.F("rate limiter stopped")
+		}
+
+		// Stop HTTP guard
+		if l.httpGuard != nil {
+			l.httpGuard.Stop()
+			log.I.F("HTTP guard stopped")
 		}
 
 		// Stop archive manager if running

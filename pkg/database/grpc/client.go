@@ -4,6 +4,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -33,6 +34,9 @@ type Client struct {
 
 // Verify Client implements database.Database at compile time.
 var _ database.Database = (*Client)(nil)
+
+// Verify Client implements CypherExecutor at compile time.
+var _ store.CypherExecutor = (*Client)(nil)
 
 // ClientConfig holds configuration for the gRPC client.
 type ClientConfig struct {
@@ -928,6 +932,44 @@ func protoToUint40s(resp *orlydbv1.SerialList) indextypes.Uint40s {
 		result = append(result, u)
 	}
 	return result
+}
+
+// === Cypher Query ===
+
+// ExecuteCypherRead implements store.CypherExecutor by proxying through gRPC.
+func (c *Client) ExecuteCypherRead(ctx context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+	// Encode params as JSON bytes for proto transport
+	protoParams := make(map[string][]byte, len(params))
+	for k, v := range params {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal param %q: %w", k, err)
+		}
+		protoParams[k] = b
+	}
+
+	resp, err := c.client.ExecuteCypherRead(ctx, &orlydbv1.CypherReadRequest{
+		Cypher: cypher,
+		Params: protoParams,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != "" {
+		return nil, fmt.Errorf("%s", resp.Error)
+	}
+
+	// Decode JSON records
+	records := make([]map[string]any, 0, len(resp.Records))
+	for _, raw := range resp.Records {
+		var rec map[string]any
+		if err := json.Unmarshal(raw, &rec); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal record: %w", err)
+		}
+		records = append(records, rec)
+	}
+
+	return records, nil
 }
 
 // NRC (Nostr Relay Connect) stubs - not supported in gRPC client

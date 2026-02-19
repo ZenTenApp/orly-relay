@@ -825,6 +825,119 @@ The bolt+s management feature exposes three HTTP endpoints:
 | `/api/neo4j/bolt` | GET | Owner (NIP-98) | Returns current bolt+s status, config path, port, cert dir, and connection URI. |
 | `/api/neo4j/bolt/toggle` | POST | Owner (NIP-98) | Accepts `{ "enabled": true/false }`. Modifies neo4j.conf and restarts Neo4j. |
 
+## Cypher Query Proxy (HTTP Endpoint)
+
+ORLY binds to the internal Neo4j bolt connection and multiplexes incoming Cypher queries through its HTTP endpoint at `POST /api/neo4j/cypher`. Authentication uses [NIP-98](https://github.com/nostr-protocol/nips/blob/master/98.md) — developers sign requests with their Nostr identity. No SSL certificates, no Neo4j credentials, no extra ports. A developer only needs their nsec.
+
+This is the primary way to query the Neo4j graph. ORLY sits between the client and Neo4j, handling authentication, read-only enforcement, and timeouts. Neo4j never needs to be exposed to the network at all — it listens on localhost, and ORLY multiplexes access through its existing HTTP port.
+
+### Architecture
+
+ORLY maintains the bolt connection to Neo4j internally. When a query arrives over HTTP, ORLY validates the NIP-98 signature, checks the query is read-only, and forwards it to Neo4j through the bolt connection. The result comes back as JSON over HTTP.
+
+In split IPC mode (Cloudron deployment), the relay process proxies through gRPC to the database process that holds the bolt connection:
+
+```
+Developer (nsec) → HTTP + NIP-98 → ORLY relay → gRPC → orly-db-neo4j → bolt → Neo4j
+```
+
+In direct mode (`ORLY_DB_TYPE=neo4j`), the relay holds the bolt connection itself:
+
+```
+Developer (nsec) → HTTP + NIP-98 → ORLY relay → bolt → Neo4j
+```
+
+Either way, the developer experience is the same: sign an HTTP request with your nsec, get JSON back.
+
+### Why NIP-98 Instead of SSL
+
+Traditional Neo4j access via bolt+s requires:
+- Exposing a Bolt port externally
+- Configuring TLS certificates for Neo4j
+- Managing Neo4j usernames and passwords
+- Neo4j Enterprise Edition for fine-grained RBAC
+
+NIP-98 replaces all of that. The developer already has a Nostr identity (nsec/npub). ORLY checks the signed event in the Authorization header and verifies the pubkey is in `ORLY_OWNERS`. No certificates to generate, no credentials to distribute, no ports to open. The Nostr identity is both the authentication and authorization mechanism.
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ORLY_NEO4J_CYPHER_ENABLED` | `false` | Enable the Cypher query endpoint |
+| `ORLY_NEO4J_CYPHER_TIMEOUT` | `30` | Default query timeout in seconds (max 120) |
+| `ORLY_NEO4J_CYPHER_MAX_ROWS` | `10000` | Max result rows returned per query (0 = unlimited) |
+
+### Request Format
+
+```bash
+# Using ORLY's NIP-98 debugging tool (nurl)
+# The only credential needed is your nsec
+NOSTR_SECRET_KEY=nsec1... ./nurl -X POST \
+  -d '{"query": "MATCH (n) RETURN count(n) AS cnt"}' \
+  https://relay.example.com/api/neo4j/cypher
+```
+
+JSON body:
+
+```json
+{
+  "query": "MATCH (e:Event)-[:AUTHORED_BY]->(a:Author) WHERE a.pubkey = $pk RETURN e.kind, count(*) AS cnt ORDER BY cnt DESC",
+  "params": {"pk": "abc123..."},
+  "timeout": 30
+}
+```
+
+- `query` (required) — Cypher query string. Must be read-only.
+- `params` (optional) — Named parameters for the query. Values can be strings, numbers, booleans, or arrays.
+- `timeout` (optional) — Query timeout in seconds. Capped at 120s regardless of the value provided.
+
+### Response Format
+
+The response is a JSON array of record objects. Each object has one key per column in the Cypher `RETURN` clause:
+
+```json
+[
+  {"e.kind": 1, "cnt": 4523},
+  {"e.kind": 0, "cnt": 892},
+  {"e.kind": 3, "cnt": 341}
+]
+```
+
+Neo4j node, relationship, and path types are converted to JSON-safe maps with metadata prefixed by `_`:
+
+```json
+{
+  "_type": "node",
+  "_id": "4:abc:123",
+  "_labels": ["Event"],
+  "id": "aabb...",
+  "kind": 1,
+  "created_at": 1700000000
+}
+```
+
+### Read-Only Validation
+
+The proxy rejects queries containing write operations: `CREATE`, `MERGE`, `SET`, `DELETE`, `REMOVE`, `DETACH`, `DROP`, and `CALL`. Comments (`//` and `/* */`) are stripped before checking. This is a safety net — the NIP-98 owner-only gate is the primary access control, not the keyword filter.
+
+### Error Responses
+
+| Status | Meaning |
+|--------|---------|
+| 401 | Missing or invalid NIP-98 authentication |
+| 403 | Authenticated user is not a relay owner |
+| 404 | Endpoint disabled (`ORLY_NEO4J_CYPHER_ENABLED=false`) |
+| 400 | Malformed JSON body or missing `query` field |
+| 500 | Query execution error (timeout, syntax error, write rejection) |
+| 503 | Database backend does not support Cypher (not Neo4j/gRPC-to-Neo4j) |
+
+### Use Cases
+
+- **Ad-hoc graph exploration** — query the social graph from curl, Postman, or custom dashboards using just your nsec
+- **Analytics** — top authors, kind distributions, relationship counts, WoT metrics
+- **Knowledge graph tools** (e.g., Brainstorm) — any HTTP client can query the graph, no Neo4j driver needed
+- **Monitoring and diagnostics** — inspect relay state without touching Neo4j directly
+
 ## NIP-50 Word Search
 
 The Neo4j backend supports full-text word search via [NIP-50](https://github.com/nostr-protocol/nips/blob/master/50.md), using a graph-based inverted index. This is the same approach used by the Badger backend — words are stored as graph nodes linked to events, enabling efficient set-intersection queries via graph traversal.
@@ -1080,7 +1193,7 @@ The migration marker is stored as a `(:Migration {version: "v6"})` node. Once th
 4. **Clustering**: Deploy Neo4j cluster for high availability
 5. **APOC Procedures**: Utilize APOC library for advanced graph algorithms
 6. **Caching Layer**: Implement query result caching similar to Badger backend
-7. **Stopword Filtering**: Optionally skip indexing high-frequency words ("the", "is", "and") to reduce graph size
+7. ~~**Stopword Filtering**: Optionally skip indexing high-frequency words ("the", "is", "and") to reduce graph size~~ — **Done in v0.60.6** (common English function words filtered during tokenization)
 
 ## Troubleshooting
 
