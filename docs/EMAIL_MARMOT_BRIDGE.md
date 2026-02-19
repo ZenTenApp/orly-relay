@@ -43,16 +43,43 @@ subscriptions via NWC lightning invoices.
                                         (attachments)
 ```
 
-The bridge operates as a Nostr identity (the **bridge npub**) that:
+The bridge operates using the **relay's own identity** (the pubkey from
+NIP-11). Users DM the relay to send email, subscribe, or contact the
+operator. The bridge:
 - Receives inbound email via SMTP and delivers it as Marmot DMs to the
   recipient npub
 - Receives outbound email as Marmot DMs (formatted by the compose form) and
   sends it via SMTP
 - Handles subscription commands (`subscribe`) via Marmot DM
+- Forwards non-email DMs to the relay operator as a blind contact proxy
 
 ---
 
 ## 3. Identity Model
+
+### 3.1 Bridge Identity
+
+The bridge uses the **relay's keypair** rather than maintaining its own
+identity. This means the NIP-11 `pubkey` field serves as both the relay
+contact point and the email bridge endpoint — users DM the relay's npub to
+interact with the bridge.
+
+**Identity resolution order:**
+
+1. **ORLY monolithic mode:** Bridge reads the relay identity directly from
+   the database (`relay:identity:sk`) — same process, no configuration needed
+2. **ORLY split IPC mode:** The launcher reads the relay identity from the
+   database and injects it into the bridge subprocess's environment
+   (`ORLY_BRIDGE_NSEC`)
+3. **Standalone / external relay:** Bridge reads identity from a local file
+   (`<data-dir>/bridge.nsec`). If the file doesn't exist, generates a new
+   keypair and persists it. This mode requires the operator to ensure the
+   bridge's pubkey matches what the relay advertises in NIP-11 (or the relay
+   doesn't advertise it at all and the bridge operates independently)
+
+The bridge logs its npub at startup in all modes.
+
+### 3.2 User Email Addresses
 
 - Each whitelisted npub gets the email address: `<npub>@<domain>`
 - The npub is the bech32-encoded public key (e.g., `npub1abc...xyz@relay.example.com`)
@@ -61,6 +88,36 @@ The bridge operates as a Nostr identity (the **bridge npub**) that:
 - **Optional NIP-05 support:** The bridge MAY serve a
   `/.well-known/nostr.json` endpoint mapping the npub portion to the
   corresponding hex pubkey, enabling NIP-05 verification at the bridge domain
+
+### 3.3 Relay Contact Forwarding (Blind Proxy)
+
+Any DM sent to the relay's npub that is **not** an email command (no `To:`
+header, not `subscribe`, etc.) is treated as a message to the relay operator.
+The bridge acts as a blind proxy:
+
+1. User A sends a Marmot DM to the relay npub R
+2. Bridge decrypts the DM (it holds R's secret key)
+3. Bridge generates a random opaque reference ID for this conversation
+4. Bridge re-encrypts the message content and sends it as a Marmot DM from R
+   to the operator's configured npub O, prefixed with the reference ID
+5. Operator O replies to R with the same reference ID
+6. Bridge looks up the reference, finds A's pubkey, re-encrypts and sends
+   the reply from R to A
+
+**Neither party learns the other's pubkey.** User A only sees the relay npub.
+Operator O only sees the relay npub plus a reference ID. The relay is a dead
+drop.
+
+This provides a built-in contact mechanism for any relay — users can message
+the operator via the NIP-11 pubkey without either party revealing their
+identity to the other. Works with any DM protocol the bridge supports
+(Marmot, NIP-17, etc.)
+
+**Configuration:**
+- `ORLY_BRIDGE_OPERATOR_PUBKEY`: hex pubkey of the relay operator (required
+  for contact forwarding to work; if unset, non-email DMs get a "not
+  supported" auto-reply)
+- Reference IDs expire after a configurable TTL (default: 30 days)
 
 ---
 
@@ -453,27 +510,36 @@ servers.
 
 ## 8. Deployment
 
-### 8.1 Integration with ORLY
+### 8.1 Deployment Modes
 
-The bridge integrates into ORLY's unified binary (`cmd/orly`) as a
-subcommand, supporting two deployment modes:
+The bridge communicates with the relay exclusively via standard Nostr
+protocol (NIP-01 WebSocket) and with Blossom via HTTP. It has no
+relay-specific dependencies — it works with any relay, not just ORLY.
 
-**Monolithic mode:** Bridge runs in-process with the relay. All subsystems
-(SMTP server, Marmot client, NWC) start as goroutines within the same
-process. Communication with the relay uses in-process channels.
+**ORLY monolithic mode:** Bridge runs in-process with the relay. All
+subsystems (SMTP server, Marmot client, NWC) start as goroutines within the
+same process. Communication with the relay uses in-process channels (no
+WebSocket hop). Identity shared from the database.
 
-**Split IPC mode:** `orly launcher` spawns `orly bridge` as a separate
+**ORLY split IPC mode:** `orly launcher` spawns `orly bridge` as a separate
 subprocess (same self-exec pattern as `orly db` and `orly acl`). The bridge
-connects to the relay via standard WebSocket (Nostr protocol). This provides
-process isolation and independent restarts.
+connects to the relay via WebSocket. The launcher injects the relay identity
+into the bridge's environment.
+
+**Standalone mode (any relay):** The bridge runs as an independent process,
+connecting to any relay via `ORLY_BRIDGE_RELAY_URL`. Uses its own identity
+from `ORLY_BRIDGE_NSEC` or auto-generated file.
 
 ```
-# Monolithic
+# ORLY monolithic
 ./orly                    # relay + bridge in one process
 
-# Split IPC (via launcher)
+# ORLY split IPC (via launcher)
 ./orly launcher           # spawns: orly db, orly acl, orly bridge, orly relay
 ./orly bridge             # standalone bridge subprocess
+
+# Standalone (any relay)
+ORLY_BRIDGE_RELAY_URL=wss://other-relay.example.com ./orly bridge
 ```
 
 ### 8.2 Container
@@ -494,26 +560,16 @@ ORLY_BRIDGE_SUBSCRIPTION_MODEL=monthly
 ORLY_BRIDGE_SUBSCRIPTION_PRICE_SATS=15000
 ORLY_BRIDGE_SMTP_PORT=25
 ORLY_BRIDGE_DKIM_PRIVATE_KEY_PATH=/path/to/dkim.key
+ORLY_BRIDGE_OPERATOR_PUBKEY=<hex-pubkey>    # for contact forwarding (§3.3)
+ORLY_BRIDGE_NSEC=                           # standalone mode only (§3.1)
 ```
 
-**Bridge identity key:**
+**Bridge identity:**
 
-The bridge identity follows the same pattern as the relay identity — no env
-var needed. On first startup the bridge calls `GetOrCreateBridgeIdentitySecret()`
-which generates a keypair and persists it in the database (Badger key:
-`bridge:identity:sk`, Neo4j marker: `bridge_identity_secret`). On subsequent
-starts the existing key is loaded.
-
-The bridge logs its npub at startup so the operator can see and share it.
-The identity can also be viewed via:
-
-```bash
-./orly bridge identity
-```
-
-This mirrors `./orly identity` for the relay key. Both identities live in the
-same database but are independent keys — the bridge needs its own identity
-because it participates in Marmot DM conversations as a distinct npub.
+The bridge uses the relay's keypair (see §3.1 for resolution order). In ORLY
+modes, no identity configuration is needed — the bridge shares the relay's
+key. In standalone mode, set `ORLY_BRIDGE_NSEC` or let the bridge
+auto-generate and persist to `<data-dir>/bridge.nsec`.
 
 ### 8.4 README
 
@@ -545,6 +601,8 @@ Must include:
 | Outbound email format | Plaintext only | No HTML composition |
 | Blossom upload (outbound) | No auth gate | Compose form is client-side only |
 | HTML handling | Zip to Blossom attachment | No stripping or processing |
+| Relay coupling | None (NIP-01 WebSocket only) | Works with any relay, ORLY integration optional |
+| Bridge identity | Relay keypair (ORLY) or standalone file | NIP-11 pubkey = bridge pubkey |
 
 ---
 
@@ -566,8 +624,8 @@ Must include:
 
 1. **Marmot Go package** — native Go Marmot protocol implementation in
    `git.mleku.dev/mleku/nostr` (MLS key packages, 1:1 groups, send/receive)
-2. **Bridge source code** — ORLY-integrated Nostr-Email bridge (Go, unified
-   binary with `orly bridge` subcommand)
+2. **Bridge source code** — Nostr-Email bridge (Go, relay-agnostic, with
+   ORLY integration as `orly bridge` subcommand)
 3. **Compose form** — Static HTML/JS email composition page (no auth, pure
    client-side, clipboard output)
 4. **Dockerfile** + **docker-compose.yml** — containerized deployment
@@ -595,6 +653,11 @@ Must include:
 - [ ] SPF, DKIM, DMARC pass validation (tested against non-Google servers)
 - [ ] NIP-05 verification resolves correctly (if enabled)
 - [ ] Bridge runs as `orly bridge` subcommand (monolithic + split IPC modes)
+- [ ] Bridge works standalone with a non-ORLY relay via `ORLY_BRIDGE_RELAY_URL`
+- [ ] Bridge uses relay identity in ORLY modes (no separate keypair)
+- [ ] Bridge auto-generates and persists identity in standalone mode
+- [ ] Contact forwarding: non-email DMs proxied to operator without revealing sender
+- [ ] Contact forwarding: operator replies proxied back without revealing operator
 - [ ] Marmot Go package in `git.mleku.dev/mleku/nostr` passes tests
 - [ ] Solution can be deployed to a VPS and configured by a regular IT administrator user from the README instructions without any specific nostr / email / orly related knowledge or understanding
 - [ ] Email body respects 64 KB limit
