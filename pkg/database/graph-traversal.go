@@ -533,6 +533,98 @@ func (d *D) GetEventAuthorSerial(eventSerial *types.Uint40) (*types.Uint40, erro
 	return authorSerial, err
 }
 
+// GetFollowsViaPPG returns pubkey serials that the source pubkey references via the
+// ppg (pubkey-pubkey-graph) materialized index. This is a single prefix scan that
+// replaces the two-hop GetFollowsFromPubkeySerial (find kind-3 → extract p-tags).
+//
+// Key format: ppg(3)|source(5)|target(5)|kind(2)|direction(1)|event(5) = 21 bytes
+// We scan prefix ppg|source and extract target serials at offset 8..13.
+func (d *D) GetFollowsViaPPG(sourceSerial *types.Uint40) ([]*types.Uint40, error) {
+	var targets []*types.Uint40
+
+	prefix := new(bytes.Buffer)
+	prefix.Write([]byte(indexes.PubkeyPubkeyGraphPrefix))
+	if err := sourceSerial.MarshalWrite(prefix); chk.E(err) {
+		return nil, err
+	}
+	searchPrefix := prefix.Bytes()
+
+	err := d.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		opts.Prefix = searchPrefix
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		seen := make(map[uint64]bool)
+		for it.Seek(searchPrefix); it.ValidForPrefix(searchPrefix); it.Next() {
+			key := it.Item().KeyCopy(nil)
+			if len(key) != 21 {
+				continue
+			}
+			// Extract target pubkey serial at bytes 8..13
+			target := new(types.Uint40)
+			if err := target.UnmarshalRead(bytes.NewReader(key[8:13])); chk.E(err) {
+				continue
+			}
+			if seen[target.Get()] {
+				continue
+			}
+			seen[target.Get()] = true
+			targets = append(targets, target)
+		}
+		return nil
+	})
+	return targets, err
+}
+
+// GetFollowersViaGPP returns pubkey serials that reference the target pubkey via the
+// gpp (graph-pubkey-pubkey) reverse index. This is a single prefix scan that replaces
+// the three-hop GetFollowersOfPubkeySerial (find referencing events → get authors → dedup).
+//
+// Key format: gpp(3)|target(5)|kind(2)|direction(1)|source(5)|event(5) = 21 bytes
+// For kind-3 followers, we can optionally narrow with kind filter.
+func (d *D) GetFollowersViaGPP(targetSerial *types.Uint40) ([]*types.Uint40, error) {
+	var sources []*types.Uint40
+
+	prefix := new(bytes.Buffer)
+	prefix.Write([]byte(indexes.GraphPubkeyPubkeyPrefix))
+	if err := targetSerial.MarshalWrite(prefix); chk.E(err) {
+		return nil, err
+	}
+	searchPrefix := prefix.Bytes()
+
+	err := d.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		opts.Prefix = searchPrefix
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		seen := make(map[uint64]bool)
+		for it.Seek(searchPrefix); it.ValidForPrefix(searchPrefix); it.Next() {
+			key := it.Item().KeyCopy(nil)
+			if len(key) != 21 {
+				continue
+			}
+			// Extract source pubkey serial at bytes 11..16
+			source := new(types.Uint40)
+			if err := source.UnmarshalRead(bytes.NewReader(key[11:16])); chk.E(err) {
+				continue
+			}
+			if seen[source.Get()] {
+				continue
+			}
+			seen[source.Get()] = true
+			sources = append(sources, source)
+		}
+		return nil
+	})
+	return sources, err
+}
+
 // PubkeyHexToSerial converts a pubkey hex string to its serial, if it exists.
 // Returns an error if the pubkey is not in the database.
 func (d *D) PubkeyHexToSerial(pubkeyHex string) (*types.Uint40, error) {

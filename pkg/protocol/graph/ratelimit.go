@@ -106,9 +106,10 @@ func (rl *RateLimiter) QueryCost(q *Query) float64 {
 		cost *= rl.depthFactor
 	}
 
-	// Add cost for reference collection (adds ~50% per ref spec)
-	refCost := float64(len(q.InboundRefs)+len(q.OutboundRefs)) * 0.5
-	cost += refCost
+	// Add cost for bidirectional queries (traversing both directions)
+	if q.IsBidirectional() {
+		cost *= 1.5
+	}
 
 	return cost
 }

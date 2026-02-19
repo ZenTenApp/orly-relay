@@ -89,6 +89,12 @@ const (
 	// Event-to-event graph indexes (for e-tag references)
 	EventEventGraphPrefix = I("eeg") // source event serial -> target event serial (outbound e-tags)
 	GraphEventEventPrefix = I("gee") // target event serial -> source event serial (reverse e-tags)
+
+	// Pubkey-to-pubkey graph indexes (noun-noun edges)
+	// Materialized from events containing p-tags, collapsing the two-hop
+	// pubkey→event→pubkey traversal into a direct single-hop lookup.
+	PubkeyPubkeyGraphPrefix = I("ppg") // source pubkey serial -> target pubkey serial (outbound)
+	GraphPubkeyPubkeyPrefix = I("gpp") // target pubkey serial -> source pubkey serial (reverse)
 )
 
 // Prefix returns the three byte human-readable prefixes that go in front of
@@ -151,6 +157,11 @@ func Prefix(prf int) (i I) {
 		return EventEventGraphPrefix
 	case GraphEventEvent:
 		return GraphEventEventPrefix
+
+	case PubkeyPubkeyGraph:
+		return PubkeyPubkeyGraphPrefix
+	case GraphPubkeyPubkey:
+		return GraphPubkeyPubkeyPrefix
 	}
 	return
 }
@@ -219,6 +230,11 @@ func Identify(r io.Reader) (i int, err error) {
 		i = EventEventGraph
 	case GraphEventEventPrefix:
 		i = GraphEventEvent
+
+	case PubkeyPubkeyGraphPrefix:
+		i = PubkeyPubkeyGraph
+	case GraphPubkeyPubkeyPrefix:
+		i = GraphPubkeyPubkey
 	}
 	return
 }
@@ -703,4 +719,42 @@ func GraphEventEventEnc(tgtSer *types.Uint40, kind *types.Uint16, direction *typ
 }
 func GraphEventEventDec(tgtSer *types.Uint40, kind *types.Uint16, direction *types.Letter, srcSer *types.Uint40) (enc *T) {
 	return New(NewPrefix(), tgtSer, kind, direction, srcSer)
+}
+
+// PubkeyPubkeyGraph creates a direct noun-noun edge between pubkeys.
+// This materializes the pubkey→event→pubkey two-hop traversal into a single-hop
+// lookup, enabling direct social graph queries without event decode.
+// The event kind that created the relationship is preserved for filtering
+// (e.g., kind 3 = follow, kind 1 = mention, kind 7 = reaction).
+// The event serial is included to enable back-traversal to the originating event.
+//
+//	3 prefix|5 source pubkey serial|5 target pubkey serial|2 kind|1 direction|5 event serial
+var PubkeyPubkeyGraph = next()
+
+func PubkeyPubkeyGraphVars() (srcPk *types.Uint40, tgtPk *types.Uint40, kind *types.Uint16, direction *types.Letter, eventSer *types.Uint40) {
+	return new(types.Uint40), new(types.Uint40), new(types.Uint16), new(types.Letter), new(types.Uint40)
+}
+func PubkeyPubkeyGraphEnc(srcPk *types.Uint40, tgtPk *types.Uint40, kind *types.Uint16, direction *types.Letter, eventSer *types.Uint40) (enc *T) {
+	return New(NewPrefix(PubkeyPubkeyGraph), srcPk, tgtPk, kind, direction, eventSer)
+}
+func PubkeyPubkeyGraphDec(srcPk *types.Uint40, tgtPk *types.Uint40, kind *types.Uint16, direction *types.Letter, eventSer *types.Uint40) (enc *T) {
+	return New(NewPrefix(), srcPk, tgtPk, kind, direction, eventSer)
+}
+
+// GraphPubkeyPubkey creates the reverse noun-noun edge: target pubkey -> source pubkey.
+// This enables querying "who references this pubkey?" as a single prefix scan.
+// Kind and direction are positioned before the trailing serial for efficient
+// filtered scans (e.g., "all kind-3 followers of pubkey X").
+//
+//	3 prefix|5 target pubkey serial|2 kind|1 direction|5 source pubkey serial|5 event serial
+var GraphPubkeyPubkey = next()
+
+func GraphPubkeyPubkeyVars() (tgtPk *types.Uint40, kind *types.Uint16, direction *types.Letter, srcPk *types.Uint40, eventSer *types.Uint40) {
+	return new(types.Uint40), new(types.Uint16), new(types.Letter), new(types.Uint40), new(types.Uint40)
+}
+func GraphPubkeyPubkeyEnc(tgtPk *types.Uint40, kind *types.Uint16, direction *types.Letter, srcPk *types.Uint40, eventSer *types.Uint40) (enc *T) {
+	return New(NewPrefix(GraphPubkeyPubkey), tgtPk, kind, direction, srcPk, eventSer)
+}
+func GraphPubkeyPubkeyDec(tgtPk *types.Uint40, kind *types.Uint16, direction *types.Letter, srcPk *types.Uint40, eventSer *types.Uint40) (enc *T) {
+	return New(NewPrefix(), tgtPk, kind, direction, srcPk, eventSer)
 }

@@ -21,6 +21,14 @@ const (
 	EdgeDirectionETagIn  byte = 1 // Inbound: This event is referenced by source event via e-tag
 )
 
+// Edge direction constants for pubkey-to-pubkey (noun-noun) graph relationships
+// These are materialized from events containing p-tags, collapsing the two-hop
+// pubkey→event→pubkey traversal into a direct single-hop edge.
+const (
+	EdgeDirectionPubkeyOut byte = 0 // Outbound: source pubkey references target pubkey (via p-tag authorship)
+	EdgeDirectionPubkeyIn  byte = 1 // Inbound: target pubkey is referenced by source pubkey
+)
+
 type Letter struct {
 	val byte
 }

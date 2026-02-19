@@ -7,7 +7,7 @@ import (
 )
 
 func TestQueryValidate(t *testing.T) {
-	validSeed := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	validPubkey := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 	tests := []struct {
 		name    string
@@ -15,122 +15,69 @@ func TestQueryValidate(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "valid follows query",
-			query: Query{
-				Method: "follows",
-				Seed:   validSeed,
-				Depth:  2,
-			},
+			name:    "valid pp/out query",
+			query:   Query{Pubkey: validPubkey, Depth: 2, Edge: "pp", Direction: "out"},
 			wantErr: nil,
 		},
 		{
-			name: "valid followers query",
-			query: Query{
-				Method: "followers",
-				Seed:   validSeed,
-			},
+			name:    "valid pp/in query",
+			query:   Query{Pubkey: validPubkey, Depth: 1, Edge: "pp", Direction: "in"},
 			wantErr: nil,
 		},
 		{
-			name: "valid mentions query",
-			query: Query{
-				Method: "mentions",
-				Seed:   validSeed,
-				Depth:  1,
-			},
+			name:    "valid pe/both query",
+			query:   Query{Pubkey: validPubkey, Depth: 3, Edge: "pe", Direction: "both"},
 			wantErr: nil,
 		},
 		{
-			name: "valid thread query",
-			query: Query{
-				Method: "thread",
-				Seed:   validSeed,
-				Depth:  10,
-			},
+			name:    "valid ee/out query",
+			query:   Query{Pubkey: validPubkey, Depth: 1, Edge: "ee", Direction: "out"},
 			wantErr: nil,
 		},
 		{
-			name: "valid query with inbound refs",
-			query: Query{
-				Method: "follows",
-				Seed:   validSeed,
-				Depth:  2,
-				InboundRefs: []RefSpec{
-					{Kinds: []int{7}, FromDepth: 1},
-				},
-			},
+			name:    "depth 0 defaults to 1",
+			query:   Query{Pubkey: validPubkey, Depth: 0, Edge: "pp", Direction: "out"},
 			wantErr: nil,
 		},
 		{
-			name: "valid query with multiple ref specs",
-			query: Query{
-				Method: "follows",
-				Seed:   validSeed,
-				InboundRefs: []RefSpec{
-					{Kinds: []int{7}, FromDepth: 1},
-					{Kinds: []int{6}, FromDepth: 1},
-				},
-				OutboundRefs: []RefSpec{
-					{Kinds: []int{1}, FromDepth: 0},
-				},
-			},
-			wantErr: nil,
+			name:    "missing pubkey",
+			query:   Query{Edge: "pp", Direction: "out"},
+			wantErr: ErrMissingPubkey,
 		},
 		{
-			name:    "missing method",
-			query:   Query{Seed: validSeed},
-			wantErr: ErrMissingMethod,
+			name:    "pubkey too short",
+			query:   Query{Pubkey: "abc123", Edge: "pp", Direction: "out"},
+			wantErr: ErrInvalidPubkey,
 		},
 		{
-			name: "invalid method",
-			query: Query{
-				Method: "invalid",
-				Seed:   validSeed,
-			},
-			wantErr: ErrInvalidMethod,
+			name:    "pubkey with invalid hex",
+			query:   Query{Pubkey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg", Edge: "pp", Direction: "out"},
+			wantErr: ErrInvalidPubkey,
 		},
 		{
-			name: "missing seed",
-			query: Query{
-				Method: "follows",
-			},
-			wantErr: ErrMissingSeed,
+			name:    "depth too high",
+			query:   Query{Pubkey: validPubkey, Depth: 17, Edge: "pp", Direction: "out"},
+			wantErr: ErrInvalidDepth,
 		},
 		{
-			name: "seed too short",
-			query: Query{
-				Method: "follows",
-				Seed:   "abc123",
-			},
-			wantErr: ErrInvalidSeed,
+			name:    "missing edge",
+			query:   Query{Pubkey: validPubkey, Direction: "out"},
+			wantErr: ErrMissingEdge,
 		},
 		{
-			name: "seed with invalid characters",
-			query: Query{
-				Method: "follows",
-				Seed:   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg",
-			},
-			wantErr: ErrInvalidSeed,
+			name:    "invalid edge",
+			query:   Query{Pubkey: validPubkey, Edge: "xx", Direction: "out"},
+			wantErr: ErrInvalidEdge,
 		},
 		{
-			name: "depth too high",
-			query: Query{
-				Method: "follows",
-				Seed:   validSeed,
-				Depth:  17,
-			},
-			wantErr: ErrDepthTooHigh,
+			name:    "missing direction",
+			query:   Query{Pubkey: validPubkey, Edge: "pp"},
+			wantErr: ErrMissingDirection,
 		},
 		{
-			name: "empty ref spec kinds",
-			query: Query{
-				Method: "follows",
-				Seed:   validSeed,
-				InboundRefs: []RefSpec{
-					{Kinds: []int{}, FromDepth: 1},
-				},
-			},
-			wantErr: ErrEmptyRefSpecKinds,
+			name:    "invalid direction",
+			query:   Query{Pubkey: validPubkey, Edge: "pp", Direction: "left"},
+			wantErr: ErrInvalidDirection,
 		},
 	}
 
@@ -151,108 +98,63 @@ func TestQueryValidate(t *testing.T) {
 }
 
 func TestQueryDefaults(t *testing.T) {
-	validSeed := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	validPubkey := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-	q := Query{
-		Method: "follows",
-		Seed:   validSeed,
-		Depth:  0, // Should default to 1
-	}
-
-	err := q.Validate()
-	if err != nil {
+	q := Query{Pubkey: validPubkey, Depth: 0, Edge: "pp", Direction: "out"}
+	if err := q.Validate(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
 	if q.Depth != 1 {
 		t.Errorf("Depth = %d, want 1 (default)", q.Depth)
 	}
 }
 
-func TestKindsAtDepth(t *testing.T) {
-	q := Query{
-		Method: "follows",
-		Seed:   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-		Depth:  3,
-		InboundRefs: []RefSpec{
-			{Kinds: []int{7}, FromDepth: 0},       // From seed
-			{Kinds: []int{6, 16}, FromDepth: 1},   // From depth 1
-			{Kinds: []int{9735}, FromDepth: 2},    // From depth 2
-		},
-		OutboundRefs: []RefSpec{
-			{Kinds: []int{1}, FromDepth: 1},
-		},
-	}
+func TestExtractFromFilter_Array(t *testing.T) {
+	validPubkey := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-	// Test inbound kinds at depth 0
-	kinds0 := q.InboundKindsAtDepth(0)
-	if !kinds0[7] || kinds0[6] || kinds0[9735] {
-		t.Errorf("InboundKindsAtDepth(0) = %v, want only kind 7", kinds0)
-	}
-
-	// Test inbound kinds at depth 1
-	kinds1 := q.InboundKindsAtDepth(1)
-	if !kinds1[7] || !kinds1[6] || !kinds1[16] || kinds1[9735] {
-		t.Errorf("InboundKindsAtDepth(1) = %v, want kinds 7, 6, 16", kinds1)
-	}
-
-	// Test inbound kinds at depth 2
-	kinds2 := q.InboundKindsAtDepth(2)
-	if !kinds2[7] || !kinds2[6] || !kinds2[16] || !kinds2[9735] {
-		t.Errorf("InboundKindsAtDepth(2) = %v, want all kinds", kinds2)
-	}
-
-	// Test outbound kinds at depth 0
-	outKinds0 := q.OutboundKindsAtDepth(0)
-	if len(outKinds0) != 0 {
-		t.Errorf("OutboundKindsAtDepth(0) = %v, want empty", outKinds0)
-	}
-
-	// Test outbound kinds at depth 1
-	outKinds1 := q.OutboundKindsAtDepth(1)
-	if !outKinds1[1] {
-		t.Errorf("OutboundKindsAtDepth(1) = %v, want kind 1", outKinds1)
-	}
-}
-
-func TestExtractFromFilter(t *testing.T) {
 	tests := []struct {
 		name       string
 		filterJSON string
 		wantQuery  bool
 		wantErr    bool
+		wantEdge   string
+		wantDir    string
 	}{
 		{
-			name:       "filter with valid graph query",
-			filterJSON: `{"kinds":[1],"_graph":{"method":"follows","seed":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","depth":2}}`,
+			name:       "4-element array format",
+			filterJSON: `{"kinds":[1],"_graph":["` + validPubkey + `",2,"pp","out"]}`,
 			wantQuery:  true,
-			wantErr:    false,
+			wantEdge:   "pp",
+			wantDir:    "out",
 		},
 		{
-			name:       "filter without graph query",
+			name:       "legacy object format (backward compat)",
+			filterJSON: `{"kinds":[1],"_graph":{"pubkey":"` + validPubkey + `","depth":2,"edge":"pp","direction":"out"}}`,
+			wantQuery:  true,
+			wantEdge:   "pp",
+			wantDir:    "out",
+		},
+		{
+			name:       "no graph query",
 			filterJSON: `{"kinds":[1,7]}`,
 			wantQuery:  false,
-			wantErr:    false,
 		},
 		{
-			name:       "filter with invalid graph query (missing method)",
-			filterJSON: `{"kinds":[1],"_graph":{"seed":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}`,
-			wantQuery:  false,
+			name:       "invalid array length",
+			filterJSON: `{"kinds":[1],"_graph":["` + validPubkey + `",2,"pp"]}`,
 			wantErr:    true,
 		},
 		{
-			name:       "filter with complex graph query",
-			filterJSON: `{"kinds":[0],"_graph":{"method":"follows","seed":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","depth":3,"inbound_refs":[{"kinds":[7],"from_depth":1}]}}`,
-			wantQuery:  true,
-			wantErr:    false,
+			name:       "invalid edge in array",
+			filterJSON: `{"kinds":[1],"_graph":["` + validPubkey + `",2,"xx","out"]}`,
+			wantErr:    true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := &filter.F{}
-			_, err := f.Unmarshal([]byte(tt.filterJSON))
-			if err != nil {
+			if _, err := f.Unmarshal([]byte(tt.filterJSON)); err != nil {
 				t.Fatalf("failed to unmarshal filter: %v", err)
 			}
 
@@ -264,16 +166,22 @@ func TestExtractFromFilter(t *testing.T) {
 				}
 				return
 			}
-
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
 
-			if tt.wantQuery && q == nil {
-				t.Error("expected query, got nil")
-			}
-			if !tt.wantQuery && q != nil {
+			if tt.wantQuery {
+				if q == nil {
+					t.Fatal("expected query, got nil")
+				}
+				if q.Edge != tt.wantEdge {
+					t.Errorf("Edge = %q, want %q", q.Edge, tt.wantEdge)
+				}
+				if q.Direction != tt.wantDir {
+					t.Errorf("Direction = %q, want %q", q.Direction, tt.wantDir)
+				}
+			} else if q != nil {
 				t.Errorf("expected nil query, got %+v", q)
 			}
 		})
@@ -288,7 +196,7 @@ func TestIsGraphQuery(t *testing.T) {
 	}{
 		{
 			name:       "filter with graph query",
-			filterJSON: `{"kinds":[1],"_graph":{"method":"follows","seed":"abc"}}`,
+			filterJSON: `{"kinds":[1],"_graph":["abc",1,"pp","out"]}`,
 			want:       true,
 		},
 		{
@@ -306,92 +214,48 @@ func TestIsGraphQuery(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := &filter.F{}
-			_, err := f.Unmarshal([]byte(tt.filterJSON))
-			if err != nil {
+			if _, err := f.Unmarshal([]byte(tt.filterJSON)); err != nil {
 				t.Fatalf("failed to unmarshal filter: %v", err)
 			}
-
-			got := IsGraphQuery(f)
-			if got != tt.want {
+			if got := IsGraphQuery(f); got != tt.want {
 				t.Errorf("IsGraphQuery() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestQueryHasRefs(t *testing.T) {
+func TestQueryEdgeHelpers(t *testing.T) {
 	tests := []struct {
-		name           string
-		query          Query
-		hasInbound     bool
-		hasOutbound    bool
-		hasRefs        bool
+		edge      string
+		direction string
+		pp, pe, ee bool
+		out, in_, both bool
 	}{
-		{
-			name: "no refs",
-			query: Query{
-				Method: "follows",
-				Seed:   "abc",
-			},
-			hasInbound:  false,
-			hasOutbound: false,
-			hasRefs:     false,
-		},
-		{
-			name: "only inbound refs",
-			query: Query{
-				Method: "follows",
-				Seed:   "abc",
-				InboundRefs: []RefSpec{
-					{Kinds: []int{7}},
-				},
-			},
-			hasInbound:  true,
-			hasOutbound: false,
-			hasRefs:     true,
-		},
-		{
-			name: "only outbound refs",
-			query: Query{
-				Method: "follows",
-				Seed:   "abc",
-				OutboundRefs: []RefSpec{
-					{Kinds: []int{1}},
-				},
-			},
-			hasInbound:  false,
-			hasOutbound: true,
-			hasRefs:     true,
-		},
-		{
-			name: "both refs",
-			query: Query{
-				Method: "follows",
-				Seed:   "abc",
-				InboundRefs: []RefSpec{
-					{Kinds: []int{7}},
-				},
-				OutboundRefs: []RefSpec{
-					{Kinds: []int{1}},
-				},
-			},
-			hasInbound:  true,
-			hasOutbound: true,
-			hasRefs:     true,
-		},
+		{"pp", "out", true, false, false, true, false, false},
+		{"pe", "in", false, true, false, false, true, false},
+		{"ee", "both", false, false, true, true, true, true},
+		{"pp", "both", true, false, false, true, true, true},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.query.HasInboundRefs(); got != tt.hasInbound {
-				t.Errorf("HasInboundRefs() = %v, want %v", got, tt.hasInbound)
-			}
-			if got := tt.query.HasOutboundRefs(); got != tt.hasOutbound {
-				t.Errorf("HasOutboundRefs() = %v, want %v", got, tt.hasOutbound)
-			}
-			if got := tt.query.HasRefs(); got != tt.hasRefs {
-				t.Errorf("HasRefs() = %v, want %v", got, tt.hasRefs)
-			}
-		})
+		q := Query{Edge: tt.edge, Direction: tt.direction}
+		if q.IsPubkeyPubkey() != tt.pp {
+			t.Errorf("edge=%s: IsPubkeyPubkey() = %v, want %v", tt.edge, q.IsPubkeyPubkey(), tt.pp)
+		}
+		if q.IsPubkeyEvent() != tt.pe {
+			t.Errorf("edge=%s: IsPubkeyEvent() = %v, want %v", tt.edge, q.IsPubkeyEvent(), tt.pe)
+		}
+		if q.IsEventEvent() != tt.ee {
+			t.Errorf("edge=%s: IsEventEvent() = %v, want %v", tt.edge, q.IsEventEvent(), tt.ee)
+		}
+		if q.IsOutbound() != tt.out {
+			t.Errorf("dir=%s: IsOutbound() = %v, want %v", tt.direction, q.IsOutbound(), tt.out)
+		}
+		if q.IsInbound() != tt.in_ {
+			t.Errorf("dir=%s: IsInbound() = %v, want %v", tt.direction, q.IsInbound(), tt.in_)
+		}
+		if q.IsBidirectional() != tt.both {
+			t.Errorf("dir=%s: IsBidirectional() = %v, want %v", tt.direction, q.IsBidirectional(), tt.both)
+		}
 	}
 }

@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	currentVersion uint32 = 9
+	currentVersion uint32 = 10
 )
 
 func (d *D) RunMigrations() {
@@ -132,6 +132,15 @@ func (d *D) RunMigrations() {
 		d.BackfillMissingSerialEventIdMappings()
 		// bump to version 9
 		_ = d.writeVersionTag(9)
+	}
+	if dbVersion < 10 {
+		log.I.F("migrating to version 10...")
+		// Backfill pubkey-to-pubkey (noun-noun) graph indexes (ppg/gpp)
+		// This materializes direct pubkey→pubkey edges from p-tag relationships,
+		// collapsing the two-hop pubkey→event→pubkey traversal into single-hop lookups
+		d.BackfillPubkeyPubkeyGraph()
+		// bump to version 10
+		_ = d.writeVersionTag(10)
 	}
 }
 
@@ -1516,4 +1525,203 @@ func (d *D) BackfillMissingSerialEventIdMappings() {
 
 	log.I.F("SerialEventId backfill complete: %d successful, %d failed, %d also converted to compact format",
 		successCount, failCount, convertedToCompact)
+}
+
+// BackfillPubkeyPubkeyGraph populates pubkey-to-pubkey (noun-noun) graph indexes
+// (ppg/gpp) for all existing events that contain p-tags.
+// This materializes direct pubkey→pubkey edges, collapsing the two-hop
+// pubkey→event→pubkey traversal into a single-hop lookup.
+//
+// For each event with p-tags, creates bidirectional edges:
+//   - ppg|author_serial|target_serial|kind|direction(out)|event_serial - forward edge
+//   - gpp|target_serial|kind|direction(in)|author_serial|event_serial - reverse edge
+//
+// This is idempotent: running multiple times won't create duplicate edges.
+func (d *D) BackfillPubkeyPubkeyGraph() {
+	log.I.F("backfilling pubkey-to-pubkey graph indexes...")
+	var err error
+
+	type PubkeyEdge struct {
+		AuthorSerial *types.Uint40
+		TargetSerial *types.Uint40
+		Kind         *types.Uint16
+		EventSerial  *types.Uint40
+	}
+
+	var edges []PubkeyEdge
+	var processedEvents int
+	var eventsWithPTags int
+	var skippedPubkeys int
+
+	// First pass: collect all pubkey-pubkey edges from events
+	if err = d.View(func(txn *badger.Txn) error {
+		// Iterate compact events (cmp prefix)
+		cmpPrf := new(bytes.Buffer)
+		if err = indexes.CompactEventEnc(nil).MarshalWrite(cmpPrf); chk.E(err) {
+			return err
+		}
+
+		it := txn.NewIterator(badger.IteratorOptions{Prefix: cmpPrf.Bytes()})
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			key := item.KeyCopy(nil)
+
+			// Extract serial from key (prefix 3 bytes + serial 5 bytes)
+			if len(key) < 8 {
+				continue
+			}
+			eventSerial := new(types.Uint40)
+			if err = eventSerial.UnmarshalRead(bytes.NewReader(key[3:8])); chk.E(err) {
+				continue
+			}
+
+			// Get event data
+			var val []byte
+			if val, err = item.ValueCopy(nil); chk.E(err) {
+				continue
+			}
+
+			// Decode the event
+			eventId, idErr := d.GetEventIdBySerial(eventSerial)
+			if idErr != nil {
+				continue
+			}
+			resolver := NewDatabaseSerialResolver(d, d.serialCache)
+			ev, decErr := UnmarshalCompactEvent(val, eventId, resolver)
+			if decErr != nil || ev == nil {
+				continue
+			}
+			processedEvents++
+
+			// Extract p-tags
+			pTags := ev.Tags.GetAll([]byte("p"))
+			if len(pTags) == 0 {
+				continue
+			}
+			eventsWithPTags++
+
+			// Get author pubkey serial
+			authorSerial, authErr := d.GetOrCreatePubkeySerial(ev.Pubkey)
+			if authErr != nil {
+				continue
+			}
+
+			eventKind := new(types.Uint16)
+			eventKind.Set(ev.Kind)
+
+			for _, pTag := range pTags {
+				if pTag.Len() < 2 {
+					continue
+				}
+
+				// Get pubkey from p-tag
+				var targetPubkey []byte
+				targetPubkey, err = hex.Dec(string(pTag.ValueHex()))
+				if err != nil || len(targetPubkey) != 32 {
+					continue
+				}
+
+				// Get or create target pubkey serial
+				targetSerial, lookupErr := d.GetOrCreatePubkeySerial(targetPubkey)
+				if lookupErr != nil {
+					skippedPubkeys++
+					continue
+				}
+
+				// Skip self-references
+				if authorSerial.Get() == targetSerial.Get() {
+					continue
+				}
+
+				// Clone serials for storage in slice
+				asSer := new(types.Uint40)
+				asSer.Set(authorSerial.Get())
+				tsSer := new(types.Uint40)
+				tsSer.Set(targetSerial.Get())
+				esSer := new(types.Uint40)
+				esSer.Set(eventSerial.Get())
+				ekKind := new(types.Uint16)
+				ekKind.Set(ev.Kind)
+
+				edges = append(edges, PubkeyEdge{
+					AuthorSerial: asSer,
+					TargetSerial: tsSer,
+					Kind:         ekKind,
+					EventSerial:  esSer,
+				})
+			}
+		}
+		return nil
+	}); chk.E(err) {
+		log.E.F("pubkey-pubkey graph backfill: failed to collect edges: %v", err)
+		return
+	}
+
+	log.I.F("pubkey-pubkey graph backfill: processed %d events, %d with p-tags, found %d edges to create (%d pubkeys failed)",
+		processedEvents, eventsWithPTags, len(edges), skippedPubkeys)
+
+	if len(edges) == 0 {
+		log.I.F("pubkey-pubkey graph backfill: no edges to create")
+		return
+	}
+
+	// Sort edges for ordered writes (improves compaction)
+	sort.Slice(edges, func(i, j int) bool {
+		if edges[i].AuthorSerial.Get() != edges[j].AuthorSerial.Get() {
+			return edges[i].AuthorSerial.Get() < edges[j].AuthorSerial.Get()
+		}
+		return edges[i].TargetSerial.Get() < edges[j].TargetSerial.Get()
+	})
+
+	// Second pass: write edges in batches
+	const batchSize = 1000
+	var createdEdges int
+
+	for i := 0; i < len(edges); i += batchSize {
+		end := i + batchSize
+		if end > len(edges) {
+			end = len(edges)
+		}
+		batch := edges[i:end]
+
+		if err = d.Update(func(txn *badger.Txn) error {
+			for _, edge := range batch {
+				// Forward edge: ppg|author|target|kind|direction(out)|event_serial
+				directionOut := new(types.Letter)
+				directionOut.Set(types.EdgeDirectionPubkeyOut)
+				keyBuf := new(bytes.Buffer)
+				if err = indexes.PubkeyPubkeyGraphEnc(edge.AuthorSerial, edge.TargetSerial, edge.Kind, directionOut, edge.EventSerial).MarshalWrite(keyBuf); chk.E(err) {
+					continue
+				}
+				if err = txn.Set(keyBuf.Bytes(), nil); chk.E(err) {
+					continue
+				}
+
+				// Reverse edge: gpp|target|kind|direction(in)|author|event_serial
+				directionIn := new(types.Letter)
+				directionIn.Set(types.EdgeDirectionPubkeyIn)
+				keyBuf.Reset()
+				if err = indexes.GraphPubkeyPubkeyEnc(edge.TargetSerial, edge.Kind, directionIn, edge.AuthorSerial, edge.EventSerial).MarshalWrite(keyBuf); chk.E(err) {
+					continue
+				}
+				if err = txn.Set(keyBuf.Bytes(), nil); chk.E(err) {
+					continue
+				}
+
+				createdEdges++
+			}
+			return nil
+		}); chk.E(err) {
+			log.W.F("pubkey-pubkey graph backfill: batch write failed: %v", err)
+			continue
+		}
+
+		if (i/batchSize)%10 == 0 && i > 0 {
+			log.I.F("pubkey-pubkey graph backfill progress: %d/%d edges created", i, len(edges))
+		}
+	}
+
+	log.I.F("pubkey-pubkey graph backfill complete: created %d bidirectional edges", createdEdges)
 }

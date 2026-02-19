@@ -435,6 +435,38 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 				}
 			}
 
+			// Create pubkey-to-pubkey (noun-noun) graph edges
+			// For every p-tag pubkey in this event, create a direct edge from
+			// the author pubkey to the p-tagged pubkey. This materializes the
+			// two-hop pubkey→event→pubkey traversal into a single-hop lookup.
+			// The event serial is preserved in the edge for back-traversal.
+			for _, pkInfo := range pubkeysForGraph {
+				if pkInfo.isAuthor {
+					continue // skip author→author self-edge
+				}
+				// Forward edge: author → p-tagged pubkey
+				dirOut := new(types.Letter)
+				dirOut.Set(types.EdgeDirectionPubkeyOut)
+				graphKeyBuf.Reset()
+				if err = indexes.PubkeyPubkeyGraphEnc(authorSerial, pkInfo.serial, eventKind, dirOut, ser).MarshalWrite(graphKeyBuf); chk.E(err) {
+					return
+				}
+				if err = txn.Set(bufpool.CopyBytes(graphKeyBuf), nil); chk.E(err) {
+					return
+				}
+
+				// Reverse edge: p-tagged pubkey ← author
+				dirIn := new(types.Letter)
+				dirIn.Set(types.EdgeDirectionPubkeyIn)
+				graphKeyBuf.Reset()
+				if err = indexes.GraphPubkeyPubkeyEnc(pkInfo.serial, eventKind, dirIn, authorSerial, ser).MarshalWrite(graphKeyBuf); chk.E(err) {
+					return
+				}
+				if err = txn.Set(bufpool.CopyBytes(graphKeyBuf), nil); chk.E(err) {
+					return
+				}
+			}
+
 			// Create event-to-event graph edges for e-tags
 			// This enables thread traversal and finding replies/reactions to events
 			eTags := ev.Tags.GetAll([]byte("e"))

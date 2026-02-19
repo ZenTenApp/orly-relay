@@ -10,10 +10,10 @@ func TestRateLimiterQueryCost(t *testing.T) {
 	rl := NewRateLimiter(DefaultRateLimiterConfig())
 
 	tests := []struct {
-		name     string
-		query    *Query
-		minCost  float64
-		maxCost  float64
+		name    string
+		query   *Query
+		minCost float64
+		maxCost float64
 	}{
 		{
 			name:    "nil query",
@@ -22,63 +22,28 @@ func TestRateLimiterQueryCost(t *testing.T) {
 			maxCost: 1.0,
 		},
 		{
-			name: "depth 1 no refs",
-			query: &Query{
-				Method: "follows",
-				Seed:   "abc",
-				Depth:  1,
-			},
+			name:    "depth 1 unidirectional",
+			query:   &Query{Pubkey: "abc", Depth: 1, Edge: "pp", Direction: "out"},
 			minCost: 1.5, // depthFactor^1 = 2
 			maxCost: 2.5,
 		},
 		{
-			name: "depth 2 no refs",
-			query: &Query{
-				Method: "follows",
-				Seed:   "abc",
-				Depth:  2,
-			},
+			name:    "depth 2 unidirectional",
+			query:   &Query{Pubkey: "abc", Depth: 2, Edge: "pp", Direction: "out"},
 			minCost: 3.5, // depthFactor^2 = 4
 			maxCost: 4.5,
 		},
 		{
-			name: "depth 3 no refs",
-			query: &Query{
-				Method: "follows",
-				Seed:   "abc",
-				Depth:  3,
-			},
+			name:    "depth 3 unidirectional",
+			query:   &Query{Pubkey: "abc", Depth: 3, Edge: "pp", Direction: "out"},
 			minCost: 7.5, // depthFactor^3 = 8
 			maxCost: 8.5,
 		},
 		{
-			name: "depth 2 with inbound refs",
-			query: &Query{
-				Method: "follows",
-				Seed:   "abc",
-				Depth:  2,
-				InboundRefs: []RefSpec{
-					{Kinds: []int{7}},
-				},
-			},
-			minCost: 4.0, // 4 + 0.5 = 4.5
-			maxCost: 5.0,
-		},
-		{
-			name: "depth 2 with both refs",
-			query: &Query{
-				Method: "follows",
-				Seed:   "abc",
-				Depth:  2,
-				InboundRefs: []RefSpec{
-					{Kinds: []int{7}},
-				},
-				OutboundRefs: []RefSpec{
-					{Kinds: []int{1}},
-				},
-			},
-			minCost: 4.5, // 4 + 0.5 + 0.5 = 5
-			maxCost: 5.5,
+			name:    "depth 2 bidirectional (1.5x cost)",
+			query:   &Query{Pubkey: "abc", Depth: 2, Edge: "pp", Direction: "both"},
+			minCost: 5.5, // depthFactor^2 * 1.5 = 6
+			maxCost: 6.5,
 		},
 	}
 

@@ -17,9 +17,11 @@ import (
 	"next.orly.dev/pkg/database"
 )
 
+// GraphBenchNumPubkeys is the number of pubkeys to generate for graph benchmark.
+// Set via -graph-pubkeys flag; default 10000.
+var GraphBenchNumPubkeys = 10000
+
 const (
-	// GraphBenchNumPubkeys is the number of pubkeys to generate for graph benchmark
-	GraphBenchNumPubkeys = 100000
 	// GraphBenchMinFollows is the minimum number of follows per pubkey
 	GraphBenchMinFollows = 1
 	// GraphBenchMaxFollows is the maximum number of follows per pubkey
@@ -146,7 +148,9 @@ func (g *GraphTraversalBenchmark) generateFollowGraph() {
 		time.Since(start), avgFollows, totalFollows)
 }
 
-// createFollowListEvents creates kind 3 follow list events in the database
+// createFollowListEvents creates kind 3 follow list events in the database.
+// Signing is done sequentially (p256k1 uses a global SHA-256 context that is
+// not goroutine-safe), then saving is parallelized across workers.
 func (g *GraphTraversalBenchmark) createFollowListEvents() {
 	fmt.Println("Creating follow list events in database...")
 	start := time.Now()
@@ -159,48 +163,21 @@ func (g *GraphTraversalBenchmark) createFollowListEvents() {
 	var successCount, errorCount int64
 	latencies := make([]time.Duration, 0, GraphBenchNumPubkeys)
 
-	// Use worker pool for parallel event creation
+	// Use worker pool for parallel database saves
 	numWorkers := g.config.ConcurrentWorkers
 	if numWorkers < 1 {
 		numWorkers = 4
 	}
 
-	workChan := make(chan int, numWorkers*2)
-
-	// Rate limiter: cap at 20,000 events/second
-	perWorkerRate := 20000.0 / float64(numWorkers)
+	// Channel carries pre-signed events for parallel saving
+	eventChan := make(chan *event.E, numWorkers*4)
 
 	for w := 0; w < numWorkers; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
-			workerLimiter := NewRateLimiter(perWorkerRate)
-
-			for i := range workChan {
-				workerLimiter.Wait()
-
-				ev := event.New()
-				ev.Kind = kind.FollowList.K
-				ev.CreatedAt = baseTime + int64(i)
-				ev.Content = []byte("")
-				ev.Tags = tag.NewS()
-
-				// Add p tags for all follows
-				for _, followIdx := range g.follows[i] {
-					pubkeyHex := hex.Enc(g.pubkeys[followIdx])
-					ev.Tags.Append(tag.NewFromAny("p", pubkeyHex))
-				}
-
-				// Sign the event
-				if err := ev.Sign(g.signers[i]); err != nil {
-					mu.Lock()
-					errorCount++
-					mu.Unlock()
-					ev.Free()
-					continue
-				}
-
+			for ev := range eventChan {
 				// Save to database
 				eventStart := time.Now()
 				_, err := g.db.SaveEvent(ctx, ev)
@@ -220,14 +197,36 @@ func (g *GraphTraversalBenchmark) createFollowListEvents() {
 		}()
 	}
 
-	// Send work
+	// Sign events sequentially (p256k1.TaggedHash uses a global hash.Hash
+	// that panics under concurrent access) and feed to save workers.
+	signErrors := 0
 	for i := 0; i < GraphBenchNumPubkeys; i++ {
-		workChan <- i
+		ev := event.New()
+		ev.Kind = kind.FollowList.K
+		ev.CreatedAt = baseTime + int64(i)
+		ev.Content = []byte("")
+		ev.Tags = tag.NewS()
+
+		// Add p tags for all follows
+		for _, followIdx := range g.follows[i] {
+			pubkeyHex := hex.Enc(g.pubkeys[followIdx])
+			ev.Tags.Append(tag.NewFromAny("p", pubkeyHex))
+		}
+
+		// Sign the event (must be sequential — p256k1 global state)
+		if err := ev.Sign(g.signers[i]); err != nil {
+			signErrors++
+			ev.Free()
+			continue
+		}
+
+		eventChan <- ev
+
 		if (i+1)%10000 == 0 {
-			fmt.Printf("  Queued %d/%d follow list events...\n", i+1, GraphBenchNumPubkeys)
+			fmt.Printf("  Signed and queued %d/%d follow list events...\n", i+1, GraphBenchNumPubkeys)
 		}
 	}
-	close(workChan)
+	close(eventChan)
 	wg.Wait()
 
 	duration := time.Since(start)
@@ -242,8 +241,8 @@ func (g *GraphTraversalBenchmark) createFollowListEvents() {
 		p99Latency = calculatePercentileLatency(latencies, 0.99)
 	}
 
-	fmt.Printf("Created %d follow list events in %v (%.2f events/sec, errors: %d)\n",
-		successCount, duration, eventsPerSec, errorCount)
+	fmt.Printf("Created %d follow list events in %v (%.2f events/sec, save errors: %d, sign errors: %d)\n",
+		successCount, duration, eventsPerSec, errorCount, signErrors)
 	fmt.Printf("  Avg latency: %v, P95: %v, P99: %v\n", avgLatency, p95Latency, p99Latency)
 
 	// Record result for event creation phase
@@ -470,10 +469,11 @@ func (g *GraphTraversalBenchmark) runThirdDegreeTraversal() {
 	g.mu.Unlock()
 }
 
-// RunSuite runs the complete graph traversal benchmark suite
-func (g *GraphTraversalBenchmark) RunSuite() {
+// SeedDatabase generates pubkeys, follow graph, and creates follow list events.
+// Call this before RunTraversal or PPG comparison to populate the database.
+func (g *GraphTraversalBenchmark) SeedDatabase() {
 	fmt.Println("\n╔════════════════════════════════════════════════════════╗")
-	fmt.Println("║      GRAPH TRAVERSAL BENCHMARK (100k Pubkeys)          ║")
+	fmt.Println("║      SEEDING GRAPH DATABASE                            ║")
 	fmt.Println("╚════════════════════════════════════════════════════════╝")
 
 	// Step 1: Generate pubkeys
@@ -485,9 +485,20 @@ func (g *GraphTraversalBenchmark) RunSuite() {
 	// Step 3: Create follow list events in database
 	g.createFollowListEvents()
 
-	// Step 4: Run third-degree traversal benchmark
-	g.runThirdDegreeTraversal()
+	fmt.Printf("\n=== Database Seeded ===\n\n")
+}
 
+// RegeneratePubkeys regenerates the deterministic pubkey/signer arrays
+// without re-seeding the database. Used when reusing an existing DB.
+func (g *GraphTraversalBenchmark) RegeneratePubkeys() {
+	g.generatePubkeys()
+	g.generateFollowGraph()
+}
+
+// RunSuite runs the complete graph traversal benchmark suite
+func (g *GraphTraversalBenchmark) RunSuite() {
+	g.SeedDatabase()
+	g.runThirdDegreeTraversal()
 	fmt.Printf("\n=== Graph Traversal Benchmark Complete ===\n\n")
 }
 

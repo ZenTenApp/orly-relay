@@ -6,6 +6,7 @@ package graph
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 	"time"
@@ -14,21 +15,15 @@ import (
 	"lol.mleku.dev/log"
 
 	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
 	"git.mleku.dev/mleku/nostr/encoders/tag"
 	"git.mleku.dev/mleku/nostr/interfaces/signer"
 	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
 )
 
-// Response kinds for graph queries (ephemeral range, relay-signed)
-const (
-	KindGraphFollows   = 39000 // Response for follows/followers queries
-	KindGraphMentions  = 39001 // Response for mentions queries
-	KindGraphThread    = 39002 // Response for thread traversal queries
-)
+// Response kind for graph queries (ephemeral, relay-signed)
+const KindGraphResult = 39000
 
 // GraphResultI is the interface that database.GraphResult implements.
-// This allows the executor to work with the database result without importing it.
 type GraphResultI interface {
 	ToDepthArrays() [][]string
 	ToEventDepthArrays() [][]string
@@ -38,37 +33,36 @@ type GraphResultI interface {
 	GetEventsByDepth() map[int][]string
 	GetTotalPubkeys() int
 	GetTotalEvents() int
-	// Ref aggregation methods
 	GetInboundRefs() map[uint16]map[string][]string
 	GetOutboundRefs() map[uint16]map[string][]string
 }
 
 // GraphDatabase defines the interface for graph traversal operations.
-// This is implemented by the database package.
+// Each method corresponds to one cell in the edge × direction matrix.
 type GraphDatabase interface {
-	// TraverseFollows performs BFS traversal of follow graph
-	TraverseFollows(seedPubkey []byte, maxDepth int) (GraphResultI, error)
-	// TraverseFollowers performs BFS traversal to find followers
-	TraverseFollowers(seedPubkey []byte, maxDepth int) (GraphResultI, error)
-	// FindMentions finds events mentioning a pubkey
-	FindMentions(pubkey []byte, kinds []uint16) (GraphResultI, error)
-	// TraverseThread performs BFS traversal of thread structure
-	TraverseThread(seedEventID []byte, maxDepth int, direction string) (GraphResultI, error)
-	// CollectInboundRefs finds events that reference items in the result
-	CollectInboundRefs(result GraphResultI, depth int, kinds []uint16) error
-	// CollectOutboundRefs finds events referenced by items in the result
-	CollectOutboundRefs(result GraphResultI, depth int, kinds []uint16) error
+	// Pubkey↔Pubkey (pp) — noun-noun edges via ppg/gpp index
+	TraversePubkeyPubkey(seedPubkey []byte, maxDepth int, direction string) (GraphResultI, error)
+
+	// Pubkey↔Event (pe) — adverb edges via peg/epg index
+	TraversePubkeyEvent(seedPubkey []byte, maxDepth int, direction string) (GraphResultI, error)
+
+	// Event↔Event (ee) — adjective edges via eeg/gee index
+	TraverseEventEvent(seedEventID []byte, maxDepth int, direction string) (GraphResultI, error)
+
+	// Baseline (no graph indexes) — for benchmark comparison.
+	// Same semantics as TraversePubkeyPubkey but uses multi-hop NIP-01 queries.
+	TraversePubkeyPubkeyBaseline(seedPubkey []byte, maxDepth int, direction string) (GraphResultI, error)
 }
 
 // Executor handles graph query execution and response generation.
 type Executor struct {
-	db           GraphDatabase
-	relaySigner  signer.I
-	relayPubkey  []byte
+	db          GraphDatabase
+	relaySigner signer.I
+	relayPubkey []byte
+	baseline    bool // when true, use baseline (no ppg/gpp) for pp queries
 }
 
 // NewExecutor creates a new graph query executor.
-// The secretKey should be the 32-byte relay identity secret key.
 func NewExecutor(db GraphDatabase, secretKey []byte) (*Executor, error) {
 	s, err := p8k.New()
 	if err != nil {
@@ -84,123 +78,78 @@ func NewExecutor(db GraphDatabase, secretKey []byte) (*Executor, error) {
 	}, nil
 }
 
+// SetBaseline enables or disables baseline mode for pp queries.
+// In baseline mode, pubkey↔pubkey traversal uses multi-hop NIP-01 queries
+// instead of the ppg/gpp materialized index, for benchmark comparison.
+func (e *Executor) SetBaseline(enabled bool) {
+	e.baseline = enabled
+}
+
 // Execute runs a graph query and returns a relay-signed event with results.
 func (e *Executor) Execute(q *Query) (*event.E, error) {
 	var result GraphResultI
 	var err error
-	var responseKind uint16
 
-	// Decode seed (hex string to bytes)
-	seedBytes, err := hex.Dec(q.Seed)
+	start := time.Now()
+
+	switch q.Edge {
+	case "pp":
+		// Pubkey↔pubkey: decode seed as pubkey hex
+		seedBytes, decErr := decodeHex(q.Pubkey)
+		if decErr != nil {
+			return nil, decErr
+		}
+		if e.baseline {
+			result, err = e.db.TraversePubkeyPubkeyBaseline(seedBytes, q.Depth, q.Direction)
+		} else {
+			result, err = e.db.TraversePubkeyPubkey(seedBytes, q.Depth, q.Direction)
+		}
+
+	case "pe":
+		// Pubkey↔event: decode seed as pubkey hex
+		seedBytes, decErr := decodeHex(q.Pubkey)
+		if decErr != nil {
+			return nil, decErr
+		}
+		result, err = e.db.TraversePubkeyEvent(seedBytes, q.Depth, q.Direction)
+
+	case "ee":
+		// Event↔event: seed is still a pubkey in our spec, but the traversal
+		// seeds from events authored by that pubkey. For direct event→event
+		// traversal, the adapter can resolve this.
+		seedBytes, decErr := decodeHex(q.Pubkey)
+		if decErr != nil {
+			return nil, decErr
+		}
+		result, err = e.db.TraverseEventEvent(seedBytes, q.Depth, q.Direction)
+
+	default:
+		return nil, ErrInvalidEdge
+	}
+
 	if err != nil {
 		return nil, err
 	}
 
-	// Execute the appropriate traversal
-	switch q.Method {
-	case "follows":
-		responseKind = KindGraphFollows
-		result, err = e.db.TraverseFollows(seedBytes, q.Depth)
-		if err != nil {
-			return nil, err
-		}
-		log.D.F("graph executor: follows traversal returned %d pubkeys", result.GetTotalPubkeys())
+	elapsed := time.Since(start)
+	log.I.F("graph query: edge=%s dir=%s depth=%d elapsed=%s pubkeys=%d events=%d baseline=%v",
+		q.Edge, q.Direction, q.Depth, elapsed, result.GetTotalPubkeys(), result.GetTotalEvents(), e.baseline)
 
-	case "followers":
-		responseKind = KindGraphFollows
-		result, err = e.db.TraverseFollowers(seedBytes, q.Depth)
-		if err != nil {
-			return nil, err
-		}
-		log.D.F("graph executor: followers traversal returned %d pubkeys", result.GetTotalPubkeys())
-
-	case "mentions":
-		responseKind = KindGraphMentions
-		// Mentions don't use depth traversal, just find direct mentions
-		// Convert RefSpec kinds to uint16 for the database call
-		var kinds []uint16
-		if len(q.InboundRefs) > 0 {
-			for _, rs := range q.InboundRefs {
-				for _, k := range rs.Kinds {
-					kinds = append(kinds, uint16(k))
-				}
-			}
-		} else {
-			kinds = []uint16{1} // Default to kind 1 (notes)
-		}
-		result, err = e.db.FindMentions(seedBytes, kinds)
-		if err != nil {
-			return nil, err
-		}
-		log.D.F("graph executor: mentions query returned %d events", result.GetTotalEvents())
-
-	case "thread":
-		responseKind = KindGraphThread
-		result, err = e.db.TraverseThread(seedBytes, q.Depth, "both")
-		if err != nil {
-			return nil, err
-		}
-		log.D.F("graph executor: thread traversal returned %d events", result.GetTotalEvents())
-
-	default:
-		return nil, ErrInvalidMethod
-	}
-
-	// Collect inbound refs if specified
-	if q.HasInboundRefs() {
-		for _, refSpec := range q.InboundRefs {
-			kinds := make([]uint16, len(refSpec.Kinds))
-			for i, k := range refSpec.Kinds {
-				kinds[i] = uint16(k)
-			}
-			// Collect refs at the specified from_depth (0 = all depths)
-			if err = e.db.CollectInboundRefs(result, refSpec.FromDepth, kinds); err != nil {
-				log.W.F("graph executor: failed to collect inbound refs: %v", err)
-				// Continue without refs rather than failing the query
-			}
-		}
-		log.D.F("graph executor: collected inbound refs")
-	}
-
-	// Collect outbound refs if specified
-	if q.HasOutboundRefs() {
-		for _, refSpec := range q.OutboundRefs {
-			kinds := make([]uint16, len(refSpec.Kinds))
-			for i, k := range refSpec.Kinds {
-				kinds[i] = uint16(k)
-			}
-			if err = e.db.CollectOutboundRefs(result, refSpec.FromDepth, kinds); err != nil {
-				log.W.F("graph executor: failed to collect outbound refs: %v", err)
-			}
-		}
-		log.D.F("graph executor: collected outbound refs")
-	}
-
-	// Generate response event
-	return e.generateResponse(q, result, responseKind)
+	return e.generateResponse(q, result, elapsed)
 }
 
 // generateResponse creates a relay-signed event containing the query results.
-func (e *Executor) generateResponse(q *Query, result GraphResultI, responseKind uint16) (*event.E, error) {
-	// Build content as JSON with depth arrays
+func (e *Executor) generateResponse(q *Query, result GraphResultI, elapsed time.Duration) (*event.E, error) {
 	var content ResponseContent
+	content.Elapsed = elapsed.String()
 
-	if q.Method == "follows" || q.Method == "followers" {
-		// For pubkey-based queries, use pubkeys_by_depth
+	if q.IsPubkeyPubkey() || (q.IsPubkeyEvent() && q.IsOutbound()) {
 		content.PubkeysByDepth = result.ToDepthArrays()
 		content.TotalPubkeys = result.GetTotalPubkeys()
-	} else {
-		// For event-based queries, use events_by_depth
+	}
+	if q.IsEventEvent() || (q.IsPubkeyEvent() && q.IsInbound()) {
 		content.EventsByDepth = result.ToEventDepthArrays()
 		content.TotalEvents = result.GetTotalEvents()
-	}
-
-	// Add ref summaries if present
-	if inboundRefs := result.GetInboundRefs(); len(inboundRefs) > 0 {
-		content.InboundRefs = buildRefSummaries(inboundRefs)
-	}
-	if outboundRefs := result.GetOutboundRefs(); len(outboundRefs) > 0 {
-		content.OutboundRefs = buildRefSummaries(outboundRefs)
 	}
 
 	contentBytes, err := json.Marshal(content)
@@ -208,22 +157,24 @@ func (e *Executor) generateResponse(q *Query, result GraphResultI, responseKind 
 		return nil, err
 	}
 
-	// Build tags
 	tags := tag.NewS(
-		tag.NewFromAny("method", q.Method),
-		tag.NewFromAny("seed", q.Seed),
+		tag.NewFromAny("edge", q.Edge),
+		tag.NewFromAny("direction", q.Direction),
+		tag.NewFromAny("seed", q.Pubkey),
 		tag.NewFromAny("depth", strconv.Itoa(q.Depth)),
+		tag.NewFromAny("elapsed", elapsed.String()),
 	)
+	if e.baseline {
+		tags.Append(tag.NewFromAny("baseline", "true"))
+	}
 
-	// Create event
 	ev := &event.E{
-		Kind:      responseKind,
+		Kind:      KindGraphResult,
 		CreatedAt: time.Now().Unix(),
 		Tags:      tags,
 		Content:   contentBytes,
 	}
 
-	// Sign with relay identity
 	if err = ev.Sign(e.relaySigner); chk.E(err) {
 		return nil, err
 	}
@@ -233,48 +184,23 @@ func (e *Executor) generateResponse(q *Query, result GraphResultI, responseKind 
 
 // ResponseContent is the JSON structure for graph query responses.
 type ResponseContent struct {
-	// PubkeysByDepth contains arrays of pubkeys at each depth (1-indexed)
-	// Each pubkey appears ONLY at the depth where it was first discovered.
 	PubkeysByDepth [][]string `json:"pubkeys_by_depth,omitempty"`
-
-	// EventsByDepth contains arrays of event IDs at each depth (1-indexed)
-	EventsByDepth [][]string `json:"events_by_depth,omitempty"`
-
-	// TotalPubkeys is the total count of unique pubkeys discovered
-	TotalPubkeys int `json:"total_pubkeys,omitempty"`
-
-	// TotalEvents is the total count of unique events discovered
-	TotalEvents int `json:"total_events,omitempty"`
-
-	// InboundRefs contains aggregated inbound references (events referencing discovered items)
-	// Structure: array of {kind, target, count, refs[]}
-	InboundRefs []RefSummary `json:"inbound_refs,omitempty"`
-
-	// OutboundRefs contains aggregated outbound references (events referenced by discovered items)
-	// Structure: array of {kind, source, count, refs[]}
-	OutboundRefs []RefSummary `json:"outbound_refs,omitempty"`
+	EventsByDepth  [][]string `json:"events_by_depth,omitempty"`
+	TotalPubkeys   int        `json:"total_pubkeys,omitempty"`
+	TotalEvents    int        `json:"total_events,omitempty"`
+	Elapsed        string     `json:"elapsed,omitempty"`
 }
 
-// RefSummary represents aggregated reference data for a single target/source.
+// RefSummary represents aggregated reference data.
 type RefSummary struct {
-	// Kind is the kind of the referencing/referenced events
-	Kind uint16 `json:"kind"`
-
-	// Target is the event ID being referenced (for inbound) or referencing (for outbound)
-	Target string `json:"target"`
-
-	// Count is the number of references
-	Count int `json:"count"`
-
-	// Refs is the list of event IDs (optional, may be omitted for large sets)
-	Refs []string `json:"refs,omitempty"`
+	Kind   uint16   `json:"kind"`
+	Target string   `json:"target"`
+	Count  int      `json:"count"`
+	Refs   []string `json:"refs,omitempty"`
 }
 
-// buildRefSummaries converts the ref map structure to a sorted array of RefSummary.
-// Results are sorted by count descending (most referenced first).
 func buildRefSummaries(refs map[uint16]map[string][]string) []RefSummary {
 	var summaries []RefSummary
-
 	for kind, targets := range refs {
 		for targetID, refIDs := range targets {
 			summaries = append(summaries, RefSummary{
@@ -285,15 +211,41 @@ func buildRefSummaries(refs map[uint16]map[string][]string) []RefSummary {
 			})
 		}
 	}
-
-	// Sort by count descending
 	sort.Slice(summaries, func(i, j int) bool {
 		if summaries[i].Count != summaries[j].Count {
 			return summaries[i].Count > summaries[j].Count
 		}
-		// Secondary sort by kind for stability
 		return summaries[i].Kind < summaries[j].Kind
 	})
-
 	return summaries
+}
+
+// decodeHex decodes a hex string to bytes, with validation.
+func decodeHex(hexStr string) ([]byte, error) {
+	if len(hexStr) != 64 {
+		return nil, fmt.Errorf("expected 64-char hex, got %d chars", len(hexStr))
+	}
+	b := make([]byte, 32)
+	for i := 0; i < 32; i++ {
+		hi := unhex(hexStr[i*2])
+		lo := unhex(hexStr[i*2+1])
+		if hi == 0xFF || lo == 0xFF {
+			return nil, fmt.Errorf("invalid hex char at position %d", i*2)
+		}
+		b[i] = hi<<4 | lo
+	}
+	return b, nil
+}
+
+func unhex(c byte) byte {
+	switch {
+	case c >= '0' && c <= '9':
+		return c - '0'
+	case c >= 'a' && c <= 'f':
+		return c - 'a' + 10
+	case c >= 'A' && c <= 'F':
+		return c - 'A' + 10
+	default:
+		return 0xFF
+	}
 }

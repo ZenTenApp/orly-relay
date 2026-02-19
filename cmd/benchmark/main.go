@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	lol "lol.mleku.dev"
 	"next.orly.dev/pkg/database"
 	"git.mleku.dev/mleku/nostr/encoders/envelopes/eventenvelope"
 	"git.mleku.dev/mleku/nostr/encoders/event"
@@ -48,6 +49,7 @@ type BenchmarkConfig struct {
 	// Graph traversal benchmark
 	UseGraphTraversal        bool
 	UseNetworkGraphTraversal bool // Network-mode graph traversal (for multi-relay testing)
+	UsePPGComparison         bool // PPG vs baseline comparison benchmark
 }
 
 type BenchmarkResult struct {
@@ -109,7 +111,7 @@ type Benchmark struct {
 }
 
 func main() {
-	// lol.SetLogLevel("trace")
+	lol.SetLogLevel("warn")
 	config := parseFlags()
 
 	if config.UseNetworkGraphTraversal {
@@ -215,8 +217,19 @@ func runGraphTraversalBenchmark(config *BenchmarkConfig) {
 	fmt.Printf("Pubkeys: %d, Follows per pubkey: %d-%d\n",
 		GraphBenchNumPubkeys, GraphBenchMinFollows, GraphBenchMaxFollows)
 
-	// Clean up existing data directory
-	os.RemoveAll(config.DataDir)
+	// Check if we can reuse an existing seeded database
+	reuseDB := false
+	if config.UsePPGComparison {
+		if info, err := os.Stat(filepath.Join(config.DataDir, "MANIFEST")); err == nil && info.Size() > 0 {
+			reuseDB = true
+			fmt.Printf("Reusing existing seeded database at %s\n", config.DataDir)
+		}
+	}
+
+	if !reuseDB {
+		// Clean up existing data directory
+		os.RemoveAll(config.DataDir)
+	}
 
 	ctx := context.Background()
 	cancel := func() {}
@@ -227,9 +240,28 @@ func runGraphTraversalBenchmark(config *BenchmarkConfig) {
 	}
 	defer db.Close()
 
-	// Create and run graph traversal benchmark
+	// Create graph traversal benchmark (always needed for pubkey arrays)
 	graphBench := NewGraphTraversalBenchmark(config, db)
-	graphBench.RunSuite()
+
+	if reuseDB {
+		// Regenerate pubkey/signer arrays (deterministic) without re-seeding DB
+		graphBench.RegeneratePubkeys()
+	} else {
+		// Seed the database with follow list events
+		graphBench.SeedDatabase()
+	}
+
+	// Run NIP-01 multi-hop traversal unless PPG mode is set (it has its own baseline)
+	if !config.UsePPGComparison {
+		graphBench.runThirdDegreeTraversal()
+	}
+
+	// Run PPG comparison if requested
+	if config.UsePPGComparison {
+		ppgBench := NewPPGBenchmark(config, db)
+		ppgBench.VerifyEquivalence(graphBench.pubkeys, 100)
+		ppgBench.RunSuite(graphBench.pubkeys)
+	}
 
 	// Generate reports
 	graphBench.PrintResults()
@@ -385,6 +417,14 @@ func parseFlags() *BenchmarkConfig {
 	flag.BoolVar(
 		&config.UseNetworkGraphTraversal, "graph-network", false,
 		"Run network graph traversal benchmark against relay specified by -relay-url",
+	)
+	flag.BoolVar(
+		&config.UsePPGComparison, "ppg", false,
+		"Run ppg/gpp vs baseline comparison benchmark (requires -graph to seed data)",
+	)
+	flag.IntVar(
+		&GraphBenchNumPubkeys, "graph-pubkeys", 10000,
+		"Number of pubkeys for graph benchmark (default 10000)",
 	)
 
 	flag.Parse()

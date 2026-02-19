@@ -264,8 +264,8 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 				return
 			}
 			if graphQuery != nil {
-				log.I.F("graph query from %s: method=%s seed=%s depth=%d",
-					l.remote, graphQuery.Method, graphQuery.Seed, graphQuery.Depth)
+				log.I.F("graph query from %s: edge=%s dir=%s seed=%s depth=%d",
+					l.remote, graphQuery.Edge, graphQuery.Direction, graphQuery.Pubkey, graphQuery.Depth)
 
 				// Check if graph executor is available
 				if l.graphExecutor == nil {
@@ -306,8 +306,8 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 					return
 				}
 
-				log.I.F("graph query completed for %s: method=%s, returned event kind %d",
-					l.remote, graphQuery.Method, resultEvent.Kind)
+				log.I.F("graph query completed for %s: edge=%s dir=%s, returned event kind %d",
+					l.remote, graphQuery.Edge, graphQuery.Direction, resultEvent.Kind)
 				return
 			}
 		}

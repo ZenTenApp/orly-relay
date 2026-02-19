@@ -1,84 +1,84 @@
 // Package graph implements NIP-XX Graph Query protocol support.
 // It provides types and functions for parsing and validating graph traversal queries.
+//
+// The _graph filter extension uses a 4-element array:
+//
+//	["_graph", ["<pubkey_hex>", <depth>, "<edge>", "<direction>"]]
+//
+// Parameters:
+//   - pubkey:    64-char hex seed pubkey — the starting node for traversal
+//   - depth:     integer 1-16 — maximum BFS depth from seed
+//   - edge:      "pp" | "pe" | "ee" — which graph edge family to traverse
+//   - direction: "out" | "in" | "both" — traversal direction
+//
+// Edge types map to the relational grammar:
+//   - "pp" (pubkey↔pubkey): noun-noun — direct social graph (materialized ppg/gpp index)
+//   - "pe" (pubkey↔event):  adverb   — authorship and p-tag references (epg/peg index)
+//   - "ee" (event↔event):   adjective — e-tag thread structure (eeg/gee index)
 package graph
 
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"git.mleku.dev/mleku/nostr/encoders/filter"
 )
 
 // Query represents a graph traversal query from a _graph filter extension.
 type Query struct {
-	// Method is the traversal method: "follows", "followers", "mentions", "thread"
-	Method string `json:"method"`
+	// Pubkey is the 64-char hex seed pubkey for traversal.
+	Pubkey string `json:"pubkey"`
 
-	// Seed is the starting point for traversal (pubkey hex or event ID hex)
-	Seed string `json:"seed"`
+	// Depth is the maximum BFS traversal depth (1-16, default: 1).
+	Depth int `json:"depth"`
 
-	// Depth is the maximum traversal depth (1-16, default: 1)
-	Depth int `json:"depth,omitempty"`
+	// Edge selects which graph edge family to traverse:
+	// "pp" = pubkey↔pubkey, "pe" = pubkey↔event, "ee" = event↔event
+	Edge string `json:"edge"`
 
-	// InboundRefs specifies which inbound references to collect
-	// (events that reference discovered events via e-tags)
-	InboundRefs []RefSpec `json:"inbound_refs,omitempty"`
-
-	// OutboundRefs specifies which outbound references to collect
-	// (events referenced by discovered events via e-tags)
-	OutboundRefs []RefSpec `json:"outbound_refs,omitempty"`
-}
-
-// RefSpec specifies which event references to include in results.
-type RefSpec struct {
-	// Kinds is the list of event kinds to match (OR semantics within this spec)
-	Kinds []int `json:"kinds"`
-
-	// FromDepth specifies the minimum depth at which to collect refs (default: 0)
-	// 0 = include refs from seed itself
-	// 1 = start from first-hop connections
-	FromDepth int `json:"from_depth,omitempty"`
+	// Direction selects traversal direction: "out", "in", or "both".
+	Direction string `json:"direction"`
 }
 
 // Validation errors
 var (
-	ErrMissingMethod    = errors.New("_graph.method is required")
-	ErrInvalidMethod    = errors.New("_graph.method must be one of: follows, followers, mentions, thread")
-	ErrMissingSeed      = errors.New("_graph.seed is required")
-	ErrInvalidSeed      = errors.New("_graph.seed must be a 64-character hex string")
-	ErrDepthTooHigh     = errors.New("_graph.depth cannot exceed 16")
-	ErrEmptyRefSpecKinds = errors.New("ref spec kinds array cannot be empty")
+	ErrMissingPubkey    = errors.New("_graph[0] (pubkey) is required")
+	ErrInvalidPubkey    = errors.New("_graph[0] (pubkey) must be a 64-character hex string")
+	ErrInvalidDepth     = errors.New("_graph[1] (depth) must be between 1 and 16")
+	ErrMissingEdge      = errors.New("_graph[2] (edge) is required")
+	ErrInvalidEdge      = errors.New("_graph[2] (edge) must be one of: pp, pe, ee")
+	ErrMissingDirection = errors.New("_graph[3] (direction) is required")
+	ErrInvalidDirection = errors.New("_graph[3] (direction) must be one of: out, in, both")
+	ErrInvalidArray     = errors.New("_graph must be a 4-element array: [pubkey, depth, edge, direction]")
 )
 
-// Valid method names
-var validMethods = map[string]bool{
-	"follows":   true,
-	"followers": true,
-	"mentions":  true,
-	"thread":    true,
+// Valid edge types
+var validEdges = map[string]bool{
+	"pp": true, // pubkey↔pubkey (noun-noun)
+	"pe": true, // pubkey↔event (adverb)
+	"ee": true, // event↔event (adjective)
+}
+
+// Valid direction values
+var validDirections = map[string]bool{
+	"out":  true,
+	"in":   true,
+	"both": true,
 }
 
 // Validate checks the query for correctness and applies defaults.
 func (q *Query) Validate() error {
-	// Method is required
-	if q.Method == "" {
-		return ErrMissingMethod
+	// Pubkey is required
+	if q.Pubkey == "" {
+		return ErrMissingPubkey
 	}
-	if !validMethods[q.Method] {
-		return ErrInvalidMethod
+	if len(q.Pubkey) != 64 {
+		return ErrInvalidPubkey
 	}
-
-	// Seed is required
-	if q.Seed == "" {
-		return ErrMissingSeed
-	}
-	if len(q.Seed) != 64 {
-		return ErrInvalidSeed
-	}
-	// Validate hex characters
-	for _, c := range q.Seed {
+	for _, c := range q.Pubkey {
 		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-			return ErrInvalidSeed
+			return ErrInvalidPubkey
 		}
 	}
 
@@ -87,67 +87,30 @@ func (q *Query) Validate() error {
 		q.Depth = 1
 	}
 	if q.Depth > 16 {
-		return ErrDepthTooHigh
+		return ErrInvalidDepth
 	}
 
-	// Validate ref specs
-	for _, rs := range q.InboundRefs {
-		if len(rs.Kinds) == 0 {
-			return ErrEmptyRefSpecKinds
-		}
+	// Edge is required
+	if q.Edge == "" {
+		return ErrMissingEdge
 	}
-	for _, rs := range q.OutboundRefs {
-		if len(rs.Kinds) == 0 {
-			return ErrEmptyRefSpecKinds
-		}
+	if !validEdges[q.Edge] {
+		return ErrInvalidEdge
+	}
+
+	// Direction is required
+	if q.Direction == "" {
+		return ErrMissingDirection
+	}
+	if !validDirections[q.Direction] {
+		return ErrInvalidDirection
 	}
 
 	return nil
 }
 
-// HasInboundRefs returns true if the query includes inbound reference collection.
-func (q *Query) HasInboundRefs() bool {
-	return len(q.InboundRefs) > 0
-}
-
-// HasOutboundRefs returns true if the query includes outbound reference collection.
-func (q *Query) HasOutboundRefs() bool {
-	return len(q.OutboundRefs) > 0
-}
-
-// HasRefs returns true if the query includes any reference collection.
-func (q *Query) HasRefs() bool {
-	return q.HasInboundRefs() || q.HasOutboundRefs()
-}
-
-// InboundKindsAtDepth returns a set of kinds that should be collected at the given depth.
-// It aggregates all RefSpecs where from_depth <= depth.
-func (q *Query) InboundKindsAtDepth(depth int) map[int]bool {
-	kinds := make(map[int]bool)
-	for _, rs := range q.InboundRefs {
-		if rs.FromDepth <= depth {
-			for _, k := range rs.Kinds {
-				kinds[k] = true
-			}
-		}
-	}
-	return kinds
-}
-
-// OutboundKindsAtDepth returns a set of kinds that should be collected at the given depth.
-func (q *Query) OutboundKindsAtDepth(depth int) map[int]bool {
-	kinds := make(map[int]bool)
-	for _, rs := range q.OutboundRefs {
-		if rs.FromDepth <= depth {
-			for _, k := range rs.Kinds {
-				kinds[k] = true
-			}
-		}
-	}
-	return kinds
-}
-
 // ExtractFromFilter checks if a filter has a _graph extension and parses it.
+// The _graph field is a 4-element JSON array: [pubkey, depth, edge, direction].
 // Returns nil if no _graph field is present.
 // Returns an error if _graph is present but invalid.
 func ExtractFromFilter(f *filter.F) (*Query, error) {
@@ -160,9 +123,44 @@ func ExtractFromFilter(f *filter.F) (*Query, error) {
 		return nil, nil
 	}
 
+	// Parse as a JSON array of 4 elements
+	var arr []json.RawMessage
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		// Try legacy object format for backward compatibility
+		var q Query
+		if err2 := json.Unmarshal(raw, &q); err2 != nil {
+			return nil, fmt.Errorf("_graph: expected 4-element array, got: %w", err)
+		}
+		if err2 := q.Validate(); err2 != nil {
+			return nil, err2
+		}
+		return &q, nil
+	}
+
+	if len(arr) != 4 {
+		return nil, ErrInvalidArray
+	}
+
 	var q Query
-	if err := json.Unmarshal(raw, &q); err != nil {
-		return nil, err
+
+	// [0] pubkey: string
+	if err := json.Unmarshal(arr[0], &q.Pubkey); err != nil {
+		return nil, fmt.Errorf("_graph[0] (pubkey): %w", err)
+	}
+
+	// [1] depth: number
+	if err := json.Unmarshal(arr[1], &q.Depth); err != nil {
+		return nil, fmt.Errorf("_graph[1] (depth): %w", err)
+	}
+
+	// [2] edge: string
+	if err := json.Unmarshal(arr[2], &q.Edge); err != nil {
+		return nil, fmt.Errorf("_graph[2] (edge): %w", err)
+	}
+
+	// [3] direction: string
+	if err := json.Unmarshal(arr[3], &q.Direction); err != nil {
+		return nil, fmt.Errorf("_graph[3] (direction): %w", err)
 	}
 
 	if err := q.Validate(); err != nil {
@@ -173,7 +171,6 @@ func ExtractFromFilter(f *filter.F) (*Query, error) {
 }
 
 // IsGraphQuery returns true if the filter contains a _graph extension.
-// This is a quick check that doesn't parse the full query.
 func IsGraphQuery(f *filter.F) bool {
 	if f == nil || f.Extra == nil {
 		return false
@@ -181,3 +178,21 @@ func IsGraphQuery(f *filter.F) bool {
 	_, ok := f.Extra["_graph"]
 	return ok
 }
+
+// IsPubkeyPubkey returns true if this query traverses pubkey↔pubkey edges.
+func (q *Query) IsPubkeyPubkey() bool { return q.Edge == "pp" }
+
+// IsPubkeyEvent returns true if this query traverses pubkey↔event edges.
+func (q *Query) IsPubkeyEvent() bool { return q.Edge == "pe" }
+
+// IsEventEvent returns true if this query traverses event↔event edges.
+func (q *Query) IsEventEvent() bool { return q.Edge == "ee" }
+
+// IsOutbound returns true if traversal follows outbound edges.
+func (q *Query) IsOutbound() bool { return q.Direction == "out" || q.Direction == "both" }
+
+// IsInbound returns true if traversal follows inbound edges.
+func (q *Query) IsInbound() bool { return q.Direction == "in" || q.Direction == "both" }
+
+// IsBidirectional returns true if traversal follows both directions.
+func (q *Query) IsBidirectional() bool { return q.Direction == "both" }
