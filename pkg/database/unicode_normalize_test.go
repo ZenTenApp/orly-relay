@@ -181,19 +181,13 @@ func TestTokenHashesNormalization(t *testing.T) {
 
 func TestTokenHashesMixedContent(t *testing.T) {
 	// Test that mixed content normalizes correctly
+	// "the" is a stop word and should be filtered, leaving "quick", "brown", "fox"
 	content := []byte("ᴛʜᴇ quick 𝔟𝔯𝔬𝔴𝔫 fox")
 	hashes := TokenHashes(content)
 
-	// Should get: "the", "quick", "brown", "fox" (4 unique words)
-	if len(hashes) != 4 {
-		t.Errorf("expected 4 hashes from mixed content, got %d", len(hashes))
-	}
-
-	// Verify "the" matches between decorated and plain
-	thePlain := TokenHashes([]byte("the"))
-	theDecorated := TokenHashes([]byte("ᴛʜᴇ"))
-	if !bytes.Equal(thePlain[0], theDecorated[0]) {
-		t.Errorf("'the' hash mismatch: plain=%x, decorated=%x", thePlain[0], theDecorated[0])
+	// Should get: "quick", "brown", "fox" (3 unique words; "the" is a stop word)
+	if len(hashes) != 3 {
+		t.Errorf("expected 3 hashes from mixed content (stop word 'the' filtered), got %d", len(hashes))
 	}
 
 	// Verify "brown" matches between decorated and plain

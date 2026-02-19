@@ -318,3 +318,182 @@ func TestSearchQuery_NoResults(t *testing.T) {
 		t.Errorf("Expected 0 results for non-existent term, got %d", len(evs))
 	}
 }
+
+// TestSearchQuery_UnicodeNormalization verifies that decorative unicode
+// (small caps, fraktur) in event content matches plain ASCII search terms.
+func TestSearchQuery_UnicodeNormalization(t *testing.T) {
+	cleanTestDatabase()
+	signer := createTestSigner(t)
+
+	// Save event with small caps content
+	saveTestEvent(t, signer, 1, "ᴅᴇᴀᴛʜ comes for everyone", nil)
+
+	// Search for the ASCII equivalent
+	f := &filter.F{
+		Search: []byte("death"),
+	}
+
+	evs, err := testDB.QueryEvents(context.Background(), f)
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+
+	if len(evs) != 1 {
+		t.Fatalf("Expected 1 result for 'death' matching small caps, got %d", len(evs))
+	}
+}
+
+// TestSearchQuery_EmptyContentTagWords verifies that events with no content
+// but with searchable words in tags are found by search.
+func TestSearchQuery_EmptyContentTagWords(t *testing.T) {
+	cleanTestDatabase()
+	signer := createTestSigner(t)
+
+	// Event with empty content but words in tag values
+	tags := tag.NewS(
+		tag.NewFromAny("subject", "bitcoin trading strategies"),
+	)
+	saveTestEvent(t, signer, 1, "", tags)
+
+	// Search for a word that appears only in the tag value
+	f := &filter.F{
+		Search: []byte("strategies"),
+	}
+
+	evs, err := testDB.QueryEvents(context.Background(), f)
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+
+	if len(evs) != 1 {
+		t.Fatalf("Expected 1 result for tag-only word 'strategies', got %d", len(evs))
+	}
+}
+
+// TestSearchQuery_MultiTermScoringRecency verifies that recency affects
+// ranking when match counts are equal.
+func TestSearchQuery_MultiTermScoringRecency(t *testing.T) {
+	cleanTestDatabase()
+	signer := createTestSigner(t)
+
+	// Save events with identical content but different timestamps.
+	// We set created_at manually via saveTestEvent ordering.
+	// ev1: old event matching "bitcoin lightning"
+	ev1 := event.New()
+	ev1.Pubkey = signer.Pub()
+	ev1.CreatedAt = 1000000
+	ev1.Kind = 1
+	ev1.Content = []byte("bitcoin lightning old post")
+	ev1.Tags = tag.NewS()
+	if err := ev1.Sign(signer); err != nil {
+		t.Fatalf("Failed to sign: %v", err)
+	}
+	if _, err := testDB.SaveEvent(context.Background(), ev1); err != nil {
+		t.Fatalf("Failed to save: %v", err)
+	}
+
+	// ev2: recent event matching "bitcoin lightning"
+	ev2 := event.New()
+	ev2.Pubkey = signer.Pub()
+	ev2.CreatedAt = 2000000
+	ev2.Kind = 1
+	ev2.Content = []byte("bitcoin lightning recent post")
+	ev2.Tags = tag.NewS()
+	if err := ev2.Sign(signer); err != nil {
+		t.Fatalf("Failed to sign: %v", err)
+	}
+	if _, err := testDB.SaveEvent(context.Background(), ev2); err != nil {
+		t.Fatalf("Failed to save: %v", err)
+	}
+
+	f := &filter.F{
+		Search: []byte("bitcoin lightning"),
+	}
+
+	evs, err := testDB.QueryEvents(context.Background(), f)
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+
+	if len(evs) != 2 {
+		t.Fatalf("Expected 2 results, got %d", len(evs))
+	}
+
+	// Both match 2 terms, so recency should break the tie — recent event first
+	if evs[0].CreatedAt < evs[1].CreatedAt {
+		t.Errorf("Expected recent event first (created_at %d), got older event first (created_at %d)",
+			evs[1].CreatedAt, evs[0].CreatedAt)
+	}
+}
+
+// TestSearchQuery_LimitInteraction verifies that limit=1 returns exactly 1 result.
+func TestSearchQuery_LimitInteraction(t *testing.T) {
+	cleanTestDatabase()
+	signer := createTestSigner(t)
+
+	saveTestEvent(t, signer, 1, "bitcoin price today", nil)
+	saveTestEvent(t, signer, 1, "bitcoin market analysis", nil)
+	saveTestEvent(t, signer, 1, "bitcoin lightning network", nil)
+
+	f := &filter.F{
+		Search: []byte("bitcoin"),
+		Limit:  uintPtr(1),
+	}
+
+	evs, err := testDB.QueryEvents(context.Background(), f)
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+
+	if len(evs) != 1 {
+		t.Errorf("Expected exactly 1 result with limit=1, got %d", len(evs))
+	}
+}
+
+// TestSearchQuery_StopWordsNotIndexed verifies that searching for a stop word
+// returns no results because stop words are not indexed.
+func TestSearchQuery_StopWordsNotIndexed(t *testing.T) {
+	cleanTestDatabase()
+	signer := createTestSigner(t)
+
+	saveTestEvent(t, signer, 1, "the quick brown fox", nil)
+
+	// "the" is a stop word — should not be indexed
+	f := &filter.F{
+		Search: []byte("the"),
+	}
+
+	evs, err := testDB.QueryEvents(context.Background(), f)
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+
+	if len(evs) != 0 {
+		t.Errorf("Expected 0 results for stop word 'the', got %d", len(evs))
+	}
+}
+
+// TestSearchQuery_TagValueOnly verifies that words appearing only in tag values
+// (not in content) are searchable.
+func TestSearchQuery_TagValueOnly(t *testing.T) {
+	cleanTestDatabase()
+	signer := createTestSigner(t)
+
+	tags := tag.NewS(
+		tag.NewFromAny("t", "cryptocurrency"),
+	)
+	saveTestEvent(t, signer, 1, "hello world", tags)
+
+	f := &filter.F{
+		Search: []byte("cryptocurrency"),
+	}
+
+	evs, err := testDB.QueryEvents(context.Background(), f)
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+
+	if len(evs) != 1 {
+		t.Errorf("Expected 1 result for tag-value word 'cryptocurrency', got %d", len(evs))
+	}
+}

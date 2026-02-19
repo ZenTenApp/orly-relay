@@ -741,20 +741,12 @@ func (n *N) buildSearchCypherQuery(f *filter.F, includeDeleteEvents bool) (strin
 		additionalWhere = " AND " + strings.Join(whereClauses, " AND ")
 	}
 
-	// Limit
-	effectiveLimit := 0
-	if f.Limit != nil && *f.Limit > 0 {
-		effectiveLimit = int(*f.Limit)
-	}
-	if n.queryResultLimit > 0 {
-		if effectiveLimit == 0 || effectiveLimit > n.queryResultLimit {
-			effectiveLimit = n.queryResultLimit
-		}
-	}
-
+	// Limit: only apply the safety cap (queryResultLimit) in Cypher.
+	// The user-requested f.Limit is applied in Go after relevance scoring,
+	// so that recency-boosted events aren't prematurely discarded.
 	limitClause := ""
-	if effectiveLimit > 0 {
-		params["limit"] = effectiveLimit
+	if n.queryResultLimit > 0 {
+		params["limit"] = n.queryResultLimit
 		limitClause = "\nLIMIT $limit"
 	}
 

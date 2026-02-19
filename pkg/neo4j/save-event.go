@@ -471,7 +471,7 @@ MATCH (e:Event {id: $eventId})
 UNWIND $words AS word
 MERGE (w:Word {hash: word.hash})
 ON CREATE SET w.text = word.text
-CREATE (e)-[:HAS_WORD]->(w)`
+MERGE (e)-[:HAS_WORD]->(w)`
 
 		params := map[string]any{
 			"eventId": eventID,

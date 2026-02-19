@@ -6,7 +6,32 @@ import (
 	"crypto/sha256"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
+
+// stopWords contains common English function words that are too frequent to be
+// useful in search results. Filtering these reduces index size and prevents
+// high-fanout Word nodes that slow down queries.
+var stopWords = map[string]struct{}{
+	"an": {}, "as": {}, "at": {}, "be": {}, "by": {},
+	"do": {}, "he": {}, "if": {}, "in": {}, "is": {},
+	"it": {}, "me": {}, "my": {}, "no": {}, "of": {},
+	"on": {}, "or": {}, "so": {}, "to": {}, "up": {},
+	"us": {}, "we": {},
+	"and": {}, "are": {}, "but": {}, "for": {}, "had": {},
+	"has": {}, "her": {}, "him": {}, "his": {}, "how": {},
+	"its": {}, "not": {}, "our": {}, "the": {}, "too": {},
+	"was": {}, "who": {}, "you": {},
+	"all": {}, "can": {}, "did": {}, "got": {}, "she": {},
+	"been": {}, "does": {}, "each": {}, "from": {},
+	"have": {}, "just": {}, "more": {}, "much": {},
+	"must": {}, "only": {}, "some": {}, "such": {}, "than": {},
+	"that": {}, "them": {}, "then": {}, "they": {}, "this": {},
+	"very": {}, "were": {}, "what": {}, "when": {}, "will": {},
+	"with": {}, "your": {},
+	"about": {}, "could": {}, "other": {}, "their": {}, "there": {},
+	"these": {}, "those": {}, "which": {}, "would": {},
+}
 
 // TokenWords extracts unique word tokens from content, returning both the
 // normalized word text and its 8-byte truncated SHA-256 hash.
@@ -26,7 +51,7 @@ func TokenWords(content []byte) []WordToken {
 	for i < len(s) {
 		r, size := rune(s[i]), 1
 		if r >= 0x80 {
-			r, size = utf8DecodeRuneInString(s[i:])
+			r, size = utf8.DecodeRuneInString(s[i:])
 		}
 
 		// Skip whitespace
@@ -64,7 +89,7 @@ func TokenWords(content []byte) []WordToken {
 		for i < len(s) {
 			r2, size2 := rune(s[i]), 1
 			if r2 >= 0x80 {
-				r2, size2 = utf8DecodeRuneInString(s[i:])
+				r2, size2 = utf8.DecodeRuneInString(s[i:])
 			}
 			if unicode.IsLetter(r2) || unicode.IsNumber(r2) {
 				// Normalize decorative unicode (small caps, fraktur) to ASCII
@@ -77,7 +102,7 @@ func TokenWords(content []byte) []WordToken {
 		}
 		// If we didn't consume any rune for a word, advance by one rune to avoid stalling
 		if i == start {
-			_, size2 := utf8DecodeRuneInString(s[i:])
+			_, size2 := utf8.DecodeRuneInString(s[i:])
 			i += size2
 			continue
 		}
@@ -85,6 +110,10 @@ func TokenWords(content []byte) []WordToken {
 			w := string(runes)
 			// Exclude 64-char hex strings
 			if isHex64(w) {
+				continue
+			}
+			// Exclude common stop words
+			if _, ok := stopWords[w]; ok {
 				continue
 			}
 			if _, ok := seen[w]; !ok {
@@ -136,7 +165,7 @@ func skipUntilSpace(s string, i int) int {
 	for i < len(s) {
 		r, size := rune(s[i]), 1
 		if r >= 0x80 {
-			r, size = utf8DecodeRuneInString(s[i:])
+			r, size = utf8.DecodeRuneInString(s[i:])
 		}
 		if unicode.IsSpace(r) {
 			return i
@@ -156,41 +185,6 @@ func allAlphaNum(s string) bool {
 }
 
 func isWordStart(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) }
-
-// utf8DecodeRuneInString decodes the first UTF-8 rune from s.
-// Returns the rune and the number of bytes consumed.
-func utf8DecodeRuneInString(s string) (r rune, size int) {
-	if len(s) == 0 {
-		return 0, 0
-	}
-	// ASCII fast path
-	b := s[0]
-	if b < 0x80 {
-		return rune(b), 1
-	}
-	// Multi-byte: determine expected length from first byte
-	var expectedLen int
-	switch {
-	case b&0xE0 == 0xC0: // 110xxxxx - 2 bytes
-		expectedLen = 2
-	case b&0xF0 == 0xE0: // 1110xxxx - 3 bytes
-		expectedLen = 3
-	case b&0xF8 == 0xF0: // 11110xxx - 4 bytes
-		expectedLen = 4
-	default:
-		// Invalid UTF-8 start byte
-		return 0xFFFD, 1
-	}
-	if len(s) < expectedLen {
-		return 0xFFFD, 1
-	}
-	// Decode using Go's built-in rune conversion (simple and correct)
-	runes := []rune(s[:expectedLen])
-	if len(runes) == 0 {
-		return 0xFFFD, 1
-	}
-	return runes[0], expectedLen
-}
 
 // isHex64 returns true if s is exactly 64 hex characters (0-9, a-f)
 func isHex64(s string) bool {
