@@ -8,9 +8,14 @@ import (
 	"next.orly.dev/pkg/protocol/nwc"
 )
 
+// NWCRequester abstracts the NWC client's Request method for testing.
+type NWCRequester interface {
+	Request(ctx context.Context, method string, params, result any) error
+}
+
 // PaymentProcessor wraps a NWC client for bridge subscription payments.
 type PaymentProcessor struct {
-	client          *nwc.Client
+	client            NWCRequester
 	monthlyPriceMSats int64
 }
 
@@ -23,9 +28,18 @@ func NewPaymentProcessor(nwcURI string, monthlyPriceSats int64) (*PaymentProcess
 	}
 
 	return &PaymentProcessor{
-		client:          client,
+		client:            client,
 		monthlyPriceMSats: monthlyPriceSats * 1000, // convert sats to msats
 	}, nil
+}
+
+// NewPaymentProcessorWithClient creates a payment processor with a provided
+// NWCRequester. This is useful for testing or custom NWC implementations.
+func NewPaymentProcessorWithClient(client NWCRequester, monthlyPriceSats int64) *PaymentProcessor {
+	return &PaymentProcessor{
+		client:            client,
+		monthlyPriceMSats: monthlyPriceSats * 1000,
+	}
 }
 
 // Invoice represents a Lightning invoice returned by the wallet.

@@ -3,6 +3,8 @@ package bridge
 import (
 	"archive/zip"
 	"bytes"
+	crand "crypto/rand"
+	"strings"
 	"testing"
 
 	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
@@ -78,6 +80,40 @@ func TestZipParts_HTMLAndAttachments(t *testing.T) {
 
 	if len(r.File) != 2 { // body.html + doc.txt
 		t.Errorf("expected 2 files, got %d", len(r.File))
+	}
+}
+
+func TestZipParts_Empty(t *testing.T) {
+	// Both empty — should produce a valid (empty) zip
+	data, err := ZipParts("", nil)
+	if err != nil {
+		t.Fatalf("ZipParts: %v", err)
+	}
+
+	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("read zip: %v", err)
+	}
+	if len(r.File) != 0 {
+		t.Errorf("expected 0 files, got %d", len(r.File))
+	}
+}
+
+func TestZipParts_ExceedsSizeLimit(t *testing.T) {
+	// crypto/rand data is incompressible — zip output will be >= input size
+	bigData := make([]byte, 26*1024*1024) // 26MB
+	crand.Read(bigData)
+
+	attachments := []bridgesmtp.Attachment{
+		{Filename: "huge.bin", ContentType: "application/octet-stream", Data: bigData},
+	}
+
+	_, err := ZipParts("", attachments)
+	if err == nil {
+		t.Fatal("expected error for exceeding zip size limit")
+	}
+	if !strings.Contains(err.Error(), "limit") {
+		t.Errorf("error should mention limit, got: %v", err)
 	}
 }
 

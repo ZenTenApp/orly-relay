@@ -20,15 +20,33 @@ type ClientConfig struct {
 	DKIMSigner *DKIMSigner
 }
 
+// MXResolver looks up MX records for a domain. The default is net.LookupMX.
+type MXResolver func(domain string) ([]*net.MX, error)
+
+// SMTPDialer connects to an SMTP server. The default is gosmtp.Dial.
+type SMTPDialer func(addr string) (*gosmtp.Client, error)
+
 // Client sends outbound emails.
 type Client struct {
-	cfg ClientConfig
+	cfg      ClientConfig
+	resolver MXResolver
+	dialer   SMTPDialer
 }
 
 // NewClient creates an outbound SMTP client.
 func NewClient(cfg ClientConfig) *Client {
-	return &Client{cfg: cfg}
+	return &Client{
+		cfg:      cfg,
+		resolver: net.LookupMX,
+		dialer:   gosmtp.Dial,
+	}
 }
+
+// SetResolver replaces the MX resolver (for testing).
+func (c *Client) SetResolver(r MXResolver) { c.resolver = r }
+
+// SetDialer replaces the SMTP dialer (for testing).
+func (c *Client) SetDialer(d SMTPDialer) { c.dialer = d }
 
 // OutboundEmail represents an email to be sent.
 type OutboundEmail struct {
@@ -114,7 +132,7 @@ func (c *Client) buildMessage(email *OutboundEmail) ([]byte, error) {
 
 // deliverToMX looks up the MX records for a domain and delivers the message.
 func (c *Client) deliverToMX(domain, from string, to []string, msg []byte) error {
-	mxRecords, err := net.LookupMX(domain)
+	mxRecords, err := c.resolver(domain)
 	if err != nil {
 		return fmt.Errorf("MX lookup for %s: %w", domain, err)
 	}
@@ -142,7 +160,7 @@ func (c *Client) deliverToMX(domain, from string, to []string, msg []byte) error
 
 // deliverDirect sends the message to a specific SMTP server.
 func (c *Client) deliverDirect(addr, from string, to []string, msg []byte) error {
-	cl, err := gosmtp.Dial(addr)
+	cl, err := c.dialer(addr)
 	if err != nil {
 		return fmt.Errorf("dial %s: %w", addr, err)
 	}

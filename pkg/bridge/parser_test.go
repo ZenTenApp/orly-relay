@@ -253,6 +253,26 @@ func TestParseAddressList(t *testing.T) {
 	}
 }
 
+func TestIsOutboundEmail_EmptyFirstLine(t *testing.T) {
+	// Content starts with a newline — first line is empty
+	got := IsOutboundEmail("\nTo: alice@example.com")
+	if got {
+		t.Error("expected false when first line is empty")
+	}
+}
+
+func TestParseDMContent_EmptyAttachmentValue(t *testing.T) {
+	content := "To: alice@example.com\nAttachment:\n\nBody"
+
+	dm, err := ParseDMContent(content)
+	if err != nil {
+		t.Fatalf("ParseDMContent error: %v", err)
+	}
+	if len(dm.Attachments) != 0 {
+		t.Errorf("expected 0 attachments for empty value, got %d", len(dm.Attachments))
+	}
+}
+
 func TestParseDMContent_UnknownHeaderBecomesBody(t *testing.T) {
 	// An unknown header key should cause parser to treat rest as body
 	content := "To: alice@example.com\nX-Custom: value\nMore text"

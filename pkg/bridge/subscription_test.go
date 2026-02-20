@@ -205,6 +205,39 @@ func TestFileSubscriptionStore_MultipleSubscriptions(t *testing.T) {
 	}
 }
 
+func TestFileSubscriptionStore_FlushToReadOnlyDir(t *testing.T) {
+	// Create a store with a path in a read-only directory
+	store := &FileSubscriptionStore{
+		path: "/dev/null/impossible/subscriptions.json",
+		subs: make(map[string]*Subscription),
+	}
+
+	sub := &Subscription{
+		PubkeyHex: "test",
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+		CreatedAt: time.Now(),
+	}
+
+	err := store.Save(sub)
+	if err == nil {
+		t.Error("expected error saving to impossible path")
+	}
+}
+
+func TestFileSubscriptionStore_DeleteFlushError(t *testing.T) {
+	store := &FileSubscriptionStore{
+		path: "/dev/null/impossible/subscriptions.json",
+		subs: map[string]*Subscription{
+			"test": {PubkeyHex: "test", ExpiresAt: time.Now().Add(time.Hour)},
+		},
+	}
+
+	err := store.Delete("test")
+	if err == nil {
+		t.Error("expected error from flush on impossible path")
+	}
+}
+
 func TestFileSubscriptionStore_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
 

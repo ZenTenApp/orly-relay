@@ -62,6 +62,28 @@ func NewDKIMSigner(domain, selector, keyPath string) (*DKIMSigner, error) {
 	}, nil
 }
 
+// NewDKIMSignerFromPEM creates a DKIM signer from PEM-encoded key bytes.
+func NewDKIMSignerFromPEM(domain, selector string, pemData []byte) (*DKIMSigner, error) {
+	block, _ := pem.Decode(pemData)
+	if block == nil {
+		return nil, fmt.Errorf("no PEM block found")
+	}
+	rsaKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		// Try PKCS8
+		parsed, err2 := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err2 != nil {
+			return nil, fmt.Errorf("parse key: %w", err)
+		}
+		key, ok := parsed.(*rsa.PrivateKey)
+		if !ok {
+			return nil, fmt.Errorf("PKCS8 key is not RSA")
+		}
+		return &DKIMSigner{domain: domain, selector: selector, key: key}, nil
+	}
+	return &DKIMSigner{domain: domain, selector: selector, key: rsaKey}, nil
+}
+
 // NewDKIMSignerFromKey creates a DKIM signer from an in-memory key.
 // Useful for testing.
 func NewDKIMSignerFromKey(domain, selector string, key crypto.Signer) *DKIMSigner {

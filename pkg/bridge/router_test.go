@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -108,17 +109,28 @@ func TestRouter_OutboundWithProcessor(t *testing.T) {
 	router := NewRouter(nil, outbound, sink.send)
 
 	// This will hit the SMTP send which panics because smtpClient is nil.
-	// But first, it should check subscription — without a sub handler, it skips that check.
-	// Then it parses, validates "To:", and tries to send.
-	// We're testing routing, not delivery — so we accept the panic/error.
 	defer func() {
 		if r := recover(); r != nil {
-			// Outbound processor tried to use nil SMTP client, which is expected in this test
 			t.Logf("expected panic from nil SMTP client: %v", r)
 		}
 	}()
 
 	router.RouteDM(context.Background(), "user1", "To: alice@example.com\nSubject: Test\n\nBody")
+}
+
+func TestRouter_Reply_NilSendDM(t *testing.T) {
+	router := NewRouter(nil, nil, nil)
+	// Should not panic
+	router.reply("user1", "test")
+}
+
+func TestRouter_Reply_Error(t *testing.T) {
+	errorSend := func(pubkey, content string) error {
+		return fmt.Errorf("send failed")
+	}
+	router := NewRouter(nil, nil, errorSend)
+	// Should not panic, just log
+	router.reply("user1", "test")
 }
 
 func TestGenerateReplyLink(t *testing.T) {

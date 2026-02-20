@@ -113,3 +113,11 @@ func TestEncryptAttachment_DifferentKeys(t *testing.T) {
 		t.Error("encrypting same data twice should produce different keys")
 	}
 }
+
+func TestDecryptAttachment_WrongKeyLength(t *testing.T) {
+	// Valid hex but wrong length (16 bytes instead of 32)
+	_, err := DecryptAttachment([]byte("some data here that is long enough"), "aabbccddaabbccddaabbccddaabbccdd")
+	if err == nil {
+		t.Error("expected error for wrong key length")
+	}
+}
