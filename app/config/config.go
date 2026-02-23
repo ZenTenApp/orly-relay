@@ -264,6 +264,10 @@ type C struct {
 	BridgeNWCURI    string `env:"ORLY_BRIDGE_NWC_URI" usage:"NWC connection string for subscription payments (falls back to ORLY_NWC_URI)"`
 	BridgeMonthlyPriceSats int64 `env:"ORLY_BRIDGE_MONTHLY_PRICE_SATS" default:"2100" usage:"price in sats for one month bridge subscription"`
 	BridgeComposeURL string `env:"ORLY_BRIDGE_COMPOSE_URL" usage:"public URL of the compose form (e.g., https://relay.example.com/compose)"`
+	BridgeSMTPRelayHost string `env:"ORLY_BRIDGE_SMTP_RELAY_HOST" usage:"SMTP smarthost for outbound delivery (e.g., smtp.migadu.com)"`
+	BridgeSMTPRelayPort int    `env:"ORLY_BRIDGE_SMTP_RELAY_PORT" default:"587" usage:"SMTP smarthost port (587 for STARTTLS)"`
+	BridgeSMTPRelayUsername string `env:"ORLY_BRIDGE_SMTP_RELAY_USERNAME" usage:"SMTP smarthost AUTH username"`
+	BridgeSMTPRelayPassword string `env:"ORLY_BRIDGE_SMTP_RELAY_PASSWORD" usage:"SMTP smarthost AUTH password"`
 
 	// ServeMode is set programmatically by the 'serve' subcommand to grant full owner
 	// access to all users (no env tag - internal use only)
@@ -949,6 +953,10 @@ func (cfg *C) GetBridgeConfigValues() (
 	nwcURI string,
 	monthlyPriceSats int64,
 	composeURL string,
+	smtpRelayHost string,
+	smtpRelayPort int,
+	smtpRelayUsername string,
+	smtpRelayPassword string,
 ) {
 	dataDir = cfg.BridgeDataDir
 	if dataDir == "" {
@@ -970,5 +978,9 @@ func (cfg *C) GetBridgeConfigValues() (
 		cfg.BridgeDKIMSelector,
 		nwcURI,
 		cfg.BridgeMonthlyPriceSats,
-		cfg.BridgeComposeURL
+		cfg.BridgeComposeURL,
+		cfg.BridgeSMTPRelayHost,
+		cfg.BridgeSMTPRelayPort,
+		cfg.BridgeSMTPRelayUsername,
+		cfg.BridgeSMTPRelayPassword
 }

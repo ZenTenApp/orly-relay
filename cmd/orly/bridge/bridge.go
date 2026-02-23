@@ -42,7 +42,8 @@ func Run(args []string) {
 	// Extract bridge-specific config
 	enabled, domain, nsec, relayURL, smtpPort, smtpHost,
 		dataDir, dkimKeyPath, dkimSelector, nwcURI,
-		monthlyPriceSats, composeURL := cfg.GetBridgeConfigValues()
+		monthlyPriceSats, composeURL,
+		smtpRelayHost, smtpRelayPort, smtpRelayUsername, smtpRelayPassword := cfg.GetBridgeConfigValues()
 
 	if !enabled && relayURL == "" {
 		// When run as a subcommand, enable by default even if ORLY_BRIDGE_ENABLED is false
@@ -62,6 +63,10 @@ func Run(args []string) {
 		NWCURI:           nwcURI,
 		MonthlyPriceSats: monthlyPriceSats,
 		ComposeURL:       composeURL,
+		SMTPRelayHost:     smtpRelayHost,
+		SMTPRelayPort:     smtpRelayPort,
+		SMTPRelayUsername: smtpRelayUsername,
+		SMTPRelayPassword: smtpRelayPassword,
 	}
 
 	// In standalone subcommand mode, no database getter is available.
@@ -117,6 +122,10 @@ Environment Variables:
   ORLY_BRIDGE_NWC_URI            NWC connection string for subscriptions
   ORLY_BRIDGE_MONTHLY_PRICE_SATS Monthly subscription price in sats (default: 2100)
   ORLY_BRIDGE_COMPOSE_URL        Public URL of the compose form
+  ORLY_BRIDGE_SMTP_RELAY_HOST    SMTP smarthost (e.g., smtp.migadu.com)
+  ORLY_BRIDGE_SMTP_RELAY_PORT    SMTP smarthost port (default: 587)
+  ORLY_BRIDGE_SMTP_RELAY_USERNAME SMTP smarthost AUTH username
+  ORLY_BRIDGE_SMTP_RELAY_PASSWORD SMTP smarthost AUTH password
 
 Examples:
   # Standalone: connect to an external relay

@@ -269,6 +269,10 @@ All bridge configuration is via environment variables with the `ORLY_BRIDGE_` pr
 | `ORLY_BRIDGE_NWC_URI` | | NWC connection string for subscription payments (falls back to `ORLY_NWC_URI`) |
 | `ORLY_BRIDGE_MONTHLY_PRICE_SATS` | `2100` | Monthly subscription price in sats |
 | `ORLY_BRIDGE_COMPOSE_URL` | | Public URL of the compose form |
+| `ORLY_BRIDGE_SMTP_RELAY_HOST` | | SMTP smarthost for outbound delivery (e.g., `smtp.migadu.com`) |
+| `ORLY_BRIDGE_SMTP_RELAY_PORT` | `587` | SMTP smarthost port (587 for STARTTLS) |
+| `ORLY_BRIDGE_SMTP_RELAY_USERNAME` | | SMTP smarthost AUTH username |
+| `ORLY_BRIDGE_SMTP_RELAY_PASSWORD` | | SMTP smarthost AUTH password |
 
 ---
 
@@ -426,4 +430,156 @@ sudo netfilter-persistent save
 
 # Start
 ./orly
+```
+
+---
+
+## SMTP Smarthost (Migadu, Mailgun, etc.)
+
+Instead of direct MX delivery with self-managed DKIM/SPF, you can relay outbound email through a hosted email provider. This simplifies DNS setup and improves deliverability since the provider handles IP reputation.
+
+When `ORLY_BRIDGE_SMTP_RELAY_HOST` is set, the bridge sends all outbound mail through the smarthost using STARTTLS + PLAIN authentication instead of direct MX delivery.
+
+```bash
+export ORLY_BRIDGE_SMTP_RELAY_HOST=smtp.migadu.com
+export ORLY_BRIDGE_SMTP_RELAY_PORT=587
+export ORLY_BRIDGE_SMTP_RELAY_USERNAME=bridge@yourdomain.com
+export ORLY_BRIDGE_SMTP_RELAY_PASSWORD=your-app-password
+```
+
+The bridge's own DKIM signing (`ORLY_BRIDGE_DKIM_KEY`) is bypassed when using a smarthost since the provider signs outbound mail with their own DKIM keys.
+
+---
+
+## Example: Migadu Deployment (relay.orly.dev)
+
+This is a worked example of deploying the bridge on a Linode VPS using Migadu as the hosted email provider for the subdomain `relay.orly.dev`. The domain registrar is Namecheap.
+
+### 1. Add Domain in Migadu
+
+Log into `admin.migadu.com`, go to Domains, add `relay.orly.dev`.
+
+Migadu will show a list of required DNS records and a verification TXT value unique to your account.
+
+### 2. DNS Records (Namecheap)
+
+In Namecheap's Advanced DNS panel for `orly.dev`, add the following records. Since `relay.orly.dev` is a subdomain, the Host field is `relay` (not `@`).
+
+**MX Records**
+
+| Type | Host | Value | Priority | TTL |
+|------|------|-------|----------|-----|
+| MX | relay | aspmx1.migadu.com | 10 | 1 min |
+| MX | relay | aspmx2.migadu.com | 20 | 1 min |
+
+**TXT Records**
+
+| Type | Host | Value | TTL |
+|------|------|-------|-----|
+| TXT | relay | v=spf1 include:spf.migadu.com -all | 1 min |
+| TXT | relay | hosted-email-verify=XXXXXXXX | 1 min |
+| TXT | _dmarc.relay | v=DMARC1; p=quarantine; | 1 min |
+
+Replace `XXXXXXXX` with the verification value from Migadu's admin panel.
+
+**CNAME Records (DKIM)**
+
+| Type | Host | Value | TTL |
+|------|------|-------|-----|
+| CNAME | key1._domainkey.relay | key1.relay.orly.dev._domainkey.migadu.com | 1 min |
+| CNAME | key2._domainkey.relay | key2.relay.orly.dev._domainkey.migadu.com | 1 min |
+| CNAME | key3._domainkey.relay | key3.relay.orly.dev._domainkey.migadu.com | 1 min |
+
+The A record for `relay.orly.dev` pointing to the VPS (e.g., 69.164.249.71) remains unchanged. MX and A records coexist without conflict.
+
+### 3. Verify in Migadu
+
+After adding DNS records (propagation is typically under 5 minutes with 1-minute TTL), go back to Migadu's domain page and run the DNS check. All checks should pass.
+
+Verify locally:
+
+```bash
+dig relay.orly.dev MX +short
+# Expected: 10 aspmx1.migadu.com.  20 aspmx2.migadu.com.
+
+dig relay.orly.dev TXT +short
+# Expected: "v=spf1 include:spf.migadu.com -all"  "hosted-email-verify=..."
+
+dig _dmarc.relay.orly.dev TXT +short
+# Expected: "v=DMARC1; p=quarantine;"
+
+dig key1._domainkey.relay.orly.dev CNAME +short
+# Expected: key1.relay.orly.dev._domainkey.migadu.com.
+```
+
+### 4. Create Mailbox in Migadu
+
+In Migadu admin, create a mailbox for the bridge (e.g., `bridge@relay.orly.dev`). Note the password — this is used for SMTP authentication.
+
+### 5. Inbound Email Forwarding
+
+Migadu receives inbound email for `relay.orly.dev` via its MX servers. To deliver it to the bridge's SMTP server on the VPS, set up forwarding:
+
+**Option A: Migadu forwards to a subdomain with direct MX**
+
+Create a subdomain `bridge.relay.orly.dev` with MX pointing directly at the VPS:
+
+| Type | Host | Value | Priority |
+|------|------|-------|----------|
+| MX | bridge.relay | relay.orly.dev | 10 |
+
+In Migadu, set up a catch-all forwarding rule to forward `*@relay.orly.dev` to `incoming@bridge.relay.orly.dev`.
+
+On the VPS, open port 25 and redirect to the bridge's SMTP port:
+
+```bash
+sudo iptables -t nat -A PREROUTING -p tcp --dport 25 -j REDIRECT --to-port 2525
+sudo netfilter-persistent save
+```
+
+**Option B: Migadu sieve forwarding to VPS**
+
+In Migadu's mailbox settings, add a sieve filter or forwarding rule that re-sends incoming mail to an address handled by the bridge's SMTP server.
+
+### 6. Bridge Environment
+
+Add to the ORLY service environment (`.env` file or systemd unit):
+
+```bash
+ORLY_BRIDGE_ENABLED=true
+ORLY_BRIDGE_DOMAIN=relay.orly.dev
+ORLY_BRIDGE_SMTP_PORT=2525
+ORLY_BRIDGE_SMTP_HOST=0.0.0.0
+ORLY_BRIDGE_SMTP_RELAY_HOST=smtp.migadu.com
+ORLY_BRIDGE_SMTP_RELAY_PORT=587
+ORLY_BRIDGE_SMTP_RELAY_USERNAME=bridge@relay.orly.dev
+ORLY_BRIDGE_SMTP_RELAY_PASSWORD=<migadu-password>
+ORLY_BRIDGE_NWC_URI=nostr+walletconnect://...
+ORLY_BRIDGE_MONTHLY_PRICE_SATS=2100
+ORLY_BRIDGE_COMPOSE_URL=https://relay.orly.dev/compose
+```
+
+### 7. Build and Deploy
+
+```bash
+# Build unified binary with web UI
+./scripts/update-embedded-web.sh
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly ./cmd/orly
+
+# Deploy
+ssh root@relay.orly.dev 'systemctl stop orly'
+rsync -avz --compress -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
+  orly root@relay.orly.dev:/home/mleku/.local/bin/
+ssh root@relay.orly.dev 'chown mleku:mleku /home/mleku/.local/bin/orly && systemctl start orly'
+```
+
+### 8. Verify
+
+```bash
+# Check bridge started
+ssh root@relay.orly.dev 'journalctl -u orly --since "1 min ago" | grep bridge'
+# Expected: "bridge identity: npub1..." and "bridge started"
+
+# Test outbound: DM the bridge npub with "subscribe"
+# Test inbound: send email to npub1...@relay.orly.dev
 ```

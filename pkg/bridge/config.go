@@ -45,4 +45,17 @@ type Config struct {
 
 	// ComposeURL is the public URL of the compose form page.
 	ComposeURL string
+
+	// SMTPRelayHost is the smarthost for outbound email delivery
+	// (e.g., "smtp.migadu.com"). If empty, direct MX delivery is used.
+	SMTPRelayHost string
+
+	// SMTPRelayPort is the smarthost port (typically 587 for STARTTLS).
+	SMTPRelayPort int
+
+	// SMTPRelayUsername is the SMTP AUTH username for the smarthost.
+	SMTPRelayUsername string
+
+	// SMTPRelayPassword is the SMTP AUTH password for the smarthost.
+	SMTPRelayPassword string
 }

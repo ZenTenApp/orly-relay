@@ -469,7 +469,9 @@ func Run(
 	bridgeEnabled, bridgeDomain, bridgeNSEC, bridgeRelayURL,
 		bridgeSMTPPort, bridgeSMTPHost, bridgeDataDir,
 		bridgeDKIMKeyPath, bridgeDKIMSelector,
-		bridgeNWCURI, bridgeMonthlyPriceSats, bridgeComposeURL := cfg.GetBridgeConfigValues()
+		bridgeNWCURI, bridgeMonthlyPriceSats, bridgeComposeURL,
+		bridgeSMTPRelayHost, bridgeSMTPRelayPort,
+		bridgeSMTPRelayUsername, bridgeSMTPRelayPassword := cfg.GetBridgeConfigValues()
 
 	if bridgeEnabled {
 		bridgeCfg := &emailbridge.Config{
@@ -484,6 +486,10 @@ func Run(
 			NWCURI:           bridgeNWCURI,
 			MonthlyPriceSats: bridgeMonthlyPriceSats,
 			ComposeURL:       bridgeComposeURL,
+			SMTPRelayHost:     bridgeSMTPRelayHost,
+			SMTPRelayPort:     bridgeSMTPRelayPort,
+			SMTPRelayUsername: bridgeSMTPRelayUsername,
+			SMTPRelayPassword: bridgeSMTPRelayPassword,
 		}
 
 		// In monolithic mode, provide a database getter for identity resolution
