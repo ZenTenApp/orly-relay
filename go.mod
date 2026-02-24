@@ -3,7 +3,7 @@ module next.orly.dev
 go 1.25.3
 
 require (
-	git.mleku.dev/mleku/nostr v1.0.21
+	git.mleku.dev/mleku/nostr v1.0.22
 	github.com/adrg/xdg v0.5.3
 	github.com/alexflint/go-arg v1.6.1
 	github.com/aperturerobotics/go-indexeddb v0.2.3
@@ -276,7 +276,5 @@ require (
 )
 
 replace p256k1.mleku.dev => git.mleku.dev/mleku/p256k1 v1.1.3
-
-replace git.mleku.dev/mleku/nostr => /home/mleku/src/git.mleku.dev/mleku/nostr
 
 retract v1.0.3
