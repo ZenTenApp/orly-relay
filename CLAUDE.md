@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-ORLY is a high-performance Nostr relay in Go with Badger/Neo4j/WasmDB backends, Svelte web UI, and purego-based secp256k1 crypto.
+ORLY is a high-performance Nostr relay in Go with Badger/Neo4j/WasmDB backends, Svelte web UI, purego-based secp256k1 crypto, and a Nostr-to-Email bridge (Marmot).
 
 ## CRITICAL: Server-Side Changes Prohibited
 
@@ -42,7 +42,7 @@ The `nostrClient` in `app/web/src/nostr.js` must implement automatic AUTH handli
 
 ```bash
 # Build - IMPORTANT: Use cmd/orly for unified binary with subcommands
-CGO_ENABLED=0 go build -o orly ./cmd/orly    # Unified binary (launcher, db, acl, relay)
+CGO_ENABLED=0 go build -o orly ./cmd/orly    # Unified binary (launcher, db, acl, bridge, relay)
 CGO_ENABLED=0 go build -o orly .              # Relay-only (NO subcommand support)
 ./scripts/update-embedded-web.sh              # Build with embedded web UI
 
@@ -54,7 +54,10 @@ go test -v -run TestName ./pkg/package
 ./orly                    # Start relay (default subcommand)
 ./orly launcher           # Start with process supervisor (split IPC mode)
 ./orly db --driver=badger # Start database server
-./orly acl --driver=follows # Start ACL server
+./orly acl --driver=paid  # Start ACL server
+./orly bridge             # Start Marmot email bridge
+./orly sync --driver=negentropy  # Start sync service
+./orly test-subscribe     # Test paid subscription flow end-to-end
 ./orly identity           # Show relay pubkey
 ./orly version            # Show version
 ./orly help               # Show all subcommands
@@ -73,6 +76,9 @@ NOSTR_SECRET_KEY=nsec1... ./nurl https://relay.example.com/api/logs/clear
 ./vainstr orly begin     # Find npub starting with "orly" (after npub1)
 ./vainstr foo contain    # Find npub containing "foo"
 ./vainstr --threads 4 xyz end  # Use 4 threads
+
+# Proto generation
+cd proto && buf generate
 ```
 
 ## Key Environment Variables
@@ -83,7 +89,7 @@ NOSTR_SECRET_KEY=nsec1... ./nurl https://relay.example.com/api/logs/clear
 | `ORLY_LOG_LEVEL` | info | trace/debug/info/warn/error |
 | `ORLY_DB_TYPE` | badger | badger/neo4j/wasmdb/grpc |
 | `ORLY_POLICY_ENABLED` | false | Enable policy system |
-| `ORLY_ACL_MODE` | none | none/follows/managed |
+| `ORLY_ACL_MODE` | none | none/follows/managed/curating/paid |
 | `ORLY_TLS_DOMAINS` | | Let's Encrypt domains |
 | `ORLY_AUTH_TO_WRITE` | false | Require auth for writes |
 
@@ -105,12 +111,14 @@ See `./orly help` for all options. **All env vars MUST be defined in `app/config
 main.go              → Relay-only entry point (no subcommands)
 cmd/
   orly/              → Unified binary entry point (WITH subcommands)
-    main.go          → Subcommand router (db, acl, sync, launcher, relay)
+    main.go          → Subcommand router (db, acl, sync, bridge, launcher, relay, test-subscribe)
     db/              → Database server subcommand
     acl/             → ACL server subcommand
-    sync/            → Sync service subcommand
+    sync/            → Sync service subcommand (distributed, cluster, relaygroup, negentropy)
+    bridge/          → Email bridge subcommand
     launcher/        → Process supervisor (self-exec pattern)
     relay/           → Main relay subcommand
+    testsubscribe/   → Test paid subscription flow (NWC loopback)
   nurl/              → NIP-98 HTTP debugging tool
   vainstr/           → Vanity npub generator
   relay-tester/      → Protocol compliance testing
@@ -133,9 +141,14 @@ pkg/
   wasmdb/            → WebAssembly IndexedDB backend
   tor/               → Tor subprocess management and hostname watching
   protocol/          → Nostr protocol (ws/, auth/, publish/)
+    nwc/             → NWC (Nostr Wallet Connect) client
   encoders/          → Optimized JSON encoding with buffer pools
   policy/            → Event filtering/validation
-  acl/               → Access control (none/follows/managed)
+  acl/               → Access control (none/follows/managed/curating/paid)
+  bridge/            → Marmot Email Bridge (DM↔SMTP, NIP-17 gift-wrap)
+proto/
+  orlydb/v1/         → Database gRPC service (100+ RPCs)
+  orlyacl/v1/        → ACL gRPC service (50+ RPCs)
 ```
 
 ## Critical Rules
@@ -205,6 +218,109 @@ Before enabling auth-required on any deployment:
 2. Ensure the relay identity key is properly configured
 3. Test with a non-production instance first
 
+## ACL Drivers
+
+| Driver | Description | Registration |
+|--------|-------------|-------------|
+| `none` | Open relay, no restrictions | Default/built-in |
+| `follows` | Whitelist from admin follow lists | `RegisterDriver("follows", ...)` |
+| `managed` | NIP-86 fine-grained access control | `RegisterDriver("managed", ...)` |
+| `curating` | Rate-limited trust tier system | `RegisterDriver("curating", ...)` |
+| `paid` | Lightning payment-gated access | `RegisterDriver("paid", ...)` |
+
+Set via `ORLY_ACL_MODE`. The `paid` driver stores subscriptions and aliases through the Database interface (works in both embedded and gRPC split-IPC modes). It exposes methods via the ACL gRPC service: `SubscribePubkey`, `UnsubscribePubkey`, `IsSubscribed`, `ClaimAlias`, etc.
+
+## Marmot Email Bridge
+
+The bridge (`pkg/bridge/`) provides bidirectional Nostr DM ↔ SMTP email. Users DM the bridge's Nostr pubkey to subscribe, send emails, and receive inbound mail as DMs.
+
+### DM Protocols
+
+The bridge supports both legacy and modern DM protocols:
+- **Kind 4 (NIP-04)**: Legacy encrypted DMs, single-layer NIP-44 encryption
+- **Kind 1059 (NIP-17)**: Modern gift-wrapped DMs — three-layer encryption (1059 → 13 → 14) with ephemeral sender key for privacy
+
+The bridge subscribes to both kinds and tracks which protocol each sender uses. Replies are sent in the same format the sender used, preventing duplicate messages in clients that support both.
+
+### Bridge Files
+
+| File | Purpose |
+|------|---------|
+| `bridge.go` | Main Bridge struct — identity, relay connection, DM handling, format tracking |
+| `config.go` | Config struct (domain, NSEC, relay URL, SMTP, DKIM, NWC, ACL gRPC) |
+| `giftwrap.go` | NIP-17 gift-wrap: `wrapGiftWrap()`, `unwrapGiftWrap()`, timestamp randomization |
+| `identity.go` | 3-tier identity resolution: config NSEC → database → file fallback |
+| `relay.go` | WebSocket relay connection with auto-reconnect and NIP-42 auth |
+| `router.go` | DM router — dispatches to SubscriptionHandler or OutboundProcessor |
+| `parser.go` | DM classification: subscribe/status commands, outbound email detection |
+| `subscription_handler.go` | Subscribe flow: invoice creation, payment poll (up to 10 min), ACL activation |
+| `subscription.go` | FileSubscriptionStore: persists subscription state as JSON |
+| `payment.go` | NWC payment processor wrapper for subscription invoices |
+| `inbound.go` | Email → DM: converts inbound emails to Nostr DMs via Blossom upload |
+| `outbound.go` | DM → Email: converts outbound DMs to SMTP messages |
+| `serve.go` | HTTP handlers for /compose and /decrypt web pages |
+| `attachments.go` | ChaCha20-Poly1305 attachment encryption |
+| `ratelimit.go` | Sliding window rate limiter for outbound emails |
+| `zip.go` | Zip bundling for HTML + attachments (max 25MB) |
+
+### Bridge Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ORLY_BRIDGE_ENABLED` | false | Enable Marmot email bridge |
+| `ORLY_BRIDGE_DOMAIN` | | Email domain (e.g., relay.example.com) |
+| `ORLY_BRIDGE_NSEC` | | Bridge identity nsec (default: use relay identity) |
+| `ORLY_BRIDGE_RELAY_URL` | | WebSocket relay URL for standalone mode |
+| `ORLY_BRIDGE_SMTP_PORT` | 2525 | SMTP server listen port |
+| `ORLY_BRIDGE_SMTP_HOST` | 0.0.0.0 | SMTP server listen address |
+| `ORLY_BRIDGE_DATA_DIR` | | Bridge data directory (default: $ORLY_DATA_DIR/bridge) |
+| `ORLY_BRIDGE_DKIM_KEY` | | Path to DKIM private key PEM file |
+| `ORLY_BRIDGE_DKIM_SELECTOR` | marmot | DKIM selector for DNS TXT record |
+| `ORLY_BRIDGE_NWC_URI` | | NWC connection string (falls back to `ORLY_NWC_URI`) |
+| `ORLY_BRIDGE_MONTHLY_PRICE_SATS` | 2100 | Monthly subscription price (sats) |
+| `ORLY_BRIDGE_ALIAS_PRICE_SATS` | 4200 | Monthly alias email price (sats) |
+| `ORLY_BRIDGE_COMPOSE_URL` | | Public URL of compose form |
+| `ORLY_BRIDGE_SMTP_RELAY_HOST` | | SMTP smarthost for outbound (e.g., smtp.migadu.com) |
+| `ORLY_BRIDGE_SMTP_RELAY_PORT` | 587 | SMTP smarthost port (STARTTLS) |
+| `ORLY_BRIDGE_SMTP_RELAY_USERNAME` | | SMTP smarthost AUTH username |
+| `ORLY_BRIDGE_SMTP_RELAY_PASSWORD` | | SMTP smarthost AUTH password |
+| `ORLY_BRIDGE_ACL_GRPC_SERVER` | | gRPC address of ACL server for paid subscription management |
+
+### Bridge Message Flow
+
+```
+Inbound DM (kind 4 or 1059)
+  → unwrap (NIP-04 or NIP-17 gift-wrap)
+  → record sender format (kind4 / giftwrap)
+  → ClassifyDM → subscribe / status / outbound email / help
+  → Router dispatches to handler
+
+Reply DM
+  → check sender's recorded format
+  → send in same format (kind 4 or NIP-17 gift-wrap)
+```
+
+### Marmot SDK Note
+
+A separate MLS-based Marmot protocol SDK exists in the nostr library at `git.mleku.dev/mleku/nostr/protocol/marmot/` (kinds 443, 445, 1059). It provides forward secrecy via MLS key ratcheting. The email bridge does NOT use this SDK — it uses NIP-17 gift-wrapping instead, which is compatible with standard Nostr clients like smesh.
+
+## NWC Client
+
+The NWC (Nostr Wallet Connect) client lives in `pkg/protocol/nwc/`:
+
+| File | Purpose |
+|------|---------|
+| `uri.go` | `ConnectionParams` struct, `ParseConnectionURI()` |
+| `client.go` | `Client` struct with `Request()` and `SubscribeNotifications()` |
+
+```go
+client, err := nwc.NewClient(nwcURI)
+err = client.Request(ctx, "make_invoice", params, &result)
+err = client.SubscribeNotifications(ctx, handler)
+```
+
+Used by the bridge's `PaymentProcessor` for Lightning invoice creation and payment polling.
+
 ## Database Backends
 
 | Backend | Use Case | Build |
@@ -215,6 +331,26 @@ Before enabling auth-required on any deployment:
 | **gRPC** | Remote database (IPC split mode) | `ORLY_DB_TYPE=grpc` |
 
 All implement `pkg/database.Database` interface.
+
+### Database Interface Method Groups
+
+The `Database` interface (`pkg/database/interface.go`) contains 100+ methods organized as:
+
+- **Core Lifecycle**: Path, Init, Sync, Close, Wipe, Ready, SetLogLevel
+- **Event Storage**: SaveEvent, GetSerialsFromFilter, WouldReplaceEvent
+- **Event Queries**: QueryEvents, QueryAllVersions, QueryEventsWithOptions, CountEvents, QueryForSerials, QueryForIds
+- **Event Fetch**: FetchEventBySerial, FetchEventsBySerials, GetSerialById, GetSerialsByIds, GetFullIdPubkeyBySerial
+- **Event Deletion**: DeleteEvent, DeleteEventBySerial, DeleteExpired, ProcessDelete, CheckForDeleted
+- **Import/Export**: Import, Export, ImportEventsFromReader, ImportEventsFromStrings
+- **Relay Identity**: GetRelayIdentitySecret, SetRelayIdentitySecret, GetOrCreateRelayIdentitySecret
+- **Markers**: SetMarker, GetMarker, HasMarker, DeleteMarker
+- **Subscriptions**: GetSubscription, IsSubscriptionActive, ExtendSubscription, RecordPayment, GetPaymentHistory, IsFirstTimeUser
+- **Paid ACL**: SavePaidSubscription, GetPaidSubscription, DeletePaidSubscription, ListPaidSubscriptions, ClaimAlias, GetAliasByPubkey, GetPubkeyByAlias, IsAliasTaken
+- **NIP-43**: AddNIP43Member, RemoveNIP43Member, IsNIP43Member, StoreInviteCode, ValidateInviteCode
+- **Query Cache**: GetCachedJSON, CacheMarshaledJSON, GetCachedEvents, CacheEvents, InvalidateQueryCache
+- **Access Tracking**: RecordEventAccess, GetEventAccessInfo, GetLeastAccessedEvents
+- **Blob Storage**: SaveBlob, GetBlob, HasBlob, DeleteBlob, ListBlobs, ListAllBlobs, GetThumbnail, SaveThumbnail
+- **NRC**: CreateNRCConnection, GetNRCConnection, SaveNRCConnection, DeleteNRCConnection
 
 ### Scaling for Large Archives
 
@@ -246,6 +382,18 @@ ORLY_MAX_STORAGE_BYTES=107374182400  # 100GB cap
 ./orly migrate --from badger --to neo4j --target-path /mnt/ssd/orly-neo4j
 ```
 
+## gRPC Proto Services
+
+Proto definitions in `proto/` with buf generation. Two services:
+
+### DatabaseService (`proto/orlydb/v1/service.proto`)
+
+100+ RPCs covering: lifecycle, event storage/queries/fetch/deletion, import/export, relay identity, markers, subscriptions, paid ACL, NIP-43, query cache, access tracking, blob storage, thumbnails, cypher queries, migrations.
+
+### ACLService (`proto/orlyacl/v1/acl.proto`)
+
+50+ RPCs covering: core access checks, follows management, managed (ban/allow pubkeys/events/IPs/kinds), curating (trust tiers, rate limiting, spam), paid (subscribe/unsubscribe, aliases).
+
 ## Logging (lol.mleku.dev)
 
 ```go
@@ -261,6 +409,10 @@ if chk.E(err) { return }   // Log + check error
 **Add Nostr handler**: Create `app/handle-<type>.go` → add case in `handle-message.go`
 
 **Add database index**: Define in `pkg/database/indexes/` → add migration → update `save-event.go` → add query builder
+
+**Add ACL driver**: Create `pkg/acl/<name>.go` + `pkg/acl/register_<name>.go` → use `RegisterDriver("<name>", desc, factory)`
+
+**Add bridge command**: Add case in `pkg/bridge/parser.go` `ClassifyDM()` → handle in `pkg/bridge/router.go` `RouteDM()`
 
 **Profiling**: `ORLY_PPROF=cpu ./orly` or `ORLY_PPROF_HTTP=true` for :6060
 
@@ -358,7 +510,8 @@ The transport manager handles ordered startup (Start fails fast, rolls back) and
 - **Service**: `systemctl {start|stop|restart|status} orly`
 - **Logs**: `journalctl -u orly -f`
 - **Binary**: `/home/mleku/.local/bin/orly` (unified binary with subcommands)
-- **Mode**: Split IPC via `orly launcher` (self-exec spawns db, acl, relay subprocesses)
+- **Mode**: Split IPC via `orly launcher` (self-exec spawns db, acl, bridge, relay subprocesses)
+- **Bridge pubkey**: `cf1ae33ad5f229dabd7d733ce37b0165126aebf581e4094df9373f77e00cb696`
 
 ### Build & Deploy
 
@@ -380,7 +533,7 @@ rsync -avz --compress -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
 ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 \
   'chown mleku:mleku /home/mleku/.local/bin/orly && systemctl start orly'
 
-# 5. Verify (should show launcher + db + acl + relay subprocesses)
+# 5. Verify (should show launcher + db + acl + bridge + relay subprocesses)
 ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 \
   'sleep 5 && systemctl status orly'
 ```
@@ -389,10 +542,30 @@ ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 \
 
 The systemd service runs `orly launcher` which uses self-exec to spawn:
 - `orly db --driver=badger` (gRPC database server on :50051)
-- `orly acl --driver=follows` (gRPC ACL server on :50052)
-- `orly` (main relay connecting to both via gRPC)
+- `orly acl --driver=<mode>` (gRPC ACL server on :50052, if `ORLY_LAUNCHER_ACL_ENABLED=true`)
+- `orly bridge` (Marmot email bridge, if `ORLY_BRIDGE_ENABLED=true`)
+- `orly sync --driver=<type>` (sync services, if enabled: distributed, cluster, relaygroup, negentropy)
+- `orly` (main relay connecting to db/acl via gRPC)
 
 This provides process isolation and allows independent restarts. The unified binary eliminates ~100MB of duplicate Go runtime compared to separate binaries.
+
+### Launcher Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ORLY_LAUNCHER_DB_DRIVER` | badger | Database driver (badger/neo4j) |
+| `ORLY_LAUNCHER_DB_LISTEN` | 127.0.0.1:50051 | Database gRPC listen address |
+| `ORLY_LAUNCHER_ACL_ENABLED` | false | Enable ACL subprocess |
+| `ORLY_LAUNCHER_ACL_LISTEN` | 127.0.0.1:50052 | ACL gRPC listen address |
+| `ORLY_LAUNCHER_DB_READY_TIMEOUT` | 30s | Wait for DB to become ready |
+| `ORLY_LAUNCHER_ACL_READY_TIMEOUT` | 120s | Wait for ACL to become ready |
+| `ORLY_LAUNCHER_STOP_TIMEOUT` | 30s | Graceful shutdown timeout |
+| `ORLY_LAUNCHER_SYNC_NEGENTROPY_ENABLED` | false | Enable negentropy sync |
+| `ORLY_LAUNCHER_SYNC_NEGENTROPY_LISTEN` | 127.0.0.1:50064 | Negentropy gRPC address |
+| `ORLY_LAUNCHER_SERVICES_ENABLED` | true | Enable auxiliary services |
+| `ORLY_LAUNCHER_ADMIN_ENABLED` | true | Enable admin interface |
+| `ORLY_LAUNCHER_ADMIN_PORT` | 8080 | Admin HTTP port |
+| `ORLY_LAUNCHER_OWNERS` | | Comma-separated owner pubkeys |
 
 **Future improvements**: Build on VPS directly (git pull + go build) to avoid slow binary transfers.
 
@@ -412,3 +585,4 @@ Push to both remotes. Use `GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519"` for gitea
 - `github.com/minio/sha256-simd` - SIMD SHA256
 - `go-simpler.org/env` - Config
 - `lol.mleku.dev` - Logging
+- `git.mleku.dev/mleku/nostr` - Nostr library (crypto, events, encoders, protocol, signer)
