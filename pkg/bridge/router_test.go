@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 type mockDMSink struct {
@@ -89,6 +90,9 @@ func TestRouter_WithSubscriptionHandler(t *testing.T) {
 	router := NewRouter(subHandler, nil, sink.send)
 
 	router.RouteDM(context.Background(), "user1", "subscribe")
+
+	// HandleSubscribe runs in a goroutine, wait briefly for it to complete
+	time.Sleep(50 * time.Millisecond)
 
 	// Should have been routed to the subscription handler,
 	// which sends a "not available" message because payments=nil

@@ -24,6 +24,14 @@ import (
 	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
 )
 
+// dmFormat tracks which DM protocol a sender last used.
+type dmFormat int
+
+const (
+	dmFormatKind4    dmFormat = iota // NIP-04 style (kind 4)
+	dmFormatGiftWrap                 // NIP-17 gift wrap (kind 1059)
+)
+
 // Bridge is the Nostr-Email bridge. It manages identity, relay connection,
 // Marmot DM handling, and SMTP transport.
 type Bridge struct {
@@ -36,6 +44,11 @@ type Bridge struct {
 	smtpServer *bridgesmtp.Server
 
 	aclClient *aclgrpc.Client
+
+	// senderFormats tracks the DM format last used by each sender so the
+	// bridge replies in the same format. Protected by senderFmtMu.
+	senderFormats map[string]dmFormat
+	senderFmtMu   sync.RWMutex
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -50,8 +63,9 @@ type Bridge struct {
 // mode (the bridge will fall back to file-based identity).
 func New(cfg *Config, dbGetter func() ([]byte, error)) *Bridge {
 	return &Bridge{
-		cfg:      cfg,
-		dbGetter: dbGetter,
+		cfg:           cfg,
+		dbGetter:      dbGetter,
+		senderFormats: make(map[string]dmFormat),
 	}
 }
 
@@ -269,12 +283,13 @@ func (b *Bridge) relayWatchLoop() {
 
 // subscribeAndProcess creates a subscription for DMs to the bridge and
 // processes events until the channel closes or context is cancelled.
+// Subscribes to both kind 4 (NIP-04) and kind 1059 (NIP-17 gift wrap).
 func (b *Bridge) subscribeAndProcess() error {
 	bridgePubHex := hex.Enc(b.sign.Pub())
 
 	ff := filter.NewS(
 		&filter.F{
-			Kinds: kind.NewS(kind.New(4)), // kind 4 = encrypted DM
+			Kinds: kind.NewS(kind.New(4), kind.New(1059)),
 			Tags: tag.NewS(
 				tag.NewFromAny("p", bridgePubHex),
 			),
@@ -288,7 +303,7 @@ func (b *Bridge) subscribeAndProcess() error {
 	}
 	defer sub.Close()
 
-	log.I.F("subscribed to DMs for bridge pubkey %s", bridgePubHex)
+	log.I.F("subscribed to DMs (kind 4 + 1059) for bridge pubkey %s", bridgePubHex)
 
 	for {
 		select {
@@ -298,7 +313,12 @@ func (b *Bridge) subscribeAndProcess() error {
 			if !ok {
 				return fmt.Errorf("event channel closed")
 			}
-			b.handleDMEvent(ev)
+			switch ev.Kind {
+			case 1059:
+				b.handleGiftWrapEvent(ev)
+			default:
+				b.handleDMEvent(ev)
+			}
 		}
 	}
 }
@@ -322,61 +342,120 @@ func (b *Bridge) handleDMEvent(ev *event.E) {
 		return
 	}
 
-	log.D.F("received DM from %s: %d bytes", senderPubHex, len(decrypted))
+	log.D.F("received kind 4 DM from %s: %d bytes", senderPubHex, len(decrypted))
+
+	b.recordSenderFormat(senderPubHex, dmFormatKind4)
 
 	if b.router != nil {
 		b.router.RouteDM(b.ctx, senderPubHex, decrypted)
 	}
 }
 
-// makeSendDM returns a callback that encrypts and publishes a kind 4 DM
-// to the given pubkey via the relay.
+// handleGiftWrapEvent unwraps a NIP-17 gift-wrapped DM (kind 1059) and routes it.
+func (b *Bridge) handleGiftWrapEvent(ev *event.E) {
+	dm, err := unwrapGiftWrap(ev, b.sign)
+	if err != nil {
+		log.W.F("gift wrap unwrap failed: %v", err)
+		return
+	}
+
+	log.D.F("received NIP-17 DM from %s: %d bytes", dm.SenderPubHex, len(dm.Content))
+
+	b.recordSenderFormat(dm.SenderPubHex, dmFormatGiftWrap)
+
+	if b.router != nil {
+		b.router.RouteDM(b.ctx, dm.SenderPubHex, dm.Content)
+	}
+}
+
+// recordSenderFormat tracks the DM format a sender used.
+func (b *Bridge) recordSenderFormat(pubkeyHex string, format dmFormat) {
+	b.senderFmtMu.Lock()
+	b.senderFormats[pubkeyHex] = format
+	b.senderFmtMu.Unlock()
+}
+
+// getSenderFormat returns the last DM format used by a sender.
+// Returns dmFormatKind4 as default for unknown senders (backward compatible).
+func (b *Bridge) getSenderFormat(pubkeyHex string) dmFormat {
+	b.senderFmtMu.RLock()
+	defer b.senderFmtMu.RUnlock()
+	f, ok := b.senderFormats[pubkeyHex]
+	if !ok {
+		return dmFormatKind4
+	}
+	return f
+}
+
+// makeSendDM returns a callback that encrypts and publishes DMs to the given
+// pubkey via the relay. Replies in the same format the sender used: kind 4
+// for NIP-04 senders, kind 1059 gift wrap for NIP-17 senders. For unknown
+// senders (inbound email), sends kind 4 as the default.
 func (b *Bridge) makeSendDM() func(pubkeyHex string, content string) error {
 	return func(pubkeyHex string, content string) error {
 		if b.relay == nil {
 			return fmt.Errorf("no relay connection")
 		}
 
-		recipientPub, err := hex.Dec(pubkeyHex)
-		if err != nil {
-			return fmt.Errorf("decode recipient pubkey: %w", err)
+		format := b.getSenderFormat(pubkeyHex)
+
+		switch format {
+		case dmFormatGiftWrap:
+			if err := b.sendGiftWrapDM(pubkeyHex, content); err != nil {
+				return fmt.Errorf("gift wrap DM: %w", err)
+			}
+			log.D.F("sent NIP-17 DM to %s (%d bytes)", pubkeyHex, len(content))
+		default:
+			if err := b.sendKind4DM(pubkeyHex, content); err != nil {
+				return fmt.Errorf("kind 4 DM: %w", err)
+			}
+			log.D.F("sent kind 4 DM to %s (%d bytes)", pubkeyHex, len(content))
 		}
 
-		// Derive conversation key
-		conversationKey, err := encryption.GenerateConversationKey(
-			b.sign.Sec(), recipientPub,
-		)
-		if err != nil {
-			return fmt.Errorf("ECDH: %w", err)
-		}
-
-		// Encrypt content with NIP-44
-		encrypted, err := encryption.Encrypt(conversationKey, []byte(content), nil)
-		if err != nil {
-			return fmt.Errorf("encrypt: %w", err)
-		}
-
-		// Build kind 4 DM event
-		ev := &event.E{
-			Content:   []byte(encrypted),
-			CreatedAt: time.Now().Unix(),
-			Kind:      4,
-			Tags: tag.NewS(
-				tag.NewFromAny("p", pubkeyHex),
-			),
-		}
-
-		if err := ev.Sign(b.sign); chk.E(err) {
-			return fmt.Errorf("sign DM: %w", err)
-		}
-
-		if err := b.relay.Publish(b.ctx, ev); err != nil {
-			return fmt.Errorf("publish DM: %w", err)
-		}
-
-		log.D.F("sent DM to %s (%d bytes)", pubkeyHex, len(content))
 		return nil
 	}
+}
+
+// sendKind4DM sends a kind 4 encrypted DM using NIP-44.
+func (b *Bridge) sendKind4DM(pubkeyHex, content string) error {
+	recipientPub, err := hex.Dec(pubkeyHex)
+	if err != nil {
+		return fmt.Errorf("decode recipient pubkey: %w", err)
+	}
+
+	conversationKey, err := encryption.GenerateConversationKey(
+		b.sign.Sec(), recipientPub,
+	)
+	if err != nil {
+		return fmt.Errorf("ECDH: %w", err)
+	}
+
+	encrypted, err := encryption.Encrypt(conversationKey, []byte(content), nil)
+	if err != nil {
+		return fmt.Errorf("encrypt: %w", err)
+	}
+
+	ev := &event.E{
+		Content:   []byte(encrypted),
+		CreatedAt: time.Now().Unix(),
+		Kind:      4,
+		Tags: tag.NewS(
+			tag.NewFromAny("p", pubkeyHex),
+		),
+	}
+	if err := ev.Sign(b.sign); chk.E(err) {
+		return fmt.Errorf("sign: %w", err)
+	}
+	return b.relay.Publish(b.ctx, ev)
+}
+
+// sendGiftWrapDM sends a NIP-17 gift-wrapped DM (kind 1059).
+func (b *Bridge) sendGiftWrapDM(pubkeyHex, content string) error {
+	gw, err := wrapGiftWrap(pubkeyHex, content, b.sign)
+	if err != nil {
+		return fmt.Errorf("wrap: %w", err)
+	}
+	return b.relay.Publish(b.ctx, gw)
 }
 
 // resolveRecipientPubkey extracts the Nostr pubkey hex from an email address

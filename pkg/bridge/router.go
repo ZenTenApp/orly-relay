@@ -35,7 +35,9 @@ func (r *Router) RouteDM(ctx context.Context, senderPubkeyHex, content string) {
 	case DMCommandSubscribe:
 		log.I.F("subscribe command from %s (alias=%q)", senderPubkeyHex, result.Alias)
 		if r.subHandler != nil {
-			r.subHandler.HandleSubscribe(ctx, senderPubkeyHex, result.Alias)
+			// Run in goroutine — HandleSubscribe blocks for up to 10 minutes
+			// waiting for payment, and must not block the event processing loop.
+			go r.subHandler.HandleSubscribe(ctx, senderPubkeyHex, result.Alias)
 		} else {
 			r.reply(senderPubkeyHex, "Subscriptions are not configured on this bridge.")
 		}
