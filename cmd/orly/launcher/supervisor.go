@@ -17,7 +17,10 @@ import (
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
 
+	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
 	orlyaclv1 "next.orly.dev/pkg/proto/orlyacl/v1"
+	orlydbv1 "next.orly.dev/pkg/proto/orlydb/v1"
 )
 
 // Supervisor manages the database, ACL, sync, and relay processes.
@@ -455,6 +458,12 @@ func (s *Supervisor) startRelay() error {
 	if s.cfg.NegentropyEnabled {
 		env = append(env, "ORLY_NEGENTROPY_ENABLED=true")
 		env = append(env, fmt.Sprintf("ORLY_GRPC_SYNC_NEGENTROPY=%s", s.cfg.NegentropyListen))
+	}
+
+	// When the launcher manages the bridge as a separate subprocess, disable
+	// the in-process bridge in the relay to avoid double-start and port conflicts.
+	if s.cfg.BridgeEnabled {
+		env = append(env, "ORLY_BRIDGE_ENABLED=false")
 	}
 
 	// Self-exec: orly (without subcommand runs as relay)
@@ -1082,6 +1091,14 @@ func (s *Supervisor) startBridge() error {
 	relayPort := getEnvOrDefault("ORLY_PORT", "3334")
 	env = append(env, fmt.Sprintf("ORLY_BRIDGE_RELAY_URL=ws://localhost:%s", relayPort))
 
+	// Fetch the relay identity from the database gRPC server and inject it
+	// so the bridge uses the same identity as the relay (owner/admin privileges).
+	if nsec, err := s.fetchRelayNSEC(); err != nil {
+		log.W.F("could not fetch relay identity for bridge: %v", err)
+	} else {
+		env = append(env, fmt.Sprintf("ORLY_BRIDGE_NSEC=%s", nsec))
+	}
+
 	// Self-exec: orly bridge
 	cmd := exec.CommandContext(s.ctx, s.selfPath, "bridge")
 	cmd.Env = env
@@ -1107,4 +1124,40 @@ func (s *Supervisor) startBridge() error {
 	log.I.F("started bridge (pid %d) via self-exec: %s bridge",
 		cmd.Process.Pid, s.selfPath)
 	return nil
+}
+
+// fetchRelayNSEC connects to the database gRPC server, retrieves the relay
+// identity secret key, and returns it as a bech32 nsec string.
+func (s *Supervisor) fetchRelayNSEC() (string, error) {
+	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
+	defer cancel()
+
+	conn, err := grpc.NewClient(s.cfg.DBListen,
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return "", fmt.Errorf("connect to db: %w", err)
+	}
+	defer conn.Close()
+
+	client := orlydbv1.NewDatabaseServiceClient(conn)
+	resp, err := client.GetOrCreateRelayIdentitySecret(ctx, &orlydbv1.Empty{})
+	if err != nil {
+		return "", fmt.Errorf("get relay identity: %w", err)
+	}
+
+	sk := resp.GetSecretKey()
+	if len(sk) != 32 {
+		// The DB may store as hex string; try decoding
+		if decoded, err := hex.Dec(string(sk)); err == nil && len(decoded) == 32 {
+			sk = decoded
+		} else {
+			return "", fmt.Errorf("unexpected secret key length: %d", len(sk))
+		}
+	}
+
+	nsec, err := bech32encoding.BinToNsec(sk)
+	if err != nil {
+		return "", fmt.Errorf("encode nsec: %w", err)
+	}
+	return string(nsec), nil
 }

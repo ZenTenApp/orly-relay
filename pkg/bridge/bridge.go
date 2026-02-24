@@ -96,7 +96,7 @@ func (b *Bridge) Start(ctx context.Context) error {
 
 	// Connect to relay (standalone mode)
 	if b.cfg.RelayURL != "" {
-		b.relay = NewRelayConn(b.cfg.RelayURL)
+		b.relay = NewRelayConn(b.cfg.RelayURL, b.sign)
 		if err := b.relay.Connect(b.ctx); err != nil {
 			return fmt.Errorf("relay connection: %w", err)
 		}

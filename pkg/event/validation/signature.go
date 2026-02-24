@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"git.mleku.dev/mleku/nostr/encoders/event"
+	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"lol.mleku.dev/log"
 	"next.orly.dev/pkg/utils"
 )
 
@@ -11,6 +13,9 @@ import (
 func ValidateEventID(ev *event.E) Result {
 	calculatedID := ev.GetIDBytes()
 	if !utils.FastEqual(calculatedID, ev.ID) {
+		canonical := ev.ToCanonical(nil)
+		log.E.F("ValidateEventID FAIL: event ID %0x computed %0x, canonical: %s",
+			ev.ID, calculatedID, string(canonical))
 		return Invalid(fmt.Sprintf(
 			"event id is computed incorrectly, event has ID %0x, but when computed it is %0x",
 			ev.ID, calculatedID,
@@ -23,9 +28,14 @@ func ValidateEventID(ev *event.E) Result {
 func ValidateSignature(ev *event.E) Result {
 	ok, err := ev.Verify()
 	if err != nil {
+		log.E.F("ValidateSignature ERROR: kind=%d pubkey=%s id=%0x err=%v",
+			ev.Kind, hex.Enc(ev.Pubkey), ev.ID, err)
 		return Error(fmt.Sprintf("failed to verify signature: %s", err.Error()))
 	}
 	if !ok {
+		canonical := ev.ToCanonical(nil)
+		log.E.F("ValidateSignature FAIL: kind=%d pubkey=%s id=%0x sig=%0x canonical=%s",
+			ev.Kind, hex.Enc(ev.Pubkey), ev.ID, ev.Sig, string(canonical))
 		return Invalid("signature is invalid")
 	}
 	return OK()

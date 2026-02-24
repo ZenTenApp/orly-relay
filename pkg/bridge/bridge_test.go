@@ -209,7 +209,7 @@ func TestBridge_StopWithRelay(t *testing.T) {
 	require.NoError(t, b.Start(ctx))
 
 	// Manually set relay to test Stop path
-	b.relay = NewRelayConn("wss://example.com")
+	b.relay = NewRelayConn("wss://example.com", nil)
 
 	b.Stop()
 }

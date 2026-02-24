@@ -3,11 +3,13 @@ package bridge
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"git.mleku.dev/mleku/nostr/encoders/event"
 	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"git.mleku.dev/mleku/nostr/interfaces/signer"
 	"git.mleku.dev/mleku/nostr/ws"
 	"lol.mleku.dev/log"
 )
@@ -17,18 +19,22 @@ import (
 // client for standalone mode (connecting to an external relay).
 type RelayConn struct {
 	url    string
+	sign   signer.I
 	conn   *ws.Client
 	mu     sync.RWMutex
 	ctx    context.Context
 	cancel context.CancelFunc
+	authed bool
 }
 
 // NewRelayConn creates a new relay connection wrapper.
-func NewRelayConn(url string) *RelayConn {
-	return &RelayConn{url: url}
+// The signer is used for NIP-42 authentication when the relay requires it.
+func NewRelayConn(url string, sign signer.I) *RelayConn {
+	return &RelayConn{url: url, sign: sign}
 }
 
-// Connect establishes the WebSocket connection to the relay.
+// Connect establishes the WebSocket connection to the relay and
+// pre-authenticates via NIP-42 so that subscriptions have proper access.
 func (rc *RelayConn) Connect(ctx context.Context) error {
 	rc.ctx, rc.cancel = context.WithCancel(ctx)
 
@@ -39,9 +45,35 @@ func (rc *RelayConn) Connect(ctx context.Context) error {
 
 	rc.mu.Lock()
 	rc.conn = conn
+	rc.authed = false
 	rc.mu.Unlock()
 
 	log.I.F("bridge connected to relay: %s", rc.url)
+
+	// Pre-authenticate so subscriptions get proper access level
+	if rc.sign != nil {
+		if err := rc.preAuth(conn); err != nil {
+			log.W.F("bridge pre-auth failed: %v (will retry on publish)", err)
+		}
+	}
+
+	return nil
+}
+
+// preAuth waits briefly for the relay's AUTH challenge, then authenticates.
+func (rc *RelayConn) preAuth(conn *ws.Client) error {
+	// Give the relay time to send the AUTH challenge
+	time.Sleep(200 * time.Millisecond)
+
+	if err := conn.Auth(rc.ctx, rc.sign); err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
+
+	rc.mu.Lock()
+	rc.authed = true
+	rc.mu.Unlock()
+
+	log.I.F("bridge pre-authenticated with relay")
 	return nil
 }
 
@@ -61,8 +93,17 @@ func (rc *RelayConn) Reconnect() error {
 		if err == nil {
 			rc.mu.Lock()
 			rc.conn = conn
+			rc.authed = false
 			rc.mu.Unlock()
 			log.I.F("bridge reconnected to relay: %s", rc.url)
+
+			// Pre-authenticate after reconnect
+			if rc.sign != nil {
+				if err := rc.preAuth(conn); err != nil {
+					log.W.F("bridge pre-auth after reconnect failed: %v", err)
+				}
+			}
+
 			return nil
 		}
 
@@ -78,7 +119,8 @@ func (rc *RelayConn) Reconnect() error {
 	}
 }
 
-// Publish sends an event to the relay.
+// Publish sends an event to the relay. If the relay responds with
+// auth-required, the bridge authenticates via NIP-42 and retries once.
 func (rc *RelayConn) Publish(ctx context.Context, ev *event.E) error {
 	rc.mu.RLock()
 	conn := rc.conn
@@ -88,6 +130,37 @@ func (rc *RelayConn) Publish(ctx context.Context, ev *event.E) error {
 		return fmt.Errorf("not connected to relay")
 	}
 
+	err := conn.Publish(ctx, ev)
+	if err == nil {
+		return nil
+	}
+
+	// Check if the error is auth-required
+	if !strings.Contains(err.Error(), "auth-required") {
+		return err
+	}
+
+	// Authenticate and retry
+	if rc.sign == nil {
+		return fmt.Errorf("auth required but no signer configured")
+	}
+
+	log.D.F("relay requires auth, authenticating...")
+
+	// Give the relay a moment to send the challenge
+	time.Sleep(100 * time.Millisecond)
+
+	if authErr := conn.Auth(ctx, rc.sign); authErr != nil {
+		return fmt.Errorf("auth failed: %w", authErr)
+	}
+
+	rc.mu.Lock()
+	rc.authed = true
+	rc.mu.Unlock()
+
+	log.I.F("bridge authenticated with relay")
+
+	// Retry the publish
 	return conn.Publish(ctx, ev)
 }
 
