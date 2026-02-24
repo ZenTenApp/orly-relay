@@ -18,7 +18,6 @@ import (
 	"git.mleku.dev/mleku/nostr/encoders/timestamp"
 	"git.mleku.dev/mleku/nostr/interfaces/signer"
 	"git.mleku.dev/mleku/nostr/ws"
-	"git.mleku.dev/mleku/nostr/utils/values"
 )
 
 type Client struct {
@@ -43,6 +42,31 @@ func NewClient(connectionURI string) (cl *Client, err error) {
 }
 
 func (cl *Client) Request(
+	c context.Context, method string, params, result any,
+) (err error) {
+	delay := time.Second
+	const maxRetries = 3
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			log.I.F("NWC request %s retry %d/%d (delay %v)",
+				method, attempt, maxRetries-1, delay)
+			select {
+			case <-time.After(delay):
+				delay *= 2
+			case <-c.Done():
+				return c.Err()
+			}
+		}
+		err = cl.requestOnce(c, method, params, result)
+		if err == nil {
+			return nil
+		}
+		log.W.F("NWC request %s attempt %d failed: %v", method, attempt+1, err)
+	}
+	return
+}
+
+func (cl *Client) requestOnce(
 	c context.Context, method string, params, result any,
 ) (err error) {
 	ctx, cancel := context.WithTimeout(c, 30*time.Second)
@@ -83,13 +107,21 @@ func (cl *Client) Request(
 	}
 	defer rc.Close()
 
+	// Filter must include authors (wallet pubkey) and #p tag (our client
+	// pubkey) — NWC relays like Alby require this and will CLOSE the
+	// subscription without it. Use Since 5 seconds ago to avoid missing
+	// fast responses.
+	since := time.Now().Unix() - 5
 	var sub *ws.Subscription
 	if sub, err = rc.Subscribe(
 		ctx, filter.NewS(
 			&filter.F{
-				Limit: values.ToUintPointer(1),
-				Kinds: kind.NewS(kind.New(23195)),
-				Since: &timestamp.T{V: time.Now().Unix()},
+				Kinds:   kind.NewS(kind.New(23195)),
+				Authors: tag.NewFromAny(cl.walletPublicKey),
+				Tags: tag.NewS(
+					tag.NewFromAny("p", hex.Enc(cl.clientSecretKey.Pub())),
+				),
+				Since: &timestamp.T{V: since},
 			},
 		),
 	); chk.E(err) {
@@ -104,6 +136,8 @@ func (cl *Client) Request(
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("no response from wallet (connection may be inactive)")
+	case reason := <-sub.ClosedReason:
+		return fmt.Errorf("relay closed subscription: %s", reason)
 	case e := <-sub.Events:
 		if e == nil {
 			return fmt.Errorf("subscription closed (wallet connection inactive)")
@@ -187,17 +221,18 @@ func (cl *Client) subscribeNotificationsOnce(
 	}
 	defer rc.Close()
 
-	// Subscribe to notification events filtered by "p" tag
-	// Support both NIP-44 (kind 23197) and legacy NIP-04 (kind 23196)
+	// Subscribe to notification events. Filter must include authors (wallet
+	// pubkey) and #p tag (our client pubkey) — NWC relays require this.
 	var sub *ws.Subscription
 	if sub, err = rc.Subscribe(
 		c, filter.NewS(
 			&filter.F{
-				Kinds: kind.NewS(kind.New(23197), kind.New(23196)),
+				Kinds:   kind.NewS(kind.New(23197), kind.New(23196)),
+				Authors: tag.NewFromAny(cl.walletPublicKey),
 				Tags: tag.NewS(
 					tag.NewFromAny("p", hex.Enc(cl.clientSecretKey.Pub())),
 				),
-				Since: &timestamp.T{V: time.Now().Unix()},
+				Since: &timestamp.T{V: time.Now().Unix() - 5},
 			},
 		),
 	); chk.E(err) {
