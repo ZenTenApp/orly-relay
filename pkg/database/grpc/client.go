@@ -972,6 +972,76 @@ func (c *Client) ExecuteCypherRead(ctx context.Context, cypher string, params ma
 	return records, nil
 }
 
+// === Paid ACL ===
+
+func (c *Client) SavePaidSubscription(sub *database.PaidSubscription) error {
+	_, err := c.client.SavePaidSubscription(context.Background(), orlydbv1.PaidSubscriptionToProto(sub))
+	return err
+}
+
+func (c *Client) GetPaidSubscription(pubkeyHex string) (*database.PaidSubscription, error) {
+	resp, err := c.client.GetPaidSubscription(context.Background(), &orlydbv1.GetPaidSubscriptionRequest{
+		PubkeyHex: pubkeyHex,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return orlydbv1.ProtoToPaidSubscription(resp), nil
+}
+
+func (c *Client) DeletePaidSubscription(pubkeyHex string) error {
+	_, err := c.client.DeletePaidSubscription(context.Background(), &orlydbv1.DeletePaidSubscriptionRequest{
+		PubkeyHex: pubkeyHex,
+	})
+	return err
+}
+
+func (c *Client) ListPaidSubscriptions() ([]*database.PaidSubscription, error) {
+	resp, err := c.client.ListPaidSubscriptions(context.Background(), &orlydbv1.Empty{})
+	if err != nil {
+		return nil, err
+	}
+	return orlydbv1.ProtoToPaidSubscriptionList(resp), nil
+}
+
+func (c *Client) ClaimAlias(alias, pubkeyHex string) error {
+	_, err := c.client.ClaimAlias(context.Background(), &orlydbv1.ClaimAliasRequest{
+		Alias:     alias,
+		PubkeyHex: pubkeyHex,
+	})
+	return err
+}
+
+func (c *Client) GetAliasByPubkey(pubkeyHex string) (string, error) {
+	resp, err := c.client.GetAliasByPubkey(context.Background(), &orlydbv1.GetAliasByPubkeyRequest{
+		PubkeyHex: pubkeyHex,
+	})
+	if err != nil {
+		return "", err
+	}
+	return resp.Alias, nil
+}
+
+func (c *Client) GetPubkeyByAlias(alias string) (string, error) {
+	resp, err := c.client.GetPubkeyByAlias(context.Background(), &orlydbv1.GetPubkeyByAliasRequest{
+		Alias: alias,
+	})
+	if err != nil {
+		return "", err
+	}
+	return resp.PubkeyHex, nil
+}
+
+func (c *Client) IsAliasTaken(alias string) (bool, error) {
+	resp, err := c.client.IsAliasTaken(context.Background(), &orlydbv1.IsAliasTakenRequest{
+		Alias: alias,
+	})
+	if err != nil {
+		return false, err
+	}
+	return resp.Taken, nil
+}
+
 // NRC (Nostr Relay Connect) stubs - not supported in gRPC client
 // NRC management must be done on the database server side
 

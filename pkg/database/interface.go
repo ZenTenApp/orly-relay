@@ -83,6 +83,16 @@ type Database interface {
 	GetBlossomStorageQuota(pubkey []byte) (quotaMB int64, err error)
 	IsFirstTimeUser(pubkey []byte) (bool, error)
 
+	// Paid ACL (Lightning payment-gated access)
+	SavePaidSubscription(sub *PaidSubscription) error
+	GetPaidSubscription(pubkeyHex string) (*PaidSubscription, error)
+	DeletePaidSubscription(pubkeyHex string) error
+	ListPaidSubscriptions() ([]*PaidSubscription, error)
+	ClaimAlias(alias, pubkeyHex string) error
+	GetAliasByPubkey(pubkeyHex string) (string, error)
+	GetPubkeyByAlias(alias string) (string, error)
+	IsAliasTaken(alias string) (bool, error)
+
 	// NIP-43 Invite-based ACL
 	AddNIP43Member(pubkey []byte, inviteCode string) error
 	RemoveNIP43Member(pubkey []byte) error

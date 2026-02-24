@@ -148,4 +148,30 @@ service ACLService {
 
   // ScanAllPubkeys scans and indexes all pubkeys in the database
   rpc ScanAllPubkeys(Empty) returns (ScanResultResponse);
+
+  // Paid ACL methods
+
+  // SubscribePubkey activates a subscription for a pubkey
+  rpc SubscribePubkey(SubscribeRequest) returns (Empty);
+
+  // UnsubscribePubkey removes a subscription
+  rpc UnsubscribePubkey(PubkeyRequest) returns (Empty);
+
+  // IsSubscribed checks if a pubkey has an active subscription
+  rpc IsSubscribed(PubkeyRequest) returns (BoolResponse);
+
+  // GetSubscription returns subscription details for a pubkey
+  rpc GetSubscription(PubkeyRequest) returns (SubscriptionResponse);
+
+  // ClaimAlias claims an email alias for a pubkey
+  rpc ClaimAlias(ClaimAliasRequest) returns (Empty);
+
+  // GetAliasByPubkey returns the alias for a pubkey
+  rpc GetAliasByPubkey(PubkeyRequest) returns (AliasResponse);
+
+  // GetPubkeyByAlias returns the pubkey for an alias
+  rpc GetPubkeyByAlias(AliasRequest) returns (PubkeyResponse);
+
+  // IsAliasTaken checks if an alias is already claimed
+  rpc IsAliasTaken(AliasRequest) returns (BoolResponse);
 }

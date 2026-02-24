@@ -25,19 +25,43 @@ type DMCommand int
 
 const (
 	DMCommandNone      DMCommand = iota // Not a command — treat as email or contact
-	DMCommandSubscribe                  // "subscribe" command
+	DMCommandSubscribe                  // "subscribe" or "subscribe <alias>" command
+	DMCommandStatus                     // "status" command
 )
 
+// ClassifyDMResult holds the classified command and any extracted alias.
+type ClassifyDMResult struct {
+	Command DMCommand
+	Alias   string // Optional alias from "subscribe <alias>"
+}
+
 // ClassifyDM determines what kind of DM this is:
-// - A subscribe command
+// - A subscribe command (optionally with alias)
+// - A status command
 // - An outbound email (has To: header)
 // - A contact message (everything else → blind proxy)
 func ClassifyDM(content string) DMCommand {
+	r := ClassifyDMFull(content)
+	return r.Command
+}
+
+// ClassifyDMFull returns the classified command along with any extracted alias.
+func ClassifyDMFull(content string) ClassifyDMResult {
 	trimmed := strings.TrimSpace(strings.ToLower(content))
 	if trimmed == "subscribe" {
-		return DMCommandSubscribe
+		return ClassifyDMResult{Command: DMCommandSubscribe}
 	}
-	return DMCommandNone
+	if strings.HasPrefix(trimmed, "subscribe ") {
+		alias := strings.TrimSpace(trimmed[len("subscribe "):])
+		if alias != "" {
+			return ClassifyDMResult{Command: DMCommandSubscribe, Alias: alias}
+		}
+		return ClassifyDMResult{Command: DMCommandSubscribe}
+	}
+	if trimmed == "status" {
+		return ClassifyDMResult{Command: DMCommandStatus}
+	}
+	return ClassifyDMResult{Command: DMCommandNone}
 }
 
 // IsOutboundEmail returns true if the DM content looks like an outbound email

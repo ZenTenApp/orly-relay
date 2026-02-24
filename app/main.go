@@ -471,25 +471,28 @@ func Run(
 		bridgeDKIMKeyPath, bridgeDKIMSelector,
 		bridgeNWCURI, bridgeMonthlyPriceSats, bridgeComposeURL,
 		bridgeSMTPRelayHost, bridgeSMTPRelayPort,
-		bridgeSMTPRelayUsername, bridgeSMTPRelayPassword := cfg.GetBridgeConfigValues()
+		bridgeSMTPRelayUsername, bridgeSMTPRelayPassword,
+		bridgeACLGRPCServer, bridgeAliasPriceSats := cfg.GetBridgeConfigValues()
 
 	if bridgeEnabled {
 		bridgeCfg := &emailbridge.Config{
-			Domain:           bridgeDomain,
-			NSEC:             bridgeNSEC,
-			RelayURL:         bridgeRelayURL,
-			SMTPPort:         bridgeSMTPPort,
-			SMTPHost:         bridgeSMTPHost,
-			DataDir:          bridgeDataDir,
-			DKIMKeyPath:      bridgeDKIMKeyPath,
-			DKIMSelector:     bridgeDKIMSelector,
-			NWCURI:           bridgeNWCURI,
-			MonthlyPriceSats: bridgeMonthlyPriceSats,
-			ComposeURL:       bridgeComposeURL,
+			Domain:            bridgeDomain,
+			NSEC:              bridgeNSEC,
+			RelayURL:          bridgeRelayURL,
+			SMTPPort:          bridgeSMTPPort,
+			SMTPHost:          bridgeSMTPHost,
+			DataDir:           bridgeDataDir,
+			DKIMKeyPath:       bridgeDKIMKeyPath,
+			DKIMSelector:      bridgeDKIMSelector,
+			NWCURI:            bridgeNWCURI,
+			MonthlyPriceSats:  bridgeMonthlyPriceSats,
+			ComposeURL:        bridgeComposeURL,
 			SMTPRelayHost:     bridgeSMTPRelayHost,
 			SMTPRelayPort:     bridgeSMTPRelayPort,
 			SMTPRelayUsername: bridgeSMTPRelayUsername,
 			SMTPRelayPassword: bridgeSMTPRelayPassword,
+			ACLGRPCServer:     bridgeACLGRPCServer,
+			AliasPriceSats:    bridgeAliasPriceSats,
 		}
 
 		// In monolithic mode, provide a database getter for identity resolution

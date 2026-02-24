@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	"encoding/hex"
+	"errors"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -788,6 +789,117 @@ func (s *ACLService) getCuratingACL() *acl.Curating {
 	return nil
 }
 
-// Unused but may be needed for debugging
-var _ = log.T
-var _ = hex.EncodeToString
+// === Paid ACL Methods ===
+
+func (s *ACLService) SubscribePubkey(ctx context.Context, req *orlyaclv1.SubscribeRequest) (*orlyaclv1.Empty, error) {
+	paid := s.getPaidACL()
+	if paid == nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "paid ACL not available")
+	}
+	expiresAt := time.Unix(req.ExpiresAt, 0)
+	if err := paid.Subscribe(req.Pubkey, expiresAt, req.InvoiceHash, req.Alias); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to subscribe: %v", err)
+	}
+	return &orlyaclv1.Empty{}, nil
+}
+
+func (s *ACLService) UnsubscribePubkey(ctx context.Context, req *orlyaclv1.PubkeyRequest) (*orlyaclv1.Empty, error) {
+	paid := s.getPaidACL()
+	if paid == nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "paid ACL not available")
+	}
+	if err := paid.Unsubscribe(req.Pubkey); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to unsubscribe: %v", err)
+	}
+	return &orlyaclv1.Empty{}, nil
+}
+
+func (s *ACLService) IsSubscribed(ctx context.Context, req *orlyaclv1.PubkeyRequest) (*orlyaclv1.BoolResponse, error) {
+	paid := s.getPaidACL()
+	if paid == nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "paid ACL not available")
+	}
+	return &orlyaclv1.BoolResponse{Value: paid.IsSubscribed(req.Pubkey)}, nil
+}
+
+func (s *ACLService) GetSubscription(ctx context.Context, req *orlyaclv1.PubkeyRequest) (*orlyaclv1.SubscriptionResponse, error) {
+	paid := s.getPaidACL()
+	if paid == nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "paid ACL not available")
+	}
+	sub, err := paid.GetSubscription(req.Pubkey)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get subscription: %v", err)
+	}
+	resp := &orlyaclv1.SubscriptionResponse{
+		Pubkey:    sub.PubkeyHex,
+		Alias:     sub.Alias,
+		ExpiresAt: sub.ExpiresAt.Unix(),
+		CreatedAt: sub.CreatedAt.Unix(),
+		HasAlias:  sub.Alias != "",
+	}
+	return resp, nil
+}
+
+func (s *ACLService) ClaimAlias(ctx context.Context, req *orlyaclv1.ClaimAliasRequest) (*orlyaclv1.Empty, error) {
+	paid := s.getPaidACL()
+	if paid == nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "paid ACL not available")
+	}
+	if err := paid.ClaimAlias(req.Alias, req.Pubkey); err != nil {
+		if errors.Is(err, database.ErrAliasTaken) {
+			return nil, status.Errorf(codes.AlreadyExists, "alias is already taken")
+		}
+		return nil, status.Errorf(codes.Internal, "failed to claim alias: %v", err)
+	}
+	return &orlyaclv1.Empty{}, nil
+}
+
+func (s *ACLService) GetAliasByPubkey(ctx context.Context, req *orlyaclv1.PubkeyRequest) (*orlyaclv1.AliasResponse, error) {
+	paid := s.getPaidACL()
+	if paid == nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "paid ACL not available")
+	}
+	alias, err := paid.GetAliasByPubkey(req.Pubkey)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get alias: %v", err)
+	}
+	return &orlyaclv1.AliasResponse{Alias: alias}, nil
+}
+
+func (s *ACLService) GetPubkeyByAlias(ctx context.Context, req *orlyaclv1.AliasRequest) (*orlyaclv1.PubkeyResponse, error) {
+	paid := s.getPaidACL()
+	if paid == nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "paid ACL not available")
+	}
+	pubkey, err := paid.GetPubkeyByAlias(req.Alias)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get pubkey by alias: %v", err)
+	}
+	return &orlyaclv1.PubkeyResponse{Pubkey: pubkey}, nil
+}
+
+func (s *ACLService) IsAliasTaken(ctx context.Context, req *orlyaclv1.AliasRequest) (*orlyaclv1.BoolResponse, error) {
+	paid := s.getPaidACL()
+	if paid == nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "paid ACL not available")
+	}
+	taken, err := paid.IsAliasTaken(req.Alias)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to check alias: %v", err)
+	}
+	return &orlyaclv1.BoolResponse{Value: taken}, nil
+}
+
+// === Helper Methods ===
+
+func (s *ACLService) getPaidACL() *acl.Paid {
+	for _, i := range acl.Registry.ACLs() {
+		if i.Type() == "paid" {
+			if paid, ok := i.(*acl.Paid); ok {
+				return paid
+			}
+		}
+	}
+	return nil
+}

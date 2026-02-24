@@ -618,3 +618,56 @@ func ProtoToUserBlobStatsList(pbs []*UserBlobStats) []*database.UserBlobStats {
 	}
 	return result
 }
+
+// === Paid ACL Converters ===
+
+// PaidSubscriptionToProto converts a database.PaidSubscription to proto.
+func PaidSubscriptionToProto(s *database.PaidSubscription) *PaidSubscriptionMsg {
+	if s == nil {
+		return nil
+	}
+	return &PaidSubscriptionMsg{
+		PubkeyHex:   s.PubkeyHex,
+		Alias:       s.Alias,
+		ExpiresAt:   s.ExpiresAt.Unix(),
+		CreatedAt:   s.CreatedAt.Unix(),
+		InvoiceHash: s.InvoiceHash,
+	}
+}
+
+// ProtoToPaidSubscription converts a proto PaidSubscriptionMsg to database type.
+func ProtoToPaidSubscription(pb *PaidSubscriptionMsg) *database.PaidSubscription {
+	if pb == nil {
+		return nil
+	}
+	return &database.PaidSubscription{
+		PubkeyHex:   pb.PubkeyHex,
+		Alias:       pb.Alias,
+		ExpiresAt:   timeFromUnix(pb.ExpiresAt),
+		CreatedAt:   timeFromUnix(pb.CreatedAt),
+		InvoiceHash: pb.InvoiceHash,
+	}
+}
+
+// PaidSubscriptionListToProto converts a slice of PaidSubscriptions to proto.
+func PaidSubscriptionListToProto(subs []*database.PaidSubscription) *PaidSubscriptionList {
+	result := &PaidSubscriptionList{
+		Subscriptions: make([]*PaidSubscriptionMsg, 0, len(subs)),
+	}
+	for _, s := range subs {
+		result.Subscriptions = append(result.Subscriptions, PaidSubscriptionToProto(s))
+	}
+	return result
+}
+
+// ProtoToPaidSubscriptionList converts a proto PaidSubscriptionList to a slice.
+func ProtoToPaidSubscriptionList(pb *PaidSubscriptionList) []*database.PaidSubscription {
+	if pb == nil {
+		return nil
+	}
+	result := make([]*database.PaidSubscription, 0, len(pb.Subscriptions))
+	for _, s := range pb.Subscriptions {
+		result = append(result, ProtoToPaidSubscription(s))
+	}
+	return result
+}

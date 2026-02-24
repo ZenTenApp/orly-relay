@@ -20,8 +20,8 @@ func TestOutboundProcessor_NotSubscribed(t *testing.T) {
 	}
 
 	store := NewMemorySubscriptionStore()
-	handler := NewSubscriptionHandler(store, nil, sendDM, 2100)
-	op := NewOutboundProcessor(nil, nil, handler, "bridge.example.com", sendDM)
+	handler := NewSubscriptionHandler(store, nil, sendDM, 2100, nil, 0)
+	op := NewOutboundProcessor(nil, nil, handler, "bridge.example.com", sendDM, nil)
 
 	err := op.ProcessOutbound("user1", "To: alice@example.com\n\nHello")
 	if err != nil {
@@ -48,7 +48,7 @@ func TestOutboundProcessor_RateLimited(t *testing.T) {
 	})
 	rl.Record("user1")
 
-	op := NewOutboundProcessor(nil, rl, nil, "bridge.example.com", sendDM)
+	op := NewOutboundProcessor(nil, rl, nil, "bridge.example.com", sendDM, nil)
 
 	err := op.ProcessOutbound("user1", "To: alice@example.com\n\nHello")
 	if err != nil {
@@ -69,7 +69,7 @@ func TestOutboundProcessor_NoRecipients(t *testing.T) {
 		return nil
 	}
 
-	op := NewOutboundProcessor(nil, nil, nil, "bridge.example.com", sendDM)
+	op := NewOutboundProcessor(nil, nil, nil, "bridge.example.com", sendDM, nil)
 
 	err := op.ProcessOutbound("user1", "Subject: No recipient\n\nBody")
 	if err != nil {
@@ -90,7 +90,7 @@ func TestOutboundProcessor_EmptyContent(t *testing.T) {
 		return nil
 	}
 
-	op := NewOutboundProcessor(nil, nil, nil, "bridge.example.com", sendDM)
+	op := NewOutboundProcessor(nil, nil, nil, "bridge.example.com", sendDM, nil)
 
 	err := op.ProcessOutbound("user1", "")
 	if err != nil {
@@ -113,9 +113,9 @@ func TestOutboundProcessor_WithSubscription_SMTPNil(t *testing.T) {
 		PubkeyHex: "user1",
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	})
-	handler := NewSubscriptionHandler(store, nil, sendDM, 2100)
+	handler := NewSubscriptionHandler(store, nil, sendDM, 2100, nil, 0)
 
-	op := NewOutboundProcessor(nil, nil, handler, "bridge.example.com", sendDM)
+	op := NewOutboundProcessor(nil, nil, handler, "bridge.example.com", sendDM, nil)
 
 	// Will panic because smtpClient is nil when calling Send
 	func() {
@@ -196,9 +196,9 @@ func TestOutboundProcessor_FullFlow(t *testing.T) {
 		PubkeyHex: "user1pubkeyhex0123456789abcdef0123456789abcdef0123456789abcdef01",
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	})
-	handler := NewSubscriptionHandler(store, nil, sendDM, 2100)
+	handler := NewSubscriptionHandler(store, nil, sendDM, 2100, nil, 0)
 
-	op := NewOutboundProcessor(smtpClient, nil, handler, "bridge.example.com", sendDM)
+	op := NewOutboundProcessor(smtpClient, nil, handler, "bridge.example.com", sendDM, nil)
 
 	err := op.ProcessOutbound(
 		"user1pubkeyhex0123456789abcdef0123456789abcdef0123456789abcdef01",
@@ -241,7 +241,7 @@ func TestOutboundProcessor_SendFails(t *testing.T) {
 		return nil
 	}
 
-	op := NewOutboundProcessor(smtpClient, nil, nil, "bridge.example.com", sendDM)
+	op := NewOutboundProcessor(smtpClient, nil, nil, "bridge.example.com", sendDM, nil)
 
 	err := op.ProcessOutbound("user1", "To: alice@example.com\n\nHello")
 	if err == nil {
@@ -262,7 +262,7 @@ func TestOutboundProcessor_ParseError(t *testing.T) {
 		return nil
 	}
 
-	op := NewOutboundProcessor(nil, nil, nil, "bridge.example.com", sendDM)
+	op := NewOutboundProcessor(nil, nil, nil, "bridge.example.com", sendDM, nil)
 
 	// Content without "To:" header but starting with something that looks like a header
 	err := op.ProcessOutbound("user1", "Subject: Test\n\nNo recipient")
@@ -311,7 +311,7 @@ func TestOutboundProcessor_WithCcRecipients(t *testing.T) {
 		return nil
 	}
 
-	op := NewOutboundProcessor(smtpClient, nil, nil, "bridge.example.com", sendDM)
+	op := NewOutboundProcessor(smtpClient, nil, nil, "bridge.example.com", sendDM, nil)
 
 	err := op.ProcessOutbound("user1", "To: alice@test.example.com\nCc: bob@test.example.com\nSubject: CC Test\n\nHello with CC")
 	if err != nil {
@@ -371,7 +371,7 @@ func TestOutboundProcessor_ShortPubkey(t *testing.T) {
 		return nil
 	}
 
-	op := NewOutboundProcessor(smtpClient, nil, nil, "bridge.example.com", sendDM)
+	op := NewOutboundProcessor(smtpClient, nil, nil, "bridge.example.com", sendDM, nil)
 
 	// Use a short pubkey (< 16 chars)
 	err := op.ProcessOutbound("abc", "To: alice@test.example.com\n\nHello")
@@ -429,7 +429,7 @@ func TestOutboundProcessor_WithRateLimiter(t *testing.T) {
 		MinInterval:    0,
 	})
 
-	op := NewOutboundProcessor(smtpClient, rl, nil, "bridge.example.com", sendDM)
+	op := NewOutboundProcessor(smtpClient, rl, nil, "bridge.example.com", sendDM, nil)
 
 	err := op.ProcessOutbound("user1", "To: alice@test.example.com\n\nHello")
 	if err != nil {

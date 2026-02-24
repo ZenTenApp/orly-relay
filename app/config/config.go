@@ -268,6 +268,8 @@ type C struct {
 	BridgeSMTPRelayPort int    `env:"ORLY_BRIDGE_SMTP_RELAY_PORT" default:"587" usage:"SMTP smarthost port (587 for STARTTLS)"`
 	BridgeSMTPRelayUsername string `env:"ORLY_BRIDGE_SMTP_RELAY_USERNAME" usage:"SMTP smarthost AUTH username"`
 	BridgeSMTPRelayPassword string `env:"ORLY_BRIDGE_SMTP_RELAY_PASSWORD" usage:"SMTP smarthost AUTH password"`
+	BridgeACLGRPCServer string `env:"ORLY_BRIDGE_ACL_GRPC_SERVER" usage:"gRPC address of ACL server for paid subscription management"`
+	BridgeAliasPriceSats int64 `env:"ORLY_BRIDGE_ALIAS_PRICE_SATS" default:"4200" usage:"monthly price in sats for alias email (default 2x base price)"`
 
 	// ServeMode is set programmatically by the 'serve' subcommand to grant full owner
 	// access to all users (no env tag - internal use only)
@@ -957,6 +959,8 @@ func (cfg *C) GetBridgeConfigValues() (
 	smtpRelayPort int,
 	smtpRelayUsername string,
 	smtpRelayPassword string,
+	aclGRPCServer string,
+	aliasPriceSats int64,
 ) {
 	dataDir = cfg.BridgeDataDir
 	if dataDir == "" {
@@ -982,5 +986,7 @@ func (cfg *C) GetBridgeConfigValues() (
 		cfg.BridgeSMTPRelayHost,
 		cfg.BridgeSMTPRelayPort,
 		cfg.BridgeSMTPRelayUsername,
-		cfg.BridgeSMTPRelayPassword
+		cfg.BridgeSMTPRelayPassword,
+		cfg.BridgeACLGRPCServer,
+		cfg.BridgeAliasPriceSats
 }

@@ -20,6 +20,7 @@ import (
 	"lol.mleku.dev/chk"
 	"lol.mleku.dev/log"
 
+	aclgrpc "next.orly.dev/pkg/acl/grpc"
 	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
 )
 
@@ -33,6 +34,8 @@ type Bridge struct {
 
 	router     *Router
 	smtpServer *bridgesmtp.Server
+
+	aclClient *aclgrpc.Client
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -77,6 +80,19 @@ func (b *Bridge) Start(ctx context.Context) error {
 
 	if b.cfg.Domain != "" {
 		log.I.F("bridge email domain: %s", b.cfg.Domain)
+	}
+
+	// Connect to ACL gRPC server if configured
+	if b.cfg.ACLGRPCServer != "" {
+		aclClient, err := aclgrpc.New(b.ctx, &aclgrpc.ClientConfig{
+			ServerAddress:  b.cfg.ACLGRPCServer,
+			ConnectTimeout: 15 * time.Second,
+		})
+		if err != nil {
+			return fmt.Errorf("connect to ACL gRPC server: %w", err)
+		}
+		b.aclClient = aclClient
+		log.I.F("bridge connected to ACL gRPC server at %s", b.cfg.ACLGRPCServer)
 	}
 
 	// Build the sendDM callback
@@ -151,8 +167,13 @@ func (b *Bridge) initComponents(sendDM func(string, string) error) error {
 		}
 	}
 
-	subHandler := NewSubscriptionHandler(subStore, payments, sendDM, b.cfg.MonthlyPriceSats)
-	outbound := NewOutboundProcessor(smtpClient, rateLimiter, subHandler, b.cfg.Domain, sendDM)
+	aliasPriceSats := b.cfg.AliasPriceSats
+	if aliasPriceSats == 0 && b.cfg.MonthlyPriceSats > 0 {
+		aliasPriceSats = b.cfg.MonthlyPriceSats * 2
+	}
+
+	subHandler := NewSubscriptionHandler(subStore, payments, sendDM, b.cfg.MonthlyPriceSats, b.aclClient, aliasPriceSats)
+	outbound := NewOutboundProcessor(smtpClient, rateLimiter, subHandler, b.cfg.Domain, sendDM, b.aclClient)
 	b.router = NewRouter(subHandler, outbound, sendDM)
 
 	return nil
@@ -175,7 +196,7 @@ func (b *Bridge) startSMTPServer(sendDM func(string, string) error) error {
 
 	handler := func(email *bridgesmtp.InboundEmail) error {
 		for _, to := range email.To {
-			pubkeyHex, err := resolveRecipientPubkey(to, b.cfg.Domain)
+			pubkeyHex, err := resolveRecipientPubkey(to, b.cfg.Domain, b.aclClient)
 			if err != nil {
 				log.W.F("cannot resolve recipient %s: %v", to, err)
 				continue
@@ -202,6 +223,9 @@ func (b *Bridge) Stop() {
 	}
 	if b.relay != nil {
 		b.relay.Close()
+	}
+	if b.aclClient != nil {
+		b.aclClient.Close()
 	}
 	b.wg.Wait()
 	log.I.F("bridge stopped")
@@ -356,8 +380,9 @@ func (b *Bridge) makeSendDM() func(pubkeyHex string, content string) error {
 }
 
 // resolveRecipientPubkey extracts the Nostr pubkey hex from an email address
-// local part. The local part can be an npub (bech32) or a hex pubkey prefix.
-func resolveRecipientPubkey(emailAddr, domain string) (string, error) {
+// local part. The local part can be an npub (bech32), a hex pubkey, or an alias.
+// When aclClient is non-nil, alias lookup is attempted.
+func resolveRecipientPubkey(emailAddr, domain string, aclClient *aclgrpc.Client) (string, error) {
 	parts := strings.SplitN(emailAddr, "@", 2)
 	if len(parts) != 2 {
 		return "", fmt.Errorf("invalid email address: %s", emailAddr)
@@ -373,16 +398,23 @@ func resolveRecipientPubkey(emailAddr, domain string) (string, error) {
 		return hex.Enc(pubkey), nil
 	}
 
-	// Assume hex (may be truncated — we can only deliver if it's a full 64-char hex pubkey)
+	// Try full 64-char hex pubkey
 	if len(local) == 64 {
 		_, err := hex.Dec(local)
-		if err != nil {
-			return "", fmt.Errorf("invalid hex pubkey: %w", err)
+		if err == nil {
+			return local, nil
 		}
-		return local, nil
 	}
 
-	return "", fmt.Errorf("cannot resolve pubkey from local part %q (must be npub or 64-char hex)", local)
+	// Try alias lookup via ACL
+	if aclClient != nil {
+		pubkey, err := aclClient.GetPubkeyByAlias(local)
+		if err == nil && pubkey != "" {
+			return pubkey, nil
+		}
+	}
+
+	return "", fmt.Errorf("cannot resolve pubkey from local part %q (must be npub, 64-char hex, or alias)", local)
 }
 
 func identitySourceString(s IdentitySource) string {

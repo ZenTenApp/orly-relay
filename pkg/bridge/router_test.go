@@ -85,7 +85,7 @@ func TestRouter_WithSubscriptionHandler(t *testing.T) {
 	store := NewMemorySubscriptionStore()
 
 	// Create handler with nil payment processor — will get "not available" reply
-	subHandler := NewSubscriptionHandler(store, nil, sink.send, 2100)
+	subHandler := NewSubscriptionHandler(store, nil, sink.send, 2100, nil, 0)
 	router := NewRouter(subHandler, nil, sink.send)
 
 	router.RouteDM(context.Background(), "user1", "subscribe")
@@ -105,7 +105,7 @@ func TestRouter_OutboundWithProcessor(t *testing.T) {
 	sink := newMockDMSink()
 
 	// Create outbound processor with nil SMTP client — will fail at send time
-	outbound := NewOutboundProcessor(nil, nil, nil, "test.example.com", sink.send)
+	outbound := NewOutboundProcessor(nil, nil, nil, "test.example.com", sink.send, nil)
 	router := NewRouter(nil, outbound, sink.send)
 
 	// This will hit the SMTP send which panics because smtpClient is nil.

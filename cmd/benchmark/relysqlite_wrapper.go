@@ -373,3 +373,30 @@ func isReplaceableKind(kind int) bool {
 func isAddressableKind(kind int) bool {
 	return kind >= 30000 && kind < 40000
 }
+
+// Paid ACL stubs (not supported in benchmark wrapper)
+
+func (w *RelySQLiteWrapper) SavePaidSubscription(sub *database.PaidSubscription) error {
+	return fmt.Errorf("not supported")
+}
+func (w *RelySQLiteWrapper) GetPaidSubscription(pubkeyHex string) (*database.PaidSubscription, error) {
+	return nil, fmt.Errorf("not supported")
+}
+func (w *RelySQLiteWrapper) DeletePaidSubscription(pubkeyHex string) error {
+	return fmt.Errorf("not supported")
+}
+func (w *RelySQLiteWrapper) ListPaidSubscriptions() ([]*database.PaidSubscription, error) {
+	return nil, fmt.Errorf("not supported")
+}
+func (w *RelySQLiteWrapper) ClaimAlias(alias, pubkeyHex string) error {
+	return fmt.Errorf("not supported")
+}
+func (w *RelySQLiteWrapper) GetAliasByPubkey(pubkeyHex string) (string, error) {
+	return "", fmt.Errorf("not supported")
+}
+func (w *RelySQLiteWrapper) GetPubkeyByAlias(alias string) (string, error) {
+	return "", fmt.Errorf("not supported")
+}
+func (w *RelySQLiteWrapper) IsAliasTaken(alias string) (bool, error) {
+	return false, fmt.Errorf("not supported")
+}

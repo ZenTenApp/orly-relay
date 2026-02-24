@@ -58,4 +58,12 @@ type Config struct {
 
 	// SMTPRelayPassword is the SMTP AUTH password for the smarthost.
 	SMTPRelayPassword string
+
+	// ACLGRPCServer is the gRPC address of the ACL server.
+	// When set, the bridge uses ACL-backed subscriptions instead of file store.
+	ACLGRPCServer string
+
+	// AliasPriceSats is the monthly price in sats for an alias email address.
+	// Must be >= MonthlyPriceSats. If zero, defaults to 2x MonthlyPriceSats.
+	AliasPriceSats int64
 }

@@ -29,13 +29,22 @@ func NewRouter(
 // RouteDM processes an incoming DM and routes it to the right handler.
 func (r *Router) RouteDM(ctx context.Context, senderPubkeyHex, content string) {
 	// Check for commands first
-	cmd := ClassifyDM(content)
+	result := ClassifyDMFull(content)
 
-	switch cmd {
+	switch result.Command {
 	case DMCommandSubscribe:
-		log.I.F("subscribe command from %s", senderPubkeyHex)
+		log.I.F("subscribe command from %s (alias=%q)", senderPubkeyHex, result.Alias)
 		if r.subHandler != nil {
-			r.subHandler.HandleSubscribe(ctx, senderPubkeyHex)
+			r.subHandler.HandleSubscribe(ctx, senderPubkeyHex, result.Alias)
+		} else {
+			r.reply(senderPubkeyHex, "Subscriptions are not configured on this bridge.")
+		}
+		return
+
+	case DMCommandStatus:
+		log.I.F("status command from %s", senderPubkeyHex)
+		if r.subHandler != nil {
+			r.subHandler.HandleStatus(senderPubkeyHex)
 		} else {
 			r.reply(senderPubkeyHex, "Subscriptions are not configured on this bridge.")
 		}
@@ -58,7 +67,9 @@ func (r *Router) RouteDM(ctx context.Context, senderPubkeyHex, content string) {
 	r.reply(senderPubkeyHex,
 		"Marmot Email Bridge\n\n"+
 			"Commands:\n"+
-			"  subscribe — Start or renew your email subscription\n\n"+
+			"  subscribe — Subscribe with npub-only email\n"+
+			"  subscribe <alias> — Subscribe with a custom email alias\n"+
+			"  status — Check your subscription status\n\n"+
 			"To send an email, format your DM like:\n\n"+
 			"To: recipient@example.com\n"+
 			"Subject: Your subject\n\n"+

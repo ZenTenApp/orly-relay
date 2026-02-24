@@ -63,10 +63,15 @@ type InvoiceStatus struct {
 }
 
 // CreateSubscriptionInvoice creates a Lightning invoice for a one-month
-// bridge subscription.
+// bridge subscription at the default price.
 func (pp *PaymentProcessor) CreateSubscriptionInvoice(ctx context.Context) (*Invoice, error) {
+	return pp.CreateInvoice(ctx, pp.monthlyPriceMSats/1000) // convert msats back to sats
+}
+
+// CreateInvoice creates a Lightning invoice for the given amount in satoshis.
+func (pp *PaymentProcessor) CreateInvoice(ctx context.Context, amountSats int64) (*Invoice, error) {
 	params := map[string]any{
-		"amount":      pp.monthlyPriceMSats,
+		"amount":      amountSats * 1000, // NWC uses millisatoshis
 		"description": "Marmot Email Bridge — 1 month subscription",
 	}
 

@@ -470,6 +470,73 @@ func (s *DatabaseService) IsFirstTimeUser(ctx context.Context, req *orlydbv1.IsF
 	return &orlydbv1.IsFirstTimeUserResponse{FirstTime: firstTime}, nil
 }
 
+// === Paid ACL ===
+
+func (s *DatabaseService) SavePaidSubscription(ctx context.Context, req *orlydbv1.PaidSubscriptionMsg) (*orlydbv1.Empty, error) {
+	sub := orlydbv1.ProtoToPaidSubscription(req)
+	if err := s.db.SavePaidSubscription(sub); err != nil {
+		return nil, status.Errorf(codes.Internal, "save paid subscription failed: %v", err)
+	}
+	return &orlydbv1.Empty{}, nil
+}
+
+func (s *DatabaseService) GetPaidSubscription(ctx context.Context, req *orlydbv1.GetPaidSubscriptionRequest) (*orlydbv1.PaidSubscriptionMsg, error) {
+	sub, err := s.db.GetPaidSubscription(req.PubkeyHex)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get paid subscription failed: %v", err)
+	}
+	if sub == nil {
+		return nil, status.Errorf(codes.NotFound, "paid subscription not found")
+	}
+	return orlydbv1.PaidSubscriptionToProto(sub), nil
+}
+
+func (s *DatabaseService) DeletePaidSubscription(ctx context.Context, req *orlydbv1.DeletePaidSubscriptionRequest) (*orlydbv1.Empty, error) {
+	if err := s.db.DeletePaidSubscription(req.PubkeyHex); err != nil {
+		return nil, status.Errorf(codes.Internal, "delete paid subscription failed: %v", err)
+	}
+	return &orlydbv1.Empty{}, nil
+}
+
+func (s *DatabaseService) ListPaidSubscriptions(ctx context.Context, req *orlydbv1.Empty) (*orlydbv1.PaidSubscriptionList, error) {
+	subs, err := s.db.ListPaidSubscriptions()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "list paid subscriptions failed: %v", err)
+	}
+	return orlydbv1.PaidSubscriptionListToProto(subs), nil
+}
+
+func (s *DatabaseService) ClaimAlias(ctx context.Context, req *orlydbv1.ClaimAliasRequest) (*orlydbv1.Empty, error) {
+	if err := s.db.ClaimAlias(req.Alias, req.PubkeyHex); err != nil {
+		return nil, status.Errorf(codes.Internal, "claim alias failed: %v", err)
+	}
+	return &orlydbv1.Empty{}, nil
+}
+
+func (s *DatabaseService) GetAliasByPubkey(ctx context.Context, req *orlydbv1.GetAliasByPubkeyRequest) (*orlydbv1.AliasResponse, error) {
+	alias, err := s.db.GetAliasByPubkey(req.PubkeyHex)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get alias by pubkey failed: %v", err)
+	}
+	return &orlydbv1.AliasResponse{Alias: alias}, nil
+}
+
+func (s *DatabaseService) GetPubkeyByAlias(ctx context.Context, req *orlydbv1.GetPubkeyByAliasRequest) (*orlydbv1.PubkeyResponse, error) {
+	pubkey, err := s.db.GetPubkeyByAlias(req.Alias)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get pubkey by alias failed: %v", err)
+	}
+	return &orlydbv1.PubkeyResponse{PubkeyHex: pubkey}, nil
+}
+
+func (s *DatabaseService) IsAliasTaken(ctx context.Context, req *orlydbv1.IsAliasTakenRequest) (*orlydbv1.IsAliasTakenResponse, error) {
+	taken, err := s.db.IsAliasTaken(req.Alias)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "is alias taken failed: %v", err)
+	}
+	return &orlydbv1.IsAliasTakenResponse{Taken: taken}, nil
+}
+
 // === NIP-43 ===
 
 func (s *DatabaseService) AddNIP43Member(ctx context.Context, req *orlydbv1.AddNIP43MemberRequest) (*orlydbv1.Empty, error) {

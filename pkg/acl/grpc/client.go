@@ -382,3 +382,127 @@ func (c *Client) IsCuratingConfigured() (bool, error) {
 	}
 	return resp.Value, nil
 }
+
+// === Paid ACL Methods ===
+
+// SubscriptionInfo holds subscription details returned by GetSubscription.
+type SubscriptionInfo struct {
+	PubkeyHex string
+	Alias     string
+	ExpiresAt time.Time
+	CreatedAt time.Time
+	HasAlias  bool
+}
+
+// SubscribePubkey activates a subscription for a pubkey.
+func (c *Client) SubscribePubkey(pubkey string, expiresAt time.Time, invoiceHash, alias string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := c.client.SubscribePubkey(ctx, &orlyaclv1.SubscribeRequest{
+		Pubkey:      pubkey,
+		ExpiresAt:   expiresAt.Unix(),
+		InvoiceHash: invoiceHash,
+		Alias:       alias,
+	})
+	return err
+}
+
+// UnsubscribePubkey removes a subscription.
+func (c *Client) UnsubscribePubkey(pubkey string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := c.client.UnsubscribePubkey(ctx, &orlyaclv1.PubkeyRequest{
+		Pubkey: pubkey,
+	})
+	return err
+}
+
+// IsSubscribedPaid checks if a pubkey has an active paid subscription.
+func (c *Client) IsSubscribedPaid(pubkey string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := c.client.IsSubscribed(ctx, &orlyaclv1.PubkeyRequest{
+		Pubkey: pubkey,
+	})
+	if err != nil {
+		return false, err
+	}
+	return resp.Value, nil
+}
+
+// GetSubscription returns subscription details for a pubkey.
+func (c *Client) GetSubscription(pubkey string) (*SubscriptionInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := c.client.GetSubscription(ctx, &orlyaclv1.PubkeyRequest{
+		Pubkey: pubkey,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &SubscriptionInfo{
+		PubkeyHex: resp.Pubkey,
+		Alias:     resp.Alias,
+		ExpiresAt: time.Unix(resp.ExpiresAt, 0),
+		CreatedAt: time.Unix(resp.CreatedAt, 0),
+		HasAlias:  resp.HasAlias,
+	}, nil
+}
+
+// ClaimAlias claims an email alias for a pubkey.
+func (c *Client) ClaimAlias(alias, pubkey string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := c.client.ClaimAlias(ctx, &orlyaclv1.ClaimAliasRequest{
+		Alias:  alias,
+		Pubkey: pubkey,
+	})
+	return err
+}
+
+// GetAliasByPubkey returns the alias for a pubkey, or "" if none.
+func (c *Client) GetAliasByPubkey(pubkey string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := c.client.GetAliasByPubkey(ctx, &orlyaclv1.PubkeyRequest{
+		Pubkey: pubkey,
+	})
+	if err != nil {
+		return "", err
+	}
+	return resp.Alias, nil
+}
+
+// GetPubkeyByAlias returns the pubkey for an alias, or "" if not found.
+func (c *Client) GetPubkeyByAlias(alias string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := c.client.GetPubkeyByAlias(ctx, &orlyaclv1.AliasRequest{
+		Alias: alias,
+	})
+	if err != nil {
+		return "", err
+	}
+	return resp.Pubkey, nil
+}
+
+// IsAliasTaken checks if an alias is already claimed.
+func (c *Client) IsAliasTaken(alias string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := c.client.IsAliasTaken(ctx, &orlyaclv1.AliasRequest{
+		Alias: alias,
+	})
+	if err != nil {
+		return false, err
+	}
+	return resp.Value, nil
+}

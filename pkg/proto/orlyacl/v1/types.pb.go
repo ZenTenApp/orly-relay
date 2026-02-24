@@ -2939,6 +2939,334 @@ func (x *ScanResultResponse) GetTotalEvents() int32 {
 	return 0
 }
 
+type SubscribeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pubkey        string                 `protobuf:"bytes,1,opt,name=pubkey,proto3" json:"pubkey,omitempty"`
+	ExpiresAt     int64                  `protobuf:"varint,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	InvoiceHash   string                 `protobuf:"bytes,3,opt,name=invoice_hash,json=invoiceHash,proto3" json:"invoice_hash,omitempty"`
+	Alias         string                 `protobuf:"bytes,4,opt,name=alias,proto3" json:"alias,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubscribeRequest) Reset() {
+	*x = SubscribeRequest{}
+	mi := &file_orlyacl_v1_types_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubscribeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeRequest) ProtoMessage() {}
+
+func (x *SubscribeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_orlyacl_v1_types_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeRequest.ProtoReflect.Descriptor instead.
+func (*SubscribeRequest) Descriptor() ([]byte, []int) {
+	return file_orlyacl_v1_types_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *SubscribeRequest) GetPubkey() string {
+	if x != nil {
+		return x.Pubkey
+	}
+	return ""
+}
+
+func (x *SubscribeRequest) GetExpiresAt() int64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+func (x *SubscribeRequest) GetInvoiceHash() string {
+	if x != nil {
+		return x.InvoiceHash
+	}
+	return ""
+}
+
+func (x *SubscribeRequest) GetAlias() string {
+	if x != nil {
+		return x.Alias
+	}
+	return ""
+}
+
+type SubscriptionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pubkey        string                 `protobuf:"bytes,1,opt,name=pubkey,proto3" json:"pubkey,omitempty"`
+	Alias         string                 `protobuf:"bytes,2,opt,name=alias,proto3" json:"alias,omitempty"`
+	ExpiresAt     int64                  `protobuf:"varint,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	CreatedAt     int64                  `protobuf:"varint,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	HasAlias      bool                   `protobuf:"varint,5,opt,name=has_alias,json=hasAlias,proto3" json:"has_alias,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubscriptionResponse) Reset() {
+	*x = SubscriptionResponse{}
+	mi := &file_orlyacl_v1_types_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubscriptionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscriptionResponse) ProtoMessage() {}
+
+func (x *SubscriptionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_orlyacl_v1_types_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscriptionResponse.ProtoReflect.Descriptor instead.
+func (*SubscriptionResponse) Descriptor() ([]byte, []int) {
+	return file_orlyacl_v1_types_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *SubscriptionResponse) GetPubkey() string {
+	if x != nil {
+		return x.Pubkey
+	}
+	return ""
+}
+
+func (x *SubscriptionResponse) GetAlias() string {
+	if x != nil {
+		return x.Alias
+	}
+	return ""
+}
+
+func (x *SubscriptionResponse) GetExpiresAt() int64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+func (x *SubscriptionResponse) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *SubscriptionResponse) GetHasAlias() bool {
+	if x != nil {
+		return x.HasAlias
+	}
+	return false
+}
+
+type ClaimAliasRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Alias         string                 `protobuf:"bytes,1,opt,name=alias,proto3" json:"alias,omitempty"`
+	Pubkey        string                 `protobuf:"bytes,2,opt,name=pubkey,proto3" json:"pubkey,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClaimAliasRequest) Reset() {
+	*x = ClaimAliasRequest{}
+	mi := &file_orlyacl_v1_types_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClaimAliasRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClaimAliasRequest) ProtoMessage() {}
+
+func (x *ClaimAliasRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_orlyacl_v1_types_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClaimAliasRequest.ProtoReflect.Descriptor instead.
+func (*ClaimAliasRequest) Descriptor() ([]byte, []int) {
+	return file_orlyacl_v1_types_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *ClaimAliasRequest) GetAlias() string {
+	if x != nil {
+		return x.Alias
+	}
+	return ""
+}
+
+func (x *ClaimAliasRequest) GetPubkey() string {
+	if x != nil {
+		return x.Pubkey
+	}
+	return ""
+}
+
+type AliasResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Alias         string                 `protobuf:"bytes,1,opt,name=alias,proto3" json:"alias,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AliasResponse) Reset() {
+	*x = AliasResponse{}
+	mi := &file_orlyacl_v1_types_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AliasResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AliasResponse) ProtoMessage() {}
+
+func (x *AliasResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_orlyacl_v1_types_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AliasResponse.ProtoReflect.Descriptor instead.
+func (*AliasResponse) Descriptor() ([]byte, []int) {
+	return file_orlyacl_v1_types_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *AliasResponse) GetAlias() string {
+	if x != nil {
+		return x.Alias
+	}
+	return ""
+}
+
+type AliasRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Alias         string                 `protobuf:"bytes,1,opt,name=alias,proto3" json:"alias,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AliasRequest) Reset() {
+	*x = AliasRequest{}
+	mi := &file_orlyacl_v1_types_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AliasRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AliasRequest) ProtoMessage() {}
+
+func (x *AliasRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_orlyacl_v1_types_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AliasRequest.ProtoReflect.Descriptor instead.
+func (*AliasRequest) Descriptor() ([]byte, []int) {
+	return file_orlyacl_v1_types_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *AliasRequest) GetAlias() string {
+	if x != nil {
+		return x.Alias
+	}
+	return ""
+}
+
+type PubkeyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pubkey        string                 `protobuf:"bytes,1,opt,name=pubkey,proto3" json:"pubkey,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PubkeyResponse) Reset() {
+	*x = PubkeyResponse{}
+	mi := &file_orlyacl_v1_types_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PubkeyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PubkeyResponse) ProtoMessage() {}
+
+func (x *PubkeyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_orlyacl_v1_types_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PubkeyResponse.ProtoReflect.Descriptor instead.
+func (*PubkeyResponse) Descriptor() ([]byte, []int) {
+	return file_orlyacl_v1_types_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *PubkeyResponse) GetPubkey() string {
+	if x != nil {
+		return x.Pubkey
+	}
+	return ""
+}
+
 var File_orlyacl_v1_types_proto protoreflect.FileDescriptor
 
 const file_orlyacl_v1_types_proto_rawDesc = "" +
@@ -3114,7 +3442,30 @@ const file_orlyacl_v1_types_proto_rawDesc = "" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\"\\\n" +
 	"\x12ScanResultResponse\x12#\n" +
 	"\rtotal_pubkeys\x18\x01 \x01(\x05R\ftotalPubkeys\x12!\n" +
-	"\ftotal_events\x18\x02 \x01(\x05R\vtotalEventsB.Z,next.orly.dev/pkg/proto/orlyacl/v1;orlyaclv1b\x06proto3"
+	"\ftotal_events\x18\x02 \x01(\x05R\vtotalEvents\"\x82\x01\n" +
+	"\x10SubscribeRequest\x12\x16\n" +
+	"\x06pubkey\x18\x01 \x01(\tR\x06pubkey\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\x03R\texpiresAt\x12!\n" +
+	"\finvoice_hash\x18\x03 \x01(\tR\vinvoiceHash\x12\x14\n" +
+	"\x05alias\x18\x04 \x01(\tR\x05alias\"\x9f\x01\n" +
+	"\x14SubscriptionResponse\x12\x16\n" +
+	"\x06pubkey\x18\x01 \x01(\tR\x06pubkey\x12\x14\n" +
+	"\x05alias\x18\x02 \x01(\tR\x05alias\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x03 \x01(\x03R\texpiresAt\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x04 \x01(\x03R\tcreatedAt\x12\x1b\n" +
+	"\thas_alias\x18\x05 \x01(\bR\bhasAlias\"A\n" +
+	"\x11ClaimAliasRequest\x12\x14\n" +
+	"\x05alias\x18\x01 \x01(\tR\x05alias\x12\x16\n" +
+	"\x06pubkey\x18\x02 \x01(\tR\x06pubkey\"%\n" +
+	"\rAliasResponse\x12\x14\n" +
+	"\x05alias\x18\x01 \x01(\tR\x05alias\"$\n" +
+	"\fAliasRequest\x12\x14\n" +
+	"\x05alias\x18\x01 \x01(\tR\x05alias\"(\n" +
+	"\x0ePubkeyResponse\x12\x16\n" +
+	"\x06pubkey\x18\x01 \x01(\tR\x06pubkeyB.Z,next.orly.dev/pkg/proto/orlyacl/v1;orlyaclv1b\x06proto3"
 
 var (
 	file_orlyacl_v1_types_proto_rawDescOnce sync.Once
@@ -3128,7 +3479,7 @@ func file_orlyacl_v1_types_proto_rawDescGZIP() []byte {
 	return file_orlyacl_v1_types_proto_rawDescData
 }
 
-var file_orlyacl_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 57)
+var file_orlyacl_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 63)
 var file_orlyacl_v1_types_proto_goTypes = []any{
 	(*Empty)(nil),                          // 0: orlyacl.v1.Empty
 	(*AccessLevelRequest)(nil),             // 1: orlyacl.v1.AccessLevelRequest
@@ -3187,16 +3538,22 @@ var file_orlyacl_v1_types_proto_goTypes = []any{
 	(*DeleteEventsForPubkeyRequest)(nil),   // 54: orlyacl.v1.DeleteEventsForPubkeyRequest
 	(*DeleteCountResponse)(nil),            // 55: orlyacl.v1.DeleteCountResponse
 	(*ScanResultResponse)(nil),             // 56: orlyacl.v1.ScanResultResponse
-	(*v1.Event)(nil),                       // 57: orlydb.v1.Event
+	(*SubscribeRequest)(nil),               // 57: orlyacl.v1.SubscribeRequest
+	(*SubscriptionResponse)(nil),           // 58: orlyacl.v1.SubscriptionResponse
+	(*ClaimAliasRequest)(nil),              // 59: orlyacl.v1.ClaimAliasRequest
+	(*AliasResponse)(nil),                  // 60: orlyacl.v1.AliasResponse
+	(*AliasRequest)(nil),                   // 61: orlyacl.v1.AliasRequest
+	(*PubkeyResponse)(nil),                 // 62: orlyacl.v1.PubkeyResponse
+	(*v1.Event)(nil),                       // 63: orlydb.v1.Event
 }
 var file_orlyacl_v1_types_proto_depIdxs = []int32{
-	57, // 0: orlyacl.v1.PolicyCheckRequest.event:type_name -> orlydb.v1.Event
+	63, // 0: orlyacl.v1.PolicyCheckRequest.event:type_name -> orlydb.v1.Event
 	18, // 1: orlyacl.v1.ListBannedPubkeysResponse.pubkeys:type_name -> orlyacl.v1.BannedPubkey
 	19, // 2: orlyacl.v1.ListAllowedPubkeysResponse.pubkeys:type_name -> orlyacl.v1.AllowedPubkey
 	22, // 3: orlyacl.v1.ListBannedEventsResponse.events:type_name -> orlyacl.v1.BannedEvent
 	23, // 4: orlyacl.v1.ListAllowedEventsResponse.events:type_name -> orlyacl.v1.AllowedEvent
 	25, // 5: orlyacl.v1.ListBlockedIPsResponse.ips:type_name -> orlyacl.v1.BlockedIP
-	57, // 6: orlyacl.v1.ConfigEventRequest.event:type_name -> orlydb.v1.Event
+	63, // 6: orlyacl.v1.ConfigEventRequest.event:type_name -> orlydb.v1.Event
 	37, // 7: orlyacl.v1.ListTrustedPubkeysResponse.pubkeys:type_name -> orlyacl.v1.TrustedPubkey
 	38, // 8: orlyacl.v1.ListBlacklistedPubkeysResponse.pubkeys:type_name -> orlyacl.v1.BlacklistedPubkey
 	40, // 9: orlyacl.v1.ListSpamEventsResponse.events:type_name -> orlyacl.v1.SpamEvent
@@ -3220,7 +3577,7 @@ func file_orlyacl_v1_types_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_orlyacl_v1_types_proto_rawDesc), len(file_orlyacl_v1_types_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   57,
+			NumMessages:   63,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

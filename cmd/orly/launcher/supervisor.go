@@ -1099,6 +1099,11 @@ func (s *Supervisor) startBridge() error {
 		env = append(env, fmt.Sprintf("ORLY_BRIDGE_NSEC=%s", nsec))
 	}
 
+	// Inject ACL gRPC server address so the bridge can manage subscriptions
+	if s.cfg.ACLEnabled && s.cfg.ACLListen != "" {
+		env = append(env, fmt.Sprintf("ORLY_BRIDGE_ACL_GRPC_SERVER=%s", s.cfg.ACLListen))
+	}
+
 	// Self-exec: orly bridge
 	cmd := exec.CommandContext(s.ctx, s.selfPath, "bridge")
 	cmd.Env = env

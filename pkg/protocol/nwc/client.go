@@ -45,7 +45,7 @@ func NewClient(connectionURI string) (cl *Client, err error) {
 func (cl *Client) Request(
 	c context.Context, method string, params, result any,
 ) (err error) {
-	ctx, cancel := context.WithTimeout(c, 10*time.Second)
+	ctx, cancel := context.WithTimeout(c, 30*time.Second)
 	defer cancel()
 
 	request := map[string]any{"method": method}

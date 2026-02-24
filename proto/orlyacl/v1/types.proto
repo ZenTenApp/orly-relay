@@ -290,3 +290,37 @@ message ScanResultResponse {
   int32 total_pubkeys = 1;
   int32 total_events = 2;
 }
+
+// Paid ACL Messages
+
+message SubscribeRequest {
+  string pubkey = 1;
+  int64 expires_at = 2;
+  string invoice_hash = 3;
+  string alias = 4;
+}
+
+message SubscriptionResponse {
+  string pubkey = 1;
+  string alias = 2;
+  int64 expires_at = 3;
+  int64 created_at = 4;
+  bool has_alias = 5;
+}
+
+message ClaimAliasRequest {
+  string alias = 1;
+  string pubkey = 2;
+}
+
+message AliasResponse {
+  string alias = 1;
+}
+
+message AliasRequest {
+  string alias = 1;
+}
+
+message PubkeyResponse {
+  string pubkey = 1;
+}

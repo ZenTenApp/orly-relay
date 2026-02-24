@@ -24,12 +24,44 @@ func TestClassifyDM_Subscribe(t *testing.T) {
 	}
 }
 
+func TestClassifyDMFull_SubscribeWithAlias(t *testing.T) {
+	tests := []struct {
+		input     string
+		wantAlias string
+	}{
+		{"subscribe alice", "alice"},
+		{"Subscribe MyAlias", "myalias"},
+		{"SUBSCRIBE bob", "bob"},
+		{"  subscribe  foo  ", "foo"},
+		{"subscribe please", "please"},
+	}
+
+	for _, tt := range tests {
+		got := ClassifyDMFull(tt.input)
+		if got.Command != DMCommandSubscribe {
+			t.Errorf("ClassifyDMFull(%q).Command = %d, want DMCommandSubscribe", tt.input, got.Command)
+		}
+		if got.Alias != tt.wantAlias {
+			t.Errorf("ClassifyDMFull(%q).Alias = %q, want %q", tt.input, got.Alias, tt.wantAlias)
+		}
+	}
+}
+
+func TestClassifyDMFull_Status(t *testing.T) {
+	tests := []string{"status", "Status", "STATUS", "  status  "}
+	for _, input := range tests {
+		got := ClassifyDMFull(input)
+		if got.Command != DMCommandStatus {
+			t.Errorf("ClassifyDMFull(%q).Command = %d, want DMCommandStatus", input, got.Command)
+		}
+	}
+}
+
 func TestClassifyDM_None(t *testing.T) {
 	tests := []string{
 		"To: alice@example.com\n\nHello",
 		"just a regular message",
 		"subscriber",
-		"subscribe please",
 		"unsubscribe",
 		"",
 	}

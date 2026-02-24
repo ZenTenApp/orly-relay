@@ -156,6 +156,32 @@ service DatabaseService {
   // IsFirstTimeUser checks if this is a first-time user
   rpc IsFirstTimeUser(IsFirstTimeUserRequest) returns (IsFirstTimeUserResponse);
 
+  // === Paid ACL (Lightning Payment-Gated Access) ===
+
+  // SavePaidSubscription saves or updates a paid subscription
+  rpc SavePaidSubscription(PaidSubscriptionMsg) returns (Empty);
+
+  // GetPaidSubscription gets a paid subscription by pubkey hex
+  rpc GetPaidSubscription(GetPaidSubscriptionRequest) returns (PaidSubscriptionMsg);
+
+  // DeletePaidSubscription deletes a paid subscription
+  rpc DeletePaidSubscription(DeletePaidSubscriptionRequest) returns (Empty);
+
+  // ListPaidSubscriptions lists all paid subscriptions
+  rpc ListPaidSubscriptions(Empty) returns (PaidSubscriptionList);
+
+  // ClaimAlias claims an email alias for a pubkey
+  rpc ClaimAlias(ClaimAliasRequest) returns (Empty);
+
+  // GetAliasByPubkey gets the alias for a pubkey
+  rpc GetAliasByPubkey(GetAliasByPubkeyRequest) returns (AliasResponse);
+
+  // GetPubkeyByAlias gets the pubkey for an alias
+  rpc GetPubkeyByAlias(GetPubkeyByAliasRequest) returns (PubkeyResponse);
+
+  // IsAliasTaken checks if an alias is taken
+  rpc IsAliasTaken(IsAliasTakenRequest) returns (IsAliasTakenResponse);
+
   // === NIP-43 Invite-Based ACL ===
 
   // AddNIP43Member adds a member via invite code
@@ -724,4 +750,54 @@ message CypherReadRequest {
 message CypherReadResponse {
   repeated bytes records = 1;  // each record is a JSON-encoded map
   string error = 2;
+}
+
+// Paid ACL messages
+message PaidSubscriptionMsg {
+  string pubkey_hex = 1;
+  string alias = 2;
+  int64 expires_at = 3;    // Unix timestamp
+  int64 created_at = 4;    // Unix timestamp
+  string invoice_hash = 5;
+}
+
+message GetPaidSubscriptionRequest {
+  string pubkey_hex = 1;
+}
+
+message DeletePaidSubscriptionRequest {
+  string pubkey_hex = 1;
+}
+
+message PaidSubscriptionList {
+  repeated PaidSubscriptionMsg subscriptions = 1;
+}
+
+message ClaimAliasRequest {
+  string alias = 1;
+  string pubkey_hex = 2;
+}
+
+message GetAliasByPubkeyRequest {
+  string pubkey_hex = 1;
+}
+
+message AliasResponse {
+  string alias = 1;
+}
+
+message GetPubkeyByAliasRequest {
+  string alias = 1;
+}
+
+message PubkeyResponse {
+  string pubkey_hex = 1;
+}
+
+message IsAliasTakenRequest {
+  string alias = 1;
+}
+
+message IsAliasTakenResponse {
+  bool taken = 1;
 }

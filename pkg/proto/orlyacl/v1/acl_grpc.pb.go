@@ -64,6 +64,14 @@ const (
 	ACLService_GetEventsForPubkey_FullMethodName     = "/orlyacl.v1.ACLService/GetEventsForPubkey"
 	ACLService_DeleteEventsForPubkey_FullMethodName  = "/orlyacl.v1.ACLService/DeleteEventsForPubkey"
 	ACLService_ScanAllPubkeys_FullMethodName         = "/orlyacl.v1.ACLService/ScanAllPubkeys"
+	ACLService_SubscribePubkey_FullMethodName        = "/orlyacl.v1.ACLService/SubscribePubkey"
+	ACLService_UnsubscribePubkey_FullMethodName      = "/orlyacl.v1.ACLService/UnsubscribePubkey"
+	ACLService_IsSubscribed_FullMethodName           = "/orlyacl.v1.ACLService/IsSubscribed"
+	ACLService_GetSubscription_FullMethodName        = "/orlyacl.v1.ACLService/GetSubscription"
+	ACLService_ClaimAlias_FullMethodName             = "/orlyacl.v1.ACLService/ClaimAlias"
+	ACLService_GetAliasByPubkey_FullMethodName       = "/orlyacl.v1.ACLService/GetAliasByPubkey"
+	ACLService_GetPubkeyByAlias_FullMethodName       = "/orlyacl.v1.ACLService/GetPubkeyByAlias"
+	ACLService_IsAliasTaken_FullMethodName           = "/orlyacl.v1.ACLService/IsAliasTaken"
 )
 
 // ACLServiceClient is the client API for ACLService service.
@@ -162,6 +170,22 @@ type ACLServiceClient interface {
 	DeleteEventsForPubkey(ctx context.Context, in *DeleteEventsForPubkeyRequest, opts ...grpc.CallOption) (*DeleteCountResponse, error)
 	// ScanAllPubkeys scans and indexes all pubkeys in the database
 	ScanAllPubkeys(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ScanResultResponse, error)
+	// SubscribePubkey activates a subscription for a pubkey
+	SubscribePubkey(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*Empty, error)
+	// UnsubscribePubkey removes a subscription
+	UnsubscribePubkey(ctx context.Context, in *PubkeyRequest, opts ...grpc.CallOption) (*Empty, error)
+	// IsSubscribed checks if a pubkey has an active subscription
+	IsSubscribed(ctx context.Context, in *PubkeyRequest, opts ...grpc.CallOption) (*BoolResponse, error)
+	// GetSubscription returns subscription details for a pubkey
+	GetSubscription(ctx context.Context, in *PubkeyRequest, opts ...grpc.CallOption) (*SubscriptionResponse, error)
+	// ClaimAlias claims an email alias for a pubkey
+	ClaimAlias(ctx context.Context, in *ClaimAliasRequest, opts ...grpc.CallOption) (*Empty, error)
+	// GetAliasByPubkey returns the alias for a pubkey
+	GetAliasByPubkey(ctx context.Context, in *PubkeyRequest, opts ...grpc.CallOption) (*AliasResponse, error)
+	// GetPubkeyByAlias returns the pubkey for an alias
+	GetPubkeyByAlias(ctx context.Context, in *AliasRequest, opts ...grpc.CallOption) (*PubkeyResponse, error)
+	// IsAliasTaken checks if an alias is already claimed
+	IsAliasTaken(ctx context.Context, in *AliasRequest, opts ...grpc.CallOption) (*BoolResponse, error)
 }
 
 type aCLServiceClient struct {
@@ -622,6 +646,86 @@ func (c *aCLServiceClient) ScanAllPubkeys(ctx context.Context, in *Empty, opts .
 	return out, nil
 }
 
+func (c *aCLServiceClient) SubscribePubkey(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, ACLService_SubscribePubkey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aCLServiceClient) UnsubscribePubkey(ctx context.Context, in *PubkeyRequest, opts ...grpc.CallOption) (*Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, ACLService_UnsubscribePubkey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aCLServiceClient) IsSubscribed(ctx context.Context, in *PubkeyRequest, opts ...grpc.CallOption) (*BoolResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BoolResponse)
+	err := c.cc.Invoke(ctx, ACLService_IsSubscribed_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aCLServiceClient) GetSubscription(ctx context.Context, in *PubkeyRequest, opts ...grpc.CallOption) (*SubscriptionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SubscriptionResponse)
+	err := c.cc.Invoke(ctx, ACLService_GetSubscription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aCLServiceClient) ClaimAlias(ctx context.Context, in *ClaimAliasRequest, opts ...grpc.CallOption) (*Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, ACLService_ClaimAlias_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aCLServiceClient) GetAliasByPubkey(ctx context.Context, in *PubkeyRequest, opts ...grpc.CallOption) (*AliasResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AliasResponse)
+	err := c.cc.Invoke(ctx, ACLService_GetAliasByPubkey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aCLServiceClient) GetPubkeyByAlias(ctx context.Context, in *AliasRequest, opts ...grpc.CallOption) (*PubkeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PubkeyResponse)
+	err := c.cc.Invoke(ctx, ACLService_GetPubkeyByAlias_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aCLServiceClient) IsAliasTaken(ctx context.Context, in *AliasRequest, opts ...grpc.CallOption) (*BoolResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BoolResponse)
+	err := c.cc.Invoke(ctx, ACLService_IsAliasTaken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ACLServiceServer is the server API for ACLService service.
 // All implementations must embed UnimplementedACLServiceServer
 // for forward compatibility.
@@ -718,6 +822,22 @@ type ACLServiceServer interface {
 	DeleteEventsForPubkey(context.Context, *DeleteEventsForPubkeyRequest) (*DeleteCountResponse, error)
 	// ScanAllPubkeys scans and indexes all pubkeys in the database
 	ScanAllPubkeys(context.Context, *Empty) (*ScanResultResponse, error)
+	// SubscribePubkey activates a subscription for a pubkey
+	SubscribePubkey(context.Context, *SubscribeRequest) (*Empty, error)
+	// UnsubscribePubkey removes a subscription
+	UnsubscribePubkey(context.Context, *PubkeyRequest) (*Empty, error)
+	// IsSubscribed checks if a pubkey has an active subscription
+	IsSubscribed(context.Context, *PubkeyRequest) (*BoolResponse, error)
+	// GetSubscription returns subscription details for a pubkey
+	GetSubscription(context.Context, *PubkeyRequest) (*SubscriptionResponse, error)
+	// ClaimAlias claims an email alias for a pubkey
+	ClaimAlias(context.Context, *ClaimAliasRequest) (*Empty, error)
+	// GetAliasByPubkey returns the alias for a pubkey
+	GetAliasByPubkey(context.Context, *PubkeyRequest) (*AliasResponse, error)
+	// GetPubkeyByAlias returns the pubkey for an alias
+	GetPubkeyByAlias(context.Context, *AliasRequest) (*PubkeyResponse, error)
+	// IsAliasTaken checks if an alias is already claimed
+	IsAliasTaken(context.Context, *AliasRequest) (*BoolResponse, error)
 	mustEmbedUnimplementedACLServiceServer()
 }
 
@@ -862,6 +982,30 @@ func (UnimplementedACLServiceServer) DeleteEventsForPubkey(context.Context, *Del
 }
 func (UnimplementedACLServiceServer) ScanAllPubkeys(context.Context, *Empty) (*ScanResultResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ScanAllPubkeys not implemented")
+}
+func (UnimplementedACLServiceServer) SubscribePubkey(context.Context, *SubscribeRequest) (*Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method SubscribePubkey not implemented")
+}
+func (UnimplementedACLServiceServer) UnsubscribePubkey(context.Context, *PubkeyRequest) (*Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method UnsubscribePubkey not implemented")
+}
+func (UnimplementedACLServiceServer) IsSubscribed(context.Context, *PubkeyRequest) (*BoolResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method IsSubscribed not implemented")
+}
+func (UnimplementedACLServiceServer) GetSubscription(context.Context, *PubkeyRequest) (*SubscriptionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSubscription not implemented")
+}
+func (UnimplementedACLServiceServer) ClaimAlias(context.Context, *ClaimAliasRequest) (*Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method ClaimAlias not implemented")
+}
+func (UnimplementedACLServiceServer) GetAliasByPubkey(context.Context, *PubkeyRequest) (*AliasResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAliasByPubkey not implemented")
+}
+func (UnimplementedACLServiceServer) GetPubkeyByAlias(context.Context, *AliasRequest) (*PubkeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPubkeyByAlias not implemented")
+}
+func (UnimplementedACLServiceServer) IsAliasTaken(context.Context, *AliasRequest) (*BoolResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method IsAliasTaken not implemented")
 }
 func (UnimplementedACLServiceServer) mustEmbedUnimplementedACLServiceServer() {}
 func (UnimplementedACLServiceServer) testEmbeddedByValue()                    {}
@@ -1694,6 +1838,150 @@ func _ACLService_ScanAllPubkeys_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ACLService_SubscribePubkey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubscribeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ACLServiceServer).SubscribePubkey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ACLService_SubscribePubkey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ACLServiceServer).SubscribePubkey(ctx, req.(*SubscribeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ACLService_UnsubscribePubkey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PubkeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ACLServiceServer).UnsubscribePubkey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ACLService_UnsubscribePubkey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ACLServiceServer).UnsubscribePubkey(ctx, req.(*PubkeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ACLService_IsSubscribed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PubkeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ACLServiceServer).IsSubscribed(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ACLService_IsSubscribed_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ACLServiceServer).IsSubscribed(ctx, req.(*PubkeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ACLService_GetSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PubkeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ACLServiceServer).GetSubscription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ACLService_GetSubscription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ACLServiceServer).GetSubscription(ctx, req.(*PubkeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ACLService_ClaimAlias_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClaimAliasRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ACLServiceServer).ClaimAlias(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ACLService_ClaimAlias_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ACLServiceServer).ClaimAlias(ctx, req.(*ClaimAliasRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ACLService_GetAliasByPubkey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PubkeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ACLServiceServer).GetAliasByPubkey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ACLService_GetAliasByPubkey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ACLServiceServer).GetAliasByPubkey(ctx, req.(*PubkeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ACLService_GetPubkeyByAlias_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AliasRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ACLServiceServer).GetPubkeyByAlias(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ACLService_GetPubkeyByAlias_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ACLServiceServer).GetPubkeyByAlias(ctx, req.(*AliasRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ACLService_IsAliasTaken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AliasRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ACLServiceServer).IsAliasTaken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ACLService_IsAliasTaken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ACLServiceServer).IsAliasTaken(ctx, req.(*AliasRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ACLService_ServiceDesc is the grpc.ServiceDesc for ACLService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1880,6 +2168,38 @@ var ACLService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ScanAllPubkeys",
 			Handler:    _ACLService_ScanAllPubkeys_Handler,
+		},
+		{
+			MethodName: "SubscribePubkey",
+			Handler:    _ACLService_SubscribePubkey_Handler,
+		},
+		{
+			MethodName: "UnsubscribePubkey",
+			Handler:    _ACLService_UnsubscribePubkey_Handler,
+		},
+		{
+			MethodName: "IsSubscribed",
+			Handler:    _ACLService_IsSubscribed_Handler,
+		},
+		{
+			MethodName: "GetSubscription",
+			Handler:    _ACLService_GetSubscription_Handler,
+		},
+		{
+			MethodName: "ClaimAlias",
+			Handler:    _ACLService_ClaimAlias_Handler,
+		},
+		{
+			MethodName: "GetAliasByPubkey",
+			Handler:    _ACLService_GetAliasByPubkey_Handler,
+		},
+		{
+			MethodName: "GetPubkeyByAlias",
+			Handler:    _ACLService_GetPubkeyByAlias_Handler,
+		},
+		{
+			MethodName: "IsAliasTaken",
+			Handler:    _ACLService_IsAliasTaken_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

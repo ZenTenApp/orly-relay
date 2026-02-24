@@ -25,7 +25,7 @@ var File_orlyacl_v1_acl_proto protoreflect.FileDescriptor
 const file_orlyacl_v1_acl_proto_rawDesc = "" +
 	"\n" +
 	"\x14orlyacl/v1/acl.proto\x12\n" +
-	"orlyacl.v1\x1a\x16orlyacl/v1/types.proto2\x91\x19\n" +
+	"orlyacl.v1\x1a\x16orlyacl/v1/types.proto2\xc5\x1d\n" +
 	"\n" +
 	"ACLService\x12Q\n" +
 	"\x0eGetAccessLevel\x12\x1e.orlyacl.v1.AccessLevelRequest\x1a\x1f.orlyacl.v1.AccessLevelResponse\x12N\n" +
@@ -76,7 +76,16 @@ const file_orlyacl_v1_acl_proto_rawDesc = "" +
 	"\x15ListUnclassifiedUsers\x12\x1d.orlyacl.v1.PaginationRequest\x1a).orlyacl.v1.ListUnclassifiedUsersResponse\x12`\n" +
 	"\x12GetEventsForPubkey\x12%.orlyacl.v1.GetEventsForPubkeyRequest\x1a#.orlyacl.v1.EventsForPubkeyResponse\x12b\n" +
 	"\x15DeleteEventsForPubkey\x12(.orlyacl.v1.DeleteEventsForPubkeyRequest\x1a\x1f.orlyacl.v1.DeleteCountResponse\x12C\n" +
-	"\x0eScanAllPubkeys\x12\x11.orlyacl.v1.Empty\x1a\x1e.orlyacl.v1.ScanResultResponseB.Z,next.orly.dev/pkg/proto/orlyacl/v1;orlyaclv1b\x06proto3"
+	"\x0eScanAllPubkeys\x12\x11.orlyacl.v1.Empty\x1a\x1e.orlyacl.v1.ScanResultResponse\x12B\n" +
+	"\x0fSubscribePubkey\x12\x1c.orlyacl.v1.SubscribeRequest\x1a\x11.orlyacl.v1.Empty\x12A\n" +
+	"\x11UnsubscribePubkey\x12\x19.orlyacl.v1.PubkeyRequest\x1a\x11.orlyacl.v1.Empty\x12C\n" +
+	"\fIsSubscribed\x12\x19.orlyacl.v1.PubkeyRequest\x1a\x18.orlyacl.v1.BoolResponse\x12N\n" +
+	"\x0fGetSubscription\x12\x19.orlyacl.v1.PubkeyRequest\x1a .orlyacl.v1.SubscriptionResponse\x12>\n" +
+	"\n" +
+	"ClaimAlias\x12\x1d.orlyacl.v1.ClaimAliasRequest\x1a\x11.orlyacl.v1.Empty\x12H\n" +
+	"\x10GetAliasByPubkey\x12\x19.orlyacl.v1.PubkeyRequest\x1a\x19.orlyacl.v1.AliasResponse\x12H\n" +
+	"\x10GetPubkeyByAlias\x12\x18.orlyacl.v1.AliasRequest\x1a\x1a.orlyacl.v1.PubkeyResponse\x12B\n" +
+	"\fIsAliasTaken\x12\x18.orlyacl.v1.AliasRequest\x1a\x18.orlyacl.v1.BoolResponseB.Z,next.orly.dev/pkg/proto/orlyacl/v1;orlyaclv1b\x06proto3"
 
 var file_orlyacl_v1_acl_proto_goTypes = []any{
 	(*AccessLevelRequest)(nil),             // 0: orlyacl.v1.AccessLevelRequest
@@ -102,30 +111,36 @@ var file_orlyacl_v1_acl_proto_goTypes = []any{
 	(*PaginationRequest)(nil),              // 20: orlyacl.v1.PaginationRequest
 	(*GetEventsForPubkeyRequest)(nil),      // 21: orlyacl.v1.GetEventsForPubkeyRequest
 	(*DeleteEventsForPubkeyRequest)(nil),   // 22: orlyacl.v1.DeleteEventsForPubkeyRequest
-	(*AccessLevelResponse)(nil),            // 23: orlyacl.v1.AccessLevelResponse
-	(*PolicyCheckResponse)(nil),            // 24: orlyacl.v1.PolicyCheckResponse
-	(*ACLInfoResponse)(nil),                // 25: orlyacl.v1.ACLInfoResponse
-	(*ModeResponse)(nil),                   // 26: orlyacl.v1.ModeResponse
-	(*ReadyResponse)(nil),                  // 27: orlyacl.v1.ReadyResponse
-	(*ThrottleDelayResponse)(nil),          // 28: orlyacl.v1.ThrottleDelayResponse
-	(*FollowedPubkeysResponse)(nil),        // 29: orlyacl.v1.FollowedPubkeysResponse
-	(*AdminRelaysResponse)(nil),            // 30: orlyacl.v1.AdminRelaysResponse
-	(*ListBannedPubkeysResponse)(nil),      // 31: orlyacl.v1.ListBannedPubkeysResponse
-	(*ListAllowedPubkeysResponse)(nil),     // 32: orlyacl.v1.ListAllowedPubkeysResponse
-	(*ListBannedEventsResponse)(nil),       // 33: orlyacl.v1.ListBannedEventsResponse
-	(*ListAllowedEventsResponse)(nil),      // 34: orlyacl.v1.ListAllowedEventsResponse
-	(*ListBlockedIPsResponse)(nil),         // 35: orlyacl.v1.ListBlockedIPsResponse
-	(*ListAllowedKindsResponse)(nil),       // 36: orlyacl.v1.ListAllowedKindsResponse
-	(*ListTrustedPubkeysResponse)(nil),     // 37: orlyacl.v1.ListTrustedPubkeysResponse
-	(*ListBlacklistedPubkeysResponse)(nil), // 38: orlyacl.v1.ListBlacklistedPubkeysResponse
-	(*ListSpamEventsResponse)(nil),         // 39: orlyacl.v1.ListSpamEventsResponse
-	(*RateLimitCheckResponse)(nil),         // 40: orlyacl.v1.RateLimitCheckResponse
-	(*CuratingConfig)(nil),                 // 41: orlyacl.v1.CuratingConfig
-	(*BoolResponse)(nil),                   // 42: orlyacl.v1.BoolResponse
-	(*ListUnclassifiedUsersResponse)(nil),  // 43: orlyacl.v1.ListUnclassifiedUsersResponse
-	(*EventsForPubkeyResponse)(nil),        // 44: orlyacl.v1.EventsForPubkeyResponse
-	(*DeleteCountResponse)(nil),            // 45: orlyacl.v1.DeleteCountResponse
-	(*ScanResultResponse)(nil),             // 46: orlyacl.v1.ScanResultResponse
+	(*SubscribeRequest)(nil),               // 23: orlyacl.v1.SubscribeRequest
+	(*ClaimAliasRequest)(nil),              // 24: orlyacl.v1.ClaimAliasRequest
+	(*AliasRequest)(nil),                   // 25: orlyacl.v1.AliasRequest
+	(*AccessLevelResponse)(nil),            // 26: orlyacl.v1.AccessLevelResponse
+	(*PolicyCheckResponse)(nil),            // 27: orlyacl.v1.PolicyCheckResponse
+	(*ACLInfoResponse)(nil),                // 28: orlyacl.v1.ACLInfoResponse
+	(*ModeResponse)(nil),                   // 29: orlyacl.v1.ModeResponse
+	(*ReadyResponse)(nil),                  // 30: orlyacl.v1.ReadyResponse
+	(*ThrottleDelayResponse)(nil),          // 31: orlyacl.v1.ThrottleDelayResponse
+	(*FollowedPubkeysResponse)(nil),        // 32: orlyacl.v1.FollowedPubkeysResponse
+	(*AdminRelaysResponse)(nil),            // 33: orlyacl.v1.AdminRelaysResponse
+	(*ListBannedPubkeysResponse)(nil),      // 34: orlyacl.v1.ListBannedPubkeysResponse
+	(*ListAllowedPubkeysResponse)(nil),     // 35: orlyacl.v1.ListAllowedPubkeysResponse
+	(*ListBannedEventsResponse)(nil),       // 36: orlyacl.v1.ListBannedEventsResponse
+	(*ListAllowedEventsResponse)(nil),      // 37: orlyacl.v1.ListAllowedEventsResponse
+	(*ListBlockedIPsResponse)(nil),         // 38: orlyacl.v1.ListBlockedIPsResponse
+	(*ListAllowedKindsResponse)(nil),       // 39: orlyacl.v1.ListAllowedKindsResponse
+	(*ListTrustedPubkeysResponse)(nil),     // 40: orlyacl.v1.ListTrustedPubkeysResponse
+	(*ListBlacklistedPubkeysResponse)(nil), // 41: orlyacl.v1.ListBlacklistedPubkeysResponse
+	(*ListSpamEventsResponse)(nil),         // 42: orlyacl.v1.ListSpamEventsResponse
+	(*RateLimitCheckResponse)(nil),         // 43: orlyacl.v1.RateLimitCheckResponse
+	(*CuratingConfig)(nil),                 // 44: orlyacl.v1.CuratingConfig
+	(*BoolResponse)(nil),                   // 45: orlyacl.v1.BoolResponse
+	(*ListUnclassifiedUsersResponse)(nil),  // 46: orlyacl.v1.ListUnclassifiedUsersResponse
+	(*EventsForPubkeyResponse)(nil),        // 47: orlyacl.v1.EventsForPubkeyResponse
+	(*DeleteCountResponse)(nil),            // 48: orlyacl.v1.DeleteCountResponse
+	(*ScanResultResponse)(nil),             // 49: orlyacl.v1.ScanResultResponse
+	(*SubscriptionResponse)(nil),           // 50: orlyacl.v1.SubscriptionResponse
+	(*AliasResponse)(nil),                  // 51: orlyacl.v1.AliasResponse
+	(*PubkeyResponse)(nil),                 // 52: orlyacl.v1.PubkeyResponse
 }
 var file_orlyacl_v1_acl_proto_depIdxs = []int32{
 	0,  // 0: orlyacl.v1.ACLService.GetAccessLevel:input_type -> orlyacl.v1.AccessLevelRequest
@@ -173,53 +188,69 @@ var file_orlyacl_v1_acl_proto_depIdxs = []int32{
 	21, // 42: orlyacl.v1.ACLService.GetEventsForPubkey:input_type -> orlyacl.v1.GetEventsForPubkeyRequest
 	22, // 43: orlyacl.v1.ACLService.DeleteEventsForPubkey:input_type -> orlyacl.v1.DeleteEventsForPubkeyRequest
 	2,  // 44: orlyacl.v1.ACLService.ScanAllPubkeys:input_type -> orlyacl.v1.Empty
-	23, // 45: orlyacl.v1.ACLService.GetAccessLevel:output_type -> orlyacl.v1.AccessLevelResponse
-	24, // 46: orlyacl.v1.ACLService.CheckPolicy:output_type -> orlyacl.v1.PolicyCheckResponse
-	25, // 47: orlyacl.v1.ACLService.GetACLInfo:output_type -> orlyacl.v1.ACLInfoResponse
-	26, // 48: orlyacl.v1.ACLService.GetMode:output_type -> orlyacl.v1.ModeResponse
-	27, // 49: orlyacl.v1.ACLService.Ready:output_type -> orlyacl.v1.ReadyResponse
-	28, // 50: orlyacl.v1.ACLService.GetThrottleDelay:output_type -> orlyacl.v1.ThrottleDelayResponse
-	2,  // 51: orlyacl.v1.ACLService.AddFollow:output_type -> orlyacl.v1.Empty
-	29, // 52: orlyacl.v1.ACLService.GetFollowedPubkeys:output_type -> orlyacl.v1.FollowedPubkeysResponse
-	30, // 53: orlyacl.v1.ACLService.GetAdminRelays:output_type -> orlyacl.v1.AdminRelaysResponse
-	2,  // 54: orlyacl.v1.ACLService.BanPubkey:output_type -> orlyacl.v1.Empty
-	2,  // 55: orlyacl.v1.ACLService.UnbanPubkey:output_type -> orlyacl.v1.Empty
-	31, // 56: orlyacl.v1.ACLService.ListBannedPubkeys:output_type -> orlyacl.v1.ListBannedPubkeysResponse
-	2,  // 57: orlyacl.v1.ACLService.AllowPubkey:output_type -> orlyacl.v1.Empty
-	2,  // 58: orlyacl.v1.ACLService.DisallowPubkey:output_type -> orlyacl.v1.Empty
-	32, // 59: orlyacl.v1.ACLService.ListAllowedPubkeys:output_type -> orlyacl.v1.ListAllowedPubkeysResponse
-	2,  // 60: orlyacl.v1.ACLService.BanEvent:output_type -> orlyacl.v1.Empty
-	2,  // 61: orlyacl.v1.ACLService.UnbanEvent:output_type -> orlyacl.v1.Empty
-	33, // 62: orlyacl.v1.ACLService.ListBannedEvents:output_type -> orlyacl.v1.ListBannedEventsResponse
-	2,  // 63: orlyacl.v1.ACLService.AllowEvent:output_type -> orlyacl.v1.Empty
-	2,  // 64: orlyacl.v1.ACLService.DisallowEvent:output_type -> orlyacl.v1.Empty
-	34, // 65: orlyacl.v1.ACLService.ListAllowedEvents:output_type -> orlyacl.v1.ListAllowedEventsResponse
-	2,  // 66: orlyacl.v1.ACLService.BlockIP:output_type -> orlyacl.v1.Empty
-	2,  // 67: orlyacl.v1.ACLService.UnblockIP:output_type -> orlyacl.v1.Empty
-	35, // 68: orlyacl.v1.ACLService.ListBlockedIPs:output_type -> orlyacl.v1.ListBlockedIPsResponse
-	2,  // 69: orlyacl.v1.ACLService.AllowKind:output_type -> orlyacl.v1.Empty
-	2,  // 70: orlyacl.v1.ACLService.DisallowKind:output_type -> orlyacl.v1.Empty
-	36, // 71: orlyacl.v1.ACLService.ListAllowedKinds:output_type -> orlyacl.v1.ListAllowedKindsResponse
-	2,  // 72: orlyacl.v1.ACLService.UpdatePeerAdmins:output_type -> orlyacl.v1.Empty
-	2,  // 73: orlyacl.v1.ACLService.TrustPubkey:output_type -> orlyacl.v1.Empty
-	2,  // 74: orlyacl.v1.ACLService.UntrustPubkey:output_type -> orlyacl.v1.Empty
-	37, // 75: orlyacl.v1.ACLService.ListTrustedPubkeys:output_type -> orlyacl.v1.ListTrustedPubkeysResponse
-	2,  // 76: orlyacl.v1.ACLService.BlacklistPubkey:output_type -> orlyacl.v1.Empty
-	2,  // 77: orlyacl.v1.ACLService.UnblacklistPubkey:output_type -> orlyacl.v1.Empty
-	38, // 78: orlyacl.v1.ACLService.ListBlacklistedPubkeys:output_type -> orlyacl.v1.ListBlacklistedPubkeysResponse
-	2,  // 79: orlyacl.v1.ACLService.MarkSpam:output_type -> orlyacl.v1.Empty
-	2,  // 80: orlyacl.v1.ACLService.UnmarkSpam:output_type -> orlyacl.v1.Empty
-	39, // 81: orlyacl.v1.ACLService.ListSpamEvents:output_type -> orlyacl.v1.ListSpamEventsResponse
-	40, // 82: orlyacl.v1.ACLService.RateLimitCheck:output_type -> orlyacl.v1.RateLimitCheckResponse
-	2,  // 83: orlyacl.v1.ACLService.ProcessConfigEvent:output_type -> orlyacl.v1.Empty
-	41, // 84: orlyacl.v1.ACLService.GetCuratingConfig:output_type -> orlyacl.v1.CuratingConfig
-	42, // 85: orlyacl.v1.ACLService.IsCuratingConfigured:output_type -> orlyacl.v1.BoolResponse
-	43, // 86: orlyacl.v1.ACLService.ListUnclassifiedUsers:output_type -> orlyacl.v1.ListUnclassifiedUsersResponse
-	44, // 87: orlyacl.v1.ACLService.GetEventsForPubkey:output_type -> orlyacl.v1.EventsForPubkeyResponse
-	45, // 88: orlyacl.v1.ACLService.DeleteEventsForPubkey:output_type -> orlyacl.v1.DeleteCountResponse
-	46, // 89: orlyacl.v1.ACLService.ScanAllPubkeys:output_type -> orlyacl.v1.ScanResultResponse
-	45, // [45:90] is the sub-list for method output_type
-	0,  // [0:45] is the sub-list for method input_type
+	23, // 45: orlyacl.v1.ACLService.SubscribePubkey:input_type -> orlyacl.v1.SubscribeRequest
+	6,  // 46: orlyacl.v1.ACLService.UnsubscribePubkey:input_type -> orlyacl.v1.PubkeyRequest
+	6,  // 47: orlyacl.v1.ACLService.IsSubscribed:input_type -> orlyacl.v1.PubkeyRequest
+	6,  // 48: orlyacl.v1.ACLService.GetSubscription:input_type -> orlyacl.v1.PubkeyRequest
+	24, // 49: orlyacl.v1.ACLService.ClaimAlias:input_type -> orlyacl.v1.ClaimAliasRequest
+	6,  // 50: orlyacl.v1.ACLService.GetAliasByPubkey:input_type -> orlyacl.v1.PubkeyRequest
+	25, // 51: orlyacl.v1.ACLService.GetPubkeyByAlias:input_type -> orlyacl.v1.AliasRequest
+	25, // 52: orlyacl.v1.ACLService.IsAliasTaken:input_type -> orlyacl.v1.AliasRequest
+	26, // 53: orlyacl.v1.ACLService.GetAccessLevel:output_type -> orlyacl.v1.AccessLevelResponse
+	27, // 54: orlyacl.v1.ACLService.CheckPolicy:output_type -> orlyacl.v1.PolicyCheckResponse
+	28, // 55: orlyacl.v1.ACLService.GetACLInfo:output_type -> orlyacl.v1.ACLInfoResponse
+	29, // 56: orlyacl.v1.ACLService.GetMode:output_type -> orlyacl.v1.ModeResponse
+	30, // 57: orlyacl.v1.ACLService.Ready:output_type -> orlyacl.v1.ReadyResponse
+	31, // 58: orlyacl.v1.ACLService.GetThrottleDelay:output_type -> orlyacl.v1.ThrottleDelayResponse
+	2,  // 59: orlyacl.v1.ACLService.AddFollow:output_type -> orlyacl.v1.Empty
+	32, // 60: orlyacl.v1.ACLService.GetFollowedPubkeys:output_type -> orlyacl.v1.FollowedPubkeysResponse
+	33, // 61: orlyacl.v1.ACLService.GetAdminRelays:output_type -> orlyacl.v1.AdminRelaysResponse
+	2,  // 62: orlyacl.v1.ACLService.BanPubkey:output_type -> orlyacl.v1.Empty
+	2,  // 63: orlyacl.v1.ACLService.UnbanPubkey:output_type -> orlyacl.v1.Empty
+	34, // 64: orlyacl.v1.ACLService.ListBannedPubkeys:output_type -> orlyacl.v1.ListBannedPubkeysResponse
+	2,  // 65: orlyacl.v1.ACLService.AllowPubkey:output_type -> orlyacl.v1.Empty
+	2,  // 66: orlyacl.v1.ACLService.DisallowPubkey:output_type -> orlyacl.v1.Empty
+	35, // 67: orlyacl.v1.ACLService.ListAllowedPubkeys:output_type -> orlyacl.v1.ListAllowedPubkeysResponse
+	2,  // 68: orlyacl.v1.ACLService.BanEvent:output_type -> orlyacl.v1.Empty
+	2,  // 69: orlyacl.v1.ACLService.UnbanEvent:output_type -> orlyacl.v1.Empty
+	36, // 70: orlyacl.v1.ACLService.ListBannedEvents:output_type -> orlyacl.v1.ListBannedEventsResponse
+	2,  // 71: orlyacl.v1.ACLService.AllowEvent:output_type -> orlyacl.v1.Empty
+	2,  // 72: orlyacl.v1.ACLService.DisallowEvent:output_type -> orlyacl.v1.Empty
+	37, // 73: orlyacl.v1.ACLService.ListAllowedEvents:output_type -> orlyacl.v1.ListAllowedEventsResponse
+	2,  // 74: orlyacl.v1.ACLService.BlockIP:output_type -> orlyacl.v1.Empty
+	2,  // 75: orlyacl.v1.ACLService.UnblockIP:output_type -> orlyacl.v1.Empty
+	38, // 76: orlyacl.v1.ACLService.ListBlockedIPs:output_type -> orlyacl.v1.ListBlockedIPsResponse
+	2,  // 77: orlyacl.v1.ACLService.AllowKind:output_type -> orlyacl.v1.Empty
+	2,  // 78: orlyacl.v1.ACLService.DisallowKind:output_type -> orlyacl.v1.Empty
+	39, // 79: orlyacl.v1.ACLService.ListAllowedKinds:output_type -> orlyacl.v1.ListAllowedKindsResponse
+	2,  // 80: orlyacl.v1.ACLService.UpdatePeerAdmins:output_type -> orlyacl.v1.Empty
+	2,  // 81: orlyacl.v1.ACLService.TrustPubkey:output_type -> orlyacl.v1.Empty
+	2,  // 82: orlyacl.v1.ACLService.UntrustPubkey:output_type -> orlyacl.v1.Empty
+	40, // 83: orlyacl.v1.ACLService.ListTrustedPubkeys:output_type -> orlyacl.v1.ListTrustedPubkeysResponse
+	2,  // 84: orlyacl.v1.ACLService.BlacklistPubkey:output_type -> orlyacl.v1.Empty
+	2,  // 85: orlyacl.v1.ACLService.UnblacklistPubkey:output_type -> orlyacl.v1.Empty
+	41, // 86: orlyacl.v1.ACLService.ListBlacklistedPubkeys:output_type -> orlyacl.v1.ListBlacklistedPubkeysResponse
+	2,  // 87: orlyacl.v1.ACLService.MarkSpam:output_type -> orlyacl.v1.Empty
+	2,  // 88: orlyacl.v1.ACLService.UnmarkSpam:output_type -> orlyacl.v1.Empty
+	42, // 89: orlyacl.v1.ACLService.ListSpamEvents:output_type -> orlyacl.v1.ListSpamEventsResponse
+	43, // 90: orlyacl.v1.ACLService.RateLimitCheck:output_type -> orlyacl.v1.RateLimitCheckResponse
+	2,  // 91: orlyacl.v1.ACLService.ProcessConfigEvent:output_type -> orlyacl.v1.Empty
+	44, // 92: orlyacl.v1.ACLService.GetCuratingConfig:output_type -> orlyacl.v1.CuratingConfig
+	45, // 93: orlyacl.v1.ACLService.IsCuratingConfigured:output_type -> orlyacl.v1.BoolResponse
+	46, // 94: orlyacl.v1.ACLService.ListUnclassifiedUsers:output_type -> orlyacl.v1.ListUnclassifiedUsersResponse
+	47, // 95: orlyacl.v1.ACLService.GetEventsForPubkey:output_type -> orlyacl.v1.EventsForPubkeyResponse
+	48, // 96: orlyacl.v1.ACLService.DeleteEventsForPubkey:output_type -> orlyacl.v1.DeleteCountResponse
+	49, // 97: orlyacl.v1.ACLService.ScanAllPubkeys:output_type -> orlyacl.v1.ScanResultResponse
+	2,  // 98: orlyacl.v1.ACLService.SubscribePubkey:output_type -> orlyacl.v1.Empty
+	2,  // 99: orlyacl.v1.ACLService.UnsubscribePubkey:output_type -> orlyacl.v1.Empty
+	45, // 100: orlyacl.v1.ACLService.IsSubscribed:output_type -> orlyacl.v1.BoolResponse
+	50, // 101: orlyacl.v1.ACLService.GetSubscription:output_type -> orlyacl.v1.SubscriptionResponse
+	2,  // 102: orlyacl.v1.ACLService.ClaimAlias:output_type -> orlyacl.v1.Empty
+	51, // 103: orlyacl.v1.ACLService.GetAliasByPubkey:output_type -> orlyacl.v1.AliasResponse
+	52, // 104: orlyacl.v1.ACLService.GetPubkeyByAlias:output_type -> orlyacl.v1.PubkeyResponse
+	45, // 105: orlyacl.v1.ACLService.IsAliasTaken:output_type -> orlyacl.v1.BoolResponse
+	53, // [53:106] is the sub-list for method output_type
+	0,  // [0:53] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name

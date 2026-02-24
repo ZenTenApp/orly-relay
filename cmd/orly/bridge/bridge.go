@@ -43,7 +43,8 @@ func Run(args []string) {
 	enabled, domain, nsec, relayURL, smtpPort, smtpHost,
 		dataDir, dkimKeyPath, dkimSelector, nwcURI,
 		monthlyPriceSats, composeURL,
-		smtpRelayHost, smtpRelayPort, smtpRelayUsername, smtpRelayPassword := cfg.GetBridgeConfigValues()
+		smtpRelayHost, smtpRelayPort, smtpRelayUsername, smtpRelayPassword,
+		aclGRPCServer, aliasPriceSats := cfg.GetBridgeConfigValues()
 
 	if !enabled && relayURL == "" {
 		// When run as a subcommand, enable by default even if ORLY_BRIDGE_ENABLED is false
@@ -52,21 +53,23 @@ func Run(args []string) {
 	}
 
 	bridgeCfg := &bridgepkg.Config{
-		Domain:           domain,
-		NSEC:             nsec,
-		RelayURL:         relayURL,
-		SMTPPort:         smtpPort,
-		SMTPHost:         smtpHost,
-		DataDir:          dataDir,
-		DKIMKeyPath:      dkimKeyPath,
-		DKIMSelector:     dkimSelector,
-		NWCURI:           nwcURI,
-		MonthlyPriceSats: monthlyPriceSats,
-		ComposeURL:       composeURL,
+		Domain:            domain,
+		NSEC:              nsec,
+		RelayURL:          relayURL,
+		SMTPPort:          smtpPort,
+		SMTPHost:          smtpHost,
+		DataDir:           dataDir,
+		DKIMKeyPath:       dkimKeyPath,
+		DKIMSelector:      dkimSelector,
+		NWCURI:            nwcURI,
+		MonthlyPriceSats:  monthlyPriceSats,
+		ComposeURL:        composeURL,
 		SMTPRelayHost:     smtpRelayHost,
 		SMTPRelayPort:     smtpRelayPort,
 		SMTPRelayUsername: smtpRelayUsername,
 		SMTPRelayPassword: smtpRelayPassword,
+		ACLGRPCServer:     aclGRPCServer,
+		AliasPriceSats:    aliasPriceSats,
 	}
 
 	// In standalone subcommand mode, no database getter is available.
@@ -126,6 +129,8 @@ Environment Variables:
   ORLY_BRIDGE_SMTP_RELAY_PORT    SMTP smarthost port (default: 587)
   ORLY_BRIDGE_SMTP_RELAY_USERNAME SMTP smarthost AUTH username
   ORLY_BRIDGE_SMTP_RELAY_PASSWORD SMTP smarthost AUTH password
+  ORLY_BRIDGE_ACL_GRPC_SERVER    ACL gRPC server address for paid subscriptions
+  ORLY_BRIDGE_ALIAS_PRICE_SATS   Monthly alias email price in sats (default: 4200)
 
 Examples:
   # Standalone: connect to an external relay

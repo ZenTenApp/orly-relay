@@ -4,18 +4,20 @@ import (
 	"fmt"
 	"strings"
 
-	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
-
 	"lol.mleku.dev/log"
+
+	aclgrpc "next.orly.dev/pkg/acl/grpc"
+	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
 )
 
 // OutboundProcessor handles converting DMs to outbound emails.
 type OutboundProcessor struct {
-	smtpClient *bridgesmtp.Client
+	smtpClient  *bridgesmtp.Client
 	rateLimiter *RateLimiter
-	subHandler *SubscriptionHandler
-	domain     string
-	sendDM     func(pubkeyHex string, content string) error
+	subHandler  *SubscriptionHandler
+	domain      string
+	sendDM      func(pubkeyHex string, content string) error
+	aclClient   *aclgrpc.Client
 }
 
 // NewOutboundProcessor creates an outbound DM-to-email processor.
@@ -25,6 +27,7 @@ func NewOutboundProcessor(
 	subHandler *SubscriptionHandler,
 	domain string,
 	sendDM func(pubkeyHex string, content string) error,
+	aclClient *aclgrpc.Client,
 ) *OutboundProcessor {
 	return &OutboundProcessor{
 		smtpClient:  smtpClient,
@@ -32,6 +35,7 @@ func NewOutboundProcessor(
 		subHandler:  subHandler,
 		domain:      domain,
 		sendDM:      sendDM,
+		aclClient:   aclClient,
 	}
 }
 
@@ -64,9 +68,14 @@ func (op *OutboundProcessor) ProcessOutbound(senderPubkeyHex, content string) er
 		return nil
 	}
 
-	// Build the from address: truncated-pubkey@domain
+	// Build the from address: alias@domain or truncated-pubkey@domain
 	fromLocal := senderPubkeyHex
-	if len(fromLocal) > 16 {
+	if op.aclClient != nil {
+		if alias, err := op.aclClient.GetAliasByPubkey(senderPubkeyHex); err == nil && alias != "" {
+			fromLocal = alias
+		}
+	}
+	if fromLocal == senderPubkeyHex && len(fromLocal) > 16 {
 		fromLocal = fromLocal[:16]
 	}
 	fromAddr := fromLocal + "@" + op.domain

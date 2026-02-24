@@ -40,6 +40,7 @@ import (
 	"next.orly.dev/cmd/orly/launcher"
 	"next.orly.dev/cmd/orly/relay"
 	"next.orly.dev/cmd/orly/sync"
+	"next.orly.dev/cmd/orly/testsubscribe"
 )
 
 // Version information (set by build flags)
@@ -67,6 +68,8 @@ func main() {
 		sync.Run(os.Args[2:])
 	case "launcher":
 		launcher.Run(os.Args[2:])
+	case "test-subscribe":
+		testsubscribe.Run(os.Args[2:])
 	case "relay":
 		relay.Run(os.Args[2:])
 	case "version", "-v", "--version":
@@ -118,6 +121,8 @@ Commands:
   launcher  Process supervisor for split-mode deployment
 
   relay     Main relay server (default if no command given)
+
+  test-subscribe  End-to-end test of paid subscription flow (NWC loopback)
 
   version   Show version information
   help      Show this help message
