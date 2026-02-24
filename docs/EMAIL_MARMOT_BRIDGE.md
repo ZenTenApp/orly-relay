@@ -609,7 +609,6 @@ Must include:
 ## 10. Out of Scope
 
 - PGP encryption
-- NIP-17 DM support
 - Gmail/Google deliverability optimization
 - Zap-based payment (NWC invoices only)
 - Multiple email addresses per npub (one npub = one address per domain)

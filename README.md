@@ -4,7 +4,7 @@
 
 ![orly.dev](./docs/orly.png)
 
-![Version v0.55.10](https://img.shields.io/badge/version-v0.55.10-blue.svg)
+![Version v0.62.0](https://img.shields.io/badge/version-v0.62.0-blue.svg)
 [![Documentation](https://img.shields.io/badge/godoc-documentation-blue.svg)](https://pkg.go.dev/next.orly.dev)
 [![Support this project](https://img.shields.io/badge/donate-geyser_crowdfunding_project_page-orange.svg)](https://geyser.fund/project/orly)
 
@@ -17,13 +17,14 @@ follow me on [nostr](https://jumble.social/users/npub1fjqqy4a93z5zsjwsfxqhc2764k
 ORLY supports a modular IPC architecture where core functionality runs as independent gRPC services:
 
 ```
-orly-launcher (process supervisor)
-├── orly-db              (gRPC :50051) - Event storage & queries
-├── orly-acl             (gRPC :50052) - Access control
-├── orly-sync-distributed (gRPC :50061) - Peer-to-peer sync
-├── orly-sync-cluster    (gRPC :50062) - Cluster replication
-├── orly-sync-relaygroup (gRPC :50063) - Relay group config (Kind 39105)
-├── orly-sync-negentropy (gRPC :50064) - NIP-77 set reconciliation
+orly launcher (process supervisor)
+├── orly db              (gRPC :50051) - Event storage & queries
+├── orly acl             (gRPC :50052) - Access control
+├── orly bridge          (SMTP :2525)  - Marmot email bridge (DM ↔ SMTP)
+├── orly sync distributed (gRPC :50061) - Peer-to-peer sync
+├── orly sync cluster    (gRPC :50062) - Cluster replication
+├── orly sync relaygroup (gRPC :50063) - Relay group config (Kind 39105)
+├── orly sync negentropy (gRPC :50064) - NIP-77 set reconciliation
 └── orly                 (WebSocket/HTTP) - Main relay
 ```
 
@@ -64,6 +65,8 @@ See [docs/IPC_SYNC_SERVICES.md](./docs/IPC_SYNC_SERVICES.md) for detailed API do
   - [Follows ACL](#follows-acl)
   - [Curation ACL](#curation-acl)
   - [Cluster Replication](#cluster-replication)
+- [Marmot Email Bridge](#marmot-email-bridge)
+- [Docker Deployment](#docker-deployment)
 - [Negentropy Sync (NIP-77)](#negentropy-sync-nip-77)
 - [Developer Notes](#developer-notes)
 
@@ -126,12 +129,18 @@ ORLY is a standard Go application that can be built using the Go toolchain.
 
 ### Basic Build
 
-To build the relay binary only:
+To build the unified binary (relay + all subcommands):
 
 ```bash
 git clone <repository-url>
 cd next.orly.dev
-go build -o orly
+go build -o orly ./cmd/orly
+```
+
+To build the relay-only binary (no subcommands):
+
+```bash
+go build -o orly .
 ```
 
 ### Building with Web UI
@@ -146,7 +155,7 @@ bun run build
 
 # Build the Go binary from project root
 cd ../../
-go build -o orly
+go build -o orly ./cmd/orly
 ```
 
 The recommended way to build and embed the web UI is using the provided script:
@@ -172,7 +181,7 @@ bun run build
 
 echo "Building Go binary..."
 cd ../../
-go build -o orly
+go build -o orly ./cmd/orly
 
 echo "Build complete!"
 ```
@@ -688,6 +697,81 @@ export ORLY_CLUSTER_PROPAGATE_PRIVILEGED_EVENTS=false
 ```
 
 **Important:** When disabled, privileged events will not be replicated to peer relays. This provides better privacy but means these events will only be available on the originating relay. Users should be aware that accessing their privileged events may require connecting directly to the relay where they were originally published.
+
+## Marmot Email Bridge
+
+ORLY includes a bidirectional Nostr DM to SMTP email bridge. Users DM the bridge's Nostr pubkey to subscribe (via Lightning payment), send outbound email, and receive inbound email as encrypted DMs.
+
+### Features
+
+- **Outbound email**: Send a DM with `To:` / `Subject:` headers to the bridge pubkey — it sends the email via SMTP
+- **Inbound email**: Email sent to `npub@yourdomain` is delivered as an encrypted DM with a reply link
+- **Lightning subscriptions**: Users pay via NWC (Nostr Wallet Connect) Lightning invoices for 30-day access
+- **Attachment encryption**: Non-plaintext email parts are zipped, encrypted with ChaCha20-Poly1305, and uploaded to Blossom with fragment-key URLs
+- **DKIM signing**: Outbound email is DKIM-signed for deliverability (or use an SMTP smarthost)
+- **Dual DM protocol**: Supports both NIP-04 (kind 4) and NIP-17 gift-wrapped (kind 1059) DMs
+- **Rate limiting**: Sliding-window rate limits per user and globally
+
+### Quick Start
+
+```bash
+# 1. Build the unified binary
+go build -o orly ./cmd/orly
+
+# 2. Set environment
+export ORLY_BRIDGE_ENABLED=true
+export ORLY_BRIDGE_DOMAIN=yourdomain.com
+export ORLY_BRIDGE_SMTP_PORT=2525
+export ORLY_BRIDGE_NWC_URI="nostr+walletconnect://..."
+
+# 3. Start (bridge runs alongside the relay)
+./orly
+```
+
+Or run standalone against any Nostr relay:
+
+```bash
+export ORLY_BRIDGE_RELAY_URL=wss://relay.example.com
+./orly bridge
+```
+
+### Documentation
+
+- [Bridge Deployment Guide](docs/BRIDGE_DEPLOYMENT.md) — DNS, DKIM, NWC, SMTP smarthost, port 25 workarounds, Migadu example
+- [Marmot Bridge Spec](docs/EMAIL_MARMOT_BRIDGE.md) — full protocol specification
+
+## Docker Deployment
+
+ORLY ships a single Docker image that serves both the relay and the email bridge. The default entrypoint runs the relay; pass `bridge` as the command to run the email bridge.
+
+### Build the Image
+
+```bash
+docker build -t orly .
+```
+
+### Run as Relay (default)
+
+```bash
+docker run --rm -p 3334:3334 -v orly-data:/data orly
+```
+
+### Run as Email Bridge
+
+```bash
+docker run --rm -p 2525:2525 --env-file .env.bridge orly bridge
+```
+
+### Docker Compose (Bridge)
+
+A ready-made compose file is provided for bridge deployment:
+
+```bash
+cp .env.bridge.example .env.bridge   # edit with your values
+docker compose -f docker-compose.bridge.yml up --build
+```
+
+See [`.env.bridge.example`](.env.bridge.example) for all available configuration variables.
 
 ## Negentropy Sync (NIP-77)
 

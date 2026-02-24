@@ -268,11 +268,13 @@ All bridge configuration is via environment variables with the `ORLY_BRIDGE_` pr
 | `ORLY_BRIDGE_DKIM_SELECTOR` | `marmot` | DKIM selector for DNS TXT record |
 | `ORLY_BRIDGE_NWC_URI` | | NWC connection string for subscription payments (falls back to `ORLY_NWC_URI`) |
 | `ORLY_BRIDGE_MONTHLY_PRICE_SATS` | `2100` | Monthly subscription price in sats |
+| `ORLY_BRIDGE_ALIAS_PRICE_SATS` | `4200` | Monthly alias email price in sats |
 | `ORLY_BRIDGE_COMPOSE_URL` | | Public URL of the compose form |
 | `ORLY_BRIDGE_SMTP_RELAY_HOST` | | SMTP smarthost for outbound delivery (e.g., `smtp.migadu.com`) |
 | `ORLY_BRIDGE_SMTP_RELAY_PORT` | `587` | SMTP smarthost port (587 for STARTTLS) |
 | `ORLY_BRIDGE_SMTP_RELAY_USERNAME` | | SMTP smarthost AUTH username |
 | `ORLY_BRIDGE_SMTP_RELAY_PASSWORD` | | SMTP smarthost AUTH password |
+| `ORLY_BRIDGE_ACL_GRPC_SERVER` | | gRPC address of ACL server (split IPC mode with paid ACL) |
 
 ---
 
