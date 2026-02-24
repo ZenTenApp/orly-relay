@@ -1,4 +1,8 @@
-# Multi-stage Dockerfile for ORLY relay
+# Multi-stage Dockerfile for ORLY relay + bridge (unified binary)
+#
+# Default: runs the relay (port 3334)
+# Bridge:  docker run orly bridge (port 2525)
+# Launcher: docker run orly launcher (relay + bridge + db)
 
 # Stage 1: Build stage
 # Use Debian-based Go image to match runtime stage (avoids musl/glibc linker mismatch)
@@ -17,8 +21,8 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the binary with CGO disabled
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly -ldflags="-w -s" .
+# Build the unified binary (includes all subcommands: relay, bridge, db, acl, launcher)
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly -ldflags="-w -s" ./cmd/orly
 
 # Stage 2: Runtime stage
 # Use Debian slim instead of Alpine because Debian's libsecp256k1 includes
@@ -41,16 +45,16 @@ WORKDIR /app
 # Copy binary (libsecp256k1.so.1 is already installed via apt)
 COPY --from=builder /build/orly /app/orly
 
-# Create data directory
-RUN mkdir -p /data && chown -R orly:orly /data /app
+# Create data and DKIM directories
+RUN mkdir -p /data /dkim && chown -R orly:orly /data /dkim /app
 
 # Switch to app user
 USER orly
 
-# Expose ports
-EXPOSE 3334
+# Expose ports: 3334=relay WebSocket, 2525=bridge SMTP inbound
+EXPOSE 3334 2525
 
-# Health check
+# Health check (relay mode — override for bridge mode in compose)
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -f http://localhost:3334/ || exit 1
 
@@ -60,5 +64,5 @@ ENV ORLY_LISTEN=0.0.0.0 \
     ORLY_DATA_DIR=/data \
     ORLY_LOG_LEVEL=info
 
-# Run the binary
+# Run the binary (default: relay; pass "bridge" to run the email bridge)
 ENTRYPOINT ["/app/orly"]

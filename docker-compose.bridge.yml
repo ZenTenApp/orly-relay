@@ -1,0 +1,30 @@
+# Docker Compose for the Marmot Email Bridge (standalone)
+#
+# Usage:
+#   cp .env.bridge.example .env.bridge   # edit with your values
+#   docker compose -f docker-compose.bridge.yml up --build
+#
+# The bridge connects to an external Nostr relay via WebSocket and
+# receives inbound email on port 2525 via SMTP.
+
+services:
+  bridge:
+    build: .
+    command: ["bridge"]
+    ports:
+      - "2525:2525"    # SMTP inbound
+    volumes:
+      - bridge-data:/data          # bridge.nsec + subscriptions.json
+      - ./dkim:/dkim:ro            # DKIM private key (optional)
+    env_file:
+      - .env.bridge
+    healthcheck:
+      test: ["CMD-SHELL", "ss -tlnp | grep -q ':2525' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  bridge-data:
