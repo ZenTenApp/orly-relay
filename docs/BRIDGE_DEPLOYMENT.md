@@ -104,13 +104,32 @@ _dmarc.yourdomain.com.  IN  TXT  "v=DMARC1; p=none; rua=mailto:postmaster@yourdo
 
 ### Reverse DNS (PTR)
 
-Your VPS provider's control panel should let you set the PTR record for your IP. Set it to match your MX hostname:
+The PTR record maps your server's IP address back to your domain. Mail servers check that the IP sending mail resolves to the domain it claims to be.
 
 ```
 <YOUR_IP>  IN  PTR  yourdomain.com.
 ```
 
-Most providers (Hetzner, DigitalOcean, Vultr, Linode) have a web UI for this under Networking or DNS settings. PTR records are set by the IP owner, not the domain registrar.
+**Important ordering:** The forward A record (`yourdomain.com → <IP>`) must exist and propagate before you set the PTR. Many providers verify the forward record when you create the reverse, and will reject or silently remove the PTR if the A record doesn't match.
+
+**How to set it:** PTR records are set by the IP owner (your VPS provider), not the domain registrar. Look for "Reverse DNS", "rDNS", or "PTR" in your provider's control panel, usually under Networking or IP settings.
+
+| Provider | Where to find it |
+|----------|-----------------|
+| Hetzner | Cloud Console → Server → Networking → Primary IPs → Edit |
+| DigitalOcean | Droplet → Networking → PTR Records |
+| Vultr | Server → Settings → IPv4 → Reverse DNS |
+| Linode/Akamai | Linode → Network → IP Addresses → Edit rDNS |
+| Mynymbox | Management panel → Reverse DNS |
+
+**Verify after setting:**
+
+```bash
+dig -x YOUR_SERVER_IP +short
+# Expected: yourdomain.com.
+```
+
+If the output still shows the provider's default hostname (e.g., `static.50.235.71.80.virtservers.com`), the PTR hasn't propagated or wasn't accepted. Check that your A record is correct and retry.
 
 ---
 
@@ -281,13 +300,33 @@ All bridge configuration is via environment variables with the `ORLY_BRIDGE_` pr
 
 ## NWC Wallet Setup
 
-The bridge uses Nostr Wallet Connect (NWC) to create Lightning invoices for subscription payments.
+The bridge uses Nostr Wallet Connect (NWC) to create Lightning invoices for subscription payments. You need a Lightning wallet that supports NWC and can generate a connection string.
 
-1. Use a wallet that supports NWC (Alby, Mutiny, etc.)
-2. Generate a connection string restricted to `make_invoice` and `lookup_invoice` methods only
-3. Set `ORLY_BRIDGE_NWC_URI` (or `ORLY_NWC_URI` if shared with the relay)
+### Getting an NWC Connection String
 
-The bridge only needs to create invoices and check payment status. It never needs `pay_invoice` or any spending capability.
+**Option A: Alby (hosted, simplest)**
+
+1. Go to [getalby.com](https://getalby.com) and create an account (or log in)
+2. Go to Settings → Wallet Connections (or visit `getalby.com/apps`)
+3. Click "Create a new connection"
+4. Name it (e.g., "Marmot Bridge")
+5. Under permissions, enable **only**: `make_invoice` and `lookup_invoice`
+6. Do **not** enable `pay_invoice` or any spending permissions
+7. Copy the connection string — it looks like: `nostr+walletconnect://pubkey?relay=wss://...&secret=...`
+
+**Option B: Self-hosted (Alby Hub, LNbits, NWC-enabled node)**
+
+Most self-hosted Lightning wallets with NWC support have an "Apps" or "Connections" section where you can create restricted connection strings. The process is similar — create a new app connection with only `make_invoice` and `lookup_invoice` permissions.
+
+### Set the Environment Variable
+
+```bash
+export ORLY_BRIDGE_NWC_URI="nostr+walletconnect://pubkey?relay=wss://relay.getalby.com/v1&secret=hexsecret"
+```
+
+Or use `ORLY_NWC_URI` if the bridge shares the wallet with the relay.
+
+The bridge only needs to create invoices and check payment status. It never needs `pay_invoice` or any spending capability. If your wallet forces you to grant all permissions, create a separate wallet for the bridge.
 
 ---
 
@@ -372,6 +411,46 @@ The decrypt page at `/decrypt` allows email recipients to decrypt attachment URL
 - The page downloads the blob, decrypts locally in the browser using ChaCha20-Poly1305
 - The decrypted file is offered for download
 - The key never leaves the browser
+
+---
+
+## Pre-Flight Checklist
+
+Run this before requesting port 25 from your provider, or before going live. Every check must pass.
+
+```bash
+# Replace with your actual domain and IP
+DOMAIN=yourdomain.com
+IP=1.2.3.4
+
+echo "=== MX ==="
+dig MX $DOMAIN +short
+# Expected: 10 yourdomain.com.  (or your MX host)
+
+echo "=== SPF ==="
+dig TXT $DOMAIN +short | grep spf
+# Expected: "v=spf1 ip4:$IP -all"
+
+echo "=== DKIM ==="
+dig TXT marmot._domainkey.$DOMAIN +short
+# Expected: "v=DKIM1; k=rsa; p=MIIBIj..."
+
+echo "=== DMARC ==="
+dig TXT _dmarc.$DOMAIN +short
+# Expected: "v=DMARC1; p=none; ..." or "p=quarantine"
+
+echo "=== PTR ==="
+dig -x $IP +short
+# Expected: yourdomain.com.  (MUST match your domain, not the provider default)
+
+echo "=== A record (forward) ==="
+dig A $DOMAIN +short
+# Expected: $IP
+```
+
+If PTR still shows the provider's default hostname, see the Reverse DNS section above. Many providers require the forward A record to exist before they accept the PTR.
+
+Also check [MX Toolbox email health](https://mxtoolbox.com/emailhealth/) for your domain — it flags common issues that will cause mail rejection.
 
 ---
 
