@@ -753,7 +753,6 @@ See [`profile.example.txt`](profile.example.txt) for a template.
 ### Documentation
 
 - [Bridge Deployment Guide](docs/BRIDGE_DEPLOYMENT.md) — DNS, DKIM, NWC, SMTP smarthost, port 25 workarounds, Migadu example
-- [Marmot Bridge Spec](docs/EMAIL_MARMOT_BRIDGE.md) — full protocol specification
 
 ## Docker Deployment
 
