@@ -68,6 +68,7 @@ See [docs/IPC_SYNC_SERVICES.md](./docs/IPC_SYNC_SERVICES.md) for detailed API do
 - [Marmot Email Bridge](#marmot-email-bridge)
 - [Docker Deployment](#docker-deployment)
 - [Negentropy Sync (NIP-77)](#negentropy-sync-nip-77)
+- [Documentation](#documentation)
 - [Developer Notes](#developer-notes)
 
 ## ⚠️ Bug Reports & Feature Requests
@@ -832,6 +833,65 @@ strfry sync wss://your-orly-relay.com --filter '{"kinds": [0, 1, 3]}' --dir down
 ```
 
 For detailed configuration including Docker deployments, filtering options, and troubleshooting, see the [Negentropy Sync Guide](docs/NEGENTROPY_SYNC_GUIDE.md).
+
+## Documentation
+
+### Deployment & Operations
+
+| Document | Description |
+|----------|-------------|
+| [Bridge Deployment Guide](docs/BRIDGE_DEPLOYMENT.md) | DNS, DKIM, NWC, SMTP for Marmot email bridge |
+| [Deployment Testing](docs/DEPLOYMENT_TESTING.md) | Deployment verification procedures |
+| [Build Platforms](docs/BUILD_PLATFORMS.md) | Multi-platform build guide (Linux, macOS, Windows, Android) |
+| [Purego Build System](docs/PUREGO_BUILD_SYSTEM.md) | CGO-free build system with runtime library loading |
+| [WASM/Mobile Builds](docs/WASM_MOBILE_BUILD_PLAN.md) | WebAssembly and mobile build targets |
+
+### Configuration & Access Control
+
+| Document | Description |
+|----------|-------------|
+| [Policy Usage Guide](docs/POLICY_USAGE_GUIDE.md) | Event filtering and validation rules |
+| [Policy Configuration Reference](docs/POLICY_CONFIGURATION_REFERENCE.md) | Complete policy JSON schema |
+| [Policy Troubleshooting](docs/POLICY_TROUBLESHOOTING.md) | Diagnosing policy issues |
+| [Curation Mode Guide](docs/CURATION_MODE_GUIDE.md) | Three-tier publisher classification ACL |
+| [HTTP Guard](docs/HTTP_GUARD.md) | Bot detection and HTTP rate limiting |
+| [Branding Guide](docs/BRANDING_GUIDE.md) | Relay name, icon, NIP-11 customization |
+
+### Architecture & Internals
+
+| Document | Description |
+|----------|-------------|
+| [IPC Architecture](docs/IPC_ARCHITECTURE.md) | gRPC split-process design |
+| [IPC Sync Services](docs/IPC_SYNC_SERVICES.md) | Sync service API reference |
+| [Negentropy Sync Guide](docs/NEGENTROPY_SYNC_GUIDE.md) | NIP-77 set reconciliation setup |
+| [Sync Client Mode](docs/SYNC_CLIENT_MODE.md) | Client-mode relay synchronization |
+| [Neo4j Backend](docs/NEO4J_BACKEND.md) | Neo4j database driver setup and tuning |
+| [NIP-77 Analysis](docs/NIP77_ANALYSIS_AND_FIX.md) | NIP-77 implementation details |
+
+### Protocol Extensions
+
+| Document | Description |
+|----------|-------------|
+| [FIND Names Spec](docs/names.md) | Free Internet Name Daemon protocol |
+| [FIND Implementation](docs/FIND_IMPLEMENTATION_PLAN.md) | FIND integration architecture and status |
+| [NIP-XX Graph Queries](docs/NIP-XX-GRAPH-QUERIES.md) | REQ filter extension for graph traversals |
+| [NIP-XX Cluster Replication](docs/NIP-XX-Cluster-Replication.md) | HTTP polling-based cluster replication |
+| [NIP-XX Responsive Images](docs/NIP-XX-responsive-images.md) | Image variant protocol extension |
+| [NIP Curation](docs/NIP-CURATION.md) | Curation-mode protocol spec |
+| [NIP NRC](docs/NIP-NRC.md) | Nostr Relay Connection protocol |
+
+### Development & Reference
+
+| Document | Description |
+|----------|-------------|
+| [Glossary](docs/GLOSSARY.md) | ORLY terminology and domain concepts |
+| [Relay Testing Guide](docs/RELAY_TESTING_GUIDE.md) | Protocol compliance testing |
+| [Web UI Event Templates](docs/WEB_UI_EVENT_TEMPLATES.md) | Event kind templates for the web UI |
+| [Applesauce Reference](docs/applesauce-reference.md) | Applesauce library integration |
+| [Graph Implementation Phases](docs/GRAPH_IMPLEMENTATION_PHASES.md) | Graph query feature tracker |
+| [Graph Queries Remaining](docs/GRAPH_QUERIES_REMAINING_PLAN.md) | Outstanding graph query work |
+| [Neo4j WoT Spec](pkg/neo4j/WOT_SPEC.md) | Web-of-Trust graph schema |
+| [Neo4j Schema Changes](pkg/neo4j/MODIFYING_SCHEMA.md) | Guide for modifying the Neo4j schema |
 
 ## Developer Notes
 

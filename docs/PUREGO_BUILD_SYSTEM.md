@@ -38,6 +38,8 @@ The p8k library (from `git.mleku.dev/mleku/nostr`) uses purego to:
    - If library found → use fast C implementation
    - If library not found → automatically fallback to pure Go p256k1
 
+The library can be downloaded from: `https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so`
+
 ### Library Search Paths
 
 Platform-specific search locations:

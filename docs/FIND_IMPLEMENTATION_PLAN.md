@@ -422,45 +422,65 @@ async function registerName(relays, privkey, name) {
 - Ownership history is permanently visible
 - Clients can use Tor or private relays for sensitive queries
 
-## Documentation Updates
+## Integration Status
 
-1. **User Guide** (`docs/FIND_USER_GUIDE.md` - new)
-   - How to register a name
-   - How to manage DNS records
-   - How to renew registrations
-   - Client integration examples
+### Completed
+- Consensus algorithm implementation
+- Trust graph calculation with multi-hop support
+- Registry service core logic
+- Event parsers for all FIND types (30100-30105)
+- Event builders for creating FIND events
+- Validation functions (DNS names, IPs, etc.)
 
-2. **Operator Guide** (`docs/FIND_OPERATOR_GUIDE.md` - new)
-   - How to enable FIND registry service
-   - Trust graph configuration
-   - Monitoring and troubleshooting
-   - Bootstrap recommendations
+### Remaining Integration Points
+1. Configuration fields in `app/config/config.go`
+2. Database query helpers (`QueryNameState`, `QueryNameRecords`, `IsNameAvailable`)
+3. Server integration in `app/main.go`
+4. HTTP API endpoints (optional)
+5. WebSocket event routing for FIND kinds
 
-3. **Developer Guide** (`docs/FIND_DEVELOPER_GUIDE.md` - new)
-   - API reference
-   - Client library examples (JS, Python, Go)
-   - Event schemas and validation
-   - Consensus algorithm details
+## Client Usage Examples
 
-4. **Update CLAUDE.md**
-   - Add FIND sections to project overview
-   - Document new configuration options
-   - Add testing instructions
+### Register a Name
 
-## Success Metrics
+```javascript
+import { finalizeEvent, getPublicKey } from 'nostr-tools'
 
-- **Registration Finality:** < 2 minutes for 95% of registrations
-- **Query Latency:** < 100ms for name lookups
-- **Consensus Agreement:** > 99% agreement among honest registry services
-- **Uptime:** Registry service availability > 99.9%
-- **Adoption:** 100+ registered names within first month of testnet
+async function registerName(relay, privkey, name) {
+  const pubkey = getPublicKey(privkey)
+  const event = {
+    kind: 30100, pubkey,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [
+      ['d', name],
+      ['action', 'register'],
+      ['expiration', String(Math.floor(Date.now() / 1000) + 300)]
+    ],
+    content: ''
+  }
+  const signedEvent = finalizeEvent(event, privkey)
+  await relay.publish(signedEvent)
+  // Wait ~2 min for consensus, then check kind 30102
+}
+```
+
+### Resolve Name
+
+```javascript
+async function resolveNameToIP(relay, name) {
+  const nameState = await relay.get({ kinds: [30102], '#d': [name] })
+  if (!nameState) throw new Error('Name not registered')
+  const owner = nameState.tags.find(t => t[0] === 'owner')[1]
+  const records = await relay.list([{
+    kinds: [30103], '#name': [name], '#type': ['A'], authors: [owner]
+  }])
+  return records.map(e => e.tags.find(t => t[0] === 'value')[1])
+}
+```
 
 ## Future Enhancements
 
 1. **Economic Incentives** - Optional registration fees via Lightning
-2. **Reputation System** - Track registry service quality metrics
-3. **Certificate System** - Implement NIP-XX certificate witnessing
-4. **Noise Protocol** - Secure transport layer for TLS replacement
-5. **Client Libraries** - Official libraries for popular languages
-6. **Browser Integration** - Browser extension for name resolution
-7. **DNS Gateway** - Traditional DNS server that queries FIND
+2. **Certificate System** - Implement NIP-XX certificate witnessing
+3. **Client Libraries** - Official libraries for popular languages
+4. **DNS Gateway** - Traditional DNS server that queries FIND

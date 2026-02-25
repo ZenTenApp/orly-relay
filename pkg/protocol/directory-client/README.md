@@ -332,7 +332,7 @@ When adding new functionality:
 
 ## Related Documentation
 
-- [NIP-XX Specification](../../docs/NIP-XX-distributed-directory-consensus.md)
+- [NIP-XX Cluster Replication](../../docs/NIP-XX-Cluster-Replication.md)
 - [Directory Protocol Package](../directory/)
 
 ## License
