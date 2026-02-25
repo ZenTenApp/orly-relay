@@ -735,6 +735,21 @@ export ORLY_BRIDGE_RELAY_URL=wss://relay.example.com
 ./orly bridge
 ```
 
+### Bridge Profile
+
+The bridge publishes a kind 0 (profile metadata) event on startup so Nostr clients can discover it. Create a `profile.txt` in the bridge data directory (or set `ORLY_BRIDGE_PROFILE`):
+
+```
+name: Marmot Bridge
+about: Nostr-Email bridge at yourdomain.com. DM 'subscribe' to get started.
+picture: https://yourdomain.com/avatar.png
+nip05: bridge@yourdomain.com
+lud16: tips@yourdomain.com
+website: https://yourdomain.com
+```
+
+See [`profile.example.txt`](profile.example.txt) for a template.
+
 ### Documentation
 
 - [Bridge Deployment Guide](docs/BRIDGE_DEPLOYMENT.md) — DNS, DKIM, NWC, SMTP smarthost, port 25 workarounds, Migadu example

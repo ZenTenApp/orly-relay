@@ -66,4 +66,9 @@ type Config struct {
 	// AliasPriceSats is the monthly price in sats for an alias email address.
 	// Must be >= MonthlyPriceSats. If zero, defaults to 2x MonthlyPriceSats.
 	AliasPriceSats int64
+
+	// ProfilePath is the path to a profile template file (email-header format).
+	// If the file exists, the bridge publishes a kind 0 metadata event on startup.
+	// Default: $DataDir/profile.txt
+	ProfilePath string
 }

@@ -275,6 +275,7 @@ All bridge configuration is via environment variables with the `ORLY_BRIDGE_` pr
 | `ORLY_BRIDGE_SMTP_RELAY_USERNAME` | | SMTP smarthost AUTH username |
 | `ORLY_BRIDGE_SMTP_RELAY_PASSWORD` | | SMTP smarthost AUTH password |
 | `ORLY_BRIDGE_ACL_GRPC_SERVER` | | gRPC address of ACL server (split IPC mode with paid ACL) |
+| `ORLY_BRIDGE_PROFILE` | `$DATA_DIR/profile.txt` | Path to profile template file (kind 0 metadata) |
 
 ---
 
@@ -307,6 +308,34 @@ Rate limits for subscribed users:
 - 100 outbound emails per hour globally
 - 500 outbound emails per day globally
 - 30 second minimum interval between sends
+
+---
+
+## Bridge Profile (Kind 0)
+
+The bridge can publish a kind 0 (profile metadata) event on startup so Nostr clients can discover it and display a name, avatar, and description. Without a profile, clients show the bridge as an unknown pubkey.
+
+Create a `profile.txt` in the bridge data directory using email-header format:
+
+```
+name: Marmot Bridge
+about: Nostr-Email bridge at yourdomain.com. DM 'subscribe' to get started.
+picture: https://yourdomain.com/avatar.png
+nip05: bridge@yourdomain.com
+lud16: tips@yourdomain.com
+website: https://yourdomain.com
+banner: https://yourdomain.com/banner.png
+```
+
+The bridge reads this file on every startup and publishes a kind 0 event signed with its identity. Lines with empty values are omitted. Comments (lines starting with `#`) are ignored.
+
+To use a custom path instead of `$ORLY_BRIDGE_DATA_DIR/profile.txt`:
+
+```bash
+export ORLY_BRIDGE_PROFILE=/etc/orly/bridge-profile.txt
+```
+
+A template is provided at `profile.example.txt` in the repository root.
 
 ---
 

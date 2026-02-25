@@ -1,0 +1,13 @@
+# Bridge Profile Template
+# Copy to your bridge data directory as profile.txt and fill in values.
+# The bridge publishes this as a kind 0 (profile metadata) event on startup.
+# Lines use email-header format: key: value
+# Empty values are omitted. Blank line ends the profile.
+
+name: Marmot Bridge
+about: Nostr-Email bridge. DM 'subscribe' to get started.
+picture:
+nip05:
+lud16:
+website:
+banner:

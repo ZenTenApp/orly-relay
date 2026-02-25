@@ -134,6 +134,11 @@ func (b *Bridge) Start(ctx context.Context) error {
 		// Start subscription loop in background
 		b.wg.Add(1)
 		go b.relayWatchLoop()
+
+		// Publish kind 0 profile if template exists
+		if err := b.publishProfile(); err != nil {
+			log.W.F("publish bridge profile: %v", err)
+		}
 	}
 
 	log.I.F("bridge started")

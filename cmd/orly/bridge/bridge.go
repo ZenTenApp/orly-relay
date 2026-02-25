@@ -44,7 +44,7 @@ func Run(args []string) {
 		dataDir, dkimKeyPath, dkimSelector, nwcURI,
 		monthlyPriceSats, composeURL,
 		smtpRelayHost, smtpRelayPort, smtpRelayUsername, smtpRelayPassword,
-		aclGRPCServer, aliasPriceSats := cfg.GetBridgeConfigValues()
+		aclGRPCServer, aliasPriceSats, profilePath := cfg.GetBridgeConfigValues()
 
 	if !enabled && relayURL == "" {
 		// When run as a subcommand, enable by default even if ORLY_BRIDGE_ENABLED is false
@@ -70,6 +70,7 @@ func Run(args []string) {
 		SMTPRelayPassword: smtpRelayPassword,
 		ACLGRPCServer:     aclGRPCServer,
 		AliasPriceSats:    aliasPriceSats,
+		ProfilePath:       profilePath,
 	}
 
 	// In standalone subcommand mode, no database getter is available.
@@ -131,6 +132,7 @@ Environment Variables:
   ORLY_BRIDGE_SMTP_RELAY_PASSWORD SMTP smarthost AUTH password
   ORLY_BRIDGE_ACL_GRPC_SERVER    ACL gRPC server address for paid subscriptions
   ORLY_BRIDGE_ALIAS_PRICE_SATS   Monthly alias email price in sats (default: 4200)
+  ORLY_BRIDGE_PROFILE            Path to profile template file (default: $DATA_DIR/profile.txt)
 
 Examples:
   # Standalone: connect to an external relay

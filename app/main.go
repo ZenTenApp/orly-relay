@@ -472,7 +472,7 @@ func Run(
 		bridgeNWCURI, bridgeMonthlyPriceSats, bridgeComposeURL,
 		bridgeSMTPRelayHost, bridgeSMTPRelayPort,
 		bridgeSMTPRelayUsername, bridgeSMTPRelayPassword,
-		bridgeACLGRPCServer, bridgeAliasPriceSats := cfg.GetBridgeConfigValues()
+		bridgeACLGRPCServer, bridgeAliasPriceSats, bridgeProfilePath := cfg.GetBridgeConfigValues()
 
 	if bridgeEnabled {
 		bridgeCfg := &emailbridge.Config{
@@ -493,6 +493,7 @@ func Run(
 			SMTPRelayPassword: bridgeSMTPRelayPassword,
 			ACLGRPCServer:     bridgeACLGRPCServer,
 			AliasPriceSats:    bridgeAliasPriceSats,
+			ProfilePath:       bridgeProfilePath,
 		}
 
 		// In monolithic mode, provide a database getter for identity resolution
