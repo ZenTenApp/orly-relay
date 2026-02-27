@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <title>Smesh</title>
+    <meta name="description" content="A user-friendly Nostr client for exploring relay feeds" />
+    <meta
+      name="keywords"
+      content="smesh, nostr, web, client, relay, feed, social, pwa, simple, clean"
+    />
+
+    <meta name="apple-mobile-web-app-title" content="Smesh" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.png" sizes="256x256" type="image/png" />
+    <meta name="theme-color" content="#171717" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />
+
+    <meta property="og:url" content="https://smesh.mleku.dev" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Smesh" />
+    <meta
+      property="og:description"
+      content="A user-friendly Nostr client for exploring relay feeds"
+    />
+    <meta
+      property="og:image"
+      content="https://git.mleku.dev/mleku/smesh/raw/branch/master/resources/og-image.png"
+    />
+
+    <style>
+      /* Prevent flash - set background based on system preference before CSS loads */
+      html, body, #root { background-color: #FFFFFF; color: #171717; }
+      @media (prefers-color-scheme: dark) {
+        html, body, #root { background-color: #171717; color: #FAFAFA; }
+      }
+      html.light, html.light body, html.light #root { background-color: #FFFFFF !important; color: #171717 !important; }
+      html.dark, html.dark body, html.dark #root { background-color: #171717 !important; color: #FAFAFA !important; }
+      html.dark.pure-black, html.dark.pure-black body, html.dark.pure-black #root { background-color: #000000 !important; }
+    </style>
+    <script>
+      (function() {
+        var theme = localStorage.getItem('theme-setting');
+        if (theme === 'light') {
+          document.documentElement.classList.add('light');
+        } else if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else if (theme === 'pure-black') {
+          document.documentElement.classList.add('dark', 'pure-black');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -145,6 +145,9 @@ type Server struct {
 
 	// Corpus crawler (relay discovery + negentropy sync)
 	corpusCrawler *crawler.Crawler
+
+	// Smesh embedded web client
+	smeshServer *SmeshServer
 }
 
 // =============================================================================

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # scripts/update-embedded-web.sh
-# Build the embedded web UI and then install the Go binary.
+# Build the embedded web UIs (relay dashboard + smesh client) and then install
+# the Go binary.
 #
 # This script will:
-#  - Build the React app in app/web to app/web/dist using Bun (preferred),
-#    or fall back to npm/yarn/pnpm if Bun isn't available.
+#  - Build the Svelte relay dashboard in app/web to app/web/dist
+#  - Build the Smesh client in app/smesh to app/smesh/dist
 #  - Run `go install` from the repository root so the binary picks up the new
 #    embedded assets.
 #
@@ -21,14 +22,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 WEB_DIR="${REPO_ROOT}/app/web"
+SMESH_DIR="${REPO_ROOT}/app/smesh"
 
 log() { printf "[update-embedded-web] %s\n" "$*"; }
 err() { printf "[update-embedded-web][ERROR] %s\n" "$*" >&2; }
-
-if [[ ! -d "${WEB_DIR}" ]]; then
-  err "Expected web directory at ${WEB_DIR} not found."
-  exit 1
-fi
 
 # Choose a JS package runner
 JS_RUNNER=""
@@ -47,46 +44,55 @@ fi
 
 log "Using JavaScript runner: ${JS_RUNNER}"
 
-# Install dependencies and build the web app
-log "Installing frontend dependencies..."
-pushd "${WEB_DIR}" >/dev/null
-case "${JS_RUNNER}" in
-  bun)
-    bun install
-    log "Building web app with Bun..."
-    bun run build
-    ;;
-  npm)
-    npm ci || npm install
-    log "Building web app with npm..."
-    npm run build
-    ;;
-  yarn)
-    yarn install --frozen-lockfile || yarn install
-    log "Building web app with yarn..."
-    yarn build
-    ;;
-  pnpm)
-    pnpm install --frozen-lockfile || pnpm install
-    log "Building web app with pnpm..."
-    pnpm build
-    ;;
-  *)
-    err "Unsupported JS runner: ${JS_RUNNER}"
+# Helper: build a JS project in the given directory
+build_js_project() {
+  local dir="$1"
+  local name="$2"
+
+  if [[ ! -d "${dir}" ]]; then
+    err "Expected ${name} directory at ${dir} not found."
     exit 1
-    ;;
+  fi
 
-esac
-popd >/dev/null
+  log "Building ${name}..."
+  pushd "${dir}" >/dev/null
+  case "${JS_RUNNER}" in
+    bun)
+      bun install
+      bun run build
+      ;;
+    npm)
+      npm ci || npm install
+      npm run build
+      ;;
+    yarn)
+      yarn install --frozen-lockfile || yarn install
+      yarn build
+      ;;
+    pnpm)
+      pnpm install --frozen-lockfile || pnpm install
+      pnpm build
+      ;;
+    *)
+      err "Unsupported JS runner: ${JS_RUNNER}"
+      exit 1
+      ;;
+  esac
+  popd >/dev/null
 
-# Verify the output directory expected by go:embed exists
-DIST_DIR="${WEB_DIR}/dist"
-if [[ ! -d "${DIST_DIR}" ]]; then
-  err "Build did not produce ${DIST_DIR}. Check your frontend build configuration."
-  exit 1
-fi
+  local dist_dir="${dir}/dist"
+  if [[ ! -d "${dist_dir}" ]]; then
+    err "${name} build did not produce ${dist_dir}. Check the build configuration."
+    exit 1
+  fi
+  log "${name} build complete at ${dist_dir}."
+}
 
-log "Frontend build complete at ${DIST_DIR}."
+# Build relay dashboard (Svelte)
+build_js_project "${WEB_DIR}" "relay dashboard"
+
+# Build smesh client (React)
+build_js_project "${SMESH_DIR}" "smesh client"
 
 # Install the Go binary so it embeds the latest files
 log "Running 'go install' from repo root..."
@@ -94,4 +100,4 @@ pushd "${REPO_ROOT}" >/dev/null
 GO111MODULE=on go install ./...
 popd >/dev/null
 
-log "Done. Your installed binary now includes the updated embedded web UI."
+log "Done. Your installed binary now includes the updated embedded web UIs."

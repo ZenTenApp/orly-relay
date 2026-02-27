@@ -281,6 +281,10 @@ type C struct {
 	BridgeAliasPriceSats int64 `env:"ORLY_BRIDGE_ALIAS_PRICE_SATS" default:"4200" usage:"monthly price in sats for alias email (default 2x base price)"`
 	BridgeProfile string `env:"ORLY_BRIDGE_PROFILE" usage:"path to bridge profile template file (default: $BRIDGE_DATA_DIR/profile.txt)"`
 
+	// Smesh embedded web client
+	SmeshEnabled bool `env:"ORLY_SMESH_ENABLED" default:"false" usage:"enable embedded Smesh web client on a dedicated port"`
+	SmeshPort    int  `env:"ORLY_SMESH_PORT" default:"8088" usage:"port for the embedded Smesh web client"`
+
 	// ServeMode is set programmatically by the 'serve' subcommand to grant full owner
 	// access to all users (no env tag - internal use only)
 	ServeMode bool

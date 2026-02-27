@@ -657,6 +657,15 @@ func Run(
 	// Initialize the user interface (registers routes)
 	l.UserInterface()
 
+	// Start embedded Smesh web client if enabled
+	if cfg.SmeshEnabled && cfg.SmeshPort > 0 {
+		l.smeshServer = NewSmeshServer(cfg.SmeshPort)
+		if err := l.smeshServer.Start(ctx); err != nil {
+			log.E.F("failed to start smesh server: %v", err)
+			l.smeshServer = nil
+		}
+	}
+
 	// Ensure a relay identity secret key exists when subscriptions and NWC are enabled
 	if cfg.SubscriptionEnabled && cfg.NWCUri != "" {
 		if skb, e := db.GetOrCreateRelayIdentitySecret(); e != nil {
@@ -848,6 +857,12 @@ func Run(
 		if l.emailBridge != nil {
 			l.emailBridge.Stop()
 			log.I.F("email bridge stopped")
+		}
+
+		// Stop smesh server if running
+		if l.smeshServer != nil {
+			l.smeshServer.Stop()
+			log.I.F("smesh server stopped")
 		}
 
 		// Stop NRC bridge if running
