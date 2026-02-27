@@ -18,7 +18,7 @@ func (l *Listener) HandleClose(req []byte) (err error) {
 		return
 	}
 	if len(rem) > 0 {
-		log.I.F("extra '%s'", rem)
+		log.T.F("extra '%s'", rem)
 	}
 	if len(env.ID) == 0 {
 		return errors.New("CLOSE has no <id>")

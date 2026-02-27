@@ -225,7 +225,7 @@ func (s *Server) AddPeer(nostrPubkey, wgPublicKey []byte, assignedIP string) err
 	}
 	s.peersMu.Unlock()
 
-	log.I.F("WireGuard peer added: %s -> %s", wgPubkeyBase64[:16]+"...", assignedIP)
+	log.D.F("WireGuard peer added: %s -> %s", wgPubkeyBase64[:16]+"...", assignedIP)
 
 	return nil
 }
@@ -257,7 +257,7 @@ func (s *Server) RemovePeer(wgPublicKey []byte) error {
 	delete(s.peers, wgPubkeyBase64)
 	s.peersMu.Unlock()
 
-	log.I.F("WireGuard peer removed: %s", wgPubkeyBase64[:16]+"...")
+	log.D.F("WireGuard peer removed: %s", wgPubkeyBase64[:16]+"...")
 
 	return nil
 }

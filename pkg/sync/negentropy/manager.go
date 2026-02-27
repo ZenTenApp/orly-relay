@@ -188,7 +188,7 @@ func (m *Manager) syncWithPeer(ctx context.Context, peerURL string) {
 	peer.Status = "syncing"
 	m.mu.Unlock()
 
-	log.I.F("negentropy sync starting with %s", peerURL)
+	log.D.F("negentropy sync starting with %s", peerURL)
 
 	eventsSynced, err := m.performNegentropy(ctx, peerURL)
 
@@ -204,7 +204,7 @@ func (m *Manager) syncWithPeer(ctx context.Context, peerURL string) {
 		peer.LastError = ""
 		peer.ConsecutiveFailures = 0
 		peer.EventsSynced += eventsSynced
-		log.I.F("negentropy sync with %s complete: %d events synced", peerURL, eventsSynced)
+		log.D.F("negentropy sync with %s complete: %d events synced", peerURL, eventsSynced)
 	}
 	m.mu.Unlock()
 }
@@ -217,7 +217,7 @@ func (m *Manager) performNegentropy(ctx context.Context, peerURL string) (int64,
 		return 0, fmt.Errorf("failed to build storage: %w", err)
 	}
 
-	log.I.F("built negentropy storage with %d events", storage.Size())
+	log.D.F("built negentropy storage with %d events", storage.Size())
 
 	// Create negentropy instance
 	neg := negentropy.New(storage, m.config.FrameSize)
@@ -316,7 +316,7 @@ func (m *Manager) performNegentropy(ctx context.Context, peerURL string) (int64,
 			}
 
 			if complete {
-				log.I.F("negentropy: reconciliation complete, need %d events, have %d to push", len(needIDs), len(haveIDs))
+				log.D.F("negentropy: reconciliation complete, need %d events, have %d to push", len(needIDs), len(haveIDs))
 				goto fetchAndPush
 			}
 
@@ -338,7 +338,7 @@ fetchAndPush:
 	// Clear any read deadline from the negotiation phase
 	conn.SetReadDeadline(time.Time{})
 
-	log.I.F("negentropy: need %d events, have %d events to send", len(needIDs), len(haveIDs))
+	log.D.F("negentropy: need %d events, have %d events to send", len(needIDs), len(haveIDs))
 
 	// Phase 2: Fetch events we need from the peer via REQ
 	// The negentropy library only populates haves/haveNots on the initiator (client) side.
@@ -349,7 +349,7 @@ fetchAndPush:
 		if err != nil {
 			log.W.F("negentropy: failed to fetch events: %v", err)
 		} else {
-			log.I.F("negentropy: fetched %d events from peer", fetched)
+			log.D.F("negentropy: fetched %d events from peer", fetched)
 			eventsSynced += int64(fetched)
 		}
 	}
@@ -360,7 +360,7 @@ fetchAndPush:
 		if err != nil {
 			log.W.F("failed to push events to peer: %v", err)
 		} else {
-			log.I.F("negentropy: pushed %d events to peer", pushed)
+			log.D.F("negentropy: pushed %d events to peer", pushed)
 			eventsSynced += int64(pushed)
 		}
 	}
@@ -464,7 +464,7 @@ func (m *Manager) pushEventsToPeer(ctx context.Context, conn *websocket.Conn, tr
 	if len(truncatedIDs) == 0 {
 		return 0, nil
 	}
-	log.I.F("pushEventsToPeer: looking up %d events to push", len(truncatedIDs))
+	log.D.F("pushEventsToPeer: looking up %d events to push", len(truncatedIDs))
 
 	pushed := 0
 	for _, truncID := range truncatedIDs {
@@ -541,7 +541,7 @@ func (m *Manager) fetchEventsFromPeer(ctx context.Context, conn *websocket.Conn,
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	log.I.F("fetchEventsFromPeer: fetching %d events with IDs (first 3): %v", len(ids), ids[:min(3, len(ids))])
+	log.D.F("fetchEventsFromPeer: fetching %d events with IDs (first 3): %v", len(ids), ids[:min(3, len(ids))])
 
 	// Batch IDs into chunks of 100
 	const batchSize = 100
@@ -555,7 +555,7 @@ func (m *Manager) fetchEventsFromPeer(ctx context.Context, conn *websocket.Conn,
 		batch := ids[i:end]
 
 		subID := fmt.Sprintf("%s-fetch-%d", baseSubID, i/batchSize)
-		log.I.F("fetchEventsFromPeer: sending REQ %s for batch of %d IDs", subID, len(batch))
+		log.D.F("fetchEventsFromPeer: sending REQ %s for batch of %d IDs", subID, len(batch))
 
 		// Send REQ for these IDs
 		filter := map[string]any{
@@ -606,12 +606,12 @@ func (m *Manager) fetchEventsFromPeer(ctx context.Context, conn *websocket.Conn,
 					} else {
 						fetched++
 						if fetched%10 == 0 {
-							log.I.F("fetchEventsFromPeer: stored %d events so far", fetched)
+							log.D.F("fetchEventsFromPeer: stored %d events so far", fetched)
 						}
 					}
 				}
 			case "EOSE":
-				log.I.F("fetchEventsFromPeer: received EOSE for %s after %d messages, fetched %d events in batch", subID, messageCount, fetched)
+				log.D.F("fetchEventsFromPeer: received EOSE for %s after %d messages, fetched %d events in batch", subID, messageCount, fetched)
 				goto nextBatch
 			case "CLOSED":
 				var reason string
@@ -636,7 +636,7 @@ func (m *Manager) fetchEventsFromPeer(ctx context.Context, conn *websocket.Conn,
 		conn.WriteJSON(closeMsg)
 	}
 
-	log.I.F("fetchEventsFromPeer: completed, total fetched: %d", fetched)
+	log.D.F("fetchEventsFromPeer: completed, total fetched: %d", fetched)
 	return fetched, nil
 }
 

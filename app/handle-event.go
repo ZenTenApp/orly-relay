@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"next.orly.dev/pkg/lol/chk"
@@ -22,7 +23,7 @@ import (
 // HandleEvent processes incoming EVENT messages.
 // This is a thin protocol adapter that delegates to the ingestion service.
 func (l *Listener) HandleEvent(msg []byte) (err error) {
-	log.I.F("HandleEvent: START handling event: %s", string(msg[:min(200, len(msg))]))
+	log.T.F("HandleEvent: START handling event: %s", string(msg[:min(200, len(msg))]))
 
 	// Stage 1: Raw JSON validation (before unmarshal)
 	if result := l.eventValidator.ValidateRawJSON(msg); !result.Valid {
@@ -42,7 +43,7 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 		log.E.F("HandleEvent: failed to unmarshal event: %v", err)
 		return
 	}
-	log.I.F("HandleEvent: unmarshaled event, kind: %d, pubkey: %s, id: %0x",
+	log.D.F("HandleEvent: unmarshaled event, kind: %d, pubkey: %s, id: %0x",
 		env.E.Kind, hex.Enc(env.E.Pubkey), env.E.ID)
 	defer func() {
 		if env != nil && env.E != nil {
@@ -125,7 +126,11 @@ func (l *Listener) handleSpecialKinds(env *eventenvelope.Submission) (bool, erro
 // sendIngestionResult sends the appropriate response based on the ingestion result.
 func (l *Listener) sendIngestionResult(env *eventenvelope.Submission, result ingestion.Result) error {
 	if result.Error != nil {
-		log.E.F("HandleEvent: ingestion error: %v", result.Error)
+		if strings.Contains(result.Error.Error(), "already exists") {
+			log.D.F("HandleEvent: duplicate event: %v", result.Error)
+		} else {
+			log.E.F("HandleEvent: ingestion error: %v", result.Error)
+		}
 		return Ok.Error(l, env, result.Error.Error())
 	}
 

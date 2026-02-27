@@ -48,7 +48,7 @@ func (cl *Client) Request(
 	const maxRetries = 3
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
-			log.I.F("NWC request %s retry %d/%d (delay %v)",
+			log.D.F("NWC request %s retry %d/%d (delay %v)",
 				method, attempt, maxRetries-1, delay)
 			select {
 			case <-time.After(delay):
@@ -240,7 +240,7 @@ func (cl *Client) subscribeNotificationsOnce(
 	}
 	defer sub.Unsub()
 
-	log.I.F(
+	log.D.F(
 		"subscribed to NWC notifications from wallet %s",
 		hex.Enc(cl.walletPublicKey),
 	)

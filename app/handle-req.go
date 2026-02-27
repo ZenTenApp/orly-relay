@@ -242,7 +242,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 					return err
 				}
 
-				log.I.F("sent NIP-43 invite event to %s", l.remote)
+				log.D.F("sent NIP-43 invite event to %s", l.remote)
 				return nil
 			}
 		}
@@ -264,7 +264,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 				return
 			}
 			if graphQuery != nil {
-				log.I.F("graph query from %s: edge=%s dir=%s seed=%s depth=%d",
+				log.D.F("graph query from %s: edge=%s dir=%s seed=%s depth=%d",
 					l.remote, graphQuery.Edge, graphQuery.Direction, graphQuery.Pubkey, graphQuery.Depth)
 
 				// Check if graph executor is available
@@ -306,7 +306,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 					return
 				}
 
-				log.I.F("graph query completed for %s: edge=%s dir=%s, returned event kind %d",
+				log.D.F("graph query completed for %s: edge=%s dir=%s, returned event kind %d",
 					l.remote, graphQuery.Edge, graphQuery.Direction, resultEvent.Kind)
 				return
 			}

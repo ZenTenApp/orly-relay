@@ -32,7 +32,7 @@ func (l *Listener) HandleAuth(b []byte) (err error) {
 		}
 	}()
 	if len(rem) > 0 {
-		log.I.F("extra '%s'", rem)
+		log.T.F("extra '%s'", rem)
 	}
 	var valid bool
 	if valid, err = auth.Validate(

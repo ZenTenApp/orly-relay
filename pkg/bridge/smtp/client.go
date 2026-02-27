@@ -211,7 +211,7 @@ func (c *Client) deliverDirect(addr, from string, to []string, msg []byte) error
 		return fmt.Errorf("close data: %w", err)
 	}
 
-	log.I.F("SMTP delivered to %s via %s", to, addr)
+	log.D.F("SMTP delivered to %s via %s", to, addr)
 	return nil
 }
 
@@ -261,7 +261,7 @@ func (c *Client) deliverViaRelay(from string, to []string, msg []byte) error {
 		return fmt.Errorf("close data: %w", err)
 	}
 
-	log.I.F("SMTP delivered to %v via relay %s", to, c.cfg.RelayHost)
+	log.D.F("SMTP delivered to %v via relay %s", to, c.cfg.RelayHost)
 	return nil
 }
 

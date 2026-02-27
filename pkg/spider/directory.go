@@ -160,9 +160,9 @@ func (ds *DirectorySpider) Stop() {
 func (ds *DirectorySpider) TriggerNow() {
 	select {
 	case ds.triggerChan <- struct{}{}:
-		log.I.F("directory spider: manual trigger sent")
+		log.D.F("directory spider: manual trigger sent")
 	default:
-		log.I.F("directory spider: trigger already pending")
+		log.D.F("directory spider: trigger already pending")
 	}
 }
 
@@ -181,17 +181,17 @@ func (ds *DirectorySpider) mainLoop() {
 	ticker := time.NewTicker(ds.interval)
 	defer ticker.Stop()
 
-	log.I.F("directory spider: main loop started, running every %v", ds.interval)
+	log.D.F("directory spider: main loop started, running every %v", ds.interval)
 
 	for {
 		select {
 		case <-ds.ctx.Done():
 			return
 		case <-ds.triggerChan:
-			log.I.F("directory spider: manual trigger received")
+			log.D.F("directory spider: manual trigger received")
 			ds.runOnce()
 		case <-ticker.C:
-			log.I.F("directory spider: scheduled run triggered")
+			log.D.F("directory spider: scheduled run triggered")
 			ds.runOnce()
 		}
 	}
@@ -203,7 +203,7 @@ func (ds *DirectorySpider) runOnce() {
 		return
 	}
 
-	log.I.F("directory spider: starting run")
+	log.D.F("directory spider: starting run")
 	start := time.Now()
 
 	// Reset state for this run
@@ -222,7 +222,7 @@ func (ds *DirectorySpider) runOnce() {
 	relayCount := len(ds.discoveredRelays)
 	ds.mu.Unlock()
 
-	log.I.F("directory spider: discovered %d relays", relayCount)
+	log.D.F("directory spider: discovered %d relays", relayCount)
 
 	// Phase 2: Fetch metadata from all discovered relays
 	if err := ds.fetchMetadataFromRelays(); err != nil {
@@ -234,7 +234,7 @@ func (ds *DirectorySpider) runOnce() {
 	ds.lastRun = time.Now()
 	ds.mu.Unlock()
 
-	log.I.F("directory spider: completed run in %v", time.Since(start))
+	log.D.F("directory spider: completed run in %v", time.Since(start))
 }
 
 // discoverRelays performs the multi-hop relay discovery.
@@ -246,7 +246,7 @@ func (ds *DirectorySpider) discoverRelays() error {
 		return nil
 	}
 
-	log.I.F("directory spider: starting relay discovery with %d seed pubkeys", len(seedPubkeys))
+	log.D.F("directory spider: starting relay discovery with %d seed pubkeys", len(seedPubkeys))
 
 	// Round 0: Get relay lists from seed pubkeys in local database
 	seedRelays, err := ds.getRelaysFromLocalDB(seedPubkeys)
@@ -269,7 +269,7 @@ func (ds *DirectorySpider) discoverRelays() error {
 	}
 	ds.mu.Unlock()
 
-	log.I.F("directory spider: found %d seed relays from local database", len(seedRelays))
+	log.D.F("directory spider: found %d seed relays from local database", len(seedRelays))
 
 	// Rounds 1 to maxHops: Expand outward
 	for hop := 1; hop <= ds.maxHops; hop++ {
@@ -290,11 +290,11 @@ func (ds *DirectorySpider) discoverRelays() error {
 		ds.mu.Unlock()
 
 		if len(relaysToProcess) == 0 {
-			log.I.F("directory spider: no relays to process at hop %d", hop)
+			log.D.F("directory spider: no relays to process at hop %d", hop)
 			break
 		}
 
-		log.I.F("directory spider: hop %d - processing %d relays", hop, len(relaysToProcess))
+		log.D.F("directory spider: hop %d - processing %d relays", hop, len(relaysToProcess))
 
 		newRelaysThisHop := 0
 
@@ -352,7 +352,7 @@ func (ds *DirectorySpider) discoverRelays() error {
 			time.Sleep(DirectorySpiderRelayDelay)
 		}
 
-		log.I.F("directory spider: hop %d - discovered %d new relays", hop, newRelaysThisHop)
+		log.D.F("directory spider: hop %d - discovered %d new relays", hop, newRelaysThisHop)
 	}
 
 	return nil
@@ -468,7 +468,7 @@ func (ds *DirectorySpider) fetchMetadataFromRelays() error {
 	}
 	ds.mu.Unlock()
 
-	log.I.F("directory spider: fetching metadata from %d relays", len(relays))
+	log.D.F("directory spider: fetching metadata from %d relays", len(relays))
 
 	// Kinds to fetch: 0 (profile), 3 (follow list), 10000 (mute list), 10002 (relay list)
 	kindsToFetch := []uint16{
@@ -527,7 +527,7 @@ func (ds *DirectorySpider) fetchMetadataFromRelays() error {
 		time.Sleep(DirectorySpiderRelayDelay)
 	}
 
-	log.I.F("directory spider: metadata fetch complete - %d events saved, %d duplicates",
+	log.D.F("directory spider: metadata fetch complete - %d events saved, %d duplicates",
 		totalSaved, totalDuplicates)
 
 	return nil

@@ -145,7 +145,7 @@ func (s *Session) handleConnect(req *NIP46Request) *NIP46Response {
 	s.clientPubkey = clientPubkey
 	s.authenticated = true
 
-	log.I.F("bunker session authenticated: %s (client=%s...)",
+	log.D.F("bunker session authenticated: %s (client=%s...)",
 		s.ID[:8], pubkeyHex[:16])
 
 	return &NIP46Response{

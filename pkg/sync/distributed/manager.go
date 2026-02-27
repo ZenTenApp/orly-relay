@@ -122,7 +122,7 @@ func NewManager(ctx context.Context, db *database.D, cfg *Config, policyManager 
 		for _, peerURL := range m.peers {
 			// Fast path: check if we already know this URL is ours
 			if m.selfURLs[peerURL] {
-				log.I.F("removed self from sync peer list (known URL): %s", peerURL)
+				log.D.F("removed self from sync peer list (known URL): %s", peerURL)
 				continue
 			}
 
@@ -138,7 +138,7 @@ func NewManager(ctx context.Context, db *database.D, cfg *Config, policyManager 
 			}
 
 			if peerPubkey == m.nodeID {
-				log.I.F("removed self from sync peer list (discovered): %s (pubkey: %s)", peerURL, m.nodeID)
+				log.D.F("removed self from sync peer list (discovered): %s (pubkey: %s)", peerURL, m.nodeID)
 				// Cache this URL as ours for future fast lookups
 				m.selfURLs[peerURL] = true
 				continue
@@ -165,7 +165,7 @@ func (m *Manager) UpdatePeers(newPeers []string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.peers = newPeers
-	log.I.F("updated peer list to %d peers", len(newPeers))
+	log.D.F("updated peer list to %d peers", len(newPeers))
 }
 
 // IsAuthorizedPeer checks if a peer is authorized by validating its NIP-11 pubkey
@@ -375,7 +375,7 @@ func (m *Manager) requestEventIDs(peerURL string, from, to uint64) {
 	missingEventIDs := m.findMissingEventIDs(eventIDsResp.EventMap)
 	if len(missingEventIDs) > 0 {
 		m.requestEventsViaWebsocket(missingEventIDs)
-		log.I.F("requested %d missing events from peer %s", len(missingEventIDs), peerURL)
+		log.D.F("requested %d missing events from peer %s", len(missingEventIDs), peerURL)
 	}
 }
 
@@ -455,7 +455,7 @@ func (m *Manager) requestEventsViaWebsocket(eventIDs []string) {
 	if len(eventIDs) < limit {
 		limit = len(eventIDs)
 	}
-	log.I.F("requested %d events via websocket: %v", len(eventIDs), eventIDs[:limit])
+	log.D.F("requested %d events via websocket: %v", len(eventIDs), eventIDs[:limit])
 }
 
 // GetEventsWithIDs retrieves events with their IDs by serial range

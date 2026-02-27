@@ -82,6 +82,6 @@ func (b *Bridge) publishProfile() error {
 		return fmt.Errorf("publish profile event: %w", err)
 	}
 
-	log.I.F("published kind 0 profile (%d fields) for bridge identity", len(profile))
+	log.D.F("published kind 0 profile (%d fields) for bridge identity", len(profile))
 	return nil
 }

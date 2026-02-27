@@ -366,7 +366,7 @@ func (cm *Manager) UpdateMembership(relayURLs []string) {
 			if err := cm.removePeerState(url); err != nil {
 				log.W.F("failed to remove persisted state for peer %s: %v", url, err)
 			}
-			log.I.F("removed cluster member: %s", url)
+			log.D.F("removed cluster member: %s", url)
 		}
 	}
 
@@ -379,7 +379,7 @@ func (cm *Manager) UpdateMembership(relayURLs []string) {
 
 		// Fast path: check if we already know this URL is ours
 		if cm.selfURLs[url] {
-			log.I.F("removed self from cluster members (known URL): %s", url)
+			log.D.F("removed self from cluster members (known URL): %s", url)
 			continue
 		}
 
@@ -392,7 +392,7 @@ func (cm *Manager) UpdateMembership(relayURLs []string) {
 			if err != nil {
 				log.D.F("couldn't fetch NIP-11 for %s, adding to cluster anyway: %v", url, err)
 			} else if peerPubkey == cm.relayIdentityPubkey {
-				log.I.F("removed self from cluster members (discovered): %s (pubkey: %s)", url, cm.relayIdentityPubkey)
+				log.D.F("removed self from cluster members (discovered): %s (pubkey: %s)", url, cm.relayIdentityPubkey)
 				// Cache this URL as ours for future fast lookups
 				cm.selfURLs[url] = true
 				continue
@@ -407,7 +407,7 @@ func (cm *Manager) UpdateMembership(relayURLs []string) {
 			Status:       "unknown",
 		}
 		cm.members[url] = member
-		log.I.F("added cluster member: %s", url)
+		log.D.F("added cluster member: %s", url)
 	}
 }
 
@@ -442,7 +442,7 @@ func (cm *Manager) HandleMembershipEvent(ev *event.E) error {
 	// Update cluster membership
 	cm.UpdateMembership(relayURLs)
 
-	log.I.F("updated cluster membership with %d relays from event %x", len(relayURLs), ev.ID)
+	log.D.F("updated cluster membership with %d relays from event %x", len(relayURLs), ev.ID)
 
 	return nil
 }

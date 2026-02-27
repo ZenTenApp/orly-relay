@@ -50,9 +50,9 @@ func (l *Listener) HandlePolicyConfigUpdate(ev *event.E) error {
 	}
 
 	if isOwner {
-		log.I.F("owner verified: %s", hex.Enc(ev.Pubkey))
+		log.D.F("owner verified: %s", hex.Enc(ev.Pubkey))
 	} else {
-		log.I.F("policy admin verified: %s", hex.Enc(ev.Pubkey))
+		log.D.F("policy admin verified: %s", hex.Enc(ev.Pubkey))
 	}
 
 	// 2. Parse and validate JSON with appropriate validation rules

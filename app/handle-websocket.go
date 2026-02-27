@@ -307,7 +307,7 @@ whitelist:
 				websocket.CloseAbnormalClosure,  // 1006
 				4537,                            // some client seems to send many of these
 			) {
-				log.I.F("websocket connection closed from %s: %v", remote, err)
+				log.D.F("websocket connection closed from %s: %v", remote, err)
 			}
 			cancel() // Cancel context like khatru does
 			return
@@ -329,7 +329,7 @@ whitelist:
 
 		// Queue message for asynchronous processing
 		if !listener.QueueMessage(msg, remote) {
-			log.W.F("ws->%s message queue full, dropping message (capacity=%d)", remote, cap(listener.messageQueue))
+			log.D.F("ws->%s message queue full, dropping message (capacity=%d)", remote, cap(listener.messageQueue))
 		}
 	}
 }

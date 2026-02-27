@@ -345,9 +345,9 @@ func (f *Follows) adminRelays() (urls []string) {
 
 	// If no admin relays found, use bootstrap relays as fallback
 	if len(urls) == 0 {
-		log.I.F("no admin relays found in DB, checking bootstrap relays and failover relays")
+		log.D.F("no admin relays found in DB, checking bootstrap relays and failover relays")
 		if len(f.cfg.BootstrapRelays) > 0 {
-			log.I.F("using bootstrap relays: %v", f.cfg.BootstrapRelays)
+			log.D.F("using bootstrap relays: %v", f.cfg.BootstrapRelays)
 			for _, relay := range f.cfg.BootstrapRelays {
 				n := string(normalize.URL(relay))
 				if n == "" {
@@ -381,7 +381,7 @@ func (f *Follows) adminRelays() (urls []string) {
 				urls = append(urls, n)
 			}
 		} else {
-			log.I.F("no bootstrap relays configured, using failover relays")
+			log.D.F("no bootstrap relays configured, using failover relays")
 		}
 
 		// If still no relays found, use hardcoded failover relays
@@ -394,7 +394,7 @@ func (f *Follows) adminRelays() (urls []string) {
 				"wss://nos.lol",
 				"wss://relay.damus.io",
 			}
-			log.I.F("using failover relays: %v", failoverRelays)
+			log.D.F("using failover relays: %v", failoverRelays)
 			for _, relay := range failoverRelays {
 				n := string(normalize.URL(relay))
 				if n == "" {
@@ -435,7 +435,7 @@ func (f *Follows) adminRelays() (urls []string) {
 
 
 func (f *Follows) Syncer() {
-	log.I.F("starting follows syncer")
+	log.D.F("starting follows syncer")
 
 	// Start periodic follow list and metadata fetching
 	go f.startPeriodicFollowListFetching()
@@ -471,7 +471,7 @@ func (f *Follows) startPeriodicFollowListFetching() {
 		frequency = time.Hour // Default to 1 hour
 	}
 
-	log.I.F("starting periodic follow list fetching every %v", frequency)
+	log.D.F("starting periodic follow list fetching every %v", frequency)
 
 	ticker := time.NewTicker(frequency)
 	defer ticker.Stop()
@@ -492,7 +492,7 @@ func (f *Follows) startPeriodicFollowListFetching() {
 
 // fetchAdminFollowLists fetches follow lists for admins and metadata for all follows
 func (f *Follows) fetchAdminFollowLists() {
-	log.I.F("follows syncer: fetching admin follow lists and follows metadata")
+	log.D.F("follows syncer: fetching admin follow lists and follows metadata")
 
 	urls := f.adminRelays()
 	if len(urls) == 0 {
@@ -514,7 +514,7 @@ func (f *Follows) fetchAdminFollowLists() {
 		return
 	}
 
-	log.I.F("follows syncer: fetching from %d relays: follow lists for %d admins, metadata for %d follows",
+	log.D.F("follows syncer: fetching from %d relays: follow lists for %d admins, metadata for %d follows",
 		len(urls), len(admins), len(allFollows))
 
 	for _, u := range urls {
@@ -547,7 +547,7 @@ func (f *Follows) fetchFollowListsFromRelay(relayURL string, admins [][]byte, al
 	}
 	defer c.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "follow list fetch complete"), time.Now().Add(time.Second))
 
-	log.I.F("follows syncer: fetching follow lists and metadata from relay %s", relayURL)
+	log.D.F("follows syncer: fetching follow lists and metadata from relay %s", relayURL)
 
 	// Create filters:
 	// - kind 3 (follow lists) for admins only
@@ -706,7 +706,7 @@ func (f *Follows) processCollectedEvents(relayURL string, followListEvents, meta
 
 		// Extract followed pubkeys from admin follow lists
 		if f.isAdminPubkey(ev.Pubkey) {
-			log.I.F("follows syncer: processing admin follow list from %s", pubkeyHex)
+			log.D.F("follows syncer: processing admin follow list from %s", pubkeyHex)
 			f.extractFollowedPubkeys(ev)
 		}
 	}
@@ -741,7 +741,7 @@ func (f *Follows) processCollectedEvents(relayURL string, followListEvents, meta
 		}
 	}
 
-	log.I.F("follows syncer: from %s - received: %d follow lists, %d metadata, %d relay lists; saved: %d, %d, %d",
+	log.D.F("follows syncer: from %s - received: %d follow lists, %d metadata, %d relay lists; saved: %d, %d, %d",
 		relayURL, len(followListEvents), len(metadataEvents), len(relayListEvents),
 		savedFollowLists, savedMetadata, savedRelayLists)
 }
@@ -827,7 +827,7 @@ func (f *Follows) AddFollow(pub []byte) {
 	f.follows = append(f.follows, b)
 	f.followsSet[pubHex] = struct{}{}
 
-	log.I.F(
+	log.D.F(
 		"follows syncer: added new followed pubkey: %s",
 		pubHex,
 	)

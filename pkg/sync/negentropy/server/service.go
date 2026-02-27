@@ -66,7 +66,7 @@ func (s *Service) HandleNegOpen(ctx context.Context, req *negentropyv1.NegOpenRe
 		}, nil
 	}
 
-	log.I.F("NEG-OPEN: built storage with %d events", storage.Size())
+	log.D.F("NEG-OPEN: built storage with %d events", storage.Size())
 
 	// Create negentropy instance for this session
 	neg := negentropylib.New(storage, negentropylib.DefaultFrameSizeLimit)
@@ -94,7 +94,7 @@ func (s *Service) HandleNegOpen(ctx context.Context, req *negentropyv1.NegOpenRe
 			Error:   fmt.Sprintf("reconcile failed: %v", err),
 		}, nil
 	}
-	log.I.F("NEG-OPEN: reconcile complete=%v, response len=%d", complete, len(respMsg))
+	log.D.F("NEG-OPEN: reconcile complete=%v, response len=%d", complete, len(respMsg))
 
 	// Collect IDs we have that client needs (to send as events)
 	haveIDs := neg.CollectHaves()
@@ -116,7 +116,7 @@ func (s *Service) HandleNegOpen(ctx context.Context, req *negentropyv1.NegOpenRe
 		}
 	}
 
-	log.I.F("NEG-OPEN: complete=%v, haves=%d, needs=%d, response len=%d",
+	log.D.F("NEG-OPEN: complete=%v, haves=%d, needs=%d, response len=%d",
 		complete, len(haveIDs), len(needIDs), len(respMsg))
 
 	return &negentropyv1.NegOpenResponse{
@@ -177,7 +177,7 @@ func (s *Service) HandleNegMsg(ctx context.Context, req *negentropyv1.NegMsgRequ
 		}
 	}
 
-	log.I.F("NEG-MSG: complete=%v, haves=%d, needs=%d, response len=%d",
+	log.D.F("NEG-MSG: complete=%v, haves=%d, needs=%d, response len=%d",
 		complete, len(haveIDs), len(needIDs), len(respMsg))
 
 	return &negentropyv1.NegMsgResponse{

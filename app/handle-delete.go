@@ -22,8 +22,8 @@ func (l *Listener) GetSerialsFromFilter(f *filter.F) (
 }
 
 func (l *Listener) HandleDelete(env *eventenvelope.Submission) (err error) {
-	log.I.F("HandleDelete: processing delete event %0x from pubkey %0x", env.E.ID, env.E.Pubkey)
-	log.I.F("HandleDelete: delete event tags: %d tags", len(*env.E.Tags))
+	log.D.F("HandleDelete: processing delete event %0x from pubkey %0x", env.E.ID, env.E.Pubkey)
+	log.T.F("HandleDelete: delete event tags: %d tags", len(*env.E.Tags))
 	for i, t := range *env.E.Tags {
 		// Use ValueHex() for e/p tags to properly display binary-encoded values
 		key := string(t.Key())
@@ -33,24 +33,16 @@ func (l *Listener) HandleDelete(env *eventenvelope.Submission) (err error) {
 		} else {
 			val = string(t.Value())
 		}
-		log.I.F("HandleDelete: tag %d: %s = %s", i, key, val)
+		log.T.F("HandleDelete: tag %d: %s = %s", i, key, val)
 	}
 
-	// Debug: log admin and owner lists
-	log.I.F("HandleDelete: checking against %d admins and %d owners", len(l.Admins), len(l.Owners))
-	for i, pk := range l.Admins {
-		log.I.F("HandleDelete: admin[%d] = %0x (hex: %s)", i, pk, hex.Enc(pk))
-	}
-	for i, pk := range l.Owners {
-		log.I.F("HandleDelete: owner[%d] = %0x (hex: %s)", i, pk, hex.Enc(pk))
-	}
-	log.I.F("HandleDelete: delete event pubkey = %0x (hex: %s)", env.E.Pubkey, hex.Enc(env.E.Pubkey))
+	log.T.F("HandleDelete: checking against %d admins and %d owners", len(l.Admins), len(l.Owners))
 
 	var ownerDelete bool
 	for _, pk := range l.Admins {
 		if utils.FastEqual(pk, env.E.Pubkey) {
 			ownerDelete = true
-			log.I.F("HandleDelete: delete event from admin/owner %0x", env.E.Pubkey)
+			log.D.F("HandleDelete: delete event from admin/owner %0x", env.E.Pubkey)
 			break
 		}
 	}
@@ -58,13 +50,13 @@ func (l *Listener) HandleDelete(env *eventenvelope.Submission) (err error) {
 		for _, pk := range l.Owners {
 			if utils.FastEqual(pk, env.E.Pubkey) {
 				ownerDelete = true
-				log.I.F("HandleDelete: delete event from owner %0x", env.E.Pubkey)
+				log.D.F("HandleDelete: delete event from owner %0x", env.E.Pubkey)
 				break
 			}
 		}
 	}
 	if !ownerDelete {
-		log.I.F("HandleDelete: delete event from regular user %0x", env.E.Pubkey)
+		log.D.F("HandleDelete: delete event from regular user %0x", env.E.Pubkey)
 	}
 	// process the tags in the delete event
 	var deleteErr error
@@ -156,7 +148,7 @@ func (l *Listener) HandleDelete(env *eventenvelope.Submission) (err error) {
 				log.W.F("HandleDelete: empty e-tag value")
 				continue
 			}
-			log.I.F("HandleDelete: processing e-tag event ID: %s", string(hexVal))
+			log.D.F("HandleDelete: processing e-tag event ID: %s", string(hexVal))
 
 			// Decode hex to binary for filter
 			dst, e := hex.Dec(string(hexVal))
@@ -173,7 +165,7 @@ func (l *Listener) HandleDelete(env *eventenvelope.Submission) (err error) {
 				log.E.F("HandleDelete: failed to get serials from filter: %v", err)
 				continue
 			}
-			log.I.F("HandleDelete: found %d serials for event ID %0x", len(sers), dst)
+			log.D.F("HandleDelete: found %d serials for event ID %0x", len(sers), dst)
 			// if found, delete them
 			if len(sers) > 0 {
 				// there should be only one event per serial, so we can just
@@ -184,9 +176,9 @@ func (l *Listener) HandleDelete(env *eventenvelope.Submission) (err error) {
 						continue
 					}
 					// Debug: log the comparison details
-					log.I.F("HandleDelete: checking deletion permission for event %s", hex.Enc(ev.ID))
-					log.I.F("HandleDelete: delete event pubkey = %s, target event pubkey = %s", hex.Enc(env.E.Pubkey), hex.Enc(ev.Pubkey))
-					log.I.F("HandleDelete: ownerDelete = %v, pubkey match = %v", ownerDelete, utils.FastEqual(env.E.Pubkey, ev.Pubkey))
+					log.D.F("HandleDelete: checking deletion permission for event %s", hex.Enc(ev.ID))
+					log.D.F("HandleDelete: delete event pubkey = %s, target event pubkey = %s", hex.Enc(env.E.Pubkey), hex.Enc(ev.Pubkey))
+					log.D.F("HandleDelete: ownerDelete = %v, pubkey match = %v", ownerDelete, utils.FastEqual(env.E.Pubkey, ev.Pubkey))
 
 					// For admin/owner deletes: allow deletion regardless of pubkey match
 					// For regular users: allow deletion only if the signer is the author
@@ -198,7 +190,7 @@ func (l *Listener) HandleDelete(env *eventenvelope.Submission) (err error) {
 						)
 						continue
 					}
-					log.I.F("HandleDelete: deletion authorized for event %s", hex.Enc(ev.ID))
+					log.D.F("HandleDelete: deletion authorized for event %s", hex.Enc(ev.ID))
 					validDeletionFound = true
 					// exclude delete events
 					if ev.Kind == kind.EventDeletion.K {
@@ -270,10 +262,10 @@ func (l *Listener) HandleDelete(env *eventenvelope.Submission) (err error) {
 		log.W.F("HandleDelete: no valid deletions found for event %0x", env.E.ID)
 		// Don't block delete events from being stored - just log the issue
 		// The delete event itself should still be accepted even if no targets are found
-		log.I.F("HandleDelete: delete event %0x stored but no target events found to delete", env.E.ID)
+		log.D.F("HandleDelete: delete event %0x stored but no target events found to delete", env.E.ID)
 		return nil
 	}
 
-	log.I.F("HandleDelete: successfully processed %d deletions for event %0x", deletionCount, env.E.ID)
+	log.D.F("HandleDelete: successfully processed %d deletions for event %0x", deletionCount, env.E.ID)
 	return
 }

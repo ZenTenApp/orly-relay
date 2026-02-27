@@ -224,7 +224,7 @@ func (s *Service) NotifyNewEvent(ctx context.Context, req *distributedv1.NewEven
 
 // TriggerSync manually triggers a sync cycle with all peers.
 func (s *Service) TriggerSync(ctx context.Context, _ *commonv1.Empty) (*commonv1.Empty, error) {
-	log.I.F("manual sync trigger requested")
+	log.D.F("manual sync trigger requested")
 	return &commonv1.Empty{}, nil
 }
 

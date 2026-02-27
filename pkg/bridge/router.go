@@ -33,7 +33,7 @@ func (r *Router) RouteDM(ctx context.Context, senderPubkeyHex, content string) {
 
 	switch result.Command {
 	case DMCommandSubscribe:
-		log.I.F("subscribe command from %s (alias=%q)", senderPubkeyHex, result.Alias)
+		log.D.F("subscribe command from %s (alias=%q)", senderPubkeyHex, result.Alias)
 		if r.subHandler != nil {
 			// Run in goroutine — HandleSubscribe blocks for up to 10 minutes
 			// waiting for payment, and must not block the event processing loop.
@@ -44,7 +44,7 @@ func (r *Router) RouteDM(ctx context.Context, senderPubkeyHex, content string) {
 		return
 
 	case DMCommandStatus:
-		log.I.F("status command from %s", senderPubkeyHex)
+		log.D.F("status command from %s", senderPubkeyHex)
 		if r.subHandler != nil {
 			r.subHandler.HandleStatus(senderPubkeyHex)
 		} else {
@@ -55,7 +55,7 @@ func (r *Router) RouteDM(ctx context.Context, senderPubkeyHex, content string) {
 
 	// Check if it's an outbound email
 	if IsOutboundEmail(content) {
-		log.I.F("outbound email from %s", senderPubkeyHex)
+		log.D.F("outbound email from %s", senderPubkeyHex)
 		if r.outbound != nil {
 			r.outbound.ProcessOutbound(senderPubkeyHex, content)
 		} else {

@@ -64,7 +64,7 @@ func IdentifyNegentropyEnvelope(msg []byte) (envelopeType string, ok bool) {
 // HandleNegOpen processes NEG-OPEN messages
 // Format: ["NEG-OPEN", subscription_id, filter, initial_message?]
 func (l *Listener) HandleNegOpen(msg []byte) error {
-	log.I.F("HandleNegOpen called from %s", l.connectionID)
+	log.D.F("HandleNegOpen called from %s", l.connectionID)
 	if negentropyHandler == nil {
 		log.E.F("negentropy handler not initialized — client sent NEG-OPEN but NIP-77 is not enabled (check ORLY_NEGENTROPY_ENABLED and startup logs)")
 		return l.sendNegErr("", "negentropy not enabled on this relay")
@@ -296,7 +296,7 @@ func (l *Listener) sendEventsForIDs(subscriptionID string, ids [][]byte) error {
 		return nil
 	}
 
-	log.I.F("NEG: sending %d events for subscription %s", len(ids), subscriptionID)
+	log.D.F("NEG: sending %d events for subscription %s", len(ids), subscriptionID)
 
 	// Build filter with binary IDs (32 bytes each)
 	f := &filter.F{}
@@ -333,7 +333,7 @@ func (l *Listener) sendEventsForIDs(subscriptionID string, ids [][]byte) error {
 		sent++
 	}
 
-	log.I.F("NEG: sent %d/%d events for subscription %s", sent, len(ids), subscriptionID)
+	log.D.F("NEG: sent %d/%d events for subscription %s", sent, len(ids), subscriptionID)
 	return nil
 }
 

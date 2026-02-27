@@ -83,7 +83,7 @@ func (s *session) Data(r io.Reader) error {
 		ReceivedAt: time.Now(),
 	}
 
-	log.I.F("SMTP received message from %s to %v (%d bytes)", s.from, s.to, len(data))
+	log.D.F("SMTP received message from %s to %v (%d bytes)", s.from, s.to, len(data))
 
 	if err := s.handler(email); err != nil {
 		log.E.F("handler error for message from %s: %v", s.from, err)

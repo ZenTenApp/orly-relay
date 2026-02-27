@@ -132,7 +132,7 @@ func (e *Executor) Execute(q *Query) (*event.E, error) {
 	}
 
 	elapsed := time.Since(start)
-	log.I.F("graph query: edge=%s dir=%s depth=%d elapsed=%s pubkeys=%d events=%d baseline=%v",
+	log.D.F("graph query: edge=%s dir=%s depth=%d elapsed=%s pubkeys=%d events=%d baseline=%v",
 		q.Edge, q.Direction, q.Depth, elapsed, result.GetTotalPubkeys(), result.GetTotalEvents(), e.baseline)
 
 	return e.generateResponse(q, result, elapsed)

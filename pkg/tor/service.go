@@ -165,7 +165,7 @@ func (s *Service) killOrphanedTor(torrcPath string) {
 		if err := killCmd.Run(); err != nil {
 			log.W.F("failed to kill orphaned Tor PID %s: %v", pid, err)
 		} else {
-			log.I.F("killed orphaned Tor PID %s", pid)
+			log.T.F("killed orphaned Tor PID %s", pid)
 		}
 	}
 
@@ -283,7 +283,7 @@ func (s *Service) logOutput(prefix string, r io.ReadCloser) {
 			strings.Contains(line, "abandoning stream") {
 			log.T.F("[%s] %s", prefix, line)
 		} else if strings.Contains(line, "Bootstrapped") {
-			log.I.F("[%s] %s", prefix, line)
+			log.D.F("[%s] %s", prefix, line)
 		} else if strings.Contains(line, "[warn]") || strings.Contains(line, "[err]") {
 			log.W.F("[%s] %s", prefix, line)
 		} else {

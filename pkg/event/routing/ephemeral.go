@@ -23,7 +23,7 @@ func IsEphemeral(k uint16) bool {
 // - Are immediately delivered to subscribers
 func MakeEphemeralHandler(publisher Publisher) Handler {
 	return func(ev *event.E, authedPubkey []byte) Result {
-		log.I.F("ephemeral handler received event kind %d, id %0x", ev.Kind, ev.ID[:8])
+		log.D.F("ephemeral handler received event kind %d, id %0x", ev.Kind, ev.ID[:8])
 		// Clone and deliver immediately without persistence
 		cloned := ev.Clone()
 		go publisher.Deliver(cloned)

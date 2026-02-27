@@ -17,7 +17,7 @@ import (
 
 // HandleNIP43JoinRequest processes a kind 28934 join request
 func (l *Listener) HandleNIP43JoinRequest(ev *event.E) error {
-	log.I.F("handling NIP-43 join request from %s", hex.Enc(ev.Pubkey))
+	log.D.F("handling NIP-43 join request from %s", hex.Enc(ev.Pubkey))
 
 	// Validate the join request
 	inviteCode, valid, reason := nip43.ValidateJoinRequest(ev)
@@ -34,7 +34,7 @@ func (l *Listener) HandleNIP43JoinRequest(ev *event.E) error {
 	}
 
 	if isMember {
-		log.I.F("user %s is already a member", hex.Enc(ev.Pubkey))
+		log.D.F("user %s is already a member", hex.Enc(ev.Pubkey))
 		return l.sendOKResponse(ev.ID, true, "duplicate: you are already a member of this relay")
 	}
 
@@ -78,7 +78,7 @@ func (l *Listener) HandleNIP43JoinRequest(ev *event.E) error {
 
 // HandleNIP43LeaveRequest processes a kind 28936 leave request
 func (l *Listener) HandleNIP43LeaveRequest(ev *event.E) error {
-	log.I.F("handling NIP-43 leave request from %s", hex.Enc(ev.Pubkey))
+	log.D.F("handling NIP-43 leave request from %s", hex.Enc(ev.Pubkey))
 
 	// Validate the leave request
 	valid, reason := nip43.ValidateLeaveRequest(ev)
@@ -95,7 +95,7 @@ func (l *Listener) HandleNIP43LeaveRequest(ev *event.E) error {
 	}
 
 	if !isMember {
-		log.I.F("user %s is not a member", hex.Enc(ev.Pubkey))
+		log.D.F("user %s is not a member", hex.Enc(ev.Pubkey))
 		return l.sendOKResponse(ev.ID, true, "you are not a member of this relay")
 	}
 
@@ -126,7 +126,7 @@ func (l *Listener) HandleNIP43LeaveRequest(ev *event.E) error {
 
 // HandleNIP43InviteRequest processes a kind 28935 invite request (REQ subscription)
 func (s *Server) HandleNIP43InviteRequest(pubkey []byte) (*event.E, error) {
-	log.I.F("generating NIP-43 invite for pubkey %s", hex.Enc(pubkey))
+	log.D.F("generating NIP-43 invite for pubkey %s", hex.Enc(pubkey))
 
 	// Check if requester has permission to request invites
 	// This could be based on ACL, admins, etc.
@@ -154,7 +154,7 @@ func (s *Server) HandleNIP43InviteRequest(pubkey []byte) (*event.E, error) {
 		return nil, err
 	}
 
-	log.I.F("generated invite code for %s", hex.Enc(pubkey))
+	log.D.F("generated invite code for %s", hex.Enc(pubkey))
 	return inviteEvent, nil
 }
 
