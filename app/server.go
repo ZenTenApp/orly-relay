@@ -49,6 +49,7 @@ import (
 	"next.orly.dev/pkg/wireguard"
 	"next.orly.dev/pkg/archive"
 	emailbridge "next.orly.dev/pkg/bridge"
+	"next.orly.dev/pkg/crawler"
 	"next.orly.dev/pkg/httpguard"
 	"next.orly.dev/pkg/transport"
 )
@@ -141,6 +142,9 @@ type Server struct {
 
 	// Email bridge (Marmot DM to SMTP)
 	emailBridge *emailbridge.Bridge
+
+	// Corpus crawler (relay discovery + negentropy sync)
+	corpusCrawler *crawler.Crawler
 }
 
 // =============================================================================

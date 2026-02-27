@@ -27,6 +27,7 @@ import (
 	"next.orly.dev/pkg/bunker"
 	"next.orly.dev/pkg/protocol/nrc"
 	"next.orly.dev/pkg/ratelimit"
+	"next.orly.dev/pkg/crawler"
 	"next.orly.dev/pkg/spider"
 	"next.orly.dev/pkg/storage"
 	dsync "next.orly.dev/pkg/sync"
@@ -382,6 +383,50 @@ func Run(
 			} else {
 				log.I.F("directory spider started (interval: %v, max hops: %d)",
 					cfg.DirectorySpiderInterval, cfg.DirectorySpiderMaxHops)
+			}
+		}
+	}
+
+	// Initialize corpus crawler if enabled (works with any database backend)
+	if cfg.CrawlerEnabled {
+		crawlerCfg := crawler.DefaultConfig()
+		if cfg.CrawlerDiscoveryInterval > 0 {
+			crawlerCfg.DiscoveryInterval = cfg.CrawlerDiscoveryInterval
+		}
+		if cfg.CrawlerSyncInterval > 0 {
+			crawlerCfg.SyncInterval = cfg.CrawlerSyncInterval
+		}
+		if cfg.CrawlerMaxHops > 0 {
+			crawlerCfg.MaxHops = cfg.CrawlerMaxHops
+		}
+		if cfg.CrawlerConcurrency > 0 {
+			crawlerCfg.Concurrency = cfg.CrawlerConcurrency
+		}
+
+		if l.corpusCrawler, err = crawler.New(ctx, db, l.publishers, crawlerCfg); err != nil {
+			log.E.F("failed to create corpus crawler: %v", err)
+		} else {
+			l.corpusCrawler.SetSeedCallback(func() [][]byte {
+				var pubkeys [][]byte
+				for _, aclInstance := range acl.Registry.ACLs() {
+					if aclInstance.Type() == "follows" {
+						if follows, ok := aclInstance.(*acl.Follows); ok {
+							pubkeys = append(pubkeys, follows.GetFollowedPubkeys()...)
+						}
+					}
+				}
+				if len(pubkeys) == 0 {
+					pubkeys = adminKeys
+				}
+				return pubkeys
+			})
+
+			if err = l.corpusCrawler.Start(); err != nil {
+				log.E.F("failed to start corpus crawler: %v", err)
+			} else {
+				log.I.F("corpus crawler started (discovery: %v, sync: %v, hops: %d, concurrency: %d)",
+					crawlerCfg.DiscoveryInterval, crawlerCfg.SyncInterval,
+					crawlerCfg.MaxHops, crawlerCfg.Concurrency)
 			}
 		}
 	}
@@ -755,6 +800,12 @@ func Run(
 		if l.directorySpider != nil {
 			l.directorySpider.Stop()
 			log.I.F("directory spider stopped")
+		}
+
+		// Stop corpus crawler if running
+		if l.corpusCrawler != nil {
+			l.corpusCrawler.Stop()
+			log.I.F("corpus crawler stopped")
 		}
 
 		// Stop rate limiter if running

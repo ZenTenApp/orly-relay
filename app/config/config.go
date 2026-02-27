@@ -109,6 +109,14 @@ type C struct {
 	DirectorySpiderInterval time.Duration `env:"ORLY_DIRECTORY_SPIDER_INTERVAL" default:"24h" usage:"how often to run directory spider"`
 	DirectorySpiderMaxHops  int           `env:"ORLY_DIRECTORY_SPIDER_HOPS" default:"3" usage:"maximum hops for relay discovery from seed users"`
 
+
+	// Corpus Crawler settings (relay discovery + negentropy full-event sync)
+	CrawlerEnabled           bool          `env:"ORLY_CRAWLER_ENABLED" default:"false" usage:"enable corpus crawler for relay discovery and full event sync via negentropy"`
+	CrawlerDiscoveryInterval time.Duration `env:"ORLY_CRAWLER_DISCOVERY_INTERVAL" default:"4h" usage:"how often to run relay discovery via kind 10002 hop expansion"`
+	CrawlerSyncInterval      time.Duration `env:"ORLY_CRAWLER_SYNC_INTERVAL" default:"30m" usage:"how often to re-sync known relays via negentropy"`
+	CrawlerMaxHops           int           `env:"ORLY_CRAWLER_MAX_HOPS" default:"5" usage:"maximum hops for relay discovery from seed pubkeys"`
+	CrawlerConcurrency       int           `env:"ORLY_CRAWLER_CONCURRENCY" default:"3" usage:"number of relays to sync concurrently"`
+
 	PolicyEnabled bool   `env:"ORLY_POLICY_ENABLED" default:"false" usage:"enable policy-based event processing (default config: $HOME/.config/ORLY/policy.json)"`
 	PolicyPath    string `env:"ORLY_POLICY_PATH" usage:"ABSOLUTE path to policy configuration file (MUST start with /); overrides default location; relative paths are rejected"`
 
