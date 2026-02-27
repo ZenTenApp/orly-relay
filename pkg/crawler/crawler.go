@@ -8,7 +8,7 @@
 //	Crawler maintains a persistent frontier of relay entries with per-relay
 //	state → Sync loop picks relays due for sync and runs negentropy
 //	reconciliation with bounded concurrency → Frontier state is persisted
-//	to Badger markers so it survives restarts.
+//	to database markers so it survives restarts.
 package crawler
 
 import (
@@ -33,65 +33,35 @@ import (
 )
 
 const (
-	// DefaultDiscoveryInterval is how often the crawler runs relay discovery.
 	DefaultDiscoveryInterval = 4 * time.Hour
-
-	// DefaultSyncInterval is how often the crawler re-syncs known relays.
-	DefaultSyncInterval = 30 * time.Minute
-
-	// DefaultMaxHops is the maximum hop distance for relay discovery.
-	DefaultMaxHops = 5
-
-	// DefaultConcurrency is how many relays to sync concurrently.
-	DefaultConcurrency = 3
-
-	// DefaultRelayTimeout is the timeout for connecting to a relay.
-	DefaultRelayTimeout = 30 * time.Second
-
-	// QueryTimeout is the timeout for waiting for EOSE on a query.
-	QueryTimeout = 60 * time.Second
-
-	// DefaultSyncTimeout is the maximum time for a single negentropy sync.
-	DefaultSyncTimeout = 10 * time.Minute
-
-	// DefaultRelayDelay is the delay between processing relays (rate limit).
-	DefaultRelayDelay = 500 * time.Millisecond
-
-	// DefaultMaxFailures is how many consecutive failures before blacklisting.
-	DefaultMaxFailures = 5
-
-	// DefaultBlacklistDuration is how long a relay stays blacklisted.
+	DefaultSyncInterval      = 30 * time.Minute
+	DefaultMaxHops           = 5
+	DefaultConcurrency       = 3
+	DefaultRelayTimeout      = 30 * time.Second
+	QueryTimeout             = 60 * time.Second
+	DefaultSyncTimeout       = 10 * time.Minute
+	DefaultRelayDelay        = 500 * time.Millisecond
+	DefaultMaxFailures       = 5
 	DefaultBlacklistDuration = 24 * time.Hour
+	DefaultMaxEventsPerSync  = 1_000_000
+	MaxEventsPerQuery        = 5000
 
-	// DefaultMaxEventsPerSync is the max events for negentropy vector building.
-	DefaultMaxEventsPerSync = 1_000_000
-
-	// MaxEventsPerQuery caps the number of events in a single relay list query.
-	MaxEventsPerQuery = 5000
-
-	// markerFrontierKey is the Badger marker key for the full frontier.
 	markerFrontierKey = "crawler:frontier"
-
-	// markerStatsKey is the Badger marker key for crawler statistics.
-	markerStatsKey = "crawler:stats"
+	markerStatsKey    = "crawler:stats"
 )
 
 // Config holds configuration for the corpus crawler.
 type Config struct {
-	// Discovery settings
 	DiscoveryInterval time.Duration
 	MaxHops           int
 
-	// Sync settings
 	SyncInterval     time.Duration
 	Concurrency      int
 	SyncTimeout      time.Duration
 	MaxEventsPerSync uint
 
-	// Rate limiting
 	RelayDelay time.Duration
 
-	// Failure handling
 	MaxFailures       int
 	BlacklistDuration time.Duration
 }
@@ -157,17 +127,22 @@ type Crawler struct {
 	pub    publisher.I
 	config *Config
 
+	// mu protects frontier, stats, and selfURLs.
 	mu       gosync.RWMutex
 	frontier map[string]*RelayState
 	stats    Stats
+	selfURLs map[string]bool
 
 	relayIdentityPubkey string
-	selfURLs            map[string]bool
 	nip11Cache          *dsync.NIP11Cache
 
+	// seedMu protects getSeedPubkeys independently from frontier lock
+	// to avoid holding mu during the callback (which may do its own locking).
+	seedMu         gosync.RWMutex
 	getSeedPubkeys func() [][]byte
 
 	running  atomic.Bool
+	stopOnce gosync.Once
 	stopChan chan struct{}
 	wg       gosync.WaitGroup
 }
@@ -199,6 +174,7 @@ func New(ctx context.Context, db database.Database, pub publisher.I, cfg *Config
 		selfURLs:            make(map[string]bool),
 		nip11Cache:          dsync.NewNIP11Cache(30 * time.Minute),
 		relayIdentityPubkey: relayPubkey,
+		stopChan:            make(chan struct{}),
 	}
 
 	if err := c.loadFrontier(); err != nil {
@@ -210,9 +186,19 @@ func New(ctx context.Context, db database.Database, pub publisher.I, cfg *Config
 
 // SetSeedCallback sets the callback for getting seed pubkeys used in discovery.
 func (c *Crawler) SetSeedCallback(fn func() [][]byte) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.seedMu.Lock()
+	defer c.seedMu.Unlock()
 	c.getSeedPubkeys = fn
+}
+
+func (c *Crawler) callSeedCallback() [][]byte {
+	c.seedMu.RLock()
+	fn := c.getSeedPubkeys
+	c.seedMu.RUnlock()
+	if fn == nil {
+		return nil
+	}
+	return fn()
 }
 
 // Start begins the crawler's discovery and sync loops.
@@ -220,12 +206,15 @@ func (c *Crawler) Start() error {
 	if c.running.Load() {
 		return fmt.Errorf("crawler already running")
 	}
-	if c.getSeedPubkeys == nil {
+
+	c.seedMu.RLock()
+	hasSeed := c.getSeedPubkeys != nil
+	c.seedMu.RUnlock()
+	if !hasSeed {
 		return fmt.Errorf("seed callback must be set before starting")
 	}
 
 	c.running.Store(true)
-	c.stopChan = make(chan struct{})
 
 	c.wg.Add(2)
 	go c.discoveryLoop()
@@ -238,13 +227,13 @@ func (c *Crawler) Start() error {
 	return nil
 }
 
-// Stop stops the crawler.
+// Stop stops the crawler gracefully.
 func (c *Crawler) Stop() {
 	if !c.running.Load() {
 		return
 	}
 	c.running.Store(false)
-	close(c.stopChan)
+	c.stopOnce.Do(func() { close(c.stopChan) })
 	c.cancel()
 	c.wg.Wait()
 
@@ -252,8 +241,13 @@ func (c *Crawler) Stop() {
 		log.W.F("crawler: failed to save frontier on stop: %v", err)
 	}
 
+	c.mu.RLock()
+	frontierSize := len(c.frontier)
+	totalEvents := c.stats.TotalEventsSynced
+	c.mu.RUnlock()
+
 	log.I.F("crawler: stopped (frontier: %d relays, total events synced: %d)",
-		len(c.frontier), c.stats.TotalEventsSynced)
+		frontierSize, totalEvents)
 }
 
 // GetStats returns a snapshot of crawler statistics.
@@ -270,7 +264,6 @@ func (c *Crawler) GetFrontierSize() int {
 	return len(c.frontier)
 }
 
-// discoveryLoop periodically discovers new relays via kind 10002 hop expansion.
 func (c *Crawler) discoveryLoop() {
 	defer c.wg.Done()
 
@@ -289,11 +282,9 @@ func (c *Crawler) discoveryLoop() {
 	}
 }
 
-// syncLoop periodically syncs events from relays in the frontier.
 func (c *Crawler) syncLoop() {
 	defer c.wg.Done()
 
-	// Wait for discovery to populate the frontier
 	select {
 	case <-c.stopChan:
 		return
@@ -319,7 +310,7 @@ func (c *Crawler) syncLoop() {
 func (c *Crawler) runDiscovery() {
 	log.I.F("crawler: starting relay discovery (max hops: %d)", c.config.MaxHops)
 
-	seeds := c.getSeedPubkeys()
+	seeds := c.callSeedCallback()
 	if len(seeds) == 0 {
 		log.W.F("crawler: no seed pubkeys, skipping discovery")
 		return
@@ -327,7 +318,6 @@ func (c *Crawler) runDiscovery() {
 
 	discovered := make(map[string]int) // URL -> hop distance
 
-	// Hop 0: get relay lists from local DB for seed pubkeys
 	localRelays := c.getRelaysFromLocalDB(seeds)
 	for url := range localRelays {
 		discovered[url] = 0
@@ -335,7 +325,6 @@ func (c *Crawler) runDiscovery() {
 
 	log.I.F("crawler: hop 0 discovered %d relays from %d seed pubkeys", len(discovered), len(seeds))
 
-	// Hops 1..N: expand by fetching kind 10002 from relays at each hop
 	for hop := 1; hop <= c.config.MaxHops; hop++ {
 		select {
 		case <-c.stopChan:
@@ -363,6 +352,7 @@ func (c *Crawler) runDiscovery() {
 			default:
 			}
 
+			// isSelfRelay does network IO (NIP-11) — must NOT hold mu.
 			if c.isSelfRelay(relayURL) {
 				continue
 			}
@@ -387,9 +377,8 @@ func (c *Crawler) runDiscovery() {
 			hop, newCount, len(prevHopRelays))
 	}
 
-	// Merge into frontier
-	c.mu.Lock()
-	added := 0
+	// Filter self-relays before taking the lock (isSelfRelay does network IO).
+	filtered := make(map[string]int, len(discovered))
 	for url, hopDist := range discovered {
 		normURL := string(normalize.URL(url))
 		if normURL == "" {
@@ -398,7 +387,13 @@ func (c *Crawler) runDiscovery() {
 		if c.isSelfRelay(normURL) {
 			continue
 		}
+		filtered[normURL] = hopDist
+	}
 
+	// Merge into frontier under lock.
+	c.mu.Lock()
+	added := 0
+	for normURL, hopDist := range filtered {
 		if existing, ok := c.frontier[normURL]; ok {
 			existing.LastDiscovery = time.Now()
 			if hopDist < existing.HopDistance {
@@ -416,10 +411,11 @@ func (c *Crawler) runDiscovery() {
 	}
 	c.stats.TotalRelaysDiscovered = int64(len(c.frontier))
 	c.stats.LastDiscoveryRun = time.Now()
+	frontierSize := len(c.frontier)
 	c.mu.Unlock()
 
 	log.I.F("crawler: discovery complete — %d new relays added, frontier size: %d",
-		added, len(c.frontier))
+		added, frontierSize)
 
 	if err := c.saveFrontier(); err != nil {
 		log.W.F("crawler: failed to save frontier: %v", err)
@@ -428,11 +424,21 @@ func (c *Crawler) runDiscovery() {
 
 // runSyncCycle syncs events from relays that are due for a sync.
 func (c *Crawler) runSyncCycle() {
+	// Snapshot relay URLs and hop distances under lock.
+	type syncTarget struct {
+		url         string
+		hopDistance  int
+		totalSyncs  int64
+	}
 	c.mu.RLock()
-	var due []*RelayState
+	var due []syncTarget
 	for _, rs := range c.frontier {
 		if rs.needsSync(c.config.SyncInterval) {
-			due = append(due, rs)
+			due = append(due, syncTarget{
+				url:        rs.URL,
+				hopDistance: rs.HopDistance,
+				totalSyncs: rs.TotalSyncs,
+			})
 		}
 	}
 	c.mu.RUnlock()
@@ -447,7 +453,7 @@ func (c *Crawler) runSyncCycle() {
 	sem := make(chan struct{}, c.config.Concurrency)
 	var syncWg gosync.WaitGroup
 
-	for _, rs := range due {
+	for _, target := range due {
 		select {
 		case <-c.stopChan:
 			syncWg.Wait()
@@ -458,11 +464,11 @@ func (c *Crawler) runSyncCycle() {
 		sem <- struct{}{}
 		syncWg.Add(1)
 
-		go func(relay *RelayState) {
+		go func(t syncTarget) {
 			defer syncWg.Done()
 			defer func() { <-sem }()
-			c.syncRelay(relay)
-		}(rs)
+			c.syncRelay(t.url, t.hopDistance, t.totalSyncs)
+		}(target)
 	}
 
 	syncWg.Wait()
@@ -478,31 +484,34 @@ func (c *Crawler) runSyncCycle() {
 	log.I.F("crawler: sync cycle complete")
 }
 
-// syncRelay performs a negentropy sync with a single relay.
-func (c *Crawler) syncRelay(rs *RelayState) {
+// syncRelay performs a negentropy sync with a single relay. The url, hopDistance,
+// and totalSyncs are snapshot values read under the lock by the caller; the
+// relay state in the frontier is updated under the lock after sync completes.
+func (c *Crawler) syncRelay(url string, hopDistance int, totalSyncs int64) {
 	ctx, cancel := context.WithTimeout(c.ctx, c.config.SyncTimeout)
 	defer cancel()
 
-	log.I.F("crawler: syncing %s (hop %d, syncs: %d)", rs.URL, rs.HopDistance, rs.TotalSyncs)
+	log.I.F("crawler: syncing %s (hop %d, syncs: %d)", url, hopDistance, totalSyncs)
 
-	// Create a one-shot negentropy manager for this relay
 	negCfg := &negentropy.Config{
-		Peers:        []string{rs.URL},
-		SyncInterval: 60 * time.Second, // Not used — we trigger manually
+		Peers:        []string{url},
+		SyncInterval: 60 * time.Second,
 		FrameSize:    128 * 1024,
 		IDSize:       16,
 		MaxEvents:    c.config.MaxEventsPerSync,
 	}
 
 	negMgr := negentropy.NewManager(c.db, negCfg)
-
-	// Trigger a one-shot sync (blocks until complete via syncWithPeer)
-	negMgr.TriggerSync(ctx, rs.URL)
-
-	// Read back the peer state to get results
-	peerState, ok := negMgr.GetPeerState(rs.URL)
+	negMgr.TriggerSync(ctx, url)
+	peerState, ok := negMgr.GetPeerState(url)
 
 	c.mu.Lock()
+	rs, exists := c.frontier[url]
+	if !exists {
+		c.mu.Unlock()
+		return
+	}
+
 	rs.LastSync = time.Now()
 	rs.TotalSyncs++
 
@@ -539,8 +548,6 @@ func (c *Crawler) syncRelay(rs *RelayState) {
 	c.mu.Unlock()
 }
 
-// getRelaysFromLocalDB queries the local database for kind 10002 events from
-// the given seed pubkeys and extracts relay URLs.
 func (c *Crawler) getRelaysFromLocalDB(seeds [][]byte) map[string]bool {
 	relays := make(map[string]bool)
 
@@ -575,8 +582,6 @@ func (c *Crawler) getRelaysFromLocalDB(seeds [][]byte) map[string]bool {
 	return relays
 }
 
-// fetchRelayListsFromRelay connects to a relay and fetches kind 10002 events
-// to discover more relay URLs.
 func (c *Crawler) fetchRelayListsFromRelay(relayURL string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, DefaultRelayTimeout)
 	defer cancel()
@@ -614,13 +619,13 @@ func (c *Crawler) fetchRelayListsFromRelay(relayURL string) ([]string, error) {
 				return relays, nil
 			}
 
-			// Store event locally
-			c.db.SaveEvent(c.ctx, ev)
+			if _, err := c.db.SaveEvent(c.ctx, ev); err != nil {
+				log.D.F("crawler: save event failed: %v", err)
+			}
 			if c.pub != nil {
 				c.pub.Deliver(ev)
 			}
 
-			// Extract relay URLs from "r" tags
 			rTags := ev.Tags.GetAll([]byte("r"))
 			for _, rTag := range rTags {
 				if rTag.Len() < 2 {
@@ -639,9 +644,12 @@ func (c *Crawler) fetchRelayListsFromRelay(relayURL string) ([]string, error) {
 }
 
 // isSelfRelay checks if a relay URL belongs to this relay instance by comparing
-// NIP-11 pubkeys.
+// NIP-11 pubkeys. This does network IO and must NOT be called while holding mu.
 func (c *Crawler) isSelfRelay(relayURL string) bool {
-	if c.selfURLs[relayURL] {
+	c.mu.RLock()
+	cached := c.selfURLs[relayURL]
+	c.mu.RUnlock()
+	if cached {
 		return true
 	}
 	if c.relayIdentityPubkey == "" {
@@ -654,13 +662,16 @@ func (c *Crawler) isSelfRelay(relayURL string) bool {
 	}
 
 	if pubkey == c.relayIdentityPubkey {
+		c.mu.Lock()
 		c.selfURLs[relayURL] = true
+		c.mu.Unlock()
 		return true
 	}
 	return false
 }
 
 // loadFrontier loads persisted frontier state from database markers.
+// Only called during New() before Start(), so no lock needed.
 func (c *Crawler) loadFrontier() error {
 	data, err := c.db.GetMarker(markerFrontierKey)
 	if err != nil {
@@ -686,7 +697,6 @@ func (c *Crawler) loadFrontier() error {
 	return nil
 }
 
-// saveFrontier persists the frontier state to database markers.
 func (c *Crawler) saveFrontier() error {
 	c.mu.RLock()
 	data, err := json.Marshal(c.frontier)
