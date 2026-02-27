@@ -1,0 +1,27 @@
+= bech32
+
+image:http://img.shields.io/badge/license-ISC-blue.svg[ISC License,link=http://copyfree.org]
+image:https://godoc.org/realy.lol/pkg/ec/bech32?status.png[GoDoc,link=http://godoc.org/realy.lol/pkg/ec/bech32]
+
+Package bech32 provides a Go implementation of the bech32 format specified in
+https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki[BIP 173].
+
+Test vectors from BIP 173 are added to ensure compatibility with the BIP.
+
+== Installation and Updating
+
+[source,bash]
+----
+$ go get -u mleku.dev/pkg/ec/bech32
+----
+
+== Examples
+
+* http://godoc.org/realy.lol/pkg/ec/bech32#example-Bech32Decode[Bech32 decode Example]
+Demonstrates how to decode a bech32 encoded string.
+* http://godoc.org/realy.lol/pkg/ec/bech32#example-BechEncode[Bech32 encode Example]
+Demonstrates how to encode data into a bech32 string.
+
+== License
+
+Package bech32 is licensed under the http://copyfree.org[copyfree] ISC License.

@@ -1,0 +1,1107 @@
+{
+  "version": "2025-12-21",
+  "source": "https://github.com/nostr-protocol/nips",
+  "ranges": {
+    "regular": {
+      "start": 1000,
+      "end": 9999,
+      "description": "Regular events - all versions kept, never replaced"
+    },
+    "replaceable": {
+      "start": 10000,
+      "end": 19999,
+      "description": "Replaceable events - only latest per pubkey kept"
+    },
+    "ephemeral": {
+      "start": 20000,
+      "end": 29999,
+      "description": "Ephemeral events - forwarded but not stored"
+    },
+    "parameterized": {
+      "start": 30000,
+      "end": 39999,
+      "description": "Parameterized replaceable - replaced by d tag value"
+    }
+  },
+  "kinds": {
+    "0": {
+      "name": "Metadata",
+      "nip": "01",
+      "description": "User profile information (name, about, picture, nip05, etc.)",
+      "classification": "replaceable"
+    },
+    "1": {
+      "name": "Short Text Note",
+      "nip": "01",
+      "description": "Short-form text post (like a tweet)"
+    },
+    "2": {
+      "name": "Recommend Relay",
+      "nip": "01",
+      "description": "Relay recommendation",
+      "deprecated": true,
+      "deprecatedBy": "NIP-65"
+    },
+    "3": {
+      "name": "Follows",
+      "nip": "02",
+      "description": "Following list with optional relay hints",
+      "classification": "replaceable"
+    },
+    "4": {
+      "name": "Encrypted Direct Message",
+      "nip": "04",
+      "description": "Private message using NIP-04 encryption",
+      "deprecated": true,
+      "deprecatedBy": "NIP-17"
+    },
+    "5": {
+      "name": "Event Deletion Request",
+      "nip": "09",
+      "description": "Request to delete events"
+    },
+    "6": {
+      "name": "Repost",
+      "nip": "18",
+      "description": "Share/repost another text note"
+    },
+    "7": {
+      "name": "Reaction",
+      "nip": "25",
+      "description": "Like, emoji reaction to an event"
+    },
+    "8": {
+      "name": "Badge Award",
+      "nip": "58",
+      "description": "Award a badge to someone"
+    },
+    "9": {
+      "name": "Chat Message",
+      "nip": "C7",
+      "description": "Chat message"
+    },
+    "10": {
+      "name": "Group Chat Threaded Reply",
+      "nip": "29",
+      "description": "Threaded reply in group chat",
+      "deprecated": true
+    },
+    "11": {
+      "name": "Thread",
+      "nip": "7D",
+      "description": "Thread event"
+    },
+    "12": {
+      "name": "Group Thread Reply",
+      "nip": "29",
+      "description": "Reply in group thread",
+      "deprecated": true
+    },
+    "13": {
+      "name": "Seal",
+      "nip": "59",
+      "description": "Sealed/encrypted event wrapper"
+    },
+    "14": {
+      "name": "Direct Message",
+      "nip": "17",
+      "description": "Private direct message using NIP-17"
+    },
+    "15": {
+      "name": "File Message",
+      "nip": "17",
+      "description": "File message in DMs"
+    },
+    "16": {
+      "name": "Generic Repost",
+      "nip": "18",
+      "description": "Repost any event kind"
+    },
+    "17": {
+      "name": "Reaction to Website",
+      "nip": "25",
+      "description": "Reaction to a website URL"
+    },
+    "20": {
+      "name": "Picture",
+      "nip": "68",
+      "description": "Picture-first feed post"
+    },
+    "21": {
+      "name": "Video Event",
+      "nip": "71",
+      "description": "Horizontal video event"
+    },
+    "22": {
+      "name": "Short-form Video",
+      "nip": "71",
+      "description": "Short-form portrait video (like TikTok)"
+    },
+    "40": {
+      "name": "Channel Creation",
+      "nip": "28",
+      "description": "Create a public chat channel"
+    },
+    "41": {
+      "name": "Channel Metadata",
+      "nip": "28",
+      "description": "Set channel name, about, picture"
+    },
+    "42": {
+      "name": "Channel Message",
+      "nip": "28",
+      "description": "Post message in channel"
+    },
+    "43": {
+      "name": "Channel Hide Message",
+      "nip": "28",
+      "description": "Hide a message in channel"
+    },
+    "44": {
+      "name": "Channel Mute User",
+      "nip": "28",
+      "description": "Mute a user in channel"
+    },
+    "62": {
+      "name": "Request to Vanish",
+      "nip": "62",
+      "description": "Request permanent deletion of all user data"
+    },
+    "64": {
+      "name": "Chess (PGN)",
+      "nip": "64",
+      "description": "Chess game in PGN format"
+    },
+    "443": {
+      "name": "KeyPackage",
+      "nip": null,
+      "description": "Marmot protocol key package",
+      "spec": "Marmot"
+    },
+    "444": {
+      "name": "Welcome Message",
+      "nip": null,
+      "description": "Marmot protocol welcome message",
+      "spec": "Marmot"
+    },
+    "445": {
+      "name": "Group Event",
+      "nip": null,
+      "description": "Marmot protocol group event",
+      "spec": "Marmot"
+    },
+    "818": {
+      "name": "Merge Requests",
+      "nip": "54",
+      "description": "Git merge request"
+    },
+    "1018": {
+      "name": "Poll Response",
+      "nip": "88",
+      "description": "Response to a poll"
+    },
+    "1021": {
+      "name": "Bid",
+      "nip": "15",
+      "description": "Auction bid"
+    },
+    "1022": {
+      "name": "Bid Confirmation",
+      "nip": "15",
+      "description": "Confirmation of auction bid"
+    },
+    "1040": {
+      "name": "OpenTimestamps",
+      "nip": "03",
+      "description": "OpenTimestamps attestation"
+    },
+    "1059": {
+      "name": "Gift Wrap",
+      "nip": "59",
+      "description": "Encrypted gift-wrapped event"
+    },
+    "1060": {
+      "name": "Gift Wrap (Kind 4)",
+      "nip": "59",
+      "description": "Gift wrap variant for NIP-04 compatibility"
+    },
+    "1063": {
+      "name": "File Metadata",
+      "nip": "94",
+      "description": "Metadata for shared files"
+    },
+    "1068": {
+      "name": "Poll",
+      "nip": "88",
+      "description": "Create a poll"
+    },
+    "1111": {
+      "name": "Comment",
+      "nip": "22",
+      "description": "Comment on events or external content"
+    },
+    "1222": {
+      "name": "Voice Message",
+      "nip": "A0",
+      "description": "Voice message"
+    },
+    "1244": {
+      "name": "Voice Message Comment",
+      "nip": "A0",
+      "description": "Comment on voice message"
+    },
+    "1311": {
+      "name": "Live Chat Message",
+      "nip": "53",
+      "description": "Message in live stream chat"
+    },
+    "1517": {
+      "name": "Bitcoin Block",
+      "nip": null,
+      "description": "Bitcoin block data",
+      "spec": "Nostrocket"
+    },
+    "1808": {
+      "name": "Live Stream",
+      "nip": null,
+      "description": "Live streaming event",
+      "spec": "zap.stream"
+    },
+    "1337": {
+      "name": "Code Snippet",
+      "nip": "C0",
+      "description": "Code snippet post"
+    },
+    "1617": {
+      "name": "Patches",
+      "nip": "34",
+      "description": "Git patches"
+    },
+    "1618": {
+      "name": "Pull Requests",
+      "nip": "34",
+      "description": "Git pull request"
+    },
+    "1619": {
+      "name": "Pull Request Updates",
+      "nip": "34",
+      "description": "Updates to git pull request"
+    },
+    "1621": {
+      "name": "Issues",
+      "nip": "34",
+      "description": "Git issues"
+    },
+    "1622": {
+      "name": "Git Replies",
+      "nip": "34",
+      "description": "Replies on git objects",
+      "deprecated": true
+    },
+    "1630": {
+      "name": "Status",
+      "nip": "34",
+      "description": "Git status"
+    },
+    "1631": {
+      "name": "Status",
+      "nip": "34",
+      "description": "Git status"
+    },
+    "1632": {
+      "name": "Status",
+      "nip": "34",
+      "description": "Git status"
+    },
+    "1633": {
+      "name": "Status",
+      "nip": "34",
+      "description": "Git status"
+    },
+    "1971": {
+      "name": "Problem Tracker",
+      "nip": null,
+      "description": "Problem tracking",
+      "spec": "Nostrocket"
+    },
+    "1984": {
+      "name": "Reporting",
+      "nip": "56",
+      "description": "Report content or users"
+    },
+    "1985": {
+      "name": "Label",
+      "nip": "32",
+      "description": "Label/tag content with namespace"
+    },
+    "1986": {
+      "name": "Relay Reviews",
+      "nip": null,
+      "description": "Reviews of relays"
+    },
+    "1987": {
+      "name": "AI Embeddings",
+      "nip": null,
+      "description": "AI embeddings/vector lists",
+      "spec": "NKBIP-02"
+    },
+    "2003": {
+      "name": "Torrent",
+      "nip": "35",
+      "description": "Torrent magnet link"
+    },
+    "2004": {
+      "name": "Torrent Comment",
+      "nip": "35",
+      "description": "Comment on torrent"
+    },
+    "2022": {
+      "name": "Coinjoin Pool",
+      "nip": null,
+      "description": "Coinjoin coordination",
+      "spec": "joinstr"
+    },
+    "4550": {
+      "name": "Community Post Approval",
+      "nip": "72",
+      "description": "Approve post in community"
+    },
+    "5000": {
+      "name": "Job Request",
+      "nip": "90",
+      "description": "Data vending machine job request (start of range)",
+      "rangeEnd": 5999
+    },
+    "6000": {
+      "name": "Job Result",
+      "nip": "90",
+      "description": "Data vending machine job result (start of range)",
+      "rangeEnd": 6999
+    },
+    "7000": {
+      "name": "Job Feedback",
+      "nip": "90",
+      "description": "Feedback on job request/result"
+    },
+    "7374": {
+      "name": "Reserved Cashu Wallet Tokens",
+      "nip": "60",
+      "description": "Reserved Cashu wallet tokens"
+    },
+    "7375": {
+      "name": "Cashu Wallet Tokens",
+      "nip": "60",
+      "description": "Cashu wallet tokens"
+    },
+    "7376": {
+      "name": "Cashu Wallet History",
+      "nip": "60",
+      "description": "Cashu wallet transaction history"
+    },
+    "7516": {
+      "name": "Geocache Log",
+      "nip": null,
+      "description": "Geocaching log entry",
+      "spec": "geocaching"
+    },
+    "7517": {
+      "name": "Geocache Proof of Find",
+      "nip": null,
+      "description": "Proof of geocache find",
+      "spec": "geocaching"
+    },
+    "8000": {
+      "name": "Add User",
+      "nip": "43",
+      "description": "Add user to group"
+    },
+    "8001": {
+      "name": "Remove User",
+      "nip": "43",
+      "description": "Remove user from group"
+    },
+    "9000": {
+      "name": "Group Control Events",
+      "nip": "29",
+      "description": "Group control events (start of range)",
+      "rangeEnd": 9030
+    },
+    "9041": {
+      "name": "Zap Goal",
+      "nip": "75",
+      "description": "Fundraising goal for zaps"
+    },
+    "9321": {
+      "name": "Nutzap",
+      "nip": "61",
+      "description": "Cashu nutzap"
+    },
+    "9467": {
+      "name": "Tidal Login",
+      "nip": null,
+      "description": "Tidal streaming login",
+      "spec": "Tidal-nostr"
+    },
+    "9734": {
+      "name": "Zap Request",
+      "nip": "57",
+      "description": "Request Lightning payment"
+    },
+    "9735": {
+      "name": "Zap",
+      "nip": "57",
+      "description": "Lightning payment receipt"
+    },
+    "9802": {
+      "name": "Highlights",
+      "nip": "84",
+      "description": "Highlighted text selection"
+    },
+    "10000": {
+      "name": "Mute List",
+      "nip": "51",
+      "description": "List of muted users/content",
+      "classification": "replaceable"
+    },
+    "10001": {
+      "name": "Pin List",
+      "nip": "51",
+      "description": "Pinned events",
+      "classification": "replaceable"
+    },
+    "10002": {
+      "name": "Relay List Metadata",
+      "nip": "65",
+      "description": "User's preferred relays for read/write",
+      "classification": "replaceable"
+    },
+    "10003": {
+      "name": "Bookmark List",
+      "nip": "51",
+      "description": "Bookmarked events",
+      "classification": "replaceable"
+    },
+    "10004": {
+      "name": "Communities List",
+      "nip": "51",
+      "description": "Communities user belongs to",
+      "classification": "replaceable"
+    },
+    "10005": {
+      "name": "Public Chats List",
+      "nip": "51",
+      "description": "Public chats user is in",
+      "classification": "replaceable"
+    },
+    "10006": {
+      "name": "Blocked Relays List",
+      "nip": "51",
+      "description": "Relays user has blocked",
+      "classification": "replaceable"
+    },
+    "10007": {
+      "name": "Search Relays List",
+      "nip": "51",
+      "description": "Preferred search relays",
+      "classification": "replaceable"
+    },
+    "10008": {
+      "name": "Relay Group Configuration",
+      "nip": null,
+      "description": "Relay group configuration",
+      "classification": "replaceable"
+    },
+    "10009": {
+      "name": "User Groups",
+      "nip": "29",
+      "description": "Groups user belongs to",
+      "classification": "replaceable"
+    },
+    "10012": {
+      "name": "Favorite Relays List",
+      "nip": "51",
+      "description": "User's favorite relays",
+      "classification": "replaceable"
+    },
+    "10013": {
+      "name": "Private Event Relay List",
+      "nip": "37",
+      "description": "Relays for private events",
+      "classification": "replaceable"
+    },
+    "10015": {
+      "name": "Interests List",
+      "nip": "51",
+      "description": "User interests/topics",
+      "classification": "replaceable"
+    },
+    "10019": {
+      "name": "Nutzap Mint Recommendation",
+      "nip": "61",
+      "description": "Recommended Cashu mints for nutzaps",
+      "classification": "replaceable"
+    },
+    "10020": {
+      "name": "Media Follows",
+      "nip": "51",
+      "description": "Followed media accounts",
+      "classification": "replaceable"
+    },
+    "10030": {
+      "name": "User Emoji List",
+      "nip": "51",
+      "description": "Custom emoji list",
+      "classification": "replaceable"
+    },
+    "10050": {
+      "name": "DM Relays List",
+      "nip": "17",
+      "description": "Relays to receive DMs on",
+      "classification": "replaceable"
+    },
+    "10051": {
+      "name": "KeyPackage Relays List",
+      "nip": null,
+      "description": "Marmot key package relays",
+      "classification": "replaceable",
+      "spec": "Marmot"
+    },
+    "10063": {
+      "name": "User Server List",
+      "nip": null,
+      "description": "Blossom server list",
+      "classification": "replaceable",
+      "spec": "Blossom"
+    },
+    "10096": {
+      "name": "File Storage Server List",
+      "nip": "96",
+      "description": "File storage servers",
+      "classification": "replaceable",
+      "deprecated": true
+    },
+    "10166": {
+      "name": "Relay Monitor Announcement",
+      "nip": "66",
+      "description": "Relay monitoring announcement",
+      "classification": "replaceable"
+    },
+    "10312": {
+      "name": "Room Presence",
+      "nip": "53",
+      "description": "Presence in live room",
+      "classification": "replaceable"
+    },
+    "10377": {
+      "name": "Proxy Announcement",
+      "nip": null,
+      "description": "Nostr proxy announcement",
+      "classification": "replaceable",
+      "spec": "Nostr Epoxy"
+    },
+    "11111": {
+      "name": "Transport Method Announcement",
+      "nip": null,
+      "description": "Transport method announcement",
+      "classification": "replaceable",
+      "spec": "Nostr Epoxy"
+    },
+    "12345": {
+      "name": "Relay Policy Configuration",
+      "nip": null,
+      "description": "Relay-internal policy configuration (admin only)",
+      "classification": "replaceable",
+      "spec": "orly"
+    },
+    "13004": {
+      "name": "JWT Binding",
+      "nip": null,
+      "description": "Link between JWT certificate and pubkey",
+      "classification": "replaceable"
+    },
+    "13194": {
+      "name": "Wallet Service Info",
+      "nip": "47",
+      "description": "NWC wallet service information",
+      "classification": "replaceable"
+    },
+    "13534": {
+      "name": "Membership Lists",
+      "nip": "43",
+      "description": "Group membership lists",
+      "classification": "replaceable"
+    },
+    "14388": {
+      "name": "User Sound Effect Lists",
+      "nip": null,
+      "description": "Sound effect lists",
+      "classification": "replaceable",
+      "spec": "Corny Chat"
+    },
+    "17375": {
+      "name": "Cashu Wallet Event",
+      "nip": "60",
+      "description": "Cashu wallet event",
+      "classification": "replaceable"
+    },
+    "21000": {
+      "name": "Lightning Pub RPC",
+      "nip": null,
+      "description": "Lightning.Pub RPC",
+      "classification": "ephemeral",
+      "spec": "Lightning.Pub"
+    },
+    "22242": {
+      "name": "Client Authentication",
+      "nip": "42",
+      "description": "Authenticate to relay",
+      "classification": "ephemeral"
+    },
+    "23194": {
+      "name": "Wallet Request",
+      "nip": "47",
+      "description": "NWC wallet request",
+      "classification": "ephemeral"
+    },
+    "23195": {
+      "name": "Wallet Response",
+      "nip": "47",
+      "description": "NWC wallet response",
+      "classification": "ephemeral"
+    },
+    "23196": {
+      "name": "Wallet Notification (NIP-04)",
+      "nip": "47",
+      "description": "NWC wallet notification (NIP-04 encrypted)",
+      "classification": "ephemeral"
+    },
+    "23197": {
+      "name": "Wallet Notification",
+      "nip": "47",
+      "description": "NWC wallet notification",
+      "classification": "ephemeral"
+    },
+    "24133": {
+      "name": "Nostr Connect",
+      "nip": "46",
+      "description": "Remote signer connection",
+      "classification": "ephemeral"
+    },
+    "24242": {
+      "name": "Blobs Stored on Mediaservers",
+      "nip": null,
+      "description": "Blossom blob storage",
+      "classification": "ephemeral",
+      "spec": "Blossom"
+    },
+    "27235": {
+      "name": "HTTP Auth",
+      "nip": "98",
+      "description": "Authenticate HTTP requests",
+      "classification": "ephemeral"
+    },
+    "28934": {
+      "name": "Join Request",
+      "nip": "43",
+      "description": "Request to join group",
+      "classification": "ephemeral"
+    },
+    "28935": {
+      "name": "Invite Request",
+      "nip": "43",
+      "description": "Invite to group",
+      "classification": "ephemeral"
+    },
+    "28936": {
+      "name": "Leave Request",
+      "nip": "43",
+      "description": "Leave group request",
+      "classification": "ephemeral"
+    },
+    "30000": {
+      "name": "Follow Sets",
+      "nip": "51",
+      "description": "Categorized people lists",
+      "classification": "parameterized"
+    },
+    "30001": {
+      "name": "Generic Lists",
+      "nip": "51",
+      "description": "Generic categorized lists",
+      "classification": "parameterized",
+      "deprecated": true
+    },
+    "30002": {
+      "name": "Relay Sets",
+      "nip": "51",
+      "description": "Categorized relay lists",
+      "classification": "parameterized"
+    },
+    "30003": {
+      "name": "Bookmark Sets",
+      "nip": "51",
+      "description": "Categorized bookmark lists",
+      "classification": "parameterized"
+    },
+    "30004": {
+      "name": "Curation Sets",
+      "nip": "51",
+      "description": "Curated content sets",
+      "classification": "parameterized"
+    },
+    "30005": {
+      "name": "Video Sets",
+      "nip": "51",
+      "description": "Video playlists",
+      "classification": "parameterized"
+    },
+    "30007": {
+      "name": "Kind Mute Sets",
+      "nip": "51",
+      "description": "Muted event kinds",
+      "classification": "parameterized"
+    },
+    "30008": {
+      "name": "Profile Badges",
+      "nip": "58",
+      "description": "Badges displayed on profile",
+      "classification": "parameterized"
+    },
+    "30009": {
+      "name": "Badge Definition",
+      "nip": "58",
+      "description": "Define a badge/achievement",
+      "classification": "parameterized"
+    },
+    "30015": {
+      "name": "Interest Sets",
+      "nip": "51",
+      "description": "Interest/topic sets",
+      "classification": "parameterized"
+    },
+    "30017": {
+      "name": "Stall",
+      "nip": "15",
+      "description": "Marketplace stall definition",
+      "classification": "parameterized"
+    },
+    "30018": {
+      "name": "Product",
+      "nip": "15",
+      "description": "Marketplace product listing",
+      "classification": "parameterized"
+    },
+    "30019": {
+      "name": "Marketplace UI/UX",
+      "nip": "15",
+      "description": "Marketplace interface settings",
+      "classification": "parameterized"
+    },
+    "30020": {
+      "name": "Product Sold as Auction",
+      "nip": "15",
+      "description": "Auction product listing",
+      "classification": "parameterized"
+    },
+    "30023": {
+      "name": "Long-form Content",
+      "nip": "23",
+      "description": "Blog post, article in markdown",
+      "classification": "parameterized"
+    },
+    "30024": {
+      "name": "Draft Long-form Content",
+      "nip": "23",
+      "description": "Draft article",
+      "classification": "parameterized"
+    },
+    "30030": {
+      "name": "Emoji Sets",
+      "nip": "51",
+      "description": "Custom emoji sets",
+      "classification": "parameterized"
+    },
+    "30040": {
+      "name": "Curated Publication Index",
+      "nip": null,
+      "description": "Publication index",
+      "classification": "parameterized",
+      "spec": "NKBIP-01"
+    },
+    "30041": {
+      "name": "Curated Publication Content",
+      "nip": null,
+      "description": "Publication content",
+      "classification": "parameterized",
+      "spec": "NKBIP-01"
+    },
+    "30063": {
+      "name": "Release Artifact Sets",
+      "nip": "51",
+      "description": "Software release artifacts",
+      "classification": "parameterized"
+    },
+    "30078": {
+      "name": "Application-specific Data",
+      "nip": "78",
+      "description": "App-specific key-value storage",
+      "classification": "parameterized"
+    },
+    "30166": {
+      "name": "Relay Discovery",
+      "nip": "66",
+      "description": "Relay discovery/monitoring",
+      "classification": "parameterized"
+    },
+    "30267": {
+      "name": "App Curation Sets",
+      "nip": "51",
+      "description": "Curated app sets",
+      "classification": "parameterized"
+    },
+    "30311": {
+      "name": "Live Event",
+      "nip": "53",
+      "description": "Live streaming event",
+      "classification": "parameterized"
+    },
+    "30312": {
+      "name": "Interactive Room",
+      "nip": "53",
+      "description": "Interactive live room",
+      "classification": "parameterized"
+    },
+    "30313": {
+      "name": "Conference Event",
+      "nip": "53",
+      "description": "Conference/meetup event",
+      "classification": "parameterized"
+    },
+    "30315": {
+      "name": "User Statuses",
+      "nip": "38",
+      "description": "User status updates",
+      "classification": "parameterized"
+    },
+    "30388": {
+      "name": "Slide Set",
+      "nip": null,
+      "description": "Presentation slides",
+      "classification": "parameterized",
+      "spec": "Corny Chat"
+    },
+    "30402": {
+      "name": "Classified Listing",
+      "nip": "99",
+      "description": "Classified ad listing",
+      "classification": "parameterized"
+    },
+    "30403": {
+      "name": "Draft Classified Listing",
+      "nip": "99",
+      "description": "Draft classified ad",
+      "classification": "parameterized"
+    },
+    "30617": {
+      "name": "Repository Announcements",
+      "nip": "34",
+      "description": "Git repository announcement",
+      "classification": "parameterized"
+    },
+    "30618": {
+      "name": "Repository State Announcements",
+      "nip": "34",
+      "description": "Git repository state",
+      "classification": "parameterized"
+    },
+    "30818": {
+      "name": "Wiki Article",
+      "nip": "54",
+      "description": "Wiki article",
+      "classification": "parameterized"
+    },
+    "30819": {
+      "name": "Redirects",
+      "nip": "54",
+      "description": "URL redirects",
+      "classification": "parameterized"
+    },
+    "31234": {
+      "name": "Draft Event",
+      "nip": "37",
+      "description": "Draft of any event",
+      "classification": "parameterized"
+    },
+    "31388": {
+      "name": "Link Set",
+      "nip": null,
+      "description": "Link collection",
+      "classification": "parameterized",
+      "spec": "Corny Chat"
+    },
+    "31890": {
+      "name": "Feed",
+      "nip": null,
+      "description": "Custom feed definition",
+      "classification": "parameterized",
+      "spec": "NUD: Custom Feeds"
+    },
+    "31922": {
+      "name": "Date-Based Calendar Event",
+      "nip": "52",
+      "description": "All-day calendar event",
+      "classification": "parameterized"
+    },
+    "31923": {
+      "name": "Time-Based Calendar Event",
+      "nip": "52",
+      "description": "Calendar event with time",
+      "classification": "parameterized"
+    },
+    "31924": {
+      "name": "Calendar",
+      "nip": "52",
+      "description": "Calendar definition",
+      "classification": "parameterized"
+    },
+    "31925": {
+      "name": "Calendar Event RSVP",
+      "nip": "52",
+      "description": "RSVP to calendar event",
+      "classification": "parameterized"
+    },
+    "31989": {
+      "name": "Handler Recommendation",
+      "nip": "89",
+      "description": "Recommended app for event kind",
+      "classification": "parameterized"
+    },
+    "31990": {
+      "name": "Handler Information",
+      "nip": "89",
+      "description": "App handler declaration",
+      "classification": "parameterized"
+    },
+    "32123": {
+      "name": "WaveLake Track",
+      "nip": null,
+      "description": "WaveLake music track",
+      "classification": "parameterized",
+      "spec": "WaveLake"
+    },
+    "32267": {
+      "name": "Software Application",
+      "nip": null,
+      "description": "Software application listing",
+      "classification": "parameterized"
+    },
+    "32388": {
+      "name": "User Room Favorites",
+      "nip": null,
+      "description": "Favorite rooms",
+      "classification": "parameterized",
+      "spec": "Corny Chat"
+    },
+    "33388": {
+      "name": "High Scores",
+      "nip": null,
+      "description": "Game high scores",
+      "classification": "parameterized",
+      "spec": "Corny Chat"
+    },
+    "34235": {
+      "name": "Video Event Horizontal",
+      "nip": "71",
+      "description": "Horizontal video event",
+      "classification": "parameterized"
+    },
+    "34236": {
+      "name": "Video Event Vertical",
+      "nip": "71",
+      "description": "Vertical video event",
+      "classification": "parameterized"
+    },
+    "34388": {
+      "name": "Sound Effects",
+      "nip": null,
+      "description": "Sound effect definitions",
+      "classification": "parameterized",
+      "spec": "Corny Chat"
+    },
+    "34550": {
+      "name": "Community Definition",
+      "nip": "72",
+      "description": "Define a community",
+      "classification": "parameterized"
+    },
+    "37516": {
+      "name": "Geocache Listing",
+      "nip": null,
+      "description": "Geocache location listing",
+      "classification": "parameterized",
+      "spec": "geocaching"
+    },
+    "38172": {
+      "name": "Cashu Mint Announcement",
+      "nip": "87",
+      "description": "Cashu mint announcement",
+      "classification": "parameterized"
+    },
+    "38173": {
+      "name": "Fedimint Announcement",
+      "nip": "87",
+      "description": "Fedimint announcement",
+      "classification": "parameterized"
+    },
+    "38383": {
+      "name": "Peer-to-peer Order Events",
+      "nip": "69",
+      "description": "P2P trading orders",
+      "classification": "parameterized"
+    },
+    "39000": {
+      "name": "Group Metadata Events",
+      "nip": "29",
+      "description": "Group metadata (start of range)",
+      "classification": "parameterized",
+      "rangeEnd": 39009
+    },
+    "39089": {
+      "name": "Starter Packs",
+      "nip": "51",
+      "description": "Starter pack lists",
+      "classification": "parameterized"
+    },
+    "39092": {
+      "name": "Media Starter Packs",
+      "nip": "51",
+      "description": "Media starter packs",
+      "classification": "parameterized"
+    },
+    "39701": {
+      "name": "Web Bookmarks",
+      "nip": "B0",
+      "description": "Web URL bookmarks",
+      "classification": "parameterized"
+    },
+    "39998": {
+      "name": "ACL Event",
+      "nip": null,
+      "description": "Access control list event",
+      "classification": "parameterized"
+    }
+  },
+  "privileged": [4, 13, 14, 15, 1059, 1060, 30078],
+  "directory": [0, 3, 5, 1984, 10002, 10000, 10050],
+  "aliases": {
+    "SetMetadata": 0,
+    "Follows": 3,
+    "Contacts": 3,
+    "Deletion": 5,
+    "MemoryHole": 1984,
+    "BlockList": 10000,
+    "Article": 30023,
+    "CategorizedPeopleList": 30000,
+    "CategorizedBookmarksList": 30001
+  }
+}

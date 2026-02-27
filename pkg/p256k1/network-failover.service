@@ -1,0 +1,13 @@
+[Unit]
+Description=Network Failover Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/network-failover
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

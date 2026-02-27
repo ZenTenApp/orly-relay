@@ -129,6 +129,9 @@ app/
   config/            → Environment configuration (go-simpler.org/env)
   web/               → Svelte frontend (embedded via go:embed)
 pkg/
+  nostr/             → Vendored nostr library (events, encoders, crypto, protocol, signer)
+  p256k1/            → Vendored secp256k1 crypto (Schnorr, ECDSA, purego, asm)
+  lol/               → Vendored logging library (log levels, chk.E pattern)
   interfaces/
     transport/       → Transport interface (pluggable network transports)
   transport/
@@ -575,11 +578,19 @@ This provides process isolation and allows independent restarts. The unified bin
 
 ## Dependencies
 
+### Vendored (in pkg/, via go.mod replace directives)
+
+- `git.mleku.dev/mleku/nostr` → `pkg/nostr/` — Nostr library (crypto, events, encoders, protocol, signer)
+- `p256k1.mleku.dev` → `pkg/p256k1/` — secp256k1 elliptic curve crypto (Schnorr, ECDSA, purego)
+- `lol.mleku.dev` → `pkg/lol/` — Logging (log levels, chk.E error pattern)
+
+Import paths unchanged across the codebase. The original server (git.mleku.dev) is permanently offline.
+
+### External
+
 - `github.com/dgraph-io/badger/v4` - Badger DB (LSM, SSD-optimized)
 - `github.com/neo4j/neo4j-go-driver/v5` - Neo4j
 - `github.com/gorilla/websocket` - WebSocket
 - `github.com/ebitengine/purego` - CGO-free C loading
 - `github.com/minio/sha256-simd` - SIMD SHA256
 - `go-simpler.org/env` - Config
-- `lol.mleku.dev` - Logging
-- `git.mleku.dev/mleku/nostr` - Nostr library (crypto, events, encoders, protocol, signer)

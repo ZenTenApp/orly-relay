@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(python3:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git stash:*)",
+      "Bash(nm -D:*)",
+      "Bash(go get:*)",
+      "Bash(CGO_ENABLED=0 go build:*)",
+      "Bash(CGO_ENABLED=0 go test:*)",
+      "Bash(objdump:*)",
+      "Bash(curl:*)",
+      "Bash(go clean:*)",
+      "Bash(rm:*)",
+      "WebFetch(domain:eprint.iacr.org)",
+      "Bash(go mod tidy:*)",
+      "Bash(tee:*)",
+      "Bash(GOOS=js GOARCH=wasm go build:*)",
+      "Bash(GOOS=js GOARCH=wasm go test:*)",
+      "Bash(chmod:*)",
+      "Bash(node --version)",
+      "Bash(./run-wasm-tests.sh:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

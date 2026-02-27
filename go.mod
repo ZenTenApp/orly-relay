@@ -275,6 +275,10 @@ require (
 	p256k1.mleku.dev v1.1.3 // indirect
 )
 
-replace p256k1.mleku.dev => git.mleku.dev/mleku/p256k1 v1.1.3
+replace (
+	git.mleku.dev/mleku/nostr => ./pkg/nostr
+	lol.mleku.dev => ./pkg/lol
+	p256k1.mleku.dev => ./pkg/p256k1
+)
 
 retract v1.0.3
