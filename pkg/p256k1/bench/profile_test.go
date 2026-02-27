@@ -5,6 +5,7 @@ package bench
 import (
 	"crypto/rand"
 	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 	"testing"
@@ -40,7 +41,7 @@ func TestGenerateMemProfile(t *testing.T) {
 	runtime.GC()
 
 	// Create memory profile file
-	f, err := os.Create("/tmp/claude/-home-mleku-src-git-mleku-dev-mleku-p256k1/bcef2154-93ee-4010-863d-5806beb52296/scratchpad/mem.prof")
+	f, err := os.Create(filepath.Join(t.TempDir(), "mem.prof"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +76,7 @@ func TestGenerateMemProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Log("Memory profile written to /tmp/claude/-home-mleku-src-git-mleku-dev-mleku-p256k1/bcef2154-93ee-4010-863d-5806beb52296/scratchpad/mem.prof")
+	t.Log("Memory profile written to", f.Name())
 }
 
 // TestAllocationsBreakdown shows allocation counts per operation

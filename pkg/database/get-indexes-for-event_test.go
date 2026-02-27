@@ -193,10 +193,12 @@ func testEventWithTags(t *testing.T) {
 		t.Fatalf("GetIndexesForEvent failed: %v", err)
 	}
 
-	// Verify the number of indexes (should be 20 for an event with 2 tags)
-	// 6 basic indexes + 2 word indexes from content + 4 indexes per tag (TagPubkey, Tag, TagKind, TagKindPubkey) + word indexes from tag fields
-	if len(idxs) != 20 {
-		t.Fatalf("Expected 20 indexes, got %d", len(idxs))
+	// Verify the number of indexes (should be 19 for an event with 2 tags)
+	// 6 basic indexes + 3 word indexes from content ("test", "content", "tags" — "with" is a stopword)
+	// + 4 indexes per tag (TagPubkey, Tag, TagKind, TagKindPubkey) = 8
+	// + 2 word indexes from tag values ("abcdef1234567890", "0123456789abcdef")
+	if len(idxs) != 19 {
+		t.Fatalf("Expected 19 indexes, got %d", len(idxs))
 	}
 
 	// Create and verify the basic indexes (same as in testBasicEvent)
