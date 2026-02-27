@@ -43,7 +43,7 @@ The tests require the secp256k1 library for signing events:
 
 ```bash
 # Download from nostr repository
-wget https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so -P /tmp/
+wget https://git.nostrdev.com/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so -P /tmp/
 
 # Add to library path
 export LD_LIBRARY_PATH="/tmp:$LD_LIBRARY_PATH"
@@ -371,7 +371,7 @@ docker exec -it neo4j-test cypher-shell -u neo4j -p test
 
 Download and set LD_LIBRARY_PATH:
 ```bash
-wget https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so
+wget https://git.nostrdev.com/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so
 export LD_LIBRARY_PATH="$(pwd):$LD_LIBRARY_PATH"
 ```
 

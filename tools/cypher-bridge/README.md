@@ -273,7 +273,7 @@ bun run seed -- --clean
 bun run seed -- --uri bolt://myhost:7687 --user neo4j --password secret
 ```
 
-The seed data comes from `~/src/git.mleku.dev/mleku/nostr/encoders/event/examples/out.jsonl` — a collection of ~11,600 real Nostr events covering text notes, reposts, reactions, contact lists, and more.
+The seed data comes from `~/src/nostr/encoders/event/examples/out.jsonl` — a collection of ~11,600 real Nostr events covering text notes, reposts, reactions, contact lists, and more.
 
 ## CLI Options
 

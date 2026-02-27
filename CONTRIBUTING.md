@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to ORLY! This document outlines the process for reporting bugs, requesting features, and submitting contributions.
 
-**Canonical Repository:** https://git.mleku.dev/mleku/next.orly.dev
+**Canonical Repository:** https://git.nostrdev.com/mleku/next.orly.dev
 
 ## Issue Reporting Policy
 
@@ -57,7 +57,7 @@ Use the **Feature Request** template when suggesting new functionality. A good f
 
 ```bash
 # Clone the repository
-git clone https://git.mleku.dev/mleku/next.orly.dev.git
+git clone https://git.nostrdev.com/mleku/next.orly.dev.git
 cd next.orly.dev
 
 # Build
@@ -93,8 +93,8 @@ Files modified:
 
 ## Communication
 
-- **Issues:** https://git.mleku.dev/mleku/next.orly.dev/issues
-- **Documentation:** https://git.mleku.dev/mleku/next.orly.dev
+- **Issues:** https://git.nostrdev.com/mleku/next.orly.dev/issues
+- **Documentation:** https://git.nostrdev.com/mleku/next.orly.dev
 
 ## License
 

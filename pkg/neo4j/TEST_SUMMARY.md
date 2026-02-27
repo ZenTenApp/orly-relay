@@ -191,7 +191,7 @@ extractPTags(ev) []string
 docker run -d --name neo4j-test -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/test neo4j:5.15
 
 # 2. Download libsecp256k1.so
-wget https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so -P /tmp/
+wget https://git.nostrdev.com/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so -P /tmp/
 export LD_LIBRARY_PATH="/tmp:$LD_LIBRARY_PATH"
 
 # 3. Set environment

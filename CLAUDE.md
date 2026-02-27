@@ -571,10 +571,7 @@ This provides process isolation and allows independent restarts. The unified bin
 
 ## Git Remotes
 
-- **origin**: `ssh://git@git.nostrdev.com:29418/mleku/next.orly.dev.git` (contract work)
-- **gitea**: `ssh://mleku@git.mleku.dev:2222/mleku/next.orly.dev.git` (primary, mleku's own host)
-
-Push to both remotes. Use `GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519"` for gitea.
+- **origin**: `ssh://git@git.nostrdev.com:29418/mleku/next.orly.dev.git`
 
 ## Dependencies
 

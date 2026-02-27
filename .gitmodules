@@ -1,3 +1,3 @@
 [submodule "lib/responsive-variants"]
 	path = lib/responsive-variants
-	url = ssh://mleku@git.mleku.dev:2222/mleku/responsive-variants.git
+	url = https://git.nostrdev.com/mleku/responsive-variants.git

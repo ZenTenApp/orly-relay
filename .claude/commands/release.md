@@ -42,11 +42,9 @@ If no argument provided, default to `patch`.
 
 9. **Create a git tag** with the new version (e.g., `v0.36.0`)
 
-10. **Push to remotes** (origin, gitea, and git.mleku.dev) with tags:
+10. **Push to origin** with tags:
     ```
     git push origin main --tags
-    git push gitea main --tags
-    GIT_SSH_COMMAND="ssh -i ~/.ssh/gitmlekudev" git push ssh://mleku@git.mleku.dev:2222/mleku/next.orly.dev.git main --tags
     ```
 
 11. **Deploy monolithic binary to relay.orly.dev** (ARM64):
@@ -70,6 +68,5 @@ If no argument provided, default to `patch`.
 12. **Report completion** with the new version and commit hash
 
 ## Important:
-- Do NOT push to github remote (only origin and gitea)
 - Always verify the build compiles before committing: `CGO_ENABLED=0 go build -o /dev/null ./...`
 - If build fails, fix issues before proceeding

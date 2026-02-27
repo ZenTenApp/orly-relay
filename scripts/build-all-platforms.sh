@@ -21,7 +21,7 @@ NC='\033[0m' # No Color
 # Configuration
 VERSION=$(cat pkg/version/version)
 OUTPUT_DIR="$REPO_ROOT/build"
-NOSTR_REPO_BASE_URL="https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k"
+NOSTR_REPO_BASE_URL="https://git.nostrdev.com/mleku/nostr/raw/branch/main/crypto/p8k"
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}ORLY Multi-Platform Build Script${NC}"

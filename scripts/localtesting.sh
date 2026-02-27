@@ -5,7 +5,7 @@ set -euo pipefail
 #
 # Requires:
 #   SUPERUSER - your npub (used for ORLY_ADMINS and ORLY_OWNERS)
-#   SMESH_SRC - (optional) path to smesh source, defaults to ~/src/git.mleku.dev/mleku/smesh
+#   SMESH_SRC - (optional) path to smesh source, defaults to ~/src/smesh
 #
 # Runs relay on ws://localhost:3334 and smesh on http://localhost:5173
 
@@ -16,7 +16,7 @@ LOGDIR="$TESTDIR/logs"
 BINARY="$TESTDIR/orly"
 SCRIPTDIR="$(cd "$(dirname "$0")" && pwd)"
 REPODIR="$(cd "$SCRIPTDIR/.." && pwd)"
-SMESH_SRC="${SMESH_SRC:-$HOME/src/git.mleku.dev/mleku/smesh}"
+SMESH_SRC="${SMESH_SRC:-$HOME/src/smesh}"
 
 if [[ -z "${SUPERUSER:-}" ]]; then
     echo "error: SUPERUSER environment variable not set"

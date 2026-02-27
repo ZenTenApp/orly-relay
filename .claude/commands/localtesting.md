@@ -18,7 +18,7 @@ Start a local ORLY relay + smesh dev server for testing.
 ## Requirements
 
 - `SUPERUSER` env var must be set to your npub
-- `SMESH_SRC` env var (optional, defaults to `~/src/git.mleku.dev/mleku/smesh`)
+- `SMESH_SRC` env var (optional, defaults to `~/src/smesh`)
 
 ## What it does
 

@@ -735,10 +735,10 @@ Maps name to git repository location with access metadata. Supports multiple pro
     ["d", "orly.mleku.dev:GIT:1"],
     ["name", "orly.mleku.dev"],
     ["type", "GIT"],
-    ["value", "https://git.mleku.dev/mleku/orly.git"],
+    ["value", "https://git.nostrdev.com/mleku/orly.git"],
     ["protocol", "https"],
-    ["clone_url", "https://git.mleku.dev/mleku/orly.git"],
-    ["ssh_url", "git@git.mleku.dev:mleku/orly.git"],
+    ["clone_url", "https://git.nostrdev.com/mleku/orly.git"],
+    ["ssh_url", "git@git.nostrdev.com:mleku/orly.git"],
     ["description", "ORLY - High-performance Nostr relay in Go"],
     ["default_branch", "main"],
     ["access", "public"]
