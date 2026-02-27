@@ -10,7 +10,7 @@ import (
 	"context"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/sync/cluster"
 	"next.orly.dev/pkg/sync/common"

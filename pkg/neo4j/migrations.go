@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/encoders/tag"
 	"next.orly.dev/pkg/database"
 )
 

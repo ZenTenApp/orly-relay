@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/event/authorization"
 	"next.orly.dev/pkg/event/processing"
 	"next.orly.dev/pkg/event/routing"

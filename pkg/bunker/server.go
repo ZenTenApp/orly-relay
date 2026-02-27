@@ -13,10 +13,10 @@ import (
 
 	"github.com/gorilla/websocket"
 	"golang.zx2c4.com/wireguard/tun/netstack"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 
-	"git.mleku.dev/mleku/nostr/interfaces/signer"
+	"next.orly.dev/pkg/nostr/interfaces/signer"
 )
 
 var upgrader = websocket.Upgrader{

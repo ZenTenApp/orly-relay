@@ -13,8 +13,8 @@ import (
 	"sync"
 
 	"golang.org/x/crypto/acme/autocert"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // Config holds TLS transport configuration.

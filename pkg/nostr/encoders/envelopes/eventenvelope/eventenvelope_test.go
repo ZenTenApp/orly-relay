@@ -5,12 +5,12 @@ import (
 	"bytes"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/envelopes"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/event/examples"
-	"git.mleku.dev/mleku/nostr/utils"
-	"git.mleku.dev/mleku/nostr/utils/bufpool"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/nostr/encoders/envelopes"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event/examples"
+	"next.orly.dev/pkg/nostr/utils"
+	"next.orly.dev/pkg/nostr/utils/bufpool"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 func TestSubmission(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/kind"
 
 	"next.orly.dev/pkg/domain/events"
 )

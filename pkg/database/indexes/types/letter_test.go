@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 func TestLetter_New(t *testing.T) {

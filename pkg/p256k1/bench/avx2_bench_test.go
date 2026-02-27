@@ -6,8 +6,8 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"p256k1.mleku.dev"
-	"p256k1.mleku.dev/signer"
+	"next.orly.dev/pkg/p256k1"
+	"next.orly.dev/pkg/p256k1/signer"
 )
 
 // This file contains benchmarks comparing:

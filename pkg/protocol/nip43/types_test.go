@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/crypto/keys"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/crypto/keys"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/tag"
 )
 
 // TestInviteManager_GenerateCode tests invite code generation

@@ -3,11 +3,11 @@ package reqenvelope
 import (
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/envelopes"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/utils"
-	"git.mleku.dev/mleku/nostr/utils/bufpool"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/nostr/encoders/envelopes"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/utils"
+	"next.orly.dev/pkg/nostr/utils/bufpool"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 func TestMarshalUnmarshal(t *testing.T) {

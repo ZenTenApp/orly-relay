@@ -8,10 +8,10 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 	acliface "next.orly.dev/pkg/interfaces/acl"
 	orlyaclv1 "next.orly.dev/pkg/proto/orlyacl/v1"
 	orlydbv1 "next.orly.dev/pkg/proto/orlydb/v1"

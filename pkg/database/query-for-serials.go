@@ -5,9 +5,9 @@ package database
 import (
 	"context"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 	"next.orly.dev/pkg/database/indexes/types"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/filter"
 	"next.orly.dev/pkg/interfaces/store"
 )
 

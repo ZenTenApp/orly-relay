@@ -4,15 +4,15 @@ import (
 	"bytes"
 	"strings"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec"
-	"git.mleku.dev/mleku/nostr/crypto/ec/bech32"
-	"git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
-	"git.mleku.dev/mleku/nostr/crypto/ec/secp256k1"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/utils"
-	"git.mleku.dev/mleku/nostr/utils/constraints"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/nostr/crypto/ec"
+	"next.orly.dev/pkg/nostr/crypto/ec/bech32"
+	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
+	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/utils"
+	"next.orly.dev/pkg/nostr/utils/constraints"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 )
 
 const (

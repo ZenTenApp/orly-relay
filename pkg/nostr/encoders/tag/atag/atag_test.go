@@ -4,12 +4,12 @@ import (
 	"math"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/encoders/kind"
-	"git.mleku.dev/mleku/nostr/utils"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/utils"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 	"lukechampine.com/frand"
 )
 

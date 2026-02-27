@@ -6,13 +6,13 @@ import (
 	"bytes"
 
 	"github.com/dgraph-io/badger/v4"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/database/bufpool"
 	"next.orly.dev/pkg/database/indexes"
 	"next.orly.dev/pkg/database/indexes/types"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/kind"
 )
 
 // IsAddressableEventQuery checks if a filter matches the NIP-33 addressable event

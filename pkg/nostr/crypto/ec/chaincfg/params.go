@@ -5,8 +5,8 @@ import (
 	"math/big"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec/chainhash"
-	"git.mleku.dev/mleku/nostr/crypto/ec/wire"
+	"next.orly.dev/pkg/nostr/crypto/ec/chainhash"
+	"next.orly.dev/pkg/nostr/crypto/ec/wire"
 )
 
 var (

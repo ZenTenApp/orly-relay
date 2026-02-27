@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"p256k1.mleku.dev/wnaf"
+	"next.orly.dev/pkg/p256k1/wnaf"
 )
 
 // TestWNAFSXS compares the standalone wnaf.Encode against the internal Scalar.wNAF

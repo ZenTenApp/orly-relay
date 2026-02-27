@@ -22,7 +22,7 @@ import (
 	"errors"
 	"fmt"
 
-	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/filter"
 )
 
 // Query represents a graph traversal query from a _graph filter extension.

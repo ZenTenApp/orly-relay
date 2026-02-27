@@ -19,7 +19,7 @@
 //
 // # Usage
 //
-//	import "p256k1.mleku.dev/exchange"
+//	import "next.orly.dev/pkg/p256k1/exchange"
 //
 //	// Compute shared secret between Alice and Bob
 //	// Alice has alicePrivate, Bob has bobPublic

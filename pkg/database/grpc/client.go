@@ -12,12 +12,12 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/tag"
 	"next.orly.dev/pkg/database"
 	indextypes "next.orly.dev/pkg/database/indexes/types"
 	"next.orly.dev/pkg/interfaces/store"

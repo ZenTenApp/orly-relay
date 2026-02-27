@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/utils/units"
+	"next.orly.dev/pkg/nostr/utils/units"
 	"github.com/gorilla/websocket"
-	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/lol/errorf"
 )
 
 // Connection represents a websocket connection to a Nostr relay.

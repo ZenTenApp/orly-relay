@@ -26,10 +26,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 
 	"next.orly.dev/pkg/database/indexes/types"
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 )
 
 // GCDatabase defines the interface for database operations needed by the GC.

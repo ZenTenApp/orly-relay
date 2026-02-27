@@ -8,8 +8,8 @@ import (
 	"sort"
 	"sync"
 
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/utils"
 )
 

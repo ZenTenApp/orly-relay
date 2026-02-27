@@ -3,9 +3,9 @@ package app
 import (
 	"errors"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/closeenvelope"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/closeenvelope"
 )
 
 // HandleClose processes a CLOSE envelope by unmarshalling the request,

@@ -24,11 +24,11 @@ import (
 
 	"github.com/aperturerobotics/go-indexeddb/idb"
 	"github.com/hack-pad/safejs"
-	"lol.mleku.dev"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol"
+	"next.orly.dev/pkg/lol/chk"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
 	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/database/indexes"
 )

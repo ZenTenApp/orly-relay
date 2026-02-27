@@ -9,8 +9,8 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 
-	"p256k1.mleku.dev"
-	"p256k1.mleku.dev/signer"
+	"next.orly.dev/pkg/p256k1"
+	"next.orly.dev/pkg/p256k1/signer"
 )
 
 // This file contains comprehensive benchmarks comparing:

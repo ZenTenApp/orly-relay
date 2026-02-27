@@ -3,7 +3,7 @@ package app
 import (
 	"golang.org/x/crypto/curve25519"
 
-	"git.mleku.dev/mleku/nostr/crypto/keys"
+	"next.orly.dev/pkg/nostr/crypto/keys"
 )
 
 // derivePublicKey derives a Curve25519 public key from a private key.

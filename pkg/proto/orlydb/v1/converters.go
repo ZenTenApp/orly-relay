@@ -4,12 +4,12 @@ package orlydbv1
 import (
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/kind"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"git.mleku.dev/mleku/nostr/encoders/timestamp"
-	ntypes "git.mleku.dev/mleku/nostr/types"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/encoders/timestamp"
+	ntypes "next.orly.dev/pkg/nostr/types"
 	"next.orly.dev/pkg/database"
 	indextypes "next.orly.dev/pkg/database/indexes/types"
 	"next.orly.dev/pkg/interfaces/store"

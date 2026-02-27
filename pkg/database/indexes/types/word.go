@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"io"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 var zero = []byte{0x00}

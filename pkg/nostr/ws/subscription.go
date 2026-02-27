@@ -7,13 +7,13 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/closeenvelope"
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/reqenvelope"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/timestamp"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/closeenvelope"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/reqenvelope"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/timestamp"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 )
 
 type ReplaceableKey struct {

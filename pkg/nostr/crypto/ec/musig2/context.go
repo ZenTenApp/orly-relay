@@ -5,9 +5,9 @@ package musig2
 import (
 	"fmt"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec"
-	"git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/nostr/crypto/ec"
+	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 var (

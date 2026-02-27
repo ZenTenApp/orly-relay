@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
 )
 
 // ArchiveDatabase defines the interface for storing fetched events.

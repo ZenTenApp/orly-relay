@@ -7,10 +7,10 @@ import (
 	"fmt"
 
 	"google.golang.org/grpc"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	negentropylib "git.mleku.dev/mleku/nostr/negentropy"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	negentropylib "next.orly.dev/pkg/nostr/negentropy"
 	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/sync/negentropy"
 	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"

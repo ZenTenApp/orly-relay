@@ -5,9 +5,9 @@ package signer
 import (
 	"errors"
 
-	"p256k1.mleku.dev/exchange"
-	"p256k1.mleku.dev/keys"
-	"p256k1.mleku.dev/schnorr"
+	"next.orly.dev/pkg/p256k1/exchange"
+	"next.orly.dev/pkg/p256k1/keys"
+	"next.orly.dev/pkg/p256k1/schnorr"
 )
 
 // P256K1Signer implements the I and Gen interfaces using the p256k1 domain packages

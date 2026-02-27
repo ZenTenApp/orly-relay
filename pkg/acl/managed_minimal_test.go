@@ -7,7 +7,7 @@ import (
 
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/database"
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 )
 
 func TestManagedACL_BasicFunctionality(t *testing.T) {

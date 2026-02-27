@@ -6,8 +6,8 @@ import (
 	"encoding/hex"
 
 	"github.com/templexxx/xhex"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/errorf"
 )
 
 var Enc = hex.EncodeToString

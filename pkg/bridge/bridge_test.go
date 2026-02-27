@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/crypto/keys"
+	"next.orly.dev/pkg/nostr/crypto/keys"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/tag"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // parseProfileTemplate reads a profile template file in email-header format

@@ -5,13 +5,13 @@ import (
 	"math/rand"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/crypto/encryption"
-	"git.mleku.dev/mleku/nostr/crypto/keys"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"git.mleku.dev/mleku/nostr/interfaces/signer"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/nostr/crypto/encryption"
+	"next.orly.dev/pkg/nostr/crypto/keys"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/interfaces/signer"
+	"next.orly.dev/pkg/lol/log"
 )
 
 const (

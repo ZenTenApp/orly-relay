@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 	"next.orly.dev/pkg/database"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/interfaces/signer"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/interfaces/signer"
 )
 
 // RegistryService implements the FIND name registry consensus protocol

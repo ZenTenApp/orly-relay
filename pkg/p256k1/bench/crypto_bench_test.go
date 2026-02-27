@@ -11,7 +11,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 
-	"p256k1.mleku.dev"
+	"next.orly.dev/pkg/p256k1"
 )
 
 // Benchmark comparing pure Go implementation vs libsecp256k1 C library

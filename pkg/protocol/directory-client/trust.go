@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/protocol/directory"
 )
 

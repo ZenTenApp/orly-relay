@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"io"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"git.mleku.dev/mleku/nostr/encoders/varint"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
+	"next.orly.dev/pkg/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/encoders/varint"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 // MarshalBinary writes a binary encoding of an event.

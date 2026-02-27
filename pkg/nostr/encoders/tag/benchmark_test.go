@@ -3,7 +3,7 @@ package tag
 import (
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 	"lukechampine.com/frand"
 )
 

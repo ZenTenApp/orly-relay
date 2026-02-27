@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"lol.mleku.dev/chk"
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/tag"
 )
 
 // Helper function to create int64 pointer

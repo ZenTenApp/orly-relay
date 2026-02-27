@@ -3,11 +3,11 @@ package okenvelope
 import (
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/envelopes"
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/messages"
-	"git.mleku.dev/mleku/nostr/utils"
+	"next.orly.dev/pkg/nostr/encoders/envelopes"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/messages"
+	"next.orly.dev/pkg/nostr/utils"
 	"github.com/minio/sha256-simd"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 	"lukechampine.com/frand"
 )
 

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 func main() {

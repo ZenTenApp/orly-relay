@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/interfaces/loadmonitor"
 )
 

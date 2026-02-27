@@ -7,7 +7,7 @@ import (
 	"time"
 
 	gosmtp "github.com/emersion/go-smtp"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // backend implements gosmtp.Backend.

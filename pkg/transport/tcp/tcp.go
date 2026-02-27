@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"sync"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // Config holds TCP transport configuration.

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"next.orly.dev/pkg/database"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 )
 
 // Subscription and payment methods

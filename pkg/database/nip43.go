@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 )
 
 // Database key prefixes for NIP-43

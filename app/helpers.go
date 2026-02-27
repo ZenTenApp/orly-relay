@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // GetRemoteFromReq retrieves the originating IP address of the client from

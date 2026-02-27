@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"go-simpler.org/env"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 
-	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/filter"
 )
 
 // Config holds the negentropy sync service configuration.

@@ -8,14 +8,14 @@ import (
 
 	"encoding/json"
 
-	"git.mleku.dev/mleku/nostr/encoders/event/examples"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"git.mleku.dev/mleku/nostr/utils"
-	"git.mleku.dev/mleku/nostr/utils/bufpool"
-	"git.mleku.dev/mleku/nostr/utils/units"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/nostr/encoders/event/examples"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/utils"
+	"next.orly.dev/pkg/nostr/utils/bufpool"
+	"next.orly.dev/pkg/nostr/utils/units"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 	"lukechampine.com/frand"
 )
 

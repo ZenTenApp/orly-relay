@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"p256k1.mleku.dev"
+	"next.orly.dev/pkg/p256k1"
 )
 
 // WASM benchmarks for cryptographic operations using 32-bit arithmetic

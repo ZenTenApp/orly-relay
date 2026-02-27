@@ -9,8 +9,8 @@ import (
 	"path"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/utils"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/utils"
 	"github.com/stretchr/testify/require"
 )
 

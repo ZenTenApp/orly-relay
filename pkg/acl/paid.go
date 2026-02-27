@@ -8,13 +8,13 @@ import (
 	"sync"
 	"time"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/errorf"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/database"
 
-	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
+	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
 )
 
 // Paid implements a Lightning payment-gated ACL.

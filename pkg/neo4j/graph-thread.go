@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/protocol/graph"
 )
 

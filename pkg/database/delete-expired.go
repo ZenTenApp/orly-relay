@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 	"next.orly.dev/pkg/database/indexes"
 	"next.orly.dev/pkg/database/indexes/types"
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 )
 
 func (d *D) DeleteExpired() {

@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"strings"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 
-	"git.mleku.dev/mleku/nostr/crypto/keys"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/httpauth"
+	"next.orly.dev/pkg/nostr/crypto/keys"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/httpauth"
 	"next.orly.dev/pkg/acl"
 )
 

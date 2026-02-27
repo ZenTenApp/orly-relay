@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/kind"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 func TestIsAddressableEventQuery(t *testing.T) {

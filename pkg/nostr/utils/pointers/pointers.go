@@ -3,7 +3,7 @@ package pointers
 import (
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/timestamp"
+	"next.orly.dev/pkg/nostr/encoders/timestamp"
 )
 
 // PointerToValue is a generic interface (type constraint) to refer to any

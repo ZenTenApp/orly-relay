@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 )
 
 func TestNewRegistry(t *testing.T) {

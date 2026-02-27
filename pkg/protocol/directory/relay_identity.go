@@ -3,10 +3,10 @@ package directory
 import (
 	"encoding/json"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/errorf"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/tag"
 )
 
 // RelayIdentityContent represents the JSON content of a Relay Identity

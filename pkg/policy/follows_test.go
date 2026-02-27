@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 )
 
 // setupTestPolicy creates a policy manager with a temporary config file.

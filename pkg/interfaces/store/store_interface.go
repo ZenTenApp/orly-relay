@@ -12,10 +12,10 @@ import (
 
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/database/indexes/types"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
-	ntypes "git.mleku.dev/mleku/nostr/types"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/tag"
+	ntypes "next.orly.dev/pkg/nostr/types"
 )
 
 // I am a type for a persistence layer for nostr events handled by a relay.

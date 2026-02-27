@@ -7,12 +7,12 @@ import (
 	"context"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"git.mleku.dev/mleku/nostr/encoders/timestamp"
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/encoders/timestamp"
+	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
 	"next.orly.dev/pkg/database/indexes/types"
 )
 

@@ -6,7 +6,7 @@ package neo4j
 import (
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
 )
 
 // Note: WebSocket subscription management (AddSubscription, GetSubscriptionCount,

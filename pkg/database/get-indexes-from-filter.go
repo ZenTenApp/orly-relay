@@ -5,13 +5,13 @@ import (
 	"math"
 	"sort"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/errorf"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/database/indexes"
 	types2 "next.orly.dev/pkg/database/indexes/types"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/tag"
 )
 
 type Range struct {

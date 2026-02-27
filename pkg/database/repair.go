@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
-	"git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"git.mleku.dev/mleku/nostr/encoders/varint"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/encoders/varint"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/database/indexes"
 	"next.orly.dev/pkg/database/indexes/types"
 )

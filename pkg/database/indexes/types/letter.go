@@ -3,7 +3,7 @@ package types
 import (
 	"io"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 const LetterLen = 1

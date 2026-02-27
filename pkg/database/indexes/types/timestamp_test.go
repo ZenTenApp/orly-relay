@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 func TestTimestamp_FromInt(t *testing.T) {

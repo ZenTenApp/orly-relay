@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 	"github.com/stretchr/testify/assert"
 )
 

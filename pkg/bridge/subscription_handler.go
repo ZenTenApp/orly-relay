@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 
 	"next.orly.dev/pkg/acl"
 	aclgrpc "next.orly.dev/pkg/acl/grpc"

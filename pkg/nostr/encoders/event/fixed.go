@@ -1,7 +1,7 @@
 package event
 
 import (
-	"git.mleku.dev/mleku/nostr/types"
+	"next.orly.dev/pkg/nostr/types"
 )
 
 // Fixed-type accessor methods for Event.

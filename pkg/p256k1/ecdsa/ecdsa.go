@@ -3,7 +3,7 @@ package ecdsa
 import (
 	"errors"
 
-	"p256k1.mleku.dev"
+	"next.orly.dev/pkg/p256k1"
 )
 
 // Signature represents an ECDSA signature.

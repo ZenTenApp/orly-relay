@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 // randBytes returns a byte slice of the required size created from a random

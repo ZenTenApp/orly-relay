@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 
 	"next.orly.dev/pkg/acl"
 	"next.orly.dev/pkg/database"

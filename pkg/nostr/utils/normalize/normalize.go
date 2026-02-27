@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"net/url"
 
-	"git.mleku.dev/mleku/nostr/encoders/ints"
-	"git.mleku.dev/mleku/nostr/utils/constraints"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/nostr/encoders/ints"
+	"next.orly.dev/pkg/nostr/utils/constraints"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 )
 
 var (

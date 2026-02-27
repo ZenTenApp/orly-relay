@@ -305,7 +305,7 @@ Reply DM
 
 ### Marmot SDK Note
 
-A separate MLS-based Marmot protocol SDK exists in the nostr library at `git.mleku.dev/mleku/nostr/protocol/marmot/` (kinds 443, 445, 1059). It provides forward secrecy via MLS key ratcheting. The email bridge does NOT use this SDK — it uses NIP-17 gift-wrapping instead, which is compatible with standard Nostr clients like smesh.
+A separate MLS-based Marmot protocol SDK exists in the nostr library at `pkg/nostr/protocol/marmot/` (kinds 443, 445, 1059). It provides forward secrecy via MLS key ratcheting. The email bridge does NOT use this SDK — it uses NIP-17 gift-wrapping instead, which is compatible with standard Nostr clients like smesh.
 
 ## NWC Client
 
@@ -397,11 +397,11 @@ Proto definitions in `proto/` with buf generation. Two services:
 
 50+ RPCs covering: core access checks, follows management, managed (ban/allow pubkeys/events/IPs/kinds), curating (trust tiers, rate limiting, spam), paid (subscribe/unsubscribe, aliases).
 
-## Logging (lol.mleku.dev)
+## Logging (pkg/lol)
 
 ```go
-import "lol.mleku.dev/log"
-import "lol.mleku.dev/chk"
+import "next.orly.dev/pkg/lol/log"
+import "next.orly.dev/pkg/lol/chk"
 
 log.T.F("trace: %s", msg)  // T=Trace, D=Debug, I=Info, W=Warn, E=Error, F=Fatal
 if chk.E(err) { return }   // Log + check error
@@ -578,13 +578,13 @@ This provides process isolation and allows independent restarts. The unified bin
 
 ## Dependencies
 
-### Vendored (in pkg/, via go.mod replace directives)
+### Internal (monorepo packages)
 
-- `git.mleku.dev/mleku/nostr` → `pkg/nostr/` — Nostr library (crypto, events, encoders, protocol, signer)
-- `p256k1.mleku.dev` → `pkg/p256k1/` — secp256k1 elliptic curve crypto (Schnorr, ECDSA, purego)
-- `lol.mleku.dev` → `pkg/lol/` — Logging (log levels, chk.E error pattern)
+- `next.orly.dev/pkg/nostr/` — Nostr library (crypto, events, encoders, protocol, signer)
+- `next.orly.dev/pkg/p256k1/` — secp256k1 elliptic curve crypto (Schnorr, ECDSA, purego)
+- `next.orly.dev/pkg/lol/` — Logging (log levels, chk.E error pattern)
 
-Import paths unchanged across the codebase. The original server (git.mleku.dev) is permanently offline.
+These were originally separate modules (git.mleku.dev/mleku/nostr, p256k1.mleku.dev, lol.mleku.dev) that have been fully merged into the monorepo as standard Go packages.
 
 ### External
 

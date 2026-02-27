@@ -3,7 +3,7 @@ package kind
 import (
 	"testing"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 	"lukechampine.com/frand"
 )
 

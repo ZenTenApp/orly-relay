@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"lol.mleku.dev"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol"
+	"next.orly.dev/pkg/lol/chk"
 	"next.orly.dev/pkg/database"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
 	"next.orly.dev/pkg/utils/apputil"
 )
 

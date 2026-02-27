@@ -4,7 +4,7 @@ import (
 	"errors"
 	"io"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 // MaxUint24 is the maximum value of a 24-bit unsigned integer: 2^24 - 1.

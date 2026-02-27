@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 	"github.com/minio/sha256-simd"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/utils"
 )
 

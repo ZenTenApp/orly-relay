@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/errorf"
 	"next.orly.dev/pkg/database"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 )
 
 // ConsensusEngine handles the consensus algorithm for name registrations

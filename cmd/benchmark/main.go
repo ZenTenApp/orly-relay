@@ -16,17 +16,17 @@ import (
 	"sync"
 	"time"
 
-	lol "lol.mleku.dev"
+	lol "next.orly.dev/pkg/lol"
 	"next.orly.dev/pkg/database"
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/eventenvelope"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	examples "git.mleku.dev/mleku/nostr/encoders/event/examples"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/kind"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"git.mleku.dev/mleku/nostr/encoders/timestamp"
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
-	"git.mleku.dev/mleku/nostr/ws"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/eventenvelope"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	examples "next.orly.dev/pkg/nostr/encoders/event/examples"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/encoders/timestamp"
+	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/nostr/ws"
 )
 
 type BenchmarkConfig struct {

@@ -3,7 +3,7 @@ package text
 import (
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 	"github.com/minio/sha256-simd"
 	"lukechampine.com/frand"
 )

@@ -1,9 +1,9 @@
 package event
 
 import (
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/encoders/ints"
-	"git.mleku.dev/mleku/nostr/encoders/text"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/ints"
+	"next.orly.dev/pkg/nostr/encoders/text"
 	"github.com/minio/sha256-simd"
 )
 

@@ -7,7 +7,7 @@ package chainhash
 import (
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/utils"
+	"next.orly.dev/pkg/nostr/utils"
 )
 
 // mainNetGenesisHash is the hash of the first block in the block chain for the

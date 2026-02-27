@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 	"next.orly.dev/pkg/acl"
 	"next.orly.dev/pkg/database"
-	"git.mleku.dev/mleku/nostr/httpauth"
+	"next.orly.dev/pkg/nostr/httpauth"
 )
 
 // handleCuratingNIP86Request handles curating NIP-86 requests with pre-authenticated pubkey.

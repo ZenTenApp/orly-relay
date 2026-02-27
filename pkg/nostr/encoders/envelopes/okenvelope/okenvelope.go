@@ -6,15 +6,15 @@ package okenvelope
 import (
 	"io"
 
-	"git.mleku.dev/mleku/nostr/encoders/envelopes"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/encoders/text"
-	"git.mleku.dev/mleku/nostr/interfaces/codec"
-	"git.mleku.dev/mleku/nostr/utils/constraints"
+	"next.orly.dev/pkg/nostr/encoders/envelopes"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/text"
+	"next.orly.dev/pkg/nostr/interfaces/codec"
+	"next.orly.dev/pkg/nostr/utils/constraints"
 	"github.com/minio/sha256-simd"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/errorf"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // L is the label associated with this type of codec.Envelope.

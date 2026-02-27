@@ -3,7 +3,7 @@
 package pointers
 
 import (
-	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/encoders/kind"
 )
 
 // Profile pointer is a combination of pubkey and relay list.

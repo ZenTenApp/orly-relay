@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/url"
 
-	"git.mleku.dev/mleku/nostr/crypto/encryption"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/interfaces/signer"
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/nostr/crypto/encryption"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/interfaces/signer"
+	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 // AuthMode defines the authentication mode for NRC connections.

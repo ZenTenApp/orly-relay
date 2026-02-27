@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"testing"
 
-	"lol.mleku.dev/chk"
-	"git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
 	"github.com/minio/sha256-simd"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/utils"
 )
 

@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 	"lukechampine.com/frand"
 	"next.orly.dev/pkg/utils"
 )

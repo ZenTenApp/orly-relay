@@ -11,7 +11,7 @@ import (
 	"github.com/emersion/go-message"
 	"github.com/emersion/go-sasl"
 	gosmtp "github.com/emersion/go-smtp"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // ClientConfig holds outbound SMTP client configuration.

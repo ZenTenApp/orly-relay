@@ -11,7 +11,7 @@ import (
 	"os"
 
 	"github.com/emersion/go-msgauth/dkim"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // DKIMSigner signs outbound emails with a DKIM signature.

@@ -11,7 +11,7 @@ package btcec
 import (
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 )
 
 func FuzzParsePubKey(f *testing.F) {

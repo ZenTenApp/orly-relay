@@ -1,8 +1,8 @@
 package filter
 
 import (
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/lol/errorf"
 )
 
 type S []*F

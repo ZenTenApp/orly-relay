@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec/secp256k1"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/utils"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/utils"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 // hexToBytes converts the passed hex string into bytes and will panic if there

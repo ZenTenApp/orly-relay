@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/crypto/keys"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/crypto/keys"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 )
 
 // Test keys - generated from known secrets for reproducibility

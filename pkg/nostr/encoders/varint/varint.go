@@ -8,7 +8,7 @@ import (
 	"io"
 
 	"golang.org/x/exp/constraints"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 func Encode[V constraints.Integer](w io.Writer, v V) {

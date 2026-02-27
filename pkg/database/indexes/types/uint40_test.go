@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 func TestUint40(t *testing.T) {

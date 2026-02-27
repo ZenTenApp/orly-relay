@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/kind"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"git.mleku.dev/mleku/nostr/utils"
-	"git.mleku.dev/mleku/nostr/utils/normalize"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/utils"
+	"next.orly.dev/pkg/nostr/utils/normalize"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/errorf"
 )
 
 // GenerateChallenge creates a reasonable, 16-byte base64 challenge string

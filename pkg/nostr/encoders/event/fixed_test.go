@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/types"
+	"next.orly.dev/pkg/nostr/types"
 )
 
 func TestIDFixed(t *testing.T) {

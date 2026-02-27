@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // TestBugReproduction_Kind1AllowedWithWhitelist4678 reproduces the reported bug

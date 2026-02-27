@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	nostrHex "git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	nostrHex "next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/database/indexes/types"
 )

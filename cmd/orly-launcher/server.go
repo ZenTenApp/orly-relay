@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // AdminServer provides HTTP endpoints for managing the launcher.

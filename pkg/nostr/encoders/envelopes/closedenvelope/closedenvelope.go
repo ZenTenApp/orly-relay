@@ -6,10 +6,10 @@ package closedenvelope
 import (
 	"io"
 
-	"git.mleku.dev/mleku/nostr/encoders/envelopes"
-	"git.mleku.dev/mleku/nostr/encoders/text"
-	"git.mleku.dev/mleku/nostr/interfaces/codec"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/nostr/encoders/envelopes"
+	"next.orly.dev/pkg/nostr/encoders/text"
+	"next.orly.dev/pkg/nostr/interfaces/codec"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 // L is the label associated with this type of codec.Envelope.

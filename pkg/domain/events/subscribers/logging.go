@@ -4,7 +4,7 @@ package subscribers
 import (
 	"encoding/hex"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 
 	"next.orly.dev/pkg/domain/events"
 )

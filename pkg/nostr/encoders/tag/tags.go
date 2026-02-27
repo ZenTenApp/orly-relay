@@ -3,9 +3,9 @@ package tag
 import (
 	"bytes"
 
-	"git.mleku.dev/mleku/nostr/utils"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/nostr/utils"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // S is a list of tag.T - which are lists of string elements with ordering and

@@ -5,8 +5,8 @@ import (
 	"bytes"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 // TestExport tests the Export function by:

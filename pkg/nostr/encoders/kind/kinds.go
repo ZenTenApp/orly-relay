@@ -3,9 +3,9 @@
 package kind
 
 import (
-	"git.mleku.dev/mleku/nostr/encoders/ints"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/nostr/encoders/ints"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/errorf"
 )
 
 // S is an array of kind.K, used in filter.K and filter.S for searches.

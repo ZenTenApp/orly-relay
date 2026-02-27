@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"p256k1.mleku.dev/signer"
+	"next.orly.dev/pkg/p256k1/signer"
 )
 
 // This file contains benchmarks for the P256K1Signer implementation

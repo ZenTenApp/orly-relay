@@ -3,7 +3,7 @@ package types
 import (
 	"io"
 
-	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/lol/errorf"
 	"github.com/minio/sha256-simd"
 )
 

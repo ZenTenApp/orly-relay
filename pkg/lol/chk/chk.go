@@ -2,7 +2,7 @@
 package chk
 
 import (
-	"lol.mleku.dev"
+	"next.orly.dev/pkg/lol"
 )
 
 var F, E, W, I, D, T lol.Chk

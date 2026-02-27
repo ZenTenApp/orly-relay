@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/crypto/ec"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 	"github.com/minio/sha256-simd"
 )
 

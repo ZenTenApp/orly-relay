@@ -1,7 +1,7 @@
 package acl
 
 import (
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 	acliface "next.orly.dev/pkg/interfaces/acl"
 	"next.orly.dev/pkg/mode"
 	"next.orly.dev/pkg/utils/atomic"

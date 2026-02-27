@@ -7,14 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/eventenvelope"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/kind"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"git.mleku.dev/mleku/nostr/encoders/timestamp"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/eventenvelope"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/encoders/timestamp"
 	negentropyiface "next.orly.dev/pkg/interfaces/negentropy"
 	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
 )

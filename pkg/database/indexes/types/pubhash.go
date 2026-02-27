@@ -3,11 +3,11 @@ package types
 import (
 	"io"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
-	"git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/errorf"
+	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
 	"github.com/minio/sha256-simd"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 )
 
 const PubHashLen = 8

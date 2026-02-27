@@ -52,7 +52,7 @@ package secp256k1
 // ordinarily would.  See the documentation for FieldVal for more details.
 
 import (
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 )
 
 // Constants used to make the code more readable.

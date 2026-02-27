@@ -8,8 +8,8 @@ import (
 	"math/big"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec/secp256k1"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 )
 
 // setHex decodes the passed big-endian hex string into the internal field value

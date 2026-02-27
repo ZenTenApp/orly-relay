@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"go.uber.org/atomic"
-	"lol.mleku.dev"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // NewLogger creates a new badger logger.

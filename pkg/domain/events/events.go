@@ -6,7 +6,7 @@ package events
 import (
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 )
 
 // DomainEvent is the base interface for all domain events.

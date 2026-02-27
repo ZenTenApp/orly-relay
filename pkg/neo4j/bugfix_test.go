@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/tag"
 )
 
 // TestLargeContactListBatching tests that kind 3 events with many follows

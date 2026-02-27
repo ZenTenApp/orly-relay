@@ -3,9 +3,9 @@
 package database
 
 import (
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/database/indexes/types"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 )
 
 // TraverseThread performs BFS traversal of thread structure via e-tags.

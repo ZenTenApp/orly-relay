@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
-	"git.mleku.dev/mleku/nostr/crypto/ec/secp256k1"
-	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
+	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
+	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
+	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
 	"github.com/minio/sha256-simd"
 )
 

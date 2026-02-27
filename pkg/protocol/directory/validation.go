@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
-	"git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
-	"git.mleku.dev/mleku/nostr/crypto/ec/secp256k1"
-	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/errorf"
+	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
+	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
+	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
+	"next.orly.dev/pkg/nostr/encoders/event"
 )
 
 // Validation constants

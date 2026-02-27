@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/filter"
 )
 
 // QueryCache tracks which filters have been queried recently to avoid

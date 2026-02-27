@@ -10,7 +10,7 @@ import (
 	"runtime/pprof"
 	"testing"
 
-	"p256k1.mleku.dev"
+	"next.orly.dev/pkg/p256k1"
 )
 
 // Generate memory profiles for optimization

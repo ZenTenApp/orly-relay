@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/kind"
 )
 
 func TestQueryForKinds(t *testing.T) {

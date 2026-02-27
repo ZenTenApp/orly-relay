@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	ntypes "git.mleku.dev/mleku/nostr/types"
+	ntypes "next.orly.dev/pkg/nostr/types"
 )
 
 func TestNewIdPkTs(t *testing.T) {

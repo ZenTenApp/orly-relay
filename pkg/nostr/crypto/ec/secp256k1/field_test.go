@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/utils"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/utils"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 // SetHex decodes the passed big-endian hex string into the internal field value

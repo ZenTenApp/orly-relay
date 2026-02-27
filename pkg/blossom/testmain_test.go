@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"lol.mleku.dev"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol"
+	"next.orly.dev/pkg/lol/log"
 )
 
 func TestMain(m *testing.M) {

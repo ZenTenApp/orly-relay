@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
-	"lol.mleku.dev/log"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"next.orly.dev/pkg/lol/log"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
 )
 
 const (

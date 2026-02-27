@@ -3,8 +3,8 @@ package atag
 import (
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
-	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
+	"next.orly.dev/pkg/nostr/encoders/kind"
 	"lukechampine.com/frand"
 )
 

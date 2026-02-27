@@ -11,11 +11,11 @@ import (
 	gosync "sync"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/tag"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/sync/common"
 )

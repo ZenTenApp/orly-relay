@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 	relaytester "next.orly.dev/relay-tester"
 )
 

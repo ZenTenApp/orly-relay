@@ -1,12 +1,12 @@
 package app
 
 import (
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/authenvelope"
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/okenvelope"
-	"git.mleku.dev/mleku/nostr/encoders/reason"
-	"git.mleku.dev/mleku/nostr/protocol/auth"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/authenvelope"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/okenvelope"
+	"next.orly.dev/pkg/nostr/encoders/reason"
+	"next.orly.dev/pkg/nostr/protocol/auth"
 )
 
 // zeroEventID is used for OK responses when we cannot parse the event ID

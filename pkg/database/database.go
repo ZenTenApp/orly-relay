@@ -11,14 +11,14 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/dgraph-io/badger/v4/options"
-	"lol.mleku.dev"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/database/querycache"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
 	"next.orly.dev/pkg/utils/apputil"
-	"git.mleku.dev/mleku/nostr/utils/units"
+	"next.orly.dev/pkg/nostr/utils/units"
 )
 
 // DefaultMaxConcurrentQueries limits concurrent database queries to prevent memory exhaustion.

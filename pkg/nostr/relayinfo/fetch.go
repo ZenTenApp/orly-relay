@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/utils/normalize"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/nostr/utils/normalize"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/errorf"
 )
 
 // Fetch fetches the NIP-11 Info.

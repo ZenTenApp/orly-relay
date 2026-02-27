@@ -5,8 +5,8 @@ package database
 import (
 	"io"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // Import a collection of events in line structured minified JSON format (JSONL).

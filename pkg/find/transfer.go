@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/interfaces/signer"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/interfaces/signer"
 )
 
 // CreateTransferProposal creates a complete transfer proposal with authorization from previous owner

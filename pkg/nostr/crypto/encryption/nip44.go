@@ -11,10 +11,10 @@ import (
 	"io"
 	"math"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec/secp256k1"
+	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
 	"golang.org/x/crypto/chacha20"
 	"golang.org/x/crypto/hkdf"
-	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/lol/errorf"
 )
 
 var (

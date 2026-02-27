@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/acl"
 	"next.orly.dev/pkg/database"

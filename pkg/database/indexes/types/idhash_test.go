@@ -5,9 +5,9 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 	"github.com/minio/sha256-simd"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/utils"
 )
 

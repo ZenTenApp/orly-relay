@@ -12,9 +12,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"lol.mleku.dev"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // Run executes the launcher subcommand.

@@ -7,11 +7,11 @@ import (
 	"sort"
 	"sync"
 
-	"git.mleku.dev/mleku/nostr/encoders/kind"
-	"git.mleku.dev/mleku/nostr/encoders/timestamp"
-	"git.mleku.dev/mleku/nostr/utils/number"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/encoders/timestamp"
+	"next.orly.dev/pkg/nostr/utils/number"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // NIP is a number and description of a nostr "improvement" possibility.

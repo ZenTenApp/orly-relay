@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 // EnsureDir checks if a file could be written to a path and creates the

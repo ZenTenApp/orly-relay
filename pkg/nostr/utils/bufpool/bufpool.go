@@ -3,7 +3,7 @@ package bufpool
 import (
 	"sync"
 
-	"git.mleku.dev/mleku/nostr/utils/units"
+	"next.orly.dev/pkg/nostr/utils/units"
 )
 
 const (

@@ -26,7 +26,7 @@
 //
 // # Usage
 //
-//	import "p256k1.mleku.dev/ecdsa"
+//	import "next.orly.dev/pkg/p256k1/ecdsa"
 //
 //	// Sign a message hash
 //	sig, err := ecdsa.Sign(messageHash, privateKey)

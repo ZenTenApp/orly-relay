@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec"
-	"git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/crypto/ec"
+	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 )
 
 var (

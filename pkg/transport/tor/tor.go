@@ -6,7 +6,7 @@ import (
 	"context"
 	"net/http"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 
 	torservice "next.orly.dev/pkg/tor"
 )

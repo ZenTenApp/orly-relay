@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 var (

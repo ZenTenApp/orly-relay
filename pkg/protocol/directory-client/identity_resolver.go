@@ -3,8 +3,8 @@ package directory_client
 import (
 	"sync"
 
-	"lol.mleku.dev/errorf"
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/lol/errorf"
+	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/protocol/directory"
 )
 

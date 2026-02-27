@@ -3,7 +3,7 @@ package encryption
 import (
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
 	"lukechampine.com/frand"
 )
 

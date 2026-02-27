@@ -11,8 +11,8 @@ import (
 	"regexp"
 	"strings"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // Manager handles loading and serving custom branding assets

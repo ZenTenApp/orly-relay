@@ -5,7 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // Subscriber handles domain events.

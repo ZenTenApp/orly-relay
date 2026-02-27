@@ -5,7 +5,7 @@
 package btcec
 
 import (
-	"git.mleku.dev/mleku/nostr/crypto/ec/secp256k1"
+	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
 )
 
 // These constants define the lengths of serialized public keys.

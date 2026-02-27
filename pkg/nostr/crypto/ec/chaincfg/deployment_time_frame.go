@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec/wire"
+	"next.orly.dev/pkg/nostr/crypto/ec/wire"
 )
 
 var (

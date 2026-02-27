@@ -7,7 +7,7 @@ import (
 	"context"
 	"sync"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // AccessTrackerDatabase defines the interface for the underlying database

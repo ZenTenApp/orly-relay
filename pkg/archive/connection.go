@@ -5,10 +5,10 @@ import (
 	"sync"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/ws"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/ws"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // RelayConnection manages a single archive relay connection.

@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/authenvelope"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/authenvelope"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/protocol/publish"
-	"git.mleku.dev/mleku/nostr/utils/units"
+	"next.orly.dev/pkg/nostr/utils/units"
 )
 
 const (

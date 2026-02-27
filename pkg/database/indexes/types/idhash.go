@@ -4,10 +4,10 @@ import (
 	"encoding/base64"
 	"io"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/errorf"
 	"github.com/minio/sha256-simd"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 )
 
 const IdHashLen = 8

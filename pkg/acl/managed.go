@@ -7,12 +7,12 @@ import (
 	"reflect"
 	"sync"
 
-	"lol.mleku.dev/errorf"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/errorf"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/database"
-	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
+	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/utils"
 )
 

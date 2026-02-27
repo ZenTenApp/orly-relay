@@ -21,11 +21,11 @@ import (
 	"syscall"
 	"time"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/kind"
-	"git.mleku.dev/mleku/nostr/encoders/timestamp"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/encoders/timestamp"
 	"next.orly.dev/pkg/database"
 	pkgsync "next.orly.dev/pkg/sync"
 	"next.orly.dev/pkg/sync/negentropy"

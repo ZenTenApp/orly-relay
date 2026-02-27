@@ -13,12 +13,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec/bech32"
-	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/nostr/crypto/ec/bech32"
+	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
+	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
 
 	"github.com/alexflint/go-arg"
 )

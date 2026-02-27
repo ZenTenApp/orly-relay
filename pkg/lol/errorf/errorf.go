@@ -2,7 +2,7 @@
 package errorf
 
 import (
-	"lol.mleku.dev"
+	"next.orly.dev/pkg/lol"
 )
 
 var F, E, W, I, D, T lol.Err

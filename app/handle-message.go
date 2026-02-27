@@ -6,15 +6,15 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
-	"git.mleku.dev/mleku/nostr/encoders/envelopes"
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/authenvelope"
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/closeenvelope"
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/countenvelope"
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/eventenvelope"
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/noticeenvelope"
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/reqenvelope"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
+	"next.orly.dev/pkg/nostr/encoders/envelopes"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/authenvelope"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/closeenvelope"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/countenvelope"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/eventenvelope"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/noticeenvelope"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/reqenvelope"
 )
 
 // validateJSONMessage checks if a message contains invalid control characters

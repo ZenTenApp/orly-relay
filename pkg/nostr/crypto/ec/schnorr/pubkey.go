@@ -8,8 +8,8 @@ package schnorr
 import (
 	"fmt"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec"
-	"git.mleku.dev/mleku/nostr/crypto/ec/secp256k1"
+	"next.orly.dev/pkg/nostr/crypto/ec"
+	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
 )
 
 // These constants define the lengths of serialized public keys.

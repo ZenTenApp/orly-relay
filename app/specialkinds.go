@@ -3,8 +3,8 @@ package app
 import (
 	"context"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/kind"
 	"next.orly.dev/pkg/acl"
 	"next.orly.dev/pkg/event/specialkinds"
 	"next.orly.dev/pkg/protocol/nip43"

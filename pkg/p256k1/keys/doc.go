@@ -33,7 +33,7 @@
 //
 // # Usage
 //
-//	import "p256k1.mleku.dev/keys"
+//	import "next.orly.dev/pkg/p256k1/keys"
 //
 //	// Generate a new key pair
 //	keypair, err := keys.Generate()

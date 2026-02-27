@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 
 	iface "next.orly.dev/pkg/interfaces/transport"
 )

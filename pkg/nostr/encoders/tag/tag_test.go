@@ -3,8 +3,8 @@ package tag
 import (
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/utils"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/nostr/utils"
+	"next.orly.dev/pkg/lol/chk"
 	"lukechampine.com/frand"
 )
 

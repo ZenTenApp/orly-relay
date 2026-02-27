@@ -3,7 +3,7 @@ package neo4j
 import (
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/encoders/tag"
 )
 
 // TestIsBinaryEncoded tests the IsBinaryEncoded function

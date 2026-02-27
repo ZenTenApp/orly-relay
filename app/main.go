@@ -10,15 +10,15 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/app/branding"
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/acl"
-	"git.mleku.dev/mleku/nostr/crypto/keys"
+	"next.orly.dev/pkg/nostr/crypto/keys"
 	"next.orly.dev/pkg/database"
-	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/neo4j"
 	"next.orly.dev/pkg/policy"
 	"next.orly.dev/pkg/protocol/graph"
@@ -39,7 +39,7 @@ import (
 	emailbridge "next.orly.dev/pkg/bridge"
 	"next.orly.dev/pkg/httpguard"
 
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
 )
 
 func Run(

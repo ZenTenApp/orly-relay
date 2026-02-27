@@ -5,14 +5,14 @@ package authenvelope
 import (
 	"io"
 
-	"git.mleku.dev/mleku/nostr/encoders/envelopes"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/text"
-	"git.mleku.dev/mleku/nostr/interfaces/codec"
-	"git.mleku.dev/mleku/nostr/utils/constraints"
-	"git.mleku.dev/mleku/nostr/utils/units"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/nostr/encoders/envelopes"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/text"
+	"next.orly.dev/pkg/nostr/interfaces/codec"
+	"next.orly.dev/pkg/nostr/utils/constraints"
+	"next.orly.dev/pkg/nostr/utils/units"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/errorf"
 )
 
 // L is the label associated with this type of codec.Envelope.

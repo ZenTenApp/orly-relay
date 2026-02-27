@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 
-	"git.mleku.dev/mleku/nostr/httpauth"
+	"next.orly.dev/pkg/nostr/httpauth"
 	"next.orly.dev/pkg/acl"
 	"next.orly.dev/pkg/interfaces/store"
 )

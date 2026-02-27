@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // blockedBots is the list of User-Agent substrings to block. Matched

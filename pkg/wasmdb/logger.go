@@ -7,7 +7,7 @@ import (
 	"syscall/js"
 	"time"
 
-	"lol.mleku.dev"
+	"next.orly.dev/pkg/lol"
 )
 
 // logger provides logging functionality for the wasmdb package

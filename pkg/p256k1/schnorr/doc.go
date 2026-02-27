@@ -25,7 +25,7 @@
 //
 // # Usage
 //
-//	import "p256k1.mleku.dev/schnorr"
+//	import "next.orly.dev/pkg/p256k1/schnorr"
 //
 //	// Create a key pair
 //	keypair, err := schnorr.NewKeyPair(privateKey)

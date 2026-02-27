@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 	"next.orly.dev/pkg/utils"
 
 	"github.com/minio/sha256-simd"

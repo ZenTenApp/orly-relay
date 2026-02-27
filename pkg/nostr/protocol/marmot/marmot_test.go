@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

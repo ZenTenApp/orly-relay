@@ -3,8 +3,8 @@
 package p8k
 
 import (
-	"git.mleku.dev/mleku/nostr/interfaces/signer"
-	p256k1signer "p256k1.mleku.dev/signer"
+	"next.orly.dev/pkg/nostr/interfaces/signer"
+	p256k1signer "next.orly.dev/pkg/p256k1/signer"
 )
 
 // Signer implements the signer.I interface using p256k1.mleku.dev

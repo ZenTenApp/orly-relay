@@ -7,7 +7,7 @@ package base58_test
 import (
 	"fmt"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec/base58"
+	"next.orly.dev/pkg/nostr/crypto/ec/base58"
 )
 
 // This example demonstrates how to decode modified base58 encoded data.

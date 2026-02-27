@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"runtime"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/utils/atomic"
 	"next.orly.dev/pkg/utils/qu"
 )

@@ -5,7 +5,7 @@ import (
 	"io"
 	"testing"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 	"next.orly.dev/pkg/database/indexes/types"
 	"next.orly.dev/pkg/utils"
 )

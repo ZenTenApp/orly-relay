@@ -4,9 +4,9 @@ import (
 	"io"
 	"reflect"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 	"next.orly.dev/pkg/database/indexes/types"
-	"git.mleku.dev/mleku/nostr/interfaces/codec"
+	"next.orly.dev/pkg/nostr/interfaces/codec"
 )
 
 var counter int

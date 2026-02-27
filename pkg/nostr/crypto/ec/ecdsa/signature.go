@@ -8,7 +8,7 @@ package ecdsa
 import (
 	"fmt"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec/secp256k1"
+	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
 )
 
 // References:

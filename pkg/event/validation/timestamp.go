@@ -3,7 +3,7 @@ package validation
 import (
 	"time"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 )
 
 // ValidateTimestamp checks that the event timestamp is not too far in the future.

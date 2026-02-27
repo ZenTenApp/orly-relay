@@ -12,7 +12,7 @@ import (
 	"math/big"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/utils"
+	"next.orly.dev/pkg/nostr/utils"
 )
 
 // TestGenerateSecretKey ensures the key generation works as expected.

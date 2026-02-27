@@ -3,7 +3,7 @@ package routing
 import (
 	"context"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 )
 
 // DeleteProcessor handles event deletion operations.

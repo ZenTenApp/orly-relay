@@ -6,7 +6,7 @@ import (
 
 	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // BlossomUploader uploads encrypted data to a Blossom server and returns the URL.

@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/interfaces/publisher"
 	"next.orly.dev/pkg/interfaces/typer"
 )

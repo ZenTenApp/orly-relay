@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"go-simpler.org/env"
-	"lol.mleku.dev"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 
 	"next.orly.dev/pkg/acl"
 	"next.orly.dev/pkg/acl/server"

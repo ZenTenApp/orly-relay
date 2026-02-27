@@ -7,7 +7,7 @@ package btcec
 import (
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/utils"
+	"next.orly.dev/pkg/nostr/utils"
 
 	"github.com/davecgh/go-spew/spew"
 )

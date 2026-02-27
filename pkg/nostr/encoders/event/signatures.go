@@ -1,12 +1,12 @@
 package event
 
 import (
-	"git.mleku.dev/mleku/nostr/interfaces/signer"
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
-	"git.mleku.dev/mleku/nostr/utils"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/nostr/interfaces/signer"
+	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/nostr/utils"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/errorf"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // Sign the event using the signer.I. Uses github.com/bitcoin-core/secp256k1 if

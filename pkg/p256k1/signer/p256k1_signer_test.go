@@ -5,7 +5,7 @@ package signer
 import (
 	"testing"
 
-	"p256k1.mleku.dev"
+	"next.orly.dev/pkg/p256k1"
 )
 
 func TestP256K1Signer_Generate(t *testing.T) {

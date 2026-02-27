@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/interfaces/loadmonitor"
 	pidif "next.orly.dev/pkg/interfaces/pid"
 	"next.orly.dev/pkg/pid"

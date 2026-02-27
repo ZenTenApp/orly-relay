@@ -3,8 +3,8 @@
 package database
 
 import (
-	"lol.mleku.dev/log"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
+	"next.orly.dev/pkg/lol/log"
+	"next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/database/indexes/types"
 )
 

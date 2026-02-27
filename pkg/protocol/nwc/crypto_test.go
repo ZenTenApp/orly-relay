@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"git.mleku.dev/mleku/nostr/crypto/encryption"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/nostr/crypto/encryption"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
 	"next.orly.dev/pkg/protocol/nwc"
 	"next.orly.dev/pkg/utils"
 )

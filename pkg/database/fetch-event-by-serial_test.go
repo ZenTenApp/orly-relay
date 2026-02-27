@@ -3,8 +3,8 @@ package database
 import (
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/filter"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/tag"
 	"next.orly.dev/pkg/database/indexes/types"
 	"next.orly.dev/pkg/utils"
 )

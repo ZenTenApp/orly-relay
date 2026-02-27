@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 
 	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/sync/distributed"

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/utils"
+	"next.orly.dev/pkg/nostr/utils"
 )
 
 // TestBech32 tests whether decoding and re-encoding the valid BIP-173 test

@@ -2,8 +2,8 @@ package acl
 
 import (
 	"next.orly.dev/app/config"
-	"git.mleku.dev/mleku/nostr/encoders/bech32encoding"
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
+	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/utils"
 )
 

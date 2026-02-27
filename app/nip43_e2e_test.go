@@ -5,21 +5,21 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
 	"os"
 	"testing"
 	"time"
 
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/acl"
-	"git.mleku.dev/mleku/nostr/crypto/keys"
+	"next.orly.dev/pkg/nostr/crypto/keys"
 	"next.orly.dev/pkg/database"
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/tag"
 	"next.orly.dev/pkg/protocol/nip43"
 	"next.orly.dev/pkg/protocol/publish"
-	"git.mleku.dev/mleku/nostr/relayinfo"
+	"next.orly.dev/pkg/nostr/relayinfo"
 )
 
 // newTestListener creates a properly initialized Listener for testing

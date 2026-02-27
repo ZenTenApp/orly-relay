@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"io"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 const TimestampLen = 8

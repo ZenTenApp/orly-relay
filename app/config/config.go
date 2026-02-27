@@ -22,9 +22,9 @@ import (
 
 	"github.com/adrg/xdg"
 	"go-simpler.org/env"
-	lol "lol.mleku.dev"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
+	lol "next.orly.dev/pkg/lol"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/logbuffer"
 	"next.orly.dev/pkg/version"
 )

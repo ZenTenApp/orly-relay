@@ -7,7 +7,7 @@ package specialkinds
 import (
 	"context"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 )
 
 // Result represents the outcome of handling a special kind event.

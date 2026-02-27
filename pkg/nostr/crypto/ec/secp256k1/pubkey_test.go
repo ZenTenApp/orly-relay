@@ -9,7 +9,7 @@ import (
 	"errors"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/utils"
+	"next.orly.dev/pkg/nostr/utils"
 )
 
 // TestParsePubKey ensures that public keys are properly parsed according

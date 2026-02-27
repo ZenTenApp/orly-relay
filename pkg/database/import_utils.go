@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/log"
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
+	"next.orly.dev/pkg/nostr/encoders/event"
 )
 
 const maxLen = 500000000

@@ -3,10 +3,10 @@ package text
 import (
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/utils"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/utils"
 	"github.com/minio/sha256-simd"
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 	"lukechampine.com/frand"
 )
 

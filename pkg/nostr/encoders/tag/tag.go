@@ -6,10 +6,10 @@ package tag
 import (
 	"bytes"
 
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/encoders/text"
-	"git.mleku.dev/mleku/nostr/utils"
-	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/text"
+	"next.orly.dev/pkg/nostr/utils"
+	"next.orly.dev/pkg/lol/errorf"
 )
 
 // The tag position meanings, so they are clear when reading.

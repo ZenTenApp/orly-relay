@@ -1,9 +1,9 @@
 package app
 
 import (
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/eventenvelope"
-	"git.mleku.dev/mleku/nostr/encoders/envelopes/okenvelope"
-	"git.mleku.dev/mleku/nostr/encoders/reason"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/eventenvelope"
+	"next.orly.dev/pkg/nostr/encoders/envelopes/okenvelope"
+	"next.orly.dev/pkg/nostr/encoders/reason"
 )
 
 // OK represents a function that processes events or operations, using provided

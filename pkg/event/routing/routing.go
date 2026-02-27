@@ -3,7 +3,7 @@
 package routing
 
 import (
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 )
 
 // Action indicates what to do after routing.

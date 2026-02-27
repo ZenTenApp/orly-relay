@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec/base58"
+	"next.orly.dev/pkg/nostr/crypto/ec/base58"
 )
 
 var (

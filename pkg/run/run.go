@@ -10,8 +10,8 @@ import (
 	"sync"
 
 	"github.com/adrg/xdg"
-	"lol.mleku.dev/chk"
-	lol "lol.mleku.dev"
+	"next.orly.dev/pkg/lol/chk"
+	lol "next.orly.dev/pkg/lol"
 	"next.orly.dev/app"
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/acl"

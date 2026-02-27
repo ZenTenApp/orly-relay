@@ -10,10 +10,10 @@ import (
 	"sync"
 	"testing"
 
-	"git.mleku.dev/mleku/nostr/encoders/event"
-	"git.mleku.dev/mleku/nostr/encoders/event/examples"
-	"lol.mleku.dev"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event/examples"
+	"next.orly.dev/pkg/lol"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // Shared test fixtures - initialized once in TestMain

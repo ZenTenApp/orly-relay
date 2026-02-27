@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 
 	aclgrpc "next.orly.dev/pkg/acl/grpc"
 	bridgesmtp "next.orly.dev/pkg/bridge/smtp"

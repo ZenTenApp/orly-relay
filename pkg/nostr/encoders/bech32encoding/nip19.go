@@ -4,17 +4,17 @@ import (
 	"bytes"
 	"encoding/binary"
 
-	"git.mleku.dev/mleku/nostr/crypto/ec/bech32"
-	"git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
-	"git.mleku.dev/mleku/nostr/encoders/bech32encoding/pointers"
-	"git.mleku.dev/mleku/nostr/encoders/bech32encoding/tlv"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/encoders/kind"
-	"git.mleku.dev/mleku/nostr/utils"
+	"next.orly.dev/pkg/nostr/crypto/ec/bech32"
+	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
+	"next.orly.dev/pkg/nostr/encoders/bech32encoding/pointers"
+	"next.orly.dev/pkg/nostr/encoders/bech32encoding/tlv"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/utils"
 	"github.com/minio/sha256-simd"
-	"lol.mleku.dev/chk"
-	"lol.mleku.dev/errorf"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/errorf"
+	"next.orly.dev/pkg/lol/log"
 )
 
 var (

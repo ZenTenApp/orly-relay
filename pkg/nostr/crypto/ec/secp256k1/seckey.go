@@ -9,7 +9,7 @@ import (
 	"crypto/rand"
 	"io"
 
-	"lol.mleku.dev/chk"
+	"next.orly.dev/pkg/lol/chk"
 )
 
 // SecretKey provides facilities for working with secp256k1 secret keys within

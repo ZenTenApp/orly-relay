@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"go.uber.org/atomic"
-	"lol.mleku.dev"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // C is your basic empty struct signal channel

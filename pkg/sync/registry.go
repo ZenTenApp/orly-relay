@@ -7,7 +7,7 @@ import (
 	"sort"
 	"sync"
 
-	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/lol/errorf"
 	"next.orly.dev/pkg/database"
 )
 

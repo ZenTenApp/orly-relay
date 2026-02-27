@@ -2,7 +2,7 @@
 package acl
 
 import (
-	"git.mleku.dev/mleku/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/interfaces/typer"
 )
 

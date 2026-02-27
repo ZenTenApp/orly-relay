@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 
 	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
 	clusterv1 "next.orly.dev/pkg/proto/orlysync/cluster/v1"

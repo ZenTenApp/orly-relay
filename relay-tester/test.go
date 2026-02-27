@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/lol/errorf"
 )
 
 // TestResult represents the result of a test.

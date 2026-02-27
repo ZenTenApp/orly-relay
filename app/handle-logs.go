@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strconv"
 
-	lol "lol.mleku.dev"
-	"lol.mleku.dev/chk"
+	lol "next.orly.dev/pkg/lol"
+	"next.orly.dev/pkg/lol/chk"
 
-	"git.mleku.dev/mleku/nostr/httpauth"
+	"next.orly.dev/pkg/nostr/httpauth"
 	"next.orly.dev/pkg/acl"
 	"next.orly.dev/pkg/logbuffer"
 )

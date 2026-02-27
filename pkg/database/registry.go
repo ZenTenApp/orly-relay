@@ -7,7 +7,7 @@ import (
 	"sort"
 	"sync"
 
-	"lol.mleku.dev/errorf"
+	"next.orly.dev/pkg/lol/errorf"
 )
 
 // DriverFactory is the signature for database driver factory functions.

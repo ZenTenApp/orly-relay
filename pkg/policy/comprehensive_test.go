@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"lol.mleku.dev/chk"
-	"git.mleku.dev/mleku/nostr/encoders/hex"
-	"git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
 )
 
 // TestPolicyDefinitionOfDone tests all requirements from the GitHub issue

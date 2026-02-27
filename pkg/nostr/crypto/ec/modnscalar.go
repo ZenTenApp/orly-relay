@@ -4,7 +4,7 @@
 package btcec
 
 import (
-	"git.mleku.dev/mleku/nostr/crypto/ec/secp256k1"
+	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
 )
 
 // ModNScalar implements optimized 256-bit constant-time fixed-precision

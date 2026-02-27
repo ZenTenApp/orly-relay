@@ -3,7 +3,7 @@ package bridge
 import (
 	"context"
 
-	"lol.mleku.dev/log"
+	"next.orly.dev/pkg/lol/log"
 )
 
 // Router dispatches incoming DMs to the appropriate handler.
