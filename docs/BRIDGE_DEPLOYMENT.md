@@ -693,3 +693,104 @@ ssh root@relay.orly.dev 'journalctl -u orly --since "1 min ago" | grep bridge'
 # Test outbound: DM the bridge npub with "subscribe"
 # Test inbound: send email to npub1...@relay.orly.dev
 ```
+
+---
+
+## Client Setup: White Noise
+
+[White Noise](https://whitenoise.ing) is a mobile/desktop Nostr messaging client that uses NIP-17 gift-wrapped DMs. When searching for the bridge by its npub, White Noise may show the profile but say the bridge "isn't on White Noise yet." This means White Noise cannot find the bridge's relay list and doesn't know where to send messages.
+
+### Why This Happens
+
+White Noise (and other NIP-17 clients) discover where to send DMs by looking up the recipient's **kind 10002** event (NIP-65 relay list metadata). This event tells clients which relays a user reads from and writes to. Without it, the client has no delivery target for gift-wrapped DMs.
+
+The bridge currently publishes a kind 0 (profile) on startup but does not publish a kind 10002 relay list. Until the bridge publishes one automatically, you need to publish it manually.
+
+### Publishing a Relay List for the Bridge
+
+Use any Nostr tool that can publish events with an arbitrary key. The event must be signed by the bridge's identity key (the nsec used for `ORLY_BRIDGE_NSEC`, or the relay's auto-generated identity if no explicit nsec is set).
+
+The kind 10002 event looks like:
+
+```json
+{
+  "kind": 10002,
+  "content": "",
+  "tags": [
+    ["r", "wss://relay.orly.dev/"],
+    ["r", "wss://relay.damus.io/", "read"],
+    ["r", "wss://nos.lol/", "read"]
+  ]
+}
+```
+
+Each `r` tag is a relay URL. Tags without a marker (no third element) mean both read and write. `"read"` means the bridge reads from that relay but doesn't write there. `"write"` means write-only.
+
+At minimum, include the bridge's own relay as a read+write relay:
+
+```json
+["r", "wss://your-relay-domain/"]
+```
+
+Adding popular public relays as `read` entries helps clients that don't connect to your relay directly find the bridge.
+
+### Step-by-Step with nak
+
+[nak](https://github.com/fiatjaf/nak) is a command-line Nostr tool. Install it, then publish the relay list:
+
+```bash
+# Set the bridge's secret key
+export NOSTR_SECRET_KEY=nsec1...  # The bridge identity nsec
+
+# Publish kind 10002 with your relay as read+write, plus popular relays as read-only
+nak event \
+  --kind 10002 \
+  --tag r='wss://relay.orly.dev/' \
+  --tag r='wss://relay.damus.io/;read' \
+  --tag r='wss://nos.lol/;read' \
+  wss://relay.orly.dev wss://relay.damus.io wss://nos.lol
+```
+
+Publish to multiple relays so clients can discover it regardless of which relays they check.
+
+### Step-by-Step with nostril
+
+[nostril](https://github.com/jb55/nostril) is another CLI option:
+
+```bash
+nostril --kind 10002 \
+  --sec <bridge-hex-secret> \
+  --tag r 'wss://relay.orly.dev/' \
+  --tag r 'wss://relay.damus.io/' read \
+  --tag r 'wss://nos.lol/' read \
+  | websocat wss://relay.orly.dev
+```
+
+### Verifying the Relay List
+
+After publishing, verify that clients can find it:
+
+```bash
+# With nak
+nak req -k 10002 -a <bridge-pubkey-hex> wss://relay.orly.dev
+
+# Or check on a web viewer
+# https://njump.me/<bridge-npub>
+```
+
+White Noise should now show the bridge as reachable. Search for the bridge npub again and the "isn't on White Noise yet" message should be replaced with the ability to start a conversation.
+
+### Recommended Relay List
+
+For maximum discoverability, include the bridge's own relay plus 2-3 popular relays:
+
+| Relay | Marker | Purpose |
+|-------|--------|---------|
+| `wss://your-relay.com/` | (none) | Primary — bridge reads and writes here |
+| `wss://relay.damus.io/` | read | Popular relay, helps discovery |
+| `wss://nos.lol/` | read | Popular relay, helps discovery |
+| `wss://relay.nostr.band/` | read | Indexer relay, helps discovery |
+
+### Future: Automatic Relay List Publishing
+
+A future ORLY release will have the bridge publish kind 10002 automatically on startup alongside the kind 0 profile, eliminating this manual step.

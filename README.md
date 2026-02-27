@@ -66,6 +66,7 @@ See [docs/IPC_SYNC_SERVICES.md](./docs/IPC_SYNC_SERVICES.md) for detailed API do
   - [Curation ACL](#curation-acl)
   - [Cluster Replication](#cluster-replication)
 - [Marmot Email Bridge](#marmot-email-bridge)
+  - [Client Setup (White Noise, etc.)](#client-setup-white-noise-etc)
 - [Docker Deployment](#docker-deployment)
 - [Negentropy Sync (NIP-77)](#negentropy-sync-nip-77)
 - [Documentation](#documentation)
@@ -751,9 +752,26 @@ website: https://yourdomain.com
 
 See [`profile.example.txt`](profile.example.txt) for a template.
 
+### Client Setup (White Noise, etc.)
+
+NIP-17 messaging clients like [White Noise](https://whitenoise.ing) need the bridge to have a **kind 10002** relay list event (NIP-65) to know where to send DMs. Without it, the client sees the bridge profile but reports the bridge "isn't on White Noise yet."
+
+Until the bridge publishes kind 10002 automatically, publish one manually using [nak](https://github.com/fiatjaf/nak):
+
+```bash
+export NOSTR_SECRET_KEY=nsec1...  # Bridge identity
+nak event --kind 10002 \
+  --tag r='wss://your-relay.com/' \
+  --tag r='wss://relay.damus.io/;read' \
+  --tag r='wss://nos.lol/;read' \
+  wss://your-relay.com wss://relay.damus.io wss://nos.lol
+```
+
+See [Bridge Deployment Guide — Client Setup: White Noise](docs/BRIDGE_DEPLOYMENT.md#client-setup-white-noise) for full instructions.
+
 ### Documentation
 
-- [Bridge Deployment Guide](docs/BRIDGE_DEPLOYMENT.md) — DNS, DKIM, NWC, SMTP smarthost, port 25 workarounds, Migadu example
+- [Bridge Deployment Guide](docs/BRIDGE_DEPLOYMENT.md) — DNS, DKIM, NWC, SMTP smarthost, port 25 workarounds, client setup, Migadu example
 
 ## Docker Deployment
 
