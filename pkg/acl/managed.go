@@ -126,6 +126,15 @@ func (m *Managed) GetAccessLevel(pub []byte, address string) (level string) {
 		}
 	}
 
+	// managedACL may be nil when database is not Badger (e.g., gRPC proxy).
+	// Fall through to default read access in that case.
+	if m.managedACL == nil {
+		if len(pub) == 0 {
+			return "none"
+		}
+		return "read"
+	}
+
 	// Check if pubkey is banned
 	pubkeyHex := hex.EncodeToString(pub)
 	if banned, err := m.managedACL.IsPubkeyBanned(pubkeyHex); err == nil && banned {
@@ -147,6 +156,11 @@ func (m *Managed) GetAccessLevel(pub []byte, address string) (level string) {
 }
 
 func (m *Managed) CheckPolicy(ev *event.E) (allowed bool, err error) {
+	// If managedACL is nil (non-Badger DB), allow everything
+	if m.managedACL == nil {
+		return true, nil
+	}
+
 	// Check if event is banned
 	eventID := hex.EncodeToString(ev.ID)
 	if banned, err := m.managedACL.IsEventBanned(eventID); err == nil && banned {

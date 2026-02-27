@@ -129,13 +129,17 @@ whitelist:
 	var err error
 	var conn *websocket.Conn
 
-	// Configure upgrader for this connection
-	// Use reasonable buffer sizes (64KB) instead of max message size (10MB)
-	// to prevent memory exhaustion with many connections
-	upgrader.ReadBufferSize = 64 * 1024  // 64KB
-	upgrader.WriteBufferSize = 64 * 1024 // 64KB
+	// Create a per-connection upgrader to avoid racing on global state.
+	// Use 64KB buffers instead of max message size (10MB) to limit memory.
+	connUpgrader := websocket.Upgrader{
+		ReadBufferSize:  64 * 1024,
+		WriteBufferSize: 64 * 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
 
-	if conn, err = upgrader.Upgrade(w, r, nil); chk.E(err) {
+	if conn, err = connUpgrader.Upgrade(w, r, nil); chk.E(err) {
 		log.E.F("websocket accept failed from %s: %v", remote, err)
 		return
 	}

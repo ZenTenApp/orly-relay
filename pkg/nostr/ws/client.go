@@ -566,13 +566,14 @@ func (r *Client) PrepareSubscription(
 			sub.checkDuplicateReplaceable = o
 		}
 	}
-	// subscription id computation
+	// subscription id computation — must copy since sub.id outlives this function
 	buf := subIdPool.Get().([]byte)[:0]
 	buf = strconv.AppendInt(buf, sub.counter, 10)
 	buf = append(buf, ':')
 	buf = append(buf, label...)
-	defer subIdPool.Put(buf)
-	sub.id = buf
+	sub.id = make([]byte, len(buf))
+	copy(sub.id, buf)
+	subIdPool.Put(buf)
 	r.Subscriptions.Store(string(buf), sub)
 	// start handling events, eose, unsub etc:
 	go sub.start()

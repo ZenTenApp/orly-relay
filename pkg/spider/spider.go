@@ -252,15 +252,15 @@ func (s *Spider) mainLoop() {
 // updateConnections updates relay connections based on current admin relays and follow lists
 func (s *Spider) updateConnections() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if !s.running {
+		s.mu.Unlock()
 		return
 	}
 
 	// Get current admin relays and follow list
 	adminRelays := s.getAdminRelays()
 	followList := s.getFollowList()
+	s.mu.Unlock()
 
 	if len(adminRelays) == 0 || len(followList) == 0 {
 		log.D.F("spider: no admin relays (%d) or follow list (%d) available",
@@ -268,15 +268,22 @@ func (s *Spider) updateConnections() {
 		return
 	}
 
-	// Update connections for current admin relays (filtering out self)
-	currentRelays := make(map[string]bool)
+	// Filter out self-relays WITHOUT holding mu — isSelfRelay takes mu internally
+	var filteredRelays []string
 	for _, url := range adminRelays {
-		// Check if this relay URL is ourselves
 		if s.isSelfRelay(url) {
 			log.D.F("spider: skipping self-relay: %s", url)
 			continue
 		}
+		filteredRelays = append(filteredRelays, url)
+	}
 
+	// Re-acquire lock for the mutation phase
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	currentRelays := make(map[string]bool)
+	for _, url := range filteredRelays {
 		currentRelays[url] = true
 
 		if conn, exists := s.connections[url]; exists {

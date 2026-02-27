@@ -137,6 +137,12 @@ func (c *Curating) GetAccessLevel(pub []byte, address string) (level string) {
 		}
 	}
 
+	// curatingACL may be nil when database is not Badger (e.g., gRPC proxy).
+	// Skip database checks and fall through to default write access.
+	if c.curatingACL == nil {
+		return "write"
+	}
+
 	// Check if IP is blocked
 	if address != "" {
 		blocked, _, err := c.curatingACL.IsIPBlocked(address)
@@ -169,6 +175,11 @@ func (c *Curating) GetAccessLevel(pub []byte, address string) (level string) {
 
 // CheckPolicy implements the PolicyChecker interface for event-level filtering
 func (c *Curating) CheckPolicy(ev *event.E) (allowed bool, err error) {
+	// If curatingACL is nil (non-Badger DB), allow everything
+	if c.curatingACL == nil {
+		return true, nil
+	}
+
 	pubkeyHex := hex.EncodeToString(ev.Pubkey)
 
 	// Check if configured

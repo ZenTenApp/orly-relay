@@ -254,12 +254,18 @@ func (ds *DirectorySpider) discoverRelays() error {
 		return errorf.W("failed to get relays from local DB: %v", err)
 	}
 
-	// Add seed relays at hop 0
-	ds.mu.Lock()
+	// Filter out self-relays WITHOUT holding mu — isSelfRelay takes mu internally
+	var nonSelfRelays []string
 	for _, url := range seedRelays {
 		if !ds.isSelfRelay(url) {
-			ds.discoveredRelays[url] = 0
+			nonSelfRelays = append(nonSelfRelays, url)
 		}
+	}
+
+	// Add seed relays at hop 0
+	ds.mu.Lock()
+	for _, url := range nonSelfRelays {
+		ds.discoveredRelays[url] = 0
 	}
 	ds.mu.Unlock()
 
@@ -314,14 +320,30 @@ func (ds *DirectorySpider) discoverRelays() error {
 			// Extract new relay URLs
 			newRelays := ds.extractRelaysFromEvents(events)
 
+			// Filter self-relays outside the lock to avoid deadlock
+			// (isSelfRelay takes ds.mu internally)
 			ds.mu.Lock()
-			ds.processedRelays[relayURL] = true
+			var unknownRelays []string
 			for _, newURL := range newRelays {
 				if _, exists := ds.discoveredRelays[newURL]; !exists {
-					if !ds.isSelfRelay(newURL) {
-						ds.discoveredRelays[newURL] = hop
-						newRelaysThisHop++
-					}
+					unknownRelays = append(unknownRelays, newURL)
+				}
+			}
+			ds.processedRelays[relayURL] = true
+			ds.mu.Unlock()
+
+			var nonSelfNew []string
+			for _, newURL := range unknownRelays {
+				if !ds.isSelfRelay(newURL) {
+					nonSelfNew = append(nonSelfNew, newURL)
+				}
+			}
+
+			ds.mu.Lock()
+			for _, newURL := range nonSelfNew {
+				if _, exists := ds.discoveredRelays[newURL]; !exists {
+					ds.discoveredRelays[newURL] = hop
+					newRelaysThisHop++
 				}
 			}
 			ds.mu.Unlock()

@@ -41,21 +41,26 @@ type EventCache struct {
 	maxSize     int64
 	maxAge      time.Duration
 
-	// ZSTD encoder/decoder (reused for efficiency)
-	encoder *zstd.Encoder
-	decoder *zstd.Decoder
+	// ZSTD encoder/decoder — encoder is NOT safe for concurrent use,
+	// so we protect it with a dedicated mutex. Decoder is safe.
+	encoder   *zstd.Encoder
+	encoderMu sync.Mutex
+	decoder   *zstd.Decoder
 
 	// Compaction tracking
 	needsCompaction bool
 	compactionChan  chan struct{}
 
+	// Shutdown signal for background goroutines
+	stopCh chan struct{}
+
 	// Metrics
-	hits              uint64
-	misses            uint64
-	evictions         uint64
-	invalidations     uint64
-	compressionRatio  float64 // Average compression ratio
-	compactionRuns    uint64
+	hits             uint64
+	misses           uint64
+	evictions        uint64
+	invalidations    uint64
+	compressionRatio float64 // Average compression ratio
+	compactionRuns   uint64
 }
 
 // NewEventCache creates a new event cache
@@ -89,6 +94,7 @@ func NewEventCache(maxSize int64, maxAge time.Duration) *EventCache {
 		encoder:        encoder,
 		decoder:        decoder,
 		compactionChan: make(chan struct{}, 1),
+		stopCh:         make(chan struct{}),
 	}
 
 	// Start background workers
@@ -98,18 +104,25 @@ func NewEventCache(maxSize int64, maxAge time.Duration) *EventCache {
 	return c
 }
 
+// Close stops background goroutines. Safe to call multiple times.
+func (c *EventCache) Close() {
+	select {
+	case <-c.stopCh:
+		// already closed
+	default:
+		close(c.stopCh)
+	}
+}
+
 // Get retrieves cached serialized events for a filter (decompresses on the fly)
 func (c *EventCache) Get(f *filter.F) (serializedJSON [][]byte, found bool) {
 	// Normalize filter by sorting to ensure consistent cache keys
 	f.Sort()
 	filterKey := string(f.Serialize())
 
-	c.mu.RLock()
+	c.mu.Lock()
 	entry, exists := c.entries[filterKey]
-	c.mu.RUnlock()
-
 	if !exists {
-		c.mu.Lock()
 		c.misses++
 		c.mu.Unlock()
 		return nil, false
@@ -117,26 +130,35 @@ func (c *EventCache) Get(f *filter.F) (serializedJSON [][]byte, found bool) {
 
 	// Check if expired
 	if time.Since(entry.CreatedAt) > c.maxAge {
-		c.mu.Lock()
 		c.removeEntry(entry)
 		c.misses++
 		c.mu.Unlock()
 		return nil, false
 	}
 
-	// Decompress the data (outside of write lock for better concurrency)
-	decompressed, err := c.decoder.DecodeAll(entry.CompressedData, nil)
+	// Copy compressed data under lock so eviction can't free it
+	compressedCopy := make([]byte, len(entry.CompressedData))
+	copy(compressedCopy, entry.CompressedData)
+	eventCount := entry.EventCount
+	compressedSize := entry.CompressedSize
+	uncompressedSize := entry.UncompressedSize
+
+	// Update access time and move to front
+	entry.LastAccess = time.Now()
+	c.lruList.MoveToFront(entry.listElement)
+	c.hits++
+	c.mu.Unlock()
+
+	// Decompress outside lock
+	decompressed, err := c.decoder.DecodeAll(compressedCopy, nil)
 	if err != nil {
 		log.E.F("failed to decompress cache entry: %v", err)
-		c.mu.Lock()
-		c.misses++
-		c.mu.Unlock()
 		return nil, false
 	}
 
 	// Deserialize the individual JSON events from the decompressed blob
 	// Format: each event is newline-delimited JSON
-	serializedJSON = make([][]byte, 0, entry.EventCount)
+	serializedJSON = make([][]byte, 0, eventCount)
 	start := 0
 	for i := 0; i < len(decompressed); i++ {
 		if decompressed[i] == '\n' {
@@ -155,16 +177,9 @@ func (c *EventCache) Get(f *filter.F) (serializedJSON [][]byte, found bool) {
 		serializedJSON = append(serializedJSON, eventJSON)
 	}
 
-	// Update access time and move to front
-	c.mu.Lock()
-	entry.LastAccess = time.Now()
-	c.lruList.MoveToFront(entry.listElement)
-	c.hits++
-	c.mu.Unlock()
-
 	log.D.F("event cache HIT: filter=%s events=%d compressed=%d uncompressed=%d ratio=%.2f",
-		filterKey[:min(50, len(filterKey))], entry.EventCount, entry.CompressedSize,
-		entry.UncompressedSize, float64(entry.UncompressedSize)/float64(entry.CompressedSize))
+		filterKey[:min(50, len(filterKey))], eventCount, compressedSize,
+		uncompressedSize, float64(uncompressedSize)/float64(compressedSize))
 
 	return serializedJSON, true
 }
@@ -192,8 +207,10 @@ func (c *EventCache) PutJSON(f *filter.F, marshaledJSON [][]byte) {
 		uncompressed = append(uncompressed, '\n')
 	}
 
-	// Compress with ZSTD level 9
+	// Compress with ZSTD — encoder is not concurrent-safe, use dedicated lock
+	c.encoderMu.Lock()
 	compressed := c.encoder.EncodeAll(uncompressed, nil)
+	c.encoderMu.Unlock()
 	compressedSize := len(compressed)
 
 	// Don't cache if compressed size is still too large
@@ -305,7 +322,16 @@ func (c *EventCache) removeEntry(entry *EventCacheEntry) {
 // compactionWorker runs in the background and compacts cache entries after evictions
 // to reclaim fragmented space and improve cache efficiency
 func (c *EventCache) compactionWorker() {
-	for range c.compactionChan {
+	for {
+		select {
+		case <-c.stopCh:
+			return
+		case _, ok := <-c.compactionChan:
+			if !ok {
+				return
+			}
+		}
+
 		c.mu.Lock()
 		if !c.needsCompaction {
 			c.mu.Unlock()
@@ -314,11 +340,6 @@ func (c *EventCache) compactionWorker() {
 
 		log.D.F("cache compaction: starting (entries=%d size=%d/%d)",
 			len(c.entries), c.currentSize, c.maxSize)
-
-		// For ZSTD compressed entries, compaction mainly means ensuring
-		// entries are tightly packed in memory. Since each entry is already
-		// individually compressed at level 9, there's not much additional
-		// compression to gain. The main benefit is from the eviction itself.
 
 		c.needsCompaction = false
 		c.compactionRuns++
@@ -333,7 +354,13 @@ func (c *EventCache) cleanupExpired() {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
-	for range ticker.C {
+	for {
+		select {
+		case <-c.stopCh:
+			return
+		case <-ticker.C:
+		}
+
 		c.mu.Lock()
 		now := time.Now()
 		var toRemove []*EventCacheEntry
@@ -409,11 +436,9 @@ func (c *EventCache) GetEvents(f *filter.F) (events []*event.E, found bool) {
 	f.Sort()
 	filterKey := string(f.Serialize())
 
-	c.mu.RLock()
+	c.mu.Lock()
 	entry, exists := c.entries[filterKey]
 	if !exists {
-		c.mu.RUnlock()
-		c.mu.Lock()
 		c.misses++
 		c.mu.Unlock()
 		return nil, false
@@ -421,28 +446,34 @@ func (c *EventCache) GetEvents(f *filter.F) (events []*event.E, found bool) {
 
 	// Check if entry is expired
 	if time.Since(entry.CreatedAt) > c.maxAge {
-		c.mu.RUnlock()
-		c.mu.Lock()
 		c.removeEntry(entry)
 		c.misses++
 		c.mu.Unlock()
 		return nil, false
 	}
 
-	// Decompress
-	decompressed, err := c.decoder.DecodeAll(entry.CompressedData, nil)
-	c.mu.RUnlock()
+	// Copy compressed data under lock so eviction can't free it
+	compressedCopy := make([]byte, len(entry.CompressedData))
+	copy(compressedCopy, entry.CompressedData)
+	eventCount := entry.EventCount
+	compressedSize := entry.CompressedSize
+	uncompressedSize := entry.UncompressedSize
+
+	// Update access time and move to front
+	entry.LastAccess = time.Now()
+	c.lruList.MoveToFront(entry.listElement)
+	c.hits++
+	c.mu.Unlock()
+
+	// Decompress outside lock — decoder is safe for concurrent use
+	decompressed, err := c.decoder.DecodeAll(compressedCopy, nil)
 	if err != nil {
 		log.E.F("failed to decompress cached events: %v", err)
-		c.mu.Lock()
-		c.removeEntry(entry)
-		c.misses++
-		c.mu.Unlock()
 		return nil, false
 	}
 
 	// Deserialize events from newline-delimited JSON
-	events = make([]*event.E, 0, entry.EventCount)
+	events = make([]*event.E, 0, eventCount)
 	start := 0
 	for i, b := range decompressed {
 		if b == '\n' {
@@ -450,10 +481,6 @@ func (c *EventCache) GetEvents(f *filter.F) (events []*event.E, found bool) {
 				ev := event.New()
 				if _, err := ev.Unmarshal(decompressed[start:i]); err != nil {
 					log.E.F("failed to unmarshal cached event: %v", err)
-					c.mu.Lock()
-					c.removeEntry(entry)
-					c.misses++
-					c.mu.Unlock()
 					return nil, false
 				}
 				events = append(events, ev)
@@ -467,25 +494,14 @@ func (c *EventCache) GetEvents(f *filter.F) (events []*event.E, found bool) {
 		ev := event.New()
 		if _, err := ev.Unmarshal(decompressed[start:]); err != nil {
 			log.E.F("failed to unmarshal cached event: %v", err)
-			c.mu.Lock()
-			c.removeEntry(entry)
-			c.misses++
-			c.mu.Unlock()
 			return nil, false
 		}
 		events = append(events, ev)
 	}
 
-	// Update access time and move to front
-	c.mu.Lock()
-	entry.LastAccess = time.Now()
-	c.lruList.MoveToFront(entry.listElement)
-	c.hits++
-	c.mu.Unlock()
-
 	log.D.F("event cache HIT: filter=%s events=%d compressed=%d uncompressed=%d ratio=%.2f",
-		filterKey[:min(50, len(filterKey))], entry.EventCount, entry.CompressedSize,
-		entry.UncompressedSize, float64(entry.UncompressedSize)/float64(entry.CompressedSize))
+		filterKey[:min(50, len(filterKey))], eventCount, compressedSize,
+		uncompressedSize, float64(uncompressedSize)/float64(compressedSize))
 
 	return events, true
 }
@@ -513,8 +529,10 @@ func (c *EventCache) PutEvents(f *filter.F, events []*event.E) {
 		uncompressed = append(uncompressed, '\n')
 	}
 
-	// Compress with ZSTD level 9
+	// Compress with ZSTD — encoder is not concurrent-safe, use dedicated lock
+	c.encoderMu.Lock()
 	compressed := c.encoder.EncodeAll(uncompressed, nil)
+	c.encoderMu.Unlock()
 	compressedSize := len(compressed)
 
 	// Don't cache if compressed size is still too large

@@ -233,15 +233,15 @@ func NewWithConfig(
 	// database after the context is canceled.
 	go func() {
 		expirationTicker := time.NewTicker(time.Minute * 10)
-		select {
-		case <-expirationTicker.C:
-			d.DeleteExpired()
-			return
-		case <-d.ctx.Done():
+		defer expirationTicker.Stop()
+		for {
+			select {
+			case <-expirationTicker.C:
+				d.DeleteExpired()
+			case <-d.ctx.Done():
+				return
+			}
 		}
-		d.cancel()
-		// d.seq.Release()
-		// d.DB.Close()
 	}()
 	return
 }
@@ -355,6 +355,11 @@ func (d *D) CacheEvents(f *filter.F, events event.S) {
 func (d *D) Close() (err error) {
 	if d.seq != nil {
 		if err = d.seq.Release(); chk.E(err) {
+			return
+		}
+	}
+	if d.pubkeySeq != nil {
+		if err = d.pubkeySeq.Release(); chk.E(err) {
 			return
 		}
 	}

@@ -1,8 +1,9 @@
 package bridge
 
 import (
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"next.orly.dev/pkg/nostr/crypto/encryption"
@@ -175,8 +176,16 @@ func wrapGiftWrap(
 }
 
 // randomizeTimestamp adds a random offset of +/- 2 days for NIP-59 privacy.
+// Uses crypto/rand to prevent timestamp correlation attacks.
 func randomizeTimestamp(base int64) int64 {
+	const fourDays = 4 * 24 * 60 * 60
 	const twoDays = 2 * 24 * 60 * 60
-	offset := rand.Int63n(4*24*60*60) - twoDays
+	var buf [8]byte
+	rand.Read(buf[:])
+	n := int64(binary.LittleEndian.Uint64(buf[:]))
+	if n < 0 {
+		n = -n
+	}
+	offset := n%fourDays - twoDays
 	return base + offset
 }

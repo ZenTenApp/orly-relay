@@ -790,25 +790,30 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		return
 	}
 
-	// Record access for returned events (for GC access-based ranking)
+	// Record access for returned events (for GC access-based ranking).
+	// Copy event IDs before launching the goroutine because the deferred
+	// ev.Free() above will release the events when HandleReq returns.
 	if l.accessTracker != nil && len(events) > 0 {
-		go func(evts event.S, connID string) {
+		eventIDs := make([][]byte, 0, len(events))
+		for _, ev := range events {
+			if len(ev.ID) == 32 {
+				id := make([]byte, 32)
+				copy(id, ev.ID)
+				eventIDs = append(eventIDs, id)
+			}
+		}
+		go func(ids [][]byte, connID string) {
 			defer func() {
 				if r := recover(); r != nil {
 					log.W.F("access tracker panic (recovered): %v", r)
 				}
 			}()
-			for _, ev := range evts {
-				// Validate event ID before calling GetSerialById
-				// Check both length and capacity to catch corrupted slice headers
-				if len(ev.ID) != 32 || cap(ev.ID) < 32 {
-					continue
-				}
-				if ser, err := l.DB.GetSerialById(ev.ID); err == nil && ser != nil {
+			for _, id := range ids {
+				if ser, err := l.DB.GetSerialById(id); err == nil && ser != nil {
 					l.accessTracker.RecordAccess(ser.Get(), connID)
 				}
 			}
-		}(events, l.connectionID)
+		}(eventIDs, l.connectionID)
 	}
 
 	// Trigger archive relay query if enabled (background fetch + stream results)
