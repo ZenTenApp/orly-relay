@@ -1,3 +1,4 @@
+import PostEditor from '@/components/PostEditor'
 import { Separator } from '@/components/ui/separator'
 import { useKeyboardNavigable } from '@/hooks/useKeyboardNavigable'
 import { toNote } from '@/lib/link'
@@ -5,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { useSecondaryPage } from '@/PageManager'
 import { TNavigationColumn } from '@/providers/KeyboardNavigationProvider'
 import { Event } from 'nostr-tools'
+import { useState } from 'react'
 import Collapsible from '../Collapsible'
 import Note from '../Note'
 import StuffStats from '../StuffStats'
@@ -34,6 +36,7 @@ export default function MainNoteCard({
   const { ref, isSelected } = useKeyboardNavigable(navColumn ?? 1, navIndex ?? 0, {
     meta: { type: 'note', event }
   })
+  const [replyOpen, setReplyOpen] = useState(false)
 
   return (
     <div
@@ -60,9 +63,25 @@ export default function MainNoteCard({
             originalNoteId={originalNoteId}
           />
         </Collapsible>
-        {!embedded && <StuffStats className="mt-3 px-4" stuff={event} />}
+        {!embedded && (
+          <StuffStats
+            className="mt-3 px-4"
+            stuff={event}
+            onReplyClick={() => setReplyOpen(true)}
+          />
+        )}
       </div>
       {!embedded && <Separator />}
+      {replyOpen && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <PostEditor
+            inline
+            parentStuff={event}
+            open={replyOpen}
+            setOpen={setReplyOpen}
+          />
+        </div>
+      )}
     </div>
   )
 }

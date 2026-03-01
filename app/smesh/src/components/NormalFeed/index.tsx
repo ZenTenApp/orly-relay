@@ -1,6 +1,8 @@
 import NoteList, { TNoteListRef } from '@/components/NoteList'
+import PostEditor from '@/components/PostEditor'
 import Tabs from '@/components/Tabs'
 import { isTouchDevice } from '@/lib/utils'
+import { useCompose } from '@/providers/ComposeProvider'
 import { useKindFilter } from '@/providers/KindFilterProvider'
 import { useUserTrust } from '@/providers/UserTrustProvider'
 import storage, { dispatchSettingsChanged } from '@/services/local-storage.service'
@@ -26,6 +28,7 @@ export default function NormalFeed({
 }) {
   const { hideUntrustedNotes } = useUserTrust()
   const { showKinds } = useKindFilter()
+  const { composeOpen, closeCompose } = useCompose()
   const [temporaryShowKinds, setTemporaryShowKinds] = useState(showKinds)
   const [listMode, setListMode] = useState<TNoteListMode>(() => {
     const stored = storage.getNoteListMode() as string
@@ -86,6 +89,13 @@ export default function NormalFeed({
           </>
         }
       />
+      {composeOpen && (
+        <PostEditor
+          inline
+          open={composeOpen}
+          setOpen={(v) => { if (!v) closeCompose() }}
+        />
+      )}
       <div ref={topRef} className="scroll-mt-[calc(6rem+1px)]" />
       <NoteList
         ref={noteListRef}

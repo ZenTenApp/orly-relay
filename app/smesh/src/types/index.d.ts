@@ -249,6 +249,15 @@ export type TSyncSettings = {
   autoInsertNewNotes?: boolean
   addClientTag?: boolean
   enableMarkdown?: boolean
+  verboseLogging?: boolean
+  fallbackRelayCount?: number
+  dmConversationFilter?: 'all' | 'follows'
+  graphQueriesEnabled?: boolean
+  socialGraphProximity?: number | null
+  socialGraphIncludeMode?: boolean
+  // Per-pubkey config (keyed by the logged-in pubkey at sync time)
+  llmConfig?: TLlmConfig | null
+  mediaUploadServiceConfig?: TMediaUploadServiceConfig
   // Non-NIP relay configurations (application-specific)
   searchRelays?: string[]
   nrcRendezvousUrl?: string

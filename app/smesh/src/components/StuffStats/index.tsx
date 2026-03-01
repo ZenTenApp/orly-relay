@@ -19,7 +19,8 @@ export default function StuffStats({
   className,
   classNames,
   fetchIfNotExisting = false,
-  displayTopZapsAndLikes = false
+  displayTopZapsAndLikes = false,
+  onReplyClick
 }: {
   stuff: Event | string
   className?: string
@@ -28,6 +29,7 @@ export default function StuffStats({
   }
   fetchIfNotExisting?: boolean
   displayTopZapsAndLikes?: boolean
+  onReplyClick?: () => void
 }) {
   const { isSmallScreen } = useScreenSize()
   const { pubkey } = useNostr()
@@ -57,7 +59,7 @@ export default function StuffStats({
           )}
           onClick={(e) => e.stopPropagation()}
         >
-          <ReplyButton stuff={stuff} />
+          <ReplyButton stuff={stuff} onReplyClick={onReplyClick} />
           <RepostButton stuff={stuff} />
           <LikeButton stuff={stuff} />
           <ZapButton stuff={stuff} />
@@ -81,7 +83,7 @@ export default function StuffStats({
           className={cn('flex items-center', loading ? 'animate-pulse' : '')}
           onClick={(e) => e.stopPropagation()}
         >
-          <ReplyButton stuff={stuff} />
+          <ReplyButton stuff={stuff} onReplyClick={onReplyClick} />
           <RepostButton stuff={stuff} />
           <LikeButton stuff={stuff} />
           <ZapButton stuff={stuff} />

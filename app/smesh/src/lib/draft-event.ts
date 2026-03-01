@@ -9,8 +9,7 @@ import {
   TMailboxRelay,
   TMailboxRelayScope,
   TPollCreateData,
-  TRelaySet,
-  TSyncSettings
+  TRelaySet
 } from '@/types'
 import { sha256 } from '@noble/hashes/sha2'
 import dayjs from 'dayjs'
@@ -445,10 +444,10 @@ export function createSeenNotificationsAtDraftEvent(): TDraftEvent {
   }
 }
 
-export function createSettingsDraftEvent(settings: TSyncSettings): TDraftEvent {
+export function createSettingsDraftEvent(content: string): TDraftEvent {
   return {
     kind: kinds.Application,
-    content: JSON.stringify(settings),
+    content,
     tags: [buildDTag(ApplicationDataKey.SETTINGS)],
     created_at: dayjs().unix()
   }

@@ -39,9 +39,10 @@ const NotificationList = forwardRef((_, ref) => {
   const { notificationListStyle } = useUserPreferences()
   const [notificationType, setNotificationType] = useState<TNotificationType>('all')
   const [lastReadTime, setLastReadTime] = useState(0)
-  const [refreshCount, setRefreshCount] = useState(0)
   const [timelineKey, setTimelineKey] = useState<string | undefined>(undefined)
-  const [loading, setLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [notifications, setNotifications] = useState<NostrEvent[]>([])
   const [visibleNotifications, setVisibleNotifications] = useState<NostrEvent[]>([])
   const [showCount, setShowCount] = useState(SHOW_COUNT)
@@ -49,6 +50,7 @@ const NotificationList = forwardRef((_, ref) => {
   const supportTouch = useMemo(() => isTouchDevice(), [])
   const topRef = useRef<HTMLDivElement | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
+  const closerRef = useRef<(() => void) | null>(null)
   const filterKinds = useMemo(() => {
     switch (notificationType) {
       case 'mentions':
@@ -78,15 +80,21 @@ const NotificationList = forwardRef((_, ref) => {
         ]
     }
   }, [notificationType])
-  useImperativeHandle(
-    ref,
-    () => ({
-      refresh: () => {
-        if (loading) return
-        setRefreshCount((count) => count + 1)
-      }
-    }),
-    [loading]
+
+  const mergeNotifications = useCallback(
+    (incoming: NostrEvent[]) => {
+      const filtered = incoming.filter((event) => event.pubkey !== pubkey)
+      if (filtered.length === 0) return
+      setNotifications((old) => {
+        const existingIds = new Set(old.map((n) => n.id))
+        const uniqueNew = filtered.filter((e) => !existingIds.has(e.id))
+        if (uniqueNew.length === 0) return old
+        const merged = [...uniqueNew, ...old]
+        merged.sort((a, b) => b.created_at - a.created_at)
+        return merged
+      })
+    },
+    [pubkey]
   )
 
   const handleNewEvent = useCallback(
@@ -108,6 +116,45 @@ const NotificationList = forwardRef((_, ref) => {
     [pubkey]
   )
 
+  // Refresh: fetch latest events and merge into existing list without tearing down
+  const doRefresh = useCallback(async () => {
+    if (!pubkey || refreshing) return
+    setRefreshing(true)
+    setLastReadTime(getNotificationsSeenAt())
+
+    try {
+      const relayList = await client.fetchRelayList(pubkey)
+      const urls = relayList.read.length > 0
+        ? relayList.read.slice(0, 5)
+        : client.currentRelays.slice(0, 5)
+
+      const events = await client.fetchEvents(urls, {
+        '#p': [pubkey],
+        kinds: filterKinds,
+        limit: LIMIT
+      })
+
+      if (events.length > 0) {
+        mergeNotifications(events)
+        threadService.addRepliesToThread(events)
+        stuffStatsService.updateStuffStatsByEvents(events)
+      }
+    } finally {
+      setRefreshing(false)
+    }
+  }, [pubkey, refreshing, filterKinds, mergeNotifications, getNotificationsSeenAt])
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      refresh: () => {
+        if (!refreshing) doRefresh()
+      }
+    }),
+    [refreshing, doRefresh]
+  )
+
+  // Initial subscription — only re-runs when pubkey or filterKinds change
   useEffect(() => {
     if (current !== 'notifications') return
 
@@ -117,7 +164,7 @@ const NotificationList = forwardRef((_, ref) => {
     }
 
     const init = async () => {
-      setLoading(true)
+      setInitialLoading(true)
       setNotifications([])
       setShowCount(SHOW_COUNT)
       setLastReadTime(getNotificationsSeenAt())
@@ -140,7 +187,7 @@ const NotificationList = forwardRef((_, ref) => {
               setNotifications(events.filter((event) => event.pubkey !== pubkey))
             }
             if (eosed) {
-              setLoading(false)
+              setInitialLoading(false)
               setUntil(events.length > 0 ? events[events.length - 1].created_at - 1 : undefined)
               threadService.addRepliesToThread(events)
               stuffStatsService.updateStuffStatsByEvents(events)
@@ -152,15 +199,16 @@ const NotificationList = forwardRef((_, ref) => {
           }
         }
       )
+      closerRef.current = closer
       setTimelineKey(timelineKey)
-      return closer
     }
 
-    const promise = init()
+    init()
     return () => {
-      promise.then((closer) => closer?.())
+      closerRef.current?.()
+      closerRef.current = null
     }
-  }, [pubkey, refreshCount, filterKinds, current])
+  }, [pubkey, filterKinds, current])
 
   useEffect(() => {
     if (!active || !pubkey) return
@@ -207,10 +255,10 @@ const NotificationList = forwardRef((_, ref) => {
         }
       }
 
-      if (!pubkey || !timelineKey || !until || loading) return
-      setLoading(true)
+      if (!pubkey || !timelineKey || !until || loadingMore || initialLoading) return
+      setLoadingMore(true)
       const newNotifications = await client.loadMoreTimeline(timelineKey, until, LIMIT)
-      setLoading(false)
+      setLoadingMore(false)
       if (newNotifications.length === 0) {
         setUntil(undefined)
         return
@@ -243,13 +291,11 @@ const NotificationList = forwardRef((_, ref) => {
         observerInstance.unobserve(currentBottomRef)
       }
     }
-  }, [pubkey, timelineKey, until, loading, showCount, notifications])
+  }, [pubkey, timelineKey, until, loadingMore, initialLoading, showCount, notifications])
 
   const refresh = () => {
     topRef.current?.scrollIntoView({ behavior: 'instant', block: 'start' })
-    setTimeout(() => {
-      setRefreshCount((count) => count + 1)
-    }, 500)
+    doRefresh()
   }
 
   const list = (
@@ -263,7 +309,7 @@ const NotificationList = forwardRef((_, ref) => {
         />
       ))}
       <div className="text-center text-sm text-muted-foreground">
-        {until || loading ? (
+        {until || loadingMore || initialLoading ? (
           <div ref={bottomRef}>
             <NotificationSkeleton />
           </div>
@@ -294,7 +340,7 @@ const NotificationList = forwardRef((_, ref) => {
       {supportTouch ? (
         <PullToRefresh
           onRefresh={async () => {
-            refresh()
+            doRefresh()
             await new Promise((resolve) => setTimeout(resolve, 1000))
           }}
           pullingContent=""

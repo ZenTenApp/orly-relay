@@ -23,7 +23,7 @@ export const useSettingsSync = () => {
   return context
 }
 
-function getCurrentSettings(): TSyncSettings {
+function getCurrentSettings(pubkey: string | null): TSyncSettings {
   return {
     themeSetting: storage.getThemeSetting(),
     primaryColor: storage.getPrimaryColor(),
@@ -49,13 +49,23 @@ function getCurrentSettings(): TSyncSettings {
     nrcOnlyConfigSync: storage.getNrcOnlyConfigSync(),
     autoInsertNewNotes: storage.getAutoInsertNewNotes(),
     addClientTag: storage.getAddClientTag(),
+    enableMarkdown: storage.getEnableMarkdown(),
+    verboseLogging: storage.getVerboseLogging(),
+    fallbackRelayCount: storage.getFallbackRelayCount(),
+    preferNip44: storage.getPreferNip44(),
+    dmConversationFilter: storage.getDMConversationFilter(),
+    graphQueriesEnabled: storage.getGraphQueriesEnabled(),
+    socialGraphProximity: storage.getSocialGraphProximity(),
+    socialGraphIncludeMode: storage.getSocialGraphIncludeMode(),
+    llmConfig: pubkey ? storage.getLlmConfig(pubkey) : null,
+    mediaUploadServiceConfig: pubkey ? storage.getMediaUploadServiceConfig(pubkey) : undefined,
     // Non-NIP relay configurations (application-specific)
     searchRelays: storage.getSearchRelays(),
     nrcRendezvousUrl: storage.getNrcRendezvousUrl() || undefined
   }
 }
 
-function applySettings(settings: TSyncSettings) {
+function applySettings(settings: TSyncSettings, pubkey: string | null) {
   if (settings.themeSetting !== undefined) {
     storage.setThemeSetting(settings.themeSetting)
   }
@@ -128,6 +138,30 @@ function applySettings(settings: TSyncSettings) {
   if (settings.addClientTag !== undefined) {
     storage.setAddClientTag(settings.addClientTag)
   }
+  if (settings.enableMarkdown !== undefined) {
+    storage.setEnableMarkdown(settings.enableMarkdown)
+  }
+  if (settings.verboseLogging !== undefined) {
+    storage.setVerboseLogging(settings.verboseLogging)
+  }
+  if (settings.fallbackRelayCount !== undefined) {
+    storage.setFallbackRelayCount(settings.fallbackRelayCount)
+  }
+  if (settings.preferNip44 !== undefined) {
+    storage.setPreferNip44(settings.preferNip44)
+  }
+  if (settings.dmConversationFilter !== undefined) {
+    storage.setDMConversationFilter(settings.dmConversationFilter)
+  }
+  if (settings.graphQueriesEnabled !== undefined) {
+    storage.setGraphQueriesEnabled(settings.graphQueriesEnabled)
+  }
+  if (settings.socialGraphProximity !== undefined) {
+    storage.setSocialGraphProximity(settings.socialGraphProximity)
+  }
+  if (settings.socialGraphIncludeMode !== undefined) {
+    storage.setSocialGraphIncludeMode(settings.socialGraphIncludeMode)
+  }
   // Non-NIP relay configurations (application-specific)
   if (settings.searchRelays !== undefined) {
     storage.setSearchRelays(settings.searchRelays.length > 0 ? settings.searchRelays : null)
@@ -135,20 +169,59 @@ function applySettings(settings: TSyncSettings) {
   if (settings.nrcRendezvousUrl !== undefined) {
     storage.setNrcRendezvousUrl(settings.nrcRendezvousUrl)
   }
+  // Per-pubkey settings
+  if (pubkey) {
+    if (settings.llmConfig !== undefined) {
+      if (settings.llmConfig) {
+        storage.setLlmConfig(pubkey, settings.llmConfig)
+      }
+    }
+    if (settings.mediaUploadServiceConfig !== undefined) {
+      storage.setMediaUploadServiceConfig(pubkey, settings.mediaUploadServiceConfig)
+    }
+  }
 }
 
 export function SettingsSyncProvider({ children }: { children: React.ReactNode }) {
-  const { pubkey, account, publish } = useNostr()
+  const { pubkey, account, publish, nip44Encrypt, nip44Decrypt, hasNip44Support } = useNostr()
   const [isLoading, setIsLoading] = useState(false)
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastSyncedSettingsRef = useRef<string | null>(null)
+
+  /**
+   * Decrypt settings content from an event.
+   * Tries NIP-44 decryption first (self-encrypted), falls back to plain JSON
+   * for backward compatibility with unencrypted events.
+   */
+  const decryptContent = useCallback(async (content: string, authorPubkey: string): Promise<TSyncSettings | null> => {
+    // Try plain JSON first (backward compat with old unencrypted events)
+    try {
+      const parsed = JSON.parse(content)
+      if (typeof parsed === 'object' && parsed !== null) {
+        return parsed as TSyncSettings
+      }
+    } catch {
+      // Not valid JSON — likely NIP-44 encrypted ciphertext
+    }
+
+    // Try NIP-44 decryption (self-encrypted to own pubkey)
+    if (hasNip44Support) {
+      try {
+        const decrypted = await nip44Decrypt(authorPubkey, content)
+        return JSON.parse(decrypted) as TSyncSettings
+      } catch (err) {
+        console.error('Failed to decrypt settings:', err)
+      }
+    }
+
+    return null
+  }, [hasNip44Support, nip44Decrypt])
 
   const fetchRemoteSettings = useCallback(async (): Promise<TSyncSettings | null> => {
     if (!pubkey) return null
 
     try {
       const relayList = await client.fetchRelayList(pubkey)
-      // Use user's write relays only (no hardcoded fallback)
       const relays = relayList.write.length > 0 ? relayList.write.slice(0, 5) : client.currentRelays.slice(0, 5)
 
       const events = await client.fetchEvents(relays, {
@@ -163,17 +236,13 @@ export function SettingsSyncProvider({ children }: { children: React.ReactNode }
         .sort((a, b) => b.created_at - a.created_at)[0]
 
       if (settingsEvent) {
-        try {
-          return JSON.parse(settingsEvent.content) as TSyncSettings
-        } catch {
-          return null
-        }
+        return await decryptContent(settingsEvent.content, settingsEvent.pubkey)
       }
     } catch (err) {
       console.error('Failed to fetch remote settings:', err)
     }
     return null
-  }, [pubkey])
+  }, [pubkey, decryptContent])
 
   const syncSettings = useCallback(async () => {
     if (!pubkey || !account) return
@@ -181,7 +250,7 @@ export function SettingsSyncProvider({ children }: { children: React.ReactNode }
     // Skip relay-based settings sync if NRC-only config sync is enabled
     if (storage.getNrcOnlyConfigSync()) return
 
-    const currentSettings = getCurrentSettings()
+    const currentSettings = getCurrentSettings(pubkey)
     const settingsJson = JSON.stringify(currentSettings)
 
     // Don't sync if settings haven't changed since last sync
@@ -191,7 +260,15 @@ export function SettingsSyncProvider({ children }: { children: React.ReactNode }
 
     setIsLoading(true)
     try {
-      const draftEvent = createSettingsDraftEvent(currentSettings)
+      // Encrypt settings with NIP-44 self-encryption if available
+      let content: string
+      if (hasNip44Support) {
+        content = await nip44Encrypt(pubkey, settingsJson)
+      } else {
+        content = settingsJson
+      }
+
+      const draftEvent = createSettingsDraftEvent(content)
       await publish(draftEvent)
       lastSyncedSettingsRef.current = settingsJson
     } catch (err) {
@@ -199,7 +276,7 @@ export function SettingsSyncProvider({ children }: { children: React.ReactNode }
     } finally {
       setIsLoading(false)
     }
-  }, [pubkey, account, publish])
+  }, [pubkey, account, publish, hasNip44Support, nip44Encrypt])
 
   // Debounced sync on settings change
   const debouncedSync = useCallback(() => {
@@ -221,32 +298,28 @@ export function SettingsSyncProvider({ children }: { children: React.ReactNode }
     // Skip relay-based settings sync if NRC-only config sync is enabled
     // (settings will sync via NRC instead)
     if (storage.getNrcOnlyConfigSync()) {
-      lastSyncedSettingsRef.current = JSON.stringify(getCurrentSettings())
+      lastSyncedSettingsRef.current = JSON.stringify(getCurrentSettings(pubkey))
       return
     }
 
     const loadRemoteSettings = async () => {
       setIsLoading(true)
       try {
-        const currentSettings = getCurrentSettings()
+        const currentSettings = getCurrentSettings(pubkey)
         const currentSettingsJson = JSON.stringify(currentSettings)
 
         const remoteSettings = await fetchRemoteSettings()
         if (remoteSettings) {
-          // Apply remote settings first, then re-read through getCurrentSettings()
-          // to normalize key order and types before comparing
-          applySettings(remoteSettings)
-          const appliedSettingsJson = JSON.stringify(getCurrentSettings())
+          applySettings(remoteSettings, pubkey)
+          const appliedSettingsJson = JSON.stringify(getCurrentSettings(pubkey))
 
           if (currentSettingsJson !== appliedSettingsJson) {
             lastSyncedSettingsRef.current = appliedSettingsJson
-            // Trigger a page reload to apply the settings
             window.location.reload()
           } else {
             lastSyncedSettingsRef.current = currentSettingsJson
           }
         } else {
-          // No remote settings, use current as baseline
           lastSyncedSettingsRef.current = currentSettingsJson
         }
       } catch (err) {
@@ -267,7 +340,6 @@ export function SettingsSyncProvider({ children }: { children: React.ReactNode }
       debouncedSync()
     }
 
-    // Listen for settings change events
     window.addEventListener(SETTINGS_CHANGED_EVENT, handleSettingsChange)
 
     return () => {

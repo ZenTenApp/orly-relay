@@ -683,13 +683,36 @@ class ClientService extends EventTarget {
     const that = this
     let events: NEvent[] = []
     let eosedAt: number | null = null
+    let lastFlushedCount = 0
+    let flushTimer: ReturnType<typeof setTimeout> | null = null
+
+    // Progressive flush: emit accumulated events to onEvents before EOSE
+    // so the UI can start rendering content as it arrives from the relay
+    const scheduleFlush = () => {
+      if (flushTimer !== null) return
+      flushTimer = setTimeout(() => {
+        flushTimer = null
+        if (eosedAt || events.length === lastFlushedCount) return
+        lastFlushedCount = events.length
+        const sorted = needSort
+          ? [...events].sort((a, b) => b.created_at - a.created_at).slice(0, filter.limit)
+          : [...events]
+        const merged = cachedEvents.length > 0
+          ? sorted.concat(cachedEvents).slice(0, filter.limit)
+          : sorted
+        onEvents(merged, false)
+      }, 150)
+    }
+
     const subCloser = this.subscribe(relays, since ? { ...filter, since } : filter, {
       startLogin,
       onevent: (evt: NEvent) => {
         that.addEventToCache(evt)
-        // not eosed yet, push to events
+        // not eosed yet, push to events and schedule progressive render
         if (!eosedAt) {
-          return events.push(evt)
+          events.push(evt)
+          scheduleFlush()
+          return
         }
         // new event
         if (evt.created_at > eosedAt) {
@@ -720,6 +743,11 @@ class ClientService extends EventTarget {
         timeline.refs.splice(idx, 0, [evt.id, evt.created_at])
       },
       oneose: (eosed) => {
+        // Cancel any pending progressive flush — the final sorted result replaces it
+        if (flushTimer !== null) {
+          clearTimeout(flushTimer)
+          flushTimer = null
+        }
         if (eosed && !eosedAt) {
           eosedAt = dayjs().unix()
         }
@@ -766,6 +794,10 @@ class ClientService extends EventTarget {
     return {
       timelineKey: key,
       closer: () => {
+        if (flushTimer !== null) {
+          clearTimeout(flushTimer)
+          flushTimer = null
+        }
         onEvents = () => {}
         onNew = () => {}
         subCloser.close()

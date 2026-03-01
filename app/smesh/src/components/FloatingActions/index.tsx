@@ -1,14 +1,14 @@
+import { useCompose } from '@/providers/ComposeProvider'
 import { useNostr } from '@/providers/NostrProvider'
 import { useScreenSize } from '@/providers/ScreenSizeProvider'
 import { PencilLine, Search } from 'lucide-react'
 import { useState } from 'react'
-import PostEditor from '../PostEditor'
 import SearchOverlay from '../SearchOverlay'
 
 export default function FloatingActions() {
   const { isSmallScreen } = useScreenSize()
   const { checkLogin } = useNostr()
-  const [postEditorOpen, setPostEditorOpen] = useState(false)
+  const { openCompose } = useCompose()
   const [searchOpen, setSearchOpen] = useState(false)
 
   if (!isSmallScreen) return null
@@ -33,7 +33,7 @@ export default function FloatingActions() {
 
         {/* Compose FAB */}
         <button
-          onClick={() => checkLogin(() => setPostEditorOpen(true))}
+          onClick={() => checkLogin(() => openCompose())}
           className="flex items-center justify-center size-14 rounded-full bg-primary text-primary-foreground shadow-lg active:scale-95 transition-transform"
           aria-label="Compose"
         >
@@ -41,7 +41,6 @@ export default function FloatingActions() {
         </button>
       </div>
 
-      <PostEditor open={postEditorOpen} setOpen={setPostEditorOpen} />
       <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
     </>
   )

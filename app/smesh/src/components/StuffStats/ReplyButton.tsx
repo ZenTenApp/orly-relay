@@ -14,7 +14,13 @@ import PostEditor from '../PostEditor'
 import KeyboardShortcut from './KeyboardShortcut'
 import { formatCount } from './utils'
 
-export default function ReplyButton({ stuff }: { stuff: Event | string }) {
+export default function ReplyButton({
+  stuff,
+  onReplyClick
+}: {
+  stuff: Event | string
+  onReplyClick?: () => void
+}) {
   const { t } = useTranslation()
   const { pubkey, checkLogin } = useNostr()
   const { event, stuffKey } = useStuff(stuff)
@@ -63,7 +69,11 @@ export default function ReplyButton({ stuff }: { stuff: Event | string }) {
         onClick={(e) => {
           e.stopPropagation()
           checkLogin(() => {
-            setOpen(true)
+            if (onReplyClick) {
+              onReplyClick()
+            } else {
+              setOpen(true)
+            }
           })
         }}
         title={t('Reply (r)')}
@@ -75,7 +85,7 @@ export default function ReplyButton({ stuff }: { stuff: Event | string }) {
         </span>
         {!!replyCount && <div className="text-sm">{formatCount(replyCount)}</div>}
       </button>
-      <PostEditor parentStuff={stuff} open={open} setOpen={setOpen} />
+      {!onReplyClick && <PostEditor parentStuff={stuff} open={open} setOpen={setOpen} />}
     </>
   )
 }

@@ -1,13 +1,12 @@
-import PostEditor from '@/components/PostEditor'
 import { cn } from '@/lib/utils'
+import { useCompose } from '@/providers/ComposeProvider'
 import { useNostr } from '@/providers/NostrProvider'
 import { PencilLine } from 'lucide-react'
-import { useState } from 'react'
 import SidebarItem from './SidebarItem'
 
 export default function PostButton({ collapse, navIndex }: { collapse: boolean; navIndex?: number }) {
   const { checkLogin } = useNostr()
-  const [open, setOpen] = useState(false)
+  const { openCompose } = useCompose()
 
   return (
     <div className="pt-4">
@@ -17,7 +16,7 @@ export default function PostButton({ collapse, navIndex }: { collapse: boolean; 
         onClick={(e) => {
           e.stopPropagation()
           checkLogin(() => {
-            setOpen(true)
+            openCompose()
           })
         }}
         variant="default"
@@ -27,7 +26,6 @@ export default function PostButton({ collapse, navIndex }: { collapse: boolean; 
       >
         <PencilLine />
       </SidebarItem>
-      <PostEditor open={open} setOpen={setOpen} />
     </div>
   )
 }

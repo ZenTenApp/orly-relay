@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useNostr } from '@/providers/NostrProvider'
 import { DEFAULT_MODEL, fetchModels, TAnthropicModel } from '@/services/llm.service'
-import storage from '@/services/local-storage.service'
+import storage, { dispatchSettingsChanged } from '@/services/local-storage.service'
 import { TLlmConfig } from '@/types'
 import { LoaderCircle } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
@@ -69,6 +69,7 @@ export default function LlmSetting() {
       setConfig(updated)
       if (pubkey) {
         storage.setLlmConfig(pubkey, updated)
+        dispatchSettingsChanged()
       }
     },
     [pubkey]

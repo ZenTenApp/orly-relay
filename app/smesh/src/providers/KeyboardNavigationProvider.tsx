@@ -943,6 +943,26 @@ export function KeyboardNavigationProvider({
             return
           }
           break
+        case 'M':
+          // Shift+M expands/collapses the currently selected note
+          if (e.shiftKey && isEnabled) {
+            e.preventDefault()
+            const col = activeColumnRef.current
+            const sel = selectedIndexRef.current[col]
+            const selectedItem = itemsRef.current[col].get(sel)
+            if (selectedItem?.ref.current) {
+              const expandBtn = selectedItem.ref.current.querySelector('[data-collapsible-expand]') as HTMLButtonElement | null
+              if (expandBtn) {
+                expandBtn.click()
+                // Re-center after expand animation
+                setTimeout(() => {
+                  if (selectedItem.ref.current) scrollToCenter(selectedItem.ref.current)
+                }, 50)
+              }
+            }
+            return
+          }
+          break
       }
 
       // Enable keyboard nav on first navigation key press

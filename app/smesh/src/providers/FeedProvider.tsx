@@ -121,6 +121,16 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     init()
   }, [pubkey, isInitialized])
 
+  // Retry 'relays' feed when relay sets become available after initial load
+  useEffect(() => {
+    if (!isInitialized || !pubkey || !relaySets.length) return
+    // Only retry if we don't have a feed or have a 'relays' stored but no active feed
+    const storedFeedInfo = storage.getFeedInfo(pubkey)
+    if (storedFeedInfo?.feedType === 'relays' && !feed) {
+      switchFeed('relays', { activeRelaySetId: storedFeedInfo.id })
+    }
+  }, [relaySets, isInitialized, pubkey, feed])
+
   // Wire up event handler callbacks
   useEffect(() => {
     setSocialHandlerCallbacks({

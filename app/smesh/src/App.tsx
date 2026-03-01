@@ -29,6 +29,7 @@ import { ThemeProvider } from '@/providers/ThemeProvider'
 import { UserPreferencesProvider } from '@/providers/UserPreferencesProvider'
 import { UserTrustProvider } from '@/providers/UserTrustProvider'
 import { ZapProvider } from '@/providers/ZapProvider'
+import { ComposeProvider } from '@/providers/ComposeProvider'
 import { PageManager } from './PageManager'
 
 export default function App(): JSX.Element {
@@ -58,10 +59,12 @@ export default function App(): JSX.Element {
                                       <MediaUploadServiceProvider>
                                         <SocialGraphFilterProvider>
                                           <KindFilterProvider>
+                                          <ComposeProvider>
                                             <UpdateNotification />
                                             <BackgroundRelayDiscovery />
                                             <PageManager />
                                             <Toaster />
+                                          </ComposeProvider>
                                           </KindFilterProvider>
                                         </SocialGraphFilterProvider>
                                       </MediaUploadServiceProvider>

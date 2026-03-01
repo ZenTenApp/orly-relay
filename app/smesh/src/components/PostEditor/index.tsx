@@ -15,7 +15,7 @@ import {
 import { useVisualViewportHeight } from '@/hooks/useVisualViewportHeight'
 import { useScreenSize } from '@/providers/ScreenSizeProvider'
 import postEditor from '@/services/post-editor.service'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, X } from 'lucide-react'
 import { Event } from 'nostr-tools'
 import { Dispatch, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -27,13 +27,15 @@ export default function PostEditor({
   parentStuff,
   open,
   setOpen,
-  highlightedText
+  highlightedText,
+  inline = false
 }: {
   defaultContent?: string
   parentStuff?: Event | string
   open: boolean
   setOpen: Dispatch<boolean>
   highlightedText?: string
+  inline?: boolean
 }) {
   const { t } = useTranslation()
   const { isSmallScreen } = useScreenSize()
@@ -55,6 +57,36 @@ export default function PostEditor({
       />
     )
   }, [highlightedText])
+
+  if (inline) {
+    if (!open) return null
+    return (
+      <div className="border-t border-b bg-card animate-in slide-in-from-top-2 fade-in duration-200">
+        <div className="flex items-center h-10 px-3 border-b shrink-0">
+          <div className="flex-1 text-sm font-medium truncate">
+            {highlightedText ? t('Create Highlight') : <Title parentStuff={parentStuff} />}
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleReset}
+              className="flex items-center justify-center w-8 h-8 rounded hover:bg-accent transition-colors text-sm"
+              aria-label="Reset"
+            >
+              🧹
+            </button>
+            <button
+              onClick={() => setOpen(false)}
+              className="flex items-center justify-center w-8 h-8 rounded hover:bg-accent transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        <div className="px-4 py-3">{content}</div>
+      </div>
+    )
+  }
 
   if (isSmallScreen) {
     return (

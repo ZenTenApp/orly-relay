@@ -92,7 +92,6 @@ const NoteList = forwardRef<
     const [events, setEvents] = useState<Event[]>([])
     const [newEvents, setNewEvents] = useState<Event[]>([])
     const [initialLoading, setInitialLoading] = useState(false)
-    const [filtering, setFiltering] = useState(false)
     const [timelineKey, setTimelineKey] = useState<string | undefined>(undefined)
     const [filteredNotes, setFilteredNotes] = useState<
       { key: string; event: Event; reposters: string[] }[]
@@ -106,6 +105,7 @@ const NoteList = forwardRef<
     eventsRef.current = events
     const emptyRetryCountRef = useRef(0)
     const isAtTopRef = useRef(true)
+    const pendingEventsRef = useRef<Event[]>([])
     const effectiveAutoInsertRef = useRef(effectiveAutoInsert)
     effectiveAutoInsertRef.current = effectiveAutoInsert
 
@@ -157,95 +157,91 @@ const NoteList = forwardRef<
       ]
     )
 
+    // Synchronous filter pass — renders immediately without waiting for async spam checks
     useEffect(() => {
-      const processEvents = async () => {
-        // Store processed event keys to avoid duplicates
-        const keySet = new Set<string>()
-        // Map to track reposters for each event key
-        const repostersMap = new Map<string, Set<string>>()
-        // Final list of filtered events
-        const filteredEvents: Event[] = []
-        const keys: string[] = []
+      const keySet = new Set<string>()
+      const repostersMap = new Map<string, Set<string>>()
+      const filteredEvents: Event[] = []
+      const keys: string[] = []
 
-        events.forEach((evt) => {
-          const key = getEventKey(evt)
-          if (keySet.has(key)) return
-          keySet.add(key)
+      events.forEach((evt) => {
+        const key = getEventKey(evt)
+        if (keySet.has(key)) return
+        keySet.add(key)
 
-          if (shouldHideEvent(evt)) return
-          if (hideReplies && isReplyNoteEvent(evt)) return
-          if (evt.kind !== kinds.Repost && evt.kind !== kinds.GenericRepost) {
-            filteredEvents.push(evt)
-            keys.push(key)
-            return
+        if (shouldHideEvent(evt)) return
+        if (hideReplies && isReplyNoteEvent(evt)) return
+        if (evt.kind !== kinds.Repost && evt.kind !== kinds.GenericRepost) {
+          filteredEvents.push(evt)
+          keys.push(key)
+          return
+        }
+
+        let targetEventKey: string | undefined
+        let eventFromContent: Event | null = null
+        const targetTag = evt.tags.find(tagNameEquals('a')) ?? evt.tags.find(tagNameEquals('e'))
+        if (targetTag) {
+          targetEventKey = getKeyFromTag(targetTag)
+        } else {
+          if (evt.content) {
+            try {
+              eventFromContent = JSON.parse(evt.content) as Event
+            } catch {
+              eventFromContent = null
+            }
           }
+          if (eventFromContent) {
+            if (
+              eventFromContent.kind === kinds.Repost ||
+              eventFromContent.kind === kinds.GenericRepost
+            ) {
+              return
+            }
+            if (shouldHideEvent(evt)) return
+            targetEventKey = getEventKey(eventFromContent)
+          }
+        }
 
-          let targetEventKey: string | undefined
-          let eventFromContent: Event | null = null
-          const targetTag = evt.tags.find(tagNameEquals('a')) ?? evt.tags.find(tagNameEquals('e'))
-          if (targetTag) {
-            targetEventKey = getKeyFromTag(targetTag)
+        if (targetEventKey) {
+          const reposters = repostersMap.get(targetEventKey)
+          if (reposters) {
+            reposters.add(evt.pubkey)
           } else {
-            // Attempt to extract the target event from the repost content
-            if (evt.content) {
-              try {
-                eventFromContent = JSON.parse(evt.content) as Event
-              } catch {
-                eventFromContent = null
-              }
-            }
-            if (eventFromContent) {
-              if (
-                eventFromContent.kind === kinds.Repost ||
-                eventFromContent.kind === kinds.GenericRepost
-              ) {
-                return
-              }
-              if (shouldHideEvent(evt)) return
-
-              targetEventKey = getEventKey(eventFromContent)
-            }
+            repostersMap.set(targetEventKey, new Set([evt.pubkey]))
           }
-
-          if (targetEventKey) {
-            // Add to reposters map
-            const reposters = repostersMap.get(targetEventKey)
-            if (reposters) {
-              reposters.add(evt.pubkey)
-            } else {
-              repostersMap.set(targetEventKey, new Set([evt.pubkey]))
-            }
-
-            // If the target event is not already included, add it now
-            if (!keySet.has(targetEventKey)) {
-              filteredEvents.push(evt)
-              keys.push(targetEventKey)
-              keySet.add(targetEventKey)
-            }
+          if (!keySet.has(targetEventKey)) {
+            filteredEvents.push(evt)
+            keys.push(targetEventKey)
+            keySet.add(targetEventKey)
           }
-        })
+        }
+      })
 
-        const _filteredNotes = (
-          await Promise.all(
-            filteredEvents.map(async (evt, i) => {
-              if (hideSpam && (await isSpammer(evt.pubkey))) {
-                return null
-              }
-              const key = keys[i]
-              return { key, event: evt, reposters: Array.from(repostersMap.get(key) ?? []) }
+      const notes = filteredEvents.map((evt, i) => {
+        const key = keys[i]
+        return { key, event: evt, reposters: Array.from(repostersMap.get(key) ?? []) }
+      })
+
+      // Render immediately with all events
+      setFilteredNotes(notes)
+
+      // Async second pass: remove spammers if hideSpam is enabled
+      if (hideSpam) {
+        let cancelled = false
+        ;(async () => {
+          const spamResults = await Promise.all(
+            notes.map(async (note) => {
+              return (await isSpammer(note.event.pubkey)) ? note.key : null
             })
           )
-        ).filter(Boolean) as {
-          key: string
-          event: Event
-          reposters: string[]
-        }[]
-
-        setFilteredNotes(_filteredNotes)
+          if (cancelled) return
+          const spamKeys = new Set(spamResults.filter(Boolean))
+          if (spamKeys.size > 0) {
+            setFilteredNotes((prev) => prev.filter((n) => !spamKeys.has(n.key)))
+          }
+        })()
+        return () => { cancelled = true }
       }
-
-      setFiltering(true)
-      processEvents().finally(() => setFiltering(false))
     }, [events, shouldHideEvent, hideReplies, isSpammer, hideSpam])
 
     useEffect(() => {
@@ -302,6 +298,7 @@ const NoteList = forwardRef<
         setInitialLoading(true)
         setEvents([])
         setNewEvents([])
+        pendingEventsRef.current = []
 
         if (showKinds?.length === 0 && subRequests.every(({ filter }) => !filter.kinds)) {
           return () => {}
@@ -327,18 +324,27 @@ const NoteList = forwardRef<
             onEvents: (events, eosed) => {
               if (events.length > 0) {
                 setEvents(events)
+                // Show content as soon as first events arrive, don't wait for EOSE
+                setInitialLoading(false)
               }
               if (eosed) {
                 threadService.addRepliesToThread(events)
+                // Final fallback in case no events arrived
                 setInitialLoading(false)
               }
             },
             onNew: (event) => {
               if (effectiveAutoInsertRef.current) {
-                setEvents((oldEvents) =>
-                  oldEvents.some((e) => e.id === event.id) ? oldEvents : [event, ...oldEvents]
-                )
-                if (!isAtTopRef.current) {
+                if (isAtTopRef.current) {
+                  // User is at top — insert directly
+                  setEvents((oldEvents) =>
+                    oldEvents.some((e) => e.id === event.id) ? oldEvents : [event, ...oldEvents]
+                  )
+                } else {
+                  // User is scrolled down — buffer to avoid layout shift
+                  if (!pendingEventsRef.current.some((e) => e.id === event.id)) {
+                    pendingEventsRef.current = [event, ...pendingEventsRef.current]
+                  }
                   setNewNotesAboveCount((c) => c + 1)
                 }
               } else {
@@ -427,6 +433,16 @@ const NoteList = forwardRef<
           isAtTopRef.current = atTop
           if (atTop) {
             setNewNotesAboveCount(0)
+            // Flush buffered events when user reaches the top
+            if (pendingEventsRef.current.length > 0) {
+              const pending = [...pendingEventsRef.current]
+              pendingEventsRef.current = []
+              setEvents((oldEvents) => {
+                const existingIds = new Set(oldEvents.map((e) => e.id))
+                const uniqueNew = pending.filter((e) => !existingIds.has(e.id))
+                return [...uniqueNew, ...oldEvents]
+              })
+            }
           }
         },
         { threshold: 0 }
@@ -473,7 +489,7 @@ const NoteList = forwardRef<
           />
         ))}
         <div ref={bottomRef} />
-        {shouldShowLoadingIndicator || filtering || initialLoading ? (
+        {shouldShowLoadingIndicator || initialLoading ? (
           <NoteCardLoadingSkeleton />
         ) : events.length ? (
           <div className="text-center text-sm text-muted-foreground mt-2">{t('no more notes')}</div>

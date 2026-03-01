@@ -91,12 +91,15 @@ export function useInfiniteScroll<T>({
     setLoading(false)
   }, [initialShowCount])
 
+  const isIntersectingRef = useRef(false)
+
   // IntersectionObserver — created once, never torn down/rebuilt
   useEffect(() => {
     const currentBottomRef = bottomRef.current
     if (!currentBottomRef) return
 
     const observer = new IntersectionObserver((entries) => {
+      isIntersectingRef.current = entries[0].isIntersecting
       if (entries[0].isIntersecting) {
         loadMore()
       }
@@ -108,6 +111,17 @@ export function useInfiniteScroll<T>({
       observer.disconnect()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-trigger loadMore when items change while bottom ref is visible.
+  // Also reset hasMore so a stale false doesn't block future loads.
+  useEffect(() => {
+    if (items.length > 0) {
+      setHasMore(true)
+    }
+    if (isIntersectingRef.current) {
+      loadMore()
+    }
+  }, [items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const visibleItems = useMemo(() => {
     return showAllInitially ? items : items.slice(0, showCount)

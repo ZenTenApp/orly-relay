@@ -61,12 +61,14 @@ export default function Collapsible({
           <div className="bg-background rounded-lg">
             <Button
               className="bg-foreground hover:bg-foreground/80"
+              data-collapsible-expand
               onClick={(e) => {
                 e.stopPropagation()
                 setExpanded(!expanded)
               }}
             >
               {t('Show more')}
+              <span className="ml-2 text-xs opacity-60 font-mono">⇧M</span>
             </Button>
           </div>
         </div>
