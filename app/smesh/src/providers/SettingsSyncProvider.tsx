@@ -187,11 +187,16 @@ export function SettingsSyncProvider({ children }: { children: React.ReactNode }
   const [isLoading, setIsLoading] = useState(false)
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastSyncedSettingsRef = useRef<string | null>(null)
+  const hasLoadedRef = useRef(false)
+
+  // Store encryption functions in refs so callbacks don't change identity
+  // when the signer initializes asynchronously
+  const encryptRef = useRef({ nip44Encrypt, nip44Decrypt, hasNip44Support })
+  encryptRef.current = { nip44Encrypt, nip44Decrypt, hasNip44Support }
 
   /**
    * Decrypt settings content from an event.
-   * Tries NIP-44 decryption first (self-encrypted), falls back to plain JSON
-   * for backward compatibility with unencrypted events.
+   * Tries plain JSON first (backward compat), then NIP-44 decryption.
    */
   const decryptContent = useCallback(async (content: string, authorPubkey: string): Promise<TSyncSettings | null> => {
     // Try plain JSON first (backward compat with old unencrypted events)
@@ -205,6 +210,7 @@ export function SettingsSyncProvider({ children }: { children: React.ReactNode }
     }
 
     // Try NIP-44 decryption (self-encrypted to own pubkey)
+    const { hasNip44Support, nip44Decrypt } = encryptRef.current
     if (hasNip44Support) {
       try {
         const decrypted = await nip44Decrypt(authorPubkey, content)
@@ -215,7 +221,7 @@ export function SettingsSyncProvider({ children }: { children: React.ReactNode }
     }
 
     return null
-  }, [hasNip44Support, nip44Decrypt])
+  }, []) // stable — reads from encryptRef
 
   const fetchRemoteSettings = useCallback(async (): Promise<TSyncSettings | null> => {
     if (!pubkey) return null
@@ -261,6 +267,7 @@ export function SettingsSyncProvider({ children }: { children: React.ReactNode }
     setIsLoading(true)
     try {
       // Encrypt settings with NIP-44 self-encryption if available
+      const { hasNip44Support, nip44Encrypt } = encryptRef.current
       let content: string
       if (hasNip44Support) {
         content = await nip44Encrypt(pubkey, settingsJson)
@@ -276,7 +283,7 @@ export function SettingsSyncProvider({ children }: { children: React.ReactNode }
     } finally {
       setIsLoading(false)
     }
-  }, [pubkey, account, publish, hasNip44Support, nip44Encrypt])
+  }, [pubkey, account, publish])
 
   // Debounced sync on settings change
   const debouncedSync = useCallback(() => {
@@ -288,21 +295,30 @@ export function SettingsSyncProvider({ children }: { children: React.ReactNode }
     }, 2000)
   }, [syncSettings])
 
-  // Load settings from network on login
+  // Load settings from network on login — runs once per pubkey
   useEffect(() => {
     if (!pubkey) {
       lastSyncedSettingsRef.current = null
+      hasLoadedRef.current = false
       return
     }
 
+    // Only load once per pubkey to prevent reload loops
+    if (hasLoadedRef.current) return
+    hasLoadedRef.current = true
+
     // Skip relay-based settings sync if NRC-only config sync is enabled
-    // (settings will sync via NRC instead)
     if (storage.getNrcOnlyConfigSync()) {
       lastSyncedSettingsRef.current = JSON.stringify(getCurrentSettings(pubkey))
       return
     }
 
     const loadRemoteSettings = async () => {
+      // Wait briefly for signer to initialize so we can decrypt
+      if (!encryptRef.current.hasNip44Support) {
+        await new Promise((r) => setTimeout(r, 500))
+      }
+
       setIsLoading(true)
       try {
         const currentSettings = getCurrentSettings(pubkey)
@@ -315,7 +331,8 @@ export function SettingsSyncProvider({ children }: { children: React.ReactNode }
 
           if (currentSettingsJson !== appliedSettingsJson) {
             lastSyncedSettingsRef.current = appliedSettingsJson
-            window.location.reload()
+            // Notify providers to re-render with new values instead of reloading
+            window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT))
           } else {
             lastSyncedSettingsRef.current = currentSettingsJson
           }
