@@ -279,7 +279,7 @@ All bridge configuration is via environment variables with the `ORLY_BRIDGE_` pr
 | `ORLY_BRIDGE_ENABLED` | `false` | Enable the email bridge |
 | `ORLY_BRIDGE_DOMAIN` | | Email domain (e.g., `relay.example.com`) |
 | `ORLY_BRIDGE_NSEC` | | Bridge identity nsec (default: relay identity from database) |
-| `ORLY_BRIDGE_RELAY_URL` | | WebSocket relay URL for standalone mode |
+| `ORLY_BRIDGE_RELAY_URL` | | The relay that the bridge will connect to - use the public URL even if running in monolithic (single binary, no gRPC bridging) mode. Also allows remote relays to be used in the same way as the bridge is a standalone unit. |
 | `ORLY_BRIDGE_SMTP_PORT` | `2525` | SMTP server listen port |
 | `ORLY_BRIDGE_SMTP_HOST` | `0.0.0.0` | SMTP server listen address |
 | `ORLY_BRIDGE_DATA_DIR` | `$ORLY_DATA_DIR/bridge` | Bridge data directory |
