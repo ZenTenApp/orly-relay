@@ -765,20 +765,18 @@ func NewWithManager(ctx context.Context, appName string, enabled bool, customPol
 
 	if enabled {
 		if err := policy.LoadFromFile(configPath); err != nil {
-			log.E.F(
-				"FATAL: Policy system is ENABLED (ORLY_POLICY_ENABLED=true) but configuration failed to load from %s: %v",
+			log.W.F(
+				"policy enabled but config failed to load from %s: %v — disabling policy",
 				configPath, err,
 			)
-			log.E.F("The relay cannot start with an invalid policy configuration.")
-			log.E.F("Fix: Either disable the policy system (ORLY_POLICY_ENABLED=false) or ensure %s exists and contains valid JSON", configPath)
-			panic(fmt.Sprintf("fatal policy configuration error: %v", err))
-		}
-		log.I.F("loaded policy configuration from %s", configPath)
+		} else {
+			log.I.F("loaded policy configuration from %s", configPath)
 
-		// Start the policy script if it exists and is enabled
-		go manager.startPolicyIfExists()
-		// Start periodic check for policy script availability
-		go manager.periodicCheck()
+			// Start the policy script if it exists and is enabled
+			go manager.startPolicyIfExists()
+			// Start periodic check for policy script availability
+			go manager.periodicCheck()
+		}
 	}
 
 	return policy

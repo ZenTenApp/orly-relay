@@ -11,6 +11,7 @@
 package config
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -304,6 +305,14 @@ type C struct {
 // or an error if any step fails
 func New() (cfg *C, err error) {
 	cfg = &C{}
+	// Load .env file from config directory before parsing env vars.
+	// The app name determines the config dir: ~/.config/<AppName>/.env
+	// Real environment variables take precedence over .env values.
+	appName := os.Getenv("ORLY_APP_NAME")
+	if appName == "" {
+		appName = "ORLY"
+	}
+	loadDotEnv(filepath.Join(xdg.ConfigHome, appName, ".env"))
 	if err = env.Load(cfg, &env.Options{SliceSep: ","}); chk.T(err) {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: %s\n\n", err)
@@ -342,6 +351,36 @@ func New() (cfg *C, err error) {
 	}
 	lol.SetLogLevel(cfg.LogLevel)
 	return
+}
+
+// loadDotEnv reads a .env file and sets environment variables for any keys
+// not already present in the real environment. This allows .env files to
+// provide defaults while real environment variables take precedence.
+func loadDotEnv(path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return // file doesn't exist or isn't readable, not an error
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || line[0] == '#' {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		k = strings.TrimSpace(k)
+		v = strings.TrimSpace(v)
+		// Don't override real environment variables
+		if _, exists := os.LookupEnv(k); exists {
+			continue
+		}
+		os.Setenv(k, v)
+	}
 }
 
 // HelpRequested determines if the command line arguments indicate a request for help
