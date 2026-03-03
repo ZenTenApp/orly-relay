@@ -445,8 +445,12 @@ func (s *Supervisor) startRelay() error {
 	}
 
 	// Configure sync service connections
-	if s.cfg.DistributedSyncEnabled {
+	// Set ORLY_SYNC_TYPE=grpc when any sync service is enabled in launcher mode,
+	// so the relay uses gRPC clients instead of embedded handlers.
+	if s.cfg.DistributedSyncEnabled || s.cfg.ClusterSyncEnabled || s.cfg.RelayGroupEnabled || s.cfg.NegentropyEnabled {
 		env = append(env, "ORLY_SYNC_TYPE=grpc")
+	}
+	if s.cfg.DistributedSyncEnabled {
 		env = append(env, fmt.Sprintf("ORLY_GRPC_SYNC_DISTRIBUTED=%s", s.cfg.DistributedSyncListen))
 	}
 	if s.cfg.ClusterSyncEnabled {

@@ -300,6 +300,7 @@ func initializeNegentropy(ctx context.Context, cfg *config.C, db database.Databa
 	syncType, _, _, _, negentropyAddr, syncTimeout, negentropyEnabled := cfg.GetGRPCSyncConfigValues()
 
 	if !negentropyEnabled {
+		log.I.F("negentropy NIP-77 disabled (set ORLY_NEGENTROPY_ENABLED=true to enable)")
 		return
 	}
 

@@ -66,8 +66,8 @@ func IdentifyNegentropyEnvelope(msg []byte) (envelopeType string, ok bool) {
 func (l *Listener) HandleNegOpen(msg []byte) error {
 	log.I.F("HandleNegOpen called from %s", l.connectionID)
 	if negentropyHandler == nil {
-		log.E.F("negentropy client is nil")
-		return l.sendNegErr("", "negentropy not enabled")
+		log.E.F("negentropy handler not initialized — client sent NEG-OPEN but NIP-77 is not enabled (check ORLY_NEGENTROPY_ENABLED and startup logs)")
+		return l.sendNegErr("", "negentropy not enabled on this relay")
 	}
 
 	// Parse the message array
