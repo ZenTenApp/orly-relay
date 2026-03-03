@@ -199,25 +199,27 @@ strfry sync wss://your-orly-relay.com --dir both
 
 ### "negentropy client is nil" in logs
 
-The relay received a `NEG-OPEN` from a client but no negentropy handler was registered. Causes:
+The relay received a `NEG-OPEN` from a client but no negentropy handler was registered. The only cause is:
 
-1. **`ORLY_NEGENTROPY_ENABLED` not set to `true`** — The relay skips negentropy init entirely. No log output at all for negentropy.
+**`ORLY_NEGENTROPY_ENABLED` is not `true`.** The relay skips negentropy init entirely. In launcher mode, this means `ORLY_LAUNCHER_SYNC_NEGENTROPY_ENABLED` was not set — the launcher only passes `ORLY_NEGENTROPY_ENABLED=true` to the relay subprocess when this is enabled.
 
-2. **Launcher mode but `ORLY_LAUNCHER_SYNC_NEGENTROPY_ENABLED` not set** — The launcher won't spawn the negentropy subprocess and won't pass `ORLY_NEGENTROPY_ENABLED=true` to the relay.
-
-3. **gRPC connection failed** — Look for `failed to connect to gRPC negentropy server` in logs. The negentropy service isn't running or the address doesn't match.
-
-4. **gRPC timeout** — Look for `timeout waiting for gRPC negentropy server`. The service started but didn't become ready within 30 seconds. May indicate a database connectivity issue in the negentropy service.
-
-5. **Wrong `ORLY_SYNC_TYPE` in manual (non-launcher) gRPC setup** — If you run the relay process manually with a separate negentropy service, you MUST set `ORLY_SYNC_TYPE=grpc`. Without it, the relay defaults to `local` and uses the embedded handler, ignoring the gRPC address entirely.
+Note: gRPC connection failures and timeouts no longer cause this. If the gRPC negentropy service is unreachable, the relay automatically falls back to the embedded handler and logs a warning. NIP-77 stays enabled either way.
 
 ### No log output about negentropy at startup
 
-`ORLY_NEGENTROPY_ENABLED` is not `true`. The init function returns immediately without logging anything. Set it and restart.
+`ORLY_NEGENTROPY_ENABLED` is not `true`. The init function logs "negentropy NIP-77 disabled" and returns. Set it and restart.
+
+### "falling back to embedded handler" in logs
+
+The relay tried to connect to the gRPC negentropy service but failed (connection refused or 30s timeout). It fell back to the embedded handler, so NIP-77 still works. However, you're not getting the benefits of the separate negentropy service (process isolation, independent restarts). Check that:
+
+- The negentropy service is actually running (`orly sync --driver=negentropy`)
+- The listen address matches: `ORLY_GRPC_SYNC_NEGENTROPY` on the relay side must match `ORLY_LAUNCHER_SYNC_NEGENTROPY_LISTEN` (or `ORLY_SYNC_NEGENTROPY_LISTEN`) on the service side
+- No firewall or port conflict on the gRPC port
 
 ### "embedded negentropy handler initialized" but expected gRPC mode
 
-`ORLY_SYNC_TYPE` is `local` (the default). The relay used the embedded handler instead of connecting to your gRPC service. Set `ORLY_SYNC_TYPE=grpc` or use `orly launcher` which sets it automatically.
+`ORLY_SYNC_TYPE` is `local` (the default). The relay went straight to the embedded handler without attempting gRPC. Set `ORLY_SYNC_TYPE=grpc` or use `orly launcher` which sets it automatically.
 
 ### Peer sync not working
 

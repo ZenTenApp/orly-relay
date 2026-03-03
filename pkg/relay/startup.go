@@ -312,31 +312,33 @@ func initializeNegentropy(ctx context.Context, cfg *config.C, db database.Databa
 			ConnectTimeout: syncTimeout,
 		})
 		if err != nil {
-			log.W.F("failed to connect to gRPC negentropy server: %v (NIP-77 disabled)", err)
-			return
+			log.W.F("failed to connect to gRPC negentropy server at %s: %v — falling back to embedded handler", negentropyAddr, err)
+		} else {
+			// Wait for negentropy server to be ready
+			select {
+			case <-negClient.Ready():
+				log.I.F("gRPC negentropy client connected")
+				app.SetNegentropyHandler(negClient)
+				return
+			case <-time.After(30 * time.Second):
+				log.W.F("timeout waiting for gRPC negentropy server at %s — falling back to embedded handler", negentropyAddr)
+				negClient.Close()
+			}
 		}
-
-		// Wait for negentropy server to be ready
-		select {
-		case <-negClient.Ready():
-			log.I.F("gRPC negentropy client connected")
-			app.SetNegentropyHandler(negClient)
-		case <-time.After(30 * time.Second):
-			log.W.F("timeout waiting for gRPC negentropy server (NIP-77 disabled)")
-		}
-	} else {
-		// Use embedded negentropy handler (monolithic mode)
-		log.I.F("initializing embedded negentropy handler")
-		negHandler := negentropy.NewEmbeddedHandler(db, &negentropy.Config{
-			SyncInterval:         60 * time.Second,
-			FrameSize:            128 * 1024,
-			IDSize:               16,
-			ClientSessionTimeout: 5 * time.Minute,
-		})
-		negHandler.Start()
-		app.SetNegentropyHandler(negHandler)
-		log.I.F("embedded negentropy handler initialized (NIP-77 enabled)")
 	}
+
+	// Embedded negentropy handler — used in standalone mode or as fallback
+	// when gRPC connection fails, so NIP-77 is never silently disabled.
+	log.I.F("initializing embedded negentropy handler")
+	negHandler := negentropy.NewEmbeddedHandler(db, &negentropy.Config{
+		SyncInterval:         60 * time.Second,
+		FrameSize:            128 * 1024,
+		IDSize:               16,
+		ClientSessionTimeout: 5 * time.Minute,
+	})
+	negHandler.Start()
+	app.SetNegentropyHandler(negHandler)
+	log.I.F("embedded negentropy handler initialized (NIP-77 enabled)")
 }
 
 // createRateLimiter creates and configures the rate limiter.
