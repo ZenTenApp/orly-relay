@@ -18,6 +18,23 @@ jobs:
         with:
           go-version: '1.23'
 
+      - name: Install bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> $GITHUB_PATH
+
+      - name: Build Web UI
+        run: |
+          cd app/web
+          $HOME/.bun/bin/bun install
+          $HOME/.bun/bin/bun run build
+
+      - name: Build Smesh UI
+        run: |
+          cd app/smesh
+          $HOME/.bun/bin/bun install
+          $HOME/.bun/bin/bun run build
+
       - name: Download libsecp256k1
         run: |
           wget -q https://git.mleku.dev/mleku/nostr/raw/branch/main/crypto/p8k/libsecp256k1.so -O libsecp256k1.so
@@ -43,6 +60,23 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.23'
+
+      - name: Install bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> $GITHUB_PATH
+
+      - name: Build Web UI
+        run: |
+          cd app/web
+          $HOME/.bun/bin/bun install
+          $HOME/.bun/bin/bun run build
+
+      - name: Build Smesh UI
+        run: |
+          cd app/smesh
+          $HOME/.bun/bin/bun install
+          $HOME/.bun/bin/bun run build
 
       - name: Check go mod tidy
         run: |
