@@ -520,8 +520,11 @@ The transport manager handles ordered startup (Start fails fast, rolls back) and
 
 **CRITICAL**: Build from `./cmd/orly` for the unified binary. Building from root (`go build .`) creates a relay-only binary WITHOUT the launcher subcommand, causing deployment failures.
 
+**CRITICAL**: When deploying web UI changes, bump `CACHE_VERSION` in `app/web/public/sw.js` before building (e.g., `orly-v2` → `orly-v3`). The service worker caches `bundle.js` by filename (no content hashing), so without a version bump, users will be served the stale cached bundle indefinitely.
+
 ```bash
-# 1. Build unified binary for amd64 (includes web UI)
+# 1. Bump CACHE_VERSION in app/web/public/sw.js (required for frontend changes!)
+# 2. Build unified binary for amd64 (includes web UI)
 ./scripts/update-embedded-web.sh
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly ./cmd/orly
 

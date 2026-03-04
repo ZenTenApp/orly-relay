@@ -53,7 +53,7 @@ See [docs/IPC_SYNC_SERVICES.md](./docs/IPC_SYNC_SERVICES.md) for detailed API do
   - [Policy System](#policy-system)
 - [Deployment](#deployment)
   - [Automated Deployment](#automated-deployment)
-  - [TLS Configuration](#tls-configuration)
+  - [Network Options](#network-options)
   - [systemd Service Management](#systemd-service-management)
   - [Remote Deployment](#remote-deployment)
   - [Configuration](#configuration)
@@ -340,26 +340,175 @@ After deployment, reload your shell environment:
 source ~/.bashrc
 ```
 
-### TLS Configuration
+### Network Options
 
-ORLY supports automatic TLS certificate management with Let's Encrypt and custom certificates:
+ORLY can handle TLS itself (direct mode) or sit behind a reverse proxy. Choose one.
+
+#### Option A: Reverse Proxy (Recommended)
+
+Run ORLY on localhost and let Caddy, nginx, or another proxy handle TLS termination, WebSocket upgrades, and certificate renewal. This is the production setup used at relay.orly.dev.
+
+```
+Internet (wss://relay.example.com)
+    → Caddy/nginx (:443, TLS termination)
+        → ORLY (127.0.0.1:3334, plain HTTP/WebSocket)
+```
+
+**1. Configure ORLY to listen on localhost only:**
 
 ```bash
-# Enable TLS with Let's Encrypt for specific domains
-export ORLY_TLS_DOMAINS=relay.example.com,backup.relay.example.com
+export ORLY_LISTEN=127.0.0.1
+export ORLY_PORT=3334
+```
 
-# Optional: Use custom certificates (will load .pem and .key files)
+Do NOT set `ORLY_TLS_DOMAINS` — the reverse proxy handles TLS.
+
+**2. Install and configure the reverse proxy.**
+
+**Caddy** (recommended — automatic HTTPS, minimal config):
+
+```bash
+# Install Caddy (Ubuntu/Debian)
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update
+sudo apt install caddy
+```
+
+Create `/etc/caddy/Caddyfile`:
+
+```
+relay.example.com {
+    reverse_proxy 127.0.0.1:3334
+}
+```
+
+That's it. Caddy handles TLS certificates, HTTPS, and WebSocket upgrades automatically. No additional configuration needed for WebSocket — Caddy proxies upgrade requests by default.
+
+Reload Caddy:
+
+```bash
+sudo systemctl reload caddy
+```
+
+**nginx** alternative:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name relay.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/relay.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/relay.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:3334;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}
+
+server {
+    listen 80;
+    server_name relay.example.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+With nginx you must obtain certificates separately (e.g., `certbot --nginx`).
+
+**3. Open firewall ports:**
+
+```bash
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+```
+
+**4. Verify:**
+
+```bash
+# Check ORLY is listening on localhost
+ss -tlnp | grep 3334
+
+# Check proxy is listening externally
+ss -tlnp | grep -E ':(80|443)'
+
+# Test WebSocket connection from outside
+wscat -c wss://relay.example.com
+```
+
+#### Option B: Direct Listening (Built-in TLS)
+
+ORLY handles TLS itself using Let's Encrypt ACME. No reverse proxy needed. ORLY binds directly to ports 80 and 443, which requires `setcap` since it runs as a non-root user.
+
+```
+Internet (wss://relay.example.com)
+    → ORLY (:443 HTTPS/WSS + :80 ACME challenges)
+```
+
+**1. Set capabilities on the binary:**
+
+```bash
+# Allow binding to privileged ports without root
+sudo setcap 'cap_net_bind_service=+ep' ~/.local/bin/orly
+```
+
+Note: `setcap` must be re-applied after every binary update.
+
+**2. Configure TLS domains:**
+
+```bash
+export ORLY_TLS_DOMAINS=relay.example.com
+```
+
+When `ORLY_TLS_DOMAINS` is set, ORLY ignores `ORLY_PORT` and listens on :443 (HTTPS/WSS) and :80 (ACME challenges) instead.
+
+**3. Optional: custom certificates:**
+
+```bash
+# Load certificates from files instead of (or in addition to) ACME
 export ORLY_CERTS=/path/to/cert1,/path/to/cert2
-
-# When TLS domains are configured, ORLY will:
-# - Listen on port 443 for HTTPS/WSS
-# - Listen on port 80 for ACME challenges
-# - Ignore ORLY_PORT setting
 ```
 
 Certificate files should be named with `.pem` and `.key` extensions:
 - `/path/to/cert1.pem` (certificate)
 - `/path/to/cert1.key` (private key)
+
+**4. Open firewall ports:**
+
+```bash
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+```
+
+**5. Verify:**
+
+```bash
+# ORLY should be listening on 80 and 443
+ss -tlnp | grep orly
+
+# Test WebSocket
+wscat -c wss://relay.example.com
+```
+
+#### Which option to choose
+
+| | Reverse Proxy | Direct Listening |
+|---|---|---|
+| TLS management | Caddy/nginx handles it | ORLY's built-in ACME |
+| Multiple services on same IP | Yes (proxy routes by domain) | No (ORLY owns port 443) |
+| WebSocket config | Automatic (Caddy) or manual (nginx) | Built-in |
+| Binary updates | Just restart ORLY | Restart + re-run setcap |
+| Additional software | Caddy or nginx | None |
+| Used at relay.orly.dev | Yes (Caddy) | No |
 
 ### systemd Service Management
 

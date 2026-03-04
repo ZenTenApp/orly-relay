@@ -2209,6 +2209,13 @@
             return;
         }
 
+        // npub login is always read-only — no signer means no signing
+        if (authMethod === "npub") {
+            userRole = "read";
+            console.log("User role: read (npub read-only login)");
+            return;
+        }
+
         try {
             const url = `${getApiBase()}/api/permissions/${userPubkey}`;
             const response = await fetch(url);

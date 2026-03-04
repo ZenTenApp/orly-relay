@@ -2,7 +2,7 @@
     import { createEventDispatcher, onMount, onDestroy } from "svelte";
     import { PrivateKeySigner } from "./nostr.js";
     import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
-    import { nsecEncode, npubEncode } from "nostr-tools/nip19";
+    import { nsecEncode, npubEncode, decode as nip19Decode } from "nostr-tools/nip19";
     import { encryptNsec, decryptNsec, isValidNsec } from "./nsec-crypto.js";
 
     const dispatch = createEventDispatcher();
@@ -22,6 +22,7 @@
     let successMessage = "";
     let generatedNsec = "";
     let generatedNpub = "";
+    let npubInput = "";
 
     // Deriving modal timer
     let derivingElapsed = 0;
@@ -82,6 +83,7 @@
     function closeModal() {
         showModal = false;
         nsecInput = "";
+        npubInput = "";
         encryptionPassword = "";
         confirmPassword = "";
         unlockPassword = "";
@@ -223,6 +225,44 @@
         }
     }
 
+    async function loginWithNpub() {
+        isLoading = true;
+        errorMessage = "";
+
+        try {
+            const input = npubInput.trim();
+            if (!input) {
+                throw new Error("Please enter an npub");
+            }
+
+            let pubkey;
+            if (/^[0-9a-f]{64}$/i.test(input)) {
+                pubkey = input.toLowerCase();
+            } else {
+                const decoded = nip19Decode(input);
+                if (decoded.type !== "npub") {
+                    throw new Error("Invalid npub — expected an npub1... string or 64-char hex pubkey");
+                }
+                pubkey = decoded.data;
+            }
+
+            localStorage.setItem("nostr_auth_method", "npub");
+            localStorage.setItem("nostr_pubkey", pubkey);
+
+            dispatch("login", {
+                method: "npub",
+                pubkey: pubkey,
+                signer: null,
+            });
+
+            closeModal();
+        } catch (error) {
+            errorMessage = error.message;
+        } finally {
+            isLoading = false;
+        }
+    }
+
     async function loginWithNsec() {
         isLoading = true;
         errorMessage = "";
@@ -298,6 +338,9 @@
         if (event.key === "Enter" && activeTab === "nsec") {
             loginWithNsec();
         }
+        if (event.key === "Enter" && activeTab === "npub") {
+            loginWithNpub();
+        }
     }
 </script>
 
@@ -338,6 +381,13 @@
                     >
                         Nsec
                     </button>
+                    <button
+                        class="tab-btn"
+                        class:active={activeTab === "npub"}
+                        on:click={() => switchTab("npub")}
+                    >
+                        Read-only
+                    </button>
                 </div>
 
                 <div class="tab-content">
@@ -355,6 +405,27 @@
                                 {isLoading
                                     ? "Connecting..."
                                     : "Log in using extension"}
+                            </button>
+                        </div>
+                    {:else if activeTab === "npub"}
+                        <div class="extension-login">
+                            <p>
+                                Enter an npub to browse in read-only mode.
+                                You won't be able to post or sign events.
+                            </p>
+                            <input
+                                type="text"
+                                placeholder="npub1... or hex pubkey"
+                                bind:value={npubInput}
+                                disabled={isLoading}
+                                class="nsec-input"
+                            />
+                            <button
+                                class="login-nsec-btn"
+                                on:click={loginWithNpub}
+                                disabled={isLoading || !npubInput.trim()}
+                            >
+                                {isLoading ? "Logging in..." : "Browse read-only"}
                             </button>
                         </div>
                     {:else}
