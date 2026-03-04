@@ -75,6 +75,19 @@ jobs:
           ls -lah dist/
           echo "Main web UI build complete"
 
+      - name: Build Smesh UI
+        run: |
+          set -e
+          export BUN_INSTALL="$HOME/.bun"
+          export PATH="$BUN_INSTALL/bin:$PATH"
+          cd ${GITHUB_WORKSPACE}/app/smesh
+          echo "Installing smesh dependencies..."
+          bun install
+          echo "Building smesh app..."
+          bun run build
+          ls -lah dist/
+          echo "Smesh UI build complete"
+
       - name: Build Launcher Admin Web UI
         run: |
           set -e
