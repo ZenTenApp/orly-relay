@@ -61,7 +61,7 @@ func (s *SmeshServer) Start(ctx context.Context) error {
 		fileServer.ServeHTTP(w, r)
 	})
 
-	addr := fmt.Sprintf("0.0.0.0:%d", s.port)
+	addr := fmt.Sprintf("127.0.0.1:%d", s.port)
 	s.server = &http.Server{
 		Addr:         addr,
 		Handler:      mux,
