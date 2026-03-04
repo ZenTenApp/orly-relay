@@ -96,8 +96,12 @@ whitelist:
 		s.connPerIPMu.Unlock()
 	}()
 
+	// Localhost connections are exempt from rate limiting — split-IPC internal
+	// connections must never be refused, even during emergency mode.
+	isLocalhost := ip == "127.0.0.1" || ip == "::1" || ip == "localhost"
+
 	// Global adaptive load check — refuse or delay connections under load
-	if s.rateLimiter != nil && s.rateLimiter.IsEnabled() {
+	if !isLocalhost && s.rateLimiter != nil && s.rateLimiter.IsEnabled() {
 		s.rateLimiter.SetActiveConnections(s.activeConnCount.Load())
 
 		if !s.rateLimiter.ShouldAcceptConnection() {

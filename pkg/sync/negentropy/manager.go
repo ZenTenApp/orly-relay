@@ -21,6 +21,7 @@ import (
 	"next.orly.dev/pkg/nostr/encoders/tag"
 	"next.orly.dev/pkg/nostr/negentropy"
 	"next.orly.dev/pkg/database"
+	"next.orly.dev/pkg/ratelimit"
 )
 
 // PeerState represents the sync state for a peer relay.
@@ -64,6 +65,7 @@ type Config struct {
 	ClientSessionTimeout time.Duration
 	Filter               *filter.F // Optional filter for selective sync
 	MaxEvents            uint      // Max events to sync per cycle (0 = unlimited)
+	MemoryTargetMB       int       // Memory target for backpressure (0 = disabled)
 }
 
 // Manager handles negentropy sync operations.
@@ -71,13 +73,14 @@ type Manager struct {
 	db     database.Database
 	config *Config
 
-	mu         gosync.RWMutex
-	peers      map[string]*PeerState
-	sessions   map[string]*ClientSession // keyed by connectionID:subscriptionID
-	active     bool
-	lastSync   time.Time
-	stopChan   chan struct{}
-	syncWg     gosync.WaitGroup
+	mu             gosync.RWMutex
+	peers          map[string]*PeerState
+	sessions       map[string]*ClientSession // keyed by connectionID:subscriptionID
+	active         bool
+	lastSync       time.Time
+	stopChan       chan struct{}
+	syncWg         gosync.WaitGroup
+	memoryMonitor  *ratelimit.MemoryMonitor // nil if backpressure disabled
 }
 
 // NewManager creates a new negentropy manager.
@@ -96,6 +99,14 @@ func NewManager(db database.Database, cfg *Config) *Manager {
 		config:   cfg,
 		peers:    make(map[string]*PeerState),
 		sessions: make(map[string]*ClientSession),
+	}
+
+	// Initialize memory monitor for backpressure if configured
+	if cfg.MemoryTargetMB > 0 {
+		m.memoryMonitor = ratelimit.NewMemoryMonitor(500 * time.Millisecond)
+		m.memoryMonitor.SetMemoryTarget(uint64(cfg.MemoryTargetMB) * 1024 * 1024)
+		m.memoryMonitor.Start()
+		log.I.F("negentropy: backpressure enabled (target %dMB)", cfg.MemoryTargetMB)
 	}
 
 	// Initialize peers from config
@@ -138,7 +149,51 @@ func (m *Manager) Stop() {
 	m.mu.Unlock()
 
 	m.syncWg.Wait()
+
+	if m.memoryMonitor != nil {
+		m.memoryMonitor.Stop()
+	}
+
 	log.I.F("negentropy manager stopped")
+}
+
+// checkBackpressure applies progressive delays when memory pressure is high.
+// Returns nil normally, ctx.Err() if the context is cancelled during a pause.
+func (m *Manager) checkBackpressure(ctx context.Context) error {
+	if m.memoryMonitor == nil {
+		return nil
+	}
+	metrics := m.memoryMonitor.GetMetrics()
+
+	// Emergency mode: pause 10s to let the system recover
+	if metrics.InEmergencyMode {
+		log.W.F("negentropy: pausing sync — emergency mode (memory pressure %.1f%%)",
+			metrics.MemoryPressure*100)
+		select {
+		case <-time.After(10 * time.Second):
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	// Progressive delay: 0ms at 70% pressure, scaling to 5s at 100%
+	if metrics.MemoryPressure > 0.7 {
+		fraction := (metrics.MemoryPressure - 0.7) / 0.3
+		if fraction > 1.0 {
+			fraction = 1.0
+		}
+		delay := time.Duration(fraction*5000) * time.Millisecond
+		log.D.F("negentropy: backpressure %v (memory pressure %.1f%%)",
+			delay, metrics.MemoryPressure*100)
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	return nil
 }
 
 func (m *Manager) syncLoop() {
@@ -468,6 +523,11 @@ func (m *Manager) pushEventsToPeer(ctx context.Context, conn *websocket.Conn, tr
 
 	pushed := 0
 	for _, truncID := range truncatedIDs {
+		// Apply backpressure before each push
+		if err := m.checkBackpressure(ctx); err != nil {
+			return pushed, err
+		}
+
 		// Query local database for events matching this ID prefix
 		// Use QueryByIDPrefix if available, otherwise fall back to broader query
 		events, err := m.queryEventsByIDPrefix(ctx, truncID)
@@ -548,6 +608,11 @@ func (m *Manager) fetchEventsFromPeer(ctx context.Context, conn *websocket.Conn,
 	fetched := 0
 
 	for i := 0; i < len(ids); i += batchSize {
+		// Apply backpressure between batches
+		if err := m.checkBackpressure(ctx); err != nil {
+			return fetched, err
+		}
+
 		end := i + batchSize
 		if end > len(ids) {
 			end = len(ids)
@@ -600,6 +665,10 @@ func (m *Manager) fetchEventsFromPeer(ctx context.Context, conn *websocket.Conn,
 			switch msgType {
 			case "EVENT":
 				if len(msg) >= 3 {
+					// Apply backpressure before writing each event
+					if err := m.checkBackpressure(ctx); err != nil {
+						return fetched, err
+					}
 					// Store the event
 					if err := m.storeEventFromJSON(ctx, msg[2]); err != nil {
 						log.W.F("fetchEventsFromPeer: failed to store event: %v", err)
