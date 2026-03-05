@@ -29,6 +29,7 @@ import { ThemeProvider } from '@/providers/ThemeProvider'
 import { UserPreferencesProvider } from '@/providers/UserPreferencesProvider'
 import { UserTrustProvider } from '@/providers/UserTrustProvider'
 import { ZapProvider } from '@/providers/ZapProvider'
+import { ChatProvider } from '@/providers/ChatProvider'
 import { ComposeProvider } from '@/providers/ComposeProvider'
 import { PageManager } from './PageManager'
 
@@ -50,6 +51,7 @@ export default function App(): JSX.Element {
                       <FollowListProvider>
                         <MuteListProvider>
                           <DMProvider>
+                          <ChatProvider>
                             <UserTrustProvider>
                               <BookmarksProvider>
                               <EmojiPackProvider>
@@ -74,6 +76,7 @@ export default function App(): JSX.Element {
                               </EmojiPackProvider>
                             </BookmarksProvider>
                             </UserTrustProvider>
+                          </ChatProvider>
                           </DMProvider>
                         </MuteListProvider>
                       </FollowListProvider>

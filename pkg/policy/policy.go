@@ -100,6 +100,9 @@ type AccessControl struct {
 	ReadAllowPermissive bool `json:"read_allow_permissive,omitempty"`
 	// WriteAllowPermissive allows write access bypassing kind whitelist on GLOBAL rule.
 	WriteAllowPermissive bool `json:"write_allow_permissive,omitempty"`
+	// WriteAllowIfTagged is a list of pubkeys. Authors not in WriteAllow can still
+	// publish if their event contains a p-tag referencing one of these pubkeys.
+	WriteAllowIfTagged []string `json:"write_allow_if_tagged,omitempty"`
 
 	// Binary caches (internal, not serialized)
 	writeAllowBin              [][]byte
@@ -112,6 +115,7 @@ type AccessControl struct {
 	writeFollowsWhitelistBin   [][]byte
 	readFollowsFollowsBin      [][]byte
 	writeFollowsFollowsBin     [][]byte
+	writeAllowIfTaggedBin      [][]byte
 }
 
 // Constraints defines limits and restrictions on events.
@@ -190,7 +194,8 @@ func (r *Rule) hasAnyRules() bool {
 		len(r.readFollowsWhitelistBin) > 0 || len(r.writeFollowsWhitelistBin) > 0 ||
 		len(r.TagValidation) > 0 ||
 		r.ProtectedRequired || r.IdentifierRegex != "" ||
-		r.ReadAllowPermissive || r.WriteAllowPermissive
+		r.ReadAllowPermissive || r.WriteAllowPermissive ||
+		len(r.WriteAllowIfTagged) > 0 || len(r.writeAllowIfTaggedBin) > 0
 }
 
 // populateBinaryCache converts hex-encoded pubkey strings to binary for faster comparison.
@@ -310,6 +315,19 @@ func (r *Rule) populateBinaryCache() error {
 				continue
 			}
 			r.writeFollowsWhitelistBin = append(r.writeFollowsWhitelistBin, binPubkey)
+		}
+	}
+
+	// Convert WriteAllowIfTagged hex strings to binary
+	if len(r.WriteAllowIfTagged) > 0 {
+		r.writeAllowIfTaggedBin = make([][]byte, 0, len(r.WriteAllowIfTagged))
+		for _, hexPubkey := range r.WriteAllowIfTagged {
+			binPubkey, decErr := hex.Dec(hexPubkey)
+			if decErr != nil {
+				log.W.F("failed to decode WriteAllowIfTagged pubkey %q: %v", hexPubkey, decErr)
+				continue
+			}
+			r.writeAllowIfTaggedBin = append(r.writeAllowIfTaggedBin, binPubkey)
 		}
 	}
 
@@ -1855,7 +1873,8 @@ func (p *P) checkRulePolicy(
 
 		// Determine if any write whitelist restriction is active
 		// Note: Legacy FollowsWhitelistAdmins also counts as a write restriction for backward compatibility
-		hasWriteRestriction := hasWriteAllowList || hasWriteFollowsWhitelist || hasLegacyFollowsWhitelist
+		hasWriteIfTagged := len(rule.writeAllowIfTaggedBin) > 0 || len(rule.WriteAllowIfTagged) > 0
+		hasWriteRestriction := hasWriteAllowList || hasWriteFollowsWhitelist || hasLegacyFollowsWhitelist || hasWriteIfTagged
 
 		if hasWriteRestriction {
 			// User must pass one of the configured access methods
@@ -1864,6 +1883,23 @@ func (p *P) checkRulePolicy(
 			}
 			// User in WriteFollowsWhitelist was already checked in STEP 4
 			// User in legacy FollowsWhitelistAdmins was already checked in STEP 3
+
+			// Check write_allow_if_tagged: allow if event p-tags a listed pubkey
+			if hasWriteIfTagged {
+				pTags := ev.Tags.GetAll([]byte("p"))
+				for _, pTag := range pTags {
+					pt, decErr := hex.Dec(string(pTag.ValueHex()))
+					if decErr != nil {
+						continue
+					}
+					for _, allowed := range rule.writeAllowIfTaggedBin {
+						if utils.FastEqual(pt, allowed) {
+							return true, nil
+						}
+					}
+				}
+			}
+
 			// If we reach here with a write restriction, deny access
 			return false, nil
 		}

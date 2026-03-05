@@ -9,6 +9,7 @@ import { useUserPreferences } from '@/providers/UserPreferencesProvider'
 import { ChevronsLeft, ChevronsRight } from 'lucide-react'
 import AccountButton from './AccountButton'
 import BookmarkButton from './BookmarkButton'
+import ChatButton from './ChatButton'
 import HelpButton from './HelpButton'
 import HomeButton from './HomeButton'
 import InboxButton from './InboxButton'
@@ -61,13 +62,14 @@ export default function PrimaryPageSidebar() {
         <NotificationsButton collapse={isCollapsed} navIndex={1} />
         <SearchButton collapse={isCollapsed} navIndex={2} />
         {pubkey && <InboxButton collapse={isCollapsed} navIndex={3} />}
-        <ProfileButton collapse={isCollapsed} navIndex={pubkey ? 4 : 3} />
-        {pubkey && <BookmarkButton collapse={isCollapsed} navIndex={5} />}
-        <SettingsButton collapse={isCollapsed} navIndex={pubkey ? 6 : 4} />
-        <PostButton collapse={isCollapsed} navIndex={pubkey ? 7 : 5} />
+        {pubkey && <ChatButton collapse={isCollapsed} navIndex={4} />}
+        <ProfileButton collapse={isCollapsed} navIndex={pubkey ? 5 : 3} />
+        {pubkey && <BookmarkButton collapse={isCollapsed} navIndex={6} />}
+        <SettingsButton collapse={isCollapsed} navIndex={pubkey ? 7 : 4} />
+        <PostButton collapse={isCollapsed} navIndex={pubkey ? 8 : 5} />
       </div>
       <div className="space-y-4">
-        <HelpButton collapse={isCollapsed} navIndex={pubkey ? 8 : 6} />
+        <HelpButton collapse={isCollapsed} navIndex={pubkey ? 9 : 6} />
         <KeyboardModeButton collapse={isCollapsed} />
         <LayoutSwitcher collapse={isCollapsed} />
         <AccountButton collapse={isCollapsed} />

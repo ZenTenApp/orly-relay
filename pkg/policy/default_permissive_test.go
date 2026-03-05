@@ -684,3 +684,137 @@ func TestGetAllFollowsWhitelistPubkeysDP(t *testing.T) {
 		}
 	}
 }
+
+// TestWriteAllowIfTagged tests the write_allow_if_tagged field.
+func TestWriteAllowIfTagged(t *testing.T) {
+	// Group A: unrestricted writers
+	groupASigner, groupAPubkey := generateTestKeypair(t)
+	groupAHex := hex.Enc(groupAPubkey)
+
+	// Group B: can only write if they p-tag a Group A member
+	groupBSigner, groupBPubkey := generateTestKeypair(t)
+
+	// Random user: no special access
+	randomSigner, randomPubkey := generateTestKeypair(t)
+
+	policyJSON := []byte(`{
+		"default_policy": "deny",
+		"kind": { "whitelist": [1] },
+		"rules": {
+			"1": {
+				"description": "Group A writes freely, others must tag Group A",
+				"write_allow": ["` + groupAHex + `"],
+				"write_allow_if_tagged": ["` + groupAHex + `"]
+			}
+		}
+	}`)
+
+	pol, err := New(policyJSON)
+	if err != nil {
+		t.Fatalf("Failed to create policy: %v", err)
+	}
+
+	t.Run("group_A_writes_freely", func(t *testing.T) {
+		ev := createTestEvent(t, groupASigner, "hello", 1)
+		allowed, err := pol.CheckPolicy("write", ev, groupAPubkey, "127.0.0.1")
+		if err != nil {
+			t.Fatalf("CheckPolicy error: %v", err)
+		}
+		if !allowed {
+			t.Error("Group A pubkey should be allowed to write freely")
+		}
+	})
+
+	t.Run("group_B_with_p_tag_allowed", func(t *testing.T) {
+		ev := createTestEvent(t, groupBSigner, "replying to group A", 1)
+		addPTag(ev, groupAPubkey)
+		allowed, err := pol.CheckPolicy("write", ev, groupBPubkey, "127.0.0.1")
+		if err != nil {
+			t.Fatalf("CheckPolicy error: %v", err)
+		}
+		if !allowed {
+			t.Error("Group B pubkey with p-tag to Group A should be allowed")
+		}
+	})
+
+	t.Run("group_B_without_p_tag_denied", func(t *testing.T) {
+		ev := createTestEvent(t, groupBSigner, "no tag", 1)
+		allowed, err := pol.CheckPolicy("write", ev, groupBPubkey, "127.0.0.1")
+		if err != nil {
+			t.Fatalf("CheckPolicy error: %v", err)
+		}
+		if allowed {
+			t.Error("Group B pubkey without p-tag should be denied")
+		}
+	})
+
+	t.Run("random_user_with_p_tag_allowed", func(t *testing.T) {
+		ev := createTestEvent(t, randomSigner, "mentioning group A", 1)
+		addPTag(ev, groupAPubkey)
+		allowed, err := pol.CheckPolicy("write", ev, randomPubkey, "127.0.0.1")
+		if err != nil {
+			t.Fatalf("CheckPolicy error: %v", err)
+		}
+		if !allowed {
+			t.Error("Random user with p-tag to Group A should be allowed")
+		}
+	})
+
+	t.Run("random_user_without_p_tag_denied", func(t *testing.T) {
+		ev := createTestEvent(t, randomSigner, "no tag", 1)
+		allowed, err := pol.CheckPolicy("write", ev, randomPubkey, "127.0.0.1")
+		if err != nil {
+			t.Fatalf("CheckPolicy error: %v", err)
+		}
+		if allowed {
+			t.Error("Random user without p-tag should be denied")
+		}
+	})
+}
+
+// TestWriteAllowIfTaggedStandalone tests write_allow_if_tagged without write_allow.
+func TestWriteAllowIfTaggedStandalone(t *testing.T) {
+	_, gatePubkey := generateTestKeypair(t)
+	gateHex := hex.Enc(gatePubkey)
+
+	writerSigner, writerPubkey := generateTestKeypair(t)
+
+	policyJSON := []byte(`{
+		"default_policy": "deny",
+		"kind": { "whitelist": [1] },
+		"rules": {
+			"1": {
+				"description": "Anyone can write if they tag the gate pubkey",
+				"write_allow_if_tagged": ["` + gateHex + `"]
+			}
+		}
+	}`)
+
+	pol, err := New(policyJSON)
+	if err != nil {
+		t.Fatalf("Failed to create policy: %v", err)
+	}
+
+	t.Run("with_tag_allowed", func(t *testing.T) {
+		ev := createTestEvent(t, writerSigner, "tagged", 1)
+		addPTag(ev, gatePubkey)
+		allowed, err := pol.CheckPolicy("write", ev, writerPubkey, "127.0.0.1")
+		if err != nil {
+			t.Fatalf("CheckPolicy error: %v", err)
+		}
+		if !allowed {
+			t.Error("Should be allowed when tagging gate pubkey")
+		}
+	})
+
+	t.Run("without_tag_denied", func(t *testing.T) {
+		ev := createTestEvent(t, writerSigner, "no tag", 1)
+		allowed, err := pol.CheckPolicy("write", ev, writerPubkey, "127.0.0.1")
+		if err != nil {
+			t.Fatalf("CheckPolicy error: %v", err)
+		}
+		if allowed {
+			t.Error("Should be denied without tagging gate pubkey")
+		}
+	})
+}

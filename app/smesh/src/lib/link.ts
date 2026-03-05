@@ -89,6 +89,7 @@ export const toChachiChat = (relay: string, d: string) => {
 export const toNjump = (id: string) => `https://njump.me/${id}`
 export const toLogin = () => '/login'
 export const toLogout = () => '/logout'
+export const toChatChannel = (channelId: string) => `/chat/${channelId}`
 export const toDMConversation = (pubkey: string) => {
   const npub = pubkey.startsWith('npub') ? pubkey : nip19.npubEncode(pubkey)
   return `/dm/${npub}`

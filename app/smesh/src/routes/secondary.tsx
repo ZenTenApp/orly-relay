@@ -1,3 +1,4 @@
+import ChatChannelPage from '@/pages/secondary/ChatChannelPage'
 import AppearanceSettingsPage from '@/pages/secondary/AppearanceSettingsPage'
 import BookmarkPage from '@/pages/secondary/BookmarkPage'
 import DMConversationPage from '@/pages/secondary/DMConversationPage'
@@ -56,7 +57,8 @@ const SECONDARY_ROUTE_CONFIGS = [
   { path: '/rizful', element: <RizfulPage /> },
   { path: '/bookmarks', element: <BookmarkPage /> },
   { path: '/dm/:pubkey', element: <DMConversationPage /> },
-  { path: '/follow-packs/:id', element: <FollowPackPage /> }
+  { path: '/follow-packs/:id', element: <FollowPackPage /> },
+  { path: '/chat/:channelId', element: <ChatChannelPage /> }
 ]
 
 export const SECONDARY_ROUTES = SECONDARY_ROUTE_CONFIGS.map(({ path, element }) => ({
