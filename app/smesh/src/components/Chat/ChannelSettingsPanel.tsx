@@ -1,5 +1,6 @@
 import { useChat } from '@/providers/ChatProvider'
 import { useNostr } from '@/providers/NostrProvider'
+import { useFetchProfile } from '@/hooks/useFetchProfile'
 import { Pubkey } from '@/domain'
 import {
   Lock,
@@ -50,11 +51,6 @@ export default function ChannelSettingsPanel({ onClose }: { onClose: () => void 
       await approveMember(hexPk)
     }
     setAddInput('')
-  }
-
-  const formatPk = (hex: string) => {
-    const pk = Pubkey.tryFromString(hex)
-    return pk?.formatNpub(8) ?? hex.slice(0, 12)
   }
 
   return (
@@ -145,7 +141,7 @@ export default function ChannelSettingsPanel({ onClose }: { onClose: () => void 
           {channelMods.map((pk) => (
             <div key={pk} className="flex items-center justify-between text-xs py-0.5">
               <span className="font-mono">
-                {formatPk(pk)}
+                <PubkeyName hex={pk} />
                 {pk === currentChannel.creator && (
                   <span className="text-muted-foreground ml-1">(owner)</span>
                 )}
@@ -170,7 +166,7 @@ export default function ChannelSettingsPanel({ onClose }: { onClose: () => void 
           <span className="text-xs text-muted-foreground font-medium">Members</span>
           {channelMembers.map((pk) => (
             <div key={pk} className="flex items-center justify-between text-xs py-0.5">
-              <span className="font-mono">{formatPk(pk)}</span>
+              <span className="font-mono"><PubkeyName hex={pk} /></span>
               <button
                 onClick={() => removeMember(pk)}
                 className="text-muted-foreground hover:text-destructive"
@@ -189,7 +185,7 @@ export default function ChannelSettingsPanel({ onClose }: { onClose: () => void 
           <span className="text-xs text-muted-foreground font-medium">Blocked</span>
           {channelBlocked.map((pk) => (
             <div key={pk} className="flex items-center justify-between text-xs py-0.5">
-              <span className="font-mono text-destructive">{formatPk(pk)}</span>
+              <span className="font-mono text-destructive"><PubkeyName hex={pk} /></span>
               <button
                 onClick={() => unblockUser(pk)}
                 className="text-muted-foreground hover:text-foreground"
@@ -203,4 +199,10 @@ export default function ChannelSettingsPanel({ onClose }: { onClose: () => void 
       )}
     </div>
   )
+}
+
+function PubkeyName({ hex }: { hex: string }) {
+  const { profile } = useFetchProfile(hex)
+  const pk = Pubkey.tryFromString(hex)
+  return <>{profile?.username || pk?.formatNpub(8) || hex.slice(0, 12)}</>
 }

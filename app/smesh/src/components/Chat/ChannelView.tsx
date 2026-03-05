@@ -1,5 +1,6 @@
 import { useChat } from '@/providers/ChatProvider'
 import { useNostr } from '@/providers/NostrProvider'
+import { useFetchProfile } from '@/hooks/useFetchProfile'
 import { cn, isTouchDevice } from '@/lib/utils'
 import { Pubkey } from '@/domain'
 import {
@@ -256,8 +257,9 @@ function ChatMessage({
   showModActions: boolean
 }) {
   const { hideMessage, blockUser } = useChat()
+  const { profile } = useFetchProfile(msg.pubkey)
   const pk = Pubkey.tryFromString(msg.pubkey)
-  const displayName = pk?.formatNpub(8) ?? msg.pubkey.slice(0, 12)
+  const displayName = profile?.username || pk?.formatNpub(8) || msg.pubkey.slice(0, 12)
   const time = dayjs.unix(msg.createdAt).format('HH:mm')
 
   return (
