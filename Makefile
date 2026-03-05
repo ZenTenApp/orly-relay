@@ -8,6 +8,7 @@
 .PHONY: upgrade upgrade-dry-run upgrade-no-restart upgrade-build
 .PHONY: orly-unified arm64-unified
 .PHONY: launcher-web orly-launcher-no-web
+.PHONY: build build-web build-smesh
 
 # Build flags
 CGO_ENABLED ?= 0
@@ -20,6 +21,20 @@ GOBIN ?= $(shell go env GOBIN)
 ifeq ($(GOBIN),)
 	GOBIN = $(shell go env GOPATH)/bin
 endif
+
+# === Frontend + Go Build ===
+
+# Build everything: both frontends then unified Go binary
+build: build-web build-smesh orly-unified
+	@echo "Build complete: web UI + smesh + unified binary"
+
+# Build relay dashboard (Svelte/Rollup)
+build-web:
+	cd app/web && bun install && bun run build
+
+# Build smesh client (React/Vite)
+build-smesh:
+	cd app/smesh && bun install && bun run build
 
 # === Default Targets (Legacy) ===
 
@@ -123,9 +138,8 @@ arm64-backends:
 
 # === Other Targets ===
 
-# Build web UI and embed
-web:
-	./scripts/update-embedded-web.sh
+# Build web UI and embed (alias for build)
+web: build-web build-smesh
 
 # Clean build artifacts (note: binaries are in GOBIN)
 clean:
@@ -238,12 +252,17 @@ help:
 	@echo "    orly-db        - Build monolithic database server"
 	@echo "    orly-acl       - Build monolithic ACL server"
 	@echo ""
+	@echo "  Build (Frontend + Go):"
+	@echo "    build             - Build web + smesh frontends then unified Go binary"
+	@echo "    build-web         - Build relay dashboard (Svelte/Rollup) to app/web/dist"
+	@echo "    build-smesh       - Build smesh client (React/Vite) to app/smesh/dist"
+	@echo ""
 	@echo "  Core:"
 	@echo "    orly              - Build main relay binary"
 	@echo "    orly-launcher     - Build process supervisor with admin UI"
 	@echo "    orly-launcher-no-web - Build launcher without admin UI"
 	@echo "    proto             - Generate protobuf code"
-	@echo "    web               - Rebuild main embedded web UI"
+	@echo "    web               - Rebuild both embedded web UIs (alias for build-web + build-smesh)"
 	@echo "    launcher-web      - Rebuild launcher admin web UI"
 	@echo "    test              - Run test suite"
 	@echo "    clean             - Clean build artifacts"

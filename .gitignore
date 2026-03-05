@@ -77,6 +77,8 @@ cmd/benchmark/data
 !*.tsx
 !bun.lock
 !*.svelte
+!*.svg
+!*.webmanifest
 !.github/**
 !.github/workflows/**
 !.claude/**
