@@ -12,6 +12,14 @@ import client from './client.service'
 import indexedDb from './indexed-db.service'
 import storage from './local-storage.service'
 
+/** Check if a DM is an NIRC protocol message that should be hidden from the inbox */
+export function isNircProtocolMessage(content: string): boolean {
+  if (!content) return false
+  if (content.startsWith('nirc:request:')) return true
+  if (content.startsWith('nirc:')) return true
+  return false
+}
+
 // In-memory plaintext cache for fast access (avoids async IndexedDB lookups on re-render)
 const plaintextCache = new Map<string, string>()
 const MAX_CACHE_SIZE = 1000
@@ -820,6 +828,9 @@ class DMService {
     const conversations = new Map<string, TConversation>()
 
     for (const message of messages) {
+      // Skip NIRC protocol messages (access requests, invites, etc.)
+      if (isNircProtocolMessage(message.content ?? '')) continue
+
       const partnerPubkey =
         message.senderPubkey === myPubkey ? message.recipientPubkey : message.senderPubkey
 

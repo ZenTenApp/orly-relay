@@ -6,7 +6,8 @@ import dmService, {
   getGlobalDeleteCutoff,
   IDMEncryption,
   isConversationDeleted,
-  isMessageDeleted
+  isMessageDeleted,
+  isNircProtocolMessage
 } from '@/services/dm.service'
 import indexedDb from '@/services/indexed-db.service'
 import storage, { dispatchSettingsChanged } from '@/services/local-storage.service'
@@ -314,6 +315,7 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
             // Filter to only messages in this conversation (excluding deleted and duplicates)
             const validMessages = batchMessages.filter((message) => {
               if (seenIds.has(message.id)) return false
+              if (isNircProtocolMessage(message.content ?? '')) return false
               const partner =
                 message.senderPubkey === pubkey ? message.recipientPubkey : message.senderPubkey
               if (partner !== targetConversation) return false
@@ -430,6 +432,7 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
               message.senderPubkey === pubkey ? message.recipientPubkey : message.senderPubkey
 
             if (!partnerPubkey || partnerPubkey === '__reaction__') continue
+            if (isNircProtocolMessage(message.content ?? '')) continue
 
             const existing = conversationMap.get(partnerPubkey)
             if (!existing || message.createdAt > existing.lastMessageAt) {
@@ -538,6 +541,7 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
               message.senderPubkey === pubkey ? message.recipientPubkey : message.senderPubkey
 
             if (!partnerPubkey || partnerPubkey === '__reaction__') continue
+            if (isNircProtocolMessage(message.content ?? '')) continue
 
             const existing = conversationMap.get(partnerPubkey)
             if (!existing || message.createdAt > existing.lastMessageAt) {

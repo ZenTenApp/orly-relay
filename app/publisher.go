@@ -191,8 +191,9 @@ func (p *P) Deliver(ev *event.E) {
 	for _, d := range deliveries {
 		// If the event is privileged, enforce that the subscriber's authed pubkey matches
 		// either the event pubkey or appears in any 'p' tag of the event.
-		// Only check authentication if AuthRequired is true (ACL is active)
-		if kind.IsPrivileged(ev.Kind) && d.sub.AuthRequired {
+		// Channel kinds always require auth check; other privileged kinds only when ACL is active.
+		isChannel := kind.IsChannelKind(ev.Kind)
+		if kind.IsPrivileged(ev.Kind) && (d.sub.AuthRequired || isChannel) {
 			pk := d.sub.AuthedPubkey
 
 			// Channel kinds (40-44) use channel membership instead of p-tag involvement

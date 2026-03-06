@@ -215,6 +215,39 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		}
 	}
 
+	// Non-discoverable channel kinds (42-44) always require authentication regardless of ACL mode.
+	// Kinds 40 (create) and 41 (metadata) are discoverable and don't require auth.
+	if len(l.authedPubkey.Load()) == 0 {
+		hasRestrictedChannelKinds := false
+		for _, f := range *env.Filters {
+			if f != nil && f.Kinds != nil {
+				for _, k := range f.Kinds.K {
+					if kind.IsChannelKind(k.K) && !kind.IsDiscoverableChannelKind(k.K) {
+						hasRestrictedChannelKinds = true
+						break
+					}
+				}
+			}
+			if hasRestrictedChannelKinds {
+				break
+			}
+		}
+		if hasRestrictedChannelKinds {
+			// Send AUTH challenge so client can authenticate
+			if err = authenvelope.NewChallengeWith(l.challenge.Load()).
+				Write(l); chk.E(err) {
+				return
+			}
+			if err = closedenvelope.NewFrom(
+				env.Subscription,
+				reason.AuthRequired.F("authentication required for channel access"),
+			).Write(l); chk.E(err) {
+				return
+			}
+			return
+		}
+	}
+
 	// Handle NIP-43 invite request (kind 28935) - ephemeral event
 	// Check if any filter requests kind 28935
 	for _, f := range *env.Filters {
@@ -563,12 +596,13 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 			// Event has private tag and user is authorized - continue to privileged check
 		}
 
-		// Filter privileged events based on kind when ACL is active
-		// When ACL is "none", skip privileged filtering to allow open access
-		// Privileged events should only be sent to users who are authenticated and
-		// are either the event author or listed in p tags
+		// Filter privileged events based on kind
+		// Non-discoverable channel kinds (42-44) always require AUTH and membership checks.
+		// Discoverable channel kinds (40, 41) pass through without auth (needed for channel list).
+		// Other privileged kinds only filter when ACL is active.
 		aclActive := acl.Registry.GetMode() != "none"
-		if kind.IsPrivileged(ev.Kind) && aclActive && accessLevel != "admin" { // admins can see all events
+		isRestrictedChannel := kind.IsChannelKind(ev.Kind) && !kind.IsDiscoverableChannelKind(ev.Kind)
+		if kind.IsPrivileged(ev.Kind) && (aclActive || isRestrictedChannel) && accessLevel != "admin" {
 			log.T.C(
 				func() string {
 					return fmt.Sprintf(
@@ -928,8 +962,24 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		l.subscriptionsMu.Unlock()
 
 		// Register subscription with publisher
-		// Set AuthRequired based on ACL mode - when ACL is "none", don't require auth for privileged events
+		// AuthRequired is set when ACL is active OR when the subscription includes
+		// non-discoverable channel kinds (42-44 require auth regardless of ACL mode)
 		authRequired := acl.Registry.GetMode() != "none"
+		if !authRequired {
+			for _, f := range subbedFilters {
+				if f != nil && f.Kinds != nil {
+					for _, k := range f.Kinds.K {
+						if kind.IsChannelKind(k.K) && !kind.IsDiscoverableChannelKind(k.K) {
+							authRequired = true
+							break
+						}
+					}
+				}
+				if authRequired {
+					break
+				}
+			}
+		}
 		l.publishers.Receive(
 			&W{
 				Conn:         l.conn,

@@ -207,8 +207,9 @@ whitelist:
 	chal := make([]byte, 32)
 	rand.Read(chal)
 	listener.challenge.Store([]byte(hex.Enc(chal)))
-	// Send AUTH challenge if ACL mode requires it, or if auth is required/required for writes
-	if s.Config.ACLMode != "none" || s.Config.AuthRequired || s.Config.AuthToWrite {
+	// Always send AUTH challenge - channel kinds (40-44) require authentication
+	// regardless of ACL mode, and NIP-42 AUTH is harmless for clients that don't need it
+	{
 		log.D.F("sending AUTH challenge to %s", remote)
 		if err = authenvelope.NewChallengeWith(listener.challenge.Load()).
 			Write(listener); chk.E(err) {

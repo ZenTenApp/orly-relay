@@ -145,11 +145,12 @@ func (l *Listener) handleSpecialKinds(env *eventenvelope.Submission) (bool, erro
 	}
 
 	// Enforce channel membership for write operations on kinds 42-44
+	// Channel kinds always require membership check regardless of ACL mode
 	if kind.IsChannelKind(env.E.Kind) && !kind.IsDiscoverableChannelKind(env.E.Kind) {
 		if l.channelMembership != nil {
-			authedPk := l.authedPubkey.Load()
-			if !l.channelMembership.IsChannelMember(env.E, authedPk, l.ctx) {
-				log.D.F("HandleEvent: channel write denied for pubkey %s (not a member)", hex.Enc(authedPk))
+			// Use the event's author pubkey (already signature-verified) for membership check
+			if !l.channelMembership.IsChannelMember(env.E, env.E.Pubkey, l.ctx) {
+				log.D.F("HandleEvent: channel write denied for pubkey %s (not a member)", hex.Enc(env.E.Pubkey))
 				if err := Ok.Blocked(l, env, "restricted: not a channel member"); chk.E(err) {
 					return true, err
 				}
