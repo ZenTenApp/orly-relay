@@ -1,4 +1,9 @@
-import chatService, { TChannel, TChannelMessage } from '@/services/chat.service'
+import chatService, {
+  TAccessMode,
+  TChannel,
+  TChannelMessage,
+  TMemberEntry
+} from '@/services/chat.service'
 import client from '@/services/client.service'
 import { useNostr } from '@/providers/NostrProvider'
 import {
@@ -51,7 +56,7 @@ type TChatContext = {
   selectChannel: (channel: TChannel | null) => void
   selectChannelById: (channelId: string | null) => void
   sendMessage: (content: string) => Promise<void>
-  createChannel: (name: string, about: string) => Promise<void>
+  createChannel: (name: string, about: string, accessMode?: TAccessMode) => Promise<void>
   refreshChannels: () => Promise<void>
   loadMoreMessages: () => Promise<void>
   // Notifications
@@ -62,10 +67,15 @@ type TChatContext = {
   toggleMuteChannel: (channelId: string) => void
   // Moderation
   channelMods: string[]
-  channelMembers: string[]
-  channelBlocked: string[]
+  channelMembers: TMemberEntry[]
+  channelBlocked: TMemberEntry[]
+  channelInvited: TMemberEntry[]
+  channelRequested: string[]
+  channelRejected: string[]
+  channelAccessMode: TAccessMode
   hiddenMessages: Set<string>
   isOwnerOrMod: boolean
+  isMember: boolean
   addMod: (pubkey: string) => Promise<void>
   removeMod: (pubkey: string) => Promise<void>
   approveMember: (pubkey: string) => Promise<void>
@@ -73,7 +83,14 @@ type TChatContext = {
   hideMessage: (messageId: string) => Promise<void>
   blockUser: (pubkey: string) => Promise<void>
   unblockUser: (pubkey: string) => Promise<void>
-  updateChannelSettings: (inviteOnly: boolean) => Promise<void>
+  updateAccessMode: (mode: TAccessMode) => Promise<void>
+  sendInvite: (pubkey: string) => Promise<void>
+  revokeInvite: (pubkey: string) => Promise<void>
+  acceptRequest: (pubkey: string) => Promise<void>
+  rejectRequest: (pubkey: string) => Promise<void>
+  revokeRejection: (pubkey: string) => Promise<void>
+  // Participants (for @ mentions and member list)
+  channelParticipants: string[]
 }
 
 const ChatContext = createContext<TChatContext | undefined>(undefined)
@@ -105,8 +122,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   // Moderation state (for current channel)
   const [channelMods, setChannelMods] = useState<string[]>([])
-  const [channelMembers, setChannelMembers] = useState<string[]>([])
-  const [channelBlocked, setChannelBlocked] = useState<string[]>([])
+  const [channelMembers, setChannelMembers] = useState<TMemberEntry[]>([])
+  const [channelBlocked, setChannelBlocked] = useState<TMemberEntry[]>([])
+  const [channelInvited, setChannelInvited] = useState<TMemberEntry[]>([])
+  const [channelRequested, setChannelRequested] = useState<string[]>([])
+  const [channelRejected, setChannelRejected] = useState<string[]>([])
+  const [channelAccessMode, setChannelAccessMode] = useState<TAccessMode>('whitelist')
   const [hiddenMessages, setHiddenMessages] = useState<Set<string>>(new Set())
 
   // Keep ref in sync
@@ -117,7 +138,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   // Load notification prefs from localStorage on login
   useEffect(() => {
     if (!pubkey) return
-    loadJsonMap(`nirc:lastSeen:${pubkey}`) // Warm localStorage, used by markChannelAsSeen
+    loadJsonMap(`nirc:lastSeen:${pubkey}`)
     setMutedChannels(loadStringSet(`nirc:muted:${pubkey}`))
   }, [pubkey])
 
@@ -126,6 +147,34 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     if (currentChannel.creator === pubkey) return true
     return channelMods.includes(pubkey)
   }, [pubkey, currentChannel, channelMods])
+
+  const isMember = useMemo(() => {
+    if (!pubkey || !currentChannel) return false
+    if (channelAccessMode === 'open') return true
+    if (currentChannel.creator === pubkey) return true
+    if (channelMods.includes(pubkey)) return true
+    if (channelAccessMode === 'whitelist') {
+      return (
+        channelMembers.some((m) => m.pubkey === pubkey) ||
+        channelInvited.some((m) => m.pubkey === pubkey)
+      )
+    }
+    if (channelAccessMode === 'blacklist') {
+      return !channelBlocked.some((m) => m.pubkey === pubkey)
+    }
+    return false
+  }, [pubkey, currentChannel, channelAccessMode, channelMods, channelMembers, channelInvited, channelBlocked])
+
+  // Collect unique participants from messages + member list for @ mentions
+  const channelParticipants = useMemo(() => {
+    const pks = new Set<string>()
+    for (const msg of messages) pks.add(msg.pubkey)
+    for (const m of channelMembers) pks.add(m.pubkey)
+    for (const m of channelInvited) pks.add(m.pubkey)
+    for (const pk of channelMods) pks.add(pk)
+    if (currentChannel) pks.add(currentChannel.creator)
+    return [...pks]
+  }, [messages, channelMembers, channelInvited, channelMods, currentChannel])
 
   const hasUnreadChannels = useMemo(() => {
     return Object.entries(unreadCounts).some(
@@ -188,20 +237,32 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       const meta = await chatService.fetchChannelMeta(relayUrl, channel.id)
       const ownerPk = channel.creator
       let mods: string[] = []
-      let members: string[] = []
-      let blocked: string[] = []
+      let members: TMemberEntry[] = []
+      let blocked: TMemberEntry[] = []
+      let invited: TMemberEntry[] = []
+      let requested: string[] = []
+      let rejected: string[] = []
+      let accessMode: TAccessMode = channel.accessMode
       if (meta) {
         mods = meta.mods
         members = meta.members
         blocked = meta.blocked
-        // Update channel's inviteOnly from latest metadata
-        channel.inviteOnly = meta.inviteOnly
+        invited = meta.invited
+        requested = meta.requested
+        rejected = meta.rejected
+        accessMode = meta.accessMode
+        // Update channel's accessMode from latest metadata
+        channel.accessMode = accessMode
       }
       // Owner is always a mod
       if (!mods.includes(ownerPk)) mods = [ownerPk, ...mods]
       setChannelMods(mods)
       setChannelMembers(members)
       setChannelBlocked(blocked)
+      setChannelInvited(invited)
+      setChannelRequested(requested)
+      setChannelRejected(rejected)
+      setChannelAccessMode(accessMode)
 
       // Fetch hidden messages and blocked users from mod actions
       const allMods = mods
@@ -211,8 +272,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       const blockedFromActions = await chatService.fetchBlockedUsers(relayUrl, channel.id, allMods)
       if (blockedFromActions.size > 0) {
         setChannelBlocked((prev) => {
-          const combined = new Set([...prev, ...blockedFromActions])
-          return [...combined]
+          const existingPks = new Set(prev.map((e) => e.pubkey))
+          const newEntries = [...blockedFromActions]
+            .filter((pk) => !existingPks.has(pk))
+            .map((pk) => ({ pubkey: pk, addedBy: '' }))
+          return [...prev, ...newEntries]
         })
       }
     },
@@ -221,7 +285,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const selectChannel = useCallback(
     async (channel: TChannel | null) => {
-      // Close previous subscription
       subCloserRef.current?.close()
       subCloserRef.current = null
       seenIdsRef.current.clear()
@@ -231,16 +294,18 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setChannelMods([])
       setChannelMembers([])
       setChannelBlocked([])
+      setChannelInvited([])
+      setChannelRequested([])
+      setChannelRejected([])
+      setChannelAccessMode('whitelist')
       setHiddenMessages(new Set())
 
       if (!channel) return
 
-      // Mark as seen
       markChannelAsSeen(channel.id)
 
       setIsLoadingMessages(true)
       try {
-        // Load messages and mod state in parallel
         const [msgs] = await Promise.all([
           chatService.fetchMessages(relayUrl, channel.id),
           loadModState(channel)
@@ -251,7 +316,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setIsLoadingMessages(false)
       }
 
-      // Subscribe for new messages
       subCloserRef.current = chatService.subscribeMessages(
         relayUrl,
         channel.id,
@@ -265,17 +329,35 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     [relayUrl, markChannelAsSeen, loadModState]
   )
 
+  const pendingChannelIdRef = useRef<string | null>(null)
+
   const selectChannelById = useCallback(
     (channelId: string | null) => {
       if (!channelId) {
+        pendingChannelIdRef.current = null
         selectChannel(null)
         return
       }
       const ch = channels.find((c) => c.id === channelId)
-      if (ch) selectChannel(ch)
+      if (ch) {
+        pendingChannelIdRef.current = null
+        selectChannel(ch)
+      } else {
+        pendingChannelIdRef.current = channelId
+      }
     },
     [channels, selectChannel]
   )
+
+  useEffect(() => {
+    if (pendingChannelIdRef.current && channels.length > 0) {
+      const ch = channels.find((c) => c.id === pendingChannelIdRef.current)
+      if (ch) {
+        pendingChannelIdRef.current = null
+        selectChannel(ch)
+      }
+    }
+  }, [channels, selectChannel])
 
   // Cleanup subscription on unmount
   useEffect(() => {
@@ -290,7 +372,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     const channelIds = channels.map((ch) => ch.id)
 
-    // Subscribe to all channel messages for unread tracking
     const globalSub = client.subscribe(
       [relayUrl],
       {
@@ -300,15 +381,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       },
       {
         onevent: (event: any) => {
-          if (event.pubkey === pubkey) return // Own messages don't count
+          if (event.pubkey === pubkey) return
           const eTag = event.tags?.find(
             (t: string[]) => t[0] === 'e' && (t[3] === 'root' || t.length === 2)
           )
           if (!eTag) return
           const chId = eTag[1]
-          // Don't increment if this is the currently viewed channel
           if (currentChannelRef.current?.id === chId) return
-          // Don't increment if muted
           if (mutedChannels.has(chId)) return
 
           setUnreadCounts((prev) => ({
@@ -335,9 +414,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   )
 
   const createChannel = useCallback(
-    async (name: string, about: string) => {
+    async (name: string, about: string, accessMode: TAccessMode = 'whitelist') => {
       if (!pubkey) return
-      const draft = chatService.createChannelDraft(name, about)
+      const draft = chatService.createChannelDraft(name, about, accessMode)
       const signed = await signEvent(draft)
       await client.publishEvent([relayUrl], signed)
       await refreshChannels()
@@ -363,66 +442,83 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const publishMetadataUpdate = useCallback(
     async (
       mods: string[],
-      members: string[],
-      blocked: string[],
-      inviteOnly?: boolean
+      members: TMemberEntry[],
+      blocked: TMemberEntry[],
+      invited: TMemberEntry[],
+      requested: string[],
+      rejected: string[],
+      accessMode?: TAccessMode
     ) => {
       if (!currentChannel || !pubkey) return
       const meta: Record<string, unknown> = {
         name: currentChannel.name,
-        about: currentChannel.about
+        about: currentChannel.about,
+        access_mode: accessMode ?? channelAccessMode
       }
-      if (inviteOnly !== undefined) meta.invite_only = inviteOnly
-      else meta.invite_only = currentChannel.inviteOnly
 
       const draft = chatService.createMetadataUpdateDraft(
         currentChannel.id,
         relayUrl,
         meta as any,
-        mods.filter((pk) => pk !== currentChannel.creator), // Don't list owner as mod in tags
+        mods.filter((pk) => pk !== currentChannel.creator),
         members,
-        blocked
+        blocked,
+        invited,
+        requested,
+        rejected
       )
       const signed = await signEvent(draft)
       await client.publishEvent([relayUrl], signed)
     },
-    [currentChannel, relayUrl, pubkey, signEvent]
+    [currentChannel, relayUrl, pubkey, signEvent, channelAccessMode]
   )
 
   const addMod = useCallback(
     async (pk: string) => {
       const newMods = [...channelMods, pk]
       setChannelMods(newMods)
-      await publishMetadataUpdate(newMods, channelMembers, channelBlocked)
+      await publishMetadataUpdate(newMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected)
     },
-    [channelMods, channelMembers, channelBlocked, publishMetadataUpdate]
+    [channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected, publishMetadataUpdate]
   )
 
   const removeMod = useCallback(
     async (pk: string) => {
+      // Cascade: remove all members/blocked/invited that this mod added
       const newMods = channelMods.filter((m) => m !== pk)
+      const newMembers = channelMembers.filter((m) => m.addedBy !== pk)
+      const newBlocked = channelBlocked.filter((m) => m.addedBy !== pk)
+      const newInvited = channelInvited.filter((m) => m.addedBy !== pk)
       setChannelMods(newMods)
-      await publishMetadataUpdate(newMods, channelMembers, channelBlocked)
+      setChannelMembers(newMembers)
+      setChannelBlocked(newBlocked)
+      setChannelInvited(newInvited)
+      await publishMetadataUpdate(newMods, newMembers, newBlocked, newInvited, channelRequested, channelRejected)
     },
-    [channelMods, channelMembers, channelBlocked, publishMetadataUpdate]
+    [channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected, publishMetadataUpdate]
   )
 
   const approveMember = useCallback(
     async (pk: string) => {
-      const newMembers = [...channelMembers, pk]
+      if (!pubkey) return
+      const entry: TMemberEntry = { pubkey: pk, addedBy: pubkey }
+      const newMembers = [...channelMembers, entry]
+      // Remove from requested if present
+      const newRequested = channelRequested.filter((r) => r !== pk)
       setChannelMembers(newMembers)
-      await publishMetadataUpdate(channelMods, newMembers, channelBlocked)
+      setChannelRequested(newRequested)
+      await publishMetadataUpdate(channelMods, newMembers, channelBlocked, channelInvited, newRequested, channelRejected)
     },
-    [channelMods, channelMembers, channelBlocked, publishMetadataUpdate]
+    [pubkey, channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected, publishMetadataUpdate]
   )
 
   const removeMember = useCallback(
     async (pk: string) => {
-      const newMembers = channelMembers.filter((m) => m !== pk)
+      const newMembers = channelMembers.filter((m) => m.pubkey !== pk)
       setChannelMembers(newMembers)
-      await publishMetadataUpdate(channelMods, newMembers, channelBlocked)
+      await publishMetadataUpdate(channelMods, newMembers, channelBlocked, channelInvited, channelRequested, channelRejected)
     },
-    [channelMods, channelMembers, channelBlocked, publishMetadataUpdate]
+    [channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected, publishMetadataUpdate]
   )
 
   const hideMessage = useCallback(
@@ -446,31 +542,97 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       )
       const signed = await signEvent(draft)
       await client.publishEvent([relayUrl], signed)
-      setChannelBlocked((prev) => [...prev, targetPubkey])
+      const entry: TMemberEntry = { pubkey: targetPubkey, addedBy: pubkey }
+      setChannelBlocked((prev) => [...prev, entry])
     },
     [currentChannel, relayUrl, pubkey, signEvent]
   )
 
   const unblockUser = useCallback(
     async (targetPubkey: string) => {
-      const newBlocked = channelBlocked.filter((pk) => pk !== targetPubkey)
+      const newBlocked = channelBlocked.filter((e) => e.pubkey !== targetPubkey)
       setChannelBlocked(newBlocked)
-      await publishMetadataUpdate(channelMods, channelMembers, newBlocked)
+      await publishMetadataUpdate(channelMods, channelMembers, newBlocked, channelInvited, channelRequested, channelRejected)
     },
-    [channelMods, channelMembers, channelBlocked, publishMetadataUpdate]
+    [channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected, publishMetadataUpdate]
   )
 
-  const updateChannelSettings = useCallback(
-    async (inviteOnly: boolean) => {
-      await publishMetadataUpdate(channelMods, channelMembers, channelBlocked, inviteOnly)
-      setCurrentChannel((prev) => (prev ? { ...prev, inviteOnly } : null))
+  const updateAccessMode = useCallback(
+    async (mode: TAccessMode) => {
+      setChannelAccessMode(mode)
+      setCurrentChannel((prev) => (prev ? { ...prev, accessMode: mode } : null))
+      await publishMetadataUpdate(channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected, mode)
     },
-    [channelMods, channelMembers, channelBlocked, publishMetadataUpdate]
+    [channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected, publishMetadataUpdate]
+  )
+
+  const sendInvite = useCallback(
+    async (targetPubkey: string) => {
+      if (!currentChannel || !pubkey) return
+      const entry: TMemberEntry = { pubkey: targetPubkey, addedBy: pubkey }
+      const newInvited = [...channelInvited, entry]
+      setChannelInvited(newInvited)
+      await publishMetadataUpdate(channelMods, channelMembers, channelBlocked, newInvited, channelRequested, channelRejected)
+
+      // Send DM with channel link
+      const link = `https://smesh.mleku.dev/#/chat/${currentChannel.id}`
+      const dmContent = `You've been invited to #${currentChannel.name} on NIRC:\n${link}`
+      const dmDraft = {
+        kind: 4,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [['p', targetPubkey]],
+        content: dmContent
+      }
+      try {
+        const signed = await signEvent(dmDraft)
+        await client.publishEvent([relayUrl], signed)
+      } catch {
+        // DM send failure is non-fatal — invite is already in metadata
+      }
+    },
+    [currentChannel, pubkey, channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected, publishMetadataUpdate, signEvent, relayUrl]
+  )
+
+  const revokeInvite = useCallback(
+    async (targetPubkey: string) => {
+      const newInvited = channelInvited.filter((e) => e.pubkey !== targetPubkey)
+      setChannelInvited(newInvited)
+      await publishMetadataUpdate(channelMods, channelMembers, channelBlocked, newInvited, channelRequested, channelRejected)
+    },
+    [channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected, publishMetadataUpdate]
+  )
+
+  const acceptRequest = useCallback(
+    async (pk: string) => {
+      // Move from requested to member
+      await approveMember(pk)
+    },
+    [approveMember]
+  )
+
+  const rejectRequest = useCallback(
+    async (pk: string) => {
+      const newRequested = channelRequested.filter((r) => r !== pk)
+      const newRejected = [...channelRejected, pk]
+      setChannelRequested(newRequested)
+      setChannelRejected(newRejected)
+      await publishMetadataUpdate(channelMods, channelMembers, channelBlocked, channelInvited, newRequested, newRejected)
+    },
+    [channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected, publishMetadataUpdate]
+  )
+
+  const revokeRejection = useCallback(
+    async (pk: string) => {
+      const newRejected = channelRejected.filter((r) => r !== pk)
+      setChannelRejected(newRejected)
+      await publishMetadataUpdate(channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, newRejected)
+    },
+    [channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected, publishMetadataUpdate]
   )
 
   // Filter messages: hide hidden messages and blocked users
   const filteredMessages = useMemo(() => {
-    const blockedSet = new Set(channelBlocked)
+    const blockedSet = new Set(channelBlocked.map((e) => e.pubkey))
     return messages.filter(
       (msg) => !hiddenMessages.has(msg.id) && !blockedSet.has(msg.pubkey)
     )
@@ -502,8 +664,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         channelMods,
         channelMembers,
         channelBlocked,
+        channelInvited,
+        channelRequested,
+        channelRejected,
+        channelAccessMode,
         hiddenMessages,
         isOwnerOrMod,
+        isMember,
         addMod,
         removeMod,
         approveMember,
@@ -511,7 +678,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         hideMessage,
         blockUser,
         unblockUser,
-        updateChannelSettings
+        updateAccessMode,
+        sendInvite,
+        revokeInvite,
+        acceptRequest,
+        rejectRequest,
+        revokeRejection,
+        channelParticipants
       }}
     >
       {children}

@@ -1,25 +1,36 @@
 import { useChat } from '@/providers/ChatProvider'
 import { useNostr } from '@/providers/NostrProvider'
 import { useFetchProfile } from '@/hooks/useFetchProfile'
-import { cn, isTouchDevice } from '@/lib/utils'
+import { isTouchDevice } from '@/lib/utils'
 import { Pubkey } from '@/domain'
 import {
   Hash,
   Loader2,
   Send,
   ChevronUp,
-  Bell,
-  BellOff,
   Shield,
   EyeOff,
   Ban,
-  Lock
+  Lock,
+  Settings2,
+  Users,
+  LogIn
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '../ui/button'
 import { Textarea } from '../ui/textarea'
 import dayjs from 'dayjs'
 import ChannelSettingsPanel from './ChannelSettingsPanel'
+import UserProfileModal from './UserProfileModal'
+import MentionPopup from './MentionPopup'
+import MemberListPanel from './MemberListPanel'
+
+type TSubmitKey = 'enter' | 'ctrl+enter'
+
+function loadSubmitKey(): TSubmitKey {
+  const v = localStorage.getItem('nirc:submitKey')
+  return v === 'enter' ? 'enter' : 'ctrl+enter'
+}
 
 export default function ChannelView() {
   const {
@@ -28,18 +39,26 @@ export default function ChannelView() {
     isLoadingMessages,
     sendMessage,
     loadMoreMessages,
-    mutedChannels,
-    toggleMuteChannel,
-    isOwnerOrMod
+    isOwnerOrMod,
+    isMember,
+    channelAccessMode,
+    channelParticipants
   } = useChat()
   const { pubkey } = useNostr()
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showMemberList, setShowMemberList] = useState(false)
+  const [profilePubkey, setProfilePubkey] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const shouldAutoScroll = useRef(true)
+  const composerRef = useRef<HTMLDivElement>(null)
+
+  // @ mention state
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [mentionStart, setMentionStart] = useState(0)
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -48,12 +67,21 @@ export default function ChannelView() {
     }
   }, [messages])
 
-  // Scroll to bottom when channel changes
+  // Scroll to bottom and restore draft when channel changes
   useEffect(() => {
     shouldAutoScroll.current = true
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
+    if (currentChannel) {
+      const draft = localStorage.getItem(`nirc:draft:${currentChannel.id}`) || ''
+      setInput(draft)
+    } else {
+      setInput('')
+    }
+    setShowSettings(false)
+    setShowMemberList(false)
+    setMentionQuery(null)
   }, [currentChannel?.id])
 
   // Focus input on channel select (desktop only)
@@ -79,26 +107,71 @@ export default function ChannelView() {
   }
 
   const handleSend = async () => {
-    if (!input.trim() || isSending || !pubkey) return
+    if (!input.trim() || isSending || !pubkey || !currentChannel) return
     setIsSending(true)
     try {
       await sendMessage(input.trim())
       setInput('')
+      localStorage.removeItem(`nirc:draft:${currentChannel.id}`)
       shouldAutoScroll.current = true
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto'
-        textareaRef.current.focus()
       }
     } finally {
       setIsSending(false)
+      setTimeout(() => textareaRef.current?.focus(), 0)
     }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault()
-      handleSend()
+    // Close mention popup on Escape
+    if (e.key === 'Escape' && mentionQuery !== null) {
+      setMentionQuery(null)
+      return
     }
+    if (e.key === 'Enter') {
+      const sk = loadSubmitKey()
+      if (sk === 'enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault()
+        handleSend()
+      } else if (sk === 'ctrl+enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault()
+        handleSend()
+      }
+    }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value
+    setInput(val)
+    if (currentChannel) {
+      localStorage.setItem(`nirc:draft:${currentChannel.id}`, val)
+    }
+    resizeTextarea()
+
+    // Detect @ mention
+    const cursorPos = e.target.selectionStart || 0
+    const textBefore = val.slice(0, cursorPos)
+    const atMatch = textBefore.match(/@(\w*)$/)
+    if (atMatch) {
+      setMentionQuery(atMatch[1].toLowerCase())
+      setMentionStart(cursorPos - atMatch[0].length)
+    } else {
+      setMentionQuery(null)
+    }
+  }
+
+  const handleMentionSelect = (selectedPubkey: string, _displayName: string) => {
+    const npub = Pubkey.tryFromString(selectedPubkey)?.npub || selectedPubkey
+    const before = input.slice(0, mentionStart)
+    const after = input.slice(textareaRef.current?.selectionStart || input.length)
+    const newInput = `${before}nostr:${npub} ${after}`
+    setInput(newInput)
+    setMentionQuery(null)
+    if (currentChannel) {
+      localStorage.setItem(`nirc:draft:${currentChannel.id}`, newInput)
+    }
+    setTimeout(() => textareaRef.current?.focus(), 0)
   }
 
   const resizeTextarea = useCallback(() => {
@@ -119,16 +192,22 @@ export default function ChannelView() {
     )
   }
 
-  const isMuted = mutedChannels.has(currentChannel.id)
+  const isRestricted = channelAccessMode !== 'open' && !isMember
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full relative">
       {/* Channel header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b">
-        <Hash className="size-4 text-muted-foreground" />
+        <button
+          className="flex items-center gap-0.5 hover:text-primary"
+          onClick={() => setShowMemberList(!showMemberList)}
+          title="Member list"
+        >
+          <Hash className="size-4 text-muted-foreground" />
+        </button>
         <span className="font-semibold text-sm">{currentChannel.name}</span>
-        {currentChannel.inviteOnly && (
-          <span title="Invite only">
+        {channelAccessMode !== 'open' && (
+          <span title={channelAccessMode === 'whitelist' ? 'Whitelist' : 'Blacklist'}>
             <Lock className="size-3 text-muted-foreground" />
           </span>
         )}
@@ -142,31 +221,30 @@ export default function ChannelView() {
           variant="ghost"
           size="icon"
           className="size-7"
-          onClick={() => toggleMuteChannel(currentChannel.id)}
-          title={isMuted ? 'Unmute notifications' : 'Mute notifications'}
+          onClick={() => setShowMemberList(!showMemberList)}
+          title="Member list"
         >
-          {isMuted ? (
-            <BellOff className="size-3.5 text-muted-foreground" />
-          ) : (
-            <Bell className="size-3.5" />
-          )}
+          <Users className="size-3.5" />
         </Button>
-        {isOwnerOrMod && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            onClick={() => setShowSettings(!showSettings)}
-            title="Channel settings"
-          >
-            <Shield className="size-3.5" />
-          </Button>
-        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          onClick={() => setShowSettings(!showSettings)}
+          title="Channel settings"
+        >
+          {isOwnerOrMod ? <Shield className="size-3.5" /> : <Settings2 className="size-3.5" />}
+        </Button>
       </div>
 
-      {/* Settings panel */}
-      {showSettings && isOwnerOrMod && (
+      {/* Settings overlay */}
+      {showSettings && (
         <ChannelSettingsPanel onClose={() => setShowSettings(false)} />
+      )}
+
+      {/* Member list panel */}
+      {showMemberList && !showSettings && (
+        <MemberListPanel onClose={() => setShowMemberList(false)} />
       )}
 
       {/* Messages */}
@@ -175,55 +253,72 @@ export default function ChannelView() {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto px-3 py-2 space-y-1"
       >
-        {messages.length > 0 && (
-          <div className="flex justify-center py-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleLoadMore}
-              disabled={isLoadingMore}
-              className="text-xs"
-            >
-              {isLoadingMore ? (
-                <Loader2 className="size-3 animate-spin mr-1" />
-              ) : (
-                <ChevronUp className="size-3 mr-1" />
-              )}
-              Load older
-            </Button>
-          </div>
-        )}
-
-        {isLoadingMessages ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="size-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="text-center py-8 text-sm text-muted-foreground">
-            No messages yet. Say something.
+        {isRestricted ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+            <Lock className="size-8" />
+            <span className="text-sm">This channel requires access</span>
+            <RequestAccessButton />
           </div>
         ) : (
-          messages.map((msg) => (
-            <ChatMessage
-              key={msg.id}
-              msg={msg}
-              isOwn={msg.pubkey === pubkey}
-              showModActions={isOwnerOrMod && msg.pubkey !== pubkey}
-            />
-          ))
+          <>
+            {messages.length > 0 && (
+              <div className="flex justify-center py-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLoadMore}
+                  disabled={isLoadingMore}
+                  className="text-xs"
+                >
+                  {isLoadingMore ? (
+                    <Loader2 className="size-3 animate-spin mr-1" />
+                  ) : (
+                    <ChevronUp className="size-3 mr-1" />
+                  )}
+                  Load older
+                </Button>
+              </div>
+            )}
+
+            {isLoadingMessages ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="text-center py-8 text-sm text-muted-foreground">
+                No messages yet. Say something.
+              </div>
+            ) : (
+              messages.map((msg) => (
+                <ChatMessage
+                  key={msg.id}
+                  msg={msg}
+                  isOwn={msg.pubkey === pubkey}
+                  showModActions={isOwnerOrMod && msg.pubkey !== pubkey}
+                  onUsernameClick={setProfilePubkey}
+                />
+              ))
+            )}
+          </>
         )}
       </div>
 
       {/* Composer */}
-      {pubkey && (
-        <div className="border-t p-2 flex items-end gap-2">
+      {pubkey && isMember && !isRestricted && (
+        <div ref={composerRef} className="border-t p-2 flex items-end gap-2 relative">
+          {/* Mention popup */}
+          {mentionQuery !== null && (
+            <MentionPopup
+              participants={channelParticipants}
+              query={mentionQuery}
+              onSelect={handleMentionSelect}
+              position={{ bottom: composerRef.current?.clientHeight || 48, left: 8 }}
+            />
+          )}
           <Textarea
             ref={textareaRef}
             value={input}
-            onChange={(e) => {
-              setInput(e.target.value)
-              resizeTextarea()
-            }}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder={`Message #${currentChannel.name}`}
             className="min-h-[36px] resize-none overflow-hidden text-sm"
@@ -243,56 +338,133 @@ export default function ChannelView() {
           </Button>
         </div>
       )}
+
+      {/* User profile modal */}
+      {profilePubkey && (
+        <UserProfileModal
+          pubkeyHex={profilePubkey}
+          onClose={() => setProfilePubkey(null)}
+        />
+      )}
     </div>
+  )
+}
+
+function RequestAccessButton() {
+  const { currentChannel } = useChat()
+  const { pubkey, signEvent } = useNostr()
+  const [sent, setSent] = useState(false)
+  const [sending, setSending] = useState(false)
+
+  const handleRequest = async () => {
+    if (!currentChannel || !pubkey || sent) return
+    setSending(true)
+    try {
+      // Send a DM to channel creator requesting access
+      const { default: clientService } = await import('@/services/client.service')
+      const content = `nirc:request:${currentChannel.id}:${currentChannel.name}`
+      const draft = {
+        kind: 4,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [['p', currentChannel.creator]],
+        content
+      }
+      const signed = await signEvent(draft)
+      await clientService.publishEvent(['wss://relay.orly.dev/'], signed)
+      setSent(true)
+    } catch {
+      // ignore
+    } finally {
+      setSending(false)
+    }
+  }
+
+  if (!pubkey) return null
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="gap-1.5"
+      onClick={handleRequest}
+      disabled={sent || sending}
+    >
+      {sending ? (
+        <Loader2 className="size-3 animate-spin" />
+      ) : (
+        <LogIn className="size-3" />
+      )}
+      {sent ? 'Request Sent' : 'Request Access'}
+    </Button>
   )
 }
 
 function ChatMessage({
   msg,
   isOwn,
-  showModActions
+  showModActions,
+  onUsernameClick
 }: {
   msg: { id: string; pubkey: string; content: string; createdAt: number }
   isOwn: boolean
   showModActions: boolean
+  onUsernameClick: (pubkey: string) => void
 }) {
   const { hideMessage, blockUser } = useChat()
   const { profile } = useFetchProfile(msg.pubkey)
   const pk = Pubkey.tryFromString(msg.pubkey)
   const displayName = profile?.username || pk?.formatNpub(8) || msg.pubkey.slice(0, 12)
   const time = dayjs.unix(msg.createdAt).format('HH:mm')
+  const isAction = msg.content.startsWith('/me ')
+  const actionText = isAction ? msg.content.slice(4) : null
 
   return (
-    <div className={cn('group flex gap-2 py-0.5 text-sm', isOwn && 'flex-row-reverse')}>
-      <div className={cn('max-w-[80%]', isOwn ? 'text-right' : 'text-left')}>
-        <div className={cn('flex items-baseline gap-2', isOwn && 'justify-end')}>
-          {!isOwn && (
-            <span className="text-xs font-medium text-primary">{displayName}</span>
-          )}
-          <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-            {time}
+    <div className="group flex items-start gap-0 py-0.5 text-sm font-mono leading-snug">
+      <span className="text-[11px] text-muted-foreground shrink-0">[{time}]&nbsp;</span>
+      {isAction ? (
+        <span className="italic break-words min-w-0">
+          <span className="text-muted-foreground">*</span>{' '}
+          <button
+            className={`${isOwn ? 'text-muted-foreground' : 'text-primary'} hover:underline cursor-pointer`}
+            onClick={() => onUsernameClick(msg.pubkey)}
+          >
+            {displayName}
+          </button>{' '}
+          {actionText}
+        </span>
+      ) : (
+        <>
+          <span className="shrink-0">
+            <span className="text-muted-foreground">&lt;</span>
+            <button
+              className={`${isOwn ? 'text-muted-foreground' : 'text-primary font-medium'} hover:underline cursor-pointer`}
+              onClick={() => onUsernameClick(msg.pubkey)}
+            >
+              {displayName}
+            </button>
+            <span className="text-muted-foreground">&gt;</span>
           </span>
-          {showModActions && (
-            <span className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5">
-              <button
-                onClick={() => hideMessage(msg.id)}
-                className="text-muted-foreground hover:text-destructive p-0.5"
-                title="Hide message"
-              >
-                <EyeOff className="size-3" />
-              </button>
-              <button
-                onClick={() => blockUser(msg.pubkey)}
-                className="text-muted-foreground hover:text-destructive p-0.5"
-                title="Block user"
-              >
-                <Ban className="size-3" />
-              </button>
-            </span>
-          )}
-        </div>
-        <div className="break-words whitespace-pre-wrap">{msg.content}</div>
-      </div>
+          <span className="break-words whitespace-pre-wrap min-w-0">&nbsp;{msg.content}</span>
+        </>
+      )}
+      {showModActions && (
+        <span className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5 ml-1 shrink-0">
+          <button
+            onClick={() => hideMessage(msg.id)}
+            className="text-muted-foreground hover:text-destructive p-0.5"
+            title="Hide message"
+          >
+            <EyeOff className="size-3" />
+          </button>
+          <button
+            onClick={() => blockUser(msg.pubkey)}
+            className="text-muted-foreground hover:text-destructive p-0.5"
+            title="Block user"
+          >
+            <Ban className="size-3" />
+          </button>
+        </span>
+      )}
     </div>
   )
 }

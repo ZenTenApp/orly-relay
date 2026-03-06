@@ -66,7 +66,17 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 		}
 	}
 
-	// Stage 5: Delegate to ingestion service
+	// Stage 5: DM stranger rate limit check
+	if l.dmRateLimiter != nil {
+		if allowed, msg := l.dmRateLimiter.CheckDM(l.ctx, env.E); !allowed {
+			if err := Ok.Blocked(l, env, msg); chk.E(err) {
+				return err
+			}
+			return nil
+		}
+	}
+
+	// Stage 6: Delegate to ingestion service
 	connCtx := &ingestion.ConnectionContext{
 		AuthedPubkey: l.authedPubkey.Load(),
 		Remote:       l.remote,
@@ -74,7 +84,21 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 	}
 	result := l.ingestionService.Ingest(context.Background(), env.E, connCtx)
 
-	// Stage 6: Send response based on result
+	// Post-ingestion hooks
+	if result.Saved {
+		// Invalidate channel membership cache when kind 41 (ChannelMetadata) is saved
+		if env.E.Kind == kind.ChannelMetadata.K && l.channelMembership != nil {
+			if channelID := ExtractChannelIDFromEvent(env.E); channelID != "" {
+				l.channelMembership.InvalidateChannel(channelID)
+			}
+		}
+		// Update DM bidirectional cache when a DM is saved
+		if l.dmRateLimiter != nil {
+			l.dmRateLimiter.OnDMIngested(env.E)
+		}
+	}
+
+	// Stage 7: Send response based on result
 	return l.sendIngestionResult(env, result)
 }
 
@@ -118,6 +142,20 @@ func (l *Listener) handleSpecialKinds(env *eventenvelope.Submission) (bool, erro
 		}
 		// Continue with normal processing
 		return false, nil
+	}
+
+	// Enforce channel membership for write operations on kinds 42-44
+	if kind.IsChannelKind(env.E.Kind) && !kind.IsDiscoverableChannelKind(env.E.Kind) {
+		if l.channelMembership != nil {
+			authedPk := l.authedPubkey.Load()
+			if !l.channelMembership.IsChannelMember(env.E, authedPk, l.ctx) {
+				log.D.F("HandleEvent: channel write denied for pubkey %s (not a member)", hex.Enc(authedPk))
+				if err := Ok.Blocked(l, env, "restricted: not a channel member"); chk.E(err) {
+					return true, err
+				}
+				return true, nil
+			}
+		}
 	}
 
 	return false, nil

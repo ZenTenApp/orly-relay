@@ -77,6 +77,23 @@ var Privileged = []*K{
 	FileMessage,
 	MLSKeyPackage,
 	KeyPackageRelaysList,
+	ChannelCreation,
+	ChannelMetadata,
+	ChannelMessage,
+	ChannelHideMessage,
+	ChannelMuteUser,
+}
+
+// IsChannelKind returns true if the kind is a channel-related kind (40-44).
+// These use channel membership rather than p-tag involvement for access control.
+func IsChannelKind(k uint16) bool {
+	return k >= ChannelCreation.K && k <= ChannelMuteUser.K
+}
+
+// IsDiscoverableChannelKind returns true for kinds 40 and 41, which should be
+// readable by all authenticated users for channel discovery purposes.
+func IsDiscoverableChannelKind(k uint16) bool {
+	return k == ChannelCreation.K || k == ChannelMetadata.K
 }
 
 // IsPrivileged returns true if the type is the kind of message nobody else than

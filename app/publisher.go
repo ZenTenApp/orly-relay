@@ -80,6 +80,8 @@ type P struct {
 	Map
 	// WriteChans maps websocket connections to their write channels
 	WriteChans WriteChanMap
+	// ChannelMembership is used for NIRC channel access control (kinds 40-44)
+	ChannelMembership *ChannelMembership
 }
 
 var _ publisher.I = &P{}
@@ -193,8 +195,17 @@ func (p *P) Deliver(ev *event.E) {
 		if kind.IsPrivileged(ev.Kind) && d.sub.AuthRequired {
 			pk := d.sub.AuthedPubkey
 
-			// Use centralized IsPartyInvolved function for consistent privilege checking
-			if !policy.IsPartyInvolved(ev, pk) {
+			// Channel kinds (40-44) use channel membership instead of p-tag involvement
+			var allowed bool
+			if kind.IsChannelKind(ev.Kind) && p.ChannelMembership != nil {
+				channelID := ExtractChannelIDFromEvent(ev)
+				allowed = p.ChannelMembership.IsChannelMemberByID(channelID, ev.Kind, pk, p.c)
+			} else {
+				// Use centralized IsPartyInvolved function for consistent privilege checking
+				allowed = policy.IsPartyInvolved(ev, pk)
+			}
+
+			if !allowed {
 				log.D.F(
 					"subscription delivery DENIED for privileged event %s to %s (not authenticated or not a party involved)",
 					hex.Enc(ev.ID), d.sub.remote,

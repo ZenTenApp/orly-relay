@@ -578,8 +578,16 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 			)
 			pk := l.authedPubkey.Load()
 
-			// Use centralized IsPartyInvolved function for consistent privilege checking
-			if policy.IsPartyInvolved(ev, pk) {
+			// Channel kinds (40-44) use channel membership instead of p-tag involvement
+			var allowed bool
+			if kind.IsChannelKind(ev.Kind) && l.channelMembership != nil {
+				allowed = l.channelMembership.IsChannelMember(ev, pk, l.ctx)
+			} else {
+				// Use centralized IsPartyInvolved function for consistent privilege checking
+				allowed = policy.IsPartyInvolved(ev, pk)
+			}
+
+			if allowed {
 				log.T.C(
 					func() string {
 						return fmt.Sprintf(

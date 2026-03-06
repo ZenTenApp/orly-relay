@@ -1,6 +1,19 @@
 import client from './client.service'
 import { Event as NEvent, EventTemplate } from 'nostr-tools'
 
+// --- Access modes ---
+
+export type TAccessMode = 'open' | 'whitelist' | 'blacklist'
+
+// --- Member entry with provenance tracking ---
+
+export type TMemberEntry = {
+  pubkey: string
+  addedBy: string // pubkey of who added them (owner or mod)
+}
+
+// --- Channel types ---
+
 export type TChannel = {
   id: string
   name: string
@@ -8,9 +21,13 @@ export type TChannel = {
   picture?: string
   creator: string
   createdAt: number
-  inviteOnly: boolean
+  accessMode: TAccessMode
   mods: string[]
-  members: string[]
+  members: TMemberEntry[]
+  blocked: TMemberEntry[]
+  invited: TMemberEntry[]
+  requested: string[]
+  rejected: string[]
 }
 
 export type TChannelMessage = {
@@ -39,6 +56,16 @@ const CHANNEL_MESSAGE_KIND = 42
 const CHANNEL_HIDE_KIND = 43
 const CHANNEL_MUTE_KIND = 44
 
+/** Parse access_mode from kind 41 content, with backward compat for invite_only */
+function parseAccessMode(meta: Record<string, unknown>): TAccessMode {
+  if (meta.access_mode === 'open' || meta.access_mode === 'whitelist' || meta.access_mode === 'blacklist') {
+    return meta.access_mode
+  }
+  // Backward compat: invite_only: true → whitelist, false → open
+  if (meta.invite_only === false) return 'open'
+  return 'whitelist'
+}
+
 function parseChannelFromEvent(event: NEvent): TChannel | null {
   try {
     const meta = JSON.parse(event.content)
@@ -49,9 +76,13 @@ function parseChannelFromEvent(event: NEvent): TChannel | null {
       picture: meta.picture,
       creator: event.pubkey,
       createdAt: event.created_at,
-      inviteOnly: meta.invite_only !== false,
+      accessMode: parseAccessMode(meta),
       mods: [],
-      members: []
+      members: [],
+      blocked: [],
+      invited: [],
+      requested: [],
+      rejected: []
     }
   } catch {
     return null
@@ -72,6 +103,16 @@ function parseMessageFromEvent(event: NEvent): TChannelMessage | null {
     createdAt: event.created_at,
     event
   }
+}
+
+export type TChannelMeta = {
+  mods: string[]
+  members: TMemberEntry[]
+  blocked: TMemberEntry[]
+  invited: TMemberEntry[]
+  requested: string[]
+  rejected: string[]
+  accessMode: TAccessMode
 }
 
 class ChatService {
@@ -109,7 +150,7 @@ class ChatService {
   async fetchChannelMeta(
     relayUrl: string,
     channelId: string
-  ): Promise<{ mods: string[]; members: string[]; blocked: string[]; inviteOnly: boolean } | null> {
+  ): Promise<TChannelMeta | null> {
     const events = await client.fetchEvents([relayUrl], {
       kinds: [CHANNEL_META_KIND],
       '#e': [channelId],
@@ -118,19 +159,29 @@ class ChatService {
     if (events.length === 0) return null
     const ev = events[0]
     const mods: string[] = []
-    const members: string[] = []
-    const blocked: string[] = []
+    const members: TMemberEntry[] = []
+    const blocked: TMemberEntry[] = []
+    const invited: TMemberEntry[] = []
+    const requested: string[] = []
+    const rejected: string[] = []
     for (const tag of ev.tags) {
-      if (tag[0] === 'p' && tag[2] === 'mod') mods.push(tag[1])
-      else if (tag[0] === 'p' && tag[2] === 'member') members.push(tag[1])
-      else if (tag[0] === 'p' && tag[2] === 'blocked') blocked.push(tag[1])
+      if (tag[0] !== 'p') continue
+      const pk = tag[1]
+      const role = tag[2]
+      const addedBy = tag[3] || ''
+      if (role === 'mod') mods.push(pk)
+      else if (role === 'member') members.push({ pubkey: pk, addedBy })
+      else if (role === 'blocked') blocked.push({ pubkey: pk, addedBy })
+      else if (role === 'invited') invited.push({ pubkey: pk, addedBy })
+      else if (role === 'requested') requested.push(pk)
+      else if (role === 'rejected') rejected.push(pk)
     }
-    let inviteOnly = true
+    let accessMode: TAccessMode = 'whitelist'
     try {
       const meta = JSON.parse(ev.content)
-      inviteOnly = meta.invite_only !== false
+      accessMode = parseAccessMode(meta)
     } catch { /* keep default */ }
-    return { mods, members, blocked, inviteOnly }
+    return { mods, members, blocked, invited, requested, rejected, accessMode }
   }
 
   async fetchHiddenMessageIds(
@@ -189,12 +240,12 @@ class ChatService {
     })
   }
 
-  createChannelDraft(name: string, about: string): EventTemplate {
+  createChannelDraft(name: string, about: string, accessMode: TAccessMode = 'whitelist'): EventTemplate {
     return {
       kind: CHANNEL_CREATE_KIND,
       created_at: Math.floor(Date.now() / 1000),
       tags: [],
-      content: JSON.stringify({ name, about, invite_only: true })
+      content: JSON.stringify({ name, about, access_mode: accessMode })
     }
   }
 
@@ -210,15 +261,21 @@ class ChatService {
   createMetadataUpdateDraft(
     channelId: string,
     relayUrl: string,
-    meta: { name?: string; about?: string; invite_only?: boolean },
+    meta: { name?: string; about?: string; access_mode?: TAccessMode },
     mods: string[],
-    members: string[],
-    blocked: string[]
+    members: TMemberEntry[],
+    blocked: TMemberEntry[],
+    invited: TMemberEntry[],
+    requested: string[],
+    rejected: string[]
   ): EventTemplate {
     const tags: string[][] = [['e', channelId, relayUrl, 'root']]
     for (const pk of mods) tags.push(['p', pk, 'mod'])
-    for (const pk of members) tags.push(['p', pk, 'member'])
-    for (const pk of blocked) tags.push(['p', pk, 'blocked'])
+    for (const m of members) tags.push(['p', m.pubkey, 'member', m.addedBy])
+    for (const b of blocked) tags.push(['p', b.pubkey, 'blocked', b.addedBy])
+    for (const inv of invited) tags.push(['p', inv.pubkey, 'invited', inv.addedBy])
+    for (const pk of requested) tags.push(['p', pk, 'requested'])
+    for (const pk of rejected) tags.push(['p', pk, 'rejected'])
     return {
       kind: CHANNEL_META_KIND,
       created_at: Math.floor(Date.now() / 1000),

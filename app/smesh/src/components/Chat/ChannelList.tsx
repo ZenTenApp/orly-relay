@@ -78,7 +78,7 @@ export default function ChannelList() {
                     <span className={cn('truncate font-medium', unread > 0 && !isMuted && 'font-bold')}>
                       {ch.name}
                     </span>
-                    {ch.inviteOnly && <Lock className="size-3 text-muted-foreground flex-shrink-0" />}
+                    {ch.accessMode !== 'open' && <Lock className="size-3 text-muted-foreground flex-shrink-0" />}
                     {isMuted && <BellOff className="size-3 text-muted-foreground flex-shrink-0" />}
                   </div>
                   {ch.about && (

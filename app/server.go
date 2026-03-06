@@ -122,6 +122,12 @@ type Server struct {
 	bunkerServer    *bunker.Server
 	subnetPool      *wireguard.SubnetPool
 
+	// Channel membership enforcement for NIRC (kinds 40-44)
+	channelMembership *ChannelMembership
+
+	// DM rate limiter (stranger 3-message cap)
+	dmRateLimiter *DMRateLimiter
+
 	// NRC (Nostr Relay Connect) bridge for remote relay access
 	nrcBridge     *nrc.Bridge
 	nrcEventStore *database.NRCEventStore

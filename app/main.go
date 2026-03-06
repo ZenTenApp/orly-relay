@@ -81,18 +81,25 @@ func Run(
 		ownerKeys = append(ownerKeys, pk)
 	}
 	// start listener
+	channelMembership := NewChannelMembership(db)
+	dmLimiter := NewDMRateLimiter(db)
+	wsPublisher := NewPublisher(ctx)
+	wsPublisher.ChannelMembership = channelMembership
+
 	l := &Server{
-		Ctx:         ctx,
-		Config:      cfg,
-		DB:          db,
-		publishers:  publish.New(NewPublisher(ctx)),
-		Admins:      adminKeys,
-		Owners:      ownerKeys,
-		rateLimiter: limiter,
-		cfg:         cfg,
-		db:          db,
-		connPerIP:   make(map[string]int),
-		aclRegistry: acl.Registry, // Inject ACL registry (transitional from global)
+		Ctx:               ctx,
+		Config:            cfg,
+		DB:                db,
+		publishers:        publish.New(wsPublisher),
+		Admins:            adminKeys,
+		Owners:            ownerKeys,
+		rateLimiter:       limiter,
+		cfg:               cfg,
+		db:                db,
+		connPerIP:         make(map[string]int),
+		aclRegistry:       acl.Registry, // Inject ACL registry (transitional from global)
+		channelMembership: channelMembership,
+		dmRateLimiter:     dmLimiter,
 	}
 
 	// Configure connection storm mitigation limits on the rate limiter
