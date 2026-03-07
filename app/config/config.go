@@ -148,6 +148,7 @@ type C struct {
 	GRPCSyncNegentropyAddress    string        `env:"ORLY_GRPC_SYNC_NEGENTROPY" default:"127.0.0.1:50056" usage:"address of gRPC negentropy server"`
 	GRPCSyncConnectTimeout       time.Duration `env:"ORLY_GRPC_SYNC_TIMEOUT" default:"10s" usage:"gRPC sync connection timeout"`
 	NegentropyEnabled            bool          `env:"ORLY_NEGENTROPY_ENABLED" default:"false" usage:"enable NIP-77 negentropy set reconciliation"`
+	NegentropyFullSyncPubkeys    string        `env:"ORLY_NEGENTROPY_FULL_SYNC_PUBKEYS" default:"" usage:"comma-separated npubs or hex pubkeys allowed full negentropy sync (others get public only)"`
 
 	QueryCacheSizeMB    int    `env:"ORLY_QUERY_CACHE_SIZE_MB" default:"512" usage:"query cache size in MB (caches database query results for faster REQ responses)"`
 	QueryCacheMaxAge    string `env:"ORLY_QUERY_CACHE_MAX_AGE" default:"5m" usage:"maximum age for cached query results (e.g., 5m, 10m, 1h)"`

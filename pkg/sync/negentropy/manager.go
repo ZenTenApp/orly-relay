@@ -18,6 +18,7 @@ import (
 
 	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/kind"
 	"next.orly.dev/pkg/nostr/encoders/tag"
 	"next.orly.dev/pkg/nostr/negentropy"
 	"next.orly.dev/pkg/database"
@@ -537,6 +538,11 @@ func (m *Manager) pushEventsToPeer(ctx context.Context, conn *websocket.Conn, tr
 		}
 
 		for _, ev := range events {
+			// Never push privileged or channel events (DMs, gift wraps, NIRC
+			// messages) to peers. These stay on the hosting relay only.
+			if kind.IsPrivileged(ev.Kind) {
+				continue
+			}
 			// Send event to peer
 			eventMsg := []any{"EVENT", ev}
 			if err := conn.WriteJSON(eventMsg); err != nil {

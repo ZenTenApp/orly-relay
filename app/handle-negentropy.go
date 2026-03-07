@@ -12,10 +12,12 @@ import (
 
 	"next.orly.dev/pkg/nostr/encoders/envelopes/eventenvelope"
 	"next.orly.dev/pkg/nostr/encoders/filter"
+	hexenc "next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/nostr/encoders/kind"
 	"next.orly.dev/pkg/nostr/encoders/tag"
 	"next.orly.dev/pkg/nostr/encoders/timestamp"
 	negentropyiface "next.orly.dev/pkg/interfaces/negentropy"
+	"next.orly.dev/pkg/policy"
 	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
 )
 
@@ -290,7 +292,9 @@ func (l *Listener) sendNegErr(subscriptionID, reason string) error {
 	return err
 }
 
-// sendEventsForIDs fetches and sends events for the given IDs
+// sendEventsForIDs fetches and sends events for the given IDs.
+// Auth-aware: unauthenticated clients get public events only; authenticated
+// clients get full delivery subject to privilege and channel membership checks.
 func (l *Listener) sendEventsForIDs(subscriptionID string, ids [][]byte) error {
 	if len(ids) == 0 {
 		return nil
@@ -314,13 +318,84 @@ func (l *Listener) sendEventsForIDs(subscriptionID string, ids [][]byte) error {
 		return err
 	}
 
+	pk := l.authedPubkey.Load()
+	// Full sync only for whitelisted relay pubkeys; everyone else gets public only
+	isFullSync := len(pk) > 0 && l.negentropyFullSyncPubkeys[hexenc.Enc(pk)]
+
 	// Send each event via EVENT envelope with subscription ID
-	sent := 0
+	sent, skipped := 0, 0
 	for _, ev := range events {
 		if ev == nil {
 			continue
 		}
-		// Create proper EVENT envelope: ["EVENT", subscription_id, event]
+
+		// --- Auth-aware filtering ---
+
+		// Privileged events (DMs, gift wraps, channel kinds, etc.)
+		if kind.IsPrivileged(ev.Kind) {
+			if !isFullSync {
+				skipped++
+				continue
+			}
+
+			// Channel kinds: check membership
+			if kind.IsChannelKind(ev.Kind) {
+				// Discoverable kinds (40, 41) are always allowed for full-sync peers
+				if !kind.IsDiscoverableChannelKind(ev.Kind) {
+					if l.channelMembership != nil {
+						if !l.channelMembership.IsChannelMember(ev, pk, ctx) {
+							skipped++
+							continue
+						}
+					}
+				}
+			} else {
+				// Non-channel privileged: only deliver to involved parties
+				if !policy.IsPartyInvolved(ev, pk) {
+					skipped++
+					continue
+				}
+			}
+		}
+
+		// Non-privileged events that reference channel events via e-tags
+		// (reactions, reposts, zaps, reports, deletions targeting channel messages)
+		if !kind.IsChannelKind(ev.Kind) && !kind.IsPrivileged(ev.Kind) && l.channelMembership != nil {
+			if channelIDHex, isChannel := l.channelMembership.ReferencesChannelEvent(ev, ctx); isChannel {
+				if !isFullSync || !l.channelMembership.IsChannelMemberByID(channelIDHex, ev.Kind, pk, ctx) {
+					log.D.F(
+						"NEG: delivery DENIED for channel-referencing event %s kind %d (not a member of channel %s)",
+						hexenc.Enc(ev.ID), ev.Kind, channelIDHex,
+					)
+					skipped++
+					continue
+				}
+			}
+		}
+
+		// Private tag check (matches publisher.go logic)
+		if ev.Tags != nil && ev.Tags.Len() > 0 {
+			var privatePubkey []byte
+			hasPrivate := false
+			for _, t := range *ev.Tags {
+				if t.Len() >= 2 {
+					keyBytes := t.Key()
+					if len(keyBytes) == 7 && string(keyBytes) == "private" {
+						hasPrivate = true
+						privatePubkey = t.Value()
+						break
+					}
+				}
+			}
+			if hasPrivate {
+				if !l.canSeePrivateEvent(pk, privatePubkey) {
+					skipped++
+					continue
+				}
+			}
+		}
+
+		// --- Passed all checks, send ---
 		res, err := eventenvelope.NewResultWith([]byte(subscriptionID), ev)
 		if err != nil {
 			log.W.F("NEG: failed to create event envelope: %v", err)
@@ -333,7 +408,8 @@ func (l *Listener) sendEventsForIDs(subscriptionID string, ids [][]byte) error {
 		sent++
 	}
 
-	log.D.F("NEG: sent %d/%d events for subscription %s", sent, len(ids), subscriptionID)
+	log.D.F("NEG: sent %d/%d events (skipped %d auth-gated) for subscription %s",
+		sent, len(ids), skipped, subscriptionID)
 	return nil
 }
 

@@ -125,6 +125,10 @@ type Server struct {
 	// Channel membership enforcement for NIRC (kinds 40-44)
 	channelMembership *ChannelMembership
 
+	// Negentropy full sync whitelist: hex pubkeys allowed full event delivery.
+	// Empty map means nobody gets full sync (public only for everyone).
+	negentropyFullSyncPubkeys map[string]bool
+
 	// DM rate limiter (stranger 3-message cap)
 	dmRateLimiter *DMRateLimiter
 

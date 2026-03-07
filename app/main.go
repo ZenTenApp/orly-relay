@@ -98,8 +98,9 @@ func Run(
 		db:                db,
 		connPerIP:         make(map[string]int),
 		aclRegistry:       acl.Registry, // Inject ACL registry (transitional from global)
-		channelMembership: channelMembership,
-		dmRateLimiter:     dmLimiter,
+		channelMembership:         channelMembership,
+		dmRateLimiter:             dmLimiter,
+		negentropyFullSyncPubkeys: parseNegentropyFullSyncPubkeys(cfg.NegentropyFullSyncPubkeys),
 	}
 
 	// Configure connection storm mitigation limits on the rate limiter
@@ -897,4 +898,43 @@ func Run(
 	}()
 
 	return
+}
+
+// parseNegentropyFullSyncPubkeys parses a comma-separated list of npubs or hex
+// pubkeys into a set of lowercase hex pubkey strings.
+func parseNegentropyFullSyncPubkeys(raw string) map[string]bool {
+	m := make(map[string]bool)
+	if raw == "" {
+		return m
+	}
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if strings.HasPrefix(entry, "npub1") {
+			_, decoded, err := bech32encoding.Decode([]byte(entry))
+			if err != nil {
+				log.W.F("ignoring invalid npub in ORLY_NEGENTROPY_FULL_SYNC_PUBKEYS: %s", entry)
+				continue
+			}
+			if pkBytes, ok := decoded.([]byte); ok {
+				m[hex.Enc(pkBytes)] = true
+			} else {
+				log.W.F("ignoring invalid npub in ORLY_NEGENTROPY_FULL_SYNC_PUBKEYS: %s", entry)
+			}
+		} else {
+			// Assume hex
+			entry = strings.ToLower(entry)
+			if len(entry) == 64 {
+				m[entry] = true
+			} else {
+				log.W.F("ignoring invalid pubkey in ORLY_NEGENTROPY_FULL_SYNC_PUBKEYS: %s", entry)
+			}
+		}
+	}
+	if len(m) > 0 {
+		log.I.F("negentropy full sync whitelist: %d pubkeys", len(m))
+	}
+	return m
 }
