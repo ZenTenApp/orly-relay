@@ -159,6 +159,23 @@ func (l *Listener) handleSpecialKinds(env *eventenvelope.Submission) (bool, erro
 		}
 	}
 
+	// Enforce channel membership for non-channel events that reference channel
+	// events via e-tags (reactions, reposts, reports, zaps, deletions targeting
+	// channel messages). Two-step indirection: resolve e-tag → referenced event
+	// → channel ID → membership check.
+	if !kind.IsChannelKind(env.E.Kind) && l.channelMembership != nil {
+		if channelIDHex, isChannel := l.channelMembership.ReferencesChannelEvent(env.E, l.ctx); isChannel {
+			if !l.channelMembership.IsChannelMemberByID(channelIDHex, env.E.Kind, env.E.Pubkey, l.ctx) {
+				log.D.F("HandleEvent: channel reference write denied for pubkey %s kind %d (not a member of channel %s)",
+					hex.Enc(env.E.Pubkey), env.E.Kind, channelIDHex)
+				if err := Ok.Blocked(l, env, "restricted: not a channel member"); chk.E(err) {
+					return true, err
+				}
+				return true, nil
+			}
+		}
+	}
+
 	return false, nil
 }
 

@@ -216,6 +216,22 @@ func (p *P) Deliver(ev *event.E) {
 			}
 		}
 
+		// For non-channel, non-privileged events: check if they reference channel
+		// events via e-tags. Reactions, reposts, zaps, reports, deletions that
+		// target channel messages must only be delivered to channel members.
+		if !kind.IsChannelKind(ev.Kind) && !kind.IsPrivileged(ev.Kind) && p.ChannelMembership != nil {
+			if channelIDHex, isChannel := p.ChannelMembership.ReferencesChannelEvent(ev, p.c); isChannel {
+				pk := d.sub.AuthedPubkey
+				if !p.ChannelMembership.IsChannelMemberByID(channelIDHex, ev.Kind, pk, p.c) {
+					log.D.F(
+						"subscription delivery DENIED for channel-referencing event %s kind %d to %s (not a member of channel %s)",
+						hex.Enc(ev.ID), ev.Kind, d.sub.remote, channelIDHex,
+					)
+					continue
+				}
+			}
+		}
+
 		// Check for private tags - only deliver to authorized users
 		if ev.Tags != nil && ev.Tags.Len() > 0 {
 			hasPrivateTag := false

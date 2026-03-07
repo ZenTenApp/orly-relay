@@ -30,10 +30,18 @@ type channelAccessInfo struct {
 
 const channelCacheTTL = 30 * time.Second
 
+// channelRefCacheEntry caches whether an event ID references a channel event.
+type channelRefCacheEntry struct {
+	channelIDHex string
+	isChannel    bool
+	cachedAt     time.Time
+}
+
 // ChannelMembership manages channel access control lookups with caching.
 type ChannelMembership struct {
-	db    database.Database
-	cache sync.Map // map[string]*channelAccessInfo (channel ID hex → info)
+	db       database.Database
+	cache    sync.Map // map[string]*channelAccessInfo (channel ID hex → info)
+	refCache sync.Map // map[string]*channelRefCacheEntry (event ID hex → channel ref info)
 }
 
 // NewChannelMembership creates a new channel membership checker.
@@ -149,6 +157,82 @@ func (cm *ChannelMembership) IsChannelMemberByID(
 	default:
 		return true
 	}
+}
+
+// ReferencesChannelEvent checks whether any e-tag in the event references a
+// restricted channel event (kind 42-44). If so, returns the channel ID and true.
+// Used to enforce channel membership for non-channel kinds (reactions, reposts,
+// reports, zaps, deletions) that reference channel events.
+func (cm *ChannelMembership) ReferencesChannelEvent(
+	ev *event.E,
+	ctx context.Context,
+) (channelIDHex string, isChannel bool) {
+	if ev.Tags == nil {
+		return "", false
+	}
+	eTags := ev.Tags.GetAll([]byte("e"))
+	if len(eTags) == 0 {
+		return "", false
+	}
+
+	for _, et := range eTags {
+		if et.Len() < 2 {
+			continue
+		}
+		refIDHex := string(et.ValueHex())
+		if refIDHex == "" {
+			continue
+		}
+
+		// Check reference cache first
+		if cached, ok := cm.refCache.Load(refIDHex); ok {
+			entry := cached.(*channelRefCacheEntry)
+			if time.Since(entry.cachedAt) < channelCacheTTL {
+				if entry.isChannel {
+					return entry.channelIDHex, true
+				}
+				continue
+			}
+		}
+
+		// Look up the referenced event in the database
+		refIDBytes, err := hexenc.Dec(refIDHex)
+		if err != nil {
+			continue
+		}
+		ser, err := cm.db.GetSerialById(refIDBytes)
+		if err != nil || ser == nil {
+			// Cache negative result
+			cm.refCache.Store(refIDHex, &channelRefCacheEntry{
+				cachedAt: time.Now(),
+			})
+			continue
+		}
+		refEv, err := cm.db.FetchEventBySerial(ser)
+		if err != nil || refEv == nil {
+			cm.refCache.Store(refIDHex, &channelRefCacheEntry{
+				cachedAt: time.Now(),
+			})
+			continue
+		}
+
+		if kind.IsChannelKind(refEv.Kind) && !kind.IsDiscoverableChannelKind(refEv.Kind) {
+			// It's a restricted channel event (42-44). Extract the channel ID.
+			chID := extractChannelID(refEv)
+			cm.refCache.Store(refIDHex, &channelRefCacheEntry{
+				channelIDHex: chID,
+				isChannel:    true,
+				cachedAt:     time.Now(),
+			})
+			return chID, true
+		}
+
+		// Not a channel event — cache that too
+		cm.refCache.Store(refIDHex, &channelRefCacheEntry{
+			cachedAt: time.Now(),
+		})
+	}
+	return "", false
 }
 
 // getChannelInfo fetches (from cache or DB) the access control info for a channel.

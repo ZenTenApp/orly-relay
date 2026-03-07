@@ -5,6 +5,23 @@ import { Event as NEvent, EventTemplate } from 'nostr-tools'
 
 export type TAccessMode = 'open' | 'whitelist' | 'blacklist'
 
+// --- Message expiry ---
+
+/** Default message expiry: 4 weeks in seconds */
+export const DEFAULT_MESSAGE_EXPIRY = 4 * 7 * 24 * 60 * 60
+
+/** Configurable expiry options for channel settings */
+export const EXPIRY_OPTIONS = [
+  { label: '1 week', value: 7 * 24 * 60 * 60 },
+  { label: '2 weeks', value: 2 * 7 * 24 * 60 * 60 },
+  { label: '4 weeks', value: 4 * 7 * 24 * 60 * 60 },
+  { label: '2 months', value: 2 * 30 * 24 * 60 * 60 },
+  { label: '3 months', value: 3 * 30 * 24 * 60 * 60 },
+  { label: '6 months', value: 6 * 30 * 24 * 60 * 60 },
+  { label: '9 months', value: 9 * 30 * 24 * 60 * 60 },
+  { label: '12 months', value: 12 * 30 * 24 * 60 * 60 },
+] as const
+
 // --- Member entry with provenance tracking ---
 
 export type TMemberEntry = {
@@ -22,6 +39,7 @@ export type TChannel = {
   creator: string
   createdAt: number
   accessMode: TAccessMode
+  messageExpiry?: number // seconds until messages expire (NIP-40)
   mods: string[]
   members: TMemberEntry[]
   blocked: TMemberEntry[]
@@ -77,6 +95,7 @@ function parseChannelFromEvent(event: NEvent): TChannel | null {
       creator: event.pubkey,
       createdAt: event.created_at,
       accessMode: parseAccessMode(meta),
+      messageExpiry: typeof meta.message_expiry === 'number' ? meta.message_expiry : undefined,
       mods: [],
       members: [],
       blocked: [],
@@ -113,6 +132,7 @@ export type TChannelMeta = {
   requested: string[]
   rejected: string[]
   accessMode: TAccessMode
+  messageExpiry?: number
 }
 
 class ChatService {
@@ -177,11 +197,15 @@ class ChatService {
       else if (role === 'rejected') rejected.push(pk)
     }
     let accessMode: TAccessMode = 'whitelist'
+    let messageExpiry: number | undefined
     try {
       const meta = JSON.parse(ev.content)
       accessMode = parseAccessMode(meta)
+      if (typeof meta.message_expiry === 'number') {
+        messageExpiry = meta.message_expiry
+      }
     } catch { /* keep default */ }
-    return { mods, members, blocked, invited, requested, rejected, accessMode }
+    return { mods, members, blocked, invited, requested, rejected, accessMode, messageExpiry }
   }
 
   async fetchHiddenMessageIds(
@@ -249,11 +273,16 @@ class ChatService {
     }
   }
 
-  createMessageDraft(channelId: string, relayUrl: string, content: string): EventTemplate {
+  createMessageDraft(channelId: string, relayUrl: string, content: string, expirySecs?: number): EventTemplate {
+    const now = Math.floor(Date.now() / 1000)
+    const expiry = expirySecs ?? DEFAULT_MESSAGE_EXPIRY
     return {
       kind: CHANNEL_MESSAGE_KIND,
-      created_at: Math.floor(Date.now() / 1000),
-      tags: [['e', channelId, relayUrl, 'root']],
+      created_at: now,
+      tags: [
+        ['e', channelId, relayUrl, 'root'],
+        ['expiration', String(now + expiry)]
+      ],
       content
     }
   }
@@ -261,7 +290,7 @@ class ChatService {
   createMetadataUpdateDraft(
     channelId: string,
     relayUrl: string,
-    meta: { name?: string; about?: string; access_mode?: TAccessMode },
+    meta: { name?: string; about?: string; access_mode?: TAccessMode; message_expiry?: number },
     mods: string[],
     members: TMemberEntry[],
     blocked: TMemberEntry[],
@@ -285,10 +314,14 @@ class ChatService {
   }
 
   createHideMessageDraft(messageEventId: string, relayUrl: string, reason = ''): EventTemplate {
+    const now = Math.floor(Date.now() / 1000)
     return {
       kind: CHANNEL_HIDE_KIND,
-      created_at: Math.floor(Date.now() / 1000),
-      tags: [['e', messageEventId, relayUrl, 'root']],
+      created_at: now,
+      tags: [
+        ['e', messageEventId, relayUrl, 'root'],
+        ['expiration', String(now + DEFAULT_MESSAGE_EXPIRY)]
+      ],
       content: reason
     }
   }
@@ -299,12 +332,14 @@ class ChatService {
     relayUrl: string,
     reason = ''
   ): EventTemplate {
+    const now = Math.floor(Date.now() / 1000)
     return {
       kind: CHANNEL_MUTE_KIND,
-      created_at: Math.floor(Date.now() / 1000),
+      created_at: now,
       tags: [
         ['e', channelId, relayUrl, 'root'],
-        ['p', targetPubkey]
+        ['p', targetPubkey],
+        ['expiration', String(now + DEFAULT_MESSAGE_EXPIRY)]
       ],
       content: reason
     }

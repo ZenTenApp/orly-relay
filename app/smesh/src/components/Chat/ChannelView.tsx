@@ -21,6 +21,7 @@ import { Button } from '../ui/button'
 import { Textarea } from '../ui/textarea'
 import dayjs from 'dayjs'
 import ChannelSettingsPanel from './ChannelSettingsPanel'
+import ChatContent from './ChatContent'
 import UserProfileModal from './UserProfileModal'
 import MentionPopup from './MentionPopup'
 import MemberListPanel from './MemberListPanel'
@@ -405,7 +406,7 @@ function ChatMessage({
   showModActions,
   onUsernameClick
 }: {
-  msg: { id: string; pubkey: string; content: string; createdAt: number }
+  msg: { id: string; pubkey: string; content: string; createdAt: number; event?: import('nostr-tools').Event }
   isOwn: boolean
   showModActions: boolean
   onUsernameClick: (pubkey: string) => void
@@ -430,7 +431,7 @@ function ChatMessage({
           >
             {displayName}
           </button>{' '}
-          {actionText}
+          <ChatContent content={actionText!} event={msg.event} />
         </span>
       ) : (
         <>
@@ -444,7 +445,7 @@ function ChatMessage({
             </button>
             <span className="text-muted-foreground">&gt;</span>
           </span>
-          <span className="break-words whitespace-pre-wrap min-w-0">&nbsp;{msg.content}</span>
+          <span className="min-w-0">&nbsp;<ChatContent content={msg.content} event={msg.event} /></span>
         </>
       )}
       {showModActions && (

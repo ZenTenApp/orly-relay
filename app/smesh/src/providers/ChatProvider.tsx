@@ -84,6 +84,7 @@ type TChatContext = {
   blockUser: (pubkey: string) => Promise<void>
   unblockUser: (pubkey: string) => Promise<void>
   updateAccessMode: (mode: TAccessMode) => Promise<void>
+  updateMessageExpiry: (expirySecs: number) => Promise<void>
   sendInvite: (pubkey: string) => Promise<void>
   revokeInvite: (pubkey: string) => Promise<void>
   acceptRequest: (pubkey: string) => Promise<void>
@@ -251,8 +252,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         requested = meta.requested
         rejected = meta.rejected
         accessMode = meta.accessMode
-        // Update channel's accessMode from latest metadata
+        // Update channel's accessMode and messageExpiry from latest metadata
         channel.accessMode = accessMode
+        if (meta.messageExpiry !== undefined) {
+          channel.messageExpiry = meta.messageExpiry
+        }
       }
       // Owner is always a mod
       if (!mods.includes(ownerPk)) mods = [ownerPk, ...mods]
@@ -406,7 +410,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const sendMessage = useCallback(
     async (content: string) => {
       if (!currentChannel || !pubkey) return
-      const draft = chatService.createMessageDraft(currentChannel.id, relayUrl, content)
+      const draft = chatService.createMessageDraft(
+        currentChannel.id, relayUrl, content, currentChannel.messageExpiry
+      )
       const signed = await signEvent(draft)
       await client.publishEvent([relayUrl], signed)
     },
@@ -447,13 +453,18 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       invited: TMemberEntry[],
       requested: string[],
       rejected: string[],
-      accessMode?: TAccessMode
+      accessMode?: TAccessMode,
+      messageExpiry?: number
     ) => {
       if (!currentChannel || !pubkey) return
       const meta: Record<string, unknown> = {
         name: currentChannel.name,
         about: currentChannel.about,
         access_mode: accessMode ?? channelAccessMode
+      }
+      const expiry = messageExpiry ?? currentChannel.messageExpiry
+      if (expiry !== undefined) {
+        meta.message_expiry = expiry
       }
 
       const draft = chatService.createMetadataUpdateDraft(
@@ -562,6 +573,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setChannelAccessMode(mode)
       setCurrentChannel((prev) => (prev ? { ...prev, accessMode: mode } : null))
       await publishMetadataUpdate(channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected, mode)
+    },
+    [channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected, publishMetadataUpdate]
+  )
+
+  const updateMessageExpiry = useCallback(
+    async (expirySecs: number) => {
+      setCurrentChannel((prev) => (prev ? { ...prev, messageExpiry: expirySecs } : null))
+      await publishMetadataUpdate(channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected, undefined, expirySecs)
     },
     [channelMods, channelMembers, channelBlocked, channelInvited, channelRequested, channelRejected, publishMetadataUpdate]
   )
@@ -679,6 +698,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         blockUser,
         unblockUser,
         updateAccessMode,
+        updateMessageExpiry,
         sendInvite,
         revokeInvite,
         acceptRequest,

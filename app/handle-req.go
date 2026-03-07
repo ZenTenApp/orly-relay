@@ -642,9 +642,23 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 				)
 			}
 		} else {
-			// Policy-defined privileged events are handled by the policy engine
-			// at line 455+. No early filtering needed here - delegate entirely to
-			// the policy engine to avoid duplicate logic.
+			// Check if this non-privileged event references a channel event via e-tags.
+			// Reactions, reposts, zaps, etc. that target channel messages must be
+			// filtered based on the channel's access control.
+			if l.channelMembership != nil {
+				if channelIDHex, isChannel := l.channelMembership.ReferencesChannelEvent(ev, l.ctx); isChannel {
+					pk := l.authedPubkey.Load()
+					if !l.channelMembership.IsChannelMemberByID(channelIDHex, ev.Kind, pk, l.ctx) {
+						log.T.C(func() string {
+							return fmt.Sprintf(
+								"channel-referencing event %0x kind %d denied for pubkey %0x (not a member of channel %s)",
+								ev.ID, ev.Kind, pk, channelIDHex,
+							)
+						})
+						continue
+					}
+				}
+			}
 			tmp = append(tmp, ev)
 		}
 	}

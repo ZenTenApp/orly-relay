@@ -2,7 +2,7 @@ import { useChat } from '@/providers/ChatProvider'
 import { useNostr } from '@/providers/NostrProvider'
 import { useFetchProfile } from '@/hooks/useFetchProfile'
 import { Pubkey } from '@/domain'
-import { TAccessMode } from '@/services/chat.service'
+import { TAccessMode, EXPIRY_OPTIONS, DEFAULT_MESSAGE_EXPIRY } from '@/services/chat.service'
 import {
   Lock,
   LockOpen,
@@ -47,6 +47,7 @@ export default function ChannelSettingsPanel({ onClose }: { onClose: () => void 
     removeMember,
     unblockUser,
     updateAccessMode,
+    updateMessageExpiry,
     sendInvite,
     revokeInvite,
     acceptRequest,
@@ -156,6 +157,31 @@ export default function ChannelSettingsPanel({ onClose }: { onClose: () => void 
               {channelAccessMode === 'open' && 'Anyone authenticated can read and write.'}
               {channelAccessMode === 'whitelist' && 'Only listed members, mods, and invitees can access.'}
               {channelAccessMode === 'blacklist' && 'Everyone except excluded users can access.'}
+            </div>
+          </section>
+        )}
+
+        {/* --- Message Expiry (owner only) --- */}
+        {isOwner && (
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Message Expiry</h3>
+            <div className="flex flex-wrap gap-1">
+              {EXPIRY_OPTIONS.map(({ label, value }) => (
+                <button
+                  key={value}
+                  className={`text-xs px-3 py-1.5 rounded border ${
+                    (currentChannel.messageExpiry ?? DEFAULT_MESSAGE_EXPIRY) === value
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'border-border'
+                  }`}
+                  onClick={() => updateMessageExpiry(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Messages will include a NIP-40 expiration tag set to this duration from send time.
             </div>
           </section>
         )}
