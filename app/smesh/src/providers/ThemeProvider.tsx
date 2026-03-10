@@ -27,7 +27,7 @@ const updateCSSVariables = (color: TPrimaryColor, currentTheme: TTheme) => {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [themeSetting, setThemeSetting] = useState<TThemeSetting>(
-    (localStorage.getItem(StorageKey.THEME_SETTING) as TThemeSetting) ?? 'system'
+    (localStorage.getItem(StorageKey.THEME_SETTING) as TThemeSetting) ?? 'pure-black'
   )
   const [theme, setTheme] = useState<TTheme>('light')
   const [primaryColor, setPrimaryColor] = useState<TPrimaryColor>(
