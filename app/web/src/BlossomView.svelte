@@ -2065,7 +2065,7 @@
     }
 
     .upload-btn {
-        background-color: var(--success, #28a745);
+        background-color: var(--success);
         color: white;
         border: none;
         padding: 0.5em 1em;
@@ -2611,7 +2611,7 @@
     }
 
     .variant-copy-btn.copied {
-        background-color: #28a745;
+        background-color: var(--success);
     }
 
     .variants-empty {

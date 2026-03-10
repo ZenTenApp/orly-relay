@@ -1,33 +1,32 @@
 <script>
-    import { isStandaloneMode, relayUrl, relayInfo, relayConnectionStatus, savedRelays, saveRelay } from "./stores.js";
+    import { isStandaloneMode, relayUrl, relayInfo, relayConnectionStatus, savedRelays, saveRelay, searchActive, notificationDropdownOpen } from "./stores.js";
+    import { totalUnreadCount } from "./notificationStores.js";
     import { getApiBase, connectToRelay, normalizeWsUrl } from "./config.js";
 
     export let isDarkTheme = false;
     export let isLoggedIn = false;
     export let userRole = "";
     export let currentEffectiveRole = "";
-    export let userProfile = null;
-    export let userPubkey = "";
 
     // Event dispatchers
     import { createEventDispatcher } from "svelte";
     const dispatch = createEventDispatcher();
+
+    function toggleSearch() {
+        searchActive.update(v => !v);
+    }
+
+    function toggleNotifications() {
+        notificationDropdownOpen.update(v => !v);
+    }
 
     // Dropdown state
     let showDropdown = false;
     let isConnecting = false;
     let connectingUrl = "";
 
-    function openSettingsDrawer() {
-        dispatch("openSettingsDrawer");
-    }
-
     function toggleMobileMenu() {
         dispatch("toggleMobileMenu");
-    }
-
-    function openLoginModal() {
-        dispatch("openLoginModal");
     }
 
     function openRelayModal() {
@@ -126,17 +125,13 @@
                 <path d="M3 12h18M3 6h18M3 18h18" />
             </svg>
         </button>
-        <img src="/orly.png" alt="ORLY Logo" class="logo" />
-        <div class="header-title">
-            <span class="app-title">
-                ORLY? dashboard
-                {#if isLoggedIn && userRole}
-                    <span class="permission-badge"
-                        >{currentEffectiveRole}</span
-                    >
-                {/if}
-            </span>
-        </div>
+
+        {#if isLoggedIn && userRole}
+            <span class="permission-badge">{currentEffectiveRole}</span>
+        {/if}
+
+        <!-- Spacer to push right-side items -->
+        <div class="header-spacer"></div>
 
         <!-- Relay indicator - dropdown only in standalone mode -->
         <div class="relay-dropdown-container">
@@ -190,28 +185,24 @@
             {/if}
         </div>
 
-        <div class="header-buttons">
-            {#if isLoggedIn}
-                <button class="user-profile-btn" on:click={openSettingsDrawer}>
-                    {#if userProfile?.picture}
-                        <img
-                            src={userProfile.picture}
-                            alt="User avatar"
-                            class="user-avatar"
-                        />
-                    {:else}
-                        <div class="user-avatar-placeholder">👤</div>
-                    {/if}
-                    <span class="user-name">
-                        {userProfile?.name || userPubkey}
-                    </span>
-                </button>
-            {:else}
-                <button class="login-btn" on:click={openLoginModal}
-                    >Log in</button
-                >
+        <!-- Search button -->
+        <button class="header-icon-btn" on:click={toggleSearch} title="Search" aria-label="Search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <path d="M21 21l-4.35-4.35" />
+            </svg>
+        </button>
+
+        <!-- Notification bell -->
+        <button class="header-icon-btn notification-btn" on:click={toggleNotifications} title="Notifications" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+            {#if $totalUnreadCount > 0}
+                <span class="notification-badge">{$totalUnreadCount > 99 ? '99+' : $totalUnreadCount}</span>
             {/if}
-        </div>
+        </button>
     </div>
 </header>
 
@@ -267,107 +258,59 @@
         }
     }
 
-    .logo {
-        height: 2.5em;
-        width: auto;
-        flex-shrink: 0;
-        align-self: center;
-    }
-
-    .header-title {
-        flex: 1;
-        display: flex;
-        align-items: center;
-        align-self: center;
-    }
-
-    .app-title {
-        font-size: 1.2em;
-        font-weight: 600;
-        color: var(--text-color);
-        display: flex;
-        align-items: center;
-        gap: 0.5em;
-    }
-
     .permission-badge {
         background: var(--primary);
-        color: var(--text-color);
+        color: #000;
         padding: 0.2em 0.5em;
         border-radius: 0.5em;
         font-size: 0.7em;
         font-weight: 500;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-    }
-
-    .header-buttons {
-        display: flex;
-        align-items: stretch;
-        align-self: stretch;
-        margin-left: auto;
-    }
-
-    .login-btn,
-    .user-profile-btn {
-        background: transparent;
-        color: var(--button-text);
-        border: 0;
-        cursor: pointer;
-        font-size: 1em;
-        transition: background-color 0.2s;
-        flex-shrink: 0;
-        padding: 0.5em;
-        margin: 0;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center;
-    }
-
-    .login-btn:hover,
-    .user-profile-btn:hover {
-        background: var(--card-bg);
-    }
-
-    .user-profile-btn {
-        gap: 0.5em;
-        justify-content: flex-start;
-        padding: 0 0.5em;
-    }
-
-    .user-avatar {
-        height: 2.5em;
-        width: 2.5em;
-        border-radius: 50%;
-        object-fit: cover;
-        flex-shrink: 0;
         align-self: center;
-        vertical-align: middle;
+        margin-left: 0.5em;
     }
 
-    .user-avatar-placeholder {
-        height: 2.5em;
-        width: 2.5em;
-        border-radius: 50%;
-        background: var(--bg-color);
+    .header-spacer {
+        flex: 1;
+    }
+
+    .header-icon-btn {
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.2em;
-        flex-shrink: 0;
-        align-self: center;
+        background: transparent;
+        border: none;
+        color: var(--text-color);
+        cursor: pointer;
+        padding: 0 0.6em;
+        align-self: stretch;
+        transition: background 0.15s;
+        position: relative;
     }
 
-    .user-name {
-        font-weight: 500;
-        white-space: nowrap;
-        line-height: 1;
-        align-self: center;
-        max-width: none !important;
-        overflow: visible !important;
-        text-overflow: unset !important;
-        width: auto !important;
-        color: var(--text-color);
+    .header-icon-btn:hover {
+        background: var(--button-hover-bg);
+    }
+
+    .header-icon-btn svg {
+        width: 1.25em;
+        height: 1.25em;
+    }
+
+    .notification-badge {
+        position: absolute;
+        top: 0.4em;
+        right: 0.3em;
+        background: var(--primary);
+        color: #000;
+        font-size: 0.55rem;
+        font-weight: 700;
+        padding: 0.1em 0.35em;
+        border-radius: 10px;
+        min-width: 1em;
+        text-align: center;
+        line-height: 1.3;
     }
 
     /* Relay dropdown container */

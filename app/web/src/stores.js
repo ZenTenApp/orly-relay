@@ -53,6 +53,28 @@ export const showSettingsDrawer = writable(false);
 export const selectedTab = writable(localStorage.getItem("selectedTab") || "export");
 export const showFilterBuilder = writable(false);
 
+// ==================== Navigation State (v0.59) ====================
+
+// Active top-level view: feed, chat, library, admin, or specific admin sub-view
+export const activeView = writable(localStorage.getItem("activeView") || "feed");
+activeView.subscribe(v => { if (v) localStorage.setItem("activeView", v); });
+
+// Accordion expanded section (null = none expanded)
+export const expandedSection = writable(localStorage.getItem("expandedSection") || null);
+expandedSection.subscribe(v => {
+    if (v) localStorage.setItem("expandedSection", v);
+    else localStorage.removeItem("expandedSection");
+});
+
+// Search overlay state
+export const searchActive = writable(false);
+
+// Notification dropdown state
+export const notificationDropdownOpen = writable(false);
+
+// User menu dropdown state
+export const userMenuOpen = writable(false);
+
 // ==================== ACL State ====================
 
 export const aclMode = writable("");

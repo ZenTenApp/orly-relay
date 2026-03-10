@@ -326,7 +326,7 @@
     }
 
     .badge-addressable {
-        background: #28a745;
+        background: var(--success);
         color: white;
     }
 

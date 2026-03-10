@@ -453,7 +453,7 @@
     }
 
     .level-info {
-        background-color: #28a745;
+        background-color: var(--success);
         color: white;
     }
 

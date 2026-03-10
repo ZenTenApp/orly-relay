@@ -147,11 +147,11 @@
     }
 
     .import-message.success {
-        color: #4caf50;
+        color: var(--success);
     }
 
     .import-message.error {
-        color: #f44336;
+        color: var(--danger);
     }
 
     .permission-denied,

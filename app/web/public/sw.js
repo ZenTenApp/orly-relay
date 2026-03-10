@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'orly-v2';
+const CACHE_VERSION = 'orly-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

@@ -718,7 +718,7 @@
 
     .generate-btn {
         padding: 10px 20px;
-        background: var(--success, #4caf50);
+        background: var(--success);
         color: white;
         border: none;
         border-radius: 6px;
@@ -728,7 +728,8 @@
     }
 
     .generate-btn:hover:not(:disabled) {
-        background: #45a049;
+        background: var(--success);
+        filter: brightness(0.9);
     }
 
     .generate-btn:disabled {
@@ -855,7 +856,7 @@
     .modal.dark-theme .success-message {
         background: #2e4a2e;
         color: #a5d6a7;
-        border: 1px solid #4caf50;
+        border: 1px solid var(--success);
     }
 
     /* Deriving modal overlay */
@@ -890,7 +891,7 @@
     .deriving-timer {
         font-size: 2.5rem;
         font-weight: bold;
-        color: var(--primary, #00bcd4);
+        color: var(--primary);
         font-family: monospace;
         margin: 0.5rem 0;
     }
@@ -905,7 +906,7 @@
         width: 48px;
         height: 48px;
         border: 4px solid var(--border-color, #e0e0e0);
-        border-top-color: var(--primary, #00bcd4);
+        border-top-color: var(--primary);
         border-radius: 50%;
         margin: 0 auto;
         animation: spin 1s linear infinite;

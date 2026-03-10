@@ -4,6 +4,14 @@
     import ManagedACL from "./ManagedACL.svelte";
     import Header from "./Header.svelte";
     import Sidebar from "./Sidebar.svelte";
+    import SidebarAccordion from "./SidebarAccordion.svelte";
+    import UserMenu from "./UserMenu.svelte";
+    import AboutView from "./AboutView.svelte";
+    import SearchOverlay from "./SearchOverlay.svelte";
+    import NotificationDropdown from "./NotificationDropdown.svelte";
+    import FeedView from "./FeedView.svelte";
+    import ChatView from "./ChatView.svelte";
+    import LibraryView from "./LibraryView.svelte";
     import ExportView from "./ExportView.svelte";
     import ImportView from "./ImportView.svelte";
     import EventsView from "./EventsView.svelte";
@@ -21,7 +29,8 @@
 
     // Relay config imports
     import { isStandalone, hasRelayConfigured, fetchRelayInfoFromUrl, getApiBase } from "./config.js";
-    import { isStandaloneMode, relayUrl, relayInfo as relayInfoStore, relayConnectionStatus, isOrlyRelay } from "./stores.js";
+    import { isStandaloneMode, relayUrl, relayInfo as relayInfoStore, relayConnectionStatus, isOrlyRelay, activeView, expandedSection, userMenuOpen } from "./stores.js";
+    import { activeChatTab } from "./chatStores.js";
 
     // Utility imports
     import { buildFilter } from "./helpers.tsx";
@@ -71,6 +80,22 @@
     let showSettingsDrawer = false;
     let mobileMenuOpen = false;
     let selectedTab = localStorage.getItem("selectedTab") || "export";
+
+    // Sync activeView with selectedTab on init: if activeView is an admin view, set selectedTab
+    {
+        const storedView = localStorage.getItem("activeView") || "feed";
+        const tabMap = {
+            "admin-export": "export", "admin-import": "import", "admin-events": "events",
+            "admin-blossom": "blossom", "admin-compose": "compose", "admin-recovery": "recovery",
+            "admin-managed-acl": "managed-acl", "admin-curation": "curation",
+            "admin-sprocket": "sprocket", "admin-policy": "policy",
+            "admin-relay-connect": "relay-connect", "admin-logs": "logs",
+        };
+        if (tabMap[storedView]) {
+            selectedTab = tabMap[storedView];
+        }
+    }
+
     let showFilterBuilder = false; // Show filter builder in events view
     let eventsViewFilter = {}; // Active filter for events view
     let searchTabs = [];
@@ -879,6 +904,11 @@
                 console.log("Could not fetch relay theme config:", e);
             }
         })();
+    }
+
+    function toggleTheme() {
+        isDarkTheme = !isDarkTheme;
+        configuredTheme = isDarkTheme ? "dark" : "light";
     }
 
     // Load state from localStorage
@@ -1916,6 +1946,42 @@
         }
 
         savePersistentState();
+    }
+
+    // Map accordion view IDs to old selectedTab IDs
+    const adminViewToTab = {
+        "admin-export": "export",
+        "admin-import": "import",
+        "admin-events": "events",
+        "admin-blossom": "blossom",
+        "admin-compose": "compose",
+        "admin-recovery": "recovery",
+        "admin-managed-acl": "managed-acl",
+        "admin-curation": "curation",
+        "admin-sprocket": "sprocket",
+        "admin-policy": "policy",
+        "admin-relay-connect": "relay-connect",
+        "admin-logs": "logs",
+    };
+
+    function handleAccordionNavigate(event) {
+        const viewId = event.detail;
+        activeView.set(viewId);
+
+        // Sync chat sub-tab when navigating to chat views
+        if (viewId === "chat-inbox") activeChatTab.set("inbox");
+        else if (viewId === "chat-channels") activeChatTab.set("channels");
+
+        // If it's an admin sub-view, bridge to old selectedTab system
+        if (adminViewToTab[viewId]) {
+            selectTab(adminViewToTab[viewId]);
+        }
+    }
+
+    let showAboutModal = false;
+
+    function handleShowAbout() {
+        showAboutModal = true;
     }
 
     function openLoginModal() {
@@ -3008,32 +3074,71 @@
     {isLoggedIn}
     {userRole}
     {currentEffectiveRole}
-    {userProfile}
-    {userPubkey}
-    on:openSettingsDrawer={openSettingsDrawer}
-    on:openLoginModal={openLoginModal}
     on:openRelayModal={openRelayConnectModal}
     on:relayChanged={handleRelayChange}
     on:toggleMobileMenu={toggleMobileMenu}
 />
 
+<!-- User Menu Dropdown -->
+<UserMenu
+    {isLoggedIn}
+    {userProfile}
+    {userPubkey}
+    {userRole}
+    {currentEffectiveRole}
+    {isDarkTheme}
+    on:logout={handleLogout}
+    on:toggleTheme={toggleTheme}
+    on:setViewAsRole={(e) => setViewAsRole(e.detail)}
+    on:openRelayModal={openRelayConnectModal}
+/>
+
 <!-- Main Content Area -->
 <div class="app-container" class:dark-theme={isDarkTheme}>
-    <!-- Sidebar -->
-    <Sidebar
-        {isDarkTheme}
-        {tabs}
-        {selectedTab}
+    <!-- Sidebar Accordion -->
+    <SidebarAccordion
+        {isLoggedIn}
+        {userProfile}
+        {userPubkey}
+        {currentEffectiveRole}
         version={relayVersion}
         mobileOpen={mobileMenuOpen}
-        on:selectTab={(e) => selectTab(e.detail)}
-        on:closeSearchTab={(e) => closeSearchTab(e.detail)}
+        {aclMode}
+        {sprocketEnabled}
+        {policyEnabled}
+        {nrcEnabled}
+        {blossomEnabled}
+        isOrlyRelay={$isOrlyRelay}
+        on:navigate={handleAccordionNavigate}
         on:closeMobileMenu={closeMobileMenu}
+        on:showAbout={handleShowAbout}
+        on:openLoginModal={openLoginModal}
     />
 
     <!-- Main Content -->
     <main class="main-content">
-        {#if selectedTab === "export"}
+        {#if $activeView === "feed"}
+            <FeedView
+                {isLoggedIn}
+                {userPubkey}
+                {userContactList}
+            />
+        {:else if $activeView?.startsWith("chat-")}
+            <ChatView
+                {isLoggedIn}
+                {userPubkey}
+                {userSigner}
+            />
+        {:else if $activeView?.startsWith("library-")}
+            <LibraryView
+                {isLoggedIn}
+                {userPubkey}
+                {userSigner}
+                subView={$activeView.replace("library-", "")}
+            />
+        {:else if $activeView?.startsWith("admin-")}
+            <!-- Admin views: bridge to existing selectedTab routing -->
+            {#if selectedTab === "export"}
             <ExportView
                 {isLoggedIn}
                 {currentEffectiveRole}
@@ -3529,6 +3634,11 @@
             {/each}
         {:else}
             <div class="welcome-message">
+                <p>Select a tab from the Admin section.</p>
+            </div>
+        {/if}
+        {:else}
+            <div class="welcome-message">
                 {#if isLoggedIn}
                     <p>
                         Welcome {userProfile?.name ||
@@ -3711,6 +3821,25 @@
     on:close={closeRelayConnectModal}
 />
 
+<!-- About Modal -->
+<AboutView
+    show={showAboutModal}
+    version={relayVersion}
+    on:close={() => showAboutModal = false}
+/>
+
+<!-- Notification Dropdown -->
+<NotificationDropdown {userPubkey} {isLoggedIn} />
+
+<!-- Search Overlay -->
+<SearchOverlay
+    on:search={(e) => {
+        // Bridge to existing search tab system
+        const filter = { search: e.detail };
+        createSearchTab(filter, `Search: ${e.detail}`);
+    }}
+/>
+
 <style>
     :global(html),
     :global(body) {
@@ -3718,103 +3847,103 @@
         padding: 0;
         overflow: hidden;
         height: 100%;
-        /* Base colors */
-        --bg-color: #ddd;
-        --header-bg: #eee;
-        --sidebar-bg: #eee;
-        --card-bg: #f8f9fa;
-        --panel-bg: #f8f9fa;
-        --border-color: #dee2e6;
-        --text-color: #444444;
-        --text-muted: #6c757d;
-        --input-border: #ccc;
-        --input-bg: #ffffff;
-        --input-text-color: #495057;
-        --button-bg: #ddd;
-        --button-hover-bg: #eee;
-        --button-text: #444444;
-        --button-hover-border: #adb5bd;
+        /* Base colors — Light theme */
+        --bg-color: #FFFFFF;
+        --header-bg: #F5F5F5;
+        --sidebar-bg: #F5F5F5;
+        --card-bg: #F5F5F5;
+        --panel-bg: #F5F5F5;
+        --border-color: #E5E5E5;
+        --text-color: #171717;
+        --text-muted: #525252;
+        --input-border: #D4D4D4;
+        --input-bg: #FFFFFF;
+        --input-text-color: #171717;
+        --button-bg: #E5E5E5;
+        --button-hover-bg: #D4D4D4;
+        --button-text: #171717;
+        --button-hover-border: #A3A3A3;
 
-        /* Theme colors */
-        --primary: #00bcd4;
-        --primary-bg: rgba(0, 188, 212, 0.1);
-        --secondary: #6c757d;
-        --success: #28a745;
-        --success-bg: #d4edda;
-        --success-text: #155724;
-        --info: #17a2b8;
-        --warning: #ff3e00;
-        --warning-bg: #fff3cd;
-        --danger: #dc3545;
-        --danger-bg: #f8d7da;
-        --danger-text: #721c24;
-        --error-bg: #f8d7da;
-        --error-text: #721c24;
+        /* Theme colors — Amber accent */
+        --primary: #F59E0B;
+        --primary-bg: rgba(245, 158, 11, 0.1);
+        --secondary: #525252;
+        --success: #22C55E;
+        --success-bg: #DCFCE7;
+        --success-text: #166534;
+        --info: #F59E0B;
+        --warning: #EF4444;
+        --warning-bg: #FEF2F2;
+        --danger: #EF4444;
+        --danger-bg: #FEF2F2;
+        --danger-text: #991B1B;
+        --error-bg: #FEF2F2;
+        --error-text: #991B1B;
 
         /* Code colors */
-        --code-bg: #f8f9fa;
-        --code-text: #495057;
+        --code-bg: #F5F5F5;
+        --code-text: #171717;
 
         /* Tab colors */
-        --tab-inactive-bg: #bbb;
+        --tab-inactive-bg: #E5E5E5;
 
         /* Accent colors */
-        --accent-color: #007bff;
-        --accent-hover-color: #0056b3;
+        --accent-color: #F59E0B;
+        --accent-hover-color: #D97706;
     }
 
     :global(body.dark-theme) {
-        /* Base colors */
-        --bg-color: #263238;
-        --header-bg: #1e272c;
-        --sidebar-bg: #1e272c;
-        --card-bg: #37474f;
-        --panel-bg: #37474f;
-        --border-color: #404040;
-        --text-color: #ffffff;
-        --text-muted: #adb5bd;
-        --input-border: #555;
-        --input-bg: #37474f;
-        --input-text-color: #ffffff;
-        --button-bg: #263238;
-        --button-hover-bg: #1e272c;
-        --button-text: #ffffff;
-        --button-hover-border: #6c757d;
+        /* Base colors — True black for OLED */
+        --bg-color: #000000;
+        --header-bg: #0A0A0A;
+        --sidebar-bg: #0A0A0A;
+        --card-bg: #0A0A0A;
+        --panel-bg: #0A0A0A;
+        --border-color: #1F1F1F;
+        --text-color: #FFFFFF;
+        --text-muted: #A3A3A3;
+        --input-border: #2A2A2A;
+        --input-bg: #141414;
+        --input-text-color: #FFFFFF;
+        --button-bg: #141414;
+        --button-hover-bg: #1F1F1F;
+        --button-text: #FFFFFF;
+        --button-hover-border: #3A3A3A;
 
-        /* Theme colors */
-        --primary: #00bcd4;
-        --primary-bg: rgba(0, 188, 212, 0.2);
-        --secondary: #6c757d;
-        --success: #28a745;
-        --success-bg: #1e4620;
-        --success-text: #d4edda;
-        --info: #17a2b8;
-        --warning: #ff3e00;
-        --warning-bg: #4d1f00;
-        --danger: #dc3545;
-        --danger-bg: #4d1319;
-        --danger-text: #f8d7da;
-        --error-bg: #4d1319;
-        --error-text: #f8d7da;
+        /* Theme colors — Amber accent */
+        --primary: #F59E0B;
+        --primary-bg: rgba(245, 158, 11, 0.15);
+        --secondary: #A3A3A3;
+        --success: #22C55E;
+        --success-bg: #052E16;
+        --success-text: #DCFCE7;
+        --info: #F59E0B;
+        --warning: #EF4444;
+        --warning-bg: #450A0A;
+        --danger: #EF4444;
+        --danger-bg: #450A0A;
+        --danger-text: #FEF2F2;
+        --error-bg: #450A0A;
+        --error-text: #FEF2F2;
 
         /* Code colors */
-        --code-bg: #1e272c;
-        --code-text: #ffffff;
+        --code-bg: #141414;
+        --code-text: #FFFFFF;
 
         /* Tab colors */
-        --tab-inactive-bg: #1a1a1a;
+        --tab-inactive-bg: #141414;
 
         /* Accent colors */
-        --accent-color: #007bff;
-        --accent-hover-color: #0056b3;
+        --accent-color: #F59E0B;
+        --accent-hover-color: #D97706;
     }
 
     .login-btn {
         padding: 0.5em 1em;
         border: none;
         border-radius: 6px;
-        background-color: #4caf50;
-        color: var(--text-color);
+        background-color: var(--primary);
+        color: #000000;
         cursor: pointer;
         font-size: 1rem;
         font-weight: 500;
@@ -3856,6 +3985,23 @@
         border-radius: 4px;
         font-family: monospace;
         color: #495057;
+    }
+
+    .placeholder-view {
+        text-align: center;
+        padding: 3em 1em;
+        color: var(--text-muted);
+    }
+
+    .placeholder-view h2 {
+        margin: 0 0 0.5em;
+        color: var(--text-color);
+        font-size: 1.4rem;
+    }
+
+    .placeholder-view p {
+        margin: 0;
+        font-size: 0.95rem;
     }
 
     /* App Container */
