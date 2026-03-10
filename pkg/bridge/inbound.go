@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
@@ -123,5 +124,5 @@ func GenerateReplyLink(baseURL, replyTo, subject string) string {
 	if !strings.HasPrefix(subject, "Re: ") {
 		subject = "Re: " + subject
 	}
-	return fmt.Sprintf("%s#to=%s&subject=%s", baseURL, replyTo, subject)
+	return fmt.Sprintf("%s#to=%s&subject=%s", baseURL, url.QueryEscape(replyTo), url.QueryEscape(subject))
 }

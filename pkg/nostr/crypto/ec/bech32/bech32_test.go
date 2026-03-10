@@ -39,7 +39,7 @@ func TestBech32(t *testing.T) {
 		{
 			"split1checkupstagehandshakeupstreamerranterredcaperred2y9e2w",
 			ErrInvalidChecksum{
-				"2y9e3w", "2y9e3wlc445v",
+				"2y9e3w", "lc445v",
 				"2y9e2w",
 			},
 		}, // invalid checksum
@@ -77,7 +77,7 @@ func TestBech32(t *testing.T) {
 		{"x1b4n0q5v", ErrNonCharsetChar(98)},
 		{"li1dgmt3", ErrInvalidSeparatorIndex(2)},
 		{"de1lg7wt\xff", ErrInvalidCharacter(0xff)},
-		{"A1G7SGD8", ErrInvalidChecksum{"2uel5l", "2uel5llqfn3a", "g7sgd8"}},
+		{"A1G7SGD8", ErrInvalidChecksum{"2uel5l", "lqfn3a", "g7sgd8"}},
 		{"10a06t8", ErrInvalidLength(7)},
 		{"1qzzfhee", ErrInvalidSeparatorIndex(0)},
 		{"a12UEL5L", ErrMixedCase{}},
@@ -155,7 +155,7 @@ func TestBech32M(t *testing.T) {
 		{"in1muywd", ErrInvalidSeparatorIndex(2)},
 		{"mm1crxm3i", ErrNonCharsetChar(105)},
 		{"au1s5cgom", ErrNonCharsetChar(111)},
-		{"M1VUXWEZ", ErrInvalidChecksum{"mzl49c", "mzl49cw70eq6", "vuxwez"}},
+		{"M1VUXWEZ", ErrInvalidChecksum{"mzl49c", "w70eq6", "vuxwez"}},
 		{"16plkw9", ErrInvalidLength(7)},
 		{"1p2gdwpf", ErrInvalidSeparatorIndex(0)},
 
@@ -448,7 +448,7 @@ func TestBech32Base256(t *testing.T) {
 		}, {
 			name:    "same as previous but with checksum invalidated",
 			encoded: "split1checkupstagehandshakeupstreamerranterredcaperred2y9e2w",
-			err:     ErrInvalidChecksum{"2y9e3w", "2y9e3wlc445v", "2y9e2w"},
+			err:     ErrInvalidChecksum{"2y9e3w", "lc445v", "2y9e2w"},
 		}, {
 			name:    "hrp with invalid character (space)",
 			encoded: "s lit1checkupstagehandshakeupstreamerranterredcaperredp8hs2p",

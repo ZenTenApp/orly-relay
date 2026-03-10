@@ -205,7 +205,10 @@ whitelist:
 		listener.blacklistTimeout = time.Now().Add(time.Minute) // Timeout after 1 minute
 	}
 	chal := make([]byte, 32)
-	rand.Read(chal)
+	if _, err = rand.Read(chal); err != nil {
+		log.E.F("failed to generate auth challenge: %v", err)
+		return
+	}
 	listener.challenge.Store([]byte(hex.Enc(chal)))
 	// Always send AUTH challenge - channel kinds (40-44) require authentication
 	// regardless of ACL mode, and NIP-42 AUTH is harmless for clients that don't need it

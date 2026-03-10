@@ -223,10 +223,10 @@ func decodeNoLimit(bech []byte) ([]byte, []byte, Version, error) {
 		expectedBldr.Grow(6)
 		writeBech32Checksum(hrp, payload, &expectedBldr, Version0)
 		expectedVersion0 := expectedBldr.String()
-		var b strings.Builder
-		b.Grow(6)
-		writeBech32Checksum(hrp, payload, &expectedBldr, VersionM)
-		expectedVersionM := expectedBldr.String()
+		var bM bytes.Buffer
+		bM.Grow(6)
+		writeBech32Checksum(hrp, payload, &bM, VersionM)
+		expectedVersionM := bM.String()
 		err = ErrInvalidChecksum{
 			Expected:  expectedVersion0,
 			ExpectedM: expectedVersionM,

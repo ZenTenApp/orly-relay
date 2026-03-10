@@ -181,7 +181,11 @@ func randomizeTimestamp(base int64) int64 {
 	const fourDays = 4 * 24 * 60 * 60
 	const twoDays = 2 * 24 * 60 * 60
 	var buf [8]byte
-	rand.Read(buf[:])
+	if _, err := rand.Read(buf[:]); err != nil {
+		// Fallback: use base timestamp unrandomized rather than
+		// using a zero buffer which would produce a predictable offset.
+		return base
+	}
 	n := int64(binary.LittleEndian.Uint64(buf[:]))
 	if n < 0 {
 		n = -n

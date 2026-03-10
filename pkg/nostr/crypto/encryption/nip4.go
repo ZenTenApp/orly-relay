@@ -85,9 +85,10 @@ func DecryptNip4(content, key []byte) (msg []byte, err error) {
 		plaintextLen = len(msg)
 	)
 	if plaintextLen > 0 {
-		// the padding amount is encoded in the padding bytes themselves
+		// PKCS#7 padding: padding byte value is the number of padding bytes,
+		// valid range is [1, 16] for AES-256-CBC with 16-byte blocks.
 		padding := int(msg[plaintextLen-1])
-		if padding > plaintextLen {
+		if padding < 1 || padding > 16 || padding > plaintextLen {
 			err = errorf.E("invalid padding amount: %d", padding)
 			return
 		}

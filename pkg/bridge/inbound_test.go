@@ -65,7 +65,7 @@ func TestProcessInbound_PlainText(t *testing.T) {
 	if !strings.Contains(sentDM, "This is the body.") {
 		t.Errorf("DM missing body: %q", sentDM)
 	}
-	if !strings.Contains(sentDM, "Reply: https://relay.example.com/compose#to=alice@example.com") {
+	if !strings.Contains(sentDM, "Reply: https://relay.example.com/compose#to=alice%40example.com") {
 		t.Errorf("DM missing reply link: %q", sentDM)
 	}
 }

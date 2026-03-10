@@ -59,12 +59,15 @@ func GetRemoteFromReq(r *http.Request) (rr string) {
 	if rem == "" {
 		rr = r.RemoteAddr
 	} else {
-		splitted := strings.Split(rem, " ")
-		if len(splitted) == 1 {
-			rr = splitted[0]
-		}
-		if len(splitted) == 2 {
-			rr = splitted[1]
+		// X-Forwarded-For can be comma-separated or space-separated;
+		// use the first (client) IP for comma-separated, or handle
+		// space-separated format from some proxies.
+		parts := strings.Split(rem, ",")
+		if len(parts) > 1 {
+			rr = strings.TrimSpace(parts[0])
+		} else {
+			splitted := strings.Split(rem, " ")
+			rr = strings.TrimSpace(splitted[0])
 		}
 	}
 	return

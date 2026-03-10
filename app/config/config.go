@@ -333,7 +333,7 @@ func New() (cfg *C, err error) {
 			fmt.Fprintf(os.Stderr, "ERROR: %s\n\n", err)
 		}
 		PrintHelp(cfg, os.Stderr)
-		os.Exit(0)
+		os.Exit(1)
 	}
 	if cfg.DataDir == "" || strings.Contains(cfg.DataDir, "~") {
 		cfg.DataDir = filepath.Join(xdg.DataHome, cfg.AppName)

@@ -142,10 +142,10 @@ func TestGenerateReplyLink(t *testing.T) {
 	if !strings.Contains(link, "bridge.example.com/compose") {
 		t.Errorf("link missing base URL: %s", link)
 	}
-	if !strings.Contains(link, "#to=alice@example.com") {
+	if !strings.Contains(link, "#to=alice%40example.com") {
 		t.Errorf("link missing to param: %s", link)
 	}
-	if !strings.Contains(link, "subject=Re: Hello") {
+	if !strings.Contains(link, "subject=Re%3A+Hello") {
 		t.Errorf("link missing subject: %s", link)
 	}
 }
