@@ -446,6 +446,26 @@ Files modified:
 - path/to/file.go: What changed
 ```
 
+## CRITICAL: Three Separate Web UIs
+
+There are three independent web UIs in this repo. They are **separate codebases** with different frameworks, build tools, and deployment targets. Changes to one do NOT affect the others.
+
+| UI | Path | Framework | Build | Service Worker | Deploy Target |
+|----|------|-----------|-------|----------------|---------------|
+| Relay Dashboard | `app/web/` | Svelte/Rollup | `bun run build` → `dist/` | Manual `CACHE_VERSION` in `public/sw.js` | Embedded in Go binary (`app/web.go`) |
+| Smesh Client | `app/smesh/` | React/Vite | `bun run build` → `dist/` | Workbox auto-hashed (content-addressed) | Embedded (`app/smesh.go`) + rsync to `/home/mleku/smesh/dist/` on VPS |
+| Launcher Admin | `cmd/orly-launcher/web/` | Svelte/Rollup | `bun run build` → `dist/` | None | Embedded (`cmd/orly-launcher/web.go`) |
+
+**Common mistakes to avoid:**
+
+1. **Rebuilding is not changing.** Rebuilding a UI without source changes just produces the same app with new chunk hashes. If the user reports visual issues (wrong colors, missing features), the **source** needs changing, not just a rebuild.
+2. **Theme defaults are per-UI.** The relay dashboard defines its theme in `app/web/src/App.svelte` (CSS variables). The smesh client defines its theme in `app/smesh/src/constants.ts` (PRIMARY_COLORS), `app/smesh/src/providers/ThemeProvider.tsx` (default theme setting), and `app/smesh/src/index.css` (CSS variable defaults). These must be changed independently.
+3. **Smesh has two deploy targets.** The embedded copy (served on port 8088 via Go binary) AND the static copy at smesh.mleku.dev (rsync to VPS) both need updating.
+4. **Service worker cache invalidation differs.** Relay dashboard requires manually bumping `CACHE_VERSION` in `app/web/public/sw.js`. Smesh uses Workbox which auto-hashes chunk filenames — but the SW itself must still be re-fetched by the browser (Caddy cache headers matter).
+5. **localStorage persists user preferences.** Theme/color changes to defaults only affect new users or cleared storage. Existing users keep their saved preferences.
+
+**Current theme defaults (smesh):** pure-black background, amber primary (`38 92% 50%` ≈ `#F59E0B`), matching the relay dashboard.
+
 ## Web UI Libraries
 
 ### nsec-crypto.js
