@@ -544,6 +544,27 @@ ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 \
   'sleep 5 && systemctl status orly'
 ```
 
+### Full-Stack Deploy Checklist
+
+When deploying changes across all web UIs (relay dashboard, smesh client, launcher admin):
+
+```bash
+# 1. Bump CACHE_VERSION in app/web/public/sw.js (smesh uses Workbox auto-hashing, no manual bump)
+# 2. Build all web UIs
+cd app/web && bun install && bun run build
+cd app/smesh && bun install && bun run build
+cd cmd/orly-launcher/web && bun install && bun run build
+# 3. Commit dist/ changes
+# 4. Build amd64 binary (embeds all three UIs)
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly ./cmd/orly
+# 5. Deploy binary to relay.orly.dev (stop → rsync → chown → start)
+# 6. Deploy smesh static files to smesh.mleku.dev
+rsync -avz --delete -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
+  app/smesh/dist/ root@69.164.249.71:/home/mleku/smesh/dist/
+```
+
+Note: `scripts/update-embedded-web.sh` only builds relay dashboard + smesh (not launcher admin) and runs `go install` (local arch, not amd64 cross-compile). For full deployment, use the manual steps above.
+
 ### Launcher Mode (Split IPC)
 
 The systemd service runs `orly launcher` which uses self-exec to spawn:
