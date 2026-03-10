@@ -3,7 +3,7 @@
 .PHONY: orly-db-badger orly-db-neo4j orly-acl-follows orly-acl-managed orly-acl-curation
 .PHONY: all-split arm64-split
 .PHONY: orly-sync-negentropy all-sync arm64-sync
-.PHONY: orly-certs
+.PHONY: orly-certs orly-nits all-sovereign
 .PHONY: quick-deploy quick-deploy-restart deploy-both deploy-both-restart deploy-new list-releases rollback
 .PHONY: upgrade upgrade-dry-run upgrade-no-restart upgrade-build
 .PHONY: orly-unified arm64-unified
@@ -168,6 +168,14 @@ deploy-split:
 orly-certs:
 	$(BUILD_FLAGS) go install ./cmd/orly-certs
 
+# Bitcoin node gRPC shim
+orly-nits:
+	$(BUILD_FLAGS) go install ./cmd/orly-nits
+
+# Sovereign stack: all services under orly-launcher (nits/luk/strela built externally)
+all-sovereign: proto orly orly-db-badger orly-acl-follows orly-nits orly-sync-negentropy orly-certs orly-launcher
+	@echo "Sovereign stack binaries installed to $(GOBIN)"
+
 orly-sync-negentropy:
 	$(BUILD_FLAGS) go install ./cmd/orly-sync-negentropy
 
@@ -267,6 +275,10 @@ help:
 	@echo "    test              - Run test suite"
 	@echo "    clean             - Clean build artifacts"
 	@echo "    help              - Show this help"
+	@echo ""
+	@echo "  Sovereign Stack:"
+	@echo "    orly-nits            - Build Bitcoin node gRPC shim"
+	@echo "    all-sovereign        - Build all orly-managed services (nits/relay/db/acl/sync/certs)"
 	@echo ""
 	@echo "  Sync Services:"
 	@echo "    orly-sync-negentropy - Build NIP-77 negentropy sync server"

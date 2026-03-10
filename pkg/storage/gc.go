@@ -32,6 +32,14 @@ import (
 	"next.orly.dev/pkg/nostr/encoders/event"
 )
 
+// WoTProvider supplies WoT depth information for graph-weighted eviction.
+// Returns the WoT depth tier for a pubkey serial:
+//   - 1 = direct follow (depth 1), 2 = depth 2, 3 = depth 3
+//   - 0 = outsider (not in WoT)
+type WoTProvider interface {
+	GetDepthForGC(pubkeySerial uint64) int
+}
+
 // GCDatabase defines the interface for database operations needed by the GC.
 type GCDatabase interface {
 	Path() string
@@ -39,9 +47,20 @@ type GCDatabase interface {
 	DeleteEventBySerial(ctx context.Context, ser *types.Uint40, ev *event.E) error
 }
 
+// AuthorLookup provides the ability to resolve event author pubkeys to serials.
+type AuthorLookup interface {
+	FetchEventBySerial(ser *types.Uint40) (ev *event.E, err error)
+	GetPubkeySerial(pubkey []byte) (*types.Uint40, error)
+}
+
 // GarbageCollector manages continuous event eviction based on access patterns.
 // It monitors storage usage and evicts the least accessed events when the
 // storage limit is exceeded.
+//
+// When a WoTProvider is configured, eviction scoring incorporates WoT depth:
+// events from socially proximate authors survive eviction longer than events
+// from outsiders. Kind 0 (profile), kind 3 (follow list), and kind 10002
+// (relay list) events are immune from eviction.
 type GarbageCollector struct {
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -54,6 +73,10 @@ type GarbageCollector struct {
 	interval  time.Duration
 	batchSize int
 	minAgeSec int64 // Minimum age before considering for eviction
+
+	// WoT integration (optional, nil = flat scoring)
+	wotProvider  WoTProvider
+	authorLookup AuthorLookup
 
 	// State
 	mu           sync.Mutex
@@ -68,6 +91,8 @@ type GCConfig struct {
 	Interval        time.Duration // How often to check storage
 	BatchSize       int           // Events to consider per GC run
 	MinAgeSec       int64         // Minimum age before eviction (default: 1 hour)
+	WoTProvider     WoTProvider   // Optional WoT depth provider for graph-weighted eviction
+	AuthorLookup    AuthorLookup  // Required if WoTProvider is set
 }
 
 // DefaultGCConfig returns a default GC configuration.
@@ -100,15 +125,17 @@ func NewGarbageCollector(
 	}
 
 	return &GarbageCollector{
-		ctx:       gcCtx,
-		cancel:    cancel,
-		db:        db,
-		tracker:   tracker,
-		dataDir:   db.Path(),
-		maxBytes:  cfg.MaxStorageBytes,
-		interval:  cfg.Interval,
-		batchSize: cfg.BatchSize,
-		minAgeSec: cfg.MinAgeSec,
+		ctx:          gcCtx,
+		cancel:       cancel,
+		db:           db,
+		tracker:      tracker,
+		dataDir:      db.Path(),
+		maxBytes:     cfg.MaxStorageBytes,
+		interval:     cfg.Interval,
+		batchSize:    cfg.BatchSize,
+		minAgeSec:    cfg.MinAgeSec,
+		wotProvider:  cfg.WoTProvider,
+		authorLookup: cfg.AuthorLookup,
 	}
 }
 
@@ -173,8 +200,14 @@ func (gc *GarbageCollector) runCycle() error {
 		maxBytes/(1024*1024),
 		float64(currentBytes)/float64(maxBytes)*100)
 
-	// Get coldest events
-	serials, err := gc.tracker.GetColdestEvents(gc.batchSize, gc.minAgeSec)
+	// Get coldest events, using WoT-weighted scoring if available
+	var serials []uint64
+	if gc.wotProvider != nil && gc.authorLookup != nil {
+		serials, err = gc.tracker.GetColdestEventsWithWoT(
+			gc.batchSize, 5, gc.minAgeSec, gc.wotProvider, gc.authorLookup)
+	} else {
+		serials, err = gc.tracker.GetColdestEvents(gc.batchSize, gc.minAgeSec)
+	}
 	if err != nil {
 		return err
 	}
@@ -242,6 +275,11 @@ func (gc *GarbageCollector) evictEvents(serials []uint64) (int, error) {
 			continue // Already deleted
 		}
 
+		// Never evict structural kinds that define the social graph
+		if isImmuneKind(ev.Kind) {
+			continue
+		}
+
 		// Delete the event
 		if err := gc.db.DeleteEventBySerial(gc.ctx, ser, ev); err != nil {
 			log.D.F("GC: failed to delete event %d: %v", serial, err)
@@ -282,6 +320,36 @@ func (gc *GarbageCollector) Stats() GCStats {
 		CurrentStorageBytes: currentBytes,
 		MaxStorageBytes:     maxBytes,
 		StoragePercentage:   percentage,
+	}
+}
+
+// isImmuneKind returns true for event kinds that must never be evicted.
+// These structural kinds define the social graph and relay metadata.
+func isImmuneKind(kind uint16) bool {
+	switch kind {
+	case 0:     // Profile metadata (NIP-01)
+		return true
+	case 3:     // Follow list (NIP-02)
+		return true
+	case 10002: // Relay list metadata (NIP-65)
+		return true
+	}
+	return false
+}
+
+// wotBonus returns the coldness score bonus (in seconds) for a WoT depth tier.
+// Higher bonus = harder to evict. Depth 1 gets 30 days of protection,
+// depth 2 gets 7 days, depth 3 gets 1 day, outsiders get nothing.
+func wotBonus(depth int) int64 {
+	switch depth {
+	case 1:
+		return 2592000 // 30 days
+	case 2:
+		return 604800 // 7 days
+	case 3:
+		return 86400 // 1 day
+	default:
+		return 0
 	}
 }
 

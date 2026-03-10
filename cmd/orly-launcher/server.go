@@ -133,6 +133,28 @@ type ConfigResponse struct {
 	NegentropyEnabled      bool     `json:"negentropy_enabled"`
 	AdminOwners            []string `json:"admin_owners"`
 	BinDir                 string   `json:"bin_dir"`
+
+	// Bitcoin node (nits)
+	NitsEnabled  bool   `json:"nits_enabled"`
+	NitsBinary   string `json:"nits_binary"`
+	NitsListen   string `json:"nits_listen"`
+	NitsRPCPort  int    `json:"nits_rpc_port"`
+	NitsDataDir  string `json:"nits_data_dir"`
+	NitsPruneMB  int    `json:"nits_prune_mb"`
+	NitsNetwork  string `json:"nits_network"`
+
+	// Lightning node (luk)
+	LukEnabled   bool   `json:"luk_enabled"`
+	LukBinary    string `json:"luk_binary"`
+	LukDataDir   string `json:"luk_data_dir"`
+	LukRPCListen string `json:"luk_rpc_listen"`
+	LukPeerListen string `json:"luk_peer_listen"`
+
+	// Wallet (strela)
+	StrelaEnabled bool   `json:"strela_enabled"`
+	StrelaBinary  string `json:"strela_binary"`
+	StrelaPort    int    `json:"strela_port"`
+	StrelaDataDir string `json:"strela_data_dir"`
 }
 
 func (s *AdminServer) handleConfig(w http.ResponseWriter, r *http.Request) {
@@ -164,6 +186,22 @@ func (s *AdminServer) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 		NegentropyEnabled:      s.cfg.NegentropyEnabled,
 		AdminOwners:            s.auth.Owners(),
 		BinDir:                 s.cfg.BinDir,
+		NitsEnabled:            s.cfg.NitsEnabled,
+		NitsBinary:             s.cfg.NitsBinary,
+		NitsListen:             s.cfg.NitsListen,
+		NitsRPCPort:            s.cfg.NitsRPCPort,
+		NitsDataDir:            s.cfg.NitsDataDir,
+		NitsPruneMB:            s.cfg.NitsPruneMB,
+		NitsNetwork:            s.cfg.NitsNetwork,
+		LukEnabled:             s.cfg.LukEnabled,
+		LukBinary:              s.cfg.LukBinary,
+		LukDataDir:             s.cfg.LukDataDir,
+		LukRPCListen:           s.cfg.LukRPCListen,
+		LukPeerListen:          s.cfg.LukPeerListen,
+		StrelaEnabled:           s.cfg.StrelaEnabled,
+		StrelaBinary:           s.cfg.StrelaBinary,
+		StrelaPort:              s.cfg.StrelaPort,
+		StrelaDataDir:           s.cfg.StrelaDataDir,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -189,6 +227,26 @@ type SetConfigRequest struct {
 	ClusterSyncEnabled     *bool    `json:"cluster_sync_enabled,omitempty"`
 	RelayGroupEnabled      *bool    `json:"relay_group_enabled,omitempty"`
 	NegentropyEnabled      *bool    `json:"negentropy_enabled,omitempty"`
+
+	// Bitcoin node (nits)
+	NitsEnabled  *bool  `json:"nits_enabled,omitempty"`
+	NitsBinary   string `json:"nits_binary,omitempty"`
+	NitsDataDir  string `json:"nits_data_dir,omitempty"`
+	NitsPruneMB  *int   `json:"nits_prune_mb,omitempty"`
+	NitsNetwork  string `json:"nits_network,omitempty"`
+
+	// Lightning node (luk)
+	LukEnabled    *bool  `json:"luk_enabled,omitempty"`
+	LukBinary     string `json:"luk_binary,omitempty"`
+	LukDataDir    string `json:"luk_data_dir,omitempty"`
+	LukRPCListen  string `json:"luk_rpc_listen,omitempty"`
+	LukPeerListen string `json:"luk_peer_listen,omitempty"`
+
+	// Wallet (strela)
+	StrelaEnabled *bool  `json:"strela_enabled,omitempty"`
+	StrelaBinary  string `json:"strela_binary,omitempty"`
+	StrelaPort    *int   `json:"strela_port,omitempty"`
+	StrelaDataDir string `json:"strela_data_dir,omitempty"`
 }
 
 // SetConfigResponse is the response for POST /api/config
@@ -263,6 +321,48 @@ func (s *AdminServer) handleSetConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.NegentropyEnabled != nil {
 		cf.NegentropyEnabled = req.NegentropyEnabled
+	}
+	if req.NitsEnabled != nil {
+		cf.NitsEnabled = req.NitsEnabled
+	}
+	if req.NitsBinary != "" {
+		cf.NitsBinary = req.NitsBinary
+	}
+	if req.NitsDataDir != "" {
+		cf.NitsDataDir = req.NitsDataDir
+	}
+	if req.NitsPruneMB != nil {
+		cf.NitsPruneMB = req.NitsPruneMB
+	}
+	if req.NitsNetwork != "" {
+		cf.NitsNetwork = req.NitsNetwork
+	}
+	if req.LukEnabled != nil {
+		cf.LukEnabled = req.LukEnabled
+	}
+	if req.LukBinary != "" {
+		cf.LukBinary = req.LukBinary
+	}
+	if req.LukDataDir != "" {
+		cf.LukDataDir = req.LukDataDir
+	}
+	if req.LukRPCListen != "" {
+		cf.LukRPCListen = req.LukRPCListen
+	}
+	if req.LukPeerListen != "" {
+		cf.LukPeerListen = req.LukPeerListen
+	}
+	if req.StrelaEnabled != nil {
+		cf.StrelaEnabled = req.StrelaEnabled
+	}
+	if req.StrelaBinary != "" {
+		cf.StrelaBinary = req.StrelaBinary
+	}
+	if req.StrelaPort != nil {
+		cf.StrelaPort = req.StrelaPort
+	}
+	if req.StrelaDataDir != "" {
+		cf.StrelaDataDir = req.StrelaDataDir
 	}
 
 	// Save to file

@@ -16,6 +16,7 @@ import (
 	"next.orly.dev/pkg/lol/log"
 
 	orlyaclv1 "next.orly.dev/pkg/proto/orlyacl/v1"
+	orlynitsv1 "next.orly.dev/pkg/proto/orlynits/v1"
 )
 
 // Supervisor manages the database, ACL, sync, and relay processes.
@@ -36,6 +37,15 @@ type Supervisor struct {
 
 	// Certificate service process
 	certsProc *Process
+
+	// Bitcoin node (nits) process
+	nitsProc *Process
+
+	// Lightning node (luk) process
+	lukProc *Process
+
+	// Wallet (strela) process
+	strelaProc *Process
 
 	wg     sync.WaitGroup
 	mu     sync.Mutex
@@ -91,12 +101,45 @@ func (s *Supervisor) Start() error {
 	s.closed = false
 	s.mu.Unlock()
 
-	// 1. Start database server
+	// Phase 1: Start Bitcoin node if enabled (nits → luk depends on it)
+	if s.cfg.NitsEnabled {
+		if err := s.startNits(); err != nil {
+			return fmt.Errorf("failed to start nits: %w", err)
+		}
+
+		if err := s.waitForNitsReady(s.cfg.NitsReadyTimeout); err != nil {
+			s.stopProcess(s.nitsProc, 30*time.Second)
+			return fmt.Errorf("nits not ready: %w", err)
+		}
+
+		log.I.F("bitcoin node is ready")
+	}
+
+	// Phase 2: Start Lightning node if enabled (luk → strela depends on it)
+	if s.cfg.LukEnabled {
+		if err := s.startLuk(); err != nil {
+			if s.cfg.NitsEnabled {
+				s.stopProcess(s.nitsProc, 30*time.Second)
+			}
+			return fmt.Errorf("failed to start luk: %w", err)
+		}
+
+		if err := s.waitForServiceReady(s.cfg.LukRPCListen, s.cfg.LukReadyTimeout); err != nil {
+			s.stopProcess(s.lukProc, 10*time.Second)
+			if s.cfg.NitsEnabled {
+				s.stopProcess(s.nitsProc, 30*time.Second)
+			}
+			return fmt.Errorf("luk not ready: %w", err)
+		}
+
+		log.I.F("lightning node is ready")
+	}
+
+	// Phase 3: Start database server
 	if err := s.startDB(); err != nil {
 		return fmt.Errorf("failed to start database: %w", err)
 	}
 
-	// 2. Wait for DB to be ready (health check on gRPC port)
 	if err := s.waitForDBReady(s.cfg.DBReadyTimeout); err != nil {
 		s.stopDB()
 		return fmt.Errorf("database not ready: %w", err)
@@ -104,14 +147,13 @@ func (s *Supervisor) Start() error {
 
 	log.I.F("database is ready")
 
-	// 3. Start ACL server if enabled
+	// Phase 4: Start ACL server if enabled
 	if s.cfg.ACLEnabled {
 		if err := s.startACL(); err != nil {
 			s.stopDB()
 			return fmt.Errorf("failed to start ACL server: %w", err)
 		}
 
-		// Wait for ACL to be ready
 		if err := s.waitForACLReady(s.cfg.ACLReadyTimeout); err != nil {
 			s.stopACL()
 			s.stopDB()
@@ -121,7 +163,7 @@ func (s *Supervisor) Start() error {
 		log.I.F("ACL server is ready")
 	}
 
-	// 4. Start sync services in parallel (they all depend on DB)
+	// Start sync services in parallel (they all depend on DB)
 	if err := s.startSyncServices(); err != nil {
 		s.stopSyncServices()
 		if s.cfg.ACLEnabled {
@@ -131,7 +173,15 @@ func (s *Supervisor) Start() error {
 		return fmt.Errorf("failed to start sync services: %w", err)
 	}
 
-	// 5. Start relay with gRPC backend(s)
+	// Phase 5: Start strela (needs luk) + relay (needs db/acl) in parallel
+	if s.cfg.StrelaEnabled {
+		if err := s.startStrela(); err != nil {
+			log.W.F("failed to start strela: %v", err)
+		} else {
+			log.I.F("strela wallet started")
+		}
+	}
+
 	if err := s.startRelay(); err != nil {
 		s.stopSyncServices()
 		if s.cfg.ACLEnabled {
@@ -141,18 +191,26 @@ func (s *Supervisor) Start() error {
 		return fmt.Errorf("failed to start relay: %w", err)
 	}
 
-	// 6. Start certificate service if enabled (independent of other services)
+	// Phase 6: Start certificate service if enabled (independent)
 	if s.cfg.CertsEnabled {
 		if err := s.startCerts(); err != nil {
 			log.W.F("failed to start certificate service: %v", err)
-			// Don't fail startup - certs are independent
 		} else {
 			log.I.F("certificate service started")
 		}
 	}
 
-	// 7. Start monitoring goroutines
+	// Start monitoring goroutines
 	monitorCount := 2 // db + relay
+	if s.cfg.NitsEnabled {
+		monitorCount++
+	}
+	if s.cfg.LukEnabled {
+		monitorCount++
+	}
+	if s.cfg.StrelaEnabled {
+		monitorCount++
+	}
 	if s.cfg.ACLEnabled {
 		monitorCount++
 	}
@@ -173,6 +231,12 @@ func (s *Supervisor) Start() error {
 	}
 
 	s.wg.Add(monitorCount)
+	if s.cfg.NitsEnabled {
+		go s.monitorProcess(s.nitsProc, "nits", s.startNits)
+	}
+	if s.cfg.LukEnabled {
+		go s.monitorProcess(s.lukProc, "luk", s.startLuk)
+	}
 	go s.monitorProcess(s.dbProc, "db", s.startDB)
 	if s.cfg.ACLEnabled {
 		go s.monitorProcess(s.aclProc, "acl", s.startACL)
@@ -188,6 +252,9 @@ func (s *Supervisor) Start() error {
 	}
 	if s.cfg.NegentropyEnabled {
 		go s.monitorProcess(s.negentropyProc, "negentropy", s.startNegentropy)
+	}
+	if s.cfg.StrelaEnabled {
+		go s.monitorProcess(s.strelaProc, "strela", s.startStrela)
 	}
 	if s.cfg.CertsEnabled {
 		go s.monitorProcess(s.certsProc, "certs", s.startCerts)
@@ -207,29 +274,41 @@ func (s *Supervisor) Stop() error {
 	s.closed = true
 	s.mu.Unlock()
 
-	// Stop certificate service first (independent, nothing depends on it)
+	// Stop in reverse startup order: certs → relay, strela → acl, sync → db → luk → nits
+
 	if s.cfg.CertsEnabled && s.certsProc != nil {
 		log.I.F("stopping certificate service...")
 		s.stopProcess(s.certsProc, 5*time.Second)
 	}
 
-	// Stop relay (it depends on sync services, ACL, and DB)
 	log.I.F("stopping relay...")
 	s.stopProcess(s.relayProc, 5*time.Second)
 
-	// Stop sync services in parallel (they depend on DB)
+	if s.cfg.StrelaEnabled && s.strelaProc != nil {
+		log.I.F("stopping strela...")
+		s.stopProcess(s.strelaProc, 5*time.Second)
+	}
+
 	log.I.F("stopping sync services...")
 	s.stopSyncServices()
 
-	// Stop ACL if enabled (it depends on DB)
 	if s.cfg.ACLEnabled && s.aclProc != nil {
 		log.I.F("stopping ACL server...")
 		s.stopProcess(s.aclProc, 5*time.Second)
 	}
 
-	// Stop DB with longer timeout for flush
 	log.I.F("stopping database...")
 	s.stopProcess(s.dbProc, s.cfg.StopTimeout)
+
+	if s.cfg.LukEnabled && s.lukProc != nil {
+		log.I.F("stopping lightning node...")
+		s.stopProcess(s.lukProc, 10*time.Second)
+	}
+
+	if s.cfg.NitsEnabled && s.nitsProc != nil {
+		log.I.F("stopping bitcoin node...")
+		s.stopProcess(s.nitsProc, 30*time.Second)
+	}
 
 	// Wait for monitor goroutines to exit (they will exit when they see closed=true)
 	s.wg.Wait()
@@ -576,6 +655,12 @@ func (s *Supervisor) monitorProcess(p *Process, procType string, restart func() 
 				p = s.negentropyProc
 			case "certs":
 				p = s.certsProc
+			case "nits":
+				p = s.nitsProc
+			case "luk":
+				p = s.lukProc
+			case "strela":
+				p = s.strelaProc
 			default:
 				p = s.relayProc
 			}
@@ -917,6 +1002,187 @@ func (s *Supervisor) startCerts() error {
 	return nil
 }
 
+func (s *Supervisor) startNits() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("ORLY_NITS_LISTEN=%s", s.cfg.NitsListen))
+	env = append(env, fmt.Sprintf("ORLY_NITS_BITCOIND=%s", s.cfg.NitsBinary))
+	env = append(env, fmt.Sprintf("ORLY_NITS_RPC_PORT=%d", s.cfg.NitsRPCPort))
+	env = append(env, fmt.Sprintf("ORLY_NITS_DATA_DIR=%s", s.cfg.NitsDataDir))
+	env = append(env, fmt.Sprintf("ORLY_NITS_PRUNE_MB=%d", s.cfg.NitsPruneMB))
+	env = append(env, fmt.Sprintf("ORLY_NITS_NETWORK=%s", s.cfg.NitsNetwork))
+	env = append(env, fmt.Sprintf("ORLY_NITS_LOG_LEVEL=%s", s.cfg.LogLevel))
+
+	cmd := exec.CommandContext(s.ctx, s.cfg.NitsShimBinary)
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); chk.E(err) {
+		return err
+	}
+
+	exited := make(chan struct{})
+	s.nitsProc = &Process{
+		name:   "orly-nits",
+		cmd:    cmd,
+		exited: exited,
+	}
+
+	go func() {
+		cmd.Wait()
+		close(exited)
+	}()
+
+	log.I.F("started bitcoin node shim (pid %d)", cmd.Process.Pid)
+	return nil
+}
+
+func (s *Supervisor) waitForNitsReady(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	var grpcConn *grpc.ClientConn
+	var nitsClient orlynitsv1.NitsServiceClient
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			if grpcConn != nil {
+				grpcConn.Close()
+			}
+			return s.ctx.Err()
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				if grpcConn != nil {
+					grpcConn.Close()
+				}
+				return fmt.Errorf("timeout waiting for bitcoin node")
+			}
+
+			// Check TCP first
+			conn, err := net.DialTimeout("tcp", s.cfg.NitsListen, time.Second)
+			if err != nil {
+				continue
+			}
+			conn.Close()
+
+			// Then check gRPC Ready()
+			if grpcConn == nil {
+				grpcConn, err = grpc.DialContext(s.ctx, s.cfg.NitsListen,
+					grpc.WithTransportCredentials(insecure.NewCredentials()),
+				)
+				if err != nil {
+					continue
+				}
+				nitsClient = orlynitsv1.NewNitsServiceClient(grpcConn)
+			}
+
+			ctx, cancel := context.WithTimeout(s.ctx, 2*time.Second)
+			resp, err := nitsClient.Ready(ctx, &orlynitsv1.Empty{})
+			cancel()
+			if err == nil && resp.Ready {
+				grpcConn.Close()
+				return nil
+			}
+			// Bitcoind responsive but still syncing is fine for luk to start
+			if err == nil && resp.Status == "syncing" {
+				grpcConn.Close()
+				log.I.F("bitcoin node responsive (syncing %d%%), proceeding", resp.SyncProgressPercent)
+				return nil
+			}
+		}
+	}
+}
+
+func (s *Supervisor) startLuk() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// luk (LND fork) uses command-line flags
+	args := []string{
+		fmt.Sprintf("--lnddir=%s", s.cfg.LukDataDir),
+		fmt.Sprintf("--rpclisten=%s", s.cfg.LukRPCListen),
+		fmt.Sprintf("--listen=%s", s.cfg.LukPeerListen),
+		fmt.Sprintf("--bitcoind.rpchost=127.0.0.1:%d", s.cfg.NitsRPCPort),
+	}
+
+	// Set network flag if not mainnet
+	switch s.cfg.NitsNetwork {
+	case "testnet":
+		args = append(args, "--bitcoin.testnet")
+	case "signet":
+		args = append(args, "--bitcoin.signet")
+	case "regtest":
+		args = append(args, "--bitcoin.regtest")
+	}
+
+	cmd := exec.CommandContext(s.ctx, s.cfg.LukBinary, args...)
+	cmd.Env = os.Environ()
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); chk.E(err) {
+		return err
+	}
+
+	exited := make(chan struct{})
+	s.lukProc = &Process{
+		name:   "luk",
+		cmd:    cmd,
+		exited: exited,
+	}
+
+	go func() {
+		cmd.Wait()
+		close(exited)
+	}()
+
+	log.I.F("started lightning node (pid %d)", cmd.Process.Pid)
+	return nil
+}
+
+func (s *Supervisor) startStrela() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	env := os.Environ()
+	env = append(env, "LN_BACKEND_TYPE=LND")
+	env = append(env, fmt.Sprintf("LND_ADDRESS=%s", s.cfg.LukRPCListen))
+	env = append(env, fmt.Sprintf("LND_CERT_FILE=%s/tls.cert", s.cfg.LukDataDir))
+	env = append(env, fmt.Sprintf("LND_MACAROON_FILE=%s/data/chain/bitcoin/mainnet/admin.macaroon", s.cfg.LukDataDir))
+	env = append(env, fmt.Sprintf("PORT=%d", s.cfg.StrelaPort))
+	env = append(env, fmt.Sprintf("WORK_DIR=%s", s.cfg.StrelaDataDir))
+	env = append(env, fmt.Sprintf("LOG_LEVEL=%s", s.cfg.LogLevel))
+
+	cmd := exec.CommandContext(s.ctx, s.cfg.StrelaBinary)
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); chk.E(err) {
+		return err
+	}
+
+	exited := make(chan struct{})
+	s.strelaProc = &Process{
+		name:   "strela",
+		cmd:    cmd,
+		exited: exited,
+	}
+
+	go func() {
+		cmd.Wait()
+		close(exited)
+	}()
+
+	log.I.F("started strela wallet (pid %d)", cmd.Process.Pid)
+	return nil
+}
+
 // GetProcessStatuses returns the status of all available modules with categories.
 // Modules are grouped by category, and some categories are mutually exclusive.
 func (s *Supervisor) GetProcessStatuses() []ProcessStatus {
@@ -978,6 +1244,24 @@ func (s *Supervisor) GetProcessStatuses() []ProcessStatus {
 	statuses = append(statuses, s.getProcessStatusFull(
 		s.certsProc, "orly-certs", s.cfg.CertsBinary,
 		s.cfg.CertsEnabled, "certs", "Let's Encrypt certificate management",
+	))
+
+	// Bitcoin node (nits)
+	statuses = append(statuses, s.getProcessStatusFull(
+		s.nitsProc, "orly-nits", s.cfg.NitsShimBinary,
+		s.cfg.NitsEnabled, "bitcoin", "Bitcoin node manager (bitcoind)",
+	))
+
+	// Lightning node (luk)
+	statuses = append(statuses, s.getProcessStatusFull(
+		s.lukProc, "luk", s.cfg.LukBinary,
+		s.cfg.LukEnabled, "lightning", "Lightning network node (LND fork)",
+	))
+
+	// Wallet (strela)
+	statuses = append(statuses, s.getProcessStatusFull(
+		s.strelaProc, "strela", s.cfg.StrelaBinary,
+		s.cfg.StrelaEnabled, "wallet", "Lightning wallet web UI",
 	))
 
 	// Relay process - always enabled
@@ -1232,6 +1516,85 @@ func (s *Supervisor) RestartService(serviceName string) ([]string, error) {
 		}
 		restarted = append(restarted, "orly")
 
+	case "orly-nits", "nits":
+		if !s.cfg.NitsEnabled {
+			return restarted, fmt.Errorf("nits is not enabled")
+		}
+		// nits restart cascades to luk → strela
+		if s.cfg.StrelaEnabled && s.strelaProc != nil {
+			s.stopProcess(s.strelaProc, 5*time.Second)
+		}
+		if s.cfg.LukEnabled && s.lukProc != nil {
+			s.stopProcess(s.lukProc, 10*time.Second)
+		}
+		s.stopProcess(s.nitsProc, 30*time.Second)
+		time.Sleep(500 * time.Millisecond)
+
+		if err := s.startNits(); err != nil {
+			return restarted, fmt.Errorf("failed to restart nits: %w", err)
+		}
+		restarted = append(restarted, "orly-nits")
+
+		if err := s.waitForNitsReady(s.cfg.NitsReadyTimeout); err != nil {
+			return restarted, fmt.Errorf("nits not ready: %w", err)
+		}
+
+		if s.cfg.LukEnabled {
+			if err := s.startLuk(); err != nil {
+				return restarted, fmt.Errorf("failed to restart luk: %w", err)
+			}
+			restarted = append(restarted, "luk")
+			if err := s.waitForServiceReady(s.cfg.LukRPCListen, s.cfg.LukReadyTimeout); err != nil {
+				return restarted, fmt.Errorf("luk not ready: %w", err)
+			}
+		}
+
+		if s.cfg.StrelaEnabled {
+			if err := s.startStrela(); err != nil {
+				return restarted, fmt.Errorf("failed to restart strela: %w", err)
+			}
+			restarted = append(restarted, "strela")
+		}
+
+	case "luk", "lightning":
+		if !s.cfg.LukEnabled {
+			return restarted, fmt.Errorf("luk is not enabled")
+		}
+		// luk restart cascades to strela
+		if s.cfg.StrelaEnabled && s.strelaProc != nil {
+			s.stopProcess(s.strelaProc, 5*time.Second)
+		}
+		s.stopProcess(s.lukProc, 10*time.Second)
+		time.Sleep(500 * time.Millisecond)
+
+		if err := s.startLuk(); err != nil {
+			return restarted, fmt.Errorf("failed to restart luk: %w", err)
+		}
+		restarted = append(restarted, "luk")
+
+		if err := s.waitForServiceReady(s.cfg.LukRPCListen, s.cfg.LukReadyTimeout); err != nil {
+			return restarted, fmt.Errorf("luk not ready: %w", err)
+		}
+
+		if s.cfg.StrelaEnabled {
+			if err := s.startStrela(); err != nil {
+				return restarted, fmt.Errorf("failed to restart strela: %w", err)
+			}
+			restarted = append(restarted, "strela")
+		}
+
+	case "strela", "wallet":
+		if !s.cfg.StrelaEnabled {
+			return restarted, fmt.Errorf("strela is not enabled")
+		}
+		// strela is a leaf node, no cascade
+		s.stopProcess(s.strelaProc, 5*time.Second)
+		time.Sleep(500 * time.Millisecond)
+		if err := s.startStrela(); err != nil {
+			return restarted, fmt.Errorf("failed to restart strela: %w", err)
+		}
+		restarted = append(restarted, "strela")
+
 	default:
 		return restarted, fmt.Errorf("unknown service: %s", serviceName)
 	}
@@ -1309,6 +1672,36 @@ func (s *Supervisor) StartService(serviceName string) error {
 			return fmt.Errorf("failed to start relay: %w", err)
 		}
 
+	case "orly-nits", "nits":
+		if !s.cfg.NitsEnabled {
+			return fmt.Errorf("nits is not enabled in configuration")
+		}
+		if err := s.startNits(); err != nil {
+			return fmt.Errorf("failed to start nits: %w", err)
+		}
+		if err := s.waitForNitsReady(s.cfg.NitsReadyTimeout); err != nil {
+			return fmt.Errorf("nits not ready: %w", err)
+		}
+
+	case "luk", "lightning":
+		if !s.cfg.LukEnabled {
+			return fmt.Errorf("luk is not enabled in configuration")
+		}
+		if err := s.startLuk(); err != nil {
+			return fmt.Errorf("failed to start luk: %w", err)
+		}
+		if err := s.waitForServiceReady(s.cfg.LukRPCListen, s.cfg.LukReadyTimeout); err != nil {
+			return fmt.Errorf("luk not ready: %w", err)
+		}
+
+	case "strela", "wallet":
+		if !s.cfg.StrelaEnabled {
+			return fmt.Errorf("strela is not enabled in configuration")
+		}
+		if err := s.startStrela(); err != nil {
+			return fmt.Errorf("failed to start strela: %w", err)
+		}
+
 	default:
 		return fmt.Errorf("unknown service: %s", serviceName)
 	}
@@ -1382,6 +1775,36 @@ func (s *Supervisor) StopService(serviceName string) error {
 		// Relay is a leaf - nothing depends on it
 		s.stopProcess(s.relayProc, 5*time.Second)
 
+	case "orly-nits", "nits":
+		// nits is root of bitcoin stack: strela → luk → nits
+		if s.cfg.StrelaEnabled && s.strelaProc != nil {
+			log.I.F("stopping strela (depends on luk)")
+			s.stopProcess(s.strelaProc, 5*time.Second)
+		}
+		if s.cfg.LukEnabled && s.lukProc != nil {
+			log.I.F("stopping luk (depends on nits)")
+			s.stopProcess(s.lukProc, 10*time.Second)
+		}
+		if s.nitsProc != nil {
+			s.stopProcess(s.nitsProc, 30*time.Second)
+		}
+
+	case "luk", "lightning":
+		// strela depends on luk
+		if s.cfg.StrelaEnabled && s.strelaProc != nil {
+			log.I.F("stopping strela (depends on luk)")
+			s.stopProcess(s.strelaProc, 5*time.Second)
+		}
+		if s.lukProc != nil {
+			s.stopProcess(s.lukProc, 10*time.Second)
+		}
+
+	case "strela", "wallet":
+		// strela is a leaf
+		if s.strelaProc != nil {
+			s.stopProcess(s.strelaProc, 5*time.Second)
+		}
+
 	default:
 		return fmt.Errorf("unknown service: %s", serviceName)
 	}
@@ -1394,11 +1817,23 @@ func (s *Supervisor) StopService(serviceName string) error {
 func (s *Supervisor) RestartAll() error {
 	log.I.F("restarting all processes...")
 
-	// Stop in reverse dependency order
+	// Stop in reverse dependency order: certs, relay, strela, sync, acl, db, luk, nits
 	s.mu.Lock()
+	if s.certsProc != nil && s.cfg.CertsEnabled {
+		s.mu.Unlock()
+		s.stopProcess(s.certsProc, 5*time.Second)
+		s.mu.Lock()
+	}
+
 	if s.relayProc != nil {
 		s.mu.Unlock()
 		s.stopProcess(s.relayProc, 5*time.Second)
+		s.mu.Lock()
+	}
+
+	if s.strelaProc != nil && s.cfg.StrelaEnabled {
+		s.mu.Unlock()
+		s.stopProcess(s.strelaProc, 5*time.Second)
 		s.mu.Lock()
 	}
 
@@ -1417,12 +1852,41 @@ func (s *Supervisor) RestartAll() error {
 		s.stopProcess(s.dbProc, s.cfg.StopTimeout)
 		s.mu.Lock()
 	}
+
+	if s.lukProc != nil && s.cfg.LukEnabled {
+		s.mu.Unlock()
+		s.stopProcess(s.lukProc, 10*time.Second)
+		s.mu.Lock()
+	}
+
+	if s.nitsProc != nil && s.cfg.NitsEnabled {
+		s.mu.Unlock()
+		s.stopProcess(s.nitsProc, 30*time.Second)
+		s.mu.Lock()
+	}
 	s.mu.Unlock()
 
-	// Small delay to ensure ports are released
 	time.Sleep(500 * time.Millisecond)
 
-	// Start again in dependency order
+	// Start again in dependency order: nits → luk → db → acl → sync → relay, strela → certs
+	if s.cfg.NitsEnabled {
+		if err := s.startNits(); err != nil {
+			return fmt.Errorf("failed to restart nits: %w", err)
+		}
+		if err := s.waitForNitsReady(s.cfg.NitsReadyTimeout); err != nil {
+			return fmt.Errorf("nits not ready after restart: %w", err)
+		}
+	}
+
+	if s.cfg.LukEnabled {
+		if err := s.startLuk(); err != nil {
+			return fmt.Errorf("failed to restart luk: %w", err)
+		}
+		if err := s.waitForServiceReady(s.cfg.LukRPCListen, s.cfg.LukReadyTimeout); err != nil {
+			return fmt.Errorf("luk not ready after restart: %w", err)
+		}
+	}
+
 	if err := s.startDB(); err != nil {
 		return fmt.Errorf("failed to restart database: %w", err)
 	}
@@ -1444,8 +1908,20 @@ func (s *Supervisor) RestartAll() error {
 		return fmt.Errorf("failed to restart sync services: %w", err)
 	}
 
+	if s.cfg.StrelaEnabled {
+		if err := s.startStrela(); err != nil {
+			log.W.F("failed to restart strela: %v", err)
+		}
+	}
+
 	if err := s.startRelay(); err != nil {
 		return fmt.Errorf("failed to restart relay: %w", err)
+	}
+
+	if s.cfg.CertsEnabled {
+		if err := s.startCerts(); err != nil {
+			log.W.F("failed to restart certificate service: %v", err)
+		}
 	}
 
 	log.I.F("all processes restarted successfully")

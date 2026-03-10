@@ -736,6 +736,20 @@ func Run(
 				BatchSize:       gcBatchSize,
 				MinAgeSec:       3600, // Minimum 1 hour before eviction
 			}
+
+			// Wire WoT provider from social ACL if active
+			if acl.Registry.GetMode() == "social" {
+				for _, aclInstance := range acl.Registry.ACLs() {
+					if social, ok := aclInstance.(*acl.Social); ok {
+						wotMap := social.GetWoTDepthMap()
+						gcCfg.WoTProvider = wotMap
+						gcCfg.AuthorLookup = badgerDB
+						log.I.F("garbage collector: WoT-weighted eviction enabled via social ACL")
+						break
+					}
+				}
+			}
+
 			l.garbageCollector = storage.NewGarbageCollector(ctx, badgerDB, l.accessTracker, gcCfg)
 			l.garbageCollector.Start()
 			log.I.F("garbage collector started (interval: %ds, batch: %d)", gcIntervalSec, gcBatchSize)

@@ -74,6 +74,16 @@ type C struct {
 	FollowsThrottlePerEvent time.Duration `env:"ORLY_FOLLOWS_THROTTLE_INCREMENT" default:"25ms" usage:"delay added per event for non-followed users"`
 	FollowsThrottleMaxDelay time.Duration `env:"ORLY_FOLLOWS_THROTTLE_MAX" default:"60s" usage:"maximum throttle delay cap"`
 
+	// Social ACL mode - WoT graph topology with inbound-trust rate limiting
+	SocialThrottleD2Increment       time.Duration `env:"ORLY_SOCIAL_THROTTLE_D2_INCREMENT" default:"50ms" usage:"throttle increment per event for WoT depth-2 users"`
+	SocialThrottleD2Max             time.Duration `env:"ORLY_SOCIAL_THROTTLE_D2_MAX" default:"30s" usage:"max throttle delay for WoT depth-2 users"`
+	SocialThrottleD3Increment       time.Duration `env:"ORLY_SOCIAL_THROTTLE_D3_INCREMENT" default:"200ms" usage:"throttle increment per event for WoT depth-3 users"`
+	SocialThrottleD3Max             time.Duration `env:"ORLY_SOCIAL_THROTTLE_D3_MAX" default:"60s" usage:"max throttle delay for WoT depth-3 users"`
+	SocialThrottleOutsiderIncrement time.Duration `env:"ORLY_SOCIAL_THROTTLE_OUTSIDER_INCREMENT" default:"500ms" usage:"throttle increment per event for outsiders (beyond WoT)"`
+	SocialThrottleOutsiderMax       time.Duration `env:"ORLY_SOCIAL_THROTTLE_OUTSIDER_MAX" default:"120s" usage:"max throttle delay for outsiders"`
+	SocialWoTMaxDepth               int           `env:"ORLY_SOCIAL_WOT_DEPTH" default:"3" usage:"maximum WoT traversal depth (1-16)"`
+	SocialWoTRefreshInterval        time.Duration `env:"ORLY_SOCIAL_WOT_REFRESH" default:"1h" usage:"how often to recompute the WoT depth map"`
+
 	// Blossom blob storage service settings
 	BlossomEnabled       bool   `env:"ORLY_BLOSSOM_ENABLED" default:"true" usage:"enable Blossom blob storage server (only works with Badger backend)"`
 	BlossomServiceLevels string `env:"ORLY_BLOSSOM_SERVICE_LEVELS" usage:"comma-separated list of service levels in format: name:storage_mb_per_sat_per_month (e.g., basic:1,premium:10)"`
@@ -945,6 +955,22 @@ func (cfg *C) GetFollowsThrottleConfigValues() (
 	return cfg.FollowsThrottleEnabled,
 		cfg.FollowsThrottlePerEvent,
 		cfg.FollowsThrottleMaxDelay
+}
+
+// GetSocialConfigValues returns the social ACL mode configuration values.
+func (cfg *C) GetSocialConfigValues() (
+	d2Increment, d2Max, d3Increment, d3Max, outsiderIncrement, outsiderMax time.Duration,
+	wotMaxDepth int,
+	wotRefresh time.Duration,
+) {
+	return cfg.SocialThrottleD2Increment,
+		cfg.SocialThrottleD2Max,
+		cfg.SocialThrottleD3Increment,
+		cfg.SocialThrottleD3Max,
+		cfg.SocialThrottleOutsiderIncrement,
+		cfg.SocialThrottleOutsiderMax,
+		cfg.SocialWoTMaxDepth,
+		cfg.SocialWoTRefreshInterval
 }
 
 // GetGRPCConfigValues returns the gRPC database client configuration values.

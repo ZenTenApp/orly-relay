@@ -5,9 +5,12 @@ package storage
 import (
 	"container/list"
 	"context"
+	"sort"
 	"sync"
 
 	"next.orly.dev/pkg/lol/log"
+
+	"next.orly.dev/pkg/database/indexes/types"
 )
 
 // AccessTrackerDatabase defines the interface for the underlying database
@@ -115,6 +118,80 @@ func (t *AccessTracker) GetAccessInfo(serial uint64) (lastAccess int64, accessCo
 // minAgeSec: minimum age in seconds since last access
 func (t *AccessTracker) GetColdestEvents(limit int, minAgeSec int64) ([]uint64, error) {
 	return t.db.GetLeastAccessedEvents(limit, minAgeSec)
+}
+
+// GetColdestEventsWithWoT returns event serials sorted by WoT-weighted coldness.
+// It overfetches candidates from the database, resolves each event's author to a
+// WoT depth, applies a depth bonus to the coldness score, filters out immune kinds,
+// re-sorts, and returns the coldest `limit` events.
+//
+// candidateMultiplier controls overfetch ratio (e.g., 5 = fetch 5x limit candidates).
+func (t *AccessTracker) GetColdestEventsWithWoT(
+	limit, candidateMultiplier int,
+	minAgeSec int64,
+	wot WoTProvider,
+	authorDB AuthorLookup,
+) ([]uint64, error) {
+	if candidateMultiplier <= 1 {
+		candidateMultiplier = 5
+	}
+
+	// Overfetch raw candidates
+	candidates, err := t.db.GetLeastAccessedEvents(limit*candidateMultiplier, minAgeSec)
+	if err != nil {
+		return nil, err
+	}
+
+	type scored struct {
+		serial uint64
+		score  int64
+	}
+
+	var results []scored
+	for _, serial := range candidates {
+		ser := &types.Uint40{}
+		if err := ser.Set(serial); err != nil {
+			continue
+		}
+
+		ev, err := authorDB.FetchEventBySerial(ser)
+		if err != nil || ev == nil {
+			continue
+		}
+
+		// Skip immune kinds
+		if isImmuneKind(ev.Kind) {
+			continue
+		}
+
+		// Get access info for scoring
+		lastAccess, accessCount, err := t.db.GetEventAccessInfo(serial)
+		if err != nil {
+			continue
+		}
+
+		// Resolve author WoT depth
+		depth := 0
+		if pkSerial, err := authorDB.GetPubkeySerial(ev.Pubkey); err == nil {
+			depth = wot.GetDepthForGC(pkSerial.Get())
+		}
+
+		// WoT-weighted coldness: higher score = warmer = keep longer
+		score := lastAccess + int64(accessCount)*3600 + wotBonus(depth)
+		results = append(results, scored{serial, score})
+	}
+
+	// Sort by score ascending (coldest first)
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].score < results[j].score
+	})
+
+	// Return up to limit
+	out := make([]uint64, 0, limit)
+	for i := 0; i < len(results) && i < limit; i++ {
+		out = append(out, results[i].serial)
+	}
+	return out, nil
 }
 
 // ClearConnection removes all dedup entries for a specific connection.

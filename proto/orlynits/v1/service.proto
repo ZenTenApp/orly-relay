@@ -1,0 +1,52 @@
+syntax = "proto3";
+package orlynits.v1;
+option go_package = "next.orly.dev/pkg/proto/orlynits/v1;orlynitsv1";
+
+// Empty is used for requests/responses with no data
+message Empty {}
+
+// ReadyResponse reports bitcoind readiness
+message ReadyResponse {
+  bool ready = 1;
+  string status = 2; // "starting", "syncing", "ready", "stopped"
+  int32 sync_progress_percent = 3;
+}
+
+// BlockchainInfoResponse reports basic chain state
+message BlockchainInfoResponse {
+  string chain = 1; // "main", "test", "signet", "regtest"
+  int64 blocks = 2;
+  int64 headers = 3;
+  double verification_progress = 4;
+  bool initial_block_download = 5;
+  bool pruned = 6;
+  int64 prune_height = 7;
+  int64 size_on_disk = 8;
+}
+
+// EstimateFeeRequest specifies the confirmation target
+message EstimateFeeRequest {
+  int32 conf_target = 1; // target number of blocks
+}
+
+// EstimateFeeResponse returns the estimated fee rate
+message EstimateFeeResponse {
+  double fee_rate = 1; // BTC/kvB
+  repeated string errors = 2;
+}
+
+// NitsService provides gRPC access to the Bitcoin node (nits/bitcoind)
+service NitsService {
+  // === Lifecycle ===
+
+  // Ready returns whether bitcoind is responsive and synced enough to use
+  rpc Ready(Empty) returns (ReadyResponse);
+
+  // === Chain State ===
+
+  // GetBlockchainInfo returns basic chain state information
+  rpc GetBlockchainInfo(Empty) returns (BlockchainInfoResponse);
+
+  // EstimateFee returns fee estimation for a given confirmation target
+  rpc EstimateFee(EstimateFeeRequest) returns (EstimateFeeResponse);
+}

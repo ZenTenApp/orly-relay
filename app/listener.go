@@ -319,17 +319,22 @@ func (l *Listener) getManagedACL() *database.ManagedACL {
 	return nil
 }
 
-// getFollowsThrottleDelay returns the progressive throttle delay for follows ACL mode.
-// Returns 0 if not in follows mode, throttle is disabled, or user is exempt.
+// getFollowsThrottleDelay returns the progressive throttle delay for follows or social ACL mode.
+// Returns 0 if not in a throttle-enabled mode, throttle is disabled, or user is exempt.
 func (l *Listener) getFollowsThrottleDelay(ev *event.E) time.Duration {
-	// Only applies to follows ACL mode
-	if acl.Registry.GetMode() != "follows" {
-		return 0
-	}
-	// Find the Follows ACL instance and get the throttle delay
-	for _, aclInstance := range acl.Registry.ACLs() {
-		if follows, ok := aclInstance.(*acl.Follows); ok {
-			return follows.GetThrottleDelay(ev.Pubkey, l.remote)
+	mode := acl.Registry.GetMode()
+	switch mode {
+	case "follows":
+		for _, aclInstance := range acl.Registry.ACLs() {
+			if follows, ok := aclInstance.(*acl.Follows); ok {
+				return follows.GetThrottleDelay(ev.Pubkey, l.remote)
+			}
+		}
+	case "social":
+		for _, aclInstance := range acl.Registry.ACLs() {
+			if social, ok := aclInstance.(*acl.Social); ok {
+				return social.GetThrottleDelay(ev.Pubkey, l.remote)
+			}
 		}
 	}
 	return 0
