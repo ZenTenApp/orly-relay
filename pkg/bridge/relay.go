@@ -35,12 +35,39 @@ func NewRelayConn(url string, sign signer.I) *RelayConn {
 
 // Connect establishes the WebSocket connection to the relay and
 // pre-authenticates via NIP-42 so that subscriptions have proper access.
+// In monolithic mode, the relay may not be listening yet, so Connect
+// retries with exponential backoff for up to 30 seconds.
 func (rc *RelayConn) Connect(ctx context.Context) error {
 	rc.ctx, rc.cancel = context.WithCancel(ctx)
 
-	conn, err := ws.RelayConnect(rc.ctx, rc.url)
-	if err != nil {
-		return fmt.Errorf("connect to relay %s: %w", rc.url, err)
+	delay := time.Second
+	maxDelay := 5 * time.Second
+	timeout := 30 * time.Second
+	deadline := time.Now().Add(timeout)
+
+	var conn *ws.Client
+	var err error
+
+	for {
+		conn, err = ws.RelayConnect(rc.ctx, rc.url)
+		if err == nil {
+			break
+		}
+
+		if time.Now().After(deadline) {
+			return fmt.Errorf("connect to relay %s after %v: %w", rc.url, timeout, err)
+		}
+
+		log.D.F("bridge waiting for relay %s: %v (retrying in %v)", rc.url, err, delay)
+
+		select {
+		case <-time.After(delay):
+			if delay < maxDelay {
+				delay *= 2
+			}
+		case <-rc.ctx.Done():
+			return fmt.Errorf("connect to relay %s: %w", rc.url, rc.ctx.Err())
+		}
 	}
 
 	rc.mu.Lock()
