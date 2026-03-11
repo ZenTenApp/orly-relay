@@ -41,8 +41,8 @@ func (rc *RelayConn) Connect(ctx context.Context) error {
 	rc.ctx, rc.cancel = context.WithCancel(ctx)
 
 	delay := time.Second
-	maxDelay := 5 * time.Second
-	timeout := 30 * time.Second
+	maxDelay := 10 * time.Second
+	timeout := 5 * time.Minute
 	deadline := time.Now().Add(timeout)
 
 	var conn *ws.Client
