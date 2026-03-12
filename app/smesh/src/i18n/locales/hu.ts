@@ -197,9 +197,6 @@ export default {
     All: 'Minden',
     Reactions: 'Reakciók',
     Zaps: 'Zap-ok',
-    'Enjoying Smesh?': 'Tetszik a Smesh?',
-    'Your donation helps me maintain Smesh and make it better! 😊':
-      'Az adományok segítenek a Smesh fenntartásában és továbbfejlesztésében! 😊',
     'Earlier notifications': 'Korábbi értesítések',
     'Temporarily display this note': 'Poszt ideiglenes megmutatása',
     buttonFollowing: 'Követed',

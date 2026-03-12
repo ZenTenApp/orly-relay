@@ -197,9 +197,6 @@ export default {
     All: 'همه',
     Reactions: 'واکنش‌ها',
     Zaps: 'زپ‌ها',
-    'Enjoying Smesh?': 'از Smesh لذت می‌برید؟',
-    'Your donation helps me maintain Smesh and make it better! 😊':
-      'کمک مالی شما به من در نگهداری Smesh و بهتر کردن آن کمک می‌کند! 😊',
     'Earlier notifications': 'اعلان‌های قبلی',
     'Temporarily display this note': 'نمایش موقت این یادداشت',
     buttonFollowing: 'دنبال می‌کنم',

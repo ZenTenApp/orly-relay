@@ -195,9 +195,6 @@ export default {
     All: 'ทั้งหมด',
     Reactions: 'ปฏิกิริยา',
     Zaps: 'ซาตส์',
-    'Enjoying Smesh?': 'ชอบ Smesh ไหม?',
-    'Your donation helps me maintain Smesh and make it better! 😊':
-      'การบริจาคของคุณช่วยให้ฉันดูแลและพัฒนา Smesh ให้ดีขึ้น! 😊',
     'Earlier notifications': 'การแจ้งเตือนก่อนหน้า',
     'Temporarily display this note': 'แสดงโน้ตนี้ชั่วคราว',
     buttonFollowing: 'กำลังติดตาม',

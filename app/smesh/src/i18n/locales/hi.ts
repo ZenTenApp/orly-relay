@@ -198,9 +198,6 @@ export default {
     All: 'सभी',
     Reactions: 'प्रतिक्रियाएं',
     Zaps: 'जैप्स',
-    'Enjoying Smesh?': 'Smesh का आनंद ले रहे हैं?',
-    'Your donation helps me maintain Smesh and make it better! 😊':
-      'आपका दान मुझे Smesh को बनाए रखने और इसे बेहतर बनाने में मदद करता है! 😊',
     'Earlier notifications': 'पुरानी सूचनाएं',
     'Temporarily display this note': 'इस नोट को अस्थायी रूप से प्रदर्शित करें',
     buttonFollowing: 'फॉलो कर रहे हैं',

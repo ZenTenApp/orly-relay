@@ -200,9 +200,6 @@ export default {
     All: 'Все',
     Reactions: 'Реакции',
     Zaps: 'Запы',
-    'Enjoying Smesh?': 'Нравится Smesh?',
-    'Your donation helps me maintain Smesh and make it better! 😊':
-      'Ваше пожертвование помогает поддерживать и улучшать Smesh! 😊',
     'Earlier notifications': 'Ранние уведомления',
     'Temporarily display this note': 'Временно отобразить эту заметку',
     buttonFollowing: 'Подписан',

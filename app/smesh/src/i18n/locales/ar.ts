@@ -195,9 +195,6 @@ export default {
     All: 'الكل',
     Reactions: 'التفاعلات',
     Zaps: 'Zaps',
-    'Enjoying Smesh?': 'هل تستمتع بـ Smesh؟',
-    'Your donation helps me maintain Smesh and make it better! 😊':
-      'تبرعك يساعد في صيانة Smesh وتحسينه! 😊',
     'Earlier notifications': 'الإشعارات السابقة',
     'Temporarily display this note': 'عرض هذه الملاحظة مؤقتاً',
     buttonFollowing: 'جارٍ المتابعة',

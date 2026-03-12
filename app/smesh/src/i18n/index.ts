@@ -3,12 +3,14 @@ import i18n, { Resource } from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import { initReactI18next } from 'react-i18next'
 import ar from './locales/ar'
+import bg from './locales/bg'
 import de from './locales/de'
 import en from './locales/en'
 import es from './locales/es'
 import fa from './locales/fa'
 import fr from './locales/fr'
 import hi from './locales/hi'
+import hr from './locales/hr'
 import hu from './locales/hu'
 import it from './locales/it'
 import ja from './locales/ja'
@@ -17,18 +19,21 @@ import pl from './locales/pl'
 import pt_BR from './locales/pt-BR'
 import pt_PT from './locales/pt-PT'
 import ru from './locales/ru'
+import sr from './locales/sr'
 import th from './locales/th'
 import zh from './locales/zh'
 import zh_TW from './locales/zh-TW'
 
 const languages = {
   ar: { resource: ar, name: 'العربية' },
+  bg: { resource: bg, name: 'Български' },
   de: { resource: de, name: 'Deutsch' },
   en: { resource: en, name: 'English' },
   es: { resource: es, name: 'Español' },
   fa: { resource: fa, name: 'فارسی' },
   fr: { resource: fr, name: 'Français' },
   hi: { resource: hi, name: 'हिन्दी' },
+  hr: { resource: hr, name: 'Hrvatski' },
   hu: { resource: hu, name: 'Magyar' },
   it: { resource: it, name: 'Italiano' },
   ja: { resource: ja, name: '日本語' },
@@ -37,6 +42,7 @@ const languages = {
   'pt-BR': { resource: pt_BR, name: 'Português (Brasil)' },
   'pt-PT': { resource: pt_PT, name: 'Português (Portugal)' },
   ru: { resource: ru, name: 'Русский' },
+  sr: { resource: sr, name: 'Српски' },
   th: { resource: th, name: 'ไทย' },
   zh: { resource: zh, name: '简体中文' },
   'zh-TW': { resource: zh_TW, name: '繁體中文' }
@@ -80,9 +86,12 @@ i18n.services.formatter?.add('date', (timestamp, lng) => {
     case 'zh-TW':
     case 'ja':
       return dayjs(timestamp).format('YYYY年MM月DD日')
+    case 'bg':
+    case 'hr':
     case 'pl':
     case 'de':
     case 'ru':
+    case 'sr':
       return dayjs(timestamp).format('DD.MM.YYYY')
     case 'fa':
     case 'hu':

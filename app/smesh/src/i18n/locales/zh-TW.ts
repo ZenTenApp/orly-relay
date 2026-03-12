@@ -197,9 +197,6 @@ export default {
     All: '全部',
     Reactions: '互動',
     Zaps: '打閃',
-    'Enjoying Smesh?': '喜歡 Smesh 嗎？',
-    'Your donation helps me maintain Smesh and make it better! 😊':
-      '您的捐贈幫助我維護 Smesh 並使其更好！😊',
     'Earlier notifications': '更早的通知',
     'Temporarily display this note': '臨時顯示此筆記',
     buttonFollowing: '已關注',

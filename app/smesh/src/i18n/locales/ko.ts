@@ -198,9 +198,6 @@ export default {
     All: '전체',
     Reactions: '반응',
     Zaps: '잽',
-    'Enjoying Smesh?': 'Smesh이 마음에 드시나요?',
-    'Your donation helps me maintain Smesh and make it better! 😊':
-      '후원해주시면 Smesh을 더 잘 유지하고 발전시킬 수 있습니다! 😊',
     'Earlier notifications': '이전 알림',
     'Temporarily display this note': '이 노트 임시 표시',
     buttonFollowing: '팔로잉 중',

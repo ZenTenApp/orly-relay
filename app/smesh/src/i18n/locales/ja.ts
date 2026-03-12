@@ -197,9 +197,6 @@ export default {
     All: 'すべて',
     Reactions: '反応',
     Zaps: 'Zap',
-    'Enjoying Smesh?': 'Smeshをお楽しみですか？',
-    'Your donation helps me maintain Smesh and make it better! 😊':
-      'あなたの寄付はSmeshの維持と改善に役立ちます！ 😊',
     'Earlier notifications': '以前の通知',
     'Temporarily display this note': 'このノートを一時的に表示',
     buttonFollowing: 'フォロー中',

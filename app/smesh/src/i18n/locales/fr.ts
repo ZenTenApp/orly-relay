@@ -198,9 +198,6 @@ export default {
     All: 'Tous',
     Reactions: 'Réactions',
     Zaps: 'Zaps',
-    'Enjoying Smesh?': 'Vous appréciez Smesh ?',
-    'Your donation helps me maintain Smesh and make it better! 😊':
-      "Votre don m'aide à maintenir Smesh et à l'améliorer ! 😊",
     'Earlier notifications': 'Notifications antérieures',
     'Temporarily display this note': 'Afficher temporairement cette note',
     buttonFollowing: 'Suivi',

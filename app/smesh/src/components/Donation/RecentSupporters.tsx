@@ -21,7 +21,7 @@ export default function RecentSupporters() {
 
   return (
     <div className="space-y-2">
-      <div className="font-semibold text-center">{t('Recent Supporters')}</div>
+      <div className="font-semibold text-center">{t('Named and Shamed')}</div>
       <div className="flex flex-col gap-2">
         {supporters.map((item, index) => (
           <div

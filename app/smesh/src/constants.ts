@@ -159,7 +159,6 @@ export const X_URL_REGEX =
   /https?:\/\/(?:www\.)?(twitter\.com|x\.com)\/(?:#!\/)?(\w+)\/status(?:es)?\/(\d+)(?:[?#].*)?/gi
 
 export const SMESH_PUBKEY = '4c800257a588a82849d049817c2bdaad984b25a45ad9f6dad66e47d3b47e3b2f'
-export const CODY_PUBKEY = '4c800257a588a82849d049817c2bdaad984b25a45ad9f6dad66e47d3b47e3b2f'
 
 export const NIP_96_SERVICE = [
   'https://mockingyou.com',

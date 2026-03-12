@@ -1,4 +1,4 @@
-import { CODY_PUBKEY, SMESH_PUBKEY } from '@/constants'
+import { SMESH_PUBKEY } from '@/constants'
 import { getZapInfoFromEvent } from '@/lib/event-metadata'
 import { TProfile } from '@/types'
 import { init, launchPaymentModal } from '@getalby/bitcoin-connect-react'
@@ -14,7 +14,7 @@ import client from './client.service'
 
 export type TRecentSupporter = { pubkey: string; amount: number; comment?: string }
 
-const OFFICIAL_PUBKEYS = [SMESH_PUBKEY, CODY_PUBKEY]
+const OFFICIAL_PUBKEYS = [SMESH_PUBKEY]
 
 class LightningService {
   static instance: LightningService
@@ -189,9 +189,8 @@ class LightningService {
     if (this.recentSupportersCache) {
       return this.recentSupportersCache
     }
-    const relayList = await client.fetchRelayList(CODY_PUBKEY)
+    const relayList = await client.fetchRelayList(SMESH_PUBKEY)
     const events = await client.fetchEvents(relayList.read.slice(0, 4), {
-      authors: ['79f00d3f5a19ec806189fcab03c1be4ff81d18ee4f653c88fac41fe03570f432'], // alby
       kinds: [kinds.Zap],
       '#p': OFFICIAL_PUBKEYS,
       since: dayjs().subtract(1, 'month').unix()
