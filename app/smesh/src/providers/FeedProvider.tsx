@@ -250,6 +250,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         newFeedType.relaySetId ?? undefined
       )
       eventDispatcher.dispatch(event)
+      setIsReady(true)
     } else {
       // No feed could be created — mark ready immediately
       setIsReady(true)
