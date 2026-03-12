@@ -11,7 +11,6 @@ import {
 import { cn, isTouchDevice } from '@/lib/utils'
 import { useNostr } from '@/providers/NostrProvider'
 import { useScreenSize } from '@/providers/ScreenSizeProvider'
-import client from '@/services/client.service'
 import postEditorCache from '@/services/post-editor-cache.service'
 import threadService from '@/services/thread.service'
 import { TPollCreateData } from '@/types'
@@ -183,15 +182,7 @@ const PostContent = forwardRef<
         toast.success(t('Post successful'), { duration: 2000 })
         close()
 
-        // Check for relay failures in the background after modal closes
-        client.lastPublishFailedRelays.then((failedUrls) => {
-          if (failedUrls.length > 0) {
-            toast.error(
-              `${t('Failed to publish to')}: ${failedUrls.join(', ')}`,
-              { duration: 5000 }
-            )
-          }
-        })
+        // Relay failures are tracked silently in relay-stats.service
       } catch (error) {
         const errors = error instanceof AggregateError ? error.errors : [error]
         errors.forEach((err) => {

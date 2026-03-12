@@ -57,6 +57,7 @@ export const StorageKey = {
   ENABLE_MARKDOWN: 'enableMarkdown',
   SEARCH_RELAYS: 'searchRelays',
   LLM_CONFIG_MAP: 'llmConfigMap',
+  OUTBOX_MODE: 'outboxMode',
   DEFAULT_SHOW_NSFW: 'defaultShowNsfw', // deprecated
   PINNED_PUBKEYS: 'pinnedPubkeys', // deprecated
   MEDIA_UPLOAD_SERVICE: 'mediaUploadService', // deprecated

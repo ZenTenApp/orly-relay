@@ -29,9 +29,11 @@ import {
 import { AbstractRelay } from 'nostr-tools/abstract-relay'
 import indexedDb from './indexed-db.service'
 import storage from './local-storage.service'
+import managedOutboxService from './managed-outbox.service'
 import nrcCacheRelayService from './nrc/nrc-cache-relay.service'
 import relayDiscoveryService from './relay-discovery.service'
 import relayListCacheService from './relay-list-cache.service'
+import relayStatsService from './relay-stats.service'
 
 /**
  * Bootstrap relays used when no user relays are available yet.
@@ -97,6 +99,7 @@ class ClientService extends EventTarget {
   }
 
   async init() {
+    await relayStatsService.init()
     await indexedDb.iterateProfileEvents((profileEvent) => this.addUsernameToIndex(profileEvent))
   }
 
@@ -185,22 +188,25 @@ class ClientService extends EventTarget {
       this.currentRelays.forEach((url) => relaySet.add(url))
     }
 
-    return Array.from(relaySet)
+    // Gate through managed outbox service — user's own write relays bypass gating
+    const ownRelays = new Set(this.currentRelays)
+    return managedOutboxService.filterRelayUrls(Array.from(relaySet), 'outbox', ownRelays)
   }
 
   async determineRelaysByFilter(filter: Filter) {
+    const ownRelays = new Set(this.currentRelays)
     if (filter.search) {
       return storage.getSearchRelays()
     } else if (filter.authors?.length) {
       const relayLists = await this.fetchRelayLists(filter.authors)
       const relays = Array.from(new Set(relayLists.flatMap((list) => list.write.slice(0, 5))))
-      // Fall back to current relays if no author relays found
-      return relays.length > 0 ? relays : this.currentRelays
+      const filtered = managedOutboxService.filterRelayUrls(relays, 'inbox', ownRelays)
+      return filtered.length > 0 ? filtered : this.currentRelays
     } else if (filter['#p']?.length) {
       const relayLists = await this.fetchRelayLists(filter['#p'])
       const relays = Array.from(new Set(relayLists.flatMap((list) => list.read.slice(0, 5))))
-      // Fall back to current relays if no recipient relays found
-      return relays.length > 0 ? relays : this.currentRelays
+      const filtered = managedOutboxService.filterRelayUrls(relays, 'inbox', ownRelays)
+      return filtered.length > 0 ? filtered : this.currentRelays
     }
     // Use current relays, falling back to discovered/bootstrap relays
     return this.currentRelays.length > 0 ? this.currentRelays : this.getFallbackRelays()
@@ -233,6 +239,7 @@ class ClientService extends EventTarget {
 
       const onSuccess = (url: string) => {
         results.set(url, 'success')
+        relayStatsService.recordPublishSuccess(url)
         if (!resolved) {
           resolved = true
           clearTimeout(timer)
@@ -243,6 +250,7 @@ class ClientService extends EventTarget {
 
       const onError = (url: string, error: Error) => {
         results.set(url, error)
+        relayStatsService.recordPublishFailure(url)
         // If all relays have finished and none succeeded, reject
         const pending = [...results.values()].filter((v) => v === 'pending')
         if (pending.length === 0 && !resolved) {
@@ -533,6 +541,7 @@ class ClientService extends EventTarget {
         })
         // cannot connect to relay
         if (!relay) {
+          relayStatsService.recordFetchFailure(url)
           if (!eosed) {
             eosedCount++
             eosed = eosedCount >= startedCount
@@ -559,6 +568,7 @@ class ClientService extends EventTarget {
             onevent?.(evt)
           },
           oneose: () => {
+            relayStatsService.recordFetchSuccess(url)
             // make sure eosed is not called multiple times
             if (eosed) return
 
@@ -599,7 +609,8 @@ class ClientService extends EventTarget {
               }
             }
 
-            // close the subscription
+            // close the subscription — record as fetch failure
+            relayStatsService.recordFetchFailure(url)
             closedCount++
             closeReasons.push(reason)
             onclose?.(url, reason)

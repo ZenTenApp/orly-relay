@@ -3,6 +3,7 @@ import { createSettingsDraftEvent } from '@/lib/draft-event'
 import { getReplaceableEventIdentifier } from '@/lib/event'
 import client from '@/services/client.service'
 import storage, { SETTINGS_CHANGED_EVENT } from '@/services/local-storage.service'
+import relayStatsService from '@/services/relay-stats.service'
 import { TSyncSettings } from '@/types'
 import { kinds } from 'nostr-tools'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
@@ -61,7 +62,10 @@ function getCurrentSettings(pubkey: string | null): TSyncSettings {
     mediaUploadServiceConfig: pubkey ? storage.getMediaUploadServiceConfig(pubkey) : undefined,
     // Non-NIP relay configurations (application-specific)
     searchRelays: storage.getSearchRelays(),
-    nrcRendezvousUrl: storage.getNrcRendezvousUrl() || undefined
+    nrcRendezvousUrl: storage.getNrcRendezvousUrl() || undefined,
+    // Outbox relay management
+    outboxMode: storage.getOutboxMode() as 'automatic' | 'managed',
+    relayStatsData: btoa(String.fromCharCode(...relayStatsService.encodeBinary()))
   }
 }
 
@@ -168,6 +172,22 @@ function applySettings(settings: TSyncSettings, pubkey: string | null) {
   }
   if (settings.nrcRendezvousUrl !== undefined) {
     storage.setNrcRendezvousUrl(settings.nrcRendezvousUrl)
+  }
+  // Outbox relay management
+  if (settings.outboxMode !== undefined) {
+    storage.setOutboxMode(settings.outboxMode)
+  }
+  if (settings.relayStatsData) {
+    try {
+      const binaryStr = atob(settings.relayStatsData)
+      const bytes = new Uint8Array(binaryStr.length)
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i)
+      }
+      relayStatsService.decodeBinary(bytes)
+    } catch {
+      console.error('Failed to decode relay stats data')
+    }
   }
   // Per-pubkey settings
   if (pubkey) {

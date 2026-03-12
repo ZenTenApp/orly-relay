@@ -31,6 +31,8 @@ const StoreNames = {
   UNWRAPPED_GIFT_WRAPS: 'unwrappedGiftWraps',
   DM_DELETED_STATE: 'dmDeletedState',
   CACHED_EVENTS: 'cachedEvents', // General event cache for NRC cache relays
+  RELAY_STATS: 'relayStats', // Per-relay per-network failure stats
+  MANAGED_RELAYS: 'managedRelays', // Outbox relay approval state
   MUTE_DECRYPTED_TAGS: 'muteDecryptedTags', // deprecated
   RELAY_INFO_EVENTS: 'relayInfoEvents' // deprecated
 }
@@ -51,7 +53,7 @@ class IndexedDbService {
   init(): Promise<void> {
     if (!this.initPromise) {
       this.initPromise = new Promise((resolve, reject) => {
-        const request = window.indexedDB.open('smesh', 15)
+        const request = window.indexedDB.open('smesh', 16)
 
         request.onerror = (event) => {
           reject(event)
@@ -129,6 +131,13 @@ class IndexedDbService {
             store.createIndex('kind', 'kind', { unique: false })
             store.createIndex('pubkey', 'pubkey', { unique: false })
             store.createIndex('created_at', 'created_at', { unique: false })
+          }
+
+          if (!db.objectStoreNames.contains(StoreNames.RELAY_STATS)) {
+            db.createObjectStore(StoreNames.RELAY_STATS, { keyPath: 'key' })
+          }
+          if (!db.objectStoreNames.contains(StoreNames.MANAGED_RELAYS)) {
+            db.createObjectStore(StoreNames.MANAGED_RELAYS, { keyPath: 'key' })
           }
 
           if (db.objectStoreNames.contains(StoreNames.RELAY_INFO_EVENTS)) {
@@ -1365,6 +1374,66 @@ class IndexedDbService {
         })
       })
     )
+  }
+
+  // ── Relay Stats CRUD ──
+
+  async putRelayStats(key: string, value: unknown): Promise<void> {
+    await this.initPromise
+    if (!this.db) return
+    const transaction = this.db.transaction(StoreNames.RELAY_STATS, 'readwrite')
+    const store = transaction.objectStore(StoreNames.RELAY_STATS)
+    store.put({ key, value, addedAt: Date.now() })
+  }
+
+  async getAllRelayStats(): Promise<Array<{ key: string; value: unknown }>> {
+    await this.initPromise
+    if (!this.db) return []
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(StoreNames.RELAY_STATS, 'readonly')
+      const store = transaction.objectStore(StoreNames.RELAY_STATS)
+      const request = store.getAll()
+      request.onsuccess = () => resolve(request.result ?? [])
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async deleteRelayStats(key: string): Promise<void> {
+    await this.initPromise
+    if (!this.db) return
+    const transaction = this.db.transaction(StoreNames.RELAY_STATS, 'readwrite')
+    const store = transaction.objectStore(StoreNames.RELAY_STATS)
+    store.delete(key)
+  }
+
+  // ── Managed Relays CRUD ──
+
+  async putManagedRelay(key: string, value: unknown): Promise<void> {
+    await this.initPromise
+    if (!this.db) return
+    const transaction = this.db.transaction(StoreNames.MANAGED_RELAYS, 'readwrite')
+    const store = transaction.objectStore(StoreNames.MANAGED_RELAYS)
+    store.put({ key, value, addedAt: Date.now() })
+  }
+
+  async getAllManagedRelays(): Promise<Array<{ key: string; value: unknown }>> {
+    await this.initPromise
+    if (!this.db) return []
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(StoreNames.MANAGED_RELAYS, 'readonly')
+      const store = transaction.objectStore(StoreNames.MANAGED_RELAYS)
+      const request = store.getAll()
+      request.onsuccess = () => resolve(request.result ?? [])
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async deleteManagedRelay(key: string): Promise<void> {
+    await this.initPromise
+    if (!this.db) return
+    const transaction = this.db.transaction(StoreNames.MANAGED_RELAYS, 'readwrite')
+    const store = transaction.objectStore(StoreNames.MANAGED_RELAYS)
+    store.delete(key)
   }
 }
 

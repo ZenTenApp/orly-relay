@@ -261,6 +261,8 @@ export type TSyncSettings = {
   // Non-NIP relay configurations (application-specific)
   searchRelays?: string[]
   nrcRendezvousUrl?: string
+  outboxMode?: 'automatic' | 'managed'
+  relayStatsData?: string
 }
 
 // DM types

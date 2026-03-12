@@ -72,6 +72,7 @@ class LocalStorageService {
   private searchRelays: string[] | null = null
   private fallbackRelayCount: number = 7
   private llmConfigMap: Record<string, TLlmConfig> = {}
+  private outboxMode: string = 'automatic'
 
   constructor() {
     if (!LocalStorageService.instance) {
@@ -314,6 +315,8 @@ class LocalStorageService {
         this.fallbackRelayCount = num
       }
     }
+
+    this.outboxMode = window.localStorage.getItem(StorageKey.OUTBOX_MODE) ?? 'automatic'
 
     // Clean up deprecated data
     window.localStorage.removeItem(StorageKey.PINNED_PUBKEYS)
@@ -837,6 +840,15 @@ class LocalStorageService {
   setFallbackRelayCount(count: number) {
     this.fallbackRelayCount = Math.max(3, Math.min(50, count))
     window.localStorage.setItem(StorageKey.FALLBACK_RELAY_COUNT, this.fallbackRelayCount.toString())
+  }
+
+  getOutboxMode(): string {
+    return this.outboxMode
+  }
+
+  setOutboxMode(mode: string) {
+    this.outboxMode = mode
+    window.localStorage.setItem(StorageKey.OUTBOX_MODE, mode)
   }
 
   // NRC rendezvous URL - stored separately by NRCProvider but accessed here for sync

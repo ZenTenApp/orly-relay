@@ -8,6 +8,7 @@ import EmojiPickerDialog from '@/components/EmojiPickerDialog'
 import FavoriteRelaysSetting from '@/components/FavoriteRelaysSetting'
 import CacheRelaysSetting from '@/components/CacheRelaysSetting'
 import MailboxSetting from '@/components/MailboxSetting'
+import ManagedOutboxSetting from '@/components/ManagedOutboxSetting'
 import NRCSettings from '@/components/NRCSettings'
 import NoteList from '@/components/NoteList'
 import Tabs from '@/components/Tabs'
@@ -554,6 +555,7 @@ export default function Settings() {
                 <TabsTrigger value="favorite-relays">{t('Favorite Relays')}</TabsTrigger>
                 <TabsTrigger value="mailbox">{t('Read & Write Relays')}</TabsTrigger>
                 <TabsTrigger value="cache-relays">{t('Cache Relays')}</TabsTrigger>
+                <TabsTrigger value="outbox">{t('Outbox')}</TabsTrigger>
               </TabsList>
               <TabsContent value="favorite-relays">
                 <FavoriteRelaysSetting />
@@ -563,6 +565,9 @@ export default function Settings() {
               </TabsContent>
               <TabsContent value="cache-relays">
                 <CacheRelaysSetting />
+              </TabsContent>
+              <TabsContent value="outbox">
+                <ManagedOutboxSetting />
               </TabsContent>
             </RadixTabs>
           </AccordionContent>
