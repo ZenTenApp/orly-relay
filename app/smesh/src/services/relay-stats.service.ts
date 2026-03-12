@@ -11,6 +11,7 @@ import {
   DIRECTION_FROM_BITS,
   STATUS_FROM_BITS,
 } from '@/types/relay-management'
+import { normalizeUrl } from '@/lib/url'
 import networkIdentityService from './network-identity.service'
 import indexedDb from './indexed-db.service'
 import { ipToBytes, bytesToIp, ipToHex } from './network-identity.service'
@@ -75,6 +76,7 @@ class RelayStatsService {
   }
 
   getOrCreateEntry(url: string): TRelayEntry {
+    url = normalizeUrl(url)
     let entry = this.entries.get(url)
     if (!entry) {
       entry = {
@@ -134,7 +136,7 @@ class RelayStatsService {
   }
 
   getFailureRate(url: string): number {
-    const entry = this.entries.get(url)
+    const entry = this.entries.get(normalizeUrl(url))
     if (!entry) return 0
     const ipHex = networkIdentityService.getCurrentIpHex() ?? 'unknown'
     const stats = entry.networkStats.get(ipHex)
@@ -146,7 +148,7 @@ class RelayStatsService {
   }
 
   isAutoDisabled(url: string): boolean {
-    const entry = this.entries.get(url)
+    const entry = this.entries.get(normalizeUrl(url))
     if (!entry) return false
     const ipHex = networkIdentityService.getCurrentIpHex() ?? 'unknown'
     const stats = entry.networkStats.get(ipHex)
@@ -159,7 +161,7 @@ class RelayStatsService {
   }
 
   getEntry(url: string): TRelayEntry | undefined {
-    return this.entries.get(url)
+    return this.entries.get(normalizeUrl(url))
   }
 
   getAllEntries(): TRelayEntry[] {
@@ -167,6 +169,7 @@ class RelayStatsService {
   }
 
   setRelayIp(url: string, ip: string): void {
+    url = normalizeUrl(url)
     const entry = this.getOrCreateEntry(url)
     entry.relayIp = ip
     entry.updatedAt = Date.now()

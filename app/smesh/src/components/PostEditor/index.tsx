@@ -13,6 +13,7 @@ import {
   SheetTitle
 } from '@/components/ui/sheet'
 import { useVisualViewportHeight } from '@/hooks/useVisualViewportHeight'
+import { usePrimaryPage } from '@/PageManager'
 import { useScreenSize } from '@/providers/ScreenSizeProvider'
 import postEditor from '@/services/post-editor.service'
 import { ArrowLeft, X } from 'lucide-react'
@@ -39,6 +40,7 @@ export default function PostEditor({
 }) {
   const { t } = useTranslation()
   const { isSmallScreen } = useScreenSize()
+  const { navigate } = usePrimaryPage()
   const viewportHeight = useVisualViewportHeight()
   const contentRef = useRef<TPostContentHandle>(null)
 
@@ -52,11 +54,14 @@ export default function PostEditor({
         ref={contentRef}
         defaultContent={defaultContent}
         parentStuff={parentStuff}
-        close={() => setOpen(false)}
+        close={() => {
+          setOpen(false)
+          navigate('home')
+        }}
         highlightedText={highlightedText}
       />
     )
-  }, [highlightedText])
+  }, [highlightedText, navigate])
 
   if (inline) {
     if (!open) return null

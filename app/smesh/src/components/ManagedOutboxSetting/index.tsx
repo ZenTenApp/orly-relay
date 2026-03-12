@@ -133,6 +133,19 @@ export default function ManagedOutboxSetting() {
 
   return (
     <div className="space-y-4">
+      <div className="text-sm text-muted-foreground space-y-2">
+        <p>
+          {t('Relays discovered via outbox model (NIP-65) are tracked here with per-network failure stats. In')}
+          {' '}<strong>{t('Automatic')}</strong> {t('mode, all discovered relays are used unless manually excluded or auto-disabled. In')}
+          {' '}<strong>{t('Managed')}</strong> {t('mode, relays must be explicitly approved before use.')}
+        </p>
+        <p>
+          {t('Approve/Reject controls whether a relay is used in managed mode. Exclude is a manual override that blocks a relay in both modes, independent of approval status. Relays with 99%+ failure rate on your current network are auto-disabled.')}
+        </p>
+        <p>
+          {t('Failure rates are tracked per network (based on your external IP), so a relay that fails on one connection may work fine on another.')}
+        </p>
+      </div>
       <div className="flex items-center justify-between">
         <Label className="text-base font-normal">{t('Outbox mode')}</Label>
         <Select value={outboxMode} onValueChange={handleModeChange}>

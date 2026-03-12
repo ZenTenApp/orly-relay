@@ -1,3 +1,4 @@
+import { normalizeUrl } from '@/lib/url'
 import relayStatsService from './relay-stats.service'
 import storage from './local-storage.service'
 import type { TRelayDirection, TOutboxMode, TRelayEntry } from '@/types/relay-management'
@@ -9,10 +10,12 @@ class ManagedOutboxService {
     ownRelays?: Set<string>
   ): string[] {
     const mode = storage.getOutboxMode() as TOutboxMode
+    const normalizedOwn = ownRelays ? new Set([...ownRelays].map(normalizeUrl)) : undefined
     const allowed: string[] = []
 
-    for (const url of urls) {
-      if (ownRelays?.has(url)) {
+    for (let url of urls) {
+      url = normalizeUrl(url)
+      if (normalizedOwn?.has(url)) {
         allowed.push(url)
         continue
       }
