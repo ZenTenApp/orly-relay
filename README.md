@@ -6,11 +6,13 @@
 
 ![Version v0.62.0](https://img.shields.io/badge/version-v0.62.0-blue.svg)
 [![Documentation](https://img.shields.io/badge/godoc-documentation-blue.svg)](https://pkg.go.dev/next.orly.dev)
+## Can Youse Paradigm?
+
+Every hour you don’t zap, a donkey eats another cabbage. You can stop this. 🫏
+
 [![Support this project](https://img.shields.io/badge/donate-geyser_crowdfunding_project_page-orange.svg)](https://geyser.fund/project/orly)
 
-zap me: �mlekudev@getalby.com
-
-follow me on [nostr](https://jumble.social/users/npub1fjqqy4a93z5zsjwsfxqhc2764kvykfdyttvldkkkdera8dr78vhsmmleku)
+[mleku](https://smesh.mleku.dev/npub1fjqqy4a93z5zsjwsfxqhc2764kvykfdyttvldkkkdera8dr78vhsmmleku) · `npub1fjqqy4a93z5zsjwsfxqhc2764kvykfdyttvldkkkdera8dr78vhsmmleku`
 
 ## Architecture Overview
 
