@@ -31,6 +31,14 @@ const ChatPage = forwardRef<TPageRef>((_, ref) => {
     }
   }, [pubkey, activeTab, markInboxAsSeen])
 
+  const { refreshChannels } = useChat()
+
+  useEffect(() => {
+    if (activeTab === 'channels') {
+      refreshChannels()
+    }
+  }, [activeTab, refreshChannels])
+
   return (
     <PrimaryPageLayout
       pageName="chat"
