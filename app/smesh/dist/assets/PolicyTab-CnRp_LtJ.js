@@ -1,4 +1,4 @@
-import{r as o,i as r,b as g,t as i,j as e,B as x,n as F}from"./index-BaqL-K3J.js";const V=`{
+import{r as o,i as r,b as g,t as i,j as e,B as x,n as F}from"./index-CsU732wQ.js";const V=`{
   "kind": {
     "whitelist": [0, 1, 3, 6, 7, 10002],
     "blacklist": []

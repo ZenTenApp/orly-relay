@@ -17,6 +17,7 @@ import LayoutSwitcher from './LayoutSwitcher'
 import NotificationsButton from './NotificationButton'
 import PostButton from './PostButton'
 import ProfileButton from './ProfileButton'
+import RelayAdminButton from './RelayAdminButton'
 import SearchButton from './SearchButton'
 import SettingsButton from './SettingsButton'
 
@@ -63,8 +64,9 @@ export default function PrimaryPageSidebar() {
         {pubkey && <ChatButton collapse={isCollapsed} navIndex={3} />}
         <ProfileButton collapse={isCollapsed} navIndex={pubkey ? 4 : 3} />
         {pubkey && <BookmarkButton collapse={isCollapsed} navIndex={5} />}
-        <SettingsButton collapse={isCollapsed} navIndex={pubkey ? 6 : 4} />
-        <PostButton collapse={isCollapsed} navIndex={pubkey ? 7 : 5} />
+        <RelayAdminButton collapse={isCollapsed} navIndex={pubkey ? 6 : 4} />
+        <SettingsButton collapse={isCollapsed} navIndex={pubkey ? 7 : 5} />
+        <PostButton collapse={isCollapsed} navIndex={pubkey ? 8 : 5} />
       </div>
       <div className="space-y-4">
         <HelpButton collapse={isCollapsed} navIndex={pubkey ? 9 : 6} />

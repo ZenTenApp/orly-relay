@@ -473,6 +473,7 @@ func (s *Server) UserInterface() {
 	s.mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
 	s.mux.HandleFunc("/api/auth/logout", s.handleAuthLogout)
 	s.mux.HandleFunc("/api/permissions/", s.handlePermissions)
+	s.mux.HandleFunc("/api/role", s.handleRole)
 	// Export endpoint
 	s.mux.HandleFunc("/api/export", s.handleExport)
 	// Events endpoints
@@ -993,6 +994,33 @@ func (s *Server) handlePermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Write(jsonData)
+}
+
+// handleRole returns the caller's access level using NIP-98 authentication.
+// Used by the smesh admin UI to determine whether to show admin controls.
+func (s *Server) handleRole(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	valid, pubkey, err := httpauth.CheckAuth(r)
+	if chk.E(err) || !valid {
+		w.Write([]byte(`{"role":""}`))
+		return
+	}
+
+	role := acl.Registry.GetAccessLevel(pubkey, r.RemoteAddr)
+	jsonData, err := json.Marshal(struct {
+		Role string `json:"role"`
+	}{Role: role})
+	if chk.E(err) {
+		w.Write([]byte(`{"role":""}`))
+		return
+	}
 	w.Write(jsonData)
 }
 
