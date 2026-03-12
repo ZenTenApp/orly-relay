@@ -13,7 +13,6 @@ const THEMES = [
   { key: 'system', label: 'System', icon: <Monitor className="size-5" /> },
   { key: 'light', label: 'Light', icon: <Sun className="size-5" /> },
   { key: 'dark', label: 'Dark', icon: <Moon className="size-5" /> },
-  { key: 'pure-black', label: 'Pure Black', icon: <Moon className="size-5 fill-current" /> }
 ] as const
 
 const LAYOUTS = [

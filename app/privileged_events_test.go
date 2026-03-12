@@ -34,12 +34,12 @@ func createPTag(pubkey string) (t *tag.T) {
 	return t
 }
 
-// Test helper to simulate privileged event filtering logic
+// Test helper to simulate privileged event filtering logic.
+// Privileged kinds are always filtered regardless of ACL mode.
 func testPrivilegedEventFiltering(events event.S, authedPubkey []byte, aclMode string, accessLevel string) (filtered event.S) {
 	var tmp event.S
 	for _, ev := range events {
-		if aclMode != "none" &&
-			kind.IsPrivileged(ev.Kind) && accessLevel != "admin" {
+		if kind.IsPrivileged(ev.Kind) && accessLevel != "admin" {
 
 			if authedPubkey == nil {
 				// Not authenticated - cannot see privileged events
@@ -404,8 +404,8 @@ func TestPrivilegedEventEdgeCases(t *testing.T) {
 	}
 }
 
-// TestPrivilegedEventsWithACLNone tests that privileged events are accessible
-// to anyone when ACL mode is set to "none" (open relay)
+// TestPrivilegedEventsWithACLNone tests that privileged events are always
+// filtered regardless of ACL mode — even on open relays, DM metadata is protected.
 func TestPrivilegedEventsWithACLNone(t *testing.T) {
 	authorPubkey := []byte("author-pubkey-12345")
 	recipientPubkey := []byte("recipient-pubkey-67")
@@ -429,20 +429,20 @@ func TestPrivilegedEventsWithACLNone(t *testing.T) {
 		description  string
 	}{
 		{
-			name:         "ACL none - unauthorized user can see privileged event",
+			name:         "ACL none - unauthorized user cannot see privileged event",
 			authedPubkey: unauthorizedPubkey,
 			aclMode:      "none",
 			accessLevel:  "write", // default for ACL=none
-			shouldAllow:  true,
-			description:  "When ACL is 'none', privileged events should be visible to anyone",
+			shouldAllow:  false,
+			description:  "Even with ACL 'none', unauthorized users cannot see privileged events",
 		},
 		{
-			name:         "ACL none - unauthenticated user can see privileged event",
+			name:         "ACL none - unauthenticated user cannot see privileged event",
 			authedPubkey: nil,
 			aclMode:      "none",
 			accessLevel:  "write", // default for ACL=none
-			shouldAllow:  true,
-			description:  "When ACL is 'none', even unauthenticated users can see privileged events",
+			shouldAllow:  false,
+			description:  "Even with ACL 'none', unauthenticated users cannot see privileged events",
 		},
 		{
 			name:         "ACL managed - unauthorized user cannot see privileged event",

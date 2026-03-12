@@ -6,8 +6,8 @@ import { useNostr } from '@/providers/NostrProvider'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import AccountButton from '../Sidebar/AccountButton'
 import BookmarkButton from '../Sidebar/BookmarkButton'
+import ChatButton from '../Sidebar/ChatButton'
 import HomeButton from '../Sidebar/HomeButton'
-import InboxButton from '../Sidebar/InboxButton'
 import LogoutButton from '../Sidebar/LogoutButton'
 import NotificationsButton from '../Sidebar/NotificationButton'
 import ProfileButton from '../Sidebar/ProfileButton'
@@ -55,7 +55,7 @@ export default function SidebarDrawer({ open, onOpenChange }: SidebarDrawerProps
             </div>
             {pubkey && (
               <div onClick={handleItemClick}>
-                <InboxButton collapse={false} />
+                <ChatButton collapse={false} />
               </div>
             )}
             <div onClick={handleItemClick}>

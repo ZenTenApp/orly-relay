@@ -1,7 +1,7 @@
 import { usePrimaryPage } from '@/PageManager'
 import { useKeyboardNavigation } from '@/providers/KeyboardNavigationProvider'
 import { useNostr } from '@/providers/NostrProvider'
-import { Bookmark } from 'lucide-react'
+import { Library } from 'lucide-react'
 import SidebarItem from './SidebarItem'
 
 export default function BookmarkButton({ collapse, navIndex }: { collapse: boolean; navIndex?: number }) {
@@ -18,13 +18,13 @@ export default function BookmarkButton({ collapse, navIndex }: { collapse: boole
 
   return (
     <SidebarItem
-      title="Bookmarks"
+      title="Library"
       onClick={handleClick}
       active={display && current === 'bookmark'}
       collapse={collapse}
       navIndex={navIndex}
     >
-      <Bookmark />
+      <Library />
     </SidebarItem>
   )
 }

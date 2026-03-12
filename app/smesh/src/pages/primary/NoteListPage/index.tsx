@@ -1,12 +1,13 @@
 import { usePrimaryPage } from '@/PageManager'
 import RelayInfo from '@/components/RelayInfo'
+import SmeshLoader from '@/components/SmeshLoader'
 import { Button } from '@/components/ui/button'
 import PrimaryPageLayout from '@/layouts/PrimaryPageLayout'
 import { useCurrentRelays } from '@/providers/CurrentRelaysProvider'
 import { useFeed } from '@/providers/FeedProvider'
 import { useNostr } from '@/providers/NostrProvider'
 import { TPageRef } from '@/types'
-import { Compass, Info, LogIn, Sparkles } from 'lucide-react'
+import { Compass, Info, LogIn } from 'lucide-react'
 import {
   Dispatch,
   forwardRef,
@@ -23,7 +24,6 @@ import PinnedFeed from './PinnedFeed'
 import RelaysFeed from './RelaysFeed'
 
 const NoteListPage = forwardRef<TPageRef>((_, ref) => {
-  const { t } = useTranslation()
   const { addRelayUrls, removeRelayUrls } = useCurrentRelays()
   const layoutRef = useRef<TPageRef>(null)
   const { pubkey } = useNostr()
@@ -50,7 +50,9 @@ const NoteListPage = forwardRef<TPageRef>((_, ref) => {
   let content: React.ReactNode = null
   if (!isReady) {
     content = (
-      <div className="text-center text-sm text-muted-foreground pt-3">{t('loading...')}</div>
+      <div className="flex items-center justify-center pt-16">
+        <SmeshLoader className="w-48 h-48" />
+      </div>
     )
   } else if (!feedInfo) {
     content = <WelcomeGuide />
@@ -139,12 +141,9 @@ function WelcomeGuide() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center space-y-6">
+      <SmeshLoader className="w-40 h-40" />
       <div className="space-y-2">
-        <div className="flex items-center w-full justify-center gap-2">
-          <Sparkles className="text-yellow-400" />
-          <h2 className="text-2xl font-bold">{t('Welcome to Smesh')}</h2>
-          <Sparkles className="text-yellow-400" />
-        </div>
+        <h2 className="text-2xl font-bold">{t('Welcome to Smesh')}</h2>
         <p className="text-muted-foreground max-w-md">
           {t(
             'Smesh is a client focused on browsing relays. Get started by exploring interesting relays or login to view your following feed.'

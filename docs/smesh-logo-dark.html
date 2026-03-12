@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>smesh</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  svg {
+    width: min(95vw, 95vh);
+    height: min(95vw, 95vh);
+  }
+
+  .edge {
+    stroke-linecap: round;
+    opacity: 0;
+    animation: edgeFade 0.4s ease forwards;
+  }
+
+  .center-ring {
+    opacity: 0;
+    animation: nodePop 0.3s ease forwards;
+  }
+
+  @keyframes edgeFade {
+    to { opacity: 1; }
+  }
+
+  @keyframes nodePop {
+    0% { opacity: 0; transform: scale(0); }
+    70% { transform: scale(1.2); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+</style>
+</head>
+<body>
+
+<svg viewBox="0 0 800 800" xmlns="http://www.w3.org/2000/svg">
+  <rect width="800" height="800" fill="#0a0a0e" />
+  <g id="lattice"></g>
+</svg>
+
+<script>
+const SVG_NS = "http://www.w3.org/2000/svg";
+const cx = 400, cy = 400;
+const latticeG = document.getElementById("lattice");
+
+const branchColors = [
+  "#e07030",  // orange
+  "#8833bb",  // purple
+  "#00aabb",  // cyan
+];
+
+let delay = 0;
+const edges = [];
+
+const baseLen = 110;
+const decay = 0.56;
+const baseWidth = 32;
+
+const branchAngles = [
+  -Math.PI / 2,
+  -Math.PI / 2 + 2 * Math.PI / 3,
+  -Math.PI / 2 + 4 * Math.PI / 3,
+];
+
+function buildBranch(px, py, angle, depth, maxDepth, branchIdx, spreadAngle) {
+  if (depth > maxDepth) return;
+
+  const scale = Math.pow(decay, depth - 1);
+  const len = baseLen * scale;
+  const width = baseWidth * scale;
+  const nx = px + Math.cos(angle) * len;
+  const ny = py + Math.sin(angle) * len;
+
+  const d = delay;
+  delay += 30;
+
+  edges.push({ x1: px, y1: py, x2: nx, y2: ny, color: branchColors[branchIdx], width, delay: d });
+
+  const childSpread = spreadAngle * 0.82;
+  const offsets = [-childSpread / 2, childSpread / 2];
+
+  for (const off of offsets) {
+    buildBranch(nx, ny, angle + off, depth + 1, maxDepth, branchIdx, childSpread);
+  }
+}
+
+delay = 50;
+
+const depth = 6;
+const spread = Math.PI * 0.68;
+
+for (let i = 0; i < 3; i++) {
+  buildBranch(cx, cy, branchAngles[i], 1, depth, i, spread);
+}
+
+// Render edges
+for (const e of edges) {
+  const line = document.createElementNS(SVG_NS, "line");
+  line.setAttribute("x1", e.x1);
+  line.setAttribute("y1", e.y1);
+  line.setAttribute("x2", e.x2);
+  line.setAttribute("y2", e.y2);
+  line.setAttribute("stroke", e.color);
+  line.setAttribute("stroke-width", e.width);
+  line.classList.add("edge");
+  line.style.animationDelay = e.delay + "ms";
+  latticeG.appendChild(line);
+}
+
+// Center hexagon — same r=24 as the old circle
+const r = 24;
+const hexPoints = [];
+for (let i = 0; i < 6; i++) {
+  const a = Math.PI / 6 + i * Math.PI / 3; // flat-top hexagon
+  hexPoints.push(`${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`);
+}
+const hex = document.createElementNS(SVG_NS, "polygon");
+hex.setAttribute("points", hexPoints.join(" "));
+hex.setAttribute("fill", "#e8e4da");
+hex.setAttribute("stroke", "#0a0a0e");
+hex.setAttribute("stroke-width", 7.5);
+hex.setAttribute("stroke-linejoin", "round");
+hex.classList.add("center-ring");
+hex.style.animationDelay = "0ms";
+latticeG.appendChild(hex);
+</script>
+</body>
+</html>

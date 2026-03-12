@@ -31,6 +31,7 @@ import { UserTrustProvider } from '@/providers/UserTrustProvider'
 import { ZapProvider } from '@/providers/ZapProvider'
 import { ChatProvider } from '@/providers/ChatProvider'
 import { ComposeProvider } from '@/providers/ComposeProvider'
+import { RelayAdminProvider } from '@/providers/RelayAdminProvider'
 import { PageManager } from './PageManager'
 
 export default function App(): JSX.Element {
@@ -43,6 +44,7 @@ export default function App(): JSX.Element {
             <DeletedEventProvider>
               <PasswordPromptProvider>
                 <NostrProvider>
+                <RelayAdminProvider>
                 <NRCProvider>
                 <RepositoryProvider>
                 <SettingsSyncProvider>
@@ -85,6 +87,7 @@ export default function App(): JSX.Element {
                 </SettingsSyncProvider>
                 </RepositoryProvider>
                 </NRCProvider>
+                </RelayAdminProvider>
                 </NostrProvider>
               </PasswordPromptProvider>
             </DeletedEventProvider>

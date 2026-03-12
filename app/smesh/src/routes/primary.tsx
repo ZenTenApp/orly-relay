@@ -1,7 +1,6 @@
 import BookmarkPage from '@/pages/primary/BookmarkPage'
 import ChatPage from '@/pages/primary/ChatPage'
 import HelpPage from '@/pages/primary/HelpPage'
-import InboxPage from '@/pages/primary/InboxPage'
 import MePage from '@/pages/primary/MePage'
 import NoteListPage from '@/pages/primary/NoteListPage'
 import NotificationListPage from '@/pages/primary/NotificationListPage'
@@ -19,7 +18,7 @@ type RouteConfig = {
 
 const PRIMARY_ROUTE_CONFIGS: RouteConfig[] = [
   { key: 'home', component: NoteListPage },
-  { key: 'inbox', component: InboxPage },
+  { key: 'inbox', component: ChatPage },
   { key: 'notifications', component: NotificationListPage },
   { key: 'me', component: MePage },
   { key: 'profile', component: ProfilePage },

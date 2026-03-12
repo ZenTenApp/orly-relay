@@ -1,7 +1,7 @@
 import BookmarkList from '@/components/BookmarkList'
 import PrimaryPageLayout from '@/layouts/PrimaryPageLayout'
 import { TPageRef } from '@/types'
-import { BookmarkIcon } from 'lucide-react'
+import { Library } from 'lucide-react'
 import { forwardRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -23,8 +23,8 @@ function BookmarkPageTitlebar() {
 
   return (
     <div className="flex gap-2 items-center h-full pl-3">
-      <BookmarkIcon />
-      <div className="text-lg font-semibold">{t('Bookmarks')}</div>
+      <Library />
+      <div className="text-lg font-semibold">{t('Library')}</div>
     </div>
   )
 }

@@ -12,7 +12,6 @@ import BookmarkButton from './BookmarkButton'
 import ChatButton from './ChatButton'
 import HelpButton from './HelpButton'
 import HomeButton from './HomeButton'
-import InboxButton from './InboxButton'
 import KeyboardModeButton from './KeyboardModeButton'
 import LayoutSwitcher from './LayoutSwitcher'
 import NotificationsButton from './NotificationButton'
@@ -61,12 +60,11 @@ export default function PrimaryPageSidebar() {
         <HomeButton collapse={isCollapsed} navIndex={0} />
         <NotificationsButton collapse={isCollapsed} navIndex={1} />
         <SearchButton collapse={isCollapsed} navIndex={2} />
-        {pubkey && <InboxButton collapse={isCollapsed} navIndex={3} />}
-        {pubkey && <ChatButton collapse={isCollapsed} navIndex={4} />}
-        <ProfileButton collapse={isCollapsed} navIndex={pubkey ? 5 : 3} />
-        {pubkey && <BookmarkButton collapse={isCollapsed} navIndex={6} />}
-        <SettingsButton collapse={isCollapsed} navIndex={pubkey ? 7 : 4} />
-        <PostButton collapse={isCollapsed} navIndex={pubkey ? 8 : 5} />
+        {pubkey && <ChatButton collapse={isCollapsed} navIndex={3} />}
+        <ProfileButton collapse={isCollapsed} navIndex={pubkey ? 4 : 3} />
+        {pubkey && <BookmarkButton collapse={isCollapsed} navIndex={5} />}
+        <SettingsButton collapse={isCollapsed} navIndex={pubkey ? 6 : 4} />
+        <PostButton collapse={isCollapsed} navIndex={pubkey ? 7 : 5} />
       </div>
       <div className="space-y-4">
         <HelpButton collapse={isCollapsed} navIndex={pubkey ? 9 : 6} />
@@ -78,7 +76,7 @@ export default function PrimaryPageSidebar() {
         <button
           className={cn(
             'absolute flex flex-col justify-center items-center right-0 w-5 h-6 p-0 rounded-l-md hover:shadow-md text-muted-foreground hover:text-foreground hover:bg-background transition-colors [&_svg]:size-4',
-            themeSetting === 'pure-black' || enableSingleColumnLayout ? 'top-3' : 'top-5'
+            themeSetting === 'dark' || enableSingleColumnLayout ? 'top-3' : 'top-5'
           )}
           onClick={(e) => {
             e.stopPropagation()

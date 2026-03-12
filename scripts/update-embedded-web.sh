@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # scripts/update-embedded-web.sh
-# Build the embedded web UIs (relay dashboard + smesh client) and then install
-# the Go binary.
+# Build the embedded smesh web client and then install the Go binary.
 #
 # This script will:
-#  - Build the Svelte relay dashboard in app/web to app/web/dist
 #  - Build the Smesh client in app/smesh to app/smesh/dist
 #  - Run `go install` from the repository root so the binary picks up the new
 #    embedded assets.
+#
+# Note: The relay dashboard (app/web/) has been merged into smesh.
+# Both app/web.go and app/smesh.go now serve from smesh/dist.
 #
 # Usage:
 #   ./scripts/update-embedded-web.sh
@@ -21,7 +22,6 @@ set -euo pipefail
 # Resolve repo root to allow running from anywhere
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-WEB_DIR="${REPO_ROOT}/app/web"
 SMESH_DIR="${REPO_ROOT}/app/smesh"
 
 log() { printf "[update-embedded-web] %s\n" "$*"; }
@@ -88,10 +88,7 @@ build_js_project() {
   log "${name} build complete at ${dist_dir}."
 }
 
-# Build relay dashboard (Svelte)
-build_js_project "${WEB_DIR}" "relay dashboard"
-
-# Build smesh client (React)
+# Build smesh client (React) — serves as both the client and the relay dashboard
 build_js_project "${SMESH_DIR}" "smesh client"
 
 # Install the Go binary so it embeds the latest files
@@ -100,4 +97,4 @@ pushd "${REPO_ROOT}" >/dev/null
 GO111MODULE=on go install ./...
 popd >/dev/null
 
-log "Done. Your installed binary now includes the updated embedded web UIs."
+log "Done. Your installed binary now includes the updated embedded smesh client."

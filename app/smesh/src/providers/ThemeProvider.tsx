@@ -25,9 +25,15 @@ const updateCSSVariables = (color: TPrimaryColor, currentTheme: TTheme) => {
   root.style.setProperty('--ring', config.ring)
 }
 
+function migrateThemeSetting(raw: string | null): TThemeSetting {
+  if (raw === 'pure-black') return 'dark'
+  if (raw === 'light' || raw === 'dark' || raw === 'system') return raw
+  return 'dark'
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [themeSetting, setThemeSetting] = useState<TThemeSetting>(
-    (localStorage.getItem(StorageKey.THEME_SETTING) as TThemeSetting) ?? 'pure-black'
+    migrateThemeSetting(localStorage.getItem(StorageKey.THEME_SETTING))
   )
   const [theme, setTheme] = useState<TTheme>('light')
   const [primaryColor, setPrimaryColor] = useState<TPrimaryColor>(
@@ -53,18 +59,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [themeSetting])
 
   useEffect(() => {
-    const updateTheme = async () => {
-      const root = window.document.documentElement
-      root.classList.remove('light', 'dark')
-      root.classList.add(theme === 'pure-black' ? 'dark' : theme)
+    const root = window.document.documentElement
+    root.classList.remove('light', 'dark')
+    root.classList.add(theme)
 
-      if (theme === 'pure-black') {
-        root.classList.add('pure-black')
-      } else {
-        root.classList.remove('pure-black')
-      }
+    // Dark mode always uses pure-black styling
+    if (theme === 'dark') {
+      root.classList.add('pure-black')
+    } else {
+      root.classList.remove('pure-black')
     }
-    updateTheme()
   }, [theme])
 
   useEffect(() => {

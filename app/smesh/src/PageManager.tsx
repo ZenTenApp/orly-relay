@@ -474,13 +474,13 @@ export function PageManager({ maxStackSize = 5 }: { maxStackSize?: number }) {
                   <div
                     className={cn(
                       'grid grid-cols-2 w-full',
-                      themeSetting === 'pure-black' ? '' : 'gap-2 pr-2 py-2'
+                      themeSetting === 'dark' ? '' : 'gap-2 pr-2 py-2'
                     )}
                   >
                     <div
                       className={cn(
                         'bg-background overflow-hidden',
-                        themeSetting === 'pure-black' ? 'border-l' : 'rounded-2xl shadow-lg'
+                        themeSetting === 'dark' ? 'border-l' : 'rounded-2xl shadow-lg'
                       )}
                     >
                       {primaryPages.map(({ name, element, props }) => (
@@ -498,8 +498,8 @@ export function PageManager({ maxStackSize = 5 }: { maxStackSize?: number }) {
                     <div
                       className={cn(
                         'bg-background overflow-hidden',
-                        themeSetting === 'pure-black' ? 'border-l' : 'rounded-2xl',
-                        themeSetting !== 'pure-black' && secondaryStack.length > 0 && 'shadow-lg',
+                        themeSetting === 'dark' ? 'border-l' : 'rounded-2xl',
+                        themeSetting !== 'dark' && secondaryStack.length > 0 && 'shadow-lg',
                         secondaryStack.length === 0 ? 'bg-surface' : ''
                       )}
                     >
