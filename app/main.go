@@ -28,6 +28,7 @@ import (
 	"next.orly.dev/pkg/protocol/nrc"
 	"next.orly.dev/pkg/ratelimit"
 	"next.orly.dev/pkg/crawler"
+	"next.orly.dev/pkg/grapevine"
 	"next.orly.dev/pkg/spider"
 	"next.orly.dev/pkg/storage"
 	dsync "next.orly.dev/pkg/sync"
@@ -221,6 +222,30 @@ func Run(
 				log.I.F("graph query executor initialized (Neo4j backend, enabled=%v, max_depth=%d, max_results=%d, rate_limit=%d/min)",
 					graphEnabled, maxDepth, maxResults, rateLimitRPM)
 			}
+		}
+	}
+
+	// Initialize GrapeVine WoT scoring engine (Badger backend only)
+	if cfg.GrapeVineEnabled {
+		if badgerDB, ok := db.(*database.D); ok {
+			gvStore := database.NewGrapeVineStore(badgerDB)
+			gvSource := grapevine.NewBadgerGraphSource(badgerDB)
+			gvCfg := grapevine.Config{
+				MaxDepth:          cfg.GrapeVineMaxDepth,
+				Cycles:            cfg.GrapeVineCycles,
+				AttenuationFactor: cfg.GrapeVineAttenuation,
+				Rigor:             cfg.GrapeVineRigor,
+				FollowConfidence:  cfg.GrapeVineFollowConf,
+			}
+			l.grapeVineEngine = grapevine.NewEngine(gvSource, gvStore, gvCfg)
+			l.grapeVineScheduler = grapevine.NewScheduler(l.grapeVineEngine, cfg.GrapeVineObservers, cfg.GrapeVineRefresh)
+			if len(cfg.GrapeVineObservers) > 0 {
+				go l.grapeVineScheduler.Start(ctx)
+			}
+			log.I.F("grapevine WoT scoring enabled (depth=%d, cycles=%d, observers=%d)",
+				cfg.GrapeVineMaxDepth, cfg.GrapeVineCycles, len(cfg.GrapeVineObservers))
+		} else {
+			log.W.F("grapevine enabled but database is not Badger — grapevine requires Badger graph indexes")
 		}
 	}
 

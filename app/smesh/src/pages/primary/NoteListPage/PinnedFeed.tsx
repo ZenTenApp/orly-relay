@@ -1,4 +1,5 @@
 import NormalFeed from '@/components/NormalFeed'
+import { useFeed } from '@/providers/FeedProvider'
 import { useNostr } from '@/providers/NostrProvider'
 import { usePinnedUsers } from '@/providers/PinnedUsersProvider'
 import client from '@/services/client.service'
@@ -8,6 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 export default function PinnedFeed() {
   const { pubkey } = useNostr()
   const { pinnedPubkeySet } = usePinnedUsers()
+  const { markFeedLoaded } = useFeed()
   const [subRequests, setSubRequests] = useState<TFeedSubRequest[]>([])
   const initializedRef = useRef(false)
 
@@ -28,5 +30,5 @@ export default function PinnedFeed() {
     init()
   }, [pubkey, pinnedPubkeySet])
 
-  return <NormalFeed subRequests={subRequests} isMainFeed enableSocialGraphFilter />
+  return <NormalFeed subRequests={subRequests} isMainFeed enableSocialGraphFilter onInitialLoad={markFeedLoaded} />
 }

@@ -28,7 +28,7 @@ const updateCSSVariables = (color: TPrimaryColor, currentTheme: TTheme) => {
 function migrateThemeSetting(raw: string | null): TThemeSetting {
   if (raw === 'pure-black') return 'dark'
   if (raw === 'light' || raw === 'dark' || raw === 'system') return raw
-  return 'dark'
+  return 'system'
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

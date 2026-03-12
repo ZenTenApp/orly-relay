@@ -37,6 +37,7 @@ import (
 	"next.orly.dev/pkg/policy"
 	"next.orly.dev/pkg/nostr/protocol/auth"
 	"next.orly.dev/pkg/nostr/httpauth"
+	"next.orly.dev/pkg/grapevine"
 	"next.orly.dev/pkg/protocol/graph"
 	"next.orly.dev/pkg/protocol/nip43"
 	"next.orly.dev/pkg/protocol/publish"
@@ -102,8 +103,10 @@ type Server struct {
 	clusterManager    *dsync.ClusterManager
 	blossomServer     *blossom.Server
 	InviteManager     *nip43.InviteManager
-	graphExecutor     *graph.Executor
-	rateLimiter       *ratelimit.Limiter
+	graphExecutor        *graph.Executor
+	grapeVineEngine      *grapevine.Engine
+	grapeVineScheduler   *grapevine.Scheduler
+	rateLimiter          *ratelimit.Limiter
 	cfg               *config.C
 	db                database.Database // Changed from *database.D to interface
 
@@ -542,6 +545,11 @@ func (s *Server) UserInterface() {
 
 	// Neo4j Cypher query proxy (NIP-98 owner-gated)
 	s.mux.HandleFunc("/api/neo4j/cypher", s.handleNeo4jCypher)
+
+	// GrapeVine WoT influence scoring API (NIP-98 authenticated)
+	s.mux.HandleFunc("/api/grapevine/scores", s.handleGrapeVineScores)
+	s.mux.HandleFunc("/api/grapevine/score", s.handleGrapeVineScore)
+	s.mux.HandleFunc("/api/grapevine/recalculate", s.handleGrapeVineRecalculate)
 
 	// Email bridge compose and decrypt pages
 	if s.emailBridge != nil {

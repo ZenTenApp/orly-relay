@@ -1,6 +1,7 @@
 import NormalFeed from '@/components/NormalFeed'
 import { Button } from '@/components/ui/button'
 import { usePrimaryPage } from '@/PageManager'
+import { useFeed } from '@/providers/FeedProvider'
 import { useFollowList } from '@/providers/FollowListProvider'
 import { useNostr } from '@/providers/NostrProvider'
 import client from '@/services/client.service'
@@ -14,6 +15,7 @@ export default function FollowingFeed() {
   const { pubkey } = useNostr()
   const { followingSet } = useFollowList()
   const { navigate } = usePrimaryPage()
+  const { markFeedLoaded } = useFeed()
   const [subRequests, setSubRequests] = useState<TFeedSubRequest[]>([])
   const [hasFollowings, setHasFollowings] = useState<boolean | null>(null)
   const [refreshCount, setRefreshCount] = useState(0)
@@ -42,6 +44,10 @@ export default function FollowingFeed() {
   }, [pubkey, followingSet, refreshCount])
 
   // Show empty state when user has no followings
+  useEffect(() => {
+    if (hasFollowings === false) markFeedLoaded()
+  }, [hasFollowings, markFeedLoaded])
+
   if (hasFollowings === false && subRequests.length > 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
@@ -73,6 +79,7 @@ export default function FollowingFeed() {
         initializedRef.current = false
         setRefreshCount((count) => count + 1)
       }}
+      onInitialLoad={markFeedLoaded}
       isMainFeed
     />
   )

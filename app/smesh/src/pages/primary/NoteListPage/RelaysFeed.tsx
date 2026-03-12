@@ -5,7 +5,7 @@ import relayInfoService from '@/services/relay-info.service'
 import { useEffect, useState } from 'react'
 
 export default function RelaysFeed() {
-  const { relayUrls } = useFeed()
+  const { relayUrls, markFeedLoaded } = useFeed()
   const [isReady, setIsReady] = useState(false)
   const [areAlgoRelays, setAreAlgoRelays] = useState(false)
 
@@ -29,6 +29,7 @@ export default function RelaysFeed() {
       isMainFeed
       showRelayCloseReason
       enableSocialGraphFilter
+      onInitialLoad={markFeedLoaded}
     />
   )
 }

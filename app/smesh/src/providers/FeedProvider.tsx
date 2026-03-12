@@ -38,6 +38,7 @@ type TFeedContext = {
     feedType: TFeedType | null,
     options?: { activeRelaySetId?: string; pubkey?: string; relay?: string | null }
   ) => Promise<void>
+  markFeedLoaded: () => void
 
   // Domain model interface
   feed: Feed | null
@@ -249,10 +250,18 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         newFeedType.relaySetId ?? undefined
       )
       eventDispatcher.dispatch(event)
+    } else {
+      // No feed could be created — mark ready immediately
+      setIsReady(true)
     }
-
-    setIsReady(true)
   }, [pubkey, ownerPubkey, relaySets])
+
+  /**
+   * Signal that the feed's initial data has loaded (called by NoteList)
+   */
+  const markFeedLoaded = useCallback(() => {
+    setIsReady(true)
+  }, [])
 
   /**
    * Update content filter settings
@@ -283,13 +292,14 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     relayUrls,
     isReady,
     switchFeed,
+    markFeedLoaded,
 
     // Domain model interface
     feed,
     contentFilter,
     updateContentFilter,
     refresh
-  }), [feedInfo, relayUrls, isReady, switchFeed, feed, contentFilter, updateContentFilter, refresh])
+  }), [feedInfo, relayUrls, isReady, switchFeed, markFeedLoaded, feed, contentFilter, updateContentFilter, refresh])
 
   return (
     <FeedContext.Provider value={value}>

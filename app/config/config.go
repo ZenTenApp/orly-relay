@@ -84,6 +84,16 @@ type C struct {
 	SocialWoTMaxDepth               int           `env:"ORLY_SOCIAL_WOT_DEPTH" default:"3" usage:"maximum WoT traversal depth (1-16)"`
 	SocialWoTRefreshInterval        time.Duration `env:"ORLY_SOCIAL_WOT_REFRESH" default:"1h" usage:"how often to recompute the WoT depth map"`
 
+	// GrapeVine WoT influence scoring API
+	GrapeVineEnabled         bool          `env:"ORLY_GRAPEVINE_ENABLED" default:"false" usage:"enable GrapeVine WoT influence scoring API (NIP-98 authenticated)"`
+	GrapeVineMaxDepth        int           `env:"ORLY_GRAPEVINE_MAX_DEPTH" default:"6" usage:"max BFS depth for follow graph traversal"`
+	GrapeVineCycles          int           `env:"ORLY_GRAPEVINE_CYCLES" default:"5" usage:"convergence iterations for influence scoring"`
+	GrapeVineAttenuation     float64       `env:"ORLY_GRAPEVINE_ATTENUATION" default:"0.8" usage:"weight decay factor per hop (0-1)"`
+	GrapeVineRigor           float64       `env:"ORLY_GRAPEVINE_RIGOR" default:"0.25" usage:"certainty curve steepness (0-1)"`
+	GrapeVineFollowConf      float64       `env:"ORLY_GRAPEVINE_FOLLOW_CONFIDENCE" default:"0.05" usage:"base confidence weight for a follow edge"`
+	GrapeVineObservers       []string      `env:"ORLY_GRAPEVINE_OBSERVERS" usage:"comma-separated hex pubkeys to auto-calculate scores for"`
+	GrapeVineRefresh         time.Duration `env:"ORLY_GRAPEVINE_REFRESH" default:"6h" usage:"recalculation interval for configured observers"`
+
 	// Blossom blob storage service settings
 	BlossomEnabled       bool   `env:"ORLY_BLOSSOM_ENABLED" default:"true" usage:"enable Blossom blob storage server (only works with Badger backend)"`
 	BlossomServiceLevels string `env:"ORLY_BLOSSOM_SERVICE_LEVELS" usage:"comma-separated list of service levels in format: name:storage_mb_per_sat_per_month (e.g., basic:1,premium:10)"`

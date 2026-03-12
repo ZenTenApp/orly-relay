@@ -17,7 +17,8 @@ export default function NormalFeed({
   isMainFeed = false,
   showRelayCloseReason = false,
   enableSocialGraphFilter = false,
-  onRefresh
+  onRefresh,
+  onInitialLoad
 }: {
   subRequests: TFeedSubRequest[]
   areAlgoRelays?: boolean
@@ -25,6 +26,7 @@ export default function NormalFeed({
   showRelayCloseReason?: boolean
   enableSocialGraphFilter?: boolean
   onRefresh?: () => void
+  onInitialLoad?: () => void
 }) {
   const { hideUntrustedNotes } = useUserTrust()
   const { showKinds } = useKindFilter()
@@ -106,6 +108,7 @@ export default function NormalFeed({
         areAlgoRelays={areAlgoRelays}
         showRelayCloseReason={showRelayCloseReason}
         applySocialGraphFilter={enableSocialGraphFilter}
+        onInitialLoad={onInitialLoad}
       />
     </>
   )

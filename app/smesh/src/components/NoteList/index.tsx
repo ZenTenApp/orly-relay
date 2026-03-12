@@ -59,6 +59,7 @@ const NoteList = forwardRef<
     showNewNotesDirectly?: boolean
     navColumn?: TNavigationColumn
     applySocialGraphFilter?: boolean
+    onInitialLoad?: () => void
   }
 >(
   (
@@ -75,7 +76,8 @@ const NoteList = forwardRef<
       filterFn,
       showNewNotesDirectly = false,
       navColumn = 1,
-      applySocialGraphFilter = false
+      applySocialGraphFilter = false,
+      onInitialLoad
     },
     ref
   ) => {
@@ -108,6 +110,8 @@ const NoteList = forwardRef<
     const pendingEventsRef = useRef<Event[]>([])
     const effectiveAutoInsertRef = useRef(effectiveAutoInsert)
     effectiveAutoInsertRef.current = effectiveAutoInsert
+    const onInitialLoadRef = useRef(onInitialLoad)
+    onInitialLoadRef.current = onInitialLoad
 
     const shouldHideEvent = useCallback(
       (evt: Event) => {
@@ -292,7 +296,10 @@ const NoteList = forwardRef<
     useImperativeHandle(ref, () => ({ scrollToTop, refresh }), [])
 
     useEffect(() => {
-      if (!subRequests.length) return
+      if (!subRequests.length) {
+        onInitialLoadRef.current?.()
+        return
+      }
 
       async function init() {
         setInitialLoading(true)
@@ -326,11 +333,13 @@ const NoteList = forwardRef<
                 setEvents(events)
                 // Show content as soon as first events arrive, don't wait for EOSE
                 setInitialLoading(false)
+                onInitialLoadRef.current?.()
               }
               if (eosed) {
                 threadService.addRepliesToThread(events)
                 // Final fallback in case no events arrived
                 setInitialLoading(false)
+                onInitialLoadRef.current?.()
               }
             },
             onNew: (event) => {
