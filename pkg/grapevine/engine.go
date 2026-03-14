@@ -39,6 +39,11 @@ func (e *Engine) Compute(observerHex string) (*ScoreSet, error) {
 	}
 	_ = pubkeysByDepth // depth info captured in allHop values
 
+	// Add observer to hop set at depth 0 (BFS doesn't include seed node)
+	// This is critical: observer must be in allHop to pass the inHop check
+	// when they appear as a follower/rater in the convergence loop
+	allHop[observerHex] = 0
+
 	if len(allHop) == 0 {
 		return &ScoreSet{
 			ObserverHex:  observerHex,
@@ -62,23 +67,53 @@ func (e *Engine) Compute(observerHex string) (*ScoreSet, error) {
 	inputScores[observerHex] = 9999
 	certaintyScores[observerHex] = 1.0
 
-	// Cache follower lookups within this computation since the graph is static
+	// Cache graph lookups within this computation since the graph is static
 	followerCache := make(map[string][]string, len(allHop))
+	muterCache := make(map[string][]string, len(allHop))
+	reporterCache := make(map[string][]string, len(allHop))
+
 	getFollowers := func(pk string) []string {
 		if cached, ok := followerCache[pk]; ok {
 			return cached
 		}
-		followers, err := e.graph.GetFollowerPubkeys(pk)
+		v, err := e.graph.GetFollowerPubkeys(pk)
 		if err != nil {
-			followers = nil
+			v = nil
 		}
-		followerCache[pk] = followers
-		return followers
+		followerCache[pk] = v
+		return v
+	}
+	getMuters := func(pk string) []string {
+		if cached, ok := muterCache[pk]; ok {
+			return cached
+		}
+		v, err := e.graph.GetMuterPubkeys(pk)
+		if err != nil {
+			v = nil
+		}
+		muterCache[pk] = v
+		return v
+	}
+	getReporters := func(pk string) []string {
+		if cached, ok := reporterCache[pk]; ok {
+			return cached
+		}
+		v, err := e.graph.GetReporterPubkeys(pk)
+		if err != nil {
+			v = nil
+		}
+		reporterCache[pk] = v
+		return v
 	}
 
-	// Convergence loop
+	// Convergence loop — mirrors Java GrapeRankAlgorithm:
+	// iterate until no node's influence changes by more than DeltaThreshold,
+	// with MaxCycles as a hard safety cap.
 	rigority := -math.Log(e.cfg.Rigor)
-	for cycle := 0; cycle < e.cfg.Cycles; cycle++ {
+	for cycle := 0; cycle < e.cfg.MaxCycles; cycle++ {
+		shouldBreak := true
+		nodesWithFollowers := 0
+
 		for ratee := range allHop {
 			if ratee == observerHex {
 				continue
@@ -87,36 +122,66 @@ func (e *Engine) Compute(observerHex string) (*ScoreSet, error) {
 			sumOfWeights := 0.0
 			sumOfProducts := 0.0
 
+			// Follows (positive rating = 1.0)
 			followers := getFollowers(ratee)
+			if len(followers) > 0 {
+				nodesWithFollowers++
+			}
 			for _, rater := range followers {
 				if rater == ratee {
 					continue
 				}
-				// Only consider raters within the hop set
 				if _, inHop := allHop[rater]; !inHop {
 					continue
 				}
-
-				rating := 1.0 // followInterpretationScore
-				weight := e.cfg.AttenuationFactor * infScores[rater] * e.cfg.FollowConfidence
+				var weight float64
 				if rater == observerHex {
-					// No attenuation for observer's own follows
-					weight = infScores[rater] * e.cfg.FollowConfidence
+					// Observer's direct follows: no attenuation (full trust)
+					weight = infScores[rater] * e.cfg.ObserverFollowConfidence
+				} else {
+					// Indirect follows: attenuated by distance
+					weight = e.cfg.AttenuationFactor * infScores[rater] * e.cfg.FollowConfidence
 				}
-
-				// TODO: mutes - skip muted pubkeys, apply muteInterpretationScore
-				// TODO: reports - apply report penalty weight
-
-				product := weight * rating
 				sumOfWeights += weight
-				sumOfProducts += product
+				sumOfProducts += weight * 1.0
+			}
+
+			// Mutes (negative rating)
+			for _, rater := range getMuters(ratee) {
+				if rater == ratee {
+					continue
+				}
+				if _, inHop := allHop[rater]; !inHop {
+					continue
+				}
+				weight := e.cfg.AttenuationFactor * infScores[rater] * e.cfg.MuteConfidence
+				sumOfWeights += weight
+				sumOfProducts += weight * e.cfg.MuteRating
+			}
+
+			// Reports (negative rating)
+			for _, rater := range getReporters(ratee) {
+				if rater == ratee {
+					continue
+				}
+				if _, inHop := allHop[rater]; !inHop {
+					continue
+				}
+				weight := e.cfg.AttenuationFactor * infScores[rater] * e.cfg.ReportConfidence
+				sumOfWeights += weight
+				sumOfProducts += weight * e.cfg.ReportRating
 			}
 
 			if sumOfWeights > 0 {
 				average := sumOfProducts / sumOfWeights
 				input := sumOfWeights
 				certainty := 1 - math.Exp(-input*rigority)
-				influence := average * certainty
+				influence := math.Max(average*certainty, 0)
+
+				deltaInfluence := math.Abs(influence - infScores[ratee])
+				if deltaInfluence > e.cfg.DeltaThreshold {
+					shouldBreak = false
+				}
 
 				infScores[ratee] = influence
 				avgScores[ratee] = average
@@ -124,7 +189,11 @@ func (e *Engine) Compute(observerHex string) (*ScoreSet, error) {
 				inputScores[ratee] = input
 			}
 		}
-		log.D.F("grapevine: convergence cycle %d/%d complete", cycle+1, e.cfg.Cycles)
+
+		if shouldBreak {
+			log.I.F("grapevine: converged after %d cycles", cycle+1)
+			break
+		}
 	}
 
 	// WoT intersection scores: for each target, count how many of

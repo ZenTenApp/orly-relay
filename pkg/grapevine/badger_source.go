@@ -33,13 +33,13 @@ func (s *BadgerGraphSource) TraverseFollowsOutbound(seedPubkey []byte, maxDepth 
 	return result.PubkeysByDepth, allPubkeys, nil
 }
 
-// GetFollowerPubkeys returns hex pubkeys of accounts that follow the target.
+// GetFollowerPubkeys returns hex pubkeys of accounts that kind-3 follow the target.
 func (s *BadgerGraphSource) GetFollowerPubkeys(targetHex string) ([]string, error) {
 	serial, err := s.db.PubkeyHexToSerial(targetHex)
 	if err != nil {
 		return nil, nil // unknown pubkey, no followers
 	}
-	followers, err := s.db.GetFollowersViaGPP(serial)
+	followers, err := s.db.GetFollowersByKindViaGPP(serial, 3)
 	if err != nil {
 		return nil, err
 	}
@@ -54,19 +54,61 @@ func (s *BadgerGraphSource) GetFollowerPubkeys(targetHex string) ([]string, erro
 	return result, nil
 }
 
-// GetFollowsPubkeys returns hex pubkeys that the source follows.
+// GetFollowsPubkeys returns hex pubkeys that the source kind-3 follows.
 func (s *BadgerGraphSource) GetFollowsPubkeys(sourceHex string) ([]string, error) {
 	serial, err := s.db.PubkeyHexToSerial(sourceHex)
 	if err != nil {
 		return nil, nil // unknown pubkey, no follows
 	}
-	follows, err := s.db.GetFollowsViaPPG(serial)
+	follows, err := s.db.GetFollowsByKindViaPPG(serial, 3)
 	if err != nil {
 		return nil, err
 	}
 	result := make([]string, 0, len(follows))
 	for _, f := range follows {
 		h, err := s.db.GetPubkeyHexFromSerial(f)
+		if err != nil {
+			continue
+		}
+		result = append(result, h)
+	}
+	return result, nil
+}
+
+// GetMuterPubkeys returns hex pubkeys of accounts that mute the target (kind-10000).
+func (s *BadgerGraphSource) GetMuterPubkeys(targetHex string) ([]string, error) {
+	serial, err := s.db.PubkeyHexToSerial(targetHex)
+	if err != nil {
+		return nil, nil // unknown pubkey, no muters
+	}
+	muters, err := s.db.GetFollowersByKindViaGPP(serial, 10000)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]string, 0, len(muters))
+	for _, m := range muters {
+		h, err := s.db.GetPubkeyHexFromSerial(m)
+		if err != nil {
+			continue
+		}
+		result = append(result, h)
+	}
+	return result, nil
+}
+
+// GetReporterPubkeys returns hex pubkeys of accounts that report the target (kind-1984).
+func (s *BadgerGraphSource) GetReporterPubkeys(targetHex string) ([]string, error) {
+	serial, err := s.db.PubkeyHexToSerial(targetHex)
+	if err != nil {
+		return nil, nil // unknown pubkey, no reporters
+	}
+	reporters, err := s.db.GetFollowersByKindViaGPP(serial, 1984)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]string, 0, len(reporters))
+	for _, r := range reporters {
+		h, err := s.db.GetPubkeyHexFromSerial(r)
 		if err != nil {
 			continue
 		}

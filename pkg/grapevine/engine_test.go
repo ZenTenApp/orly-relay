@@ -13,18 +13,30 @@ import (
 type mockGraphSource struct {
 	follows   map[string][]string // source -> targets
 	followers map[string][]string // target -> sources (reverse)
+	muters    map[string][]string // target -> who mutes them
+	reporters map[string][]string // target -> who reports them
 }
 
 func newMockGraph() *mockGraphSource {
 	return &mockGraphSource{
 		follows:   make(map[string][]string),
 		followers: make(map[string][]string),
+		muters:    make(map[string][]string),
+		reporters: make(map[string][]string),
 	}
 }
 
 func (m *mockGraphSource) addFollow(from, to string) {
 	m.follows[from] = append(m.follows[from], to)
 	m.followers[to] = append(m.followers[to], from)
+}
+
+func (m *mockGraphSource) addMute(from, to string) {
+	m.muters[to] = append(m.muters[to], from)
+}
+
+func (m *mockGraphSource) addReport(from, to string) {
+	m.reporters[to] = append(m.reporters[to], from)
 }
 
 func (m *mockGraphSource) TraverseFollowsOutbound(seedPubkey []byte, maxDepth int) (
@@ -57,6 +69,14 @@ func (m *mockGraphSource) GetFollowerPubkeys(targetHex string) ([]string, error)
 
 func (m *mockGraphSource) GetFollowsPubkeys(sourceHex string) ([]string, error) {
 	return m.follows[sourceHex], nil
+}
+
+func (m *mockGraphSource) GetMuterPubkeys(targetHex string) ([]string, error) {
+	return m.muters[targetHex], nil
+}
+
+func (m *mockGraphSource) GetReporterPubkeys(targetHex string) ([]string, error) {
+	return m.reporters[targetHex], nil
 }
 
 func bytesToHex(b []byte) string {
@@ -165,7 +185,7 @@ func TestComputeDeterministicSmall(t *testing.T) {
 	store := newMockStore()
 	cfg := DefaultConfig()
 	cfg.MaxDepth = 3
-	cfg.Cycles = 5
+	cfg.MaxCycles = 5
 	engine := NewEngine(graph, store, cfg)
 
 	set, err := engine.Compute(obs)
@@ -207,7 +227,7 @@ func TestComputeDeterministicMedium(t *testing.T) {
 	store := newMockStore()
 	cfg := DefaultConfig()
 	cfg.MaxDepth = 4
-	cfg.Cycles = 8
+	cfg.MaxCycles = 8
 	engine := NewEngine(graph, store, cfg)
 
 	set, err := engine.Compute(obs)
@@ -284,7 +304,7 @@ func TestComputeConvergenceStabilizes(t *testing.T) {
 		store := newMockStore()
 		cfg := DefaultConfig()
 		cfg.MaxDepth = 3
-		cfg.Cycles = cycles
+		cfg.MaxCycles = cycles
 		engine := NewEngine(graph, store, cfg)
 
 		set, err := engine.Compute(obs)
@@ -469,8 +489,11 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.MaxDepth != 6 {
 		t.Errorf("expected MaxDepth=6, got %d", cfg.MaxDepth)
 	}
-	if cfg.Cycles != 5 {
-		t.Errorf("expected Cycles=5, got %d", cfg.Cycles)
+	if cfg.MaxCycles != 20 {
+		t.Errorf("expected MaxCycles=20, got %d", cfg.MaxCycles)
+	}
+	if cfg.DeltaThreshold != 0.001 {
+		t.Errorf("expected DeltaThreshold=0.001, got %f", cfg.DeltaThreshold)
 	}
 	if cfg.AttenuationFactor != 0.8 {
 		t.Errorf("expected AttenuationFactor=0.8, got %f", cfg.AttenuationFactor)
@@ -480,6 +503,54 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if cfg.FollowConfidence != 0.05 {
 		t.Errorf("expected FollowConfidence=0.05, got %f", cfg.FollowConfidence)
+	}
+	if cfg.ObserverFollowConfidence != 1.0 {
+		t.Errorf("expected ObserverFollowConfidence=1.0, got %f", cfg.ObserverFollowConfidence)
+	}
+	if cfg.MuteRating != -1.0 {
+		t.Errorf("expected MuteRating=-1.0, got %f", cfg.MuteRating)
+	}
+	if cfg.ReportRating != -1.0 {
+		t.Errorf("expected ReportRating=-1.0, got %f", cfg.ReportRating)
+	}
+}
+
+func TestMuteReducesInfluence(t *testing.T) {
+	// Simple 4-node graph: observer -> A -> B, observer -> C
+	// B is muted by C: B should end up with zero influence (clamped)
+	rng := frand.NewCustom([]byte("mute-test-seed-padding-bytes!!!!"), 1024, 12)
+	var buf [32]byte
+	mkPK := func() string { rng.Read(buf[:]); return bytesToHex(buf[:]) }
+
+	obs := mkPK()
+	pkA := mkPK()
+	pkB := mkPK()
+	pkC := mkPK()
+
+	graph := newMockGraph()
+	graph.addFollow(obs, pkA)
+	graph.addFollow(obs, pkC)
+	graph.addFollow(pkA, pkB)
+	graph.addMute(pkC, pkB) // C mutes B
+
+	store := newMockStore()
+	cfg := DefaultConfig()
+	cfg.MuteConfidence = 0.9 // strong mute signal for test clarity
+	engine := NewEngine(graph, store, cfg)
+
+	set, err := engine.Compute(obs)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	scores := scoreMap(set)
+	// B should have zero influence (mute clamps it)
+	if s, ok := scores[pkB]; ok && s.Influence > 0 {
+		t.Errorf("muted pubkey B should have influence=0, got %f", s.Influence)
+	}
+	// A and C (unfollowed by muter) should still have positive influence
+	if s := scores[pkA]; s == nil || s.Influence <= 0 {
+		t.Errorf("pubkey A should still have positive influence")
 	}
 }
 
@@ -493,7 +564,7 @@ func TestComputeLargeGraph(t *testing.T) {
 	store := newMockStore()
 	cfg := DefaultConfig()
 	cfg.MaxDepth = 3
-	cfg.Cycles = 5
+	cfg.MaxCycles = 5
 	engine := NewEngine(graph, store, cfg)
 
 	set, err := engine.Compute(obs)

@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"next.orly.dev/app/config"
+	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/lol/chk"
 	"next.orly.dev/pkg/lol/errorf"
 	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/app/config"
-	"next.orly.dev/pkg/database"
 	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
 	"next.orly.dev/pkg/nostr/encoders/envelopes"
 	"next.orly.dev/pkg/nostr/encoders/envelopes/eoseenvelope"
@@ -24,9 +24,9 @@ import (
 	"next.orly.dev/pkg/nostr/encoders/filter"
 	"next.orly.dev/pkg/nostr/encoders/kind"
 	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/protocol/publish"
 	"next.orly.dev/pkg/nostr/utils/normalize"
 	"next.orly.dev/pkg/nostr/utils/values"
+	"next.orly.dev/pkg/protocol/publish"
 )
 
 type Follows struct {
@@ -835,6 +835,41 @@ func (f *Follows) AddFollow(pub []byte) {
 	if f.onFollowListUpdate != nil {
 		go f.onFollowListUpdate()
 	}
+}
+
+// UpdateFollowsFromWhitelist replaces the follows list with a new whitelist (hex strings).
+// This is used by the GrapeVine auto-whitelist updater to refresh the ACL based on influence scores.
+func (f *Follows) UpdateFollowsFromWhitelist(whitelistHex []string) error {
+	newFollows := make([][]byte, 0, len(whitelistHex))
+	newFollowsSet := make(map[string]struct{}, len(whitelistHex))
+
+	for _, hexKey := range whitelistHex {
+		pk, err := hex.DecodeString(hexKey)
+		if err != nil {
+			log.W.F("follows ACL: invalid hex pubkey in whitelist: %s", hexKey)
+			continue
+		}
+		if len(pk) != 32 {
+			continue
+		}
+		newFollows = append(newFollows, pk)
+		newFollowsSet[hexKey] = struct{}{}
+	}
+
+	f.followsMx.Lock()
+	oldCount := len(f.follows)
+	f.follows = newFollows
+	f.followsSet = newFollowsSet
+	f.followsMx.Unlock()
+
+	log.I.F("follows ACL: updated whitelist from %d to %d pubkeys", oldCount, len(newFollows))
+
+	// Notify external listeners (e.g., spider, negentropy syncer)
+	if f.onFollowListUpdate != nil {
+		go f.onFollowListUpdate()
+	}
+
+	return nil
 }
 
 func init() {

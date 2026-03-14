@@ -3,9 +3,9 @@
 package database
 
 import (
+	"next.orly.dev/pkg/database/indexes/types"
 	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/database/indexes/types"
 )
 
 // TraversePubkeyPubkey performs BFS traversal of the pubkey↔pubkey graph using
@@ -43,7 +43,7 @@ func (d *D) TraversePubkeyPubkey(seedPubkey []byte, maxDepth int, direction stri
 			var neighbors []*types.Uint40
 
 			if direction == "out" || direction == "both" {
-				outNeighbors, err := d.GetFollowsViaPPG(serial)
+				outNeighbors, err := d.GetFollowsByKindViaPPG(serial, 3)
 				if err != nil {
 					log.D.F("TraversePubkeyPubkey: ppg scan error for serial %d: %v", serial.Get(), err)
 					continue
@@ -52,7 +52,7 @@ func (d *D) TraversePubkeyPubkey(seedPubkey []byte, maxDepth int, direction stri
 			}
 
 			if direction == "in" || direction == "both" {
-				inNeighbors, err := d.GetFollowersViaGPP(serial)
+				inNeighbors, err := d.GetFollowersByKindViaGPP(serial, 3)
 				if err != nil {
 					log.D.F("TraversePubkeyPubkey: gpp scan error for serial %d: %v", serial.Get(), err)
 					continue

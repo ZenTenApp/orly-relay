@@ -7,10 +7,10 @@ import (
 	"errors"
 
 	"github.com/dgraph-io/badger/v4"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/database/indexes"
 	"next.orly.dev/pkg/database/indexes/types"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/nostr/encoders/hex"
 )
 
@@ -579,6 +579,60 @@ func (d *D) GetFollowsViaPPG(sourceSerial *types.Uint40) ([]*types.Uint40, error
 	return targets, err
 }
 
+// GetFollowsByKindViaPPG returns pubkey serials that the source pubkey references via the
+// ppg index, filtered to a specific event kind. This restricts the outbound scan to
+// e.g. kind-3 follows only, excluding kind-10000 mutes or kind-1984 reports.
+//
+// Key format: ppg(3)|source(5)|target(5)|kind(2)|direction(1)|event(5) = 21 bytes
+// Scan prefix: ppg(3)|source(5) = 8 bytes; kind is checked at bytes 13..15 in-loop.
+func (d *D) GetFollowsByKindViaPPG(sourceSerial *types.Uint40, kind uint16) ([]*types.Uint40, error) {
+	var targets []*types.Uint40
+
+	prefix := new(bytes.Buffer)
+	prefix.Write([]byte(indexes.PubkeyPubkeyGraphPrefix))
+	if err := sourceSerial.MarshalWrite(prefix); chk.E(err) {
+		return nil, err
+	}
+	searchPrefix := prefix.Bytes()
+
+	// Encode requested kind as big-endian 2 bytes for comparison
+	kindHi := byte(kind >> 8)
+	kindLo := byte(kind & 0xff)
+
+	err := d.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		opts.Prefix = searchPrefix
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		seen := make(map[uint64]bool)
+		for it.Seek(searchPrefix); it.ValidForPrefix(searchPrefix); it.Next() {
+			key := it.Item().KeyCopy(nil)
+			if len(key) != 21 {
+				continue
+			}
+			// Kind is at bytes 13..15; skip non-matching kinds
+			if key[13] != kindHi || key[14] != kindLo {
+				continue
+			}
+			// Extract target pubkey serial at bytes 8..13
+			target := new(types.Uint40)
+			if err := target.UnmarshalRead(bytes.NewReader(key[8:13])); chk.E(err) {
+				continue
+			}
+			if seen[target.Get()] {
+				continue
+			}
+			seen[target.Get()] = true
+			targets = append(targets, target)
+		}
+		return nil
+	})
+	return targets, err
+}
+
 // GetFollowersViaGPP returns pubkey serials that reference the target pubkey via the
 // gpp (graph-pubkey-pubkey) reverse index. This is a single prefix scan that replaces
 // the three-hop GetFollowersOfPubkeySerial (find referencing events → get authors → dedup).
@@ -591,6 +645,54 @@ func (d *D) GetFollowersViaGPP(targetSerial *types.Uint40) ([]*types.Uint40, err
 	prefix := new(bytes.Buffer)
 	prefix.Write([]byte(indexes.GraphPubkeyPubkeyPrefix))
 	if err := targetSerial.MarshalWrite(prefix); chk.E(err) {
+		return nil, err
+	}
+	searchPrefix := prefix.Bytes()
+
+	err := d.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		opts.Prefix = searchPrefix
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		seen := make(map[uint64]bool)
+		for it.Seek(searchPrefix); it.ValidForPrefix(searchPrefix); it.Next() {
+			key := it.Item().KeyCopy(nil)
+			if len(key) != 21 {
+				continue
+			}
+			// Extract source pubkey serial at bytes 11..16
+			source := new(types.Uint40)
+			if err := source.UnmarshalRead(bytes.NewReader(key[11:16])); chk.E(err) {
+				continue
+			}
+			if seen[source.Get()] {
+				continue
+			}
+			seen[source.Get()] = true
+			sources = append(sources, source)
+		}
+		return nil
+	})
+	return sources, err
+}
+
+// GetFollowersByKindViaGPP returns pubkey serials that reference the target pubkey via the
+// gpp reverse index, filtered to a specific event kind. This enables efficient lookup of
+// e.g. kind-10000 muters or kind-1984 reporters without scanning unrelated relationship types.
+//
+// Key format: gpp(3)|target(5)|kind(2)|direction(1)|source(5)|event(5) = 21 bytes
+// Prefix used: gpp(3)|target(5)|kind(2) = 10 bytes
+func (d *D) GetFollowersByKindViaGPP(targetSerial *types.Uint40, kind uint16) ([]*types.Uint40, error) {
+	var sources []*types.Uint40
+
+	kindType := new(types.Uint16)
+	kindType.Set(kind)
+
+	prefix := new(bytes.Buffer)
+	if err := indexes.GraphPubkeyPubkeyEnc(targetSerial, kindType, nil, nil, nil).MarshalWrite(prefix); chk.E(err) {
 		return nil, err
 	}
 	searchPrefix := prefix.Bytes()

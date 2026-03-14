@@ -10,25 +10,28 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/app/branding"
 	"next.orly.dev/app/config"
 	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/nostr/crypto/keys"
+	"next.orly.dev/pkg/archive"
+	emailbridge "next.orly.dev/pkg/bridge"
+	"next.orly.dev/pkg/bunker"
+	"next.orly.dev/pkg/crawler"
 	"next.orly.dev/pkg/database"
+	"next.orly.dev/pkg/grapevine"
+	"next.orly.dev/pkg/httpguard"
+	"next.orly.dev/pkg/lol/chk"
+	"next.orly.dev/pkg/lol/log"
+	"next.orly.dev/pkg/neo4j"
+	"next.orly.dev/pkg/nostr/crypto/keys"
 	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
 	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/neo4j"
 	"next.orly.dev/pkg/policy"
 	"next.orly.dev/pkg/protocol/graph"
 	"next.orly.dev/pkg/protocol/nip43"
-	"next.orly.dev/pkg/protocol/publish"
-	"next.orly.dev/pkg/bunker"
 	"next.orly.dev/pkg/protocol/nrc"
+	"next.orly.dev/pkg/protocol/publish"
 	"next.orly.dev/pkg/ratelimit"
-	"next.orly.dev/pkg/crawler"
-	"next.orly.dev/pkg/grapevine"
 	"next.orly.dev/pkg/spider"
 	"next.orly.dev/pkg/storage"
 	dsync "next.orly.dev/pkg/sync"
@@ -37,9 +40,6 @@ import (
 	tlstransport "next.orly.dev/pkg/transport/tls"
 	tortransport "next.orly.dev/pkg/transport/tor"
 	"next.orly.dev/pkg/wireguard"
-	"next.orly.dev/pkg/archive"
-	emailbridge "next.orly.dev/pkg/bridge"
-	"next.orly.dev/pkg/httpguard"
 
 	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
 )
@@ -230,20 +230,44 @@ func Run(
 		if badgerDB, ok := db.(*database.D); ok {
 			gvStore := database.NewGrapeVineStore(badgerDB)
 			gvSource := grapevine.NewBadgerGraphSource(badgerDB)
-			gvCfg := grapevine.Config{
-				MaxDepth:          cfg.GrapeVineMaxDepth,
-				Cycles:            cfg.GrapeVineCycles,
-				AttenuationFactor: cfg.GrapeVineAttenuation,
-				Rigor:             cfg.GrapeVineRigor,
-				FollowConfidence:  cfg.GrapeVineFollowConf,
-			}
+			gvCfg := grapevine.DefaultConfig()
+			gvCfg.MaxDepth = cfg.GrapeVineMaxDepth
+			gvCfg.MaxCycles = cfg.GrapeVineMaxCycles
+			gvCfg.AttenuationFactor = cfg.GrapeVineAttenuation
+			gvCfg.Rigor = cfg.GrapeVineRigor
+			gvCfg.FollowConfidence = cfg.GrapeVineFollowConf
 			l.grapeVineEngine = grapevine.NewEngine(gvSource, gvStore, gvCfg)
 			l.grapeVineScheduler = grapevine.NewScheduler(l.grapeVineEngine, cfg.GrapeVineObservers, cfg.GrapeVineRefresh)
 			if len(cfg.GrapeVineObservers) > 0 {
 				go l.grapeVineScheduler.Start(ctx)
 			}
-			log.I.F("grapevine WoT scoring enabled (depth=%d, cycles=%d, observers=%d)",
-				cfg.GrapeVineMaxDepth, cfg.GrapeVineCycles, len(cfg.GrapeVineObservers))
+			log.I.F("grapevine WoT scoring enabled (depth=%d, max_cycles=%d, observers=%d)",
+				cfg.GrapeVineMaxDepth, cfg.GrapeVineMaxCycles, len(cfg.GrapeVineObservers))
+
+			// Initialize auto-whitelist updater if enabled and ACL mode is "follows"
+			if cfg.GrapeVineAutoWhitelist && cfg.ACLMode == "follows" && len(cfg.GrapeVineObservers) > 0 {
+				// Get the follows ACL instance
+				for _, aclInstance := range acl.Registry.ACLs() {
+					if followsACL, ok := aclInstance.(*acl.Follows); ok && aclInstance.Type() == "follows" {
+						observerHex := cfg.GrapeVineObservers[0] // Use first observer as whitelist source
+						whitelistCfg := grapevine.WhitelistConfig{
+							InfluenceThreshold: cfg.GrapeVineWhitelistThresh,
+							UpdateInterval:     cfg.GrapeVineWhitelistRefresh,
+							OnUpdate: func(whitelist []string) error {
+								return followsACL.UpdateFollowsFromWhitelist(whitelist)
+							},
+						}
+						whitelistUpdater := grapevine.NewWhitelistUpdater(ctx, l.grapeVineEngine, whitelistCfg)
+						if err := whitelistUpdater.Start(observerHex); err != nil {
+							log.E.F("failed to start grapevine whitelist updater: %v", err)
+						} else {
+							log.I.F("grapevine auto-whitelist enabled (observer=%s, threshold=%.2f, interval=%v)",
+								observerHex[:12], cfg.GrapeVineWhitelistThresh, cfg.GrapeVineWhitelistRefresh)
+						}
+						break
+					}
+				}
+			}
 		} else {
 			log.W.F("grapevine enabled but database is not Badger — grapevine requires Badger graph indexes")
 		}
@@ -396,7 +420,26 @@ func Run(
 			// Set up callback to get seed pubkeys (whitelisted users)
 			l.directorySpider.SetSeedCallback(func() [][]byte {
 				var pubkeys [][]byte
-				// Get followed pubkeys from follows ACL if available
+				
+				// Priority 1: Use GrapeVine whitelist if auto-whitelist is enabled
+				if cfg.GrapeVineEnabled && cfg.GrapeVineAutoWhitelist && len(cfg.GrapeVineObservers) > 0 && l.grapeVineEngine != nil {
+					observerHex := cfg.GrapeVineObservers[0]
+					if scoreSet, err := l.grapeVineEngine.GetScores(observerHex); err == nil && scoreSet != nil {
+						for _, score := range scoreSet.Scores {
+							if score.Influence >= cfg.GrapeVineWhitelistThresh {
+								if pk, err := hex.Dec(score.PubkeyHex); err == nil && len(pk) == 32 {
+									pubkeys = append(pubkeys, pk)
+								}
+							}
+						}
+						if len(pubkeys) > 0 {
+							log.D.F("directory spider: using %d pubkeys from GrapeVine whitelist", len(pubkeys))
+							return pubkeys
+						}
+					}
+				}
+				
+				// Priority 2: Get followed pubkeys from follows ACL if available
 				for _, aclInstance := range acl.Registry.ACLs() {
 					if aclInstance.Type() == "follows" {
 						if follows, ok := aclInstance.(*acl.Follows); ok {
@@ -404,7 +447,8 @@ func Run(
 						}
 					}
 				}
-				// Fall back to admin keys if no follows ACL
+				
+				// Priority 3: Fall back to admin keys if no other source
 				if len(pubkeys) == 0 {
 					pubkeys = adminKeys
 				}
@@ -441,6 +485,25 @@ func Run(
 		} else {
 			l.corpusCrawler.SetSeedCallback(func() [][]byte {
 				var pubkeys [][]byte
+				
+				// Priority 1: Use GrapeVine whitelist if auto-whitelist is enabled
+				if cfg.GrapeVineEnabled && cfg.GrapeVineAutoWhitelist && len(cfg.GrapeVineObservers) > 0 && l.grapeVineEngine != nil {
+					observerHex := cfg.GrapeVineObservers[0]
+					if scoreSet, err := l.grapeVineEngine.GetScores(observerHex); err == nil && scoreSet != nil {
+						for _, score := range scoreSet.Scores {
+							if score.Influence >= cfg.GrapeVineWhitelistThresh {
+								if pk, err := hex.Dec(score.PubkeyHex); err == nil && len(pk) == 32 {
+									pubkeys = append(pubkeys, pk)
+								}
+							}
+						}
+						if len(pubkeys) > 0 {
+							return pubkeys
+						}
+					}
+				}
+				
+				// Priority 2: Get followed pubkeys from follows ACL if available
 				for _, aclInstance := range acl.Registry.ACLs() {
 					if aclInstance.Type() == "follows" {
 						if follows, ok := aclInstance.(*acl.Follows); ok {

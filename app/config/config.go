@@ -23,10 +23,10 @@ import (
 
 	"github.com/adrg/xdg"
 	"go-simpler.org/env"
+	"next.orly.dev/pkg/logbuffer"
 	lol "next.orly.dev/pkg/lol"
 	"next.orly.dev/pkg/lol/chk"
 	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/logbuffer"
 	"next.orly.dev/pkg/version"
 )
 
@@ -87,12 +87,15 @@ type C struct {
 	// GrapeVine WoT influence scoring API
 	GrapeVineEnabled         bool          `env:"ORLY_GRAPEVINE_ENABLED" default:"false" usage:"enable GrapeVine WoT influence scoring API (NIP-98 authenticated)"`
 	GrapeVineMaxDepth        int           `env:"ORLY_GRAPEVINE_MAX_DEPTH" default:"6" usage:"max BFS depth for follow graph traversal"`
-	GrapeVineCycles          int           `env:"ORLY_GRAPEVINE_CYCLES" default:"5" usage:"convergence iterations for influence scoring"`
+	GrapeVineMaxCycles       int           `env:"ORLY_GRAPEVINE_MAX_CYCLES" default:"20" usage:"max convergence iterations safety cap for influence scoring"`
 	GrapeVineAttenuation     float64       `env:"ORLY_GRAPEVINE_ATTENUATION" default:"0.8" usage:"weight decay factor per hop (0-1)"`
 	GrapeVineRigor           float64       `env:"ORLY_GRAPEVINE_RIGOR" default:"0.25" usage:"certainty curve steepness (0-1)"`
 	GrapeVineFollowConf      float64       `env:"ORLY_GRAPEVINE_FOLLOW_CONFIDENCE" default:"0.05" usage:"base confidence weight for a follow edge"`
 	GrapeVineObservers       []string      `env:"ORLY_GRAPEVINE_OBSERVERS" usage:"comma-separated hex pubkeys to auto-calculate scores for"`
 	GrapeVineRefresh         time.Duration `env:"ORLY_GRAPEVINE_REFRESH" default:"6h" usage:"recalculation interval for configured observers"`
+	GrapeVineAutoWhitelist   bool          `env:"ORLY_GRAPEVINE_AUTO_WHITELIST" default:"false" usage:"automatically update ACL follows whitelist from GrapeVine scores"`
+	GrapeVineWhitelistThresh float64       `env:"ORLY_GRAPEVINE_WHITELIST_THRESHOLD" default:"0.5" usage:"minimum influence score for whitelist inclusion (0-1)"`
+	GrapeVineWhitelistRefresh time.Duration `env:"ORLY_GRAPEVINE_WHITELIST_REFRESH" default:"6h" usage:"how often to refresh the whitelist from GrapeVine scores"`
 
 	// Blossom blob storage service settings
 	BlossomEnabled       bool   `env:"ORLY_BLOSSOM_ENABLED" default:"true" usage:"enable Blossom blob storage server (only works with Badger backend)"`
