@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { DEPLOYMENT } from '@/constants'
 import { Separator } from '@/components/ui/separator'
 import { isDevEnv } from '@/lib/utils'
 import { useNostr } from '@/providers/NostrProvider'
@@ -49,17 +50,21 @@ function AccountManagerNav({
           {t('Add an Account')}
         </div>
         <div className="space-y-2 mt-4">
-          {!!window.nostr && (
+          {DEPLOYMENT.loginMethods.includes('nip07') && !!window.nostr && (
             <Button onClick={() => nip07Login().then(() => close?.())} className="w-full">
               {t('Login with Browser Extension')}
             </Button>
           )}
-          <Button variant="secondary" onClick={() => setPage('nsec')} className="w-full">
-            {t('Login with Private Key')}
-          </Button>
-          <Button variant="secondary" onClick={() => setPage('bunker')} className="w-full">
-            {t('Login with Bunker')}
-          </Button>
+          {DEPLOYMENT.loginMethods.includes('nsec') && (
+            <Button variant="secondary" onClick={() => setPage('nsec')} className="w-full">
+              {t('Login with Private Key')}
+            </Button>
+          )}
+          {DEPLOYMENT.loginMethods.includes('bunker') && (
+            <Button variant="secondary" onClick={() => setPage('bunker')} className="w-full">
+              {t('Login with Bunker')}
+            </Button>
+          )}
           {isDevEnv() && (
             <Button variant="secondary" onClick={() => setPage('npub')} className="w-full">
               Login with Public key (for development)
@@ -67,15 +72,19 @@ function AccountManagerNav({
           )}
         </div>
       </div>
-      <Separator />
-      <div>
-        <div className="text-center text-muted-foreground text-sm font-semibold">
-          {t("Don't have an account yet?")}
-        </div>
-        <Button onClick={() => setPage('signup')} className="w-full mt-4">
-          {t('Create New Account')}
-        </Button>
-      </div>
+      {DEPLOYMENT.loginMethods.includes('nsec') && (
+        <>
+          <Separator />
+          <div>
+            <div className="text-center text-muted-foreground text-sm font-semibold">
+              {t("Don't have an account yet?")}
+            </div>
+            <Button onClick={() => setPage('signup')} className="w-full mt-4">
+              {t('Create New Account')}
+            </Button>
+          </div>
+        </>
+      )}
       {accounts.length > 0 && (
         <>
           <Separator />

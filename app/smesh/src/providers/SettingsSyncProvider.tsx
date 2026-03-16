@@ -1,4 +1,5 @@
 import { ApplicationDataKey } from '@/constants'
+import i18n from '@/i18n'
 import { createSettingsDraftEvent } from '@/lib/draft-event'
 import { getReplaceableEventIdentifier } from '@/lib/event'
 import client from '@/services/client.service'
@@ -26,15 +27,12 @@ export const useSettingsSync = () => {
 
 function getCurrentSettings(pubkey: string | null): TSyncSettings {
   return {
+    language: window.localStorage.getItem('i18nextLng') || undefined,
     themeSetting: storage.getThemeSetting(),
     primaryColor: storage.getPrimaryColor(),
     defaultZapSats: storage.getDefaultZapSats(),
     defaultZapComment: storage.getDefaultZapComment(),
     quickZap: storage.getQuickZap(),
-    autoplay: storage.getAutoplay(),
-    hideUntrustedInteractions: storage.getHideUntrustedInteractions(),
-    hideUntrustedNotifications: storage.getHideUntrustedNotifications(),
-    hideUntrustedNotes: storage.getHideUntrustedNotes(),
     nsfwDisplayPolicy: storage.getNsfwDisplayPolicy(),
     showKinds: storage.getShowKinds(),
     hideContentMentioningMutedUsers: storage.getHideContentMentioningMutedUsers(),
@@ -70,6 +68,9 @@ function getCurrentSettings(pubkey: string | null): TSyncSettings {
 }
 
 function applySettings(settings: TSyncSettings, pubkey: string | null) {
+  if (settings.language !== undefined) {
+    i18n.changeLanguage(settings.language)
+  }
   if (settings.themeSetting !== undefined) {
     storage.setThemeSetting(settings.themeSetting)
   }
@@ -84,18 +85,6 @@ function applySettings(settings: TSyncSettings, pubkey: string | null) {
   }
   if (settings.quickZap !== undefined) {
     storage.setQuickZap(settings.quickZap)
-  }
-  if (settings.autoplay !== undefined) {
-    storage.setAutoplay(settings.autoplay)
-  }
-  if (settings.hideUntrustedInteractions !== undefined) {
-    storage.setHideUntrustedInteractions(settings.hideUntrustedInteractions)
-  }
-  if (settings.hideUntrustedNotifications !== undefined) {
-    storage.setHideUntrustedNotifications(settings.hideUntrustedNotifications)
-  }
-  if (settings.hideUntrustedNotes !== undefined) {
-    storage.setHideUntrustedNotes(settings.hideUntrustedNotes)
   }
   if (settings.nsfwDisplayPolicy !== undefined) {
     storage.setNsfwDisplayPolicy(settings.nsfwDisplayPolicy)

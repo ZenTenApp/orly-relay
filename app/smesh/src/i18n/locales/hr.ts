@@ -473,7 +473,7 @@ export default {
     'Private Key': 'Privatni kljuc',
     'Welcome to Smesh': 'Dobrodosli na Smesh',
     'Smesh is a client focused on browsing relays. Get started by exploring interesting relays or login to view your following feed.':
-      'Smesh je klijent fokusiran na pregledavanje releja. Zapocnite istrazivanjem zanimljivih releja ili se prijavite za prikaz vaseg feeda pracenja.',
+      'Smesh je nostr klijent fokusiran na izgradnju zajednica i pomoć u koordinaciji ljudi sa suverenim razmišljanjem.',
     'Explore Relays': 'Istrazuj releje',
     'Choose a feed': 'Odaberite feed',
     'and {{x}} others': 'i jos {{x}}',

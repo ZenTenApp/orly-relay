@@ -490,7 +490,7 @@ export default {
     'Private Key': 'کلید خصوصی',
     'Welcome to Smesh': 'به Smesh خوش آمدید',
     'Smesh is a client focused on browsing relays. Get started by exploring interesting relays or login to view your following feed.':
-      'Smesh یک کلاینت متمرکز بر مرور رله‌هاست. با کاوش در رله‌های جالب شروع کنید یا وارد شوید تا فید دنبال‌کننده‌های خود را مشاهده کنید.',
+      'Smesh یک کلاینت nostr است که بر ساختن جوامع و کمک به هماهنگی افرادی با ذهنیت حاکمیتی تمرکز دارد.',
     'Explore Relays': 'کاوش در رله‌ها',
     'Choose a feed': 'یک فید انتخاب کنید',
     'and {{x}} others': 'و {{x}} دیگر',

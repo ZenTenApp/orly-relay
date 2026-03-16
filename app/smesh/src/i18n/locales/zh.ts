@@ -483,7 +483,7 @@ export default {
     'Private Key': '私钥',
     'Welcome to Smesh': '欢迎来到 Smesh',
     'Smesh is a client focused on browsing relays. Get started by exploring interesting relays or login to view your following feed.':
-      'Smesh 是一个专注于浏览服务器的客户端。从探索有趣的服务器开始，或者登录查看你的关注动态。',
+      'Smesh 是一个专注于构建社区和协助具有主权意识的人们进行协调的 nostr 客户端。',
     'Explore Relays': '探索服务器',
     'Choose a feed': '选择一个动态',
     'and {{x}} others': '和其他 {{x}} 人',

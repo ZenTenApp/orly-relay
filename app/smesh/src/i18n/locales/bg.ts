@@ -473,7 +473,7 @@ export default {
     'Private Key': 'Частен ключ',
     'Welcome to Smesh': 'Добре дошли в Smesh',
     'Smesh is a client focused on browsing relays. Get started by exploring interesting relays or login to view your following feed.':
-      'Smesh е клиент, фокусиран върху разглеждането на релета. Започнете с разглеждане на интересни релета или влезте, за да видите потока от следвани.',
+      'Smesh е nostr клиент, фокусиран върху изграждането на общности и подпомагането на координацията между хора със суверенно мислене.',
     'Explore Relays': 'Разгледай релета',
     'Choose a feed': 'Изберете поток',
     'and {{x}} others': 'и {{x}} други',

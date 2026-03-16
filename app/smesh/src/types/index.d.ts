@@ -223,15 +223,12 @@ export type TMediaAutoLoadPolicy =
 export type TNsfwDisplayPolicy = (typeof NSFW_DISPLAY_POLICY)[keyof typeof NSFW_DISPLAY_POLICY]
 
 export type TSyncSettings = {
+  language?: string
   themeSetting?: TThemeSetting
   primaryColor?: string
   defaultZapSats?: number
   defaultZapComment?: string
   quickZap?: boolean
-  autoplay?: boolean
-  hideUntrustedInteractions?: boolean
-  hideUntrustedNotifications?: boolean
-  hideUntrustedNotes?: boolean
   nsfwDisplayPolicy?: TNsfwDisplayPolicy
   showKinds?: number[]
   hideContentMentioningMutedUsers?: boolean

@@ -8,19 +8,22 @@
  * 4. Compiling a frequency-sorted list of all discovered relays
  */
 
+import { DEPLOYMENT } from '@/constants'
 import { kinds, Event as NEvent } from 'nostr-tools'
 import client from './client.service'
 
 /** Bootstrap relays to seed the discovery */
-const BOOTSTRAP_RELAYS = [
-  'wss://relay.orly.dev/',
-  'wss://relay.damus.io/',
-  'wss://relay.nostr.band/',
-  'wss://nos.lol/',
-  'wss://nostr.wine/',
-  'wss://relay.snort.social/',
-  'wss://purplepag.es/'
-]
+const BOOTSTRAP_RELAYS = DEPLOYMENT.defaultRelay
+  ? [DEPLOYMENT.defaultRelay]
+  : [
+      'wss://relay.orly.dev/',
+      'wss://relay.damus.io/',
+      'wss://relay.nostr.band/',
+      'wss://nos.lol/',
+      'wss://nostr.wine/',
+      'wss://relay.snort.social/',
+      'wss://purplepag.es/'
+    ]
 
 /** Cache key for localStorage */
 const CACHE_KEY = 'relay-discovery-cache'

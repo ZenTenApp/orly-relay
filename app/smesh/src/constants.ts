@@ -1,5 +1,12 @@
 import { kinds } from 'nostr-tools'
 
+export const DEPLOYMENT = {
+  loginMethods: (import.meta.env.VITE_LOGIN_METHODS || 'nsec,nip07,bunker')
+    .split(',')
+    .map((s: string) => s.trim()),
+  defaultRelay: import.meta.env.VITE_DEFAULT_RELAY || ''
+} as const
+
 export const SMESH_API_BASE_URL = 'https://api.smesh.social'
 
 export const RECOMMENDED_BLOSSOM_SERVERS = [

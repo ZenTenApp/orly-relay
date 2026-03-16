@@ -216,8 +216,6 @@ export default function Settings() {
   // General settings
   const [language, setLanguage] = useState<TLanguage>(i18n.language as TLanguage)
   const {
-    autoplay,
-    setAutoplay,
     nsfwDisplayPolicy,
     setNsfwDisplayPolicy,
     hideContentMentioningMutedUsers,
@@ -350,13 +348,6 @@ export default function Settings() {
                   <SelectItem value={MEDIA_AUTO_LOAD_POLICY.NEVER}>{t('Never')}</SelectItem>
                 </SelectContent>
               </Select>
-            </SettingItem>
-            <SettingItem>
-              <Label htmlFor="autoplay" className="text-base font-normal">
-                <div>{t('Autoplay')}</div>
-                <div className="text-muted-foreground">{t('Enable video autoplay on this device')}</div>
-              </Label>
-              <Switch id="autoplay" checked={autoplay} onCheckedChange={setAutoplay} />
             </SettingItem>
             <SettingItem>
               <Label htmlFor="auto-insert-new-notes" className="text-base font-normal">

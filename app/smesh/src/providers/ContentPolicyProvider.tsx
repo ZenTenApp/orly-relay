@@ -4,9 +4,6 @@ import { TMediaAutoLoadPolicy, TNsfwDisplayPolicy } from '@/types'
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 
 type TContentPolicyContext = {
-  autoplay: boolean
-  setAutoplay: (autoplay: boolean) => void
-
   nsfwDisplayPolicy: TNsfwDisplayPolicy
   setNsfwDisplayPolicy: (policy: TNsfwDisplayPolicy) => void
 
@@ -38,7 +35,6 @@ export const useContentPolicy = () => {
 }
 
 export function ContentPolicyProvider({ children }: { children: React.ReactNode }) {
-  const [autoplay, setAutoplay] = useState(storage.getAutoplay())
   const [nsfwDisplayPolicy, setNsfwDisplayPolicy] = useState(storage.getNsfwDisplayPolicy())
   const [hideContentMentioningMutedUsers, setHideContentMentioningMutedUsers] = useState(
     storage.getHideContentMentioningMutedUsers()
@@ -74,12 +70,6 @@ export function ContentPolicyProvider({ children }: { children: React.ReactNode 
     // WIFI_ONLY
     return connectionType === 'wifi' || connectionType === 'ethernet'
   }, [mediaAutoLoadPolicy, connectionType])
-
-  const updateAutoplay = (autoplay: boolean) => {
-    storage.setAutoplay(autoplay)
-    setAutoplay(autoplay)
-    dispatchSettingsChanged()
-  }
 
   const updateNsfwDisplayPolicy = (policy: TNsfwDisplayPolicy) => {
     storage.setNsfwDisplayPolicy(policy)
@@ -120,8 +110,6 @@ export function ContentPolicyProvider({ children }: { children: React.ReactNode 
   return (
     <ContentPolicyContext.Provider
       value={{
-        autoplay,
-        setAutoplay: updateAutoplay,
         nsfwDisplayPolicy,
         setNsfwDisplayPolicy: updateNsfwDisplayPolicy,
         hideContentMentioningMutedUsers,

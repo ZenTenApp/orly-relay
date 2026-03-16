@@ -620,6 +620,59 @@ This provides process isolation and allows independent restarts. The unified bin
 
 - **origin**: `ssh://git@git.nostrdev.com:29418/mleku/next.orly.dev.git`
 
+## git.mleku.dev Self-Hosted Git
+
+Bare git repos on mleku.dev with HTTP read + SSH write. No forge (no Gitea/Forgejo/cgit).
+
+- **Server**: `mleku.dev` (same VPS as relay.orly.dev, `root@mleku.dev`)
+- **Repos**: `/home/git/` (bare repos, e.g. `reshetka.git`)
+- **HTTP clone** (public, read-only): `https://git.mleku.dev/reshetka.git`
+- **SSH clone** (authenticated, read+write): `git@mleku.dev:reshetka.git`
+- **Go import**: `git.mleku.dev/reshetka` (meta tag served by Caddy)
+- **LFS**: Supported via `git-lfs-transfer` (SSH-native, charmbracelet)
+
+### Architecture
+
+- **Shell**: `git` user has `/usr/local/bin/git-shell-lfs` (allows only `git-receive-pack`, `git-upload-pack`, `git-lfs-transfer`)
+- **HTTP backend**: `fcgiwrap` → `git-http-backend` (served by Caddy, `GIT_HTTP_EXPORT_ALL=1`)
+- **Post-receive hook**: runs `git update-server-info` for dumb HTTP client compatibility
+- **Update hook**: branch protection — only `GIT_USER=owner` can push to `main`; all users can push tags and feature branches
+
+### User Management
+
+Manual editing of `/home/git/.ssh/authorized_keys`. Each line sets `GIT_USER` via SSH environment variable.
+
+Roles:
+- `owner` — can push to `main`, tags, and all branches
+- `contributor` — can push tags and feature branches only (not `main`)
+
+### Adding a Contributor
+
+```bash
+# SSH into the server
+ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@mleku.dev
+
+# Append their public key to authorized_keys
+echo 'environment="GIT_USER=contributor" ssh-ed25519 AAAAC3...theirkey user@description' \
+  >> /home/git/.ssh/authorized_keys
+```
+
+The contributor can then: `git clone git@mleku.dev:reshetka.git`, push feature branches, and submit PRs by telling the owner to merge.
+
+### Adding a New Repo
+
+```bash
+ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@mleku.dev
+cd /home/git
+git init --bare newrepo.git
+chown -R git:git newrepo.git
+touch newrepo.git/git-daemon-export-ok
+# Copy hooks from existing repo
+cp reshetka.git/hooks/post-receive newrepo.git/hooks/post-receive
+cp reshetka.git/hooks/update newrepo.git/hooks/update
+# Then update Caddy config to add HTTP route for the new repo
+```
+
 ## Dependencies
 
 ### Internal (monorepo packages)

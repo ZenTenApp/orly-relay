@@ -495,7 +495,7 @@ export default {
     'Private Key': 'Zaszyfrowany Klucz',
     'Welcome to Smesh': 'Witamy w Smesh',
     'Smesh is a client focused on browsing relays. Get started by exploring interesting relays or login to view your following feed.':
-      'Smesh to klient skupiający się na przeglądaniu transmiterów. Rozpocznij od odkrycia interesujących transmiterów lub zaloguj się, aby wyświetlić wpisy  obserwowanych użytkowników.',
+      'Smesh to klient nostr skupiający się na budowaniu społeczności i wspieraniu koordynacji ludzi o suwerennym sposobie myślenia.',
     'Explore Relays': 'Przeglądaj transmitery',
     'Choose a feed': 'Wybierz transmitery',
     'and {{x}} others': 'i {{x}} innych',

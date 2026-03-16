@@ -10,7 +10,7 @@ import SecondaryPageLayout from '@/layouts/SecondaryPageLayout'
 import { cn, isSupportCheckConnectionType } from '@/lib/utils'
 import { useContentPolicy } from '@/providers/ContentPolicyProvider'
 import { useUserPreferences } from '@/providers/UserPreferencesProvider'
-import { useUserTrust } from '@/providers/UserTrustProvider'
+import { dispatchSettingsChanged } from '@/services/local-storage.service'
 import { TMediaAutoLoadPolicy, TNsfwDisplayPolicy } from '@/types'
 import { SelectValue } from '@radix-ui/react-select'
 import { RotateCcw } from 'lucide-react'
@@ -21,8 +21,6 @@ const GeneralSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
   const { t, i18n } = useTranslation()
   const [language, setLanguage] = useState<TLanguage>(i18n.language as TLanguage)
   const {
-    autoplay,
-    setAutoplay,
     nsfwDisplayPolicy,
     setNsfwDisplayPolicy,
     hideContentMentioningMutedUsers,
@@ -34,20 +32,13 @@ const GeneralSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
     enableMarkdown,
     setEnableMarkdown
   } = useContentPolicy()
-  const {
-    hideUntrustedNotes,
-    updateHideUntrustedNotes,
-    hideUntrustedInteractions,
-    updateHideUntrustedInteractions,
-    hideUntrustedNotifications,
-    updateHideUntrustedNotifications
-  } = useUserTrust()
   const { quickReaction, updateQuickReaction, quickReactionEmoji, updateQuickReactionEmoji } =
     useUserPreferences()
 
   const handleLanguageChange = (value: TLanguage) => {
     i18n.changeLanguage(value)
     setLanguage(value)
+    dispatchSettingsChanged()
   }
 
   return (
@@ -94,48 +85,11 @@ const GeneralSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
           </Select>
         </SettingItem>
         <SettingItem>
-          <Label htmlFor="autoplay" className="text-base font-normal">
-            <div>{t('Autoplay')}</div>
-            <div className="text-muted-foreground">{t('Enable video autoplay on this device')}</div>
-          </Label>
-          <Switch id="autoplay" checked={autoplay} onCheckedChange={setAutoplay} />
-        </SettingItem>
-        <SettingItem>
           <Label htmlFor="enable-markdown" className="text-base font-normal">
             <div>{t('Render Markdown')}</div>
             <div className="text-muted-foreground">{t('Parse and render markdown formatting in notes')}</div>
           </Label>
           <Switch id="enable-markdown" checked={enableMarkdown} onCheckedChange={setEnableMarkdown} />
-        </SettingItem>
-        <SettingItem>
-          <Label htmlFor="hide-untrusted-notes" className="text-base font-normal">
-            {t('Hide untrusted notes')}
-          </Label>
-          <Switch
-            id="hide-untrusted-notes"
-            checked={hideUntrustedNotes}
-            onCheckedChange={updateHideUntrustedNotes}
-          />
-        </SettingItem>
-        <SettingItem>
-          <Label htmlFor="hide-untrusted-interactions" className="text-base font-normal">
-            {t('Hide untrusted interactions')}
-          </Label>
-          <Switch
-            id="hide-untrusted-interactions"
-            checked={hideUntrustedInteractions}
-            onCheckedChange={updateHideUntrustedInteractions}
-          />
-        </SettingItem>
-        <SettingItem>
-          <Label htmlFor="hide-untrusted-notifications" className="text-base font-normal">
-            {t('Hide untrusted notifications')}
-          </Label>
-          <Switch
-            id="hide-untrusted-notifications"
-            checked={hideUntrustedNotifications}
-            onCheckedChange={updateHideUntrustedNotifications}
-          />
         </SettingItem>
         <SettingItem>
           <Label htmlFor="hide-content-mentioning-muted-users" className="text-base font-normal">

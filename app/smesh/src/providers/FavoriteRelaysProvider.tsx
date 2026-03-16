@@ -1,3 +1,4 @@
+import { DEPLOYMENT } from '@/constants'
 import {
   FavoriteRelays,
   RelaySet,
@@ -61,6 +62,10 @@ export function FavoriteRelaysProvider({ children }: { children: React.ReactNode
           }
         })
       })
+      // If still empty and a default relay is configured, use it
+      if (relays.length === 0 && DEPLOYMENT.defaultRelay) {
+        relays.push(DEPLOYMENT.defaultRelay)
+      }
       return relays
     }
     return favoriteRelaysAggregate.getRelayUrls()

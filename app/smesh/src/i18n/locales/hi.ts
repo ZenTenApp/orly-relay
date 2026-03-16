@@ -492,7 +492,7 @@ export default {
     'Private Key': 'प्राइवेट की',
     'Welcome to Smesh': 'Smesh में आपका स्वागत है',
     'Smesh is a client focused on browsing relays. Get started by exploring interesting relays or login to view your following feed.':
-      'Smesh एक क्लाइंट है जो रिले ब्राउज़ करने पर केंद्रित है। रोचक रिले की खोज करके शुरू करें या अपनी फ़ॉलोइंग फ़ीड देखने के लिए लॉगिन करें।',
+      'Smesh एक nostr क्लाइंट है जो समुदायों के निर्माण और संप्रभु मानसिकता वाले लोगों के समन्वय में सहायता पर केंद्रित है।',
     'Explore Relays': 'रिले एक्सप्लोर करें',
     'Choose a feed': 'एक फीड चुनें',
     'and {{x}} others': 'और {{x}} अन्य',

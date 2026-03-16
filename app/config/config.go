@@ -306,7 +306,7 @@ type C struct {
 	BridgeProfile string `env:"ORLY_BRIDGE_PROFILE" usage:"path to bridge profile template file (default: $BRIDGE_DATA_DIR/profile.txt)"`
 
 	// Smesh embedded web client
-	SmeshEnabled bool `env:"ORLY_SMESH_ENABLED" default:"false" usage:"enable embedded Smesh web client on a dedicated port"`
+	SmeshEnabled bool `env:"ORLY_SMESH_ENABLED" default:"true" usage:"enable embedded Smesh web client on a dedicated port"`
 	SmeshPort    int  `env:"ORLY_SMESH_PORT" default:"8088" usage:"port for the embedded Smesh web client"`
 
 	// ServeMode is set programmatically by the 'serve' subcommand to grant full owner

@@ -495,7 +495,7 @@ export default {
     'Private Key': 'Chave Privada',
     'Welcome to Smesh': 'Bem-vindo ao Smesh',
     'Smesh is a client focused on browsing relays. Get started by exploring interesting relays or login to view your following feed.':
-      'Smesh é um cliente focado em explorar relays. Comece por explorar relays interessantes ou inicie sessão para ver o seu feed de seguidos.',
+      'Smesh é um cliente nostr focado na construção de comunidades e no apoio à coordenação de pessoas com mentalidade soberana.',
     'Explore Relays': 'Explorar Relays',
     'Choose a feed': 'Escolha um feed',
     'and {{x}} others': 'e {{x}} outros',

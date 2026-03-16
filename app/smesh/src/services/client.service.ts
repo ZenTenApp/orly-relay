@@ -1,4 +1,4 @@
-import { ExtendedKind } from '@/constants'
+import { DEPLOYMENT, ExtendedKind } from '@/constants'
 import { Pubkey } from '@/domain'
 import {
   compareEvents,
@@ -39,13 +39,15 @@ import relayStatsService from './relay-stats.service'
  * Bootstrap relays used when no user relays are available yet.
  * Essential for initial login when we need to fetch the user's relay list.
  */
-const BOOTSTRAP_RELAYS = [
-  'wss://relay.orly.dev/',
-  'wss://relay.damus.io/',
-  'wss://relay.nostr.band/',
-  'wss://nos.lol/',
-  'wss://nostr.wine/'
-]
+const BOOTSTRAP_RELAYS = DEPLOYMENT.defaultRelay
+  ? [DEPLOYMENT.defaultRelay]
+  : [
+      'wss://relay.orly.dev/',
+      'wss://relay.damus.io/',
+      'wss://relay.nostr.band/',
+      'wss://nos.lol/',
+      'wss://nostr.wine/'
+    ]
 
 type TTimelineRef = [string, number]
 

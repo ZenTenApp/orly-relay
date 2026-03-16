@@ -1,3 +1,4 @@
+import { DEPLOYMENT } from '@/constants'
 import { getRelaySetFromEvent } from '@/lib/event-metadata'
 import { isWebsocketUrl, normalizeUrl } from '@/lib/url'
 import indexedDb from '@/services/indexed-db.service'
@@ -96,8 +97,17 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         const retrieved = storage.getFeedInfo(pubkey)
         storedFeedInfo = retrieved ?? null
         if (!storedFeedInfo) {
-          storedFeedInfo = { feedType: 'following' }
+          // When a default relay is configured, use it as the default feed
+          // so new users immediately see content from that relay
+          if (DEPLOYMENT.defaultRelay) {
+            storedFeedInfo = { feedType: 'relay', id: DEPLOYMENT.defaultRelay }
+          } else {
+            storedFeedInfo = { feedType: 'following' }
+          }
         }
+      } else if (DEPLOYMENT.defaultRelay) {
+        // Even without login, show the default relay feed
+        storedFeedInfo = { feedType: 'relay', id: DEPLOYMENT.defaultRelay }
       }
 
       if (storedFeedInfo?.feedType === 'relays') {

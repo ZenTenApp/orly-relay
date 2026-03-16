@@ -489,7 +489,7 @@ export default {
     'Private Key': 'Titkos Kulcs',
     'Welcome to Smesh': 'Isten hozott',
     'Smesh is a client focused on browsing relays. Get started by exploring interesting relays or login to view your following feed.':
-      'Smesh egy kliens, amivel könnyen böngészhetsz csomópontokat. Kezdd az érdekes csomópontok felderítésével, vagy lépj be, hogy a követettek posztjait megnézd.',
+      'A Smesh egy nostr kliens, amely közösségek építésére és szuverén gondolkodású emberek koordinálásának segítésére összpontosít.',
     'Explore Relays': 'Csomópontok felderítése',
     'Choose a feed': 'Válassz hírfolyamot',
     'and {{x}} others': 'és {{x}} másik',

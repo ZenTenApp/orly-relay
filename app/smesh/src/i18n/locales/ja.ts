@@ -491,7 +491,7 @@ export default {
     'Private Key': '暗号化されたキー',
     'Welcome to Smesh': 'Smeshへようこそ',
     'Smesh is a client focused on browsing relays. Get started by exploring interesting relays or login to view your following feed.':
-      'Smeshはリレーを閲覧することに焦点を当てたクライアントです。興味深いリレーを探索するか、ログインしてフォロー中のフィードを表示してください。',
+      'Smeshはコミュニティの構築と、主権的な考え方を持つ人々の連携を支援することに焦点を当てたnostrクライアントです。',
     'Explore Relays': 'リレーを探索',
     'Choose a feed': 'フィードを選択',
     'and {{x}} others': 'および他{{x}}人',

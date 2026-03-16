@@ -1,7 +1,6 @@
 import client from '@/services/client.service'
 import fayan from '@/services/fayan.service'
-import storage, { dispatchSettingsChanged } from '@/services/local-storage.service'
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect } from 'react'
 import { useNostr } from './NostrProvider'
 
 type TUserTrustContext = {
@@ -29,15 +28,12 @@ const wotSet = new Set<string>()
 
 export function UserTrustProvider({ children }: { children: React.ReactNode }) {
   const { pubkey: currentPubkey } = useNostr()
-  const [hideUntrustedInteractions, setHideUntrustedInteractions] = useState(() =>
-    storage.getHideUntrustedInteractions()
-  )
-  const [hideUntrustedNotifications, setHideUntrustedNotifications] = useState(() =>
-    storage.getHideUntrustedNotifications()
-  )
-  const [hideUntrustedNotes, setHideUntrustedNotes] = useState(() =>
-    storage.getHideUntrustedNotes()
-  )
+  // All three hideUntrusted flags are permanently disabled.
+  // Mute lists handle unwanted content. These flags break relay feeds
+  // by turning them into de-facto follow feeds.
+  const hideUntrustedInteractions = false
+  const hideUntrustedNotes = false
+  const hideUntrustedNotifications = false
 
   useEffect(() => {
     if (!currentPubkey) return
@@ -81,23 +77,10 @@ export function UserTrustProvider({ children }: { children: React.ReactNode }) {
     [isUserTrusted]
   )
 
-  const updateHideUntrustedInteractions = (hide: boolean) => {
-    setHideUntrustedInteractions(hide)
-    storage.setHideUntrustedInteractions(hide)
-    dispatchSettingsChanged()
-  }
-
-  const updateHideUntrustedNotifications = (hide: boolean) => {
-    setHideUntrustedNotifications(hide)
-    storage.setHideUntrustedNotifications(hide)
-    dispatchSettingsChanged()
-  }
-
-  const updateHideUntrustedNotes = (hide: boolean) => {
-    setHideUntrustedNotes(hide)
-    storage.setHideUntrustedNotes(hide)
-    dispatchSettingsChanged()
-  }
+  // no-op updaters preserved for interface compatibility
+  const updateHideUntrustedInteractions = (_hide: boolean) => {}
+  const updateHideUntrustedNotifications = (_hide: boolean) => {}
+  const updateHideUntrustedNotes = (_hide: boolean) => {}
 
   return (
     <UserTrustContext.Provider

@@ -157,52 +157,35 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		}
 	}
 
-	// send a challenge to the client to auth if an ACL is active, auth is required, or AuthToWrite is enabled
-	if len(l.authedPubkey.Load()) == 0 && (acl.Registry.GetMode() != "none" || l.Config.AuthRequired || l.Config.AuthToWrite) {
-		if err = authenvelope.NewChallengeWith(l.challenge.Load()).
-			Write(l); chk.E(err) {
-			return
-		}
-	}
 	// check permissions of user
 	accessLevel := acl.Registry.GetAccessLevel(l.authedPubkey.Load(), l.remote)
+	aclMode := acl.Registry.GetMode()
 
-	// If auth is required but user is not authenticated, deny access
-	if l.Config.AuthRequired && len(l.authedPubkey.Load()) == 0 {
-		if err = closedenvelope.NewFrom(
-			env.Subscription,
-			reason.AuthRequired.F("authentication required"),
-		).Write(l); chk.E(err) {
-			return
-		}
-		return
-	}
-
-	// If AuthToWrite is enabled, allow REQ without auth (but still check ACL)
-	// Skip the auth requirement check for REQ when AuthToWrite is true
-	if l.Config.AuthToWrite && len(l.authedPubkey.Load()) == 0 {
-		// Allow unauthenticated REQ when AuthToWrite is enabled
-		// but still respect ACL access levels if ACL is active
-		if acl.Registry.GetMode() != "none" {
-			switch accessLevel {
-			case "none", "blocked", "banned":
-				if err = closedenvelope.NewFrom(
-					env.Subscription,
-					reason.AuthRequired.F("user not authed or has no read access"),
-				).Write(l); chk.E(err) {
-					return
-				}
+	// When ACL is "none" and auth is not required, skip all access checks.
+	// Privileged kinds (DMs etc.) are still gated below.
+	if aclMode != "none" || l.Config.AuthRequired {
+		// send a challenge to the client to auth
+		if len(l.authedPubkey.Load()) == 0 {
+			if err = authenvelope.NewChallengeWith(l.challenge.Load()).
+				Write(l); chk.E(err) {
 				return
 			}
 		}
-		// Allow the request to proceed without authentication
-	}
 
-	// Only check ACL access level if not already handled by AuthToWrite
-	if !l.Config.AuthToWrite || len(l.authedPubkey.Load()) > 0 {
+		// If auth is required but user is not authenticated, deny access
+		if l.Config.AuthRequired && len(l.authedPubkey.Load()) == 0 {
+			if err = closedenvelope.NewFrom(
+				env.Subscription,
+				reason.AuthRequired.F("authentication required"),
+			).Write(l); chk.E(err) {
+				return
+			}
+			return
+		}
+
+		// Check ACL access level
 		switch accessLevel {
-		case "none":
-			// For REQ denial, send a CLOSED with auth-required reason (NIP-01)
+		case "none", "blocked", "banned":
 			if err = closedenvelope.NewFrom(
 				env.Subscription,
 				reason.AuthRequired.F("user not authed or has no read access"),
@@ -210,8 +193,6 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 				return
 			}
 			return
-		default:
-			// user has read access or better, continue
 		}
 	}
 

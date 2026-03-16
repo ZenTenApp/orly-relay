@@ -1,46 +1,13 @@
-import { cn, isInViewport } from '@/lib/utils'
-import { useContentPolicy } from '@/providers/ContentPolicyProvider'
+import { cn } from '@/lib/utils'
 import { useUserPreferences } from '@/providers/UserPreferencesProvider'
 import mediaManager from '@/services/media-manager.service'
 import { useEffect, useRef, useState } from 'react'
 import ExternalLink from '../ExternalLink'
 
 export default function VideoPlayer({ src, className }: { src: string; className?: string }) {
-  const { autoplay } = useContentPolicy()
   const { muteMedia, updateMuteMedia } = useUserPreferences()
   const [error, setError] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const video = videoRef.current
-    const container = containerRef.current
-
-    if (!video || !container || error) return
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && autoplay) {
-          setTimeout(() => {
-            if (isInViewport(container)) {
-              mediaManager.autoPlay(video)
-            }
-          }, 200)
-        }
-
-        if (!entry.isIntersecting) {
-          mediaManager.pause(video)
-        }
-      },
-      { threshold: 1 }
-    )
-
-    observer.observe(container)
-
-    return () => {
-      observer.unobserve(container)
-    }
-  }, [autoplay, error])
 
   useEffect(() => {
     if (!videoRef.current) return
@@ -74,7 +41,7 @@ export default function VideoPlayer({ src, className }: { src: string; className
   }
 
   return (
-    <div ref={containerRef}>
+    <div>
       <video
         ref={videoRef}
         controls
