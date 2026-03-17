@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"strconv"
 	"time"
 
 	"next.orly.dev/pkg/nostr/crypto/encryption"
@@ -14,6 +15,8 @@ import (
 	"next.orly.dev/pkg/nostr/interfaces/signer"
 	"next.orly.dev/pkg/lol/log"
 )
+
+const defaultDMExpirationSeconds int64 = 30 * 24 * 60 * 60 // 30 days
 
 const (
 	kindSeal      uint16 = 13
@@ -82,62 +85,114 @@ func unwrapGiftWrap(ev *event.E, sign signer.I) (*UnwrappedDM, error) {
 	}, nil
 }
 
-// wrapGiftWrap creates a NIP-17 gift-wrapped DM (kind 14 → 13 → 1059).
-// The outer gift wrap uses an ephemeral key for sender privacy.
+// wrapGiftWrap creates NIP-17 gift-wrapped DMs (kind 14 → 13 → 1059).
+// Returns two wraps: one for the recipient and one self-addressed copy for the sender.
+// NIP-17 requires both so the sender can recover sent messages from relays.
 func wrapGiftWrap(
 	recipientPubHex string, content string, sign signer.I,
-) (*event.E, error) {
+) (recipientWrap *event.E, senderWrap *event.E, err error) {
 	recipientPub, err := hex.Dec(recipientPubHex)
 	if err != nil {
-		return nil, fmt.Errorf("decode recipient pubkey: %w", err)
+		return nil, nil, fmt.Errorf("decode recipient pubkey: %w", err)
 	}
 
+	senderPub := sign.Pub()
+	senderPubHex := hex.Enc(senderPub)
 	now := time.Now().Unix()
+	expiration := strconv.FormatInt(now+defaultDMExpirationSeconds, 10)
 
-	// Step 1: Create inner DM (kind 14)
+	// Step 1: Create inner DM (kind 14) — shared by both wraps
 	inner := &event.E{
 		Content:   []byte(content),
 		CreatedAt: now,
 		Kind:      kindDM,
 		Tags: tag.NewS(
 			tag.NewFromAny("p", recipientPubHex),
+			tag.NewFromAny("expiration", expiration),
 		),
 	}
 	if err := inner.Sign(sign); err != nil {
-		return nil, fmt.Errorf("sign inner DM: %w", err)
+		return nil, nil, fmt.Errorf("sign inner DM: %w", err)
 	}
 
 	innerJSON, err := inner.MarshalJSON()
 	if err != nil {
-		return nil, fmt.Errorf("marshal inner DM: %w", err)
+		return nil, nil, fmt.Errorf("marshal inner DM: %w", err)
 	}
 
-	// Step 2: Create seal (kind 13) — encrypt inner with sender + recipient
-	sealConvKey, err := encryption.GenerateConversationKey(sign.Sec(), recipientPub)
+	// --- Recipient path ---
+
+	// Seal encrypted with (sender_secret, recipient_pubkey)
+	recipientSealKey, err := encryption.GenerateConversationKey(sign.Sec(), recipientPub)
 	if err != nil {
-		return nil, fmt.Errorf("seal ECDH: %w", err)
+		return nil, nil, fmt.Errorf("recipient seal ECDH: %w", err)
 	}
-	sealCiphertext, err := encryption.Encrypt(sealConvKey, innerJSON, nil)
+	recipientSealCT, err := encryption.Encrypt(recipientSealKey, innerJSON, nil)
 	if err != nil {
-		return nil, fmt.Errorf("seal encrypt: %w", err)
+		return nil, nil, fmt.Errorf("recipient seal encrypt: %w", err)
 	}
 
-	seal := &event.E{
-		Content:   []byte(sealCiphertext),
+	recipientSeal := &event.E{
+		Content:   []byte(recipientSealCT),
 		CreatedAt: randomizeTimestamp(now),
 		Kind:      kindSeal,
-		Tags:      tag.NewS(), // no tags on seal
+		Tags:      tag.NewS(),
 	}
-	if err := seal.Sign(sign); err != nil {
-		return nil, fmt.Errorf("sign seal: %w", err)
+	if err := recipientSeal.Sign(sign); err != nil {
+		return nil, nil, fmt.Errorf("sign recipient seal: %w", err)
 	}
 
-	sealJSON, err := seal.MarshalJSON()
+	recipientSealJSON, err := recipientSeal.MarshalJSON()
 	if err != nil {
-		return nil, fmt.Errorf("marshal seal: %w", err)
+		return nil, nil, fmt.Errorf("marshal recipient seal: %w", err)
 	}
 
-	// Step 3: Create gift wrap (kind 1059) — encrypt seal with ephemeral + recipient
+	// Gift wrap with ephemeral key, p-tag = recipient
+	recipientWrap, err = wrapSealForTarget(recipientPub, recipientPubHex, recipientSealJSON, now, expiration)
+	if err != nil {
+		return nil, nil, fmt.Errorf("recipient wrap: %w", err)
+	}
+
+	// --- Sender (self) path ---
+
+	// Seal encrypted with (sender_secret, sender_pubkey)
+	senderSealKey, err := encryption.GenerateConversationKey(sign.Sec(), senderPub)
+	if err != nil {
+		return nil, nil, fmt.Errorf("sender seal ECDH: %w", err)
+	}
+	senderSealCT, err := encryption.Encrypt(senderSealKey, innerJSON, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("sender seal encrypt: %w", err)
+	}
+
+	senderSeal := &event.E{
+		Content:   []byte(senderSealCT),
+		CreatedAt: randomizeTimestamp(now),
+		Kind:      kindSeal,
+		Tags:      tag.NewS(),
+	}
+	if err := senderSeal.Sign(sign); err != nil {
+		return nil, nil, fmt.Errorf("sign sender seal: %w", err)
+	}
+
+	senderSealJSON, err := senderSeal.MarshalJSON()
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal sender seal: %w", err)
+	}
+
+	// Gift wrap with different ephemeral key, p-tag = sender
+	senderWrap, err = wrapSealForTarget(senderPub, senderPubHex, senderSealJSON, now, expiration)
+	if err != nil {
+		return nil, nil, fmt.Errorf("sender wrap: %w", err)
+	}
+
+	log.D.F("created NIP-17 gift wraps for %s (self-copy for %s)", recipientPubHex, senderPubHex)
+
+	return recipientWrap, senderWrap, nil
+}
+
+// wrapSealForTarget creates a gift wrap (kind 1059) encrypting sealJSON for targetPub.
+func wrapSealForTarget(targetPub []byte, targetPubHex string, sealJSON []byte, now int64, expiration string) (*event.E, error) {
 	ephSecret, err := keys.GenerateSecretKey()
 	if err != nil {
 		return nil, fmt.Errorf("generate ephemeral key: %w", err)
@@ -148,7 +203,7 @@ func wrapGiftWrap(
 	}
 	defer ephSigner.Zero()
 
-	wrapConvKey, err := encryption.GenerateConversationKey(ephSecret, recipientPub)
+	wrapConvKey, err := encryption.GenerateConversationKey(ephSecret, targetPub)
 	if err != nil {
 		return nil, fmt.Errorf("gift wrap ECDH: %w", err)
 	}
@@ -157,39 +212,37 @@ func wrapGiftWrap(
 		return nil, fmt.Errorf("gift wrap encrypt: %w", err)
 	}
 
-	giftWrap := &event.E{
+	gwTags := tag.NewS(
+		tag.NewFromAny("p", targetPubHex),
+	)
+	if expiration != "" {
+		*gwTags = append(*gwTags, tag.NewFromAny("expiration", expiration))
+	}
+	gw := &event.E{
 		Content:   []byte(wrapCiphertext),
 		CreatedAt: randomizeTimestamp(now),
 		Kind:      kindGiftWrap,
-		Tags: tag.NewS(
-			tag.NewFromAny("p", recipientPubHex),
-		),
+		Tags:      gwTags,
 	}
-	if err := giftWrap.Sign(ephSigner); err != nil {
+	if err := gw.Sign(ephSigner); err != nil {
 		return nil, fmt.Errorf("sign gift wrap: %w", err)
 	}
 
-	log.D.F("created NIP-17 gift wrap for %s (ephemeral pubkey %s)",
-		recipientPubHex, hex.Enc(ephSigner.Pub()))
-
-	return giftWrap, nil
+	return gw, nil
 }
 
-// randomizeTimestamp adds a random offset of +/- 2 days for NIP-59 privacy.
-// Uses crypto/rand to prevent timestamp correlation attacks.
+// randomizeTimestamp subtracts a random offset of 0–2 days for NIP-59 privacy.
+// Never produces future timestamps — relays reject those.
 func randomizeTimestamp(base int64) int64 {
-	const fourDays = 4 * 24 * 60 * 60
 	const twoDays = 2 * 24 * 60 * 60
 	var buf [8]byte
 	if _, err := rand.Read(buf[:]); err != nil {
-		// Fallback: use base timestamp unrandomized rather than
-		// using a zero buffer which would produce a predictable offset.
 		return base
 	}
 	n := int64(binary.LittleEndian.Uint64(buf[:]))
 	if n < 0 {
 		n = -n
 	}
-	offset := n%fourDays - twoDays
-	return base + offset
+	offset := n % twoDays
+	return base - offset
 }

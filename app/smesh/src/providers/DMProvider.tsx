@@ -26,7 +26,7 @@ type TDMContext = {
   error: string | null
   selectConversation: (partnerPubkey: string | null) => void
   startConversation: (partnerPubkey: string) => void
-  sendMessage: (content: string, customRelayUrls?: string[]) => Promise<void>
+  sendMessage: (content: string, customRelayUrls?: string[], expirationSeconds?: number) => Promise<void>
   refreshConversations: () => Promise<void>
   reloadConversation: () => void
   loadMoreConversations: () => Promise<void>
@@ -36,17 +36,14 @@ type TDMContext = {
   isNewConversation: boolean
   clearNewConversationFlag: () => void
   dismissProvisionalConversation: () => void
-  // Unread tracking
   totalUnreadCount: number
   hasNewMessages: boolean
   markInboxAsSeen: () => void
-  // Selection mode
   selectedMessages: Set<string>
   isSelectionMode: boolean
   toggleMessageSelection: (messageId: string) => void
   selectAllMessages: () => void
   clearSelection: () => void
-  // Deletion
   deleteSelectedMessages: () => Promise<void>
   deleteAllInConversation: () => Promise<void>
   undeleteAllInConversation: () => Promise<void>
@@ -60,6 +57,24 @@ export const useDM = () => {
     throw new Error('useDM must be used within a DMProvider')
   }
   return context
+}
+
+// Merge two message arrays, dedupe by ID, sort by timestamp
+function mergeAndDedupe(
+  existing: TDirectMessage[],
+  incoming: TDirectMessage[]
+): TDirectMessage[] {
+  const ids = new Set(existing.map((m) => m.id))
+  const innerIds = new Set(existing.map((m) => m.innerEventId).filter(Boolean))
+  const merged = [...existing]
+  for (const msg of incoming) {
+    if (ids.has(msg.id)) continue
+    if (msg.innerEventId && innerIds.has(msg.innerEventId)) continue
+    merged.push(msg)
+    ids.add(msg.id)
+    if (msg.innerEventId) innerIds.add(msg.innerEventId)
+  }
+  return merged.sort((a, b) => a.createdAt - b.createdAt)
 }
 
 export function DMProvider({ children }: { children: React.ReactNode }) {
@@ -78,10 +93,6 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
   const [allConversations, setAllConversations] = useState<TConversation[]>([])
   const [currentConversation, setCurrentConversation] = useState<string | null>(null)
   const [messages, setMessages] = useState<TDirectMessage[]>([])
-  const [conversationMessages, setConversationMessages] = useState<Map<string, TDirectMessage[]>>(
-    () => new Map()
-  )
-  const [loadedConversations, setLoadedConversations] = useState<Set<string>>(() => new Set())
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingConversation, setIsLoadingConversation] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -95,19 +106,21 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
   const [lastSeenTimestamp, setLastSeenTimestamp] = useState<number>(() =>
     pubkey ? storage.getDMLastSeenTimestamp(pubkey) : 0
   )
+  const [newestIncomingTimestamp, setNewestIncomingTimestamp] = useState(0)
+  const [reloadTrigger, setReloadTrigger] = useState(0)
   const CONVERSATIONS_PER_PAGE = 100
 
-  // Track which conversation load is in progress to prevent race conditions
   const loadingConversationRef = useRef<string | null>(null)
-  // Track if we've already initialized to avoid reloading on navigation
   const hasInitializedRef = useRef(false)
   const lastPubkeyRef = useRef<string | null>(null)
-  // Background subscription for real-time DM updates
   const dmSubscriptionRef = useRef<{ close: () => void } | null>(null)
-  // Track newest message timestamp from subscription (to update hasNewMessages)
-  const [newestIncomingTimestamp, setNewestIncomingTimestamp] = useState(0)
+  const currentConversationRef = useRef<string | null>(null)
 
-  // Create encryption wrapper object for dm.service
+  // Keep ref in sync
+  useEffect(() => {
+    currentConversationRef.current = currentConversation
+  }, [currentConversation])
+
   const encryption: IDMEncryption | null = useMemo(() => {
     if (!pubkey) return null
     return {
@@ -120,27 +133,22 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
     }
   }, [pubkey, nip04Encrypt, nip04Decrypt, nip44Encrypt, nip44Decrypt, hasNip44Support, signEvent])
 
-  // Load deleted state and conversations when user is logged in
+  // Initialize: load deleted state, conversations, start subscription
   useEffect(() => {
     if (pubkey && encryption) {
-      // Skip if already initialized for this pubkey (e.g., navigating back)
       if (hasInitializedRef.current && lastPubkeyRef.current === pubkey) {
         return
       }
-
-      // Mark as initialized for this pubkey
       hasInitializedRef.current = true
       lastPubkeyRef.current = pubkey
 
-      // Reload lastSeenTimestamp from storage (useState initializer may have run when pubkey was null)
       const savedTimestamp = storage.getDMLastSeenTimestamp(pubkey)
       if (savedTimestamp > 0) {
         setLastSeenTimestamp(savedTimestamp)
       }
 
-      // Load deleted state FIRST before anything else
-      const loadDeletedStateAndConversations = async () => {
-        // Step 1: Load deleted state from IndexedDB
+      const initialize = async () => {
+        // Load deleted state
         let currentDeletedState: TDMDeletedState = { deletedIds: [], deletedRanges: {} }
         const cached = await indexedDb.getDeletedMessagesState(pubkey)
         if (cached) {
@@ -150,7 +158,6 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
           setDeletedState(currentDeletedState)
         }
 
-        // Step 2: Fetch from relays (kind 30078 Application Specific Data) - this takes priority
         try {
           const relayUrls = relayList?.read.length ? relayList.read : client.currentRelays
           const events = await client.fetchEvents(relayUrls, {
@@ -160,24 +167,23 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
             limit: 1
           })
           if (events.length > 0) {
-            const event = events[0]
             try {
-              const parsedState = JSON.parse(event.content) as TDMDeletedState
+              const parsedState = JSON.parse(events[0].content) as TDMDeletedState
               currentDeletedState = parsedState
               setDeletedState(parsedState)
               await indexedDb.putDeletedMessagesState(pubkey, parsedState)
             } catch {
-              // Invalid JSON, ignore
+              // Invalid JSON
             }
           }
         } catch {
-          // Relay fetch failed, use cached
+          // Relay fetch failed
         }
 
-        // Step 3: Load cached conversations (filtered by deleted state)
+        // Load cached conversations
         const cachedConvs = await indexedDb.getDMConversations(pubkey)
         if (cachedConvs.length > 0) {
-          const conversations: TConversation[] = cachedConvs
+          const convs: TConversation[] = cachedConvs
             .filter((c) => c.partnerPubkey && typeof c.partnerPubkey === 'string')
             .filter((c) => !isConversationDeleted(c.partnerPubkey, c.lastMessageAt, currentDeletedState))
             .map((c) => ({
@@ -187,55 +193,105 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
               unreadCount: 0,
               preferredEncryption: c.encryptionType
             }))
-          setAllConversations(conversations)
-          setConversations(conversations.slice(0, CONVERSATIONS_PER_PAGE))
-          setHasMoreConversations(conversations.length > CONVERSATIONS_PER_PAGE)
+          setAllConversations(convs)
+          setConversations(convs.slice(0, CONVERSATIONS_PER_PAGE))
+          setHasMoreConversations(convs.length > CONVERSATIONS_PER_PAGE)
         }
 
-        // Step 4: Background refresh from network (don't clear existing data)
+        // Background refresh
         backgroundRefreshConversations()
 
-        // Step 5: Start real-time subscription for new DMs
+        // Start real-time subscription
         if (dmSubscriptionRef.current) {
           dmSubscriptionRef.current.close()
         }
         const relayUrls = relayList?.read || []
-        // Use the newest known conversation timestamp to avoid gaps between fetch and subscription
         const newestKnownTimestamp = cachedConvs.length > 0
           ? Math.max(...cachedConvs.map((c) => c.lastMessageAt))
           : undefined
-        dmSubscriptionRef.current = dmService.subscribeToDMs(pubkey, relayUrls, (event) => {
-          // New DM event received - update timestamp to trigger hasNewMessages
+
+        dmSubscriptionRef.current = dmService.subscribeToDMs(pubkey, relayUrls, async (event) => {
           setNewestIncomingTimestamp(event.created_at)
+
+          if (encryption) {
+            try {
+              const message = await dmService.decryptMessage(event, encryption, pubkey)
+              if (message && message.senderPubkey && message.recipientPubkey) {
+                const partner = message.senderPubkey === pubkey
+                  ? message.recipientPubkey
+                  : message.senderPubkey
+                const activeConv = currentConversationRef.current
+
+                if (activeConv && partner === activeConv) {
+                  // Append directly — dedup by outer ID and inner event ID (self-copy has same inner)
+                  setMessages((prev) => {
+                    if (prev.some((m) => m.id === message.id)) return prev
+                    if (message.innerEventId && prev.some((m) => m.innerEventId === message.innerEventId)) return prev
+                    return [...prev, message].sort((a, b) => a.createdAt - b.createdAt)
+                  })
+                }
+
+                // Always update conversation list (for both active and non-active conversations)
+                const preview = (message.content ?? '').substring(0, 100)
+                const updateConvList = (prev: TConversation[]) => {
+                  const existing = prev.find((c) => c.partnerPubkey === partner)
+                  if (existing) {
+                    if (message.createdAt <= existing.lastMessageAt) return prev
+                    return prev.map((c) =>
+                      c.partnerPubkey === partner
+                        ? {
+                            ...c,
+                            lastMessageAt: message.createdAt,
+                            lastMessagePreview: preview,
+                            unreadCount: partner !== activeConv ? c.unreadCount + 1 : c.unreadCount
+                          }
+                        : c
+                    ).sort((a, b) => b.lastMessageAt - a.lastMessageAt)
+                  }
+                  return [{
+                    partnerPubkey: partner,
+                    lastMessageAt: message.createdAt,
+                    lastMessagePreview: preview,
+                    unreadCount: 1,
+                    preferredEncryption: message.encryptionType
+                  }, ...prev]
+                }
+                setConversations(updateConvList)
+                setAllConversations(updateConvList)
+
+                // Persist to IndexedDB
+                indexedDb.putDMConversation(
+                  pubkey, partner, message.createdAt, preview, message.encryptionType
+                ).catch(() => {})
+              }
+            } catch {
+              // Decryption failed
+            }
+          }
         }, newestKnownTimestamp)
       }
 
-      loadDeletedStateAndConversations()
+      initialize()
     } else {
-      // Clear all state on logout
+      // Logout
       setConversations([])
       setAllConversations([])
       setMessages([])
-      setConversationMessages(new Map())
-      setLoadedConversations(new Set())
       setCurrentConversation(null)
       setDeletedState(null)
       setSelectedMessages(new Set())
       setIsSelectionMode(false)
-      // Clear in-memory plaintext cache
       clearPlaintextCache()
-      // Stop DM subscription
       if (dmSubscriptionRef.current) {
         dmSubscriptionRef.current.close()
         dmSubscriptionRef.current = null
       }
-      // Reset initialization flag so we reload on next login
       hasInitializedRef.current = false
       lastPubkeyRef.current = null
     }
   }, [pubkey, encryption, relayList])
 
-  // Load full conversation when selected
+  // Load conversation when selected (or reloadTrigger changes)
   useEffect(() => {
     if (!currentConversation || !pubkey || !encryption) {
       setMessages([])
@@ -243,31 +299,17 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    // Capture the conversation we're loading to detect stale updates
     const targetConversation = currentConversation
     loadingConversationRef.current = targetConversation
 
-    // Check if we already have messages in memory for this conversation
-    const existing = conversationMessages.get(targetConversation)
-    if (existing && existing.length > 0) {
-      setMessages(existing)
-      // If already fully loaded and data is present, don't fetch again
-      if (loadedConversations.has(targetConversation)) {
-        return
-      }
-    }
-
-    // Load full conversation history
     const loadConversation = async () => {
       setIsLoadingConversation(true)
       try {
-        // First, try to load from IndexedDB cache for instant display
+        // IndexedDB cache — single setMessages, no progressive flashing
         const cached = await indexedDb.getConversationMessages(pubkey, targetConversation)
         if (cached && cached.length > 0 && loadingConversationRef.current === targetConversation) {
           const cachedMessages: TDirectMessage[] = cached
-            .filter(
-              (m) => !isMessageDeleted(m.id, targetConversation, m.createdAt, deletedState)
-            )
+            .filter((m) => !isMessageDeleted(m.id, targetConversation, m.createdAt, deletedState))
             .map((m) => ({
               id: m.id,
               senderPubkey: m.senderPubkey,
@@ -280,74 +322,53 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
               seenOnRelays: m.seenOnRelays
             }))
           setMessages(cachedMessages)
-          setConversationMessages((prev) => new Map(prev).set(targetConversation, cachedMessages))
         }
 
-        // Then fetch fresh from relays
+        // Network fetch
         const relayUrls = relayList?.read || []
         const events = await dmService.fetchConversationEvents(pubkey, targetConversation, relayUrls)
 
-        // Check if user switched to a different conversation while we were loading
-        if (loadingConversationRef.current !== targetConversation) {
-          return // Abort - user switched conversations
-        }
+        if (loadingConversationRef.current !== targetConversation) return
 
-        // Pre-filter events: skip gift wraps older than global delete cutoff (before decryption)
+        // Pre-filter gift wraps older than delete cutoff.
+        // Gift wrap outer timestamps are randomized up to 2 days in the past (NIP-59),
+        // so subtract 3 days buffer to avoid filtering out recent messages.
         const deleteCutoff = getGlobalDeleteCutoff(deletedState)
-        const filteredEvents = deleteCutoff > 0
-          ? events.filter((e) => e.kind !== 1059 || e.created_at > deleteCutoff)
+        const giftWrapCutoff = deleteCutoff > 0 ? deleteCutoff - 3 * 24 * 60 * 60 : 0
+        const filteredEvents = giftWrapCutoff > 0
+          ? events.filter((e) => e.kind !== 1059 || e.created_at > giftWrapCutoff)
           : events
 
-        // Decrypt messages in batches to avoid blocking UI
-        // Progressive updates: show messages as they're decrypted
-        const allDecrypted: TDirectMessage[] = []
-        const seenIds = new Set<string>()
-
-        await decryptMessagesInBatches(
-          filteredEvents,
-          encryption,
-          pubkey,
-          10, // batch size
-          (batchMessages) => {
-            // Check if still on same conversation before updating
-            if (loadingConversationRef.current !== targetConversation) return
-
-            // Filter to only messages in this conversation (excluding deleted and duplicates)
-            const validMessages = batchMessages.filter((message) => {
-              if (seenIds.has(message.id)) return false
-              if (isNircProtocolMessage(message.content ?? '')) return false
-              const partner =
-                message.senderPubkey === pubkey ? message.recipientPubkey : message.senderPubkey
-              if (partner !== targetConversation) return false
-              if (isMessageDeleted(message.id, targetConversation, message.createdAt, deletedState)) return false
-              seenIds.add(message.id)
-              return true
-            })
-
-            allDecrypted.push(...validMessages)
-
-            // Sort and update progressively
-            const sorted = [...allDecrypted].sort((a, b) => a.createdAt - b.createdAt)
-            setMessages(sorted)
-            setConversationMessages((prev) => new Map(prev).set(targetConversation, sorted))
-          }
+        // Decrypt all at once — no progressive batch rendering
+        const allDecrypted = await decryptMessagesInBatches(
+          filteredEvents, encryption, pubkey, 10
         )
 
-        // Check again after decryption (which can take time)
-        if (loadingConversationRef.current !== targetConversation) {
-          return // Abort - user switched conversations
-        }
+        if (loadingConversationRef.current !== targetConversation) return
 
-        // Final sort
-        const sorted = allDecrypted.sort((a, b) => a.createdAt - b.createdAt)
+        // Filter — deduplicate by inner event ID for gift wraps (recipient + self-copy
+        // share the same inner DM but have different outer wrap IDs)
+        const seenIds = new Set<string>()
+        const seenInnerIds = new Set<string>()
+        const validMessages = allDecrypted.filter((message) => {
+          if (seenIds.has(message.id)) return false
+          if (message.innerEventId && seenInnerIds.has(message.innerEventId)) return false
+          if (isNircProtocolMessage(message.content ?? '')) return false
+          const partner = message.senderPubkey === pubkey
+            ? message.recipientPubkey
+            : message.senderPubkey
+          if (partner !== targetConversation) return false
+          if (isMessageDeleted(message.id, targetConversation, message.createdAt, deletedState)) return false
+          seenIds.add(message.id)
+          if (message.innerEventId) seenInnerIds.add(message.innerEventId)
+          return true
+        })
 
-        // Update state only if still on same conversation
-        setConversationMessages((prev) => new Map(prev).set(targetConversation, sorted))
-        setLoadedConversations((prev) => new Set(prev).add(targetConversation))
-        setMessages(sorted)
+        // Merge with existing messages (preserves subscription-appended messages)
+        setMessages((prev) => mergeAndDedupe(prev, validMessages))
 
-        // Cache messages to IndexedDB (without the full event object)
-        const toCache = sorted.map((m) => ({
+        // Cache to IndexedDB — merge with existing cache, never replace with fewer messages
+        const toCache = validMessages.map((m) => ({
           id: m.id,
           senderPubkey: m.senderPubkey,
           recipientPubkey: m.recipientPubkey,
@@ -356,11 +377,26 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
           encryptionType: m.encryptionType,
           seenOnRelays: m.seenOnRelays
         }))
-        await indexedDb.putConversationMessages(pubkey, targetConversation, toCache)
+        type CachedMsg = typeof toCache[number]
+        const existingCache = await indexedDb.getConversationMessages(pubkey, targetConversation)
+        if (existingCache && existingCache.length > 0 && toCache.length > 0) {
+          const ids = new Set(toCache.map((m) => m.id))
+          const merged: CachedMsg[] = [...toCache]
+          for (const m of existingCache) {
+            if (!ids.has(m.id)) {
+              merged.push(m as CachedMsg)
+              ids.add(m.id)
+            }
+          }
+          merged.sort((a, b) => a.createdAt - b.createdAt)
+          await indexedDb.putConversationMessages(pubkey, targetConversation, merged)
+        } else if (toCache.length > 0) {
+          await indexedDb.putConversationMessages(pubkey, targetConversation, toCache)
+        }
+        // If toCache is empty, don't write — keep existing cache intact
       } catch {
-        // Failed to load conversation
+        // Failed to load
       } finally {
-        // Only clear loading state if this is still the active load
         if (loadingConversationRef.current === targetConversation) {
           setIsLoadingConversation(false)
         }
@@ -368,28 +404,22 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
     }
 
     loadConversation()
-  }, [currentConversation, pubkey, encryption, relayList, deletedState])
+  }, [currentConversation, pubkey, encryption, relayList, deletedState, reloadTrigger])
 
-  // Background refresh - merges new data without clearing existing cache
+  // Background refresh conversations list
   const backgroundRefreshConversations = useCallback(async () => {
     if (!pubkey || !encryption) return
 
     try {
-      // Get relay URLs
       const relayUrls = relayList?.read || []
-
-      // Fetch recent DM events (raw, not decrypted)
       const events = await dmService.fetchRecentDMEvents(pubkey, relayUrls)
 
-      // Separate NIP-04 events and gift wraps
       const nip04Events = events.filter((e) => e.kind === 4)
       const giftWraps = events.filter((e) => e.kind === 1059)
 
-      // Build conversation map from existing conversations
       const conversationMap = new Map<string, TConversation>()
       allConversations.forEach((c) => conversationMap.set(c.partnerPubkey, c))
 
-      // Add NIP-04 conversations
       const nip04Convs = dmService.groupEventsIntoConversations(nip04Events, pubkey)
       nip04Convs.forEach((conv, key) => {
         const existing = conversationMap.get(key)
@@ -398,7 +428,6 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
         }
       })
 
-      // Update UI with NIP-04 data (filtered by deleted state)
       const updateAndShowConversations = () => {
         const validConversations = Array.from(conversationMap.values())
           .filter((conv) => conv.partnerPubkey && typeof conv.partnerPubkey === 'string')
@@ -413,76 +442,58 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
 
       updateAndShowConversations()
 
-      // Process gift wraps in background (progressive, no UI blocking)
       const sortedGiftWraps = giftWraps.sort((a, b) => b.created_at - a.created_at)
-
-      // Calculate global delete cutoff for pre-filtering (skip decryption for old deleted messages)
       const deleteCutoff = getGlobalDeleteCutoff(deletedState)
 
       for (const giftWrap of sortedGiftWraps) {
-        // Skip gift wraps older than global delete cutoff (no decryption needed)
-        if (deleteCutoff > 0 && giftWrap.created_at <= deleteCutoff) {
-          continue
-        }
+        if (deleteCutoff > 0 && giftWrap.created_at <= deleteCutoff) continue
 
         try {
           const message = await dmService.decryptMessage(giftWrap, encryption, pubkey)
           if (message && message.senderPubkey && message.recipientPubkey) {
             const partnerPubkey =
               message.senderPubkey === pubkey ? message.recipientPubkey : message.senderPubkey
-
             if (!partnerPubkey || partnerPubkey === '__reaction__') continue
             if (isNircProtocolMessage(message.content ?? '')) continue
 
             const existing = conversationMap.get(partnerPubkey)
             if (!existing || message.createdAt > existing.lastMessageAt) {
-              const preview = (message.content ?? '').substring(0, 100)
               conversationMap.set(partnerPubkey, {
                 partnerPubkey,
                 lastMessageAt: message.createdAt,
-                lastMessagePreview: preview,
+                lastMessagePreview: (message.content ?? '').substring(0, 100),
                 unreadCount: 0,
                 preferredEncryption: 'nip17'
               })
               updateAndShowConversations()
             }
 
-            // Cache conversation metadata
-            indexedDb
-              .putDMConversation(
-                pubkey,
-                partnerPubkey,
-                message.createdAt,
-                (message.content ?? '').substring(0, 100),
-                'nip17'
-              )
-              .catch(() => {})
+            indexedDb.putDMConversation(
+              pubkey, partnerPubkey, message.createdAt,
+              (message.content ?? '').substring(0, 100), 'nip17'
+            ).catch(() => {})
           }
         } catch {
-          // Skip failed decryptions silently
+          // Skip
         }
       }
 
-      // Final update and cache all conversations
       updateAndShowConversations()
       const finalConversations = Array.from(conversationMap.values())
       Promise.all(
         finalConversations.map((conv) =>
           indexedDb.putDMConversation(
-            pubkey,
-            conv.partnerPubkey,
-            conv.lastMessageAt,
-            conv.lastMessagePreview,
-            conv.preferredEncryption
+            pubkey, conv.partnerPubkey, conv.lastMessageAt,
+            conv.lastMessagePreview, conv.preferredEncryption
           )
         )
       ).catch(() => {})
     } catch {
-      // Background refresh failed silently - cached data still shown
+      // Background refresh failed
     }
   }, [pubkey, encryption, relayList, deletedState, allConversations])
 
-  // Full refresh - fetches fresh data from network (manual action)
+  // Manual refresh
   const refreshConversations = useCallback(async () => {
     if (!pubkey || !encryption) return
 
@@ -490,21 +501,15 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
     setError(null)
 
     try {
-      // Get relay URLs
       const relayUrls = relayList?.read || []
-
-      // Fetch recent DM events (raw, not decrypted)
       const events = await dmService.fetchRecentDMEvents(pubkey, relayUrls)
 
-      // Separate NIP-04 events and gift wraps
       const nip04Events = events.filter((e) => e.kind === 4)
       const giftWraps = events.filter((e) => e.kind === 1059)
 
-      // Build conversation map from existing conversations (merge, don't replace)
       const conversationMap = new Map<string, TConversation>()
       allConversations.forEach((c) => conversationMap.set(c.partnerPubkey, c))
 
-      // Add NIP-04 conversations
       const nip04Convs = dmService.groupEventsIntoConversations(nip04Events, pubkey)
       nip04Convs.forEach((conv, key) => {
         const existing = conversationMap.get(key)
@@ -513,7 +518,6 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
         }
       })
 
-      // Show NIP-04 conversations immediately (filtered by deleted state)
       const updateAndShowConversations = () => {
         const validConversations = Array.from(conversationMap.values())
           .filter((conv) => conv.partnerPubkey && typeof conv.partnerPubkey === 'string')
@@ -527,63 +531,47 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
       }
 
       updateAndShowConversations()
-      setIsLoading(false) // Stop spinner, but continue processing in background
+      setIsLoading(false)
 
-      // Sort gift wraps by created_at descending (newest first)
       const sortedGiftWraps = giftWraps.sort((a, b) => b.created_at - a.created_at)
-
-      // Process gift wraps one by one in the background (progressive loading)
       for (const giftWrap of sortedGiftWraps) {
         try {
           const message = await dmService.decryptMessage(giftWrap, encryption, pubkey)
           if (message && message.senderPubkey && message.recipientPubkey) {
             const partnerPubkey =
               message.senderPubkey === pubkey ? message.recipientPubkey : message.senderPubkey
-
             if (!partnerPubkey || partnerPubkey === '__reaction__') continue
             if (isNircProtocolMessage(message.content ?? '')) continue
 
             const existing = conversationMap.get(partnerPubkey)
             if (!existing || message.createdAt > existing.lastMessageAt) {
-              const preview = (message.content ?? '').substring(0, 100)
               conversationMap.set(partnerPubkey, {
                 partnerPubkey,
                 lastMessageAt: message.createdAt,
-                lastMessagePreview: preview,
+                lastMessagePreview: (message.content ?? '').substring(0, 100),
                 unreadCount: 0,
                 preferredEncryption: 'nip17'
               })
-              // Update UI progressively
               updateAndShowConversations()
             }
 
-            // Cache conversation metadata
-            indexedDb
-              .putDMConversation(
-                pubkey,
-                partnerPubkey,
-                message.createdAt,
-                (message.content ?? '').substring(0, 100),
-                'nip17'
-              )
-              .catch(() => {})
+            indexedDb.putDMConversation(
+              pubkey, partnerPubkey, message.createdAt,
+              (message.content ?? '').substring(0, 100), 'nip17'
+            ).catch(() => {})
           }
         } catch {
-          // Skip failed decryptions silently
+          // Skip
         }
       }
 
-      // Final update and cache all conversations
       updateAndShowConversations()
       const finalConversations = Array.from(conversationMap.values())
       Promise.all(
         finalConversations.map((conv) =>
           indexedDb.putDMConversation(
-            pubkey,
-            conv.partnerPubkey,
-            conv.lastMessageAt,
-            conv.lastMessagePreview,
-            conv.preferredEncryption
+            pubkey, conv.partnerPubkey, conv.lastMessageAt,
+            conv.lastMessagePreview, conv.preferredEncryption
           )
         )
       ).catch(() => {})
@@ -595,7 +583,6 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
 
   const loadMoreConversations = useCallback(async () => {
     if (!hasMoreConversations) return
-
     const currentCount = conversations.length
     const nextBatch = allConversations.slice(currentCount, currentCount + CONVERSATIONS_PER_PAGE)
     setConversations((prev) => [...prev, ...nextBatch])
@@ -604,7 +591,6 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
 
   const selectConversation = useCallback(
     (partnerPubkey: string | null) => {
-      // Clear messages immediately to prevent showing old conversation
       if (partnerPubkey !== currentConversation) {
         setMessages([])
       }
@@ -613,19 +599,14 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
     [currentConversation]
   )
 
-  // Start a new conversation - marks it as new for UI effects (pulsing settings button)
-  // Creates a provisional conversation that appears in the list immediately
   const startConversation = useCallback(
     (partnerPubkey: string) => {
-      // Check if this is a new conversation (not in existing list)
       const existingConversation = allConversations.find(
         (c) => c.partnerPubkey === partnerPubkey
       )
       if (!existingConversation) {
         setIsNewConversation(true)
         setProvisionalPubkey(partnerPubkey)
-        // Add a provisional conversation to the list so it appears immediately
-        // Default to nip17 (modern encryption) to avoid dual-send on first message
         const provisionalConversation: TConversation = {
           partnerPubkey,
           lastMessageAt: Math.floor(Date.now() / 1000),
@@ -633,11 +614,9 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
           unreadCount: 0,
           preferredEncryption: 'nip17'
         }
-        // Add to front of both lists
         setAllConversations((prev) => [provisionalConversation, ...prev])
         setConversations((prev) => [provisionalConversation, ...prev])
       }
-      // Clear messages and select the conversation
       setMessages([])
       setCurrentConversation(partnerPubkey)
     },
@@ -648,138 +627,100 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
     setIsNewConversation(false)
   }, [])
 
-  // Dismiss a provisional conversation (remove from list without sending any messages)
   const dismissProvisionalConversation = useCallback(() => {
     if (!provisionalPubkey) return
-
-    // Remove from conversation lists
     setAllConversations((prev) => prev.filter((c) => c.partnerPubkey !== provisionalPubkey))
     setConversations((prev) => prev.filter((c) => c.partnerPubkey !== provisionalPubkey))
-
-    // Clear provisional state
     setProvisionalPubkey(null)
     setIsNewConversation(false)
-
-    // Deselect if this was the current conversation
     if (currentConversation === provisionalPubkey) {
       setCurrentConversation(null)
       setMessages([])
     }
   }, [provisionalPubkey, currentConversation])
 
-  // Reload the current conversation by clearing its cached state
   const reloadConversation = useCallback(() => {
     if (!currentConversation) return
-
-    // Clear the loaded state and cached messages for this conversation
-    setLoadedConversations((prev) => {
-      const next = new Set(prev)
-      next.delete(currentConversation)
-      return next
-    })
-    setConversationMessages((prev) => {
-      const next = new Map(prev)
-      next.delete(currentConversation)
-      return next
-    })
-    // Clear current messages to trigger a reload
     setMessages([])
+    setReloadTrigger((prev) => prev + 1)
   }, [currentConversation])
 
   const sendMessage = useCallback(
-    async (content: string, customRelayUrls?: string[]) => {
+    async (content: string, customRelayUrls?: string[], expirationSeconds?: number) => {
       if (!pubkey || !encryption || !currentConversation) {
         throw new Error('Cannot send message: not logged in or no conversation selected')
       }
 
-      // Use custom relays if provided, otherwise fall back to user's write relays
       const relayUrls = customRelayUrls && customRelayUrls.length > 0
         ? customRelayUrls
         : (relayList?.write || [])
 
-      // Find existing encryption type for this conversation
       const conversation = conversations.find((c) => c.partnerPubkey === currentConversation)
       const existingEncryptionType: TDMEncryptionType | null =
         conversation?.preferredEncryption ?? null
 
-      // Check for conversation-specific encryption preference
       const encryptionPref = await indexedDb.getConversationEncryptionPreference(
-        pubkey,
-        currentConversation
+        pubkey, currentConversation
       )
 
-      // Determine the encryption to use based on preference
       let effectiveEncryption: TDMEncryptionType | null = existingEncryptionType
-
       if (encryptionPref === 'nip04') {
         effectiveEncryption = 'nip04'
       } else if (encryptionPref === 'nip17') {
         effectiveEncryption = 'nip17'
       }
-      // 'auto' keeps the existing behavior (match conversation or send both)
 
-      // Send the message
+      // Read expiration preference from IndexedDB if not provided by caller
+      let effectiveExpiration = expirationSeconds ?? 0
+      if (effectiveExpiration === 0) {
+        effectiveExpiration = await indexedDb.getConversationExpirationPreference(
+          pubkey, currentConversation
+        )
+      }
+
       const sentEvents = await dmService.sendDM(
-        currentConversation,
-        content,
-        encryption,
-        relayUrls,
-        preferNip44,
-        effectiveEncryption
+        currentConversation, content, encryption, relayUrls, preferNip44, effectiveEncryption,
+        effectiveExpiration
       )
 
-      // Create local message for immediate display
       const now = Math.floor(Date.now() / 1000)
-      // Determine the actual encryption type used for the message
       const usedEncryptionType: TDMEncryptionType =
         effectiveEncryption || (preferNip44 ? 'nip17' : 'nip04')
+      const sentEvent = sentEvents[0]
+      const innerEventId = (sentEvent as any)?._innerEventId as string | undefined
       const newMessage: TDirectMessage = {
-        id: sentEvents[0]?.id || `local-${now}`,
+        id: sentEvent?.id || `local-${now}`,
+        innerEventId,
         senderPubkey: pubkey,
         recipientPubkey: currentConversation,
         content,
         createdAt: now,
         encryptionType: usedEncryptionType,
-        event: sentEvents[0] || ({} as Event),
+        event: sentEvent || ({} as Event),
         decryptedContent: content
       }
 
-      // Add to messages for this conversation
-      setConversationMessages((prev) => {
-        const existing = prev.get(currentConversation) || []
-        return new Map(prev).set(currentConversation, [...existing, newMessage])
-      })
       setMessages((prev) => [...prev, newMessage])
 
-      // Update conversation
       setConversations((prev) => {
         const existing = prev.find((c) => c.partnerPubkey === currentConversation)
         if (existing) {
           return prev.map((c) =>
             c.partnerPubkey === currentConversation
-              ? {
-                  ...c,
-                  lastMessageAt: now,
-                  lastMessagePreview: content.substring(0, 100),
-                  preferredEncryption: usedEncryptionType
-                }
+              ? { ...c, lastMessageAt: now, lastMessagePreview: content.substring(0, 100), preferredEncryption: usedEncryptionType }
               : c
           )
         } else {
-          return [
-            {
-              partnerPubkey: currentConversation,
-              lastMessageAt: now,
-              lastMessagePreview: content.substring(0, 100),
-              unreadCount: 0,
-              preferredEncryption: usedEncryptionType
-            },
-            ...prev
-          ]
+          return [{
+            partnerPubkey: currentConversation,
+            lastMessageAt: now,
+            lastMessagePreview: content.substring(0, 100),
+            unreadCount: 0,
+            preferredEncryption: usedEncryptionType
+          }, ...prev]
         }
       })
 
-      // Clear provisional state - conversation is now permanent
       if (provisionalPubkey === currentConversation) {
         setProvisionalPubkey(null)
         setIsNewConversation(false)
@@ -794,22 +735,15 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
     dispatchSettingsChanged()
   }, [])
 
-  // Selection mode methods
   const toggleMessageSelection = useCallback((messageId: string) => {
     setSelectedMessages((prev) => {
       const next = new Set(prev)
       if (next.has(messageId)) {
         next.delete(messageId)
-        // Exit selection mode if nothing selected
-        if (next.size === 0) {
-          setIsSelectionMode(false)
-        }
+        if (next.size === 0) setIsSelectionMode(false)
       } else {
         next.add(messageId)
-        // Enter selection mode when first message selected
-        if (!isSelectionMode) {
-          setIsSelectionMode(true)
-        }
+        if (!isSelectionMode) setIsSelectionMode(true)
       }
       return next
     })
@@ -826,15 +760,10 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
     setIsSelectionMode(false)
   }, [])
 
-  // Helper to publish deleted state to relays
   const publishDeletedState = useCallback(
     async (newState: TDMDeletedState) => {
       if (!pubkey || !encryption) return
-
-      // Save to IndexedDB
       await indexedDb.putDeletedMessagesState(pubkey, newState)
-
-      // Publish to relays
       const relayUrls = relayList?.write.length ? relayList.write : client.currentRelays
       const draftEvent = createDeletedMessagesDraftEvent(newState)
       const signedEvent = await encryption.signEvent(draftEvent)
@@ -843,114 +772,62 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
     [pubkey, encryption, relayList]
   )
 
-  // Delete selected messages (soft delete only - no kind 5, so undelete always works)
   const deleteSelectedMessages = useCallback(async () => {
     if (!pubkey || selectedMessages.size === 0) return
 
     const messageIds = Array.from(selectedMessages)
-
-    // Update deleted state
     const newDeletedState: TDMDeletedState = {
       deletedIds: [...(deletedState?.deletedIds || []), ...messageIds],
       deletedRanges: deletedState?.deletedRanges || {}
     }
     setDeletedState(newDeletedState)
-
-    // Remove from UI
     setMessages((prev) => prev.filter((m) => !selectedMessages.has(m.id)))
-    if (currentConversation) {
-      setConversationMessages((prev) => {
-        const existing = prev.get(currentConversation) || []
-        return new Map(prev).set(
-          currentConversation,
-          existing.filter((m) => !selectedMessages.has(m.id))
-        )
-      })
-    }
-
-    // Clear selection
     setSelectedMessages(new Set())
     setIsSelectionMode(false)
-
-    // Publish to relays
     await publishDeletedState(newDeletedState)
-  }, [pubkey, selectedMessages, deletedState, currentConversation, publishDeletedState])
+  }, [pubkey, selectedMessages, deletedState, publishDeletedState])
 
-  // Delete all messages in current conversation (timestamp range)
   const deleteAllInConversation = useCallback(async () => {
     if (!pubkey || !currentConversation) return
 
     const now = Math.floor(Date.now() / 1000)
-    const newRange = { start: 0, end: now }
-
-    // Update deleted state with new range
     const newDeletedState: TDMDeletedState = {
       deletedIds: deletedState?.deletedIds || [],
       deletedRanges: {
         ...(deletedState?.deletedRanges || {}),
         [currentConversation]: [
           ...(deletedState?.deletedRanges[currentConversation] || []),
-          newRange
+          { start: 0, end: now }
         ]
       }
     }
     setDeletedState(newDeletedState)
-
-    // Clear messages from UI
     setMessages([])
-    setConversationMessages((prev) => {
-      const next = new Map(prev)
-      next.delete(currentConversation)
-      return next
-    })
-
-    // Remove conversation from list
     setConversations((prev) => prev.filter((c) => c.partnerPubkey !== currentConversation))
     setAllConversations((prev) => prev.filter((c) => c.partnerPubkey !== currentConversation))
-
-    // Clear selection and close conversation
     setSelectedMessages(new Set())
     setIsSelectionMode(false)
     setCurrentConversation(null)
-
-    // Publish to relays
     await publishDeletedState(newDeletedState)
   }, [pubkey, currentConversation, deletedState, publishDeletedState])
 
-  // Undelete all messages in current conversation (remove delete markers)
   const undeleteAllInConversation = useCallback(async () => {
     if (!pubkey || !currentConversation) return
 
-    // Remove all delete markers for this conversation
     const newDeletedState: TDMDeletedState = {
       deletedIds: deletedState?.deletedIds || [],
       deletedRanges: {
         ...(deletedState?.deletedRanges || {}),
-        [currentConversation]: [] // Clear all ranges for this conversation
+        [currentConversation]: []
       }
     }
     setDeletedState(newDeletedState)
-
-    // Clear cached messages to force reload
-    setConversationMessages((prev) => {
-      const next = new Map(prev)
-      next.delete(currentConversation)
-      return next
-    })
-    setLoadedConversations((prev) => {
-      const next = new Set(prev)
-      next.delete(currentConversation)
-      return next
-    })
-
-    // Publish to relays
+    setMessages([])
+    setReloadTrigger((prev) => prev + 1)
     await publishDeletedState(newDeletedState)
-
-    // Trigger a background refresh of conversations
     await backgroundRefreshConversations()
   }, [pubkey, currentConversation, deletedState, publishDeletedState, backgroundRefreshConversations])
 
-  // Filter out deleted conversations from the list
   const filteredConversations = useMemo(() => {
     if (!deletedState) return conversations
     return conversations.filter(
@@ -958,34 +835,24 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
     )
   }, [conversations, deletedState])
 
-  // Calculate total unread count across all conversations
   const totalUnreadCount = useMemo(() => {
     return filteredConversations.reduce((sum, c) => sum + c.unreadCount, 0)
   }, [filteredConversations])
 
-  // Check if there are new messages since last seen
   const newestMessageTimestamp = useMemo(() => {
     const fromConversations = filteredConversations.length === 0
       ? 0
       : Math.max(...filteredConversations.map((c) => c.lastMessageAt))
-    // Also consider real-time incoming messages
     return Math.max(fromConversations, newestIncomingTimestamp)
   }, [filteredConversations, newestIncomingTimestamp])
 
-  // Only show notification dot if:
-  // 1. User has a saved lastSeenTimestamp AND there are newer messages
-  // 2. OR we received a real-time message during this session (newestIncomingTimestamp > 0)
-  // This prevents the dot from appearing on first load when lastSeenTimestamp is 0
   const hasNewMessages = lastSeenTimestamp > 0
     ? newestMessageTimestamp > lastSeenTimestamp
     : newestIncomingTimestamp > 0
 
-  // Mark inbox as seen (update last seen timestamp)
   const markInboxAsSeen = useCallback(() => {
     if (!pubkey) return
-    // Always clear incoming timestamp first to remove notification dot
     setNewestIncomingTimestamp(0)
-    // Only update storage if we have a valid timestamp
     if (newestMessageTimestamp > 0) {
       setLastSeenTimestamp(newestMessageTimestamp)
       storage.setDMLastSeenTimestamp(pubkey, newestMessageTimestamp)
@@ -1013,17 +880,14 @@ export function DMProvider({ children }: { children: React.ReactNode }) {
         isNewConversation,
         clearNewConversationFlag,
         dismissProvisionalConversation,
-        // Unread tracking
         totalUnreadCount,
         hasNewMessages,
         markInboxAsSeen,
-        // Selection mode
         selectedMessages,
         isSelectionMode,
         toggleMessageSelection,
         selectAllMessages,
         clearSelection,
-        // Deletion
         deleteSelectedMessages,
         deleteAllInConversation,
         undeleteAllInConversation

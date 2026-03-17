@@ -9,12 +9,13 @@ import PubkeyCopy from '@/components/PubkeyCopy'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useFetchFollowings, useFetchProfile } from '@/hooks'
-import { toMuteList, toProfileEditor } from '@/lib/link'
+import { toDMConversation, toMuteList, toProfileEditor } from '@/lib/link'
 import { SecondaryPageLink, useSecondaryPage } from '@/PageManager'
+import { useDM } from '@/providers/DMProvider'
 import { useMuteList } from '@/providers/MuteListProvider'
 import { useNostr } from '@/providers/NostrProvider'
 import client from '@/services/client.service'
-import { Link, Zap } from 'lucide-react'
+import { Link, Mail, Zap } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import NotFound from '../NotFound'
@@ -34,6 +35,7 @@ export default function Profile({ id }: { id?: string }) {
   const { push } = useSecondaryPage()
   const { profile, isFetching } = useFetchProfile(id)
   const { pubkey: accountPubkey } = useNostr()
+  const { startConversation } = useDM()
   const { mutePubkeySet } = useMuteList()
   const [searchInput, setSearchInput] = useState('')
   const [debouncedInput, setDebouncedInput] = useState(searchInput)
@@ -133,6 +135,18 @@ export default function Profile({ id }: { id?: string }) {
               </Button>
             ) : (
               <>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="rounded-full size-9"
+                  onClick={() => {
+                    startConversation(pubkey)
+                    push(toDMConversation(pubkey))
+                  }}
+                  title={t('Message')}
+                >
+                  <Mail className="size-4" />
+                </Button>
                 {!!lightningAddress && <ProfileZapButton pubkey={pubkey} />}
                 <SpecialFollowButton pubkey={pubkey} />
                 <FollowButton pubkey={pubkey} />

@@ -1646,7 +1646,7 @@ func (s *Server) updatePeerAdminACL(peerPubkey []byte) {
 func (s *Server) InitEventServices() {
 	// Initialize validation service
 	s.eventValidator = validation.NewWithConfig(&validation.Config{
-		MaxFutureSeconds: 3600, // 1 hour
+		MaxFutureSeconds: 10800, // 3 hours
 	})
 
 	// Initialize authorization service

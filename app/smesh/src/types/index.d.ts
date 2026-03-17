@@ -275,6 +275,7 @@ export interface TConversation {
 
 export interface TDirectMessage {
   id: string
+  innerEventId?: string
   senderPubkey: string
   recipientPubkey: string
   content: string

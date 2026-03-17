@@ -394,6 +394,10 @@ class LocalStorageService {
   removeAccount(account: TAccount) {
     this.accounts = this.accounts.filter((act) => !isSameAccount(act, account))
     window.localStorage.setItem(StorageKey.ACCOUNTS, JSON.stringify(this.accounts))
+    if (isSameAccount(this.currentAccount, account)) {
+      this.currentAccount = null
+      window.localStorage.removeItem(StorageKey.CURRENT_ACCOUNT)
+    }
     return this.accounts
   }
 

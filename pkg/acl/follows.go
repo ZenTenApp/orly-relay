@@ -473,10 +473,17 @@ func (f *Follows) startPeriodicFollowListFetching() {
 
 	log.D.F("starting periodic follow list fetching every %v", frequency)
 
+	// Delay initial fetch to allow relay to start accepting connections.
+	// The persisted follow list is already loaded, so this is safe.
+	select {
+	case <-time.After(15 * time.Second):
+	case <-f.Ctx.Done():
+		return
+	}
+
 	ticker := time.NewTicker(frequency)
 	defer ticker.Stop()
 
-	// Fetch immediately on startup
 	f.fetchAdminFollowLists()
 
 	for {

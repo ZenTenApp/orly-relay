@@ -83,7 +83,8 @@ func Run(
 	}
 	// start listener
 	channelMembership := NewChannelMembership(db)
-	dmLimiter := NewDMRateLimiter(db)
+	// DM rate limiter disabled — users can mute unwanted senders.
+	// dmLimiter := NewDMRateLimiter(db)
 	wsPublisher := NewPublisher(ctx)
 	wsPublisher.ChannelMembership = channelMembership
 
@@ -100,7 +101,7 @@ func Run(
 		connPerIP:         make(map[string]int),
 		aclRegistry:       acl.Registry, // Inject ACL registry (transitional from global)
 		channelMembership:         channelMembership,
-		dmRateLimiter:             dmLimiter,
+		dmRateLimiter:             nil,
 		negentropyFullSyncPubkeys: parseNegentropyFullSyncPubkeys(cfg.NegentropyFullSyncPubkeys),
 	}
 
@@ -607,7 +608,7 @@ func Run(
 	}
 
 	// Initialize Nostr-Email bridge if enabled
-	bridgeEnabled, bridgeDomain, bridgeNSEC, bridgeRelayURL,
+	bridgeEnabled, bridgeDomain, bridgeNSEC, bridgeRelayURL, bridgePublicRelayURL,
 		bridgeSMTPPort, bridgeSMTPHost, bridgeDataDir,
 		bridgeDKIMKeyPath, bridgeDKIMSelector,
 		bridgeNWCURI, bridgeMonthlyPriceSats, bridgeComposeURL,
@@ -620,6 +621,7 @@ func Run(
 			Domain:            bridgeDomain,
 			NSEC:              bridgeNSEC,
 			RelayURL:          bridgeRelayURL,
+			PublicRelayURL:    bridgePublicRelayURL,
 			SMTPPort:          bridgeSMTPPort,
 			SMTPHost:          bridgeSMTPHost,
 			DataDir:           bridgeDataDir,

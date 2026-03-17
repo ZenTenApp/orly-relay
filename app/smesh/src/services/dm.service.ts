@@ -10,7 +10,6 @@ import { TConversation, TDirectMessage, TDMDeletedState, TDMEncryptionType, TDra
 import { Event, kinds, VerifiedEvent } from 'nostr-tools'
 import client from './client.service'
 import indexedDb from './indexed-db.service'
-import storage from './local-storage.service'
 
 /** Check if a DM is an NIRC protocol message that should be hidden from the inbox */
 export function isNircProtocolMessage(content: string): boolean {
@@ -292,7 +291,17 @@ class DMService {
         const otherPubkey = this.getOtherPartyPubkey(event, myPubkey)
         if (!otherPubkey) return null
 
-        const decryptedContent = await encryption.nip04Decrypt(otherPubkey, event.content)
+        let decryptedContent: string
+        try {
+          decryptedContent = await encryption.nip04Decrypt(otherPubkey, event.content)
+        } catch {
+          // NIP-04 failed — try NIP-44 fallback (some relays/bridges use NIP-44 on kind 4)
+          if (encryption.nip44Decrypt) {
+            decryptedContent = await encryption.nip44Decrypt(otherPubkey, event.content)
+          } else {
+            throw new Error('NIP-04 decrypt failed and no NIP-44 support')
+          }
+        }
 
         // Cache in both layers
         setCachedPlaintext(event.id, decryptedContent)
@@ -303,17 +312,18 @@ class DMService {
         // NIP-17 - check in-memory cache first
         const memCached = getCachedPlaintext(event.id)
         if (memCached) {
-          // Stored as JSON: {s: senderPubkey, r: recipientPubkey, c: content}
+          // Stored as JSON: {s: senderPubkey, r: recipientPubkey, c: content, t: innerTimestamp, i: innerEventId}
           try {
-            const parsed = JSON.parse(memCached) as { s: string; r: string; c: string }
+            const parsed = JSON.parse(memCached) as { s: string; r: string; c: string; t?: number; i?: string }
             if (parsed.r === '__reaction__') return null
             const seenOnRelays = client.getSeenEventRelayUrls(event.id)
             return {
               id: event.id,
+              innerEventId: parsed.i,
               senderPubkey: parsed.s,
               recipientPubkey: parsed.r,
               content: parsed.c,
-              createdAt: event.created_at,
+              createdAt: parsed.t ?? event.created_at,
               encryptionType: 'nip17',
               event,
               decryptedContent: parsed.c,
@@ -331,11 +341,12 @@ class DMService {
           if (cachedUnwrapped.recipientPubkey === '__reaction__') {
             return null
           }
-          // Populate in-memory cache
-          setCachedPlaintext(event.id, JSON.stringify({ s: cachedUnwrapped.pubkey, r: cachedUnwrapped.recipientPubkey, c: cachedUnwrapped.content }))
+          // Populate in-memory cache (include inner timestamp + inner event ID)
+          setCachedPlaintext(event.id, JSON.stringify({ s: cachedUnwrapped.pubkey, r: cachedUnwrapped.recipientPubkey, c: cachedUnwrapped.content, t: cachedUnwrapped.createdAt, i: cachedUnwrapped.innerEventId }))
           const seenOnRelays = client.getSeenEventRelayUrls(event.id)
           return {
             id: event.id,
+            innerEventId: cachedUnwrapped.innerEventId,
             senderPubkey: cachedUnwrapped.pubkey,
             recipientPubkey: cachedUnwrapped.recipientPubkey,
             content: cachedUnwrapped.content,
@@ -371,21 +382,24 @@ class DMService {
         }
 
         const recipientPubkey = this.getRecipientFromTags(innerEvent.tags) || myPubkey
+        const innerEventId = innerEvent.id
 
-        // Cache in both layers
-        setCachedPlaintext(event.id, JSON.stringify({ s: innerEvent.pubkey, r: recipientPubkey, c: unwrapped.content }))
+        // Cache in both layers (include inner timestamp + inner event ID for dedup)
+        setCachedPlaintext(event.id, JSON.stringify({ s: innerEvent.pubkey, r: recipientPubkey, c: unwrapped.content, t: innerEvent.created_at, i: innerEventId }))
         indexedDb
           .putUnwrappedGiftWrap(event.id, {
             pubkey: innerEvent.pubkey,
             recipientPubkey,
             content: unwrapped.content,
-            createdAt: innerEvent.created_at
+            createdAt: innerEvent.created_at,
+            innerEventId
           })
           .catch(() => {})
 
         const seenOnRelays = client.getSeenEventRelayUrls(event.id)
         return {
           id: event.id,
+          innerEventId,
           senderPubkey: innerEvent.pubkey,
           recipientPubkey,
           content: unwrapped.content,
@@ -399,13 +413,8 @@ class DMService {
         return null
       }
     } catch (error) {
-      if (storage.getVerboseLogging()) {
-        console.warn('[DM] Gift wrap decryption failed:', {
-          eventId: event.id,
-          created_at: event.created_at,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        })
-      }
+      console.warn('[DM] decryptMessage failed:', event.id,
+        error instanceof Error ? error.message : 'Unknown error')
       return null
     }
   }
@@ -451,12 +460,8 @@ class DMService {
         return null
       }
     } catch (error) {
-      if (storage.getVerboseLogging()) {
-        console.warn('[DM] unwrapGiftWrap failed:', {
-          giftWrapId: giftWrap.id,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        })
-      }
+      console.warn('[DM] unwrapGiftWrap failed:', giftWrap.id,
+        error instanceof Error ? error.message : 'Unknown error')
       return null
     }
   }
@@ -490,6 +495,7 @@ class DMService {
   /**
    * Send a DM to a recipient
    * When no existing conversation, sends in BOTH formats (NIP-04 and NIP-17)
+   * expirationSeconds: optional TTL in seconds (0 = no expiration)
    */
   async sendDM(
     recipientPubkey: string,
@@ -497,7 +503,8 @@ class DMService {
     encryption: IDMEncryption,
     relayUrls: string[],
     _preferNip44: boolean,
-    existingEncryption: TDMEncryptionType | null
+    existingEncryption: TDMEncryptionType | null,
+    expirationSeconds: number = 0
   ): Promise<Event[]> {
     const sentEvents: Event[] = []
 
@@ -509,35 +516,50 @@ class DMService {
       this.fetchPartnerRelays(recipientPubkey)
     ])
     const allRelays = [...new Set([...relayUrls, ...recipientWriteRelays])]
-    const inboxRelays = [...new Set([...relayUrls, ...recipientInboxRelays])]
+    // NIP-17: send only to recipient's inbox relays, not sender's general relays
+    const inboxRelays = recipientInboxRelays.length > 0
+      ? recipientInboxRelays
+      : relayUrls // last resort fallback
+
+    console.log('[DM] sendDM to', recipientPubkey.slice(0, 8) + '...')
+    console.log('[DM] existingEncryption:', existingEncryption)
+    console.log('[DM] user relays:', relayUrls)
+    console.log('[DM] recipient inbox relays:', recipientInboxRelays)
+    console.log('[DM] recipient write relays:', recipientWriteRelays)
+    console.log('[DM] merged allRelays (NIP-04):', allRelays)
+    console.log('[DM] inboxRelays (NIP-17):', inboxRelays)
 
     if (existingEncryption === null) {
-      // No existing conversation - send in BOTH formats
-      try {
-        const nip04Event = await this.createAndPublishNip04DM(
-          recipientPubkey,
-          content,
-          encryption,
-          allRelays
-        )
-        sentEvents.push(nip04Event)
-      } catch (error) {
-        console.error('Failed to send NIP-04 DM:', error)
-      }
-
-      try {
-        if (encryption.nip44Encrypt) {
-          // Use inbox relays for NIP-17 delivery
+      // No existing conversation — prefer NIP-17 if available, NIP-04 as fallback (never both)
+      if (encryption.nip44Encrypt) {
+        try {
           const nip17Event = await this.createAndPublishNip17DM(
             recipientPubkey,
             content,
             encryption,
-            inboxRelays
+            inboxRelays,
+            relayUrls,
+            expirationSeconds
           )
           sentEvents.push(nip17Event)
+        } catch (error) {
+          console.error('Failed to send NIP-17 DM:', error)
+          throw error
         }
-      } catch (error) {
-        console.error('Failed to send NIP-17 DM:', error)
+      } else {
+        try {
+          const nip04Event = await this.createAndPublishNip04DM(
+            recipientPubkey,
+            content,
+            encryption,
+            allRelays,
+            expirationSeconds
+          )
+          sentEvents.push(nip04Event)
+        } catch (error) {
+          console.error('Failed to send NIP-04 DM:', error)
+          throw error
+        }
       }
     } else if (existingEncryption === 'nip04') {
       // Match existing NIP-04 encryption
@@ -546,7 +568,8 @@ class DMService {
           recipientPubkey,
           content,
           encryption,
-          allRelays
+          allRelays,
+          expirationSeconds
         )
         sentEvents.push(nip04Event)
       } catch (error) {
@@ -554,7 +577,7 @@ class DMService {
         throw error // Re-throw so caller knows it failed
       }
     } else if (existingEncryption === 'nip17') {
-      // Match existing NIP-17 encryption - use inbox relays
+      // Match existing NIP-17 encryption - use inbox relays for recipient, sender relays for self
       if (!encryption.nip44Encrypt) {
         throw new Error('Encryption does not support NIP-44')
       }
@@ -563,7 +586,9 @@ class DMService {
           recipientPubkey,
           content,
           encryption,
-          inboxRelays
+          inboxRelays,
+          relayUrls,
+          expirationSeconds
         )
         sentEvents.push(nip17Event)
       } catch (error) {
@@ -582,15 +607,21 @@ class DMService {
     recipientPubkey: string,
     content: string,
     encryption: IDMEncryption,
-    relayUrls: string[]
+    relayUrls: string[],
+    expirationSeconds: number = 0
   ): Promise<VerifiedEvent> {
     const encryptedContent = await encryption.nip04Encrypt(recipientPubkey, content)
+    const now = Math.floor(Date.now() / 1000)
+    const tags: string[][] = [['p', recipientPubkey]]
+    if (expirationSeconds > 0) {
+      tags.push(['expiration', String(now + expirationSeconds)])
+    }
 
     const draftEvent: TDraftEvent = {
       kind: KIND_ENCRYPTED_DM,
-      created_at: Math.floor(Date.now() / 1000),
+      created_at: now,
       content: encryptedContent,
-      tags: [['p', recipientPubkey]]
+      tags
     }
 
     const signedEvent = await encryption.signEvent(draftEvent)
@@ -602,66 +633,117 @@ class DMService {
   }
 
   /**
-   * Create and publish a NIP-17 DM with gift wrapping (kind 14 -> 13 -> 1059)
+   * Create and publish a NIP-17 DM with gift wrapping (kind 14 -> 13 -> 1059).
+   * Publishes two gift wraps: one for the recipient and one self-addressed copy
+   * so the sender can recover sent messages from relays.
    */
   private async createAndPublishNip17DM(
     recipientPubkey: string,
     content: string,
     encryption: IDMEncryption,
-    relayUrls: string[]
+    recipientRelayUrls: string[],
+    senderRelayUrls: string[],
+    expirationSeconds: number = 0
   ): Promise<VerifiedEvent> {
     if (!encryption.nip44Encrypt) {
       throw new Error('Encryption does not support NIP-44')
     }
 
-    // Note: senderPubkey is determined by the signer when signing the event
+    const senderPubkey = encryption.getPublicKey()
+    const now = Math.floor(Date.now() / 1000)
+    const expirationTag = expirationSeconds > 0
+      ? ['expiration', String(now + expirationSeconds)]
+      : null
 
-    // Step 1: Create the inner chat message (kind 14)
+    // Step 1: Create the inner chat message (kind 14) — shared by both wraps
+    const innerTags: string[][] = [['p', recipientPubkey]]
+    if (expirationTag) innerTags.push(expirationTag)
     const chatMessage: TDraftEvent = {
       kind: KIND_PRIVATE_DM,
-      created_at: Math.floor(Date.now() / 1000),
+      created_at: now,
       content,
-      tags: [['p', recipientPubkey]]
+      tags: innerTags
     }
-
-    // Step 2: Sign the chat message
     const signedChat = await encryption.signEvent(chatMessage)
+    const signedChatJSON = JSON.stringify(signedChat)
 
-    // Step 3: Create a seal (kind 13) containing the encrypted chat message
-    const sealContent = await encryption.nip44Encrypt(recipientPubkey, JSON.stringify(signedChat))
-    const seal: TDraftEvent = {
+    // --- Recipient path ---
+
+    // Seal encrypted with (sender_secret, recipient_pubkey)
+    const recipientSealContent = await encryption.nip44Encrypt(recipientPubkey, signedChatJSON)
+    const recipientSeal: TDraftEvent = {
       kind: KIND_SEAL,
       created_at: this.randomizeTimestamp(signedChat.created_at),
-      content: sealContent,
+      content: recipientSealContent,
       tags: []
     }
-    const signedSeal = await encryption.signEvent(seal)
+    const signedRecipientSeal = await encryption.signEvent(recipientSeal)
 
-    // Step 4: Create a gift wrap (kind 1059) with random sender key
-    // For simplicity, we'll use the same encryption but in production you'd use a random key
-    const giftWrapContent = await encryption.nip44Encrypt(recipientPubkey, JSON.stringify(signedSeal))
-    const giftWrap: TDraftEvent = {
+    // Gift wrap for recipient (expiration on outer lets relays GC)
+    const recipientWrapContent = await encryption.nip44Encrypt(recipientPubkey, JSON.stringify(signedRecipientSeal))
+    const recipientWrapTags: string[][] = [['p', recipientPubkey]]
+    if (expirationTag) recipientWrapTags.push(expirationTag)
+    const recipientGiftWrap: TDraftEvent = {
       kind: KIND_GIFT_WRAP,
-      created_at: this.randomizeTimestamp(signedSeal.created_at),
-      content: giftWrapContent,
-      tags: [['p', recipientPubkey]]
+      created_at: this.randomizeTimestamp(signedRecipientSeal.created_at),
+      content: recipientWrapContent,
+      tags: recipientWrapTags
     }
-    const signedGiftWrap = await encryption.signEvent(giftWrap)
+    const signedRecipientWrap = await encryption.signEvent(recipientGiftWrap)
 
-    // Publish the gift wrap
-    await client.publishEvent(relayUrls, signedGiftWrap)
-    await indexedDb.putDMEvent(signedGiftWrap)
-    await indexedDb.putDecryptedContent(signedGiftWrap.id, content)
+    // --- Sender (self) path ---
 
-    return signedGiftWrap
+    // Seal encrypted with (sender_secret, sender_pubkey)
+    const senderSealContent = await encryption.nip44Encrypt(senderPubkey, signedChatJSON)
+    const senderSeal: TDraftEvent = {
+      kind: KIND_SEAL,
+      created_at: this.randomizeTimestamp(signedChat.created_at),
+      content: senderSealContent,
+      tags: []
+    }
+    const signedSenderSeal = await encryption.signEvent(senderSeal)
+
+    // Gift wrap for sender
+    const senderWrapContent = await encryption.nip44Encrypt(senderPubkey, JSON.stringify(signedSenderSeal))
+    const senderWrapTags: string[][] = [['p', senderPubkey]]
+    if (expirationTag) senderWrapTags.push(expirationTag)
+    const senderGiftWrap: TDraftEvent = {
+      kind: KIND_GIFT_WRAP,
+      created_at: this.randomizeTimestamp(signedSenderSeal.created_at),
+      content: senderWrapContent,
+      tags: senderWrapTags
+    }
+    const signedSenderWrap = await encryption.signEvent(senderGiftWrap)
+
+    // Publish both copies
+    await client.publishEvent(recipientRelayUrls, signedRecipientWrap)
+    await client.publishEvent(senderRelayUrls, signedSenderWrap)
+
+    // Cache both wraps in IndexedDB, including inner event ID for dedup
+    const innerEventId = signedChat.id
+    await indexedDb.putDMEvent(signedRecipientWrap)
+    await indexedDb.putDecryptedContent(signedRecipientWrap.id, content)
+    await indexedDb.putUnwrappedGiftWrap(signedRecipientWrap.id, {
+      pubkey: senderPubkey, recipientPubkey, content, createdAt: now, innerEventId
+    })
+    await indexedDb.putDMEvent(signedSenderWrap)
+    await indexedDb.putDecryptedContent(signedSenderWrap.id, content)
+    await indexedDb.putUnwrappedGiftWrap(signedSenderWrap.id, {
+      pubkey: senderPubkey, recipientPubkey, content, createdAt: now, innerEventId
+    })
+
+    // Attach innerEventId to the returned event for optimistic dedup
+    ;(signedRecipientWrap as any)._innerEventId = innerEventId
+
+    return signedRecipientWrap
   }
 
   /**
    * Randomize timestamp for privacy (NIP-59)
    */
   private randomizeTimestamp(baseTime: number): number {
-    // Add random offset between -2 days and +2 days
-    const offset = Math.floor(Math.random() * 4 * 24 * 60 * 60) - 2 * 24 * 60 * 60
+    // Random offset between 0 and -2 days (never future, per NIP-59)
+    const offset = -Math.floor(Math.random() * 2 * 24 * 60 * 60)
     return baseTime + offset
   }
 
@@ -708,31 +790,46 @@ class DMService {
    */
   async fetchPartnerInboxRelays(pubkey: string): Promise<string[]> {
     try {
-      // Try to get relay list from IndexedDB first
-      const cachedEvent = await indexedDb.getReplaceableEvent(pubkey, kinds.RelayList)
-      if (cachedEvent) {
-        return this.parseInboxRelays(cachedEvent)
+      // 1. Try kind 10050 (NIP-17 DM inbox relays) from cache
+      const cached10050 = await indexedDb.getReplaceableEvent(pubkey, kinds.DirectMessageRelaysList)
+      if (cached10050) {
+        const parsed = this.parseDMInboxRelays(cached10050)
+        if (parsed.length > 0) return parsed
       }
 
-      // Fetch from user's current relays (not hardcoded relays)
+      // 2. Try kind 10002 (general relay list) from cache as fallback
+      const cached10002 = await indexedDb.getReplaceableEvent(pubkey, kinds.RelayList)
+      if (cached10002) {
+        const parsed = this.parseInboxRelays(cached10002)
+        if (parsed.length > 0) return parsed
+      }
+
+      // 3. Fetch both from network
       const relays = client.currentRelays.length > 0 ? client.currentRelays : []
-      if (relays.length === 0) {
-        return client.currentRelays // Fall back to user's relays
-      }
+      if (relays.length === 0) return client.currentRelays
 
-      const relayListEvents = await client.fetchEvents(relays, {
-        kinds: [kinds.RelayList],
+      const events = await client.fetchEvents(relays, {
+        kinds: [kinds.DirectMessageRelaysList, kinds.RelayList],
         authors: [pubkey],
-        limit: 1
+        limit: 2
       })
 
-      if (relayListEvents.length > 0) {
-        const event = relayListEvents[0]
-        await indexedDb.putReplaceableEvent(event)
-        return this.parseInboxRelays(event)
+      let inbox10050: string[] = []
+      let inbox10002: string[] = []
+
+      for (const ev of events) {
+        await indexedDb.putReplaceableEvent(ev)
+        if (ev.kind === kinds.DirectMessageRelaysList) {
+          inbox10050 = this.parseDMInboxRelays(ev)
+        } else if (ev.kind === kinds.RelayList) {
+          inbox10002 = this.parseInboxRelays(ev)
+        }
       }
 
-      // Fallback to user's current relays
+      // Prefer 10050 over 10002
+      if (inbox10050.length > 0) return inbox10050
+      if (inbox10002.length > 0) return inbox10002
+
       return client.currentRelays
     } catch {
       return client.currentRelays
@@ -764,6 +861,20 @@ class DMService {
    * Parse inbox (read) relays from kind 10002 event
    * These are where the user receives DMs
    */
+  /**
+   * Parse relay URLs from a kind 10050 DM inbox relay list event.
+   * NIP-17: tags are ["relay", "wss://..."]
+   */
+  private parseDMInboxRelays(event: Event): string[] {
+    const relays: string[] = []
+    for (const tag of event.tags) {
+      if (tag[0] === 'relay' && tag[1]) {
+        relays.push(tag[1])
+      }
+    }
+    return relays
+  }
+
   private parseInboxRelays(event: Event): string[] {
     const inboxRelays: string[] = []
 
@@ -951,10 +1062,13 @@ class DMService {
       }
     )
 
-    // Subscribe to NIP-17 gift wraps (kind 1059) addressed to user
+    // Subscribe to NIP-17 gift wraps (kind 1059) addressed to user.
+    // NIP-59 randomizes outer timestamps up to 2 days in the past,
+    // so subtract 3 days to avoid missing fresh replies.
+    const giftWrapSince = since - (3 * 24 * 60 * 60)
     const giftWrapSub = client.subscribe(
       allRelays,
-      { kinds: [KIND_GIFT_WRAP], '#p': [pubkey], since },
+      { kinds: [KIND_GIFT_WRAP], '#p': [pubkey], since: giftWrapSince },
       {
         onevent: (event) => {
           indexedDb.putDMEvent(event).catch(() => {})

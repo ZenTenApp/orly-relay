@@ -289,6 +289,7 @@ type C struct {
 	BridgeDomain  string `env:"ORLY_BRIDGE_DOMAIN" usage:"email domain for the bridge (e.g., relay.example.com)"`
 	BridgeNSEC    string `env:"ORLY_BRIDGE_NSEC" usage:"bridge identity nsec (default: use relay identity from database)"`
 	BridgeRelayURL string `env:"ORLY_BRIDGE_RELAY_URL" usage:"WebSocket relay URL for standalone mode (e.g., wss://relay.example.com)"`
+	BridgePublicRelayURL string `env:"ORLY_BRIDGE_PUBLIC_RELAY_URL" usage:"public wss:// URL for relay list events (e.g., wss://relay.example.com)"`
 	BridgeSMTPPort int    `env:"ORLY_BRIDGE_SMTP_PORT" default:"2525" usage:"SMTP server listen port"`
 	BridgeSMTPHost string `env:"ORLY_BRIDGE_SMTP_HOST" default:"0.0.0.0" usage:"SMTP server listen address"`
 	BridgeDataDir  string `env:"ORLY_BRIDGE_DATA_DIR" usage:"bridge data directory (default: $ORLY_DATA_DIR/bridge)"`
@@ -1039,6 +1040,7 @@ func (cfg *C) GetBridgeConfigValues() (
 	domain string,
 	nsec string,
 	relayURL string,
+	publicRelayURL string,
 	smtpPort int,
 	smtpHost string,
 	dataDir string,
@@ -1068,6 +1070,7 @@ func (cfg *C) GetBridgeConfigValues() (
 		cfg.BridgeDomain,
 		cfg.BridgeNSEC,
 		cfg.BridgeRelayURL,
+		cfg.BridgePublicRelayURL,
 		cfg.BridgeSMTPPort,
 		cfg.BridgeSMTPHost,
 		dataDir,

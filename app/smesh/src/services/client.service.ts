@@ -45,8 +45,7 @@ const BOOTSTRAP_RELAYS = DEPLOYMENT.defaultRelay
       'wss://relay.orly.dev/',
       'wss://relay.damus.io/',
       'wss://relay.nostr.band/',
-      'wss://nos.lol/',
-      'wss://nostr.wine/'
+      'wss://nos.lol/'
     ]
 
 type TTimelineRef = [string, number]

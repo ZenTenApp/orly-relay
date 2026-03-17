@@ -20,7 +20,6 @@ const BOOTSTRAP_RELAYS = DEPLOYMENT.defaultRelay
       'wss://relay.damus.io/',
       'wss://relay.nostr.band/',
       'wss://nos.lol/',
-      'wss://nostr.wine/',
       'wss://relay.snort.social/',
       'wss://purplepag.es/'
     ]

@@ -196,10 +196,10 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		}
 	}
 
-	// Privileged kinds (DMs, gift-wrap, seals, channels, etc.) always require
-	// authentication regardless of ACL mode. Discoverable channel kinds (40, 41)
+	// Privileged kinds (DMs, gift-wrap, seals, channels, etc.) require
+	// authentication when auth is enabled. Discoverable channel kinds (40, 41)
 	// are exempt since they're needed for channel listing.
-	if len(l.authedPubkey.Load()) == 0 {
+	if l.Config.AuthRequired && len(l.authedPubkey.Load()) == 0 {
 		hasPrivilegedKinds := false
 		for _, f := range *env.Filters {
 			if f != nil && f.Kinds != nil {
@@ -579,9 +579,9 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		}
 
 		// Filter privileged events based on kind.
-		// Privileged kinds always require auth and party-involvement checks,
-		// regardless of ACL mode. This protects DM metadata even on open relays.
-		if kind.IsPrivileged(ev.Kind) && accessLevel != "admin" {
+		// When auth is required, privileged kinds need party-involvement checks
+		// to protect DM metadata.
+		if l.Config.AuthRequired && kind.IsPrivileged(ev.Kind) && accessLevel != "admin" {
 			log.T.C(
 				func() string {
 					return fmt.Sprintf(

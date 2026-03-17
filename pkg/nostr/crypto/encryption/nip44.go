@@ -203,6 +203,36 @@ func GenerateConversationKey(
 	return
 }
 
+// GenerateNip4Key computes the raw ECDH shared secret for NIP-04 decryption.
+// This is the x-coordinate of the ECDH point, without the HKDF step used by NIP-44.
+func GenerateNip4Key(sendPrivkey, recvPubkey []byte) (sharedKey []byte, err error) {
+	var privKey secp256k1.SecretKey
+	if overflow := privKey.Key.SetByteSlice(sendPrivkey); overflow {
+		return nil, errorf.E("invalid private key")
+	}
+	if privKey.Key.IsZero() {
+		return nil, errorf.E("invalid private key: zero")
+	}
+
+	var pubKeyBytes []byte
+	if len(recvPubkey) == 32 {
+		pubKeyBytes = make([]byte, 33)
+		pubKeyBytes[0] = secp256k1.PubKeyFormatCompressedEven
+		copy(pubKeyBytes[1:], recvPubkey)
+	} else if len(recvPubkey) == 33 {
+		pubKeyBytes = recvPubkey
+	} else {
+		return nil, errorf.E("invalid public key length: %d", len(recvPubkey))
+	}
+
+	pubKey, err := secp256k1.ParsePubKey(pubKeyBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return secp256k1.GenerateSharedSecret(&privKey, pubKey), nil
+}
+
 func chacha20_(key []byte, nonce []byte, message []byte) ([]byte, error) {
 	var (
 		cipher *chacha20.Cipher

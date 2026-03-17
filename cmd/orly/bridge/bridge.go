@@ -40,7 +40,7 @@ func Run(args []string) {
 	log.I.F("starting bridge %s", version.V)
 
 	// Extract bridge-specific config
-	enabled, domain, nsec, relayURL, smtpPort, smtpHost,
+	enabled, domain, nsec, relayURL, publicRelayURL, smtpPort, smtpHost,
 		dataDir, dkimKeyPath, dkimSelector, nwcURI,
 		monthlyPriceSats, composeURL,
 		smtpRelayHost, smtpRelayPort, smtpRelayUsername, smtpRelayPassword,
@@ -56,6 +56,7 @@ func Run(args []string) {
 		Domain:            domain,
 		NSEC:              nsec,
 		RelayURL:          relayURL,
+		PublicRelayURL:    publicRelayURL,
 		SMTPPort:          smtpPort,
 		SMTPHost:          smtpHost,
 		DataDir:           dataDir,

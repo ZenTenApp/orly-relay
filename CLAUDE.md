@@ -529,7 +529,7 @@ The transport manager handles ordered startup (Start fails fast, rolls back) and
 
 - **Architecture**: **x86_64 (amd64)** — NOT arm64, always use `GOARCH=amd64`
 - **OS**: Ubuntu 24.04 LTS
-- **SSH**: `ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71`
+- **SSH**: `ssh root@10.0.0.1`
 - **Service**: `systemctl {start|stop|restart|status} orly`
 - **Logs**: `journalctl -u orly -f`
 - **Binary**: `/home/mleku/.local/bin/orly` (unified binary with subcommands)
@@ -549,18 +549,17 @@ The transport manager handles ordered startup (Start fails fast, rolls back) and
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly ./cmd/orly
 
 # 2. Stop service
-ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 'systemctl stop orly'
+ssh root@10.0.0.1 'systemctl stop orly'
 
 # 3. Deploy binary
-rsync -avz --compress -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
-  orly root@69.164.249.71:/home/mleku/.local/bin/
+rsync -avz --compress orly root@10.0.0.1:/home/mleku/.local/bin/
 
 # 4. Fix ownership and start
-ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 \
+ssh root@10.0.0.1 \
   'chown mleku:mleku /home/mleku/.local/bin/orly && systemctl start orly'
 
 # 5. Verify (should show launcher + db + acl + bridge + relay subprocesses)
-ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@69.164.249.71 \
+ssh root@10.0.0.1 \
   'sleep 5 && systemctl status orly'
 ```
 
@@ -579,8 +578,7 @@ cd cmd/orly-launcher/web && bun install && bun run build
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly ./cmd/orly
 # 5. Deploy binary to relay.orly.dev (stop → rsync → chown → start)
 # 6. Deploy smesh static files to smesh.mleku.dev
-rsync -avz --delete -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
-  app/smesh/dist/ root@69.164.249.71:/home/mleku/smesh/dist/
+rsync -avz --delete app/smesh/dist/ root@10.0.0.1:/home/mleku/smesh/dist/
 ```
 
 Note: `scripts/update-embedded-web.sh` only builds relay dashboard + smesh (not launcher admin) and runs `go install` (local arch, not amd64 cross-compile). For full deployment, use the manual steps above.

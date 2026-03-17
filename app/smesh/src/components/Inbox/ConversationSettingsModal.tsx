@@ -12,7 +12,7 @@ import { useNostr } from '@/providers/NostrProvider'
 import client from '@/services/client.service'
 import indexedDb from '@/services/indexed-db.service'
 import { TRelayList } from '@/types'
-import { Check, Loader2, Lock, LockOpen, User, Users, Zap } from 'lucide-react'
+import { Check, Clock, Loader2, Lock, LockOpen, User, Users, Zap } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -46,6 +46,14 @@ export default function ConversationSettingsModal({
   const [isLoading, setIsLoading] = useState(false)
   const [relays, setRelays] = useState<RelayInfo[]>([])
   const [encryptionPreference, setEncryptionPreference] = useState<EncryptionPreference>('auto')
+  const [expirationSeconds, setExpirationSeconds] = useState(0)
+
+  const EXPIRATION_OPTIONS = [
+    { label: 'No expiry', seconds: 0 },
+    { label: '1 day', seconds: 86400 },
+    { label: '1 week', seconds: 604800 },
+    { label: '1 month', seconds: 2592000 },
+  ] as const
 
   // Fetch partner's relay list when modal opens
   useEffect(() => {
@@ -66,15 +74,17 @@ export default function ConversationSettingsModal({
     fetchPartnerRelays()
   }, [open, partnerPubkey])
 
-  // Load encryption preference when modal opens
+  // Load encryption + expiration preferences when modal opens
   useEffect(() => {
     if (!open || !partnerPubkey || !pubkey) return
 
-    const loadEncryptionPreference = async () => {
-      const saved = await indexedDb.getConversationEncryptionPreference(pubkey, partnerPubkey)
-      setEncryptionPreference(saved || 'auto')
+    const loadPreferences = async () => {
+      const savedEnc = await indexedDb.getConversationEncryptionPreference(pubkey, partnerPubkey)
+      setEncryptionPreference(savedEnc || 'auto')
+      const savedExp = await indexedDb.getConversationExpirationPreference(pubkey, partnerPubkey)
+      setExpirationSeconds(savedExp)
     }
-    loadEncryptionPreference()
+    loadPreferences()
   }, [open, partnerPubkey, pubkey])
 
   // Save encryption preference when it changes
@@ -82,6 +92,14 @@ export default function ConversationSettingsModal({
     setEncryptionPreference(value)
     if (pubkey && partnerPubkey) {
       await indexedDb.putConversationEncryptionPreference(pubkey, partnerPubkey, value)
+    }
+  }
+
+  // Save expiration preference when it changes
+  const handleExpirationChange = async (seconds: number) => {
+    setExpirationSeconds(seconds)
+    if (pubkey && partnerPubkey) {
+      await indexedDb.putConversationExpirationPreference(pubkey, partnerPubkey, seconds)
     }
   }
 
@@ -214,6 +232,32 @@ export default function ConversationSettingsModal({
                 : encryptionPreference === 'nip04'
                   ? t('Classic encryption (NIP-04) - compatible with all clients')
                   : t('Modern encryption (NIP-17) - more private with metadata protection')}
+            </p>
+          </div>
+
+          {/* Message Expiration */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium flex items-center gap-1">
+              <Clock className="size-3.5" />
+              {t('Message Expiration')}
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              {EXPIRATION_OPTIONS.map((opt) => (
+                <Button
+                  key={opt.seconds}
+                  variant={expirationSeconds === opt.seconds ? 'default' : 'outline'}
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => handleExpirationChange(opt.seconds)}
+                >
+                  {t(opt.label)}
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {expirationSeconds === 0
+                ? t('Messages will not expire')
+                : t('Messages will include an expiration tag for relay garbage collection')}
             </p>
           </div>
 

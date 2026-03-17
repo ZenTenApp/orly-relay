@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -139,6 +140,14 @@ func (b *Bridge) Start(ctx context.Context) error {
 		if err := b.publishProfile(); err != nil {
 			log.W.F("publish bridge profile: %v", err)
 		}
+
+		// Publish kind 10002 + 10050 relay lists
+		if err := b.publishRelayList(); err != nil {
+			log.W.F("publish bridge relay list: %v", err)
+		}
+
+		// Broadcast identity to popular relays in background
+		go b.broadcastIdentity()
 	}
 
 	log.I.F("bridge started")
@@ -292,13 +301,16 @@ func (b *Bridge) relayWatchLoop() {
 func (b *Bridge) subscribeAndProcess() error {
 	bridgePubHex := hex.Enc(b.sign.Pub())
 
+	// Since = now - 3 days: gift-wrap timestamps are randomized up to
+	// -2 days (NIP-59), so we need a lookback window to catch them.
+	since := time.Now().Add(-3 * 24 * time.Hour).Unix()
 	ff := filter.NewS(
 		&filter.F{
 			Kinds: kind.NewS(kind.New(4), kind.New(1059)),
 			Tags: tag.NewS(
 				tag.NewFromAny("p", bridgePubHex),
 			),
-			Since: &timestamp.T{V: time.Now().Unix()},
+			Since: &timestamp.T{V: since},
 		},
 	)
 
@@ -329,10 +341,17 @@ func (b *Bridge) subscribeAndProcess() error {
 }
 
 // handleDMEvent decrypts a kind 4 DM event and routes it.
+// Tries NIP-44 decryption first, falls back to NIP-04.
 func (b *Bridge) handleDMEvent(ev *event.E) {
 	senderPubHex := hex.Enc(ev.Pubkey[:])
 
-	// Derive conversation key for NIP-44 decryption
+	// Skip our own outbound DMs to prevent feedback loop
+	bridgePubHex := hex.Enc(b.sign.Pub())
+	if senderPubHex == bridgePubHex {
+		return
+	}
+
+	// Try NIP-44 first
 	conversationKey, err := encryption.GenerateConversationKey(
 		b.sign.Sec(), ev.Pubkey[:],
 	)
@@ -343,11 +362,23 @@ func (b *Bridge) handleDMEvent(ev *event.E) {
 
 	decrypted, err := encryption.Decrypt(conversationKey, string(ev.Content))
 	if err != nil {
-		log.W.F("DM decryption failed from %s: %v", senderPubHex, err)
-		return
+		log.I.F("NIP-44 decrypt failed for sender %s, trying NIP-04: %v", senderPubHex, err)
+		// Fall back to NIP-04 decryption
+		nip4Key, keyErr := encryption.GenerateNip4Key(b.sign.Sec(), ev.Pubkey[:])
+		if keyErr != nil {
+			log.E.F("NIP-04 key generation failed for sender %s: %v", senderPubHex, keyErr)
+			return
+		}
+		nip4Decrypted, nip4Err := encryption.DecryptNip4(ev.Content, nip4Key)
+		if nip4Err != nil {
+			log.I.F("DM decryption failed from %s (tried NIP-44 and NIP-04): %v", senderPubHex, nip4Err)
+			return
+		}
+		decrypted = string(nip4Decrypted)
+		log.I.F("NIP-04 fallback succeeded for sender %s", senderPubHex)
 	}
 
-	log.D.F("received kind 4 DM from %s: %d bytes", senderPubHex, len(decrypted))
+	log.I.F("received kind 4 DM from %s: %d bytes", senderPubHex, len(decrypted))
 
 	b.recordSenderFormat(senderPubHex, dmFormatKind4)
 
@@ -360,11 +391,18 @@ func (b *Bridge) handleDMEvent(ev *event.E) {
 func (b *Bridge) handleGiftWrapEvent(ev *event.E) {
 	dm, err := unwrapGiftWrap(ev, b.sign)
 	if err != nil {
-		log.W.F("gift wrap unwrap failed: %v", err)
+		log.I.F("gift wrap unwrap failed: %v", err)
 		return
 	}
 
-	log.D.F("received NIP-17 DM from %s: %d bytes", dm.SenderPubHex, len(dm.Content))
+	// Skip our own outbound DMs to prevent feedback loop
+	bridgePubHex := hex.Enc(b.sign.Pub())
+	if dm.SenderPubHex == bridgePubHex {
+		log.I.F("skipping own gift wrap DM")
+		return
+	}
+
+	log.I.F("received NIP-17 DM from %s: %d bytes", dm.SenderPubHex, len(dm.Content))
 
 	b.recordSenderFormat(dm.SenderPubHex, dmFormatGiftWrap)
 
@@ -404,48 +442,51 @@ func (b *Bridge) makeSendDM() func(pubkeyHex string, content string) error {
 
 		format := b.getSenderFormat(pubkeyHex)
 
+		log.I.F("sending DM reply to %s (format=%d, %d bytes)", pubkeyHex, format, len(content))
+
 		switch format {
 		case dmFormatGiftWrap:
 			if err := b.sendGiftWrapDM(pubkeyHex, content); err != nil {
 				return fmt.Errorf("gift wrap DM: %w", err)
 			}
-			log.D.F("sent NIP-17 DM to %s (%d bytes)", pubkeyHex, len(content))
+			log.I.F("sent NIP-17 DM to %s (%d bytes)", pubkeyHex, len(content))
 		default:
 			if err := b.sendKind4DM(pubkeyHex, content); err != nil {
 				return fmt.Errorf("kind 4 DM: %w", err)
 			}
-			log.D.F("sent kind 4 DM to %s (%d bytes)", pubkeyHex, len(content))
+			log.I.F("sent kind 4 DM to %s (%d bytes)", pubkeyHex, len(content))
 		}
 
 		return nil
 	}
 }
 
-// sendKind4DM sends a kind 4 encrypted DM using NIP-44.
+// sendKind4DM sends a kind 4 encrypted DM using NIP-04.
 func (b *Bridge) sendKind4DM(pubkeyHex, content string) error {
 	recipientPub, err := hex.Dec(pubkeyHex)
 	if err != nil {
 		return fmt.Errorf("decode recipient pubkey: %w", err)
 	}
 
-	conversationKey, err := encryption.GenerateConversationKey(
-		b.sign.Sec(), recipientPub,
-	)
+	sharedKey, err := encryption.GenerateNip4Key(b.sign.Sec(), recipientPub)
 	if err != nil {
-		return fmt.Errorf("ECDH: %w", err)
+		return fmt.Errorf("NIP-04 shared key: %w", err)
 	}
 
-	encrypted, err := encryption.Encrypt(conversationKey, []byte(content), nil)
+	encrypted, err := encryption.EncryptNip4([]byte(content), sharedKey)
 	if err != nil {
-		return fmt.Errorf("encrypt: %w", err)
+		return fmt.Errorf("NIP-04 encrypt: %w", err)
 	}
 
+	now := time.Now().Unix()
+	expiration := strconv.FormatInt(now+defaultDMExpirationSeconds, 10)
 	ev := &event.E{
-		Content:   []byte(encrypted),
-		CreatedAt: time.Now().Unix(),
+		Content:   encrypted,
+		CreatedAt: now,
 		Kind:      4,
 		Tags: tag.NewS(
 			tag.NewFromAny("p", pubkeyHex),
+			tag.NewFromAny("expiration", expiration),
 		),
 	}
 	if err := ev.Sign(b.sign); chk.E(err) {
@@ -455,12 +496,20 @@ func (b *Bridge) sendKind4DM(pubkeyHex, content string) error {
 }
 
 // sendGiftWrapDM sends a NIP-17 gift-wrapped DM (kind 1059).
+// Publishes both a recipient copy and a self-addressed copy per NIP-17.
 func (b *Bridge) sendGiftWrapDM(pubkeyHex, content string) error {
-	gw, err := wrapGiftWrap(pubkeyHex, content, b.sign)
+	recipientWrap, selfWrap, err := wrapGiftWrap(pubkeyHex, content, b.sign)
 	if err != nil {
 		return fmt.Errorf("wrap: %w", err)
 	}
-	return b.relay.Publish(b.ctx, gw)
+	if err := b.relay.Publish(b.ctx, recipientWrap); err != nil {
+		return fmt.Errorf("publish recipient wrap: %w", err)
+	}
+	// Self-copy — best-effort, don't fail the send
+	if err := b.relay.Publish(b.ctx, selfWrap); err != nil {
+		log.W.F("failed to publish self-copy gift wrap: %v", err)
+	}
+	return nil
 }
 
 // resolveRecipientPubkey extracts the Nostr pubkey hex from an email address

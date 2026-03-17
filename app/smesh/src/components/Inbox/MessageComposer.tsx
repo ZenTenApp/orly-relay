@@ -105,40 +105,41 @@ export default function MessageComposer() {
         </div>
       )}
 
-      {/* Relay selector */}
-      {writeRelays.length > 0 && (
-        <div className="space-y-1">
-          <button
-            onClick={() => setShowRelays(!showRelays)}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {showRelays ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-            <span>
-              {t('Relays')} ({selectedRelays.size}/{writeRelays.length})
-            </span>
-          </button>
-          {showRelays && (
-            <div className="flex flex-wrap gap-1">
-              {writeRelays.map((url) => (
-                <button
-                  key={url}
-                  onClick={() => toggleRelay(url)}
-                  className={cn(
-                    'text-xs px-2 py-0.5 rounded-full border transition-colors',
-                    selectedRelays.has(url)
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-muted text-muted-foreground border-muted hover:border-primary/50'
-                  )}
-                  title={url}
-                >
-                  {formatRelayUrl(url)}
-                </button>
-              ))}
-            </div>
-          )}
+      {/* Relay selector + expiration */}
+      <div className="flex items-center gap-3">
+        {writeRelays.length > 0 && (
+          <div className="space-y-1">
+            <button
+              onClick={() => setShowRelays(!showRelays)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showRelays ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+              <span>
+                {t('Relays')} ({selectedRelays.size}/{writeRelays.length})
+              </span>
+            </button>
+          </div>
+        )}
+      </div>
+      {showRelays && writeRelays.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {writeRelays.map((url) => (
+            <button
+              key={url}
+              onClick={() => toggleRelay(url)}
+              className={cn(
+                'text-xs px-2 py-0.5 rounded-full border transition-colors',
+                selectedRelays.has(url)
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-muted text-muted-foreground border-muted hover:border-primary/50'
+              )}
+              title={url}
+            >
+              {formatRelayUrl(url)}
+            </button>
+          ))}
         </div>
       )}
-
       <div className="flex items-end gap-2">
         <Textarea
           ref={textareaRef}

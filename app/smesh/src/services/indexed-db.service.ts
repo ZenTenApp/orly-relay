@@ -754,6 +754,60 @@ class IndexedDbService {
     })
   }
 
+  async putConversationExpirationPreference(
+    userPubkey: string,
+    partnerPubkey: string,
+    seconds: number
+  ): Promise<void> {
+    await this.initPromise
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        return reject('database not initialized')
+      }
+      const transaction = this.db.transaction(StoreNames.DM_CONVERSATIONS, 'readwrite')
+      const store = transaction.objectStore(StoreNames.DM_CONVERSATIONS)
+      const key = `${userPubkey}:${partnerPubkey}:expiration`
+
+      const putRequest = store.put(this.formatValue(key, { seconds }))
+      putRequest.onsuccess = () => {
+        transaction.commit()
+        resolve()
+      }
+
+      putRequest.onerror = (event) => {
+        transaction.commit()
+        reject(event)
+      }
+    })
+  }
+
+  async getConversationExpirationPreference(
+    userPubkey: string,
+    partnerPubkey: string
+  ): Promise<number> {
+    await this.initPromise
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        return reject('database not initialized')
+      }
+      const transaction = this.db.transaction(StoreNames.DM_CONVERSATIONS, 'readonly')
+      const store = transaction.objectStore(StoreNames.DM_CONVERSATIONS)
+      const key = `${userPubkey}:${partnerPubkey}:expiration`
+      const request = store.get(key)
+
+      request.onsuccess = () => {
+        transaction.commit()
+        const result = (request.result as TValue)?.value
+        resolve(result?.seconds ?? 0)
+      }
+
+      request.onerror = (event) => {
+        transaction.commit()
+        reject(event)
+      }
+    })
+  }
+
   async putConversationMessages(
     userPubkey: string,
     partnerPubkey: string,
@@ -836,6 +890,7 @@ class IndexedDbService {
       recipientPubkey: string
       content: string
       createdAt: number
+      innerEventId?: string
     }
   ): Promise<void> {
     await this.initPromise
@@ -869,6 +924,7 @@ class IndexedDbService {
     recipientPubkey: string
     content: string
     createdAt: number
+    innerEventId?: string
   } | null> {
     await this.initPromise
     return new Promise((resolve, reject) => {

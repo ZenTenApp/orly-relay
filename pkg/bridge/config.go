@@ -21,6 +21,11 @@ type Config struct {
 	// (events are routed in-process).
 	RelayURL string
 
+	// PublicRelayURL is the public wss:// URL advertised in kind 10002
+	// and kind 10050 relay list events. Separate from RelayURL because
+	// the bridge may connect via ws://localhost internally.
+	PublicRelayURL string
+
 	// SMTPPort is the port the SMTP server listens on.
 	SMTPPort int
 

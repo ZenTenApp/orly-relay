@@ -33,7 +33,7 @@ func (r *Router) RouteDM(ctx context.Context, senderPubkeyHex, content string) {
 
 	switch result.Command {
 	case DMCommandSubscribe:
-		log.D.F("subscribe command from %s (alias=%q)", senderPubkeyHex, result.Alias)
+		log.I.F("subscribe command from %s (alias=%q)", senderPubkeyHex, result.Alias)
 		if r.subHandler != nil {
 			// Run in goroutine — HandleSubscribe blocks for up to 10 minutes
 			// waiting for payment, and must not block the event processing loop.
@@ -44,7 +44,7 @@ func (r *Router) RouteDM(ctx context.Context, senderPubkeyHex, content string) {
 		return
 
 	case DMCommandStatus:
-		log.D.F("status command from %s", senderPubkeyHex)
+		log.I.F("status command from %s", senderPubkeyHex)
 		if r.subHandler != nil {
 			r.subHandler.HandleStatus(senderPubkeyHex)
 		} else {
@@ -55,7 +55,7 @@ func (r *Router) RouteDM(ctx context.Context, senderPubkeyHex, content string) {
 
 	// Check if it's an outbound email
 	if IsOutboundEmail(content) {
-		log.D.F("outbound email from %s", senderPubkeyHex)
+		log.I.F("outbound email from %s", senderPubkeyHex)
 		if r.outbound != nil {
 			r.outbound.ProcessOutbound(senderPubkeyHex, content)
 		} else {
@@ -65,7 +65,7 @@ func (r *Router) RouteDM(ctx context.Context, senderPubkeyHex, content string) {
 	}
 
 	// Not a recognized command or email — auto-reply with help
-	log.D.F("unrecognized DM from %s", senderPubkeyHex)
+	log.I.F("unrecognized DM from %s", senderPubkeyHex)
 	r.reply(senderPubkeyHex,
 		"Marmot Email Bridge\n\n"+
 			"Commands:\n"+
@@ -81,9 +81,12 @@ func (r *Router) RouteDM(ctx context.Context, senderPubkeyHex, content string) {
 
 func (r *Router) reply(pubkeyHex, content string) {
 	if r.sendDM == nil {
+		log.E.F("sendDM callback is nil, cannot reply to %s", pubkeyHex)
 		return
 	}
 	if err := r.sendDM(pubkeyHex, content); err != nil {
 		log.E.F("failed to send reply DM to %s: %v", pubkeyHex, err)
+	} else {
+		log.I.F("sent reply DM to %s (%d bytes)", pubkeyHex, len(content))
 	}
 }

@@ -25,7 +25,7 @@ func TestGiftWrap_RoundTrip(t *testing.T) {
 
 	// Wrap a message from sender to recipient
 	content := "subscribe testuser"
-	gw, err := wrapGiftWrap(recipientPubHex, content, sender)
+	gw, _, err := wrapGiftWrap(recipientPubHex, content, sender)
 	require.NoError(t, err)
 
 	assert.Equal(t, uint16(1059), gw.Kind)
@@ -63,7 +63,7 @@ func TestGiftWrap_WrongRecipient(t *testing.T) {
 
 	recipientPubHex := hexEnc(recipient.Pub())
 
-	gw, err := wrapGiftWrap(recipientPubHex, "secret message", sender)
+	gw, _, err := wrapGiftWrap(recipientPubHex, "secret message", sender)
 	require.NoError(t, err)
 
 	// Third party cannot decrypt
@@ -87,7 +87,7 @@ func TestGiftWrap_TimestampRandomized(t *testing.T) {
 	// Create multiple gift wraps and verify timestamps differ
 	timestamps := make(map[int64]bool)
 	for i := 0; i < 10; i++ {
-		gw, err := wrapGiftWrap(recipientPubHex, "test", sender)
+		gw, _, err := wrapGiftWrap(recipientPubHex, "test", sender)
 		require.NoError(t, err)
 		timestamps[gw.CreatedAt] = true
 	}
@@ -117,7 +117,7 @@ func TestGiftWrap_LongContent(t *testing.T) {
 		"It includes multiple paragraphs and special characters like " +
 		"<html>, &amp;, \"quotes\", and unicode: 日本語テスト"
 
-	gw, err := wrapGiftWrap(recipientPubHex, content, sender)
+	gw, _, err := wrapGiftWrap(recipientPubHex, content, sender)
 	require.NoError(t, err)
 
 	dm, err := unwrapGiftWrap(gw, recipient)
