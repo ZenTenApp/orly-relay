@@ -1,8 +1,26 @@
-// smesh2 service worker — local nostr relay
+// smesh2 service worker — local nostr relay + signer
 // speaks NIP-01 over postMessage to the UI thread
 
-const CACHE_NAME = 'smesh2-v11'
+import { schnorr } from 'https://esm.sh/@noble/curves@1.8.2/secp256k1'
+import { sha256 } from 'https://esm.sh/@noble/hashes@1.7.2/sha256'
+import { bytesToHex } from 'https://esm.sh/@noble/hashes@1.7.2/utils'
+
+const CACHE_NAME = 'smesh2-v27'
 const CACHE_URLS = ['./', './index.html']
+
+// ─── signing ────────────────────────────────────────────────────────
+
+let secretKey = null // Uint8Array(32) or null
+
+function signEvent(event) {
+  const serialized = JSON.stringify([
+    0, event.pubkey, event.created_at, event.kind, event.tags, event.content
+  ])
+  const hash = sha256(new TextEncoder().encode(serialized))
+  const id = bytesToHex(hash)
+  const sig = bytesToHex(schnorr.sign(hash, secretKey))
+  return { ...event, id, sig }
+}
 
 // ─── lifecycle ───────────────────────────────────────────────────────
 
@@ -10,7 +28,7 @@ self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(CACHE_URLS))
   )
-  self.skipWaiting()
+  // don't skipWaiting here — wait for user to click the update snackbar
 })
 
 self.addEventListener('activate', (e) => {
@@ -316,10 +334,16 @@ async function handleProxy(clientId, subId, filter, ...relayUrls) {
   }
 }
 
-function cleanupProxy(proxyId) {
+async function cleanupProxy(proxyId) {
   const info = proxySubs.get(proxyId)
   if (!info) return
   clearTimeout(info.timeout)
+  // send EOSE to client before cleanup
+  const sub = subs.get(proxyId)
+  if (sub) {
+    const client = await self.clients.get(sub.clientId)
+    if (client) client.postMessage(['EOSE', proxyId])
+  }
   // send CLOSE for all remote subs
   for (const rSubId of info.remoteSubIds) {
     for (const [url, conn] of pool) {
@@ -392,5 +416,30 @@ self.addEventListener('message', (e) => {
     case 'PROXY':      handleProxy(clientId, args[0], args[1], ...args.slice(2)); break
     case 'RELAY_INFO': handleRelayInfo(clientId, args[0]); break
     case 'SKIP_WAITING': self.skipWaiting(); break
+    case 'SET_KEY': {
+      secretKey = new Uint8Array(args[0])
+      const client = self.clients.get(clientId)
+      if (client) client.then((c) => c?.postMessage(['KEY_SET']))
+      break
+    }
+    case 'SIGN': {
+      const [requestId, unsignedEvent] = args
+      if (!secretKey) break
+      try {
+        const signed = signEvent(unsignedEvent)
+        self.clients.get(clientId).then((c) => {
+          if (c) c.postMessage(['SIGNED', requestId, signed])
+        })
+      } catch (err) {
+        self.clients.get(clientId).then((c) => {
+          if (c) c.postMessage(['SIGN_ERROR', requestId, err.message])
+        })
+      }
+      break
+    }
+    case 'CLEAR_KEY': {
+      secretKey = null
+      break
+    }
   }
 })

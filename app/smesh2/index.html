@@ -40,6 +40,8 @@ body { font-family: var(--font); background: var(--bg); color: var(--fg); height
 .feed-item:hover { background: var(--border); }
 .feed-item.active { background: var(--accent); color: #000; font-weight: 600; }
 
+.sidebar-logout { padding: 8px 12px; font-size: 13px; color: var(--fg2); cursor: pointer; border-top: 1px solid var(--border); }
+.sidebar-logout:hover { color: var(--fg); background: var(--border); }
 .relay-status { padding: 8px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--fg2); }
 .relay-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; }
 .relay-dot.on { background: #22c55e; }
@@ -64,9 +66,15 @@ body { font-family: var(--font); background: var(--bg); color: var(--fg); height
 .compose button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* login */
-.login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100dvh; gap: 16px; }
-.login-screen h1 { font-size: 24px; }
+.login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100dvh; gap: 16px; }
 .login-screen button { background: var(--accent); color: #000; border: none; border-radius: var(--radius); padding: 12px 24px; font-size: 16px; font-weight: 600; cursor: pointer; }
+
+/* smesh loader animation */
+.smesh-loader { width: 180px; height: 180px; }
+.smesh-loader-edge { stroke-linecap: round; opacity: 0; animation: smeshEdgeFade 0.4s ease forwards; }
+.smesh-loader-center { opacity: 0; animation: smeshNodePop 0.3s ease forwards; transform-origin: 400px 400px; }
+@keyframes smeshEdgeFade { to { opacity: 1; } }
+@keyframes smeshNodePop { 0% { opacity: 0; transform: scale(0); } 70% { transform: scale(1.2); } 100% { opacity: 1; transform: scale(1); } }
 
 /* settings */
 .settings { padding: 16px; overflow-y: auto; flex: 1; }
@@ -82,15 +90,31 @@ body { font-family: var(--font); background: var(--bg); color: var(--fg); height
 .thread-back { padding: 8px 12px; cursor: pointer; color: var(--accent); font-size: 14px; border-bottom: 1px solid var(--border); }
 .thread-back:hover { background: var(--bg2); }
 .thread-root { border-left: 3px solid var(--accent); }
-.thread-reply { padding-left: 24px; border-left: 2px solid var(--border); margin-left: 16px; }
+.thread-reply { border-left: 2px solid var(--border); }
 .note-actions { display: flex; gap: 16px; margin-top: 6px; }
 .note-action { font-size: 12px; color: var(--fg2); cursor: pointer; display: flex; align-items: center; gap: 4px; }
 .note-action:hover { color: var(--accent); }
+.header-action { margin-left: 0; }
+
+/* reply compose */
+.reply-compose { margin-top: 8px; }
+.reply-input { width: 100%; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; font-family: var(--font); font-size: 14px; resize: none; min-height: 60px; max-height: 120px; }
+.reply-input:focus { outline: none; border-color: var(--accent); }
+.reply-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.reply-cancel { background: none; border: 1px solid var(--border); color: var(--fg2); border-radius: var(--radius); padding: 4px 12px; font-size: 13px; cursor: pointer; }
+.reply-cancel:hover { border-color: var(--fg2); }
+.reply-submit { background: var(--accent); color: #000; border: none; border-radius: var(--radius); padding: 4px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.reply-submit:hover { opacity: 0.9; }
+.reply-submit:disabled { opacity: 0.4; cursor: not-allowed; }
 .orly-badge { display: inline-block; background: var(--accent); color: #000; font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 700; margin-left: 6px; vertical-align: middle; }
 
 /* snackbar */
 .snackbar { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 20px; border-radius: var(--radius); font-size: 14px; z-index: 999; animation: fadein 0.3s; }
 @keyframes fadein { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }
+
+/* new notes pill */
+.new-notes-pill { position: sticky; top: 8px; left: 50%; transform: translateX(-50%); width: fit-content; background: var(--accent); color: #000; padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; z-index: 5; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+.new-notes-pill:hover { opacity: 0.9; }
 
 /* loading */
 .loading { display: flex; align-items: center; justify-content: center; height: 100dvh; color: var(--fg2); }
@@ -111,8 +135,11 @@ body { font-family: var(--font); background: var(--bg); color: var(--fg); height
 
 <script type="module">
 import { h, render, createContext } from 'https://esm.sh/preact@10.25.4'
-import { useState, useEffect, useCallback, useContext, useRef } from 'https://esm.sh/preact@10.25.4/hooks'
+import { useState, useEffect, useCallback, useContext, useRef, useMemo } from 'https://esm.sh/preact@10.25.4/hooks'
 import htm from 'https://esm.sh/htm@3.1.1'
+import { decode as nip19Decode } from 'https://esm.sh/nostr-tools@2.17.0/nip19'
+import { schnorr } from 'https://esm.sh/@noble/curves@1.8.2/secp256k1'
+import { bytesToHex } from 'https://esm.sh/@noble/hashes@1.7.2/utils'
 const html = htm.bind(h)
 
 // ─── service worker ──────────────────────────────────────────────────
@@ -123,6 +150,73 @@ function send(msg) {
   if (navigator.serviceWorker.controller) {
     navigator.serviceWorker.controller.postMessage(msg)
   }
+}
+
+// ─── SW signing bridge ──────────────────────────────────────────────
+
+let signCounter = 0
+const signCallbacks = new Map()
+
+function signViaSW(event) {
+  return new Promise((resolve, reject) => {
+    const id = ++signCounter
+    const timeout = setTimeout(() => {
+      signCallbacks.delete(id)
+      reject(new Error('sign timeout'))
+    }, 10000)
+    signCallbacks.set(id, (signed) => {
+      clearTimeout(timeout)
+      resolve(signed)
+    })
+    send(['SIGN', id, event])
+  })
+}
+
+// ─── nsec encryption (PBKDF2 + AES-256-GCM) ────────────────────────
+
+async function deriveKeyPBKDF2(password, salt) {
+  const enc = new TextEncoder()
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey'])
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 600000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  )
+}
+
+async function encryptNsec(nsec, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(32))
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const key = await deriveKeyPBKDF2(password, salt)
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(nsec))
+  const combined = new Uint8Array(salt.length + iv.length + encrypted.byteLength)
+  combined.set(salt, 0)
+  combined.set(iv, salt.length)
+  combined.set(new Uint8Array(encrypted), salt.length + iv.length)
+  return btoa(String.fromCharCode(...combined))
+}
+
+async function decryptNsec(encryptedData, password) {
+  const combined = new Uint8Array(atob(encryptedData).split('').map((c) => c.charCodeAt(0)))
+  const salt = combined.slice(0, 32)
+  const iv = combined.slice(32, 44)
+  const ciphertext = combined.slice(44)
+  const key = await deriveKeyPBKDF2(password, salt)
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext)
+  return new TextDecoder().decode(decrypted)
+}
+
+function decodeNsec(nsec) {
+  const decoded = nip19Decode(nsec)
+  if (decoded.type !== 'nsec') throw new Error('not an nsec')
+  return decoded.data // Uint8Array(32)
+}
+
+function pubkeyFromSecret(secretKeyBytes) {
+  const pubBytes = schnorr.getPublicKey(secretKeyBytes)
+  return bytesToHex(pubBytes)
 }
 
 // ─── nostr helpers ───────────────────────────────────────────────────
@@ -178,6 +272,16 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
         </div>
       </div>
 
+      ${state.pubkey && html`
+        <div class="sidebar-logout" onClick=${() => {
+          send(['CLEAR_KEY'])
+          localStorage.removeItem('smesh2-enc')
+          localStorage.removeItem('smesh2-pubkey')
+          localStorage.removeItem('smesh2-loginMode')
+          location.reload()
+        }}>logout</div>
+      `}
+
       <div class="relay-status">
         ${(state.relays || []).map((r) => html`
           <div><span class="relay-dot on" />${r.replace('wss://', '')}</div>
@@ -188,46 +292,142 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
   `
 }
 
-function Note({ event, isRoot, isReply }) {
+function Note({ event, isRoot, isReply, depth, inThread }) {
   const { state, dispatch } = useApp()
   const profile = state.profiles.get(event.pubkey) || {}
+  const [replying, setReplying] = useState(false)
+  const [replyText, setReplyText] = useState('')
+  const [sending, setSending] = useState(false)
 
   const openThread = () => {
     dispatch({ type: 'OPEN_THREAD', eventId: event.id, event })
   }
 
-  const replyCount = state.threadReplies?.[event.id] || 0
+  const submitReply = useCallback(async () => {
+    if (!replyText.trim() || !state.pubkey) return
+    setSending(true)
+    try {
+      // NIP-10: build e tags — root + reply
+      const eTags = (event.tags || []).filter((t) => t[0] === 'e')
+      const rootTag = eTags.find((t) => t[3] === 'root')
+      const tags = []
+      if (rootTag) {
+        tags.push(rootTag)
+        tags.push(['e', event.id, '', 'reply'])
+      } else if (eTags.length > 0) {
+        tags.push(['e', eTags[0][1], eTags[0][2] || '', 'root'])
+        tags.push(['e', event.id, '', 'reply'])
+      } else {
+        tags.push(['e', event.id, '', 'root'])
+      }
+      // p tag for the author we're replying to
+      tags.push(['p', event.pubkey])
+      const ev = {
+        kind: 1,
+        content: replyText.trim(),
+        tags,
+        created_at: Math.floor(Date.now() / 1000),
+        pubkey: state.pubkey,
+      }
+      let signed
+      if (state.loginMode === 'nsec') {
+        signed = await signViaSW(ev)
+      } else if (window.nostr) {
+        signed = await window.nostr.signEvent(ev)
+      } else { return }
+      send(['EVENT', signed])
+      setReplyText('')
+      setReplying(false)
+    } finally {
+      setSending(false)
+    }
+  }, [replyText, state.pubkey, state.loginMode, event])
+
+  // detect if this note is part of a thread
+  const hasETags = event.tags?.some((t) => t[0] === 'e')
+  const hasReplies = state.feed.some((e) =>
+    e.tags?.some((t) => t[0] === 'e' && t[1] === event.id)
+  )
+  const isThread = hasETags || hasReplies
+
   const cls = `note ${isRoot ? 'thread-root' : ''} ${isReply ? 'thread-reply' : ''}`
+  const indent = isReply && depth > 0 ? { marginLeft: (depth * 10) + 'px' } : {}
 
   return html`
-    <div class=${cls}>
+    <div class=${cls} style=${indent}>
       <div class="note-header">
         ${profile.picture
           ? html`<img class="note-avatar" src=${profile.picture} />`
           : html`<div class="note-avatar" />`}
         <span class="note-author">${profile.name || shortId(event.pubkey)}</span>
+        ${state.pubkey && html`<span class="note-action header-action" onClick=${() => setReplying(!replying)}>reply</span>`}
+        ${!inThread && isThread && html`<span class="note-action header-action" onClick=${openThread}>thread</span>`}
         <span class="note-time">${relativeTime(event.created_at)}</span>
       </div>
       <div class="note-content">${event.content}</div>
-      <div class="note-actions">
-        <span class="note-action" onClick=${openThread}>
-          💬 ${replyCount || ''}
-        </span>
-      </div>
+      ${replying && html`
+        <div class="reply-compose">
+          <textarea
+            class="reply-input"
+            value=${replyText}
+            onInput=${(e) => setReplyText(e.target.value)}
+            placeholder="reply..."
+            onKeyDown=${(e) => { if (e.key === 'Enter' && e.ctrlKey) submitReply() }}
+          />
+          <div class="reply-buttons">
+            <button class="reply-cancel" onClick=${() => { setReplying(false); setReplyText('') }}>cancel</button>
+            <button class="reply-submit" onClick=${submitReply} disabled=${sending || !replyText.trim()}>reply</button>
+          </div>
+        </div>
+      `}
     </div>
   `
 }
 
 function Feed() {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const feedRef = useRef(null)
+  const pending = state.pendingNotes.length
 
-  const sorted = [...state.feed].sort((a, b) => b.created_at - a.created_at)
+  const flush = () => {
+    dispatch({ type: 'FLUSH_PENDING' })
+    if (feedRef.current) feedRef.current.scrollTop = 0
+  }
+
+  const sorted = useMemo(
+    () => [...state.feed].sort((a, b) => b.created_at - a.created_at),
+    [state.feed]
+  )
+
+  const loadMore = useCallback(() => {
+    if (state.feedLoading || state.feedExhausted || !state.contacts.length || !sorted.length) return
+    dispatch({ type: 'SET_FEED_LOADING' })
+    const oldest = sorted[sorted.length - 1].created_at
+    const batch = state.contacts.slice(0, 100)
+    const relays = state.relays.slice(0, 4)
+    const subId = 'feed-more-' + state.feedPage
+    send(['PROXY', subId, { kinds: [1], authors: batch, limit: 50, until: oldest }, ...relays])
+  }, [state.feedLoading, state.feedExhausted, state.contacts, state.relays, state.feedPage, sorted])
+
+  const onScroll = useCallback((e) => {
+    const el = e.target
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 400) {
+      loadMore()
+    }
+  }, [loadMore])
 
   return html`
-    <div class="feed" ref=${feedRef}>
-      ${sorted.map((ev) => html`<${Note} key=${ev.id} event=${ev} />`)}
-      ${sorted.length === 0 && html`
+    <div class="feed" ref=${feedRef} style="position:relative" onScroll=${onScroll}>
+      ${pending > 0 && html`
+        <div class="new-notes-pill" onClick=${flush}>
+          ${pending} new note${pending > 1 ? 's' : ''}
+        </div>
+      `}
+      ${sorted.map((ev) => html`<${Note} key=${ev.id} event=${ev} inThread=${false} />`)}
+      ${state.feedLoading && html`
+        <div style="padding: 16px; text-align: center; color: var(--fg2); font-size: 13px">loading...</div>
+      `}
+      ${sorted.length === 0 && !state.feedLoading && html`
         <div style="padding: 24px; text-align: center; color: var(--fg2)">
           ${state.pubkey ? 'no notes yet' : 'log in to see your feed'}
         </div>
@@ -252,15 +452,18 @@ function Compose() {
         created_at: Math.floor(Date.now() / 1000),
         pubkey: state.pubkey,
       }
-      if (window.nostr) {
-        const signed = await window.nostr.signEvent(event)
-        send(['EVENT', signed])
-        setText('')
-      }
+      let signed
+      if (state.loginMode === 'nsec') {
+        signed = await signViaSW(event)
+      } else if (window.nostr) {
+        signed = await window.nostr.signEvent(event)
+      } else { return }
+      send(['EVENT', signed])
+      setText('')
     } finally {
       setSending(false)
     }
-  }, [text, state.pubkey])
+  }, [text, state.pubkey, state.loginMode])
 
   if (!state.pubkey) return null
 
@@ -315,6 +518,16 @@ function Settings() {
         ${state.pubkey
           ? html`<div style="font-family: var(--mono); font-size: 12px; word-break: break-all">${state.pubkey}</div>`
           : html`<div style="color: var(--fg2)">not logged in</div>`}
+        ${state.loginMode === 'nsec' && html`
+          <button onClick=${() => {
+            send(['CLEAR_KEY'])
+            localStorage.removeItem('smesh2-enc')
+            localStorage.removeItem('smesh2-pubkey')
+            location.reload()
+          }} style="margin-top: 12px; background: none; border: 1px solid var(--border); color: var(--fg2); border-radius: var(--radius); padding: 6px 16px; font-size: 13px; cursor: pointer;">
+            logout
+          </button>
+        `}
       </section>
     </div>
   `
@@ -342,23 +555,67 @@ function ProfileView() {
   `
 }
 
+function buildThread(events, rootId) {
+  // find each event's parent from e tags
+  const parentOf = new Map()
+  const childrenOf = new Map()
+  for (const ev of events) {
+    if (ev.id === rootId) continue
+    // NIP-10: reply marker on e tag, or last e tag without marker
+    const eTags = (ev.tags || []).filter((t) => t[0] === 'e')
+    const replyTag = eTags.find((t) => t[3] === 'reply')
+    const rootTag = eTags.find((t) => t[3] === 'root')
+    let parentId
+    if (replyTag) {
+      parentId = replyTag[1]
+    } else if (eTags.length === 1) {
+      parentId = eTags[0][1]
+    } else if (eTags.length > 1) {
+      parentId = eTags[eTags.length - 1][1]
+    } else {
+      parentId = rootId
+    }
+    // if parent isn't in our event set, attach to root
+    if (!events.some((e) => e.id === parentId)) parentId = rootId
+    parentOf.set(ev.id, parentId)
+    if (!childrenOf.has(parentId)) childrenOf.set(parentId, [])
+    childrenOf.get(parentId).push(ev)
+  }
+  // sort children by time
+  for (const [, kids] of childrenOf) kids.sort((a, b) => a.created_at - b.created_at)
+  // flatten tree depth-first
+  const flat = []
+  const walk = (id, depth) => {
+    const kids = childrenOf.get(id) || []
+    for (const kid of kids) {
+      flat.push({ event: kid, depth })
+      walk(kid.id, depth + 1)
+    }
+  }
+  walk(rootId, 1)
+  return flat
+}
+
 function ThreadView() {
   const { state, dispatch } = useApp()
   const rootId = state.threadRootId
   const rootEvent = state.threadEvents.find((e) => e.id === rootId)
-  const replies = state.threadEvents
-    .filter((e) => e.id !== rootId)
-    .sort((a, b) => a.created_at - b.created_at)
+  const threaded = useMemo(
+    () => buildThread(state.threadEvents, rootId),
+    [state.threadEvents, rootId]
+  )
 
   const goBack = () => dispatch({ type: 'SET_TAB', tab: 'feed' })
 
   return html`
     <div class="feed">
       <div class="thread-back" onClick=${goBack}>← back</div>
-      ${rootEvent && html`<${Note} event=${rootEvent} isRoot=${true} />`}
+      ${rootEvent && html`<${Note} event=${rootEvent} isRoot=${true} inThread=${true} />`}
       ${!rootEvent && html`<div class="note" style="color:var(--fg2)">loading root note...</div>`}
-      ${replies.map((ev) => html`<${Note} key=${ev.id} event=${ev} isReply=${true} />`)}
-      ${replies.length === 0 && rootEvent && html`
+      ${threaded.map(({ event, depth }) => html`
+        <${Note} key=${event.id} event=${event} isReply=${true} depth=${depth} inThread=${true} />
+      `)}
+      ${threaded.length === 0 && rootEvent && html`
         <div style="padding: 16px 24px; color: var(--fg2); font-size: 14px">no replies yet</div>
       `}
       ${state.orlyRelays.length > 0 && html`
@@ -370,26 +627,192 @@ function ThreadView() {
   `
 }
 
+function SmeshLoader() {
+  const svgRef = useRef(null)
+
+  useEffect(() => {
+    const g = svgRef.current
+    if (!g) return
+    while (g.firstChild) g.removeChild(g.firstChild)
+
+    const SVG_NS = 'http://www.w3.org/2000/svg'
+    const COLORS = ['#e07030', '#8833bb', '#00aabb']
+    const BASE_LEN = 110, DECAY = 0.56, BASE_WIDTH = 32, MAX_DEPTH = 6
+    const SPREAD = Math.PI * 0.68, CX = 400, CY = 400
+    const ANGLES = [-Math.PI / 2, -Math.PI / 2 + (2 * Math.PI) / 3, -Math.PI / 2 + (4 * Math.PI) / 3]
+
+    let delay = 50
+    function branch(px, py, angle, depth, branchIdx, spreadAngle) {
+      if (depth > MAX_DEPTH) return
+      const scale = Math.pow(DECAY, depth - 1)
+      const len = BASE_LEN * scale
+      const width = BASE_WIDTH * scale
+      const nx = px + Math.cos(angle) * len
+      const ny = py + Math.sin(angle) * len
+      const d = delay
+      delay += 30
+
+      const line = document.createElementNS(SVG_NS, 'line')
+      line.setAttribute('x1', px); line.setAttribute('y1', py)
+      line.setAttribute('x2', nx); line.setAttribute('y2', ny)
+      line.setAttribute('stroke', COLORS[branchIdx])
+      line.setAttribute('stroke-width', width)
+      line.classList.add('smesh-loader-edge')
+      line.style.animationDelay = d + 'ms'
+      g.appendChild(line)
+
+      const childSpread = spreadAngle * 0.82
+      branch(nx, ny, angle - childSpread / 2, depth + 1, branchIdx, childSpread)
+      branch(nx, ny, angle + childSpread / 2, depth + 1, branchIdx, childSpread)
+    }
+
+    for (let i = 0; i < 3; i++) branch(CX, CY, ANGLES[i], 1, i, SPREAD)
+
+    // center hexagon
+    const r = 24
+    const pts = []
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI / 6 + (i * Math.PI) / 3
+      pts.push((CX + r * Math.cos(a)).toFixed(2) + ',' + (CY + r * Math.sin(a)).toFixed(2))
+    }
+    const hex = document.createElementNS(SVG_NS, 'polygon')
+    hex.setAttribute('points', pts.join(' '))
+    hex.setAttribute('fill', '#e8e4da')
+    hex.setAttribute('stroke', '#0a0a0e')
+    hex.setAttribute('stroke-width', '7.5')
+    hex.setAttribute('stroke-linejoin', 'round')
+    hex.classList.add('smesh-loader-center')
+    hex.style.animationDelay = '0ms'
+    g.appendChild(hex)
+  }, [])
+
+  return html`
+    <div class="smesh-loader">
+      <svg viewBox="160.68 160.68 478.65 478.65" style="width:100%;height:100%">
+        <g ref=${svgRef} />
+      </svg>
+    </div>
+  `
+}
+
 function LoginScreen() {
   const { dispatch } = useApp()
+  const [nsecInput, setNsecInput] = useState('')
+  const [passwordInput, setPasswordInput] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const login = async () => {
+  const loginExtension = async () => {
     if (!window.nostr) {
-      alert('install a NIP-07 browser extension (nos2x, Alby, etc)')
+      setError('install a NIP-07 browser extension (nos2x, Alby, etc)')
       return
     }
     try {
       const pubkey = await window.nostr.getPublicKey()
-      dispatch({ type: 'LOGIN', pubkey })
+      dispatch({ type: 'LOGIN', pubkey, loginMode: 'extension' })
     } catch (err) {
-      alert('login failed: ' + err.message)
+      setError('login failed: ' + err.message)
+    }
+  }
+
+  const loginNsec = async () => {
+    setError('')
+    setLoading(true)
+    try {
+      const secretKeyBytes = decodeNsec(nsecInput.trim())
+      const pubkey = pubkeyFromSecret(secretKeyBytes)
+      // send key to SW
+      send(['SET_KEY', Array.from(secretKeyBytes)])
+      // encrypt and store if password provided
+      if (passwordInput) {
+        const encrypted = await encryptNsec(nsecInput.trim(), passwordInput)
+        localStorage.setItem('smesh2-enc', encrypted)
+        localStorage.setItem('smesh2-pubkey', pubkey)
+      }
+      dispatch({ type: 'LOGIN', pubkey, loginMode: 'nsec' })
+    } catch (err) {
+      setError('invalid nsec: ' + err.message)
+    } finally {
+      setLoading(false)
     }
   }
 
   return html`
     <div class="login-screen">
-      <h1>smesh</h1>
-      <button onClick=${login}>login with extension</button>
+      <${SmeshLoader} />
+      <button onClick=${loginExtension}>login with extension</button>
+      <div style="color: var(--fg2); font-size: 13px; margin: 8px 0">or</div>
+      <input
+        type="password"
+        value=${nsecInput}
+        onInput=${(e) => setNsecInput(e.target.value)}
+        placeholder="nsec1..."
+        style="width: 300px; max-width: 90vw; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; font-family: var(--mono); font-size: 13px;"
+      />
+      <input
+        type="password"
+        value=${passwordInput}
+        onInput=${(e) => setPasswordInput(e.target.value)}
+        placeholder="password (optional, for session restore)"
+        style="width: 300px; max-width: 90vw; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; font-size: 13px;"
+      />
+      <button onClick=${loginNsec} disabled=${loading || !nsecInput.trim()}>
+        ${loading ? 'encrypting...' : 'login with nsec'}
+      </button>
+      ${error && html`<div style="color: #ef4444; font-size: 13px; max-width: 300px; text-align: center">${error}</div>`}
+    </div>
+  `
+}
+
+function PasswordPrompt() {
+  const { dispatch } = useApp()
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const unlock = async () => {
+    setError('')
+    setLoading(true)
+    try {
+      const encrypted = localStorage.getItem('smesh2-enc')
+      const nsec = await decryptNsec(encrypted, password)
+      const secretKeyBytes = decodeNsec(nsec)
+      const pubkey = pubkeyFromSecret(secretKeyBytes)
+      send(['SET_KEY', Array.from(secretKeyBytes)])
+      dispatch({ type: 'LOGIN', pubkey, loginMode: 'nsec' })
+    } catch (err) {
+      setError('wrong password')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const forget = () => {
+    localStorage.removeItem('smesh2-enc')
+    localStorage.removeItem('smesh2-pubkey')
+    send(['CLEAR_KEY'])
+    dispatch({ type: 'CLEAR_STORED_SESSION' })
+  }
+
+  return html`
+    <div class="login-screen">
+      <${SmeshLoader} />
+      <div style="font-size: 13px; color: var(--fg2); margin-bottom: 8px">enter password to unlock</div>
+      <input
+        type="password"
+        value=${password}
+        onInput=${(e) => setPassword(e.target.value)}
+        placeholder="password"
+        onKeyDown=${(e) => { if (e.key === 'Enter') unlock() }}
+        style="width: 300px; max-width: 90vw; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; font-size: 13px;"
+      />
+      <button onClick=${unlock} disabled=${loading || !password}>
+        ${loading ? 'decrypting...' : 'unlock'}
+      </button>
+      ${error && html`<div style="color: #ef4444; font-size: 13px">${error}</div>`}
+      <button onClick=${forget} style="background: none; border: 1px solid var(--border); color: var(--fg2); margin-top: 8px; font-size: 12px; padding: 6px 16px;">
+        forget me
+      </button>
     </div>
   `
 }
@@ -431,15 +854,27 @@ const DEFAULT_RELAYS = ['wss://relay.orly.dev', 'wss://relay.damus.io', 'wss://n
 
 function reducer(state, action) {
   switch (action.type) {
-    case 'LOGIN':
-      return { ...state, pubkey: action.pubkey }
+    case 'LOGIN': {
+      const mode = action.loginMode || 'extension'
+      localStorage.setItem('smesh2-pubkey', action.pubkey)
+      localStorage.setItem('smesh2-loginMode', mode)
+      return { ...state, pubkey: action.pubkey, loginMode: mode, hasStoredSession: false, feedReady: false }
+    }
+    case 'CLEAR_STORED_SESSION':
+      localStorage.removeItem('smesh2-pubkey')
+      localStorage.removeItem('smesh2-loginMode')
+      return { ...state, hasStoredSession: false }
     case 'SET_TAB':
       return { ...state, activeTab: action.tab }
-    case 'SET_PROFILE':
-      return { ...state, profile: action.profile }
+    case 'SET_PROFILE': {
+      if (state.profileTs && action.ts < state.profileTs) return state
+      return { ...state, profile: action.profile, profileTs: action.ts }
+    }
     case 'ADD_PROFILE': {
+      const existing = state.profiles.get(action.pubkey)
+      if (existing && existing._ts >= action.ts) return state
       const profiles = new Map(state.profiles)
-      profiles.set(action.pubkey, action.profile)
+      profiles.set(action.pubkey, { ...action.profile, _ts: action.ts })
       return { ...state, profiles }
     }
     case 'SET_CONTACTS':
@@ -453,22 +888,44 @@ function reducer(state, action) {
       return { ...state, relays: state.relays.filter((r) => r !== action.url) }
     case 'ADD_EVENT': {
       if (state.feed.some((e) => e.id === action.event.id)) return state
+      if (state.pendingNotes.some((e) => e.id === action.event.id)) return state
       return { ...state, feed: [...state.feed, action.event] }
+    }
+    case 'ADD_PENDING_NOTE': {
+      if (state.feed.some((e) => e.id === action.event.id)) return state
+      if (state.pendingNotes.some((e) => e.id === action.event.id)) return state
+      return { ...state, pendingNotes: [...state.pendingNotes, action.event] }
+    }
+    case 'FLUSH_PENDING': {
+      if (!state.pendingNotes.length) return state
+      return { ...state, feed: [...state.feed, ...state.pendingNotes], pendingNotes: [] }
+    }
+    case 'SET_FEED_READY':
+      return { ...state, feedReady: true }
+    case 'SET_FEED_LOADING':
+      return { ...state, feedLoading: true, feedLenBefore: state.feed.length }
+    case 'FEED_LOADED_MORE': {
+      const added = state.feed.length - state.feedLenBefore
+      return { ...state, feedLoading: false, feedPage: state.feedPage + 1, feedExhausted: added === 0 }
     }
     case 'OPEN_THREAD': {
       const ev = action.event
-      const rootTag = ev?.tags?.find((t) => t[0] === 'e' && (t[3] === 'root' || !t[3]))
+      const eTags = (ev?.tags || []).filter((t) => t[0] === 'e')
+      // NIP-10: find root — explicit root marker first, then first e tag (positional)
+      const rootTag = eTags.find((t) => t[3] === 'root') || (eTags.length > 0 ? eTags[0] : null)
       const rootId = rootTag ? rootTag[1] : action.eventId
       // collect relay hints from all e tags
       const hints = (ev?.tags || [])
         .filter((t) => t[0] === 'e' && t[2] && t[2].startsWith('wss://'))
         .map((t) => t[2])
-      return { ...state, activeTab: 'thread', threadEventId: action.eventId, threadRootId: rootId, threadRelayHints: hints, threadEvents: ev ? [ev] : [] }
+      return { ...state, activeTab: 'thread', threadEventId: action.eventId, threadRootId: rootId, threadRelayHints: hints, threadEvents: ev ? [ev] : [], threadQueriedIds: [] }
     }
     case 'ADD_THREAD_EVENT': {
       if (state.threadEvents.some((e) => e.id === action.event.id)) return state
       return { ...state, threadEvents: [...state.threadEvents, action.event] }
     }
+    case 'MARK_THREAD_QUERIED':
+      return { ...state, threadQueriedIds: [...state.threadQueriedIds, ...action.ids] }
     case 'SET_ORLY_RELAYS':
       return { ...state, orlyRelays: action.relays }
     case 'SET_SNACKBAR':
@@ -481,20 +938,36 @@ function reducer(state, action) {
 // ─── App ─────────────────────────────────────────────────────────────
 
 function App() {
+  const storedPubkey = localStorage.getItem('smesh2-pubkey')
+  const storedMode = localStorage.getItem('smesh2-loginMode') || 'extension'
+  const hasEncrypted = !!(localStorage.getItem('smesh2-enc'))
+  // restore: extension or nsec-without-password restore immediately; nsec with encrypted key shows password prompt
+  const canAutoRestore = storedPubkey && (storedMode === 'extension' || (storedMode === 'nsec' && !hasEncrypted))
+  const needsPasswordPrompt = storedPubkey && storedMode === 'nsec' && hasEncrypted
+
   const [state, rawDispatch] = useState({
-    pubkey: null,
+    pubkey: canAutoRestore ? storedPubkey : null,
+    loginMode: canAutoRestore ? storedMode : null,
+    hasStoredSession: !!needsPasswordPrompt,
     profile: {},
+    profileTs: 0,
     profiles: new Map(),
     contacts: [],
     relays: JSON.parse(localStorage.getItem('smesh2-relays') || 'null') || DEFAULT_RELAYS,
     feed: [],
+    pendingNotes: [],
+    feedReady: false,
+    feedLoading: false,
+    feedPage: 0,
+    feedExhausted: false,
+    feedLenBefore: 0,
     activeTab: 'feed',
     snackbar: null,
     threadEventId: null,
     threadRootId: null,
     threadRelayHints: [],
     threadEvents: [],
-    threadReplies: {},
+    threadQueriedIds: [],
     orlyRelays: [],
   })
 
@@ -519,12 +992,16 @@ function App() {
           if (event.kind === 0) {
             const profile = parseProfile(event)
             if (event.pubkey === state.pubkey) {
-              dispatch({ type: 'SET_PROFILE', profile })
+              dispatch({ type: 'SET_PROFILE', profile, ts: event.created_at })
             }
-            dispatch({ type: 'ADD_PROFILE', pubkey: event.pubkey, profile })
+            dispatch({ type: 'ADD_PROFILE', pubkey: event.pubkey, profile, ts: event.created_at })
           }
           if (event.kind === 1) {
-            dispatch({ type: 'ADD_EVENT', event })
+            if (subId === 'feed-live' && state.feedReady) {
+              dispatch({ type: 'ADD_PENDING_NOTE', event })
+            } else {
+              dispatch({ type: 'ADD_EVENT', event })
+            }
             if (subId.startsWith('thread-')) {
               dispatch({ type: 'ADD_THREAD_EVENT', event })
             }
@@ -543,6 +1020,17 @@ function App() {
           }
           break
         }
+        case 'EOSE': {
+          const [subId] = args
+          if (subId === 'feed-live') {
+            dispatch({ type: 'SET_FEED_READY' })
+          }
+          if (subId.startsWith('feed-more-')) {
+            // slight delay so ADD_EVENT dispatches settle first
+            setTimeout(() => dispatch({ type: 'FEED_LOADED_MORE' }), 200)
+          }
+          break
+        }
         case 'NOTICE':
           dispatch({ type: 'SET_SNACKBAR', message: args[0] })
           break
@@ -551,6 +1039,18 @@ function App() {
           if (info?.graph_query?.enabled || info?.proxy_query?.enabled) {
             dispatch({ type: 'SET_ORLY_RELAYS', relays: [...(state.orlyRelays || []).filter((r) => r !== relayUrl), relayUrl] })
           }
+          break
+        }
+        case 'SIGNED': {
+          const [requestId, signedEvent] = args
+          const cb = signCallbacks.get(requestId)
+          if (cb) { signCallbacks.delete(requestId); cb(signedEvent) }
+          break
+        }
+        case 'SIGN_ERROR': {
+          const [requestId, errMsg] = args
+          signCallbacks.delete(requestId)
+          dispatch({ type: 'SET_SNACKBAR', message: 'sign error: ' + errMsg })
           break
         }
       }
@@ -577,21 +1077,52 @@ function App() {
     const relays = state.relays.slice(0, 4)
     const hints = state.threadRelayHints || []
     const orly = state.orlyRelays[0]
+    const allRelays = [...new Set([...hints, ...relays])]
 
+    // collect all ancestor IDs from the clicked event's e tags
+    const clickedEv = state.threadEvents.find((e) => e.id === state.threadEventId)
+    const ancestorIds = (clickedEv?.tags || [])
+      .filter((t) => t[0] === 'e')
+      .map((t) => t[1])
+      .filter((id) => id !== rootId)
+    // all IDs we're about to query for
+    const allFetchIds = [rootId, ...ancestorIds]
+
+    // mark all as queried so deepen effect doesn't re-query
+    dispatch({ type: 'MARK_THREAD_QUERIED', ids: allFetchIds })
+
+    // fetch root + all ancestors in one request
+    send(['PROXY', 'thread-root', { ids: allFetchIds }, ...allRelays])
+
+    // fetch replies to root AND all ancestors
     if (orly) {
-      // ORLY relay handles fan-out server-side via _proxy extension
       const hintRelays = [...new Set([...hints, ...relays.filter((r) => r !== orly)])]
-      send(['PROXY', 'thread-root', { ids: [rootId], limit: 1, _proxy: hintRelays }, orly])
-      send(['PROXY', 'thread-replies', { '#e': [rootId], kinds: [1], limit: 100, _proxy: hintRelays }, orly])
-      // graph query for thread tree
+      send(['PROXY', 'thread-replies', { '#e': allFetchIds, kinds: [1], limit: 500, _proxy: hintRelays }, orly])
       send(['PROXY', 'thread-graph', { _graph: [rootId, 3, 'ee', 'in'], kinds: [1] }, orly])
     } else {
-      // no ORLY relay — SW fans out directly
-      const rootRelays = [...new Set([...hints, ...relays])]
-      send(['PROXY', 'thread-root', { ids: [rootId], limit: 1 }, ...rootRelays])
-      send(['PROXY', 'thread-replies', { '#e': [rootId], kinds: [1], limit: 100 }, ...relays])
+      send(['PROXY', 'thread-replies', { '#e': allFetchIds, kinds: [1], limit: 500 }, ...relays])
     }
   }, [state.activeTab, state.threadRootId])
+
+  // deepen thread: fetch replies to replies we haven't queried yet
+  useEffect(() => {
+    if (state.activeTab !== 'thread' || state.threadEvents.length < 2) return
+    const queried = new Set(state.threadQueriedIds)
+    const newIds = state.threadEvents
+      .map((e) => e.id)
+      .filter((id) => !queried.has(id))
+    if (!newIds.length) return
+    dispatch({ type: 'MARK_THREAD_QUERIED', ids: newIds })
+    const relays = state.relays.slice(0, 4)
+    const orly = state.orlyRelays[0]
+    // batch query: find events that tag any of these IDs
+    if (orly) {
+      const hintRelays = relays.filter((r) => r !== orly)
+      send(['PROXY', 'thread-deep', { '#e': newIds, kinds: [1], limit: 200, _proxy: hintRelays }, orly])
+    } else {
+      send(['PROXY', 'thread-deep', { '#e': newIds, kinds: [1], limit: 200 }, ...relays])
+    }
+  }, [state.threadEvents.length])
 
   // fetch profiles for thread participants as events arrive
   useEffect(() => {
@@ -619,7 +1150,9 @@ function App() {
 
   return html`
     <${AppContext.Provider} value=${{ state, dispatch }}>
-      ${!state.pubkey
+      ${!state.pubkey && state.hasStoredSession
+        ? html`<${PasswordPrompt} />`
+        : !state.pubkey
         ? html`<${LoginScreen} />`
         : html`
           <div class="sidebar-toggle" onClick=${() => setSidebarOpen(!sidebarOpen)}>☰</div>
@@ -651,7 +1184,7 @@ async function boot() {
   const el = document.getElementById('app')
   try {
     if ('serviceWorker' in navigator) {
-      const reg = await navigator.serviceWorker.register('./sw.js')
+      const reg = await navigator.serviceWorker.register('./sw.js', { type: 'module' })
       if (!navigator.serviceWorker.controller) {
         await new Promise((resolve) => {
           navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true })

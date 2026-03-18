@@ -2,6 +2,16 @@
 
 ORLY is a high-performance Nostr relay in Go with Badger/Neo4j/WasmDB backends, Svelte web UI, purego-based secp256k1 crypto, and a Nostr-to-Email bridge (Marmot).
 
+## CRITICAL: Always Build from ./cmd/orly
+
+**NEVER use `go build .` for deployment.** The root `main.go` builds a relay-only binary without subcommands. The service runs `orly launcher` which requires the unified binary:
+
+```bash
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly ./cmd/orly
+```
+
+Building from root will produce a binary that crashes on `orly launcher`, causing 502 errors.
+
 ## CRITICAL: Server-Side Changes Prohibited
 
 **DO NOT modify the relay (ORLY) code (Go files in `app/`, `pkg/`, `cmd/`) unless the user EXPLICITLY states the changes should go into "the relay" or "orly".**
