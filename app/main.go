@@ -764,6 +764,15 @@ func Run(
 		}
 	}
 
+	// Start embedded Smesh2 web client if enabled
+	if cfg.Smesh2Enabled && cfg.Smesh2Port > 0 {
+		l.smesh2Server = NewSmesh2Server(cfg.Smesh2Port)
+		if err := l.smesh2Server.Start(ctx); err != nil {
+			log.E.F("failed to start smesh2 server: %v", err)
+			l.smesh2Server = nil
+		}
+	}
+
 	// Ensure a relay identity secret key exists when subscriptions and NWC are enabled
 	if cfg.SubscriptionEnabled && cfg.NWCUri != "" {
 		if skb, e := db.GetOrCreateRelayIdentitySecret(); e != nil {
@@ -846,17 +855,24 @@ func Run(
 		}
 	}
 
-	// Initialize archive relay manager if enabled
+	// Initialize archive relay manager (always created for _proxy support;
+	// archive augmentation only runs when ORLY_ARCHIVE_ENABLED=true)
 	archiveEnabled, archiveRelays, archiveTimeoutSec, archiveCacheTTLHrs := cfg.GetArchiveConfigValues()
+	archiveCfg := archive.Config{
+		Enabled:     archiveEnabled,
+		Relays:      archiveRelays,
+		TimeoutSec:  archiveTimeoutSec,
+		CacheTTLHrs: archiveCacheTTLHrs,
+	}
+	l.archiveManager = archive.New(ctx, db, archiveCfg)
 	if archiveEnabled && len(archiveRelays) > 0 {
-		archiveCfg := archive.Config{
-			Enabled:     true,
-			Relays:      archiveRelays,
-			TimeoutSec:  archiveTimeoutSec,
-			CacheTTLHrs: archiveCacheTTLHrs,
-		}
-		l.archiveManager = archive.New(ctx, db, archiveCfg)
 		log.I.F("archive relay manager initialized with %d relays", len(archiveRelays))
+	}
+
+	// Load proxy config
+	l.proxyEnabled, l.proxyMaxRelays, l.proxyTimeoutSec = cfg.GetProxyConfigValues()
+	if l.proxyEnabled {
+		log.I.F("proxy query extension enabled (max %d relays, %ds timeout)", l.proxyMaxRelays, l.proxyTimeoutSec)
 	}
 
 	// Build transport manager
@@ -975,6 +991,12 @@ func Run(
 		if l.smeshServer != nil {
 			l.smeshServer.Stop()
 			log.I.F("smesh server stopped")
+		}
+
+		// Stop smesh2 server if running
+		if l.smesh2Server != nil {
+			l.smesh2Server.Stop()
+			log.I.F("smesh2 server stopped")
 		}
 
 		// Stop NRC bridge if running

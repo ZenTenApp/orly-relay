@@ -23,12 +23,19 @@ type GraphQueryConfig struct {
 	Methods    []string `json:"methods"`
 }
 
+// ProxyQueryConfig describes _proxy filter extension capabilities for NIP-11.
+type ProxyQueryConfig struct {
+	Enabled   bool `json:"enabled"`
+	MaxRelays int  `json:"max_relays"`
+}
+
 // ExtendedRelayInfo extends the standard NIP-11 relay info with additional fields.
 // The Addresses field contains alternative WebSocket URLs for the relay (e.g., .onion).
 type ExtendedRelayInfo struct {
 	*relayinfo.T
 	Addresses      []string          `json:"addresses,omitempty"`
 	GraphQuery     *GraphQueryConfig `json:"graph_query,omitempty"`
+	ProxyQuery     *ProxyQueryConfig `json:"proxy_query,omitempty"`
 	Theme          string            `json:"theme,omitempty"`
 	BlossomEnabled bool              `json:"blossom_enabled,omitempty"`
 	DBType         string            `json:"db_type,omitempty"`
@@ -220,6 +227,15 @@ func (s *Server) HandleRelayInfo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Build proxy query config if enabled
+	var proxyConfig *ProxyQueryConfig
+	if s.proxyEnabled {
+		proxyConfig = &ProxyQueryConfig{
+			Enabled:   true,
+			MaxRelays: s.proxyMaxRelays,
+		}
+	}
+
 	// Return extended info if we have addresses, graph query support, custom theme, or blossom
 	theme := s.Config.Theme
 	if theme != "auto" && theme != "light" && theme != "dark" {
@@ -228,11 +244,12 @@ func (s *Server) HandleRelayInfo(w http.ResponseWriter, r *http.Request) {
 	// Blossom is only available if the server is actually initialized (requires Badger backend)
 	blossomEnabled := s.blossomServer != nil
 	dbType := s.Config.DBType
-	if len(addresses) > 0 || graphConfig != nil || theme != "auto" || blossomEnabled || dbType != "badger" {
+	if len(addresses) > 0 || graphConfig != nil || proxyConfig != nil || theme != "auto" || blossomEnabled || dbType != "badger" {
 		extInfo := &ExtendedRelayInfo{
 			T:              info,
 			Addresses:      addresses,
 			GraphQuery:     graphConfig,
+			ProxyQuery:     proxyConfig,
 			Theme:          theme,
 			BlossomEnabled: blossomEnabled,
 			DBType:         dbType,

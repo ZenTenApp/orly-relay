@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -862,6 +863,44 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 			seen,
 			l, // implements EventDeliveryChannel
 		)
+	}
+
+	// Handle _proxy filter extension: fetch from client-specified relay URLs
+	if l.proxyEnabled && l.archiveManager != nil && len(*env.Filters) > 0 {
+		f := (*env.Filters)[0]
+		if raw, ok := f.Extra["_proxy"]; ok {
+			var relayURLs []string
+			if err := json.Unmarshal(raw, &relayURLs); err == nil {
+				// validate and cap relay count
+				var valid []string
+				for _, u := range relayURLs {
+					if (strings.HasPrefix(u, "wss://") || strings.HasPrefix(u, "ws://")) && len(valid) < l.proxyMaxRelays {
+						valid = append(valid, u)
+					}
+				}
+				if len(valid) > 0 {
+					// strip _proxy from filter before forwarding
+					cleanFilter := *f
+					cleanFilter.Extra = make(map[string][]byte)
+					for k, v := range f.Extra {
+						if k != "_proxy" {
+							cleanFilter.Extra[k] = v
+						}
+					}
+					timeout := time.Duration(l.proxyTimeoutSec) * time.Second
+					log.D.F("REQ %s: _proxy fetch from %d relays", env.Subscription, len(valid))
+					go l.archiveManager.QueryRelays(
+						string(env.Subscription),
+						l.connectionID,
+						&cleanFilter,
+						valid,
+						timeout,
+						seen,
+						l,
+					)
+				}
+			}
+		}
 	}
 
 	// if the query was for just Ids, we know there can't be any more results,

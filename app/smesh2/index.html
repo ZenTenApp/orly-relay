@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>smesh</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #111; --bg2: #1a1a1a; --fg: #e0e0e0; --fg2: #888;
+  --accent: #f59e0b; --border: #333; --radius: 6px;
+  --font: system-ui, -apple-system, sans-serif;
+  --mono: 'SF Mono', 'Fira Code', monospace;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #fff; --bg2: #f5f5f5; --fg: #111; --fg2: #666;
+    --accent: #d97706; --border: #ddd;
+  }
+}
+
+body { font-family: var(--font); background: var(--bg); color: var(--fg); height: 100dvh; overflow: hidden; }
+
+/* layout */
+#app { display: flex; height: 100dvh; }
+.sidebar { width: auto; min-width: 0; background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* sidebar */
+.profile-area { padding: 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.profile-area:hover { background: var(--border); }
+.avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--border); object-fit: cover; }
+.profile-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.profile-npub { font-size: 11px; color: var(--fg2); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.feed-list { flex: 1; overflow-y: auto; padding: 8px; }
+.feed-item { padding: 8px 12px; border-radius: var(--radius); cursor: pointer; font-size: 14px; margin-bottom: 2px; }
+.feed-item:hover { background: var(--border); }
+.feed-item.active { background: var(--accent); color: #000; font-weight: 600; }
+
+.relay-status { padding: 8px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--fg2); }
+.relay-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; }
+.relay-dot.on { background: #22c55e; }
+.relay-dot.off { background: #ef4444; }
+
+/* main content */
+.toolbar { padding: 12px; border-bottom: 1px solid var(--border); font-size: 16px; font-weight: 600; }
+
+.feed { flex: 1; overflow-y: auto; padding: 0; }
+.note { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.note-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.note-author { font-weight: 600; font-size: 14px; }
+.note-time { font-size: 12px; color: var(--fg2); margin-left: auto; }
+.note-content { font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.note-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--border); object-fit: cover; flex-shrink: 0; }
+
+.compose { padding: 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+.compose textarea { flex: 1; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; font-family: var(--font); font-size: 14px; resize: none; min-height: 40px; max-height: 120px; }
+.compose textarea:focus { outline: none; border-color: var(--accent); }
+.compose button { background: var(--accent); color: #000; border: none; border-radius: var(--radius); padding: 8px 16px; font-weight: 600; cursor: pointer; font-size: 14px; align-self: flex-end; }
+.compose button:hover { opacity: 0.9; }
+.compose button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* login */
+.login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100dvh; gap: 16px; }
+.login-screen h1 { font-size: 24px; }
+.login-screen button { background: var(--accent); color: #000; border: none; border-radius: var(--radius); padding: 12px 24px; font-size: 16px; font-weight: 600; cursor: pointer; }
+
+/* settings */
+.settings { padding: 16px; overflow-y: auto; flex: 1; }
+.settings h2 { font-size: 16px; margin-bottom: 12px; }
+.settings section { margin-bottom: 24px; }
+.relay-input { display: flex; gap: 8px; margin-bottom: 8px; }
+.relay-input input { flex: 1; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; font-size: 14px; }
+.relay-input button { background: var(--accent); color: #000; border: none; border-radius: var(--radius); padding: 8px 12px; font-weight: 600; cursor: pointer; }
+.relay-list-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; font-size: 14px; font-family: var(--mono); }
+.relay-list-item button { background: none; border: none; color: var(--fg2); cursor: pointer; font-size: 16px; }
+
+/* thread view */
+.thread-back { padding: 8px 12px; cursor: pointer; color: var(--accent); font-size: 14px; border-bottom: 1px solid var(--border); }
+.thread-back:hover { background: var(--bg2); }
+.thread-root { border-left: 3px solid var(--accent); }
+.thread-reply { padding-left: 24px; border-left: 2px solid var(--border); margin-left: 16px; }
+.note-actions { display: flex; gap: 16px; margin-top: 6px; }
+.note-action { font-size: 12px; color: var(--fg2); cursor: pointer; display: flex; align-items: center; gap: 4px; }
+.note-action:hover { color: var(--accent); }
+.orly-badge { display: inline-block; background: var(--accent); color: #000; font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 700; margin-left: 6px; vertical-align: middle; }
+
+/* snackbar */
+.snackbar { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 20px; border-radius: var(--radius); font-size: 14px; z-index: 999; animation: fadein 0.3s; }
+@keyframes fadein { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }
+
+/* loading */
+.loading { display: flex; align-items: center; justify-content: center; height: 100dvh; color: var(--fg2); }
+
+/* mobile */
+@media (max-width: 600px) {
+  .sidebar { position: fixed; left: -100%; z-index: 10; height: 100dvh; transition: left 0.2s; width: auto; }
+  .sidebar.open { left: 0; }
+  .sidebar-toggle { display: block; padding: 8px 12px; cursor: pointer; font-size: 20px; }
+}
+@media (min-width: 601px) {
+  .sidebar-toggle { display: none; }
+}
+</style>
+</head>
+<body>
+<div id="app"><div class="loading">loading...</div></div>
+
+<script type="module">
+import { h, render, createContext } from 'https://esm.sh/preact@10.25.4'
+import { useState, useEffect, useCallback, useContext, useRef } from 'https://esm.sh/preact@10.25.4/hooks'
+import htm from 'https://esm.sh/htm@3.1.1'
+const html = htm.bind(h)
+
+// ─── service worker ──────────────────────────────────────────────────
+
+let swReady = false
+
+function send(msg) {
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage(msg)
+  }
+}
+
+// ─── nostr helpers ───────────────────────────────────────────────────
+
+function shortId(hex) {
+  if (!hex) return '?'
+  return hex.slice(0, 8) + '...' + hex.slice(-4)
+}
+
+function relativeTime(ts) {
+  const diff = Math.floor(Date.now() / 1000) - ts
+  if (diff < 60) return 'now'
+  if (diff < 3600) return Math.floor(diff / 60) + 'm'
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h'
+  return Math.floor(diff / 86400) + 'd'
+}
+
+function parseProfile(event) {
+  try { return JSON.parse(event.content) } catch { return {} }
+}
+
+// ─── app context ─────────────────────────────────────────────────────
+
+const AppContext = createContext()
+
+function useApp() { return useContext(AppContext) }
+
+// ─── components ──────────────────────────────────────────────────────
+
+function Sidebar({ sidebarOpen, setSidebarOpen }) {
+  const { state, dispatch } = useApp()
+  const profile = state.profile || {}
+
+  return html`
+    <div class="sidebar ${sidebarOpen ? 'open' : ''}">
+      <div class="profile-area" onClick=${() => dispatch({ type: 'SET_TAB', tab: 'profile' })}>
+        ${profile.picture
+          ? html`<img class="avatar" src=${profile.picture} />`
+          : html`<div class="avatar" />`}
+        <div>
+          <div class="profile-name">${profile.name || 'anon'}</div>
+        </div>
+      </div>
+
+      <div class="feed-list">
+        <div class="feed-item ${state.activeTab === 'feed' ? 'active' : ''}"
+             onClick=${() => dispatch({ type: 'SET_TAB', tab: 'feed' })}>
+          Following
+        </div>
+        <div class="feed-item ${state.activeTab === 'settings' ? 'active' : ''}"
+             onClick=${() => dispatch({ type: 'SET_TAB', tab: 'settings' })}>
+          Settings
+        </div>
+      </div>
+
+      <div class="relay-status">
+        ${(state.relays || []).map((r) => html`
+          <div><span class="relay-dot on" />${r.replace('wss://', '')}</div>
+        `)}
+        ${(!state.relays || state.relays.length === 0) && html`<div>no relays configured</div>`}
+      </div>
+    </div>
+  `
+}
+
+function Note({ event, isRoot, isReply }) {
+  const { state, dispatch } = useApp()
+  const profile = state.profiles.get(event.pubkey) || {}
+
+  const openThread = () => {
+    dispatch({ type: 'OPEN_THREAD', eventId: event.id, event })
+  }
+
+  const replyCount = state.threadReplies?.[event.id] || 0
+  const cls = `note ${isRoot ? 'thread-root' : ''} ${isReply ? 'thread-reply' : ''}`
+
+  return html`
+    <div class=${cls}>
+      <div class="note-header">
+        ${profile.picture
+          ? html`<img class="note-avatar" src=${profile.picture} />`
+          : html`<div class="note-avatar" />`}
+        <span class="note-author">${profile.name || shortId(event.pubkey)}</span>
+        <span class="note-time">${relativeTime(event.created_at)}</span>
+      </div>
+      <div class="note-content">${event.content}</div>
+      <div class="note-actions">
+        <span class="note-action" onClick=${openThread}>
+          💬 ${replyCount || ''}
+        </span>
+      </div>
+    </div>
+  `
+}
+
+function Feed() {
+  const { state } = useApp()
+  const feedRef = useRef(null)
+
+  const sorted = [...state.feed].sort((a, b) => b.created_at - a.created_at)
+
+  return html`
+    <div class="feed" ref=${feedRef}>
+      ${sorted.map((ev) => html`<${Note} key=${ev.id} event=${ev} />`)}
+      ${sorted.length === 0 && html`
+        <div style="padding: 24px; text-align: center; color: var(--fg2)">
+          ${state.pubkey ? 'no notes yet' : 'log in to see your feed'}
+        </div>
+      `}
+    </div>
+  `
+}
+
+function Compose() {
+  const { state } = useApp()
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+
+  const publish = useCallback(async () => {
+    if (!text.trim() || !state.pubkey) return
+    setSending(true)
+    try {
+      const event = {
+        kind: 1,
+        content: text.trim(),
+        tags: [],
+        created_at: Math.floor(Date.now() / 1000),
+        pubkey: state.pubkey,
+      }
+      if (window.nostr) {
+        const signed = await window.nostr.signEvent(event)
+        send(['EVENT', signed])
+        setText('')
+      }
+    } finally {
+      setSending(false)
+    }
+  }, [text, state.pubkey])
+
+  if (!state.pubkey) return null
+
+  return html`
+    <div class="compose">
+      <textarea
+        value=${text}
+        onInput=${(e) => setText(e.target.value)}
+        placeholder="what's on your mind?"
+        onKeyDown=${(e) => { if (e.key === 'Enter' && e.ctrlKey) publish() }}
+      />
+      <button onClick=${publish} disabled=${sending || !text.trim()}>post</button>
+    </div>
+  `
+}
+
+function Settings() {
+  const { state, dispatch } = useApp()
+  const [newRelay, setNewRelay] = useState('')
+
+  const addRelay = () => {
+    let url = newRelay.trim()
+    if (!url) return
+    if (!url.startsWith('wss://') && !url.startsWith('ws://')) url = 'wss://' + url
+    dispatch({ type: 'ADD_RELAY', url })
+    setNewRelay('')
+  }
+
+  return html`
+    <div class="settings">
+      <section>
+        <h2>relays</h2>
+        <div class="relay-input">
+          <input
+            value=${newRelay}
+            onInput=${(e) => setNewRelay(e.target.value)}
+            placeholder="wss://relay.example.com"
+            onKeyDown=${(e) => { if (e.key === 'Enter') addRelay() }}
+          />
+          <button onClick=${addRelay}>add</button>
+        </div>
+        ${(state.relays || []).map((r) => html`
+          <div class="relay-list-item">
+            <span>${r}</span>
+            <button onClick=${() => dispatch({ type: 'REMOVE_RELAY', url: r })}>×</button>
+          </div>
+        `)}
+      </section>
+
+      <section>
+        <h2>identity</h2>
+        ${state.pubkey
+          ? html`<div style="font-family: var(--mono); font-size: 12px; word-break: break-all">${state.pubkey}</div>`
+          : html`<div style="color: var(--fg2)">not logged in</div>`}
+      </section>
+    </div>
+  `
+}
+
+function ProfileView() {
+  const { state } = useApp()
+  const profile = state.profile || {}
+
+  return html`
+    <div class="settings">
+      <section>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px">
+          ${profile.picture
+            ? html`<img class="avatar" style="width:64px;height:64px" src=${profile.picture} />`
+            : html`<div class="avatar" style="width:64px;height:64px" />`}
+          <div>
+            <div style="font-size: 20px; font-weight: 600">${profile.name || shortId(state.pubkey)}</div>
+            ${profile.nip05 && html`<div style="font-size: 13px; color: var(--fg2)">${profile.nip05}</div>`}
+          </div>
+        </div>
+        ${profile.about && html`<div style="font-size: 14px; line-height: 1.5">${profile.about}</div>`}
+      </section>
+    </div>
+  `
+}
+
+function ThreadView() {
+  const { state, dispatch } = useApp()
+  const rootId = state.threadRootId
+  const rootEvent = state.threadEvents.find((e) => e.id === rootId)
+  const replies = state.threadEvents
+    .filter((e) => e.id !== rootId)
+    .sort((a, b) => a.created_at - b.created_at)
+
+  const goBack = () => dispatch({ type: 'SET_TAB', tab: 'feed' })
+
+  return html`
+    <div class="feed">
+      <div class="thread-back" onClick=${goBack}>← back</div>
+      ${rootEvent && html`<${Note} event=${rootEvent} isRoot=${true} />`}
+      ${!rootEvent && html`<div class="note" style="color:var(--fg2)">loading root note...</div>`}
+      ${replies.map((ev) => html`<${Note} key=${ev.id} event=${ev} isReply=${true} />`)}
+      ${replies.length === 0 && rootEvent && html`
+        <div style="padding: 16px 24px; color: var(--fg2); font-size: 14px">no replies yet</div>
+      `}
+      ${state.orlyRelays.length > 0 && html`
+        <div style="padding: 4px 16px; font-size: 11px; color: var(--fg2)">
+          thread via graph query <span class="orly-badge">ORLY</span>
+        </div>
+      `}
+    </div>
+  `
+}
+
+function LoginScreen() {
+  const { dispatch } = useApp()
+
+  const login = async () => {
+    if (!window.nostr) {
+      alert('install a NIP-07 browser extension (nos2x, Alby, etc)')
+      return
+    }
+    try {
+      const pubkey = await window.nostr.getPublicKey()
+      dispatch({ type: 'LOGIN', pubkey })
+    } catch (err) {
+      alert('login failed: ' + err.message)
+    }
+  }
+
+  return html`
+    <div class="login-screen">
+      <h1>smesh</h1>
+      <button onClick=${login}>login with extension</button>
+    </div>
+  `
+}
+
+function Snackbar({ message, onDone }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 4000)
+    return () => clearTimeout(t)
+  }, [message])
+
+  return html`<div class="snackbar">${message}</div>`
+}
+
+function UpdateSnackbar() {
+  const [show, setShow] = useState(false)
+
+  useEffect(() => {
+    const handler = () => setShow(true)
+    window.addEventListener('sw-update', handler)
+    return () => window.removeEventListener('sw-update', handler)
+  }, [])
+
+  if (!show) return null
+
+  const update = () => {
+    if (pendingWorker) pendingWorker.postMessage(['SKIP_WAITING'])
+  }
+
+  return html`
+    <div class="snackbar" onClick=${update} style="cursor:pointer">
+      new version available — click to update
+    </div>
+  `
+}
+
+// ─── state reducer ───────────────────────────────────────────────────
+
+const DEFAULT_RELAYS = ['wss://relay.orly.dev', 'wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.nostr.band']
+
+function reducer(state, action) {
+  switch (action.type) {
+    case 'LOGIN':
+      return { ...state, pubkey: action.pubkey }
+    case 'SET_TAB':
+      return { ...state, activeTab: action.tab }
+    case 'SET_PROFILE':
+      return { ...state, profile: action.profile }
+    case 'ADD_PROFILE': {
+      const profiles = new Map(state.profiles)
+      profiles.set(action.pubkey, action.profile)
+      return { ...state, profiles }
+    }
+    case 'SET_CONTACTS':
+      return { ...state, contacts: action.contacts }
+    case 'SET_RELAYS':
+      return { ...state, relays: action.relays }
+    case 'ADD_RELAY':
+      if (state.relays.includes(action.url)) return state
+      return { ...state, relays: [...state.relays, action.url] }
+    case 'REMOVE_RELAY':
+      return { ...state, relays: state.relays.filter((r) => r !== action.url) }
+    case 'ADD_EVENT': {
+      if (state.feed.some((e) => e.id === action.event.id)) return state
+      return { ...state, feed: [...state.feed, action.event] }
+    }
+    case 'OPEN_THREAD': {
+      const ev = action.event
+      const rootTag = ev?.tags?.find((t) => t[0] === 'e' && (t[3] === 'root' || !t[3]))
+      const rootId = rootTag ? rootTag[1] : action.eventId
+      // collect relay hints from all e tags
+      const hints = (ev?.tags || [])
+        .filter((t) => t[0] === 'e' && t[2] && t[2].startsWith('wss://'))
+        .map((t) => t[2])
+      return { ...state, activeTab: 'thread', threadEventId: action.eventId, threadRootId: rootId, threadRelayHints: hints, threadEvents: ev ? [ev] : [] }
+    }
+    case 'ADD_THREAD_EVENT': {
+      if (state.threadEvents.some((e) => e.id === action.event.id)) return state
+      return { ...state, threadEvents: [...state.threadEvents, action.event] }
+    }
+    case 'SET_ORLY_RELAYS':
+      return { ...state, orlyRelays: action.relays }
+    case 'SET_SNACKBAR':
+      return { ...state, snackbar: action.message }
+    default:
+      return state
+  }
+}
+
+// ─── App ─────────────────────────────────────────────────────────────
+
+function App() {
+  const [state, rawDispatch] = useState({
+    pubkey: null,
+    profile: {},
+    profiles: new Map(),
+    contacts: [],
+    relays: JSON.parse(localStorage.getItem('smesh2-relays') || 'null') || DEFAULT_RELAYS,
+    feed: [],
+    activeTab: 'feed',
+    snackbar: null,
+    threadEventId: null,
+    threadRootId: null,
+    threadRelayHints: [],
+    threadEvents: [],
+    threadReplies: {},
+    orlyRelays: [],
+  })
+
+  const dispatch = useCallback((action) => {
+    rawDispatch((prev) => reducer(prev, action))
+  }, [])
+
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // persist relays
+  useEffect(() => {
+    localStorage.setItem('smesh2-relays', JSON.stringify(state.relays))
+  }, [state.relays])
+
+  // listen to service worker messages
+  useEffect(() => {
+    const handler = (e) => {
+      const [type, ...args] = e.data
+      switch (type) {
+        case 'EVENT': {
+          const [subId, event] = args
+          if (event.kind === 0) {
+            const profile = parseProfile(event)
+            if (event.pubkey === state.pubkey) {
+              dispatch({ type: 'SET_PROFILE', profile })
+            }
+            dispatch({ type: 'ADD_PROFILE', pubkey: event.pubkey, profile })
+          }
+          if (event.kind === 1) {
+            dispatch({ type: 'ADD_EVENT', event })
+            if (subId.startsWith('thread-')) {
+              dispatch({ type: 'ADD_THREAD_EVENT', event })
+            }
+          }
+          if (event.kind === 3 && event.pubkey === state.pubkey) {
+            const contacts = event.tags
+              .filter((t) => t[0] === 'p')
+              .map((t) => t[1])
+            dispatch({ type: 'SET_CONTACTS', contacts })
+          }
+          if (event.kind === 10002 && event.pubkey === state.pubkey) {
+            const relays = event.tags
+              .filter((t) => t[0] === 'r')
+              .map((t) => t[1])
+            if (relays.length > 0) dispatch({ type: 'SET_RELAYS', relays })
+          }
+          break
+        }
+        case 'NOTICE':
+          dispatch({ type: 'SET_SNACKBAR', message: args[0] })
+          break
+        case 'RELAY_INFO': {
+          const [relayUrl, info] = args
+          if (info?.graph_query?.enabled || info?.proxy_query?.enabled) {
+            dispatch({ type: 'SET_ORLY_RELAYS', relays: [...(state.orlyRelays || []).filter((r) => r !== relayUrl), relayUrl] })
+          }
+          break
+        }
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', handler)
+    return () => navigator.serviceWorker.removeEventListener('message', handler)
+  }, [state.pubkey])
+
+  // on login, fetch profile + contacts + relay list from remote relays
+  useEffect(() => {
+    if (!state.pubkey) return
+    const relays = state.relays.slice(0, 3)
+    send(['PROXY', 'init-profile', { kinds: [0], authors: [state.pubkey], limit: 1 }, ...relays])
+    send(['PROXY', 'init-contacts', { kinds: [3], authors: [state.pubkey], limit: 1 }, ...relays])
+    send(['PROXY', 'init-relays', { kinds: [10002], authors: [state.pubkey], limit: 1 }, ...relays])
+    // probe all relays for ORLY graph_query capability
+    for (const r of state.relays) send(['RELAY_INFO', r])
+  }, [state.pubkey])
+
+  // fetch thread when thread tab opens
+  useEffect(() => {
+    if (state.activeTab !== 'thread' || !state.threadRootId) return
+    const rootId = state.threadRootId
+    const relays = state.relays.slice(0, 4)
+    const hints = state.threadRelayHints || []
+    const orly = state.orlyRelays[0]
+
+    if (orly) {
+      // ORLY relay handles fan-out server-side via _proxy extension
+      const hintRelays = [...new Set([...hints, ...relays.filter((r) => r !== orly)])]
+      send(['PROXY', 'thread-root', { ids: [rootId], limit: 1, _proxy: hintRelays }, orly])
+      send(['PROXY', 'thread-replies', { '#e': [rootId], kinds: [1], limit: 100, _proxy: hintRelays }, orly])
+      // graph query for thread tree
+      send(['PROXY', 'thread-graph', { _graph: [rootId, 3, 'ee', 'in'], kinds: [1] }, orly])
+    } else {
+      // no ORLY relay — SW fans out directly
+      const rootRelays = [...new Set([...hints, ...relays])]
+      send(['PROXY', 'thread-root', { ids: [rootId], limit: 1 }, ...rootRelays])
+      send(['PROXY', 'thread-replies', { '#e': [rootId], kinds: [1], limit: 100 }, ...relays])
+    }
+  }, [state.activeTab, state.threadRootId])
+
+  // fetch profiles for thread participants as events arrive
+  useEffect(() => {
+    if (state.activeTab !== 'thread' || !state.threadEvents.length) return
+    const unknownAuthors = state.threadEvents
+      .filter((e) => !state.profiles.has(e.pubkey))
+      .map((e) => e.pubkey)
+    if (!unknownAuthors.length) return
+    const relays = state.relays.slice(0, 3)
+    const dedupedAuthors = [...new Set(unknownAuthors)]
+    send(['PROXY', 'thread-profiles', { kinds: [0], authors: dedupedAuthors }, ...relays])
+  }, [state.threadEvents.length])
+
+  // subscribe to feed when contacts arrive
+  useEffect(() => {
+    if (!state.contacts.length) return
+    const batch = state.contacts.slice(0, 100)
+    const relays = state.relays.slice(0, 4)
+    send(['PROXY', 'feed-profiles', { kinds: [0], authors: batch }, ...relays])
+    send(['PROXY', 'feed-notes', { kinds: [1], authors: batch, limit: 50 }, ...relays])
+    send(['REQ', 'feed-live', { kinds: [1], authors: batch }])
+  }, [state.contacts])
+
+  const tabTitle = { feed: 'Following', profile: 'Profile', settings: 'Settings', thread: 'Thread' }
+
+  return html`
+    <${AppContext.Provider} value=${{ state, dispatch }}>
+      ${!state.pubkey
+        ? html`<${LoginScreen} />`
+        : html`
+          <div class="sidebar-toggle" onClick=${() => setSidebarOpen(!sidebarOpen)}>☰</div>
+          <${Sidebar} sidebarOpen=${sidebarOpen} setSidebarOpen=${setSidebarOpen} />
+          <div class="main">
+            <div class="toolbar">${tabTitle[state.activeTab] || 'smesh'}</div>
+            ${state.activeTab === 'feed' && html`<${Feed} />`}
+            ${state.activeTab === 'feed' && html`<${Compose} />`}
+            ${state.activeTab === 'thread' && html`<${ThreadView} />`}
+            ${state.activeTab === 'profile' && html`<${ProfileView} />`}
+            ${state.activeTab === 'settings' && html`<${Settings} />`}
+          </div>
+        `}
+      ${state.snackbar && html`
+        <${Snackbar}
+          message=${state.snackbar}
+          onDone=${() => dispatch({ type: 'SET_SNACKBAR', message: null })}
+        />`}
+      <${UpdateSnackbar} />
+    <//>
+  `
+}
+
+// ─── boot ────────────────────────────────────────────────────────────
+
+let pendingWorker = null
+
+async function boot() {
+  const el = document.getElementById('app')
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.register('./sw.js')
+      if (!navigator.serviceWorker.controller) {
+        await new Promise((resolve) => {
+          navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true })
+        })
+      }
+
+      // detect updates — new SW installed and waiting
+      const onUpdate = (worker) => {
+        pendingWorker = worker
+        window.dispatchEvent(new CustomEvent('sw-update'))
+      }
+
+      if (reg.waiting) onUpdate(reg.waiting)
+      reg.addEventListener('updatefound', () => {
+        const installing = reg.installing
+        if (!installing) return
+        installing.addEventListener('statechange', () => {
+          if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+            onUpdate(installing)
+          }
+        })
+      })
+
+      // reload when new SW takes over
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (pendingWorker) location.reload()
+      })
+    }
+    render(html`<${App} />`, el)
+  } catch (err) {
+    el.innerHTML = '<pre style="color:red;padding:20px">' + err.stack + '</pre>'
+  }
+}
+
+boot()
+</script>
+</body>
+</html>

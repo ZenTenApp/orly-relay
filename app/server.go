@@ -139,6 +139,11 @@ type Server struct {
 	nrcBridge     *nrc.Bridge
 	nrcEventStore *database.NRCEventStore
 
+	// Proxy query config (_proxy filter extension)
+	proxyEnabled    bool
+	proxyMaxRelays  int
+	proxyTimeoutSec int
+
 	// Archive relay and storage management
 	archiveManager   *archive.Manager
 	accessTracker    *storage.AccessTracker
@@ -160,7 +165,8 @@ type Server struct {
 	corpusCrawler *crawler.Crawler
 
 	// Smesh embedded web client
-	smeshServer *SmeshServer
+	smeshServer  *SmeshServer
+	smesh2Server *Smesh2Server
 }
 
 // =============================================================================

@@ -53,10 +53,6 @@ type Config struct {
 
 // New creates a new archive manager.
 func New(ctx context.Context, db ArchiveDatabase, cfg Config) *Manager {
-	if !cfg.Enabled || len(cfg.Relays) == 0 {
-		return &Manager{enabled: false}
-	}
-
 	mgrCtx, cancel := context.WithCancel(ctx)
 
 	timeout := time.Duration(cfg.TimeoutSec) * time.Second
@@ -69,6 +65,8 @@ func New(ctx context.Context, db ArchiveDatabase, cfg Config) *Manager {
 		cacheTTL = 24 * time.Hour
 	}
 
+	enabled := cfg.Enabled && len(cfg.Relays) > 0
+
 	m := &Manager{
 		ctx:         mgrCtx,
 		cancel:      cancel,
@@ -77,11 +75,13 @@ func New(ctx context.Context, db ArchiveDatabase, cfg Config) *Manager {
 		db:          db,
 		queryCache:  NewQueryCache(cacheTTL, 100000), // 100k cached queries
 		connections: make(map[string]*RelayConnection),
-		enabled:     true,
+		enabled:     enabled,
 	}
 
-	log.I.F("archive manager initialized with %d relays, %v timeout, %v cache TTL",
-		len(cfg.Relays), timeout, cacheTTL)
+	if enabled {
+		log.I.F("archive manager initialized with %d relays, %v timeout, %v cache TTL",
+			len(cfg.Relays), timeout, cacheTTL)
+	}
 
 	return m
 }
@@ -227,6 +227,77 @@ func (m *Manager) getOrCreateConnection(url string) (*RelayConnection, error) {
 
 	m.connections[url] = conn
 	return conn, nil
+}
+
+// QueryRelays queries explicit relay URLs and stores/streams results.
+// Unlike QueryArchive, this uses client-provided relay URLs and skips the query cache.
+// Works even when archive mode is disabled — only needs a valid context and database.
+func (m *Manager) QueryRelays(
+	subID string,
+	connID string,
+	f *filter.F,
+	relayURLs []string,
+	timeout time.Duration,
+	delivered map[string]struct{},
+	listener EventDeliveryChannel,
+) {
+	if len(relayURLs) == 0 {
+		return
+	}
+
+	if timeout <= 0 {
+		timeout = 15 * time.Second
+	}
+
+	queryCtx, cancel := context.WithTimeout(m.ctx, timeout)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	results := make(chan *event.E, 1000)
+
+	for _, relayURL := range relayURLs {
+		wg.Add(1)
+		go func(url string) {
+			defer wg.Done()
+			m.queryRelay(queryCtx, url, f, results)
+		}(relayURL)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	stored := 0
+	streamed := 0
+
+	for ev := range results {
+		evIDStr := string(ev.ID[:])
+		if _, exists := delivered[evIDStr]; exists {
+			continue
+		}
+
+		exists, err := m.db.SaveEvent(queryCtx, ev)
+		if err != nil {
+			log.D.F("proxy: failed to save event: %v", err)
+			continue
+		}
+		if !exists {
+			stored++
+		}
+
+		if listener != nil && listener.IsConnected() {
+			if err := listener.SendEvent(ev); err == nil {
+				streamed++
+				delivered[evIDStr] = struct{}{}
+			}
+		}
+	}
+
+	if stored > 0 || streamed > 0 {
+		log.I.F("proxy: query %s completed — stored: %d, streamed: %d from %d relays",
+			subID, stored, streamed, len(relayURLs))
+	}
 }
 
 // Stop stops the archive manager and closes all connections.

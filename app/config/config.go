@@ -269,6 +269,11 @@ type C struct {
 	GraphMaxResults     int  `env:"ORLY_GRAPH_MAX_RESULTS" default:"10000" usage:"maximum pubkeys/events returned per graph query"`
 	GraphRateLimitRPM   int  `env:"ORLY_GRAPH_RATE_LIMIT_RPM" default:"60" usage:"graph queries per minute per connection (0=unlimited)"`
 
+	// Proxy query configuration (_proxy filter extension — relay-assisted remote fetching)
+	ProxyEnabled    bool `env:"ORLY_PROXY_ENABLED" default:"true" usage:"enable _proxy filter extension (relay fetches from client-specified relays)"`
+	ProxyMaxRelays  int  `env:"ORLY_PROXY_MAX_RELAYS" default:"8" usage:"max relay URLs allowed per _proxy query"`
+	ProxyTimeoutSec int  `env:"ORLY_PROXY_TIMEOUT_SEC" default:"15" usage:"timeout in seconds for proxy relay queries"`
+
 	// Archive relay configuration (query augmentation from authoritative archives)
 	ArchiveEnabled     bool     `env:"ORLY_ARCHIVE_ENABLED" default:"false" usage:"enable archive relay query augmentation (fetch from archives, cache locally)"`
 	ArchiveRelays      []string `env:"ORLY_ARCHIVE_RELAYS" default:"wss://archive.orly.dev/" usage:"comma-separated list of archive relay URLs for query augmentation"`
@@ -309,6 +314,10 @@ type C struct {
 	// Smesh embedded web client
 	SmeshEnabled bool `env:"ORLY_SMESH_ENABLED" default:"true" usage:"enable embedded Smesh web client on a dedicated port"`
 	SmeshPort    int  `env:"ORLY_SMESH_PORT" default:"8088" usage:"port for the embedded Smesh web client"`
+
+	// Smesh2 embedded web client (next-gen)
+	Smesh2Enabled bool `env:"ORLY_SMESH2_ENABLED" default:"true" usage:"enable embedded Smesh2 web client on a dedicated port"`
+	Smesh2Port    int  `env:"ORLY_SMESH2_PORT" default:"8089" usage:"port for the embedded Smesh2 web client"`
 
 	// ServeMode is set programmatically by the 'serve' subcommand to grant full owner
 	// access to all users (no env tag - internal use only)
@@ -859,6 +868,10 @@ func (cfg *C) GetArchiveConfigValues() (
 		cfg.ArchiveRelays,
 		cfg.ArchiveTimeoutSec,
 		cfg.ArchiveCacheTTLHrs
+}
+
+func (cfg *C) GetProxyConfigValues() (enabled bool, maxRelays int, timeoutSec int) {
+	return cfg.ProxyEnabled, cfg.ProxyMaxRelays, cfg.ProxyTimeoutSec
 }
 
 // GetStorageConfigValues returns the storage management configuration values.
