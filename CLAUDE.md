@@ -263,6 +263,7 @@ The bridge subscribes to both kinds and tracks which protocol each sender uses. 
 | `outbound.go` | DM → Email: converts outbound DMs to SMTP messages |
 | `serve.go` | HTTP handlers for /compose and /decrypt web pages |
 | `attachments.go` | ChaCha20-Poly1305 attachment encryption |
+| `profile.go` | Kind 0 profile publishing, relay list events (10002/10050), identity broadcast to popular relays |
 | `ratelimit.go` | Sliding window rate limiter for outbound emails |
 | `zip.go` | Zip bundling for HTML + attachments (max 25MB) |
 
@@ -274,6 +275,7 @@ The bridge subscribes to both kinds and tracks which protocol each sender uses. 
 | `ORLY_BRIDGE_DOMAIN` | | Email domain (e.g., relay.example.com) |
 | `ORLY_BRIDGE_NSEC` | | Bridge identity nsec (default: use relay identity) |
 | `ORLY_BRIDGE_RELAY_URL` | | WebSocket relay URL for standalone mode |
+| `ORLY_BRIDGE_PUBLIC_RELAY_URL` | | Public wss:// URL for relay list events (falls back to RELAY_URL) |
 | `ORLY_BRIDGE_SMTP_PORT` | 2525 | SMTP server listen port |
 | `ORLY_BRIDGE_SMTP_HOST` | 0.0.0.0 | SMTP server listen address |
 | `ORLY_BRIDGE_DATA_DIR` | | Bridge data directory (default: $ORLY_DATA_DIR/bridge) |
@@ -288,6 +290,24 @@ The bridge subscribes to both kinds and tracks which protocol each sender uses. 
 | `ORLY_BRIDGE_SMTP_RELAY_USERNAME` | | SMTP smarthost AUTH username |
 | `ORLY_BRIDGE_SMTP_RELAY_PASSWORD` | | SMTP smarthost AUTH password |
 | `ORLY_BRIDGE_ACL_GRPC_SERVER` | | gRPC address of ACL server for paid subscription management |
+| `ORLY_BRIDGE_PROFILE` | $DataDir/profile.txt | Profile template file (email-header format) for kind 0 metadata |
+
+### Bridge Identity Broadcasting
+
+On startup the bridge publishes its identity to the home relay and to popular public relays (damus, nos.lol, nostr.band, purplepag.es, primal). Three event kinds are broadcast:
+
+- **Kind 0** (profile metadata) — parsed from the profile template file if it exists
+- **Kind 10002** (relay list) — points to `PUBLIC_RELAY_URL` (or `RELAY_URL` fallback)
+- **Kind 10050** (DM inbox relays) — same URL, tells outbox-model clients where to send DMs
+
+The profile template uses email-header format (one `key: value` per line, blank line ends, `#` comments). A hamster in a tuxedo could write one:
+
+```
+name: Marmot Bridge
+about: DM me to get an email address
+picture: https://example.com/marmot.png
+nip05: marmot@relay.example.com
+```
 
 ### Bridge Message Flow
 
