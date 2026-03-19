@@ -277,4 +277,6 @@ require (
 	gvisor.dev/gvisor v0.0.0-20250503011706-39ed1f5ac29c // indirect
 )
 
+replace github.com/emersion/go-mls => ./pkg/nostr/crypto/mls
+
 retract v1.0.3

@@ -4,15 +4,16 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/emersion/go-mls"
+	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/nostr/encoders/filter"
 	"next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/nostr/encoders/kind"
 	"next.orly.dev/pkg/nostr/encoders/tag"
 	"next.orly.dev/pkg/nostr/interfaces/signer"
-	"github.com/emersion/go-mls"
-	"next.orly.dev/pkg/lol/log"
 )
 
 // RelayConnection abstracts the relay interface so the Marmot client can be
@@ -38,6 +39,7 @@ type Client struct {
 	sign   signer.I
 	store  GroupStore
 	relay  RelayConnection
+	relays []string // relay URLs for key package discovery
 	onDM   DMHandler
 	kpp    *mls.KeyPairPackage // our current key pair package
 	groups map[string]*GroupState
@@ -46,7 +48,8 @@ type Client struct {
 
 // NewClient creates a Marmot client. The signer provides identity and
 // signing. The store persists group state. The relay handles event transport.
-func NewClient(sign signer.I, store GroupStore, relay RelayConnection) (*Client, error) {
+// Relays are the WebSocket URLs advertised in key package events.
+func NewClient(sign signer.I, store GroupStore, relay RelayConnection, relays ...string) (*Client, error) {
 	kpp, err := GenerateKeyPackage(sign)
 	if err != nil {
 		return nil, fmt.Errorf("generate key package: %w", err)
@@ -56,6 +59,7 @@ func NewClient(sign signer.I, store GroupStore, relay RelayConnection) (*Client,
 		sign:   sign,
 		store:  store,
 		relay:  relay,
+		relays: relays,
 		kpp:    kpp,
 		groups: make(map[string]*GroupState),
 	}
@@ -79,9 +83,10 @@ func NewClient(sign signer.I, store GroupStore, relay RelayConnection) (*Client,
 			// For now, groups are re-established on restart via welcome
 			// re-exchange. Store the metadata so we know about them.
 			c.groups[string(gs.GroupID)] = &GroupState{
-				GroupID:  gs.GroupID,
-				PeerPub:  gs.PeerPub,
-				mlsBytes: gs.MLSState,
+				GroupID:      gs.GroupID,
+				NostrGroupID: gs.NostrGroupID,
+				PeerPub:      gs.PeerPub,
+				mlsBytes:     gs.MLSState,
 			}
 		}
 	}
@@ -97,7 +102,7 @@ func (c *Client) OnDM(handler DMHandler) {
 // PublishKeyPackage publishes our MLS key package as a kind 443 event so
 // peers can create DM groups with us.
 func (c *Client) PublishKeyPackage(ctx context.Context) error {
-	ev, err := KeyPackageToEvent(c.kpp, c.sign)
+	ev, err := KeyPackageToEvent(c.kpp, c.sign, c.relays)
 	if err != nil {
 		return err
 	}
@@ -128,7 +133,12 @@ func (c *Client) SendDM(ctx context.Context, recipientPub []byte, plaintext []by
 		return fmt.Errorf("encrypt: %w", err)
 	}
 
-	ev, err := MessageToEvent(groupID, ciphertext, c.sign)
+	exporterSecret, err := gs.DeriveExporterSecret()
+	if err != nil {
+		return fmt.Errorf("derive exporter secret: %w", err)
+	}
+
+	ev, err := MessageToEvent(gs.NostrGroupID, ciphertext, exporterSecret)
 	if err != nil {
 		return err
 	}
@@ -169,13 +179,13 @@ func (c *Client) establishGroup(ctx context.Context, peerPub []byte) (*GroupStat
 		return nil, fmt.Errorf("parse peer key package: %w", err)
 	}
 
-	gs, welcome, _, err := CreateDMGroup(c.kpp, peerKP, c.sign.Pub(), peerPub)
+	gs, welcome, _, err := CreateDMGroup(c.kpp, peerKP, c.sign.Pub(), peerPub, c.relays)
 	if err != nil {
 		return nil, fmt.Errorf("create DM group: %w", err)
 	}
 
-	// Send the welcome as a gift-wrapped event
-	wrapEv, err := WelcomeToGiftWrap(welcome, peerPub, c.sign)
+	// Send the welcome as a gift-wrapped event with key package event ID
+	wrapEv, err := WelcomeToGiftWrap(welcome, peerPub, c.sign, peerKPEvent, c.relays)
 	if err != nil {
 		return nil, fmt.Errorf("gift wrap welcome: %w", err)
 	}
@@ -206,19 +216,22 @@ func (c *Client) HandleEvent(ctx context.Context, ev *event.E) error {
 }
 
 func (c *Client) handleWelcome(ctx context.Context, ev *event.E) error {
-	welcome, err := UnwrapWelcome(ev, c.sign)
+	unwrapped, err := UnwrapWelcome(ev, c.sign)
 	if err != nil {
 		return fmt.Errorf("unwrap welcome: %w", err)
 	}
 
-	senderPub := ev.Pubkey
-	gs, err := JoinDMGroup(welcome, c.kpp, senderPub)
+	// SenderPub comes from the seal layer (real identity, not ephemeral).
+	senderPub := unwrapped.SenderPub
+	gs, err := JoinDMGroup(unwrapped.Welcome, c.kpp, senderPub)
 	if err != nil {
 		return fmt.Errorf("join DM group: %w", err)
 	}
 
-	// Derive the group ID
-	gs.GroupID = DMGroupID(c.sign.Pub(), senderPub)
+	// Ensure the MLS GroupID is set (should match from the Welcome)
+	if len(gs.GroupID) == 0 {
+		gs.GroupID = DMGroupID(c.sign.Pub(), senderPub)
+	}
 
 	c.mu.Lock()
 	c.groups[string(gs.GroupID)] = gs
@@ -226,31 +239,54 @@ func (c *Client) handleWelcome(ctx context.Context, ev *event.E) error {
 
 	c.persistGroup(gs)
 
-	log.I.F("joined DM group with %s", hex.Enc(senderPub))
+	log.I.F("joined DM group with %s (nostr_group_id: %s)", hex.Enc(senderPub), hex.Enc(gs.NostrGroupID))
+	return nil
+}
+
+// findGroupByNostrGroupID looks up a group by its nostr_group_id (from "h" tag).
+func (c *Client) findGroupByNostrGroupID(nostrGroupID []byte) *GroupState {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, gs := range c.groups {
+		if string(gs.NostrGroupID) == string(nostrGroupID) {
+			return gs
+		}
+	}
 	return nil
 }
 
 func (c *Client) handleGroupMessage(ctx context.Context, ev *event.E) error {
-	groupID, ciphertext, err := EventToMessage(ev)
+	hTag := ev.Tags.GetFirst([]byte("h"))
+	if hTag == nil {
+		return fmt.Errorf("missing 'h' tag on kind %d", KindGroupMessage)
+	}
+	nostrGroupID, err := hex.Dec(string(hTag.Value()))
+	if err != nil {
+		return fmt.Errorf("decode nostr group ID: %w", err)
+	}
+
+	gs := c.findGroupByNostrGroupID(nostrGroupID)
+	if gs == nil || gs.group == nil {
+		return fmt.Errorf("unknown nostr group %x", nostrGroupID)
+	}
+
+	exporterSecret, err := gs.DeriveExporterSecret()
+	if err != nil {
+		return fmt.Errorf("derive exporter secret: %w", err)
+	}
+
+	_, mlsCiphertext, err := EventToMessage(ev, exporterSecret)
 	if err != nil {
 		return err
 	}
 
-	c.mu.RLock()
-	gs, ok := c.groups[string(groupID)]
-	c.mu.RUnlock()
-
-	if !ok || gs.group == nil {
-		return fmt.Errorf("unknown group %x", groupID)
-	}
-
-	plaintext, err := gs.Decrypt(ciphertext)
+	plaintext, err := gs.Decrypt(mlsCiphertext)
 	if err != nil {
 		return fmt.Errorf("decrypt: %w", err)
 	}
 
 	if c.onDM != nil {
-		c.onDM(ev.Pubkey, plaintext)
+		c.onDM(gs.PeerPub, plaintext)
 	}
 
 	return nil
@@ -267,16 +303,106 @@ func (c *Client) persistGroup(gs *GroupState) {
 	}
 }
 
-// SubscriptionFilter returns the filter for subscribing to events relevant
-// to this client (key packages, welcomes, and group messages addressed to us).
-func (c *Client) SubscriptionFilter() *filter.S {
+// WelcomeFilter returns a filter for kind 1059 events addressed to us via
+// "p" tag. These are Welcome messages from peers establishing new groups.
+func (c *Client) WelcomeFilter() *filter.F {
 	f := filter.New()
-	f.Kinds = kind.NewS(
-		kind.New(KindGiftWrap),
-		kind.New(KindGroupMessage),
-	)
+	f.Kinds = kind.NewS(kind.New(KindGiftWrap))
 	f.Tags = tag.NewS(
 		tag.NewFromAny("#p", hex.Enc(c.sign.Pub())),
 	)
-	return filter.NewS(f)
+	return f
+}
+
+// GroupMessageFilter returns a filter for kind 445 events tagged with our
+// active group IDs. Kind 445 events use ephemeral pubkeys (no "p" tag for
+// the real recipient), so we subscribe via "#h" tags.
+func (c *Client) GroupMessageFilter() *filter.F {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if len(c.groups) == 0 {
+		return nil
+	}
+
+	hValues := make([]any, 0, len(c.groups)+1)
+	hValues = append(hValues, "#h")
+	for _, gs := range c.groups {
+		if len(gs.NostrGroupID) > 0 {
+			hValues = append(hValues, hex.Enc(gs.NostrGroupID))
+		}
+	}
+
+	f := filter.New()
+	f.Kinds = kind.NewS(kind.New(KindGroupMessage))
+	f.Tags = tag.NewS(
+		tag.NewFromAny(hValues...),
+	)
+	return f
+}
+
+// SubscriptionFilters returns filters for all events relevant to this client.
+// Returns one or two filters depending on whether active groups exist.
+func (c *Client) SubscriptionFilters() *filter.S {
+	filters := []*filter.F{c.WelcomeFilter()}
+	if gmf := c.GroupMessageFilter(); gmf != nil {
+		filters = append(filters, gmf)
+	}
+	return filter.NewS(filters...)
+}
+
+// ActiveGroupIDs returns hex-encoded nostr_group_ids of all active groups.
+func (c *Client) ActiveGroupIDs() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	ids := make([]string, 0, len(c.groups))
+	for _, gs := range c.groups {
+		if len(gs.NostrGroupID) > 0 {
+			ids = append(ids, hex.Enc(gs.NostrGroupID))
+		}
+	}
+	return ids
+}
+
+// KeyPackageEvent returns a signed kind 443 event containing our MLS key
+// package, suitable for broadcasting to external relays.
+func (c *Client) KeyPackageEvent() (*event.E, error) {
+	return KeyPackageToEvent(c.kpp, c.sign, c.relays)
+}
+
+// KeyPackageRelaysEvent returns a signed kind 10051 event listing relay URLs
+// where our key packages can be found, suitable for broadcasting.
+func (c *Client) KeyPackageRelaysEvent(relayURLs []string) (*event.E, error) {
+	tags := make([]*tag.T, len(relayURLs))
+	for i, u := range relayURLs {
+		tags[i] = tag.NewFromAny("relay", u)
+	}
+
+	ev := event.New()
+	ev.CreatedAt = time.Now().Unix()
+	ev.Kind = KindKeyPackageRelays
+	ev.Tags = tag.NewS(tags...)
+	if err := ev.Sign(c.sign); err != nil {
+		return nil, fmt.Errorf("sign key package relays: %w", err)
+	}
+	return ev, nil
+}
+
+// PublishKeyPackageRelays publishes a kind 10051 event listing relay URLs
+// where our key packages can be found.
+func (c *Client) PublishKeyPackageRelays(ctx context.Context, relayURLs []string) error {
+	tags := make([]*tag.T, len(relayURLs))
+	for i, u := range relayURLs {
+		tags[i] = tag.NewFromAny("relay", u)
+	}
+
+	ev := event.New()
+	ev.CreatedAt = time.Now().Unix()
+	ev.Kind = KindKeyPackageRelays
+	ev.Tags = tag.NewS(tags...)
+	if err := ev.Sign(c.sign); err != nil {
+		return fmt.Errorf("sign key package relays: %w", err)
+	}
+	return c.relay.Publish(ctx, ev)
 }

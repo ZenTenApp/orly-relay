@@ -14,14 +14,15 @@ var cipherSuite = mls.CipherSuiteMLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519
 
 // GroupState holds the MLS group state for a 1:1 DM conversation.
 type GroupState struct {
-	GroupID  []byte
-	PeerPub  []byte // 32-byte x-only Nostr pubkey of the peer
-	group    *mls.Group
-	mlsBytes []byte // serialized MLS state for persistence
+	GroupID      []byte // MLS group ID (deterministic, for internal lookups)
+	NostrGroupID []byte // 32-byte random ID from NostrGroupData (0xf2ee), used in "h" tags
+	PeerPub      []byte // 32-byte x-only Nostr pubkey of the peer
+	group        *mls.Group
+	mlsBytes     []byte // serialized MLS state for persistence
 }
 
 // DMGroupID derives a deterministic group ID for a 1:1 DM between two pubkeys.
-// The ID is SHA256(sort(pubA, pubB)) so both sides compute the same value.
+// Used as the MLS GroupID. Both sides compute the same value.
 func DMGroupID(pubA, pubB []byte) []byte {
 	pair := [2][]byte{pubA, pubB}
 	sort.Slice(pair[:], func(i, j int) bool {
@@ -38,13 +39,26 @@ func DMGroupID(pubA, pubB []byte) []byte {
 	return h.Sum(nil)
 }
 
-// CreateDMGroup creates a new 2-member MLS group and generates a Welcome
-// message for the peer. Returns the group state, the welcome (to send to peer),
-// and the serialized commit message.
-func CreateDMGroup(selfKPP *mls.KeyPairPackage, peerKP *mls.KeyPackage, selfPub, peerPub []byte) (*GroupState, *mls.Welcome, []byte, error) {
+// CreateDMGroup creates a new 2-member MLS group with a NostrGroupData
+// extension and generates a Welcome for the peer. The nostrGroupID is a
+// random 32-byte value carried in the 0xf2ee extension and used in "h" tags.
+func CreateDMGroup(selfKPP *mls.KeyPairPackage, peerKP *mls.KeyPackage, selfPub, peerPub []byte, relays []string) (*GroupState, *mls.Welcome, []byte, error) {
 	groupID := DMGroupID(selfPub, peerPub)
 
-	group, err := mls.CreateGroup(groupID, selfKPP)
+	// Create NostrGroupData extension with random nostr_group_id
+	ngd, err := NewNostrGroupData("", selfPub, relays)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("create nostr group data: %w", err)
+	}
+
+	ngdExt, err := ngd.MarshalExtension()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("marshal nostr group data: %w", err)
+	}
+
+	group, err := mls.CreateGroupWithOptions(groupID, selfKPP, &mls.GroupOptions{
+		Extensions: []mls.Extension{ngdExt},
+	})
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("mls create group: %w", err)
 	}
@@ -60,26 +74,56 @@ func CreateDMGroup(selfKPP *mls.KeyPairPackage, peerKP *mls.KeyPackage, selfPub,
 	}
 
 	gs := &GroupState{
-		GroupID: groupID,
-		PeerPub: peerPub,
-		group:   group,
+		GroupID:      groupID,
+		NostrGroupID: ngd.NostrGroupID[:],
+		PeerPub:      peerPub,
+		group:        group,
 	}
 	return gs, welcome, welcome.Bytes(), nil
 }
 
-// JoinDMGroup joins a group from a received Welcome message.
+// JoinDMGroup joins a group from a received Welcome message. Extracts the
+// nostr_group_id from the NostrGroupData extension in the group context.
 func JoinDMGroup(welcome *mls.Welcome, selfKPP *mls.KeyPairPackage, peerPub []byte) (*GroupState, error) {
 	group, err := mls.GroupFromWelcome(welcome, selfKPP)
 	if err != nil {
 		return nil, fmt.Errorf("mls join from welcome: %w", err)
 	}
 
-	// Derive the group ID from the MLS group
 	gs := &GroupState{
+		GroupID: group.GroupID(),
 		PeerPub: peerPub,
 		group:   group,
 	}
+
+	// Extract nostr_group_id from the 0xf2ee extension
+	extData := group.FindGroupContextExtension(mls.ExtensionTypeNostrGroupData)
+	if extData != nil {
+		ngd, err := UnmarshalNostrGroupData(extData)
+		if err == nil {
+			gs.NostrGroupID = ngd.NostrGroupID[:]
+		}
+	}
+
 	return gs, nil
+}
+
+// DeriveExporterSecret derives the MLS exporter secret for kind 445 events
+// using MLS-Exporter("marmot", "group-event", 32) per MIP-03.
+func (gs *GroupState) DeriveExporterSecret() ([]byte, error) {
+	if gs.group == nil {
+		return nil, fmt.Errorf("group not initialized")
+	}
+	return DeriveExporterSecret(gs.group)
+}
+
+// ExporterSecret derives the raw MLS exporter secret from the current epoch.
+// Prefer DeriveExporterSecret for kind 445 encryption.
+func (gs *GroupState) ExporterSecret() ([]byte, error) {
+	if gs.group == nil {
+		return nil, fmt.Errorf("group not initialized")
+	}
+	return gs.group.ExporterSecret()
 }
 
 // Encrypt encrypts a plaintext message within the MLS group.

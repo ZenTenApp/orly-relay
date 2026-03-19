@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>smesh</title>
+<link rel="icon" href="./favicon.ico" sizes="48x48" />
+<link rel="icon" href="./favicon.png" sizes="256x256" type="image/png" />
+<link rel="icon" href="./favicon-96x96.png" sizes="96x96" type="image/png" />
+<link rel="apple-touch-icon" href="./apple-touch-icon.png" />
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -48,7 +52,9 @@ body { font-family: var(--font); background: var(--bg); color: var(--fg); height
 .relay-dot.off { background: #ef4444; }
 
 /* main content */
-.toolbar { padding: 12px; border-bottom: 1px solid var(--border); font-size: 16px; font-weight: 600; }
+.toolbar { padding: 12px; border-bottom: 1px solid var(--border); font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; }
+.toolbar-reload { background: none; border: none; color: var(--fg2); cursor: pointer; font-size: 18px; padding: 4px; line-height: 1; }
+.toolbar-reload:hover { color: var(--fg); }
 
 .feed { flex: 1; overflow-y: auto; padding: 0; }
 .note { padding: 12px 16px; border-bottom: 1px solid var(--border); }
@@ -115,6 +121,33 @@ body { font-family: var(--font); background: var(--bg); color: var(--fg); height
 /* new notes pill */
 .new-notes-pill { position: sticky; top: 8px; left: 50%; transform: translateX(-50%); width: fit-content; background: var(--accent); color: #000; padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; z-index: 5; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
 .new-notes-pill:hover { opacity: 0.9; }
+
+/* rich content */
+.rich-link { color: var(--accent); text-decoration: none; word-break: break-all; }
+.rich-link:hover { text-decoration: underline; }
+.rich-image { max-width: 100%; max-height: 400px; border-radius: var(--radius); margin: 6px 0; display: block; cursor: pointer; }
+.rich-video { max-width: 100%; max-height: 400px; border-radius: var(--radius); margin: 6px 0; display: block; }
+.rich-mention { color: var(--accent); cursor: pointer; font-weight: 600; }
+.rich-mention:hover { text-decoration: underline; }
+
+/* embedded notes */
+.embedded-note { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; margin: 6px 0; background: var(--bg2); cursor: pointer; }
+.embedded-note:hover { border-color: var(--accent); }
+.embedded-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.embedded-content { font-size: 13px; color: var(--fg2); line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+.embedded-loading, .embedded-missing { color: var(--fg2); font-size: 13px; font-style: italic; }
+
+/* repost */
+.repost-label { font-size: 12px; color: var(--fg2); margin-bottom: 4px; padding-left: 36px; }
+
+/* lightbox */
+.lightbox-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 100; display: flex; align-items: center; justify-content: center; }
+.lightbox-close { position: fixed; top: 12px; right: 16px; background: none; border: none; color: #fff; font-size: 28px; cursor: pointer; z-index: 101; }
+.lightbox-img { max-width: 95vw; max-height: 90vh; object-fit: contain; touch-action: pinch-zoom; }
+
+/* hashtag feed */
+.hashtag-input { width: 100%; background: var(--bg2); color: var(--fg); border: none; border-bottom: 1px solid var(--border); padding: 10px 12px; font-size: 14px; font-family: var(--font); outline: none; }
+.hashtag-input:focus { border-color: var(--accent); }
 
 /* loading */
 .loading { display: flex; align-items: center; justify-content: center; height: 100dvh; color: var(--fg2); }
@@ -221,6 +254,23 @@ function pubkeyFromSecret(secretKeyBytes) {
 
 // ─── nostr helpers ───────────────────────────────────────────────────
 
+const PROFILE_RELAYS = [
+  'wss://relay.damus.io',
+  'wss://relay.nostr.net',
+  'wss://nos.lol',
+  'wss://purplepag.es',
+  'wss://relay.snort.social',
+  'wss://relay.primal.net',
+  'wss://offchain.pub',
+  'wss://nostr.wine',
+  'wss://relay.noswhere.com',
+  'wss://nostr-pub.wellorder.net',
+]
+
+function profileRelays(userRelays) {
+  return [...new Set([...userRelays.slice(0, 3), ...PROFILE_RELAYS])]
+}
+
 function shortId(hex) {
   if (!hex) return '?'
   return hex.slice(0, 8) + '...' + hex.slice(-4)
@@ -238,11 +288,140 @@ function parseProfile(event) {
   try { return JSON.parse(event.content) } catch { return {} }
 }
 
+// ─── content parser ──────────────────────────────────────────────────
+
+const IMAGE_RE = /\.(jpe?g|png|gif|webp|svg)(\?[^\s]*)?$/i
+const VIDEO_RE = /\.(mp4|webm|mov)(\?[^\s]*)?$/i
+
+function parseContent(text) {
+  if (!text) return [{ t: 'text', v: '' }]
+  const TOKEN = /(https?:\/\/[^\s<>"]+)|(nostr:(npub1|note1|nevent1|nprofile1|naddr1)[a-z0-9]+)/gi
+  const segments = []
+  let last = 0, m
+  while ((m = TOKEN.exec(text)) !== null) {
+    if (m.index > last) segments.push({ t: 'text', v: text.slice(last, m.index) })
+    if (m[1]) {
+      const url = m[1].replace(/[.,;:!?)]+$/, '')
+      segments.push(IMAGE_RE.test(url) ? { t: 'image', url } : VIDEO_RE.test(url) ? { t: 'video', url } : { t: 'link', url })
+      last = m.index + url.length
+      TOKEN.lastIndex = last
+    } else if (m[2]) {
+      const raw = m[2], bech32 = raw.slice(6)
+      try {
+        const d = nip19Decode(bech32)
+        if (d.type === 'npub') segments.push({ t: 'mention', pubkey: d.data })
+        else if (d.type === 'nprofile') segments.push({ t: 'mention', pubkey: d.data.pubkey, relays: d.data.relays })
+        else if (d.type === 'note') segments.push({ t: 'noteref', id: d.data })
+        else if (d.type === 'nevent') segments.push({ t: 'noteref', id: d.data.id, relays: d.data.relays })
+        else if (d.type === 'naddr') segments.push({ t: 'addrref', kind: d.data.kind, pubkey: d.data.pubkey, d: d.data.identifier, relays: d.data.relays })
+        else segments.push({ t: 'text', v: raw })
+      } catch { segments.push({ t: 'text', v: raw }) }
+      last = m.index + raw.length
+      TOKEN.lastIndex = last
+    }
+  }
+  if (last < text.length) segments.push({ t: 'text', v: text.slice(last) })
+  return segments
+}
+
 // ─── app context ─────────────────────────────────────────────────────
 
 const AppContext = createContext()
 
 function useApp() { return useContext(AppContext) }
+
+// ─── rich content components ─────────────────────────────────────────
+
+function EmbeddedNote({ eventId, relays, embedDepth }) {
+  const { state, dispatch } = useApp()
+  const [fetched, setFetched] = useState(false)
+
+  const event = state.embeddedNotes?.get(eventId)
+    || state.feed.find((e) => e.id === eventId)
+    || state.hashtagFeed?.find((e) => e.id === eventId)
+    || state.relayFeed?.find((e) => e.id === eventId)
+    || null
+
+  useEffect(() => {
+    if (event || fetched) return
+    setFetched(true)
+    const subId = 'embed-' + eventId.slice(0, 12)
+    const fetchRelays = relays?.length ? relays : state.relays.slice(0, 3)
+    send(['PROXY', subId, { ids: [eventId], limit: 1 }, ...fetchRelays])
+  }, [eventId, event, fetched])
+
+  if (!event) return html`<div class="embedded-note embedded-loading">loading note...</div>`
+
+  const profile = state.profiles.get(event.pubkey) || {}
+  const nextDepth = (embedDepth || 0) + 1
+  const text = typeof event.content === 'string' ? event.content : ''
+
+  return html`
+    <div class="embedded-note" onClick=${(e) => { e.stopPropagation(); dispatch({ type: 'OPEN_THREAD', eventId: event.id, event }) }}>
+      <div class="embedded-header">
+        ${profile.picture
+          ? html`<img class="note-avatar" src=${profile.picture} />`
+          : html`<div class="note-avatar" />`}
+        <span class="note-author" style="font-size:13px">${profile.name || shortId(event.pubkey)}</span>
+        <span class="note-time">${relativeTime(event.created_at)}</span>
+      </div>
+      <div class="embedded-content">
+        <${RichContent} content=${text} embedDepth=${nextDepth} />
+      </div>
+    </div>
+  `
+}
+
+function RichContent({ content, embedDepth }) {
+  const { state, dispatch } = useApp()
+  const depth = embedDepth || 0
+  const segments = useMemo(() => parseContent(content), [content])
+
+  return html`<div class="note-content">${segments.map((seg) => {
+    switch (seg.t) {
+      case 'text':
+        return seg.v
+      case 'link':
+        return html`<a href=${seg.url} target="_blank" rel="noopener noreferrer" class="rich-link">${seg.url.replace(/^https?:\/\//, '').slice(0, 60)}${seg.url.replace(/^https?:\/\//, '').length > 60 ? '...' : ''}</a>`
+      case 'image':
+        return html`<img src=${seg.url} class="rich-image" loading="lazy" onClick=${(e) => { e.stopPropagation(); dispatch({ type: 'OPEN_LIGHTBOX', url: seg.url }) }} />`
+      case 'video':
+        return html`<video src=${seg.url} controls preload="metadata" class="rich-video" />`
+      case 'mention': {
+        const p = state.profiles.get(seg.pubkey)
+        return html`<span class="rich-mention">@${p?.name || shortId(seg.pubkey)}</span>`
+      }
+      case 'noteref':
+        if (depth >= 2) return html`<span class="rich-mention">note:${seg.id.slice(0, 8)}...</span>`
+        return html`<${EmbeddedNote} eventId=${seg.id} relays=${seg.relays} embedDepth=${depth} />`
+      case 'addrref':
+        if (depth >= 2) return html`<span class="rich-mention">addr:${(seg.d || '').slice(0, 8)}...</span>`
+        return html`<${EmbeddedNote} eventId=${seg.d} relays=${seg.relays} embedDepth=${depth} />`
+      default:
+        return ''
+    }
+  })}</div>`
+}
+
+function Lightbox() {
+  const { state, dispatch } = useApp()
+  if (!state.lightboxUrl) return null
+
+  const close = () => dispatch({ type: 'CLOSE_LIGHTBOX' })
+
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') close() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  return html`
+    <div class="lightbox-overlay" onClick=${close}>
+      <button class="lightbox-close" onClick=${close}>✕</button>
+      <img src=${state.lightboxUrl} class="lightbox-img" onClick=${(e) => e.stopPropagation()} />
+    </div>
+  `
+}
 
 // ─── components ──────────────────────────────────────────────────────
 
@@ -265,6 +444,14 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
         <div class="feed-item ${state.activeTab === 'feed' ? 'active' : ''}"
              onClick=${() => dispatch({ type: 'SET_TAB', tab: 'feed' })}>
           Following
+        </div>
+        <div class="feed-item ${state.activeTab === 'relays' ? 'active' : ''}"
+             onClick=${() => dispatch({ type: 'SET_TAB', tab: 'relays' })}>
+          Relays
+        </div>
+        <div class="feed-item ${state.activeTab === 'hashtags' ? 'active' : ''}"
+             onClick=${() => dispatch({ type: 'SET_TAB', tab: 'hashtags' })}>
+          Hashtags
         </div>
         <div class="feed-item ${state.activeTab === 'settings' ? 'active' : ''}"
              onClick=${() => dispatch({ type: 'SET_TAB', tab: 'settings' })}>
@@ -293,6 +480,37 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
 }
 
 function Note({ event, isRoot, isReply, depth, inThread }) {
+  const { state } = useApp()
+
+  // kind 6 repost: unwrap inner event or show embedded reference
+  if (event.kind === 6) {
+    let inner = null
+    try { inner = JSON.parse(event.content) } catch {}
+    const repostProfile = state.profiles.get(event.pubkey) || {}
+    const repostName = repostProfile.name || shortId(event.pubkey)
+    if (inner && inner.id) {
+      return html`
+        <div class="note" style=${{ paddingTop: '4px' }}>
+          <div class="repost-label">⟳ reposted by ${repostName}</div>
+          <${NoteInner} event=${inner} isRoot=${isRoot} isReply=${isReply} depth=${depth} inThread=${inThread} />
+        </div>
+      `
+    }
+    const eTag = event.tags?.find((t) => t[0] === 'e')
+    if (eTag) {
+      return html`
+        <div class="note" style=${{ paddingTop: '4px' }}>
+          <div class="repost-label">⟳ reposted by ${repostName}</div>
+          <${EmbeddedNote} eventId=${eTag[1]} />
+        </div>
+      `
+    }
+  }
+
+  return html`<${NoteInner} event=${event} isRoot=${isRoot} isReply=${isReply} depth=${depth} inThread=${inThread} />`
+}
+
+function NoteInner({ event, isRoot, isReply, depth, inThread }) {
   const { state, dispatch } = useApp()
   const profile = state.profiles.get(event.pubkey) || {}
   const [replying, setReplying] = useState(false)
@@ -307,7 +525,6 @@ function Note({ event, isRoot, isReply, depth, inThread }) {
     if (!replyText.trim() || !state.pubkey) return
     setSending(true)
     try {
-      // NIP-10: build e tags — root + reply
       const eTags = (event.tags || []).filter((t) => t[0] === 'e')
       const rootTag = eTags.find((t) => t[3] === 'root')
       const tags = []
@@ -320,7 +537,6 @@ function Note({ event, isRoot, isReply, depth, inThread }) {
       } else {
         tags.push(['e', event.id, '', 'root'])
       }
-      // p tag for the author we're replying to
       tags.push(['p', event.pubkey])
       const ev = {
         kind: 1,
@@ -343,7 +559,6 @@ function Note({ event, isRoot, isReply, depth, inThread }) {
     }
   }, [replyText, state.pubkey, state.loginMode, event])
 
-  // detect if this note is part of a thread
   const hasETags = event.tags?.some((t) => t[0] === 'e')
   const hasReplies = state.feed.some((e) =>
     e.tags?.some((t) => t[0] === 'e' && t[1] === event.id)
@@ -364,7 +579,7 @@ function Note({ event, isRoot, isReply, depth, inThread }) {
         ${!inThread && isThread && html`<span class="note-action header-action" onClick=${openThread}>thread</span>`}
         <span class="note-time">${relativeTime(event.created_at)}</span>
       </div>
-      <div class="note-content">${event.content}</div>
+      <${RichContent} content=${event.content} />
       ${replying && html`
         <div class="reply-compose">
           <textarea
@@ -406,7 +621,7 @@ function Feed() {
     const batch = state.contacts.slice(0, 100)
     const relays = state.relays.slice(0, 4)
     const subId = 'feed-more-' + state.feedPage
-    send(['PROXY', subId, { kinds: [1], authors: batch, limit: 50, until: oldest }, ...relays])
+    send(['PROXY', subId, { kinds: [1, 6], authors: batch, limit: 50, until: oldest }, ...relays])
   }, [state.feedLoading, state.feedExhausted, state.contacts, state.relays, state.feedPage, sorted])
 
   const onScroll = useCallback((e) => {
@@ -476,6 +691,121 @@ function Compose() {
         onKeyDown=${(e) => { if (e.key === 'Enter' && e.ctrlKey) publish() }}
       />
       <button onClick=${publish} disabled=${sending || !text.trim()}>post</button>
+    </div>
+  `
+}
+
+function HashtagFeed() {
+  const { state, dispatch } = useApp()
+  const feedRef = useRef(null)
+  const [input, setInput] = useState(state.hashtagQuery || '')
+  const timerRef = useRef(null)
+
+  const doSearch = useCallback((query) => {
+    if (!query.trim()) return
+    const tag = query.trim().replace(/^#/, '')
+    dispatch({ type: 'SET_HASHTAG_QUERY', query: tag })
+    const relays = state.relays.slice(0, 4)
+    send(['PROXY', 'hashtag-init', { kinds: [1], '#t': [tag], limit: 50 }, ...relays])
+  }, [state.relays])
+
+  const onInput = useCallback((e) => {
+    const val = e.target.value
+    setInput(val)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => doSearch(val), 2000)
+  }, [doSearch])
+
+  const sorted = useMemo(
+    () => [...state.hashtagFeed].sort((a, b) => b.created_at - a.created_at),
+    [state.hashtagFeed]
+  )
+
+  const loadMore = useCallback(() => {
+    if (state.hashtagLoading || state.hashtagExhausted || !state.hashtagQuery || !sorted.length) return
+    dispatch({ type: 'SET_HASHTAG_LOADING' })
+    const oldest = sorted[sorted.length - 1].created_at
+    const relays = state.relays.slice(0, 4)
+    const subId = 'hashtag-more-' + state.hashtagPage
+    send(['PROXY', subId, { kinds: [1], '#t': [state.hashtagQuery], limit: 50, until: oldest }, ...relays])
+  }, [state.hashtagLoading, state.hashtagExhausted, state.hashtagQuery, state.relays, state.hashtagPage, sorted])
+
+  const onScroll = useCallback((e) => {
+    const el = e.target
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 400) loadMore()
+  }, [loadMore])
+
+  // fetch profiles for hashtag feed authors
+  useEffect(() => {
+    if (!state.hashtagFeed.length) return
+    const unknown = [...new Set(state.hashtagFeed.filter((e) => !state.profiles.has(e.pubkey)).map((e) => e.pubkey))]
+    if (!unknown.length) return
+    send(['PROXY', 'hashtag-profiles', { kinds: [0], authors: unknown.slice(0, 50) }, ...profileRelays(state.relays)])
+  }, [state.hashtagFeed.length])
+
+  return html`
+    <div class="feed" ref=${feedRef} style="position:relative" onScroll=${onScroll}>
+      <input class="hashtag-input" value=${input} onInput=${onInput} placeholder="search hashtag..." />
+      ${sorted.map((ev) => html`<${Note} key=${ev.id} event=${ev} inThread=${false} />`)}
+      ${state.hashtagLoading && html`
+        <div style="padding: 16px; text-align: center; color: var(--fg2); font-size: 13px">loading...</div>
+      `}
+      ${sorted.length === 0 && state.hashtagQuery && !state.hashtagLoading && html`
+        <div style="padding: 24px; text-align: center; color: var(--fg2)">no notes for #${state.hashtagQuery}</div>
+      `}
+    </div>
+  `
+}
+
+function RelayFeed() {
+  const { state, dispatch } = useApp()
+  const feedRef = useRef(null)
+  const [loaded, setLoaded] = useState(false)
+
+  // initial load
+  useEffect(() => {
+    if (loaded || !state.relays.length) return
+    setLoaded(true)
+    const relays = state.relays.slice(0, 4)
+    send(['PROXY', 'relay-init', { kinds: [1], limit: 50 }, ...relays])
+  }, [state.relays, loaded])
+
+  const sorted = useMemo(
+    () => [...state.relayFeed].sort((a, b) => b.created_at - a.created_at),
+    [state.relayFeed]
+  )
+
+  const loadMore = useCallback(() => {
+    if (state.relayFeedLoading || state.relayFeedExhausted || !sorted.length) return
+    dispatch({ type: 'SET_RELAY_LOADING' })
+    const oldest = sorted[sorted.length - 1].created_at
+    const relays = state.relays.slice(0, 4)
+    const subId = 'relay-more-' + state.relayFeedPage
+    send(['PROXY', subId, { kinds: [1], limit: 50, until: oldest }, ...relays])
+  }, [state.relayFeedLoading, state.relayFeedExhausted, state.relays, state.relayFeedPage, sorted])
+
+  const onScroll = useCallback((e) => {
+    const el = e.target
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 400) loadMore()
+  }, [loadMore])
+
+  // fetch profiles for relay feed authors
+  useEffect(() => {
+    if (!state.relayFeed.length) return
+    const unknown = [...new Set(state.relayFeed.filter((e) => !state.profiles.has(e.pubkey)).map((e) => e.pubkey))]
+    if (!unknown.length) return
+    send(['PROXY', 'relay-profiles', { kinds: [0], authors: unknown.slice(0, 50) }, ...profileRelays(state.relays)])
+  }, [state.relayFeed.length])
+
+  return html`
+    <div class="feed" ref=${feedRef} style="position:relative" onScroll=${onScroll}>
+      ${sorted.map((ev) => html`<${Note} key=${ev.id} event=${ev} inThread=${false} />`)}
+      ${state.relayFeedLoading && html`
+        <div style="padding: 16px; text-align: center; color: var(--fg2); font-size: 13px">loading...</div>
+      `}
+      ${sorted.length === 0 && !state.relayFeedLoading && html`
+        <div style="padding: 24px; text-align: center; color: var(--fg2)">no notes yet</div>
+      `}
     </div>
   `
 }
@@ -742,23 +1072,25 @@ function LoginScreen() {
       <${SmeshLoader} />
       <button onClick=${loginExtension}>login with extension</button>
       <div style="color: var(--fg2); font-size: 13px; margin: 8px 0">or</div>
-      <input
-        type="password"
-        value=${nsecInput}
-        onInput=${(e) => setNsecInput(e.target.value)}
-        placeholder="nsec1..."
-        style="width: 300px; max-width: 90vw; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; font-family: var(--mono); font-size: 13px;"
-      />
-      <input
-        type="password"
-        value=${passwordInput}
-        onInput=${(e) => setPasswordInput(e.target.value)}
-        placeholder="password (optional, for session restore)"
-        style="width: 300px; max-width: 90vw; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; font-size: 13px;"
-      />
-      <button onClick=${loginNsec} disabled=${loading || !nsecInput.trim()}>
-        ${loading ? 'encrypting...' : 'login with nsec'}
-      </button>
+      <form onSubmit=${(e) => { e.preventDefault(); loginNsec() }} style="display:flex;flex-direction:column;align-items:center;gap:8px">
+        <input
+          type="password"
+          value=${nsecInput}
+          onInput=${(e) => setNsecInput(e.target.value)}
+          placeholder="nsec1..."
+          style="width: 300px; max-width: 90vw; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; font-family: var(--mono); font-size: 13px;"
+        />
+        <input
+          type="password"
+          value=${passwordInput}
+          onInput=${(e) => setPasswordInput(e.target.value)}
+          placeholder="password (optional, for session restore)"
+          style="width: 300px; max-width: 90vw; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; font-size: 13px;"
+        />
+        <button type="submit" disabled=${loading || !nsecInput.trim()}>
+          ${loading ? 'encrypting...' : 'login with nsec'}
+        </button>
+      </form>
       ${error && html`<div style="color: #ef4444; font-size: 13px; max-width: 300px; text-align: center">${error}</div>`}
     </div>
   `
@@ -798,17 +1130,18 @@ function PasswordPrompt() {
     <div class="login-screen">
       <${SmeshLoader} />
       <div style="font-size: 13px; color: var(--fg2); margin-bottom: 8px">enter password to unlock</div>
-      <input
-        type="password"
-        value=${password}
-        onInput=${(e) => setPassword(e.target.value)}
-        placeholder="password"
-        onKeyDown=${(e) => { if (e.key === 'Enter') unlock() }}
-        style="width: 300px; max-width: 90vw; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; font-size: 13px;"
-      />
-      <button onClick=${unlock} disabled=${loading || !password}>
-        ${loading ? 'decrypting...' : 'unlock'}
-      </button>
+      <form onSubmit=${(e) => { e.preventDefault(); unlock() }} style="display:flex;flex-direction:column;align-items:center;gap:8px">
+        <input
+          type="password"
+          value=${password}
+          onInput=${(e) => setPassword(e.target.value)}
+          placeholder="password"
+          style="width: 300px; max-width: 90vw; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; font-size: 13px;"
+        />
+        <button type="submit" disabled=${loading || !password}>
+          ${loading ? 'decrypting...' : 'unlock'}
+        </button>
+      </form>
       ${error && html`<div style="color: #ef4444; font-size: 13px">${error}</div>`}
       <button onClick=${forget} style="background: none; border: 1px solid var(--border); color: var(--fg2); margin-top: 8px; font-size: 12px; padding: 6px 16px;">
         forget me
@@ -930,6 +1263,37 @@ function reducer(state, action) {
       return { ...state, orlyRelays: action.relays }
     case 'SET_SNACKBAR':
       return { ...state, snackbar: action.message }
+    case 'CACHE_EMBEDDED': {
+      const embeddedNotes = new Map(state.embeddedNotes)
+      embeddedNotes.set(action.eventId, action.event)
+      return { ...state, embeddedNotes }
+    }
+    case 'OPEN_LIGHTBOX':
+      return { ...state, lightboxUrl: action.url }
+    case 'CLOSE_LIGHTBOX':
+      return { ...state, lightboxUrl: null }
+    case 'SET_HASHTAG_QUERY':
+      return { ...state, hashtagQuery: action.query, hashtagFeed: [], hashtagPage: 0, hashtagExhausted: false, hashtagLoading: false, hashtagLenBefore: 0 }
+    case 'ADD_HASHTAG_EVENT': {
+      if (state.hashtagFeed.some((e) => e.id === action.event.id)) return state
+      return { ...state, hashtagFeed: [...state.hashtagFeed, action.event] }
+    }
+    case 'SET_HASHTAG_LOADING':
+      return { ...state, hashtagLoading: true, hashtagLenBefore: state.hashtagFeed.length }
+    case 'HASHTAG_LOADED_MORE': {
+      const added = state.hashtagFeed.length - state.hashtagLenBefore
+      return { ...state, hashtagLoading: false, hashtagPage: state.hashtagPage + 1, hashtagExhausted: added === 0 }
+    }
+    case 'ADD_RELAY_EVENT': {
+      if (state.relayFeed.some((e) => e.id === action.event.id)) return state
+      return { ...state, relayFeed: [...state.relayFeed, action.event] }
+    }
+    case 'SET_RELAY_LOADING':
+      return { ...state, relayFeedLoading: true, relayFeedLenBefore: state.relayFeed.length }
+    case 'RELAY_LOADED_MORE': {
+      const added = state.relayFeed.length - state.relayFeedLenBefore
+      return { ...state, relayFeedLoading: false, relayFeedPage: state.relayFeedPage + 1, relayFeedExhausted: added === 0 }
+    }
     default:
       return state
   }
@@ -969,6 +1333,19 @@ function App() {
     threadEvents: [],
     threadQueriedIds: [],
     orlyRelays: [],
+    embeddedNotes: new Map(),
+    lightboxUrl: null,
+    hashtagQuery: '',
+    hashtagFeed: [],
+    hashtagLoading: false,
+    hashtagPage: 0,
+    hashtagExhausted: false,
+    hashtagLenBefore: 0,
+    relayFeed: [],
+    relayFeedLoading: false,
+    relayFeedPage: 0,
+    relayFeedExhausted: false,
+    relayFeedLenBefore: 0,
   })
 
   const dispatch = useCallback((action) => {
@@ -980,6 +1357,7 @@ function App() {
   // persist relays
   useEffect(() => {
     localStorage.setItem('smesh2-relays', JSON.stringify(state.relays))
+    if (state.pubkey) send(['SET_WRITE_RELAYS', state.relays])
   }, [state.relays])
 
   // listen to service worker messages
@@ -996,8 +1374,15 @@ function App() {
             }
             dispatch({ type: 'ADD_PROFILE', pubkey: event.pubkey, profile, ts: event.created_at })
           }
-          if (event.kind === 1) {
-            if (subId === 'feed-live' && state.feedReady) {
+          if (event.kind === 1 || event.kind === 6) {
+            // route to correct feed based on subscription prefix
+            if (subId.startsWith('hashtag-')) {
+              dispatch({ type: 'ADD_HASHTAG_EVENT', event })
+            } else if (subId.startsWith('relay-')) {
+              dispatch({ type: 'ADD_RELAY_EVENT', event })
+            } else if (subId.startsWith('embed-')) {
+              dispatch({ type: 'CACHE_EMBEDDED', eventId: event.id, event })
+            } else if (subId === 'feed-live' && state.feedReady) {
               dispatch({ type: 'ADD_PENDING_NOTE', event })
             } else {
               dispatch({ type: 'ADD_EVENT', event })
@@ -1026,8 +1411,13 @@ function App() {
             dispatch({ type: 'SET_FEED_READY' })
           }
           if (subId.startsWith('feed-more-')) {
-            // slight delay so ADD_EVENT dispatches settle first
             setTimeout(() => dispatch({ type: 'FEED_LOADED_MORE' }), 200)
+          }
+          if (subId.startsWith('hashtag-more-')) {
+            setTimeout(() => dispatch({ type: 'HASHTAG_LOADED_MORE' }), 200)
+          }
+          if (subId.startsWith('relay-more-')) {
+            setTimeout(() => dispatch({ type: 'RELAY_LOADED_MORE' }), 200)
           }
           break
         }
@@ -1062,8 +1452,10 @@ function App() {
   // on login, fetch profile + contacts + relay list from remote relays
   useEffect(() => {
     if (!state.pubkey) return
+    // tell SW which relays to propagate fetched events to
+    send(['SET_WRITE_RELAYS', state.relays])
     const relays = state.relays.slice(0, 3)
-    send(['PROXY', 'init-profile', { kinds: [0], authors: [state.pubkey], limit: 1 }, ...relays])
+    send(['PROXY', 'init-profile', { kinds: [0], authors: [state.pubkey], limit: 1 }, ...profileRelays(relays)])
     send(['PROXY', 'init-contacts', { kinds: [3], authors: [state.pubkey], limit: 1 }, ...relays])
     send(['PROXY', 'init-relays', { kinds: [10002], authors: [state.pubkey], limit: 1 }, ...relays])
     // probe all relays for ORLY graph_query capability
@@ -1133,7 +1525,7 @@ function App() {
     if (!unknownAuthors.length) return
     const relays = state.relays.slice(0, 3)
     const dedupedAuthors = [...new Set(unknownAuthors)]
-    send(['PROXY', 'thread-profiles', { kinds: [0], authors: dedupedAuthors }, ...relays])
+    send(['PROXY', 'thread-profiles', { kinds: [0], authors: dedupedAuthors }, ...profileRelays(relays)])
   }, [state.threadEvents.length])
 
   // subscribe to feed when contacts arrive
@@ -1141,12 +1533,12 @@ function App() {
     if (!state.contacts.length) return
     const batch = state.contacts.slice(0, 100)
     const relays = state.relays.slice(0, 4)
-    send(['PROXY', 'feed-profiles', { kinds: [0], authors: batch }, ...relays])
-    send(['PROXY', 'feed-notes', { kinds: [1], authors: batch, limit: 50 }, ...relays])
-    send(['REQ', 'feed-live', { kinds: [1], authors: batch }])
+    send(['PROXY', 'feed-profiles', { kinds: [0], authors: batch }, ...profileRelays(relays)])
+    send(['PROXY', 'feed-notes', { kinds: [1, 6], authors: batch, limit: 50 }, ...relays])
+    send(['REQ', 'feed-live', { kinds: [1, 6], authors: batch }])
   }, [state.contacts])
 
-  const tabTitle = { feed: 'Following', profile: 'Profile', settings: 'Settings', thread: 'Thread' }
+  const tabTitle = { feed: 'Following', relays: 'Relays', hashtags: 'Hashtags', profile: 'Profile', settings: 'Settings', thread: 'Thread' }
 
   return html`
     <${AppContext.Provider} value=${{ state, dispatch }}>
@@ -1158,14 +1550,20 @@ function App() {
           <div class="sidebar-toggle" onClick=${() => setSidebarOpen(!sidebarOpen)}>☰</div>
           <${Sidebar} sidebarOpen=${sidebarOpen} setSidebarOpen=${setSidebarOpen} />
           <div class="main">
-            <div class="toolbar">${tabTitle[state.activeTab] || 'smesh'}</div>
+            <div class="toolbar">
+              <span>${tabTitle[state.activeTab] || 'smesh'}</span>
+              <button class="toolbar-reload" onClick=${() => location.reload()} title="reload">⟳</button>
+            </div>
             ${state.activeTab === 'feed' && html`<${Feed} />`}
             ${state.activeTab === 'feed' && html`<${Compose} />`}
+            ${state.activeTab === 'relays' && html`<${RelayFeed} />`}
+            ${state.activeTab === 'hashtags' && html`<${HashtagFeed} />`}
             ${state.activeTab === 'thread' && html`<${ThreadView} />`}
             ${state.activeTab === 'profile' && html`<${ProfileView} />`}
             ${state.activeTab === 'settings' && html`<${Settings} />`}
           </div>
         `}
+      <${Lightbox} />
       ${state.snackbar && html`
         <${Snackbar}
           message=${state.snackbar}

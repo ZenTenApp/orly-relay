@@ -5,12 +5,13 @@ import { schnorr } from 'https://esm.sh/@noble/curves@1.8.2/secp256k1'
 import { sha256 } from 'https://esm.sh/@noble/hashes@1.7.2/sha256'
 import { bytesToHex } from 'https://esm.sh/@noble/hashes@1.7.2/utils'
 
-const CACHE_NAME = 'smesh2-v27'
-const CACHE_URLS = ['./', './index.html']
+const CACHE_NAME = 'smesh2-v38'
+const CACHE_URLS = ['./', './index.html', './favicon.ico', './favicon.png', './favicon-96x96.png', './apple-touch-icon.png']
 
 // ─── signing ────────────────────────────────────────────────────────
 
 let secretKey = null // Uint8Array(32) or null
+let writeRelays = [] // relay URLs to propagate fetched events to
 
 function signEvent(event) {
   const serialized = JSON.stringify([
@@ -205,7 +206,7 @@ function matchesFilter(ev, f) {
 
 // ─── WebSocket pool ──────────────────────────────────────────────────
 
-const MAX_CONNECTIONS = 4
+const MAX_CONNECTIONS = 16
 const pool = new Map() // url -> { ws, lastUsed, subCount }
 
 function getConnection(url) {
@@ -275,7 +276,13 @@ async function handleRelayMessage(relayUrl, msg) {
   if (type === 'EVENT') {
     const [subId, event] = args
     const saved = await saveEvent(event)
-    if (saved) await pushToMatchingSubs(event)
+    if (saved) {
+      await pushToMatchingSubs(event)
+      // propagate to write relays (skip source to avoid echo)
+      for (const wr of writeRelays) {
+        if (wr !== relayUrl) sendToRelay(wr, ['EVENT', event])
+      }
+    }
   }
 
   if (type === 'EOSE') {
@@ -439,6 +446,11 @@ self.addEventListener('message', (e) => {
     }
     case 'CLEAR_KEY': {
       secretKey = null
+      writeRelays = []
+      break
+    }
+    case 'SET_WRITE_RELAYS': {
+      writeRelays = args[0] || []
       break
     }
   }

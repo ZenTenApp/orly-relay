@@ -23,6 +23,7 @@ import (
 
 	aclgrpc "next.orly.dev/pkg/acl/grpc"
 	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
+	"next.orly.dev/pkg/nostr/protocol/marmot"
 )
 
 // dmFormat tracks which DM protocol a sender last used.
@@ -31,6 +32,7 @@ type dmFormat int
 const (
 	dmFormatKind4    dmFormat = iota // NIP-04 style (kind 4)
 	dmFormatGiftWrap                 // NIP-17 gift wrap (kind 1059)
+	dmFormatMLS                      // MLS/NIP-EE (kind 443/444/445)
 )
 
 // Bridge is the Nostr-Email bridge. It manages identity, relay connection,
@@ -45,6 +47,7 @@ type Bridge struct {
 	smtpServer *bridgesmtp.Server
 
 	aclClient *aclgrpc.Client
+	mlsClient *marmot.Client
 
 	// senderFormats tracks the DM format last used by each sender so the
 	// bridge replies in the same format. Protected by senderFmtMu.
@@ -148,6 +151,15 @@ func (b *Bridge) Start(ctx context.Context) error {
 
 		// Broadcast identity to popular relays in background
 		go b.broadcastIdentity()
+
+		// Initialize MLS if enabled
+		if b.cfg.MLSEnabled {
+			if err := b.initMLS(); err != nil {
+				log.W.F("MLS init failed (continuing without MLS): %v", err)
+			} else {
+				log.I.F("MLS (NIP-EE) enabled")
+			}
+		}
 	}
 
 	log.I.F("bridge started")
@@ -387,11 +399,21 @@ func (b *Bridge) handleDMEvent(ev *event.E) {
 	}
 }
 
-// handleGiftWrapEvent unwraps a NIP-17 gift-wrapped DM (kind 1059) and routes it.
+// handleGiftWrapEvent unwraps a kind 1059 event. Both NIP-17 DMs and MLS
+// Welcomes arrive as kind 1059. Strategy: try NIP-17 first (expects inner
+// kind 13 seal -> kind 14 DM). If that fails and MLS is enabled, pass to
+// the MLS client (expects inner kind 13 seal -> kind 444 Welcome).
 func (b *Bridge) handleGiftWrapEvent(ev *event.E) {
 	dm, err := unwrapGiftWrap(ev, b.sign)
 	if err != nil {
-		log.I.F("gift wrap unwrap failed: %v", err)
+		// NIP-17 unwrap failed. Try MLS Welcome if enabled.
+		if b.mlsClient != nil {
+			if mlsErr := b.mlsClient.HandleEvent(b.ctx, ev); mlsErr != nil {
+				log.D.F("kind 1059 unwrap failed (NIP-17: %v, MLS: %v)", err, mlsErr)
+			}
+		} else {
+			log.I.F("gift wrap unwrap failed: %v", err)
+		}
 		return
 	}
 
@@ -445,6 +467,11 @@ func (b *Bridge) makeSendDM() func(pubkeyHex string, content string) error {
 		log.I.F("sending DM reply to %s (format=%d, %d bytes)", pubkeyHex, format, len(content))
 
 		switch format {
+		case dmFormatMLS:
+			if err := b.sendMLSDM(pubkeyHex, content); err != nil {
+				return fmt.Errorf("MLS DM: %w", err)
+			}
+			log.I.F("sent MLS DM to %s (%d bytes)", pubkeyHex, len(content))
 		case dmFormatGiftWrap:
 			if err := b.sendGiftWrapDM(pubkeyHex, content); err != nil {
 				return fmt.Errorf("gift wrap DM: %w", err)

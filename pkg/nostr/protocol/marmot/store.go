@@ -130,16 +130,18 @@ func (s *MemoryGroupStore) DeleteGroup(groupID []byte) error {
 
 // groupStateSerialized is the JSON structure for persisting group state.
 type groupStateSerialized struct {
-	GroupID  []byte `json:"group_id"`
-	PeerPub  []byte `json:"peer_pub"`
-	MLSState []byte `json:"mls_state"`
+	GroupID      []byte `json:"group_id"`
+	NostrGroupID []byte `json:"nostr_group_id,omitempty"`
+	PeerPub      []byte `json:"peer_pub"`
+	MLSState     []byte `json:"mls_state"`
 }
 
 func marshalGroupState(gs *GroupState) ([]byte, error) {
 	return json.Marshal(&groupStateSerialized{
-		GroupID:  gs.GroupID,
-		PeerPub:  gs.PeerPub,
-		MLSState: gs.mlsBytes,
+		GroupID:      gs.GroupID,
+		NostrGroupID: gs.NostrGroupID,
+		PeerPub:      gs.PeerPub,
+		MLSState:     gs.mlsBytes,
 	})
 }
 

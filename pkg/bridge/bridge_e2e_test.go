@@ -8,9 +8,11 @@ import (
 
 	"next.orly.dev/pkg/nostr/crypto/encryption"
 	"next.orly.dev/pkg/nostr/encoders/event"
+	"next.orly.dev/pkg/nostr/encoders/filter"
 	"next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/nostr/encoders/tag"
 	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"next.orly.dev/pkg/nostr/protocol/marmot"
 )
 
 func newTestSigner(t *testing.T) *p8k.Signer {
@@ -362,6 +364,307 @@ func TestE2E_TwoUserConversation(t *testing.T) {
 		t.Error("alice should NOT be able to unwrap bob's gift wrap")
 	}
 }
+
+// TestE2E_MLSKeyPackageEvent verifies that the bridge can produce a valid kind
+// 443 key package event and a kind 10051 relay list event for broadcasting.
+func TestE2E_MLSKeyPackageEvent(t *testing.T) {
+	bridgeSign := newTestSigner(t)
+	store, err := marmot.NewFileGroupStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("create store: %v", err)
+	}
+
+	// We need a mock relay adapter but KeyPackageEvent doesn't use it.
+	client, err := marmot.NewClient(bridgeSign, store, &nullRelay{})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+
+	// Kind 443 key package event
+	kpEv, err := client.KeyPackageEvent()
+	if err != nil {
+		t.Fatalf("KeyPackageEvent: %v", err)
+	}
+	if kpEv.Kind != 443 {
+		t.Errorf("kind: want 443, got %d", kpEv.Kind)
+	}
+	if len(kpEv.Content) == 0 {
+		t.Error("key package event has empty content")
+	}
+	// Verify round-trip: parse back to MLS key package
+	kp, err := marmot.EventToKeyPackage(kpEv)
+	if err != nil {
+		t.Fatalf("parse key package from event: %v", err)
+	}
+	if kp == nil {
+		t.Fatal("parsed key package is nil")
+	}
+
+	// Kind 10051 relay list event
+	kprEv, err := client.KeyPackageRelaysEvent([]string{"wss://relay.example.com"})
+	if err != nil {
+		t.Fatalf("KeyPackageRelaysEvent: %v", err)
+	}
+	if kprEv.Kind != 10051 {
+		t.Errorf("kind: want 10051, got %d", kprEv.Kind)
+	}
+	relayTag := findTag(kprEv, "relay")
+	if relayTag != "wss://relay.example.com" {
+		t.Errorf("relay tag: want wss://relay.example.com, got %q", relayTag)
+	}
+}
+
+// TestE2E_MLSWelcomeRoundTrip verifies that an MLS Welcome can be gift-wrapped
+// and unwrapped through the marmot SDK, exercising the same code path that the
+// bridge's handleGiftWrapEvent uses for MLS disambiguation.
+func TestE2E_MLSWelcomeRoundTrip(t *testing.T) {
+	alice := newTestSigner(t)
+	bob := newTestSigner(t)
+
+	aliceKPP, err := marmot.GenerateKeyPackage(alice)
+	if err != nil {
+		t.Fatalf("alice key package: %v", err)
+	}
+	bobKPP, err := marmot.GenerateKeyPackage(bob)
+	if err != nil {
+		t.Fatalf("bob key package: %v", err)
+	}
+
+	// Alice creates a group with Bob
+	_, welcome, _, err := marmot.CreateDMGroup(aliceKPP, &bobKPP.Public, alice.Pub(), bob.Pub(), nil)
+	if err != nil {
+		t.Fatalf("create DM group: %v", err)
+	}
+
+	// Alice wraps the welcome for Bob using NIP-59 three-layer gift wrap
+	wrapEv, err := marmot.WelcomeToGiftWrap(welcome, bob.Pub(), alice, nil, nil)
+	if err != nil {
+		t.Fatalf("WelcomeToGiftWrap: %v", err)
+	}
+
+	// Verify outer structure
+	if wrapEv.Kind != 1059 {
+		t.Errorf("wrap kind: want 1059, got %d", wrapEv.Kind)
+	}
+	pTag := findTag(wrapEv, "p")
+	if pTag != hex.Enc(bob.Pub()) {
+		t.Errorf("p tag: want bob's pubkey, got %s", pTag)
+	}
+
+	// Bob unwraps the welcome
+	unwrapped, err := marmot.UnwrapWelcome(wrapEv, bob)
+	if err != nil {
+		t.Fatalf("UnwrapWelcome: %v", err)
+	}
+
+	// Sender should be Alice (from the seal layer)
+	if hex.Enc(unwrapped.SenderPub) != hex.Enc(alice.Pub()) {
+		t.Errorf("sender: want alice, got %s", hex.Enc(unwrapped.SenderPub))
+	}
+
+	// Bob joins the group
+	gs, err := marmot.JoinDMGroup(unwrapped.Welcome, bobKPP, alice.Pub())
+	if err != nil {
+		t.Fatalf("join group: %v", err)
+	}
+	if gs == nil {
+		t.Fatal("group state is nil after join")
+	}
+}
+
+// TestE2E_Kind1059Disambiguation verifies that the bridge correctly
+// distinguishes between NIP-17 gift-wrapped DMs and MLS Welcome events,
+// both of which arrive as kind 1059.
+func TestE2E_Kind1059Disambiguation(t *testing.T) {
+	bridgeSign := newTestSigner(t)
+	alice := newTestSigner(t)
+
+	bridgePubHex := hex.Enc(bridgeSign.Pub())
+
+	// Create a NIP-17 gift wrap
+	nip17Wrap, _, err := wrapGiftWrap(bridgePubHex, "hello from NIP-17", alice)
+	if err != nil {
+		t.Fatalf("NIP-17 wrap: %v", err)
+	}
+
+	// NIP-17 unwrap should succeed
+	dm, err := unwrapGiftWrap(nip17Wrap, bridgeSign)
+	if err != nil {
+		t.Fatalf("NIP-17 unwrap: %v", err)
+	}
+	if dm.Content != "hello from NIP-17" {
+		t.Errorf("NIP-17 content: want 'hello from NIP-17', got %q", dm.Content)
+	}
+
+	// Create an MLS Welcome wrapped as kind 1059
+	aliceKPP, err := marmot.GenerateKeyPackage(alice)
+	if err != nil {
+		t.Fatalf("alice key package: %v", err)
+	}
+	bridgeKPP, err := marmot.GenerateKeyPackage(bridgeSign)
+	if err != nil {
+		t.Fatalf("bridge key package: %v", err)
+	}
+
+	_, welcome, _, err := marmot.CreateDMGroup(aliceKPP, &bridgeKPP.Public, alice.Pub(), bridgeSign.Pub(), nil)
+	if err != nil {
+		t.Fatalf("create DM group: %v", err)
+	}
+
+	mlsWrap, err := marmot.WelcomeToGiftWrap(welcome, bridgeSign.Pub(), alice, nil, nil)
+	if err != nil {
+		t.Fatalf("MLS wrap: %v", err)
+	}
+
+	// NIP-17 unwrap of MLS Welcome should FAIL (different inner structure)
+	_, err = unwrapGiftWrap(mlsWrap, bridgeSign)
+	if err == nil {
+		t.Fatal("NIP-17 unwrap of MLS Welcome should have failed")
+	}
+
+	// MLS unwrap should succeed (this is the fallback path)
+	unwrapped, err := marmot.UnwrapWelcome(mlsWrap, bridgeSign)
+	if err != nil {
+		t.Fatalf("MLS unwrap: %v", err)
+	}
+	if hex.Enc(unwrapped.SenderPub) != hex.Enc(alice.Pub()) {
+		t.Errorf("MLS sender: want alice, got %s", hex.Enc(unwrapped.SenderPub))
+	}
+}
+
+// TestE2E_ThreeProtocolFormatTracking verifies that the bridge correctly
+// tracks NIP-04, NIP-17, and MLS format per sender and returns the right
+// format for each.
+func TestE2E_ThreeProtocolFormatTracking(t *testing.T) {
+	bridgeSign := newTestSigner(t)
+	alice := newTestSigner(t)
+	bob := newTestSigner(t)
+	carol := newTestSigner(t)
+
+	alicePubHex := hex.Enc(alice.Pub())
+	bobPubHex := hex.Enc(bob.Pub())
+	carolPubHex := hex.Enc(carol.Pub())
+
+	b := &Bridge{
+		sign:          bridgeSign,
+		senderFormats: make(map[string]dmFormat),
+	}
+
+	// Alice uses NIP-04
+	b.recordSenderFormat(alicePubHex, dmFormatKind4)
+	// Bob uses NIP-17
+	b.recordSenderFormat(bobPubHex, dmFormatGiftWrap)
+	// Carol uses MLS
+	b.recordSenderFormat(carolPubHex, dmFormatMLS)
+
+	if f := b.getSenderFormat(alicePubHex); f != dmFormatKind4 {
+		t.Errorf("alice: want kind4, got %d", f)
+	}
+	if f := b.getSenderFormat(bobPubHex); f != dmFormatGiftWrap {
+		t.Errorf("bob: want giftWrap, got %d", f)
+	}
+	if f := b.getSenderFormat(carolPubHex); f != dmFormatMLS {
+		t.Errorf("carol: want MLS, got %d", f)
+	}
+
+	// Unknown defaults to kind4
+	if f := b.getSenderFormat("unknown"); f != dmFormatKind4 {
+		t.Errorf("unknown: want kind4 default, got %d", f)
+	}
+}
+
+// TestE2E_MLSGroupMessageRoundTrip tests that a message encrypted through MLS
+// can be wrapped in a kind 445 event and decrypted by the recipient, verifying
+// the full NIP-EE message path that the bridge uses.
+func TestE2E_MLSGroupMessageRoundTrip(t *testing.T) {
+	alice := newTestSigner(t)
+	bob := newTestSigner(t)
+
+	aliceKPP, err := marmot.GenerateKeyPackage(alice)
+	if err != nil {
+		t.Fatalf("alice KPP: %v", err)
+	}
+	bobKPP, err := marmot.GenerateKeyPackage(bob)
+	if err != nil {
+		t.Fatalf("bob KPP: %v", err)
+	}
+
+	// Alice creates group, gets Welcome for Bob
+	aliceGS, welcome, _, err := marmot.CreateDMGroup(aliceKPP, &bobKPP.Public, alice.Pub(), bob.Pub(), nil)
+	if err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+
+	// Bob joins
+	bobGS, err := marmot.JoinDMGroup(welcome, bobKPP, alice.Pub())
+	if err != nil {
+		t.Fatalf("join group: %v", err)
+	}
+	bobGS.GroupID = aliceGS.GroupID
+
+	// Alice encrypts and wraps in kind 445
+	plaintext := []byte("subscribe")
+	ciphertext, err := aliceGS.Encrypt(plaintext)
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+
+	exporterSecret, err := aliceGS.DeriveExporterSecret()
+	if err != nil {
+		t.Fatalf("exporter secret: %v", err)
+	}
+
+	ev, err := marmot.MessageToEvent(aliceGS.NostrGroupID, ciphertext, exporterSecret)
+	if err != nil {
+		t.Fatalf("MessageToEvent: %v", err)
+	}
+
+	if ev.Kind != 445 {
+		t.Errorf("kind: want 445, got %d", ev.Kind)
+	}
+	hTag := findTag(ev, "h")
+	if hTag != hex.Enc(aliceGS.NostrGroupID) {
+		t.Errorf("h tag: want nostr group ID, got %s", hTag)
+	}
+
+	// Bob extracts and decrypts
+	bobExporter, err := bobGS.DeriveExporterSecret()
+	if err != nil {
+		t.Fatalf("bob exporter secret: %v", err)
+	}
+
+	_, mlsCiphertext, err := marmot.EventToMessage(ev, bobExporter)
+	if err != nil {
+		t.Fatalf("EventToMessage: %v", err)
+	}
+
+	decrypted, err := bobGS.Decrypt(mlsCiphertext)
+	if err != nil {
+		t.Fatalf("decrypt: %v", err)
+	}
+
+	if string(decrypted) != "subscribe" {
+		t.Errorf("decrypted: want 'subscribe', got %q", string(decrypted))
+	}
+}
+
+// nullRelay is a no-op relay for tests that don't need network.
+type nullRelay struct{}
+
+func (n *nullRelay) Publish(ctx context.Context, ev *event.E) error { return nil }
+func (n *nullRelay) Subscribe(ctx context.Context, ff *filter.S) (marmot.EventStream, error) {
+	return &nullStream{}, nil
+}
+
+type nullStream struct{ ch chan *event.E }
+
+func (s *nullStream) Events() <-chan *event.E {
+	if s.ch == nil {
+		s.ch = make(chan *event.E)
+	}
+	return s.ch
+}
+func (s *nullStream) Close() {}
 
 // --- helpers ---
 

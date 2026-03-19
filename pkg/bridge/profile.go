@@ -209,6 +209,16 @@ func (b *Bridge) broadcastIdentity() {
 		events = append(events, dmRelayEv)
 	}
 
+	// Add MLS key package and relay list events if MLS is enabled
+	if b.mlsClient != nil {
+		if kpEv, err := b.mlsKeyPackageEvent(); err == nil {
+			events = append(events, kpEv)
+		}
+		if kprEv, err := b.mlsKeyPackageRelaysEvent(pubURL); err == nil {
+			events = append(events, kprEv)
+		}
+	}
+
 	if len(events) == 0 {
 		return
 	}

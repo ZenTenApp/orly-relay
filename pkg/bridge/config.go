@@ -76,4 +76,9 @@ type Config struct {
 	// If the file exists, the bridge publishes a kind 0 metadata event on startup.
 	// Default: $DataDir/profile.txt
 	ProfilePath string
+
+	// MLSEnabled enables MLS (NIP-EE) protocol support. When true, the bridge
+	// publishes MLS key packages and can exchange DMs with MLS-capable clients
+	// like White Noise.
+	MLSEnabled bool
 }

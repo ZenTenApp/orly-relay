@@ -310,6 +310,7 @@ type C struct {
 	BridgeACLGRPCServer string `env:"ORLY_BRIDGE_ACL_GRPC_SERVER" usage:"gRPC address of ACL server for paid subscription management"`
 	BridgeAliasPriceSats int64 `env:"ORLY_BRIDGE_ALIAS_PRICE_SATS" default:"4200" usage:"monthly price in sats for alias email (default 2x base price)"`
 	BridgeProfile string `env:"ORLY_BRIDGE_PROFILE" usage:"path to bridge profile template file (default: $BRIDGE_DATA_DIR/profile.txt)"`
+	BridgeMLS     bool   `env:"ORLY_BRIDGE_MLS" default:"false" usage:"enable MLS (NIP-EE) protocol support for E2E encrypted DMs with MLS-capable clients"`
 
 	// Smesh embedded web client
 	SmeshEnabled bool `env:"ORLY_SMESH_ENABLED" default:"true" usage:"enable embedded Smesh web client on a dedicated port"`
@@ -1069,6 +1070,7 @@ func (cfg *C) GetBridgeConfigValues() (
 	aclGRPCServer string,
 	aliasPriceSats int64,
 	profilePath string,
+	mlsEnabled bool,
 ) {
 	dataDir = cfg.BridgeDataDir
 	if dataDir == "" {
@@ -1103,5 +1105,6 @@ func (cfg *C) GetBridgeConfigValues() (
 				return cfg.BridgeProfile
 			}
 			return filepath.Join(dataDir, "profile.txt")
-		}()
+		}(),
+		cfg.BridgeMLS
 }
