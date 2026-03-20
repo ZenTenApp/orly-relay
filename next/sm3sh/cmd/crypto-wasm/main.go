@@ -3,7 +3,7 @@
 package main
 
 import (
-	"smesh3/crypto/secp256k1"
+	"common/crypto/secp256k1"
 	"syscall/js"
 )
 

@@ -1,8 +1,8 @@
 package relay
 
 import (
-	"smesh3/jsbridge/ws"
-	"smesh3/nostr"
+	"common/jsbridge/ws"
+	"common/nostr"
 )
 
 // State constants for connection readiness.

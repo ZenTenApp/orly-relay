@@ -1,12 +1,12 @@
 package main
 
 import (
-	"smesh3/helpers"
-	"smesh3/jsbridge/crypto"
-	"smesh3/jsbridge/dom"
-	"smesh3/jsbridge/localstorage"
-	"smesh3/nostr"
-	"smesh3/relay"
+	"common/helpers"
+	"common/jsbridge/crypto"
+	"common/jsbridge/dom"
+	"common/jsbridge/localstorage"
+	"common/nostr"
+	"common/relay"
 )
 
 const (

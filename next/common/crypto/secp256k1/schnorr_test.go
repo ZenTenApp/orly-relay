@@ -1,7 +1,7 @@
 package secp256k1
 
 import (
-	"smesh3/helpers"
+	"common/helpers"
 	"testing"
 )
 

@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"smesh3/crypto/secp256k1"
-	"smesh3/crypto/sha256"
-	"smesh3/helpers"
+	"common/crypto/secp256k1"
+	"common/crypto/sha256"
+	"common/helpers"
 	"syscall/js"
 	"time"
 )

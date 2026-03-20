@@ -1,6 +1,6 @@
 package relay
 
-import "smesh3/nostr"
+import "common/nostr"
 
 // Sub is an active subscription on a relay connection.
 type Sub struct {

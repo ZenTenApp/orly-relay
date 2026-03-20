@@ -1,7 +1,7 @@
 package secp256k1
 
 import (
-	"smesh3/crypto/sha256"
+	"common/crypto/sha256"
 )
 
 // VerifySchnorr verifies a BIP-340 Schnorr signature.

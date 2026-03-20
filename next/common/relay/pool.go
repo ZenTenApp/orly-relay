@@ -1,6 +1,6 @@
 package relay
 
-import "smesh3/nostr"
+import "common/nostr"
 
 // Pool manages connections to multiple relays.
 type Pool struct {

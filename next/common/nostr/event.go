@@ -1,8 +1,8 @@
 package nostr
 
 import (
-	"smesh3/crypto/sha256"
-	"smesh3/helpers"
+	"common/crypto/sha256"
+	"common/helpers"
 )
 
 // Event is a Nostr event (NIP-01).
