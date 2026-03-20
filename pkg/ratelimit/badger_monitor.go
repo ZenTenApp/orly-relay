@@ -94,8 +94,7 @@ func (m *BadgerMonitor) ForceEmergencyMode(duration time.Duration) {
 }
 
 // TriggerCompaction initiates a Badger Flatten operation to compact all levels.
-// This should be called when memory pressure is high and the database needs to
-// reclaim space. It runs synchronously and may take significant time.
+// Runs synchronously — caller is responsible for setting STW flags before calling.
 func (m *BadgerMonitor) TriggerCompaction() error {
 	if m.db == nil || m.db.IsClosed() {
 		return nil
@@ -108,9 +107,6 @@ func (m *BadgerMonitor) TriggerCompaction() error {
 
 	m.isCompacting.Store(true)
 	defer m.isCompacting.Store(false)
-
-	log.I.Ln("🗜️  triggering Badger compaction (Flatten)")
-	start := time.Now()
 
 	// Flatten with 4 workers (matches NumCompactors default)
 	err := m.db.Flatten(4)
@@ -127,8 +123,19 @@ func (m *BadgerMonitor) TriggerCompaction() error {
 		}
 	}
 
-	log.I.F("🗜️  compaction completed in %v", time.Since(start))
 	return nil
+}
+
+// LSMSize returns the total size of all LSM levels in bytes.
+func (m *BadgerMonitor) LSMSize() int64 {
+	if m.db == nil || m.db.IsClosed() {
+		return 0
+	}
+	var total int64
+	for _, level := range m.db.Levels() {
+		total += level.Size
+	}
+	return total
 }
 
 // IsCompacting returns true if a compaction is currently in progress.

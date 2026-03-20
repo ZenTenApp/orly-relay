@@ -1,7 +1,5 @@
 package relay
 
-import "common/nostr"
-
 // Pool manages connections to multiple relays.
 type Pool struct {
 	conns   map[string]*Conn
@@ -18,10 +16,9 @@ func NewPool(maxSize int) *Pool {
 
 // Connect gets or creates a connection to a relay.
 func (p *Pool) Connect(url string) *Conn {
-	if c, ok := p.conns[url]; ok && !c.closed {
+	if c, ok := p.conns[url]; ok && c.IsOpen() {
 		return c
 	}
-	// Evict if at capacity.
 	if len(p.conns) >= p.maxSize {
 		p.evictOne()
 	}
@@ -33,7 +30,7 @@ func (p *Pool) Connect(url string) *Conn {
 // Get returns an existing connection, or nil.
 func (p *Pool) Get(url string) *Conn {
 	c, ok := p.conns[url]
-	if !ok || c.closed {
+	if !ok || !c.IsOpen() {
 		return nil
 	}
 	return c
@@ -44,29 +41,6 @@ func (p *Pool) Disconnect(url string) {
 	if c, ok := p.conns[url]; ok {
 		c.Close()
 		delete(p.conns, url)
-	}
-}
-
-// Subscribe sends a subscription to specific relays.
-func (p *Pool) Subscribe(relays []string, id string, filters []*nostr.Filter) []*Sub {
-	var subs []*Sub
-	for _, url := range relays {
-		c := p.Connect(url)
-		if c.WaitOpen() {
-			sub := c.Subscribe(id, filters)
-			subs = append(subs, sub)
-		}
-	}
-	return subs
-}
-
-// Publish sends an event to specific relays.
-func (p *Pool) Publish(relays []string, ev *nostr.Event) {
-	for _, url := range relays {
-		c := p.Connect(url)
-		if c.WaitOpen() {
-			c.Publish(ev)
-		}
 	}
 }
 
@@ -82,7 +56,7 @@ func (p *Pool) CloseAll() {
 func (p *Pool) URLs() []string {
 	var out []string
 	for url, c := range p.conns {
-		if !c.closed {
+		if c.IsOpen() {
 			out = append(out, url)
 		}
 	}
@@ -90,14 +64,12 @@ func (p *Pool) URLs() []string {
 }
 
 func (p *Pool) evictOne() {
-	// Evict first found closed connection, or oldest.
 	for url, c := range p.conns {
-		if c.closed {
+		if c.state == StateClosed {
 			delete(p.conns, url)
 			return
 		}
 	}
-	// All open — evict arbitrary one.
 	for url, c := range p.conns {
 		c.Close()
 		delete(p.conns, url)

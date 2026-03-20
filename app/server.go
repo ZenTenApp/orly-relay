@@ -1803,8 +1803,8 @@ func (w *processingRateLimiterWrapper) IsEnabled() bool {
 }
 
 func (w *processingRateLimiterWrapper) Wait(ctx context.Context, opType int) error {
-	w.rl.Wait(ctx, opType)
-	return nil
+	_, err := w.rl.Wait(ctx, opType)
+	return err
 }
 
 // SyncManager wrapper for processing.SyncManager interface

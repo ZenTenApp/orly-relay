@@ -129,3 +129,8 @@ export function ReleaseElement(el) {
   $rt.dom.ReleaseElement(el);
 }
 
+// jsbridge: dom.FetchText
+export function FetchText(url, fn) {
+  $rt.dom.FetchText(url, fn);
+}
+

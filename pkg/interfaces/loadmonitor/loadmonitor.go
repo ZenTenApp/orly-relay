@@ -74,12 +74,15 @@ type CompactableMonitor interface {
 	Monitor
 
 	// TriggerCompaction initiates a database compaction operation.
-	// This may take significant time; callers should run this in a goroutine.
+	// This runs synchronously and may take significant time.
 	// Returns an error if compaction fails or is not supported.
 	TriggerCompaction() error
 
 	// IsCompacting returns true if a compaction is currently in progress.
 	IsCompacting() bool
+
+	// LSMSize returns the total size of all LSM levels in bytes.
+	LSMSize() int64
 }
 
 // EmergencyModeMonitor extends Monitor with emergency mode detection.

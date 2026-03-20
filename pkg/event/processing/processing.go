@@ -201,7 +201,9 @@ func (s *Service) saveEvent(ctx context.Context, ev *event.E) Result {
 	const kindNIP46 = 24133
 	if s.rateLimiter != nil && s.rateLimiter.IsEnabled() && ev.Kind != uint16(kindNIP46) {
 		const writeOpType = 1 // ratelimit.Write
-		s.rateLimiter.Wait(saveCtx, writeOpType)
+		if err := s.rateLimiter.Wait(saveCtx, writeOpType); err != nil {
+			return Result{Blocked: true, BlockMsg: "rate-limited: " + err.Error()}
+		}
 	}
 
 	// Save to database

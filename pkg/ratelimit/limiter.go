@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"context"
+	"errors"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -12,6 +13,11 @@ import (
 	pidif "next.orly.dev/pkg/interfaces/pid"
 	"next.orly.dev/pkg/pid"
 )
+
+// ErrCompactionPause is returned by Wait() during STW compaction.
+// The error string is the human-readable detail; callers prepend the
+// NIP-01 machine-readable "rate-limited:" prefix.
+var ErrCompactionPause = errors.New("pausing request processing to compact tables")
 
 // OperationType distinguishes between read and write operations
 // for applying different rate limiting strategies.
@@ -94,6 +100,14 @@ type Config struct {
 	// CompactionCheckInterval controls how often to check if compaction should be triggered.
 	// Default: 10 seconds
 	CompactionCheckInterval time.Duration
+
+	// CompactionThresholdMB is the LSM size growth (in MB) since last compaction
+	// that triggers a stop-the-world compaction. Default: 256MB.
+	CompactionThresholdMB int
+
+	// STWCheckInterval is how often to check LSM size delta for STW compaction.
+	// Default: 30 seconds.
+	STWCheckInterval time.Duration
 }
 
 // DefaultConfig returns a default configuration for the rate limiter.
@@ -117,6 +131,8 @@ func DefaultConfig() Config {
 		RecoveryThreshold:       0.833, // Target - 1/6th (~1.25GB for 1.5GB target)
 		EmergencyMaxDelayMs:     5000,  // 5 seconds max in emergency mode
 		CompactionCheckInterval: 10 * time.Second,
+		CompactionThresholdMB:   256,
+		STWCheckInterval:        30 * time.Second,
 	}
 }
 
@@ -162,6 +178,8 @@ func NewConfigFromValues(
 		RecoveryThreshold:       recoveryThreshold,
 		EmergencyMaxDelayMs:     emergencyMaxMs,
 		CompactionCheckInterval: 10 * time.Second,
+		CompactionThresholdMB:   256,
+		STWCheckInterval:        30 * time.Second,
 	}
 }
 
@@ -181,9 +199,14 @@ type Limiter struct {
 	currentMetrics loadmonitor.Metrics
 
 	// Emergency mode tracking with hysteresis
-	inEmergencyMode     atomic.Bool
-	lastEmergencyCheck  atomic.Int64 // Unix nano timestamp
-	compactionTriggered atomic.Bool
+	inEmergencyMode    atomic.Bool
+	lastEmergencyCheck atomic.Int64 // Unix nano timestamp
+
+	// STW compaction state
+	compacting              atomic.Bool  // true during stop-the-world compaction
+	lsmSizeAtLastCompact    atomic.Int64 // LSM size right after last compaction
+	lastCompactionDuration  atomic.Int64 // nanoseconds
+	lastCompactionReclaimed atomic.Int64 // bytes reclaimed
 
 	// Connection-level metrics for adaptive connection acceptance
 	activeConnections atomic.Int64
@@ -228,6 +251,12 @@ func NewLimiter(config Config, monitor loadmonitor.Monitor) *Limiter {
 	}
 	if config.CompactionCheckInterval == 0 {
 		config.CompactionCheckInterval = 10 * time.Second
+	}
+	if config.CompactionThresholdMB == 0 {
+		config.CompactionThresholdMB = 256
+	}
+	if config.STWCheckInterval == 0 {
+		config.STWCheckInterval = 30 * time.Second
 	}
 
 	l := &Limiter{
@@ -290,12 +319,15 @@ func (l *Limiter) Start() {
 	go l.updateLoop()
 }
 
-// updateLoop periodically fetches metrics from the monitor.
+// updateLoop periodically fetches metrics from the monitor and checks STW triggers.
 func (l *Limiter) updateLoop() {
 	defer l.wg.Done()
 
 	ticker := time.NewTicker(l.config.MetricUpdateInterval)
 	defer ticker.Stop()
+
+	stwCheck := time.NewTicker(l.config.STWCheckInterval)
+	defer stwCheck.Stop()
 
 	for {
 		select {
@@ -307,10 +339,47 @@ func (l *Limiter) updateLoop() {
 				l.metricsLock.Lock()
 				l.currentMetrics = metrics
 				l.metricsLock.Unlock()
+
+				// Re-evaluate emergency mode on every tick, not just during
+				// event processing. Without this, ShouldAcceptConnection()
+				// refuses connections during emergency, which means no events
+				// arrive, which means checkEmergencyMode() never runs to
+				// clear the flag — permanent lockup.
+				l.checkEmergencyMode(metrics.MemoryPressure)
 			}
 			// Sample goroutine count for connection storm detection
 			l.goroutineCount.Store(int64(runtime.NumGoroutine()))
+
+		case <-stwCheck.C:
+			l.checkSTWCompaction()
 		}
+	}
+}
+
+// checkSTWCompaction checks if LSM growth since last compaction exceeds
+// the threshold and triggers a synchronous STW compaction if so.
+func (l *Limiter) checkSTWCompaction() {
+	compactMon, ok := l.monitor.(loadmonitor.CompactableMonitor)
+	if !ok {
+		return
+	}
+
+	currentSize := compactMon.LSMSize()
+	lastSize := l.lsmSizeAtLastCompact.Load()
+
+	// Initialize baseline on first check
+	if lastSize == 0 {
+		l.lsmSizeAtLastCompact.Store(currentSize)
+		return
+	}
+
+	delta := currentSize - lastSize
+	thresholdBytes := int64(l.config.CompactionThresholdMB) * 1024 * 1024
+
+	if delta >= thresholdBytes {
+		log.I.F("STW compaction triggered: LSM grew %dMB (threshold %dMB)",
+			delta/(1024*1024), l.config.CompactionThresholdMB)
+		l.triggerSTWCompaction()
 	}
 }
 
@@ -332,25 +401,30 @@ func (l *Limiter) Stopped() <-chan struct{} {
 }
 
 // Wait blocks until the rate limiter permits the operation to proceed.
-// It returns the delay that was applied, or 0 if no delay was needed.
-// If the context is cancelled, it returns immediately.
+// Returns the delay applied and an error if the operation should be rejected.
+// During STW compaction, writes are rejected immediately with ErrCompactionPause.
 // opType accepts int for interface compatibility (0=Read, 1=Write)
-func (l *Limiter) Wait(ctx context.Context, opType int) time.Duration {
+func (l *Limiter) Wait(ctx context.Context, opType int) (time.Duration, error) {
 	if !l.config.Enabled || l.monitor == nil {
-		return 0
+		return 0, nil
+	}
+
+	// STW check — reject writes immediately during compaction
+	if OperationType(opType) == Write && l.compacting.Load() {
+		return 0, ErrCompactionPause
 	}
 
 	delay := l.ComputeDelay(OperationType(opType))
 	if delay <= 0 {
-		return 0
+		return 0, nil
 	}
 
 	// Apply the delay
 	select {
 	case <-ctx.Done():
-		return 0
+		return 0, ctx.Err()
 	case <-time.After(delay):
-		return delay
+		return delay, nil
 	}
 }
 
@@ -457,37 +531,41 @@ func (l *Limiter) checkEmergencyMode(memoryPressure float64) bool {
 		log.W.F("⚠️  entering emergency mode: memory %.1f%% >= threshold %.1f%%",
 			memoryPressure*100, l.config.EmergencyThreshold*100)
 
-		// Trigger compaction if supported
-		l.triggerCompactionIfNeeded()
 		return true
 	}
 
 	return false
 }
 
-// triggerCompactionIfNeeded triggers database compaction if the monitor supports it
-// and compaction isn't already in progress.
-func (l *Limiter) triggerCompactionIfNeeded() {
-	if l.compactionTriggered.Load() {
-		return // Already triggered
-	}
-
+// triggerSTWCompaction runs a synchronous stop-the-world compaction.
+// While compacting, l.compacting is true and Wait() rejects writes immediately.
+func (l *Limiter) triggerSTWCompaction() {
 	compactMon, ok := l.monitor.(loadmonitor.CompactableMonitor)
-	if !ok {
-		return // Monitor doesn't support compaction
+	if !ok || compactMon.IsCompacting() {
+		return
 	}
 
-	if compactMon.IsCompacting() {
-		return // Already compacting
+	l.compacting.Store(true)
+	defer l.compacting.Store(false)
+
+	sizeBefore := compactMon.LSMSize()
+	start := time.Now()
+
+	if err := compactMon.TriggerCompaction(); err != nil {
+		log.E.F("STW compaction failed: %v", err)
+		return
 	}
 
-	l.compactionTriggered.Store(true)
-	go func() {
-		defer l.compactionTriggered.Store(false)
-		if err := compactMon.TriggerCompaction(); err != nil {
-			log.E.F("compaction failed: %v", err)
-		}
-	}()
+	dur := time.Since(start)
+	sizeAfter := compactMon.LSMSize()
+	reclaimed := sizeBefore - sizeAfter
+
+	l.lsmSizeAtLastCompact.Store(sizeAfter)
+	l.lastCompactionDuration.Store(dur.Nanoseconds())
+	l.lastCompactionReclaimed.Store(reclaimed)
+
+	log.I.F("STW compaction: %v, reclaimed %dMB (%dMB -> %dMB)",
+		dur, reclaimed/(1024*1024), sizeBefore/(1024*1024), sizeAfter/(1024*1024))
 }
 
 // InEmergencyMode returns true if the limiter is currently in emergency mode.

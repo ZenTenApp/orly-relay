@@ -17,8 +17,19 @@ export let feedContainer = { $value: 0, $get() { return this.$value; }, $set(v) 
 export let statusEl = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let eventCount = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let appContainer = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let relays = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 
 export function init() {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
+  $t0_1 = { $value: $rt.builtin.makeSlice(3, 3, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t1_2 = $t0_1.$get().addr(0);
+  $t1_2.$set('wss://nostr.wine');
+  $t2_3 = $t0_1.$get().addr(1);
+  $t2_3.$set('wss://nostr.land');
+  $t3_4 = $t0_1.$get().addr(2);
+  $t3_4.$set('wss://nostr1.com');
+  $t4_5 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+  relays.$set($t4_5);
   return;
 }
 
@@ -60,7 +71,7 @@ export async function main() {
 }
 
 export function showLogin() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101;
   $t0_1 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
   $t1_2 = common$jsbridge$dom.Body();
   $t0_1.$set($t1_2);
@@ -72,90 +83,115 @@ export function showLogin() {
   $t7_8 = common$jsbridge$dom.SetStyle($t4_5, 'justifyContent', 'center');
   $t8_9 = common$jsbridge$dom.SetStyle($t4_5, 'height', '100vh');
   $t9_10 = common$jsbridge$dom.SetStyle($t4_5, 'flexDirection', 'column');
-  $t10_11 = common$jsbridge$dom.CreateElement('div');
-  $t11_12 = common$jsbridge$dom.SetStyle($t10_11, 'marginBottom', '16px');
-  $t12_13 = dendriteSVG();
-  $t13_14 = common$jsbridge$dom.SetInnerHTML($t10_11, $t12_13);
-  $t14_15 = common$jsbridge$dom.AppendChild($t4_5, $t10_11);
-  $t15_16 = common$jsbridge$dom.CreateElement('h1');
-  $t16_17 = common$jsbridge$dom.SetTextContent($t15_16, 'sm3sh');
-  $t17_18 = common$jsbridge$dom.SetStyle($t15_16, 'color', 'var(--accent)');
-  $t18_19 = common$jsbridge$dom.SetStyle($t15_16, 'fontSize', '48px');
-  $t19_20 = common$jsbridge$dom.SetStyle($t15_16, 'marginBottom', '4px');
-  $t20_21 = common$jsbridge$dom.AppendChild($t4_5, $t15_16);
-  $t21_22 = common$jsbridge$dom.CreateElement('p');
-  $t22_23 = common$jsbridge$dom.SetTextContent($t21_22, 'nostr client — tinygo → javascript');
-  $t23_24 = common$jsbridge$dom.SetStyle($t21_22, 'color', 'var(--muted)');
-  $t24_25 = common$jsbridge$dom.SetStyle($t21_22, 'marginBottom', '32px');
-  $t25_26 = common$jsbridge$dom.AppendChild($t4_5, $t21_22);
-  $t26_27 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t27_28 = common$jsbridge$dom.CreateElement('input');
-  $t26_27.$set($t27_28);
-  $t28_29 = $t26_27.$get();
-  $t29_30 = common$jsbridge$dom.SetAttribute($t28_29, 'type', 'password');
-  $t30_31 = $t26_27.$get();
-  $t31_32 = common$jsbridge$dom.SetAttribute($t30_31, 'placeholder', 'nsec1...');
-  $t32_33 = $t26_27.$get();
-  $t33_34 = common$jsbridge$dom.SetAttribute($t32_33, 'autocomplete', 'off');
-  $t34_35 = $t26_27.$get();
-  $t35_36 = common$jsbridge$dom.SetAttribute($t34_35, 'spellcheck', 'false');
-  $t36_37 = $t26_27.$get();
-  $t37_38 = common$jsbridge$dom.SetStyle($t36_37, 'width', '420px');
-  $t38_39 = $t26_27.$get();
-  $t39_40 = common$jsbridge$dom.SetStyle($t38_39, 'maxWidth', '90vw');
-  $t40_41 = $t26_27.$get();
-  $t41_42 = common$jsbridge$dom.SetStyle($t40_41, 'padding', '12px');
-  $t42_43 = $t26_27.$get();
-  $t43_44 = common$jsbridge$dom.SetStyle($t42_43, 'fontFamily', 'monospace');
-  $t44_45 = $t26_27.$get();
-  $t45_46 = common$jsbridge$dom.SetStyle($t44_45, 'fontSize', '14px');
-  $t46_47 = $t26_27.$get();
-  $t47_48 = common$jsbridge$dom.SetStyle($t46_47, 'border', '1px solid var(--muted)');
-  $t48_49 = $t26_27.$get();
-  $t49_50 = common$jsbridge$dom.SetStyle($t48_49, 'borderRadius', '4px');
-  $t50_51 = $t26_27.$get();
-  $t51_52 = common$jsbridge$dom.SetStyle($t50_51, 'background', 'var(--bg)');
-  $t52_53 = $t26_27.$get();
-  $t53_54 = common$jsbridge$dom.SetStyle($t52_53, 'color', 'var(--fg)');
-  $t54_55 = $t26_27.$get();
-  $t55_56 = common$jsbridge$dom.SetStyle($t54_55, 'outline', 'none');
-  $t56_57 = $t26_27.$get();
-  $t57_58 = common$jsbridge$dom.SetStyle($t56_57, 'marginBottom', '12px');
-  $t58_59 = $t26_27.$get();
-  $t59_60 = common$jsbridge$dom.AppendChild($t4_5, $t58_59);
-  $t60_61 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t61_62 = common$jsbridge$dom.CreateElement('div');
-  $t60_61.$set($t61_62);
-  $t62_63 = $t60_61.$get();
-  $t63_64 = common$jsbridge$dom.SetStyle($t62_63, 'color', '#e55');
-  $t64_65 = $t60_61.$get();
-  $t65_66 = common$jsbridge$dom.SetStyle($t64_65, 'fontSize', '13px');
-  $t66_67 = $t60_61.$get();
-  $t67_68 = common$jsbridge$dom.SetStyle($t66_67, 'marginBottom', '12px');
-  $t68_69 = $t60_61.$get();
-  $t69_70 = common$jsbridge$dom.SetStyle($t68_69, 'minHeight', '18px');
-  $t70_71 = $t60_61.$get();
-  $t71_72 = common$jsbridge$dom.AppendChild($t4_5, $t70_71);
-  $t72_73 = common$jsbridge$dom.CreateElement('button');
-  $t73_74 = common$jsbridge$dom.SetTextContent($t72_73, 'login with nsec');
-  $t74_75 = common$jsbridge$dom.SetStyle($t72_73, 'padding', '10px 32px');
-  $t75_76 = common$jsbridge$dom.SetStyle($t72_73, 'fontFamily', 'monospace');
-  $t76_77 = common$jsbridge$dom.SetStyle($t72_73, 'fontSize', '14px');
-  $t77_78 = common$jsbridge$dom.SetStyle($t72_73, 'background', 'var(--accent)');
-  $t78_79 = common$jsbridge$dom.SetStyle($t72_73, 'color', '#000');
-  $t79_80 = common$jsbridge$dom.SetStyle($t72_73, 'border', 'none');
-  $t80_81 = common$jsbridge$dom.SetStyle($t72_73, 'borderRadius', '4px');
-  $t81_82 = common$jsbridge$dom.SetStyle($t72_73, 'cursor', 'pointer');
-  $t82_83 = common$jsbridge$dom.AppendChild($t4_5, $t72_73);
-  $t83_84 = showLogin$1.bind(null, $t26_27, $t60_61, $t0_1);
-  $t84_85 = common$jsbridge$dom.RegisterCallback($t83_84);
-  $t85_86 = common$jsbridge$dom.AddEventListener($t72_73, 'click', $t84_85);
-  $t86_87 = $t0_1.$get();
-  $t87_88 = common$jsbridge$dom.AppendChild($t86_87, $t4_5);
+  $t10_11 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t11_12 = common$jsbridge$dom.CreateElement('div');
+  $t10_11.$set($t11_12);
+  $t12_13 = $t10_11.$get();
+  $t13_14 = common$jsbridge$dom.SetStyle($t12_13, 'width', '180px');
+  $t14_15 = $t10_11.$get();
+  $t15_16 = common$jsbridge$dom.SetStyle($t14_15, 'height', '180px');
+  $t16_17 = $t10_11.$get();
+  $t17_18 = common$jsbridge$dom.SetStyle($t16_17, 'marginBottom', '16px');
+  $t18_19 = showLogin$1.bind(null, $t10_11);
+  $t19_20 = common$jsbridge$dom.FetchText('./smesh-loader.svg', $t18_19);
+  $t20_21 = $t10_11.$get();
+  $t21_22 = common$jsbridge$dom.AppendChild($t4_5, $t20_21);
+  $t22_23 = common$jsbridge$dom.CreateElement('h1');
+  $t23_24 = common$jsbridge$dom.SetTextContent($t22_23, 'sm3sh');
+  $t24_25 = common$jsbridge$dom.SetStyle($t22_23, 'color', 'var(--accent)');
+  $t25_26 = common$jsbridge$dom.SetStyle($t22_23, 'fontSize', '48px');
+  $t26_27 = common$jsbridge$dom.SetStyle($t22_23, 'marginBottom', '4px');
+  $t27_28 = common$jsbridge$dom.AppendChild($t4_5, $t22_23);
+  $t28_29 = common$jsbridge$dom.CreateElement('p');
+  $t29_30 = common$jsbridge$dom.SetTextContent($t28_29, 'nostr client — tinygo → javascript');
+  $t30_31 = common$jsbridge$dom.SetStyle($t28_29, 'color', 'var(--muted)');
+  $t31_32 = common$jsbridge$dom.SetStyle($t28_29, 'marginBottom', '32px');
+  $t32_33 = common$jsbridge$dom.AppendChild($t4_5, $t28_29);
+  $t33_34 = common$jsbridge$dom.CreateElement('form');
+  $t34_35 = common$jsbridge$dom.RegisterCallback(showLogin$2);
+  $t35_36 = common$jsbridge$dom.AddEventListener($t33_34, 'submit', $t34_35);
+  $t36_37 = common$jsbridge$dom.SetAttribute($t33_34, 'onsubmit', 'return false');
+  $t37_38 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t38_39 = common$jsbridge$dom.CreateElement('input');
+  $t37_38.$set($t38_39);
+  $t39_40 = $t37_38.$get();
+  $t40_41 = common$jsbridge$dom.SetAttribute($t39_40, 'type', 'password');
+  $t41_42 = $t37_38.$get();
+  $t42_43 = common$jsbridge$dom.SetAttribute($t41_42, 'placeholder', 'nsec1...');
+  $t43_44 = $t37_38.$get();
+  $t44_45 = common$jsbridge$dom.SetAttribute($t43_44, 'autocomplete', 'off');
+  $t45_46 = $t37_38.$get();
+  $t46_47 = common$jsbridge$dom.SetAttribute($t45_46, 'spellcheck', 'false');
+  $t47_48 = $t37_38.$get();
+  $t48_49 = common$jsbridge$dom.SetStyle($t47_48, 'width', '420px');
+  $t49_50 = $t37_38.$get();
+  $t50_51 = common$jsbridge$dom.SetStyle($t49_50, 'maxWidth', '90vw');
+  $t51_52 = $t37_38.$get();
+  $t52_53 = common$jsbridge$dom.SetStyle($t51_52, 'padding', '12px');
+  $t53_54 = $t37_38.$get();
+  $t54_55 = common$jsbridge$dom.SetStyle($t53_54, 'fontFamily', 'monospace');
+  $t55_56 = $t37_38.$get();
+  $t56_57 = common$jsbridge$dom.SetStyle($t55_56, 'fontSize', '14px');
+  $t57_58 = $t37_38.$get();
+  $t58_59 = common$jsbridge$dom.SetStyle($t57_58, 'border', '1px solid var(--muted)');
+  $t59_60 = $t37_38.$get();
+  $t60_61 = common$jsbridge$dom.SetStyle($t59_60, 'borderRadius', '4px');
+  $t61_62 = $t37_38.$get();
+  $t62_63 = common$jsbridge$dom.SetStyle($t61_62, 'background', 'var(--bg)');
+  $t63_64 = $t37_38.$get();
+  $t64_65 = common$jsbridge$dom.SetStyle($t63_64, 'color', 'var(--fg)');
+  $t65_66 = $t37_38.$get();
+  $t66_67 = common$jsbridge$dom.SetStyle($t65_66, 'outline', 'none');
+  $t67_68 = $t37_38.$get();
+  $t68_69 = common$jsbridge$dom.SetStyle($t67_68, 'marginBottom', '12px');
+  $t69_70 = $t37_38.$get();
+  $t70_71 = common$jsbridge$dom.AppendChild($t33_34, $t69_70);
+  $t71_72 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t72_73 = common$jsbridge$dom.CreateElement('div');
+  $t71_72.$set($t72_73);
+  $t73_74 = $t71_72.$get();
+  $t74_75 = common$jsbridge$dom.SetStyle($t73_74, 'color', '#e55');
+  $t75_76 = $t71_72.$get();
+  $t76_77 = common$jsbridge$dom.SetStyle($t75_76, 'fontSize', '13px');
+  $t77_78 = $t71_72.$get();
+  $t78_79 = common$jsbridge$dom.SetStyle($t77_78, 'marginBottom', '12px');
+  $t79_80 = $t71_72.$get();
+  $t80_81 = common$jsbridge$dom.SetStyle($t79_80, 'minHeight', '18px');
+  $t81_82 = $t71_72.$get();
+  $t82_83 = common$jsbridge$dom.AppendChild($t33_34, $t81_82);
+  $t83_84 = common$jsbridge$dom.CreateElement('button');
+  $t84_85 = common$jsbridge$dom.SetTextContent($t83_84, 'login with nsec');
+  $t85_86 = common$jsbridge$dom.SetAttribute($t83_84, 'type', 'button');
+  $t86_87 = common$jsbridge$dom.SetStyle($t83_84, 'padding', '10px 32px');
+  $t87_88 = common$jsbridge$dom.SetStyle($t83_84, 'fontFamily', 'monospace');
+  $t88_89 = common$jsbridge$dom.SetStyle($t83_84, 'fontSize', '14px');
+  $t89_90 = common$jsbridge$dom.SetStyle($t83_84, 'background', 'var(--accent)');
+  $t90_91 = common$jsbridge$dom.SetStyle($t83_84, 'color', '#000');
+  $t91_92 = common$jsbridge$dom.SetStyle($t83_84, 'border', 'none');
+  $t92_93 = common$jsbridge$dom.SetStyle($t83_84, 'borderRadius', '4px');
+  $t93_94 = common$jsbridge$dom.SetStyle($t83_84, 'cursor', 'pointer');
+  $t94_95 = common$jsbridge$dom.AppendChild($t33_34, $t83_84);
+  $t95_96 = common$jsbridge$dom.AppendChild($t4_5, $t33_34);
+  $t96_97 = showLogin$3.bind(null, $t37_38, $t71_72, $t0_1);
+  $t97_98 = common$jsbridge$dom.RegisterCallback($t96_97);
+  $t98_99 = common$jsbridge$dom.AddEventListener($t83_84, 'click', $t97_98);
+  $t99_100 = $t0_1.$get();
+  $t100_101 = common$jsbridge$dom.AppendChild($t99_100, $t4_5);
   return;
 }
 
-async function showLogin$1(input, errEl, body) {
+function showLogin$1(loader, svg) {
+  let $t0_1, $t1_2;
+  $t0_1 = loader.$get();
+  $t1_2 = common$jsbridge$dom.SetInnerHTML($t0_1, svg);
+  return;
+}
+
+function showLogin$2() {
+  return;
+}
+
+async function showLogin$3(input, errEl, body) {
   let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
   let $block = 0;
   while (true) {
@@ -316,7 +352,7 @@ export async function showApp() {
         $t59_60 = appContainer.$get();
         $t60_61 = feedContainer.$get();
         $t61_62 = common$jsbridge$dom.AppendChild($t59_60, $t60_61);
-        $rt.goroutine.spawn(async () => await connectRelay());
+        $rt.goroutine.spawn(async () => connectRelays());
         return;
         break;
       }
@@ -377,18 +413,59 @@ export function doLogout() {
   }
 }
 
-export async function connectRelay() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27;
+export function connectRelays() {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set('wss://relay.damus.io');
-        $t1_2 = $t0_1.$get();
-        $t2_3 = await common$relay.Dial($t1_2);
-        $t3_4 = await common$relay.Conn$WaitOpen($t2_3);
-        if ($t3_4) {
+        $t0_1 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set(0);
+        $t1_2 = relays.$get();
+        $t2_3 = $rt.builtin.len($t1_2);
+        $t3_4 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t4_5 = ($t3_4 + 1);
+        $t5_6 = ($t4_5 < $t2_3);
+        if ($t5_6) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t6_7 = $t1_2.addr($t4_5);
+        $t7_8 = $t6_7.$get();
+        $t8_9 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t9_10 = common$relay.Dial($t7_8);
+        $t8_9.$set($t9_10);
+        $t10_11 = $t8_9.$get();
+        $t11_12 = connectRelays$1.bind(null, $t0_1, $t8_9);
+        $t12_13 = common$relay.Conn$OnReady($t10_11, $t11_12);
+        $t3_4 = $t4_5;
+        $block = 1; break;
+        break;
+      }
+      case 3: {
+        return;
+        break;
+      }
+    }
+  }
+}
+
+function connectRelays$1(connected, conn, ok) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        if (ok) {
           $block = 2; break;
         }
         else {
@@ -397,39 +474,43 @@ export async function connectRelay() {
         break;
       }
       case 1: {
-        $t4_5 = statusEl.$get();
-        $t5_6 = $t0_1.$get();
-        $t6_7 = ('failed: ' + $t5_6);
-        $t7_8 = common$jsbridge$dom.SetTextContent($t4_5, $t6_7);
-        $t8_9 = statusEl.$get();
-        $t9_10 = common$jsbridge$dom.SetStyle($t8_9, 'color', '#e55');
         return;
         break;
       }
       case 2: {
-        $t10_11 = statusEl.$get();
-        $t11_12 = $t0_1.$get();
-        $t12_13 = ('connected: ' + $t11_12);
-        $t13_14 = common$jsbridge$dom.SetTextContent($t10_11, $t12_13);
-        $t14_15 = { $value: { IDs: null, Authors: null, Kinds: null, Tags: null, Since: 0, Until: 0, Limit: 0 }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t15_16 = { $get() { return $t14_15.$get().Kinds; }, $set(v) { const obj = $t14_15.$get(); obj.Kinds = v; $t14_15.$set(obj); } };
-        $t16_17 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t17_18 = $t16_17.$get().addr(0);
-        $t17_18.$set(1);
-        $t18_19 = $rt.builtin.sliceSlice($t16_17.$get(), undefined, undefined, undefined);
-        $t19_20 = { $get() { return $t14_15.$get().Limit; }, $set(v) { const obj = $t14_15.$get(); obj.Limit = v; $t14_15.$set(obj); } };
-        $t15_16.$set($t18_19);
-        $t19_20.$set(20);
-        $t20_21 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t21_22 = $t20_21.$get().addr(0);
-        $t21_22.$set($t14_15);
-        $t22_23 = $rt.builtin.sliceSlice($t20_21.$get(), undefined, undefined, undefined);
-        $t23_24 = common$relay.Conn$Subscribe($t2_3, 'feed', $t22_23);
-        $t24_25 = { $get() { return $t23_24.$get().OnEvent; }, $set(v) { const obj = $t23_24.$get(); obj.OnEvent = v; $t23_24.$set(obj); } };
-        $t24_25.$set(connectRelay$1);
-        $t25_26 = connectRelay$2.bind(null, $t0_1);
-        $t26_27 = { $get() { return $t23_24.$get().OnEOSE; }, $set(v) { const obj = $t23_24.$get(); obj.OnEOSE = v; $t23_24.$set(obj); } };
-        $t26_27.$set($t25_26);
+        $t0_1 = connected.$get();
+        $t1_2 = ($t0_1 + 1);
+        connected.$set($t1_2);
+        $t2_3 = statusEl.$get();
+        $t3_4 = connected.$get();
+        $t4_5 = itoa($t3_4);
+        $t5_6 = ($t4_5 + '/');
+        $t6_7 = relays.$get();
+        $t7_8 = $rt.builtin.len($t6_7);
+        $t8_9 = itoa($t7_8);
+        $t9_10 = ($t5_6 + $t8_9);
+        $t10_11 = ($t9_10 + ' relays');
+        $t11_12 = common$jsbridge$dom.SetTextContent($t2_3, $t10_11);
+        $t12_13 = { $value: { IDs: null, Authors: null, Kinds: null, Tags: null, Since: 0, Until: 0, Limit: 0 }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t13_14 = { $get() { return $t12_13.$get().Kinds; }, $set(v) { const obj = $t12_13.$get(); obj.Kinds = v; $t12_13.$set(obj); } };
+        $t14_15 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t15_16 = $t14_15.$get().addr(0);
+        $t15_16.$set(1);
+        $t16_17 = $rt.builtin.sliceSlice($t14_15.$get(), undefined, undefined, undefined);
+        $t17_18 = { $get() { return $t12_13.$get().Limit; }, $set(v) { const obj = $t12_13.$get(); obj.Limit = v; $t12_13.$set(obj); } };
+        $t13_14.$set($t16_17);
+        $t17_18.$set(20);
+        $t18_19 = conn.$get();
+        $t19_20 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t20_21 = $t19_20.$get().addr(0);
+        $t20_21.$set($t12_13);
+        $t21_22 = $rt.builtin.sliceSlice($t19_20.$get(), undefined, undefined, undefined);
+        $t22_23 = common$relay.Conn$Subscribe($t18_19, 'feed', $t21_22);
+        $t23_24 = { $get() { return $t22_23.$get().OnEvent; }, $set(v) { const obj = $t22_23.$get(); obj.OnEvent = v; $t22_23.$set(obj); } };
+        $t23_24.$set(connectRelays$1$1);
+        $t24_25 = connectRelays$1$2.bind(null, connected);
+        $t25_26 = { $get() { return $t22_23.$get().OnEOSE; }, $set(v) { const obj = $t22_23.$get(); obj.OnEOSE = v; $t22_23.$set(obj); } };
+        $t25_26.$set($t24_25);
         return;
         break;
       }
@@ -437,7 +518,7 @@ export async function connectRelay() {
   }
 }
 
-function connectRelay$1(ev) {
+function connectRelays$1$1(ev) {
   let $t0_1, $t1_2, $t2_3;
   $t0_1 = eventCount.$get();
   $t1_2 = ($t0_1 + 1);
@@ -446,16 +527,22 @@ function connectRelay$1(ev) {
   return;
 }
 
-function connectRelay$2(url) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
+function connectRelays$1$2(connected) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
   $t0_1 = statusEl.$get();
-  $t1_2 = url.$get();
-  $t2_3 = ($t1_2 + ' | ');
-  $t3_4 = eventCount.$get();
-  $t4_5 = itoa($t3_4);
-  $t5_6 = ($t2_3 + $t4_5);
-  $t6_7 = ($t5_6 + ' events');
-  $t7_8 = common$jsbridge$dom.SetTextContent($t0_1, $t6_7);
+  $t1_2 = connected.$get();
+  $t2_3 = itoa($t1_2);
+  $t3_4 = ($t2_3 + '/');
+  $t4_5 = relays.$get();
+  $t5_6 = $rt.builtin.len($t4_5);
+  $t6_7 = itoa($t5_6);
+  $t7_8 = ($t3_4 + $t6_7);
+  $t8_9 = ($t7_8 + ' relays | ');
+  $t9_10 = eventCount.$get();
+  $t10_11 = itoa($t9_10);
+  $t11_12 = ($t8_9 + $t10_11);
+  $t12_13 = ($t11_12 + ' events');
+  $t13_14 = common$jsbridge$dom.SetTextContent($t0_1, $t12_13);
   return;
 }
 
@@ -559,478 +646,6 @@ export function renderNote(ev) {
         $t43_44 = feedContainer.$get();
         $t44_45 = common$jsbridge$dom.AppendChild($t43_44, $t0_1);
         $block = 7; break;
-        break;
-      }
-    }
-  }
-}
-
-export function dendriteSVG() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129, $t129_130, $t130_131, $t131_132, $t132_133, $t133_134, $t134_135, $t135_136, $t136_137, $t137_138, $t138_139, $t139_140, $t140_141, $t141_142, $t142_143, $t143_144, $t144_145, $t145_146, $t146_147, $t147_148, $t148_149, $t149_150, $t150_151, $t151_152, $t152_153, $t153_154, $t154_155, $t155_156, $t156_157, $t157_158, $t158_159, $t159_160, $t160_161, $t161_162, $t162_163, $t163_164, $t164_165, $t165_166, $t166_167, $t167_168, $t168_169, $t169_170, $t170_171, $t171_172, $t172_173, $t173_174, $t174_175, $t175_176, $t176_177, $t177_178, $t178_179, $t179_180, $t180_181, $t181_182, $t182_183, $t183_184, $t184_185, $t185_186, $t186_187, $t187_188, $t188_189, $t189_190, $t190_191, $t191_192, $t192_193, $t193_194, $t194_195, $t195_196, $t196_197, $t197_198, $t198_199, $t199_200, $t200_201, $t201_202, $t202_203, $t203_204, $t204_205, $t205_206, $t206_207, $t207_208, $t208_209, $t209_210, $t210_211, $t211_212, $t212_213, $t213_214, $t214_215, $t215_216, $t216_217, $t217_218, $t218_219, $t219_220, $t220_221, $t221_222, $t222_223, $t223_224, $t224_225;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(23, 23, { x1: 0, y1: 0, x2: 0, y2: 0, w: 0, d: 0 }), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2 = $t0_1.$get().addr(0);
-        $t2_3 = { $get() { return $t1_2.$get().x1; }, $set(v) { const obj = $t1_2.$get(); obj.x1 = v; $t1_2.$set(obj); } };
-        $t3_4 = { $get() { return $t1_2.$get().y1; }, $set(v) { const obj = $t1_2.$get(); obj.y1 = v; $t1_2.$set(obj); } };
-        $t4_5 = { $get() { return $t1_2.$get().x2; }, $set(v) { const obj = $t1_2.$get(); obj.x2 = v; $t1_2.$set(obj); } };
-        $t5_6 = { $get() { return $t1_2.$get().y2; }, $set(v) { const obj = $t1_2.$get(); obj.y2 = v; $t1_2.$set(obj); } };
-        $t6_7 = { $get() { return $t1_2.$get().w; }, $set(v) { const obj = $t1_2.$get(); obj.w = v; $t1_2.$set(obj); } };
-        $t7_8 = { $get() { return $t1_2.$get().d; }, $set(v) { const obj = $t1_2.$get(); obj.d = v; $t1_2.$set(obj); } };
-        $t2_3.$set(150);
-        $t3_4.$set(240);
-        $t4_5.$set(150);
-        $t5_6.$set(160);
-        $t6_7.$set(30);
-        $t7_8.$set(0);
-        $t8_9 = $t0_1.$get().addr(1);
-        $t9_10 = { $get() { return $t8_9.$get().x1; }, $set(v) { const obj = $t8_9.$get(); obj.x1 = v; $t8_9.$set(obj); } };
-        $t10_11 = { $get() { return $t8_9.$get().y1; }, $set(v) { const obj = $t8_9.$get(); obj.y1 = v; $t8_9.$set(obj); } };
-        $t11_12 = { $get() { return $t8_9.$get().x2; }, $set(v) { const obj = $t8_9.$get(); obj.x2 = v; $t8_9.$set(obj); } };
-        $t12_13 = { $get() { return $t8_9.$get().y2; }, $set(v) { const obj = $t8_9.$get(); obj.y2 = v; $t8_9.$set(obj); } };
-        $t13_14 = { $get() { return $t8_9.$get().w; }, $set(v) { const obj = $t8_9.$get(); obj.w = v; $t8_9.$set(obj); } };
-        $t14_15 = { $get() { return $t8_9.$get().d; }, $set(v) { const obj = $t8_9.$get(); obj.d = v; $t8_9.$set(obj); } };
-        $t9_10.$set(150);
-        $t10_11.$set(160);
-        $t11_12.$set(100);
-        $t12_13.$set(100);
-        $t13_14.$set(22);
-        $t14_15.$set(300);
-        $t15_16 = $t0_1.$get().addr(2);
-        $t16_17 = { $get() { return $t15_16.$get().x1; }, $set(v) { const obj = $t15_16.$get(); obj.x1 = v; $t15_16.$set(obj); } };
-        $t17_18 = { $get() { return $t15_16.$get().y1; }, $set(v) { const obj = $t15_16.$get(); obj.y1 = v; $t15_16.$set(obj); } };
-        $t18_19 = { $get() { return $t15_16.$get().x2; }, $set(v) { const obj = $t15_16.$get(); obj.x2 = v; $t15_16.$set(obj); } };
-        $t19_20 = { $get() { return $t15_16.$get().y2; }, $set(v) { const obj = $t15_16.$get(); obj.y2 = v; $t15_16.$set(obj); } };
-        $t20_21 = { $get() { return $t15_16.$get().w; }, $set(v) { const obj = $t15_16.$get(); obj.w = v; $t15_16.$set(obj); } };
-        $t21_22 = { $get() { return $t15_16.$get().d; }, $set(v) { const obj = $t15_16.$get(); obj.d = v; $t15_16.$set(obj); } };
-        $t16_17.$set(150);
-        $t17_18.$set(160);
-        $t18_19.$set(200);
-        $t19_20.$set(95);
-        $t20_21.$set(22);
-        $t21_22.$set(350);
-        $t22_23 = $t0_1.$get().addr(3);
-        $t23_24 = { $get() { return $t22_23.$get().x1; }, $set(v) { const obj = $t22_23.$get(); obj.x1 = v; $t22_23.$set(obj); } };
-        $t24_25 = { $get() { return $t22_23.$get().y1; }, $set(v) { const obj = $t22_23.$get(); obj.y1 = v; $t22_23.$set(obj); } };
-        $t25_26 = { $get() { return $t22_23.$get().x2; }, $set(v) { const obj = $t22_23.$get(); obj.x2 = v; $t22_23.$set(obj); } };
-        $t26_27 = { $get() { return $t22_23.$get().y2; }, $set(v) { const obj = $t22_23.$get(); obj.y2 = v; $t22_23.$set(obj); } };
-        $t27_28 = { $get() { return $t22_23.$get().w; }, $set(v) { const obj = $t22_23.$get(); obj.w = v; $t22_23.$set(obj); } };
-        $t28_29 = { $get() { return $t22_23.$get().d; }, $set(v) { const obj = $t22_23.$get(); obj.d = v; $t22_23.$set(obj); } };
-        $t23_24.$set(100);
-        $t24_25.$set(100);
-        $t25_26.$set(60);
-        $t26_27.$set(55);
-        $t27_28.$set(15);
-        $t28_29.$set(700);
-        $t29_30 = $t0_1.$get().addr(4);
-        $t30_31 = { $get() { return $t29_30.$get().x1; }, $set(v) { const obj = $t29_30.$get(); obj.x1 = v; $t29_30.$set(obj); } };
-        $t31_32 = { $get() { return $t29_30.$get().y1; }, $set(v) { const obj = $t29_30.$get(); obj.y1 = v; $t29_30.$set(obj); } };
-        $t32_33 = { $get() { return $t29_30.$get().x2; }, $set(v) { const obj = $t29_30.$get(); obj.x2 = v; $t29_30.$set(obj); } };
-        $t33_34 = { $get() { return $t29_30.$get().y2; }, $set(v) { const obj = $t29_30.$get(); obj.y2 = v; $t29_30.$set(obj); } };
-        $t34_35 = { $get() { return $t29_30.$get().w; }, $set(v) { const obj = $t29_30.$get(); obj.w = v; $t29_30.$set(obj); } };
-        $t35_36 = { $get() { return $t29_30.$get().d; }, $set(v) { const obj = $t29_30.$get(); obj.d = v; $t29_30.$set(obj); } };
-        $t30_31.$set(100);
-        $t31_32.$set(100);
-        $t32_33.$set(120);
-        $t33_34.$set(50);
-        $t34_35.$set(15);
-        $t35_36.$set(750);
-        $t36_37 = $t0_1.$get().addr(5);
-        $t37_38 = { $get() { return $t36_37.$get().x1; }, $set(v) { const obj = $t36_37.$get(); obj.x1 = v; $t36_37.$set(obj); } };
-        $t38_39 = { $get() { return $t36_37.$get().y1; }, $set(v) { const obj = $t36_37.$get(); obj.y1 = v; $t36_37.$set(obj); } };
-        $t39_40 = { $get() { return $t36_37.$get().x2; }, $set(v) { const obj = $t36_37.$get(); obj.x2 = v; $t36_37.$set(obj); } };
-        $t40_41 = { $get() { return $t36_37.$get().y2; }, $set(v) { const obj = $t36_37.$get(); obj.y2 = v; $t36_37.$set(obj); } };
-        $t41_42 = { $get() { return $t36_37.$get().w; }, $set(v) { const obj = $t36_37.$get(); obj.w = v; $t36_37.$set(obj); } };
-        $t42_43 = { $get() { return $t36_37.$get().d; }, $set(v) { const obj = $t36_37.$get(); obj.d = v; $t36_37.$set(obj); } };
-        $t37_38.$set(200);
-        $t38_39.$set(95);
-        $t39_40.$set(185);
-        $t40_41.$set(45);
-        $t41_42.$set(15);
-        $t42_43.$set(800);
-        $t43_44 = $t0_1.$get().addr(6);
-        $t44_45 = { $get() { return $t43_44.$get().x1; }, $set(v) { const obj = $t43_44.$get(); obj.x1 = v; $t43_44.$set(obj); } };
-        $t45_46 = { $get() { return $t43_44.$get().y1; }, $set(v) { const obj = $t43_44.$get(); obj.y1 = v; $t43_44.$set(obj); } };
-        $t46_47 = { $get() { return $t43_44.$get().x2; }, $set(v) { const obj = $t43_44.$get(); obj.x2 = v; $t43_44.$set(obj); } };
-        $t47_48 = { $get() { return $t43_44.$get().y2; }, $set(v) { const obj = $t43_44.$get(); obj.y2 = v; $t43_44.$set(obj); } };
-        $t48_49 = { $get() { return $t43_44.$get().w; }, $set(v) { const obj = $t43_44.$get(); obj.w = v; $t43_44.$set(obj); } };
-        $t49_50 = { $get() { return $t43_44.$get().d; }, $set(v) { const obj = $t43_44.$get(); obj.d = v; $t43_44.$set(obj); } };
-        $t44_45.$set(200);
-        $t45_46.$set(95);
-        $t46_47.$set(240);
-        $t47_48.$set(50);
-        $t48_49.$set(15);
-        $t49_50.$set(850);
-        $t50_51 = $t0_1.$get().addr(7);
-        $t51_52 = { $get() { return $t50_51.$get().x1; }, $set(v) { const obj = $t50_51.$get(); obj.x1 = v; $t50_51.$set(obj); } };
-        $t52_53 = { $get() { return $t50_51.$get().y1; }, $set(v) { const obj = $t50_51.$get(); obj.y1 = v; $t50_51.$set(obj); } };
-        $t53_54 = { $get() { return $t50_51.$get().x2; }, $set(v) { const obj = $t50_51.$get(); obj.x2 = v; $t50_51.$set(obj); } };
-        $t54_55 = { $get() { return $t50_51.$get().y2; }, $set(v) { const obj = $t50_51.$get(); obj.y2 = v; $t50_51.$set(obj); } };
-        $t55_56 = { $get() { return $t50_51.$get().w; }, $set(v) { const obj = $t50_51.$get(); obj.w = v; $t50_51.$set(obj); } };
-        $t56_57 = { $get() { return $t50_51.$get().d; }, $set(v) { const obj = $t50_51.$get(); obj.d = v; $t50_51.$set(obj); } };
-        $t51_52.$set(60);
-        $t52_53.$set(55);
-        $t53_54.$set(35);
-        $t54_55.$set(25);
-        $t55_56.$set(10);
-        $t56_57.$set(1200);
-        $t57_58 = $t0_1.$get().addr(8);
-        $t58_59 = { $get() { return $t57_58.$get().x1; }, $set(v) { const obj = $t57_58.$get(); obj.x1 = v; $t57_58.$set(obj); } };
-        $t59_60 = { $get() { return $t57_58.$get().y1; }, $set(v) { const obj = $t57_58.$get(); obj.y1 = v; $t57_58.$set(obj); } };
-        $t60_61 = { $get() { return $t57_58.$get().x2; }, $set(v) { const obj = $t57_58.$get(); obj.x2 = v; $t57_58.$set(obj); } };
-        $t61_62 = { $get() { return $t57_58.$get().y2; }, $set(v) { const obj = $t57_58.$get(); obj.y2 = v; $t57_58.$set(obj); } };
-        $t62_63 = { $get() { return $t57_58.$get().w; }, $set(v) { const obj = $t57_58.$get(); obj.w = v; $t57_58.$set(obj); } };
-        $t63_64 = { $get() { return $t57_58.$get().d; }, $set(v) { const obj = $t57_58.$get(); obj.d = v; $t57_58.$set(obj); } };
-        $t58_59.$set(60);
-        $t59_60.$set(55);
-        $t60_61.$set(65);
-        $t61_62.$set(20);
-        $t62_63.$set(10);
-        $t63_64.$set(1250);
-        $t64_65 = $t0_1.$get().addr(9);
-        $t65_66 = { $get() { return $t64_65.$get().x1; }, $set(v) { const obj = $t64_65.$get(); obj.x1 = v; $t64_65.$set(obj); } };
-        $t66_67 = { $get() { return $t64_65.$get().y1; }, $set(v) { const obj = $t64_65.$get(); obj.y1 = v; $t64_65.$set(obj); } };
-        $t67_68 = { $get() { return $t64_65.$get().x2; }, $set(v) { const obj = $t64_65.$get(); obj.x2 = v; $t64_65.$set(obj); } };
-        $t68_69 = { $get() { return $t64_65.$get().y2; }, $set(v) { const obj = $t64_65.$get(); obj.y2 = v; $t64_65.$set(obj); } };
-        $t69_70 = { $get() { return $t64_65.$get().w; }, $set(v) { const obj = $t64_65.$get(); obj.w = v; $t64_65.$set(obj); } };
-        $t70_71 = { $get() { return $t64_65.$get().d; }, $set(v) { const obj = $t64_65.$get(); obj.d = v; $t64_65.$set(obj); } };
-        $t65_66.$set(120);
-        $t66_67.$set(50);
-        $t67_68.$set(105);
-        $t68_69.$set(18);
-        $t69_70.$set(10);
-        $t70_71.$set(1300);
-        $t71_72 = $t0_1.$get().addr(10);
-        $t72_73 = { $get() { return $t71_72.$get().x1; }, $set(v) { const obj = $t71_72.$get(); obj.x1 = v; $t71_72.$set(obj); } };
-        $t73_74 = { $get() { return $t71_72.$get().y1; }, $set(v) { const obj = $t71_72.$get(); obj.y1 = v; $t71_72.$set(obj); } };
-        $t74_75 = { $get() { return $t71_72.$get().x2; }, $set(v) { const obj = $t71_72.$get(); obj.x2 = v; $t71_72.$set(obj); } };
-        $t75_76 = { $get() { return $t71_72.$get().y2; }, $set(v) { const obj = $t71_72.$get(); obj.y2 = v; $t71_72.$set(obj); } };
-        $t76_77 = { $get() { return $t71_72.$get().w; }, $set(v) { const obj = $t71_72.$get(); obj.w = v; $t71_72.$set(obj); } };
-        $t77_78 = { $get() { return $t71_72.$get().d; }, $set(v) { const obj = $t71_72.$get(); obj.d = v; $t71_72.$set(obj); } };
-        $t72_73.$set(120);
-        $t73_74.$set(50);
-        $t74_75.$set(138);
-        $t75_76.$set(15);
-        $t76_77.$set(10);
-        $t77_78.$set(1350);
-        $t78_79 = $t0_1.$get().addr(11);
-        $t79_80 = { $get() { return $t78_79.$get().x1; }, $set(v) { const obj = $t78_79.$get(); obj.x1 = v; $t78_79.$set(obj); } };
-        $t80_81 = { $get() { return $t78_79.$get().y1; }, $set(v) { const obj = $t78_79.$get(); obj.y1 = v; $t78_79.$set(obj); } };
-        $t81_82 = { $get() { return $t78_79.$get().x2; }, $set(v) { const obj = $t78_79.$get(); obj.x2 = v; $t78_79.$set(obj); } };
-        $t82_83 = { $get() { return $t78_79.$get().y2; }, $set(v) { const obj = $t78_79.$get(); obj.y2 = v; $t78_79.$set(obj); } };
-        $t83_84 = { $get() { return $t78_79.$get().w; }, $set(v) { const obj = $t78_79.$get(); obj.w = v; $t78_79.$set(obj); } };
-        $t84_85 = { $get() { return $t78_79.$get().d; }, $set(v) { const obj = $t78_79.$get(); obj.d = v; $t78_79.$set(obj); } };
-        $t79_80.$set(185);
-        $t80_81.$set(45);
-        $t81_82.$set(170);
-        $t82_83.$set(12);
-        $t83_84.$set(10);
-        $t84_85.$set(1400);
-        $t85_86 = $t0_1.$get().addr(12);
-        $t86_87 = { $get() { return $t85_86.$get().x1; }, $set(v) { const obj = $t85_86.$get(); obj.x1 = v; $t85_86.$set(obj); } };
-        $t87_88 = { $get() { return $t85_86.$get().y1; }, $set(v) { const obj = $t85_86.$get(); obj.y1 = v; $t85_86.$set(obj); } };
-        $t88_89 = { $get() { return $t85_86.$get().x2; }, $set(v) { const obj = $t85_86.$get(); obj.x2 = v; $t85_86.$set(obj); } };
-        $t89_90 = { $get() { return $t85_86.$get().y2; }, $set(v) { const obj = $t85_86.$get(); obj.y2 = v; $t85_86.$set(obj); } };
-        $t90_91 = { $get() { return $t85_86.$get().w; }, $set(v) { const obj = $t85_86.$get(); obj.w = v; $t85_86.$set(obj); } };
-        $t91_92 = { $get() { return $t85_86.$get().d; }, $set(v) { const obj = $t85_86.$get(); obj.d = v; $t85_86.$set(obj); } };
-        $t86_87.$set(185);
-        $t87_88.$set(45);
-        $t88_89.$set(198);
-        $t89_90.$set(10);
-        $t90_91.$set(10);
-        $t91_92.$set(1450);
-        $t92_93 = $t0_1.$get().addr(13);
-        $t93_94 = { $get() { return $t92_93.$get().x1; }, $set(v) { const obj = $t92_93.$get(); obj.x1 = v; $t92_93.$set(obj); } };
-        $t94_95 = { $get() { return $t92_93.$get().y1; }, $set(v) { const obj = $t92_93.$get(); obj.y1 = v; $t92_93.$set(obj); } };
-        $t95_96 = { $get() { return $t92_93.$get().x2; }, $set(v) { const obj = $t92_93.$get(); obj.x2 = v; $t92_93.$set(obj); } };
-        $t96_97 = { $get() { return $t92_93.$get().y2; }, $set(v) { const obj = $t92_93.$get(); obj.y2 = v; $t92_93.$set(obj); } };
-        $t97_98 = { $get() { return $t92_93.$get().w; }, $set(v) { const obj = $t92_93.$get(); obj.w = v; $t92_93.$set(obj); } };
-        $t98_99 = { $get() { return $t92_93.$get().d; }, $set(v) { const obj = $t92_93.$get(); obj.d = v; $t92_93.$set(obj); } };
-        $t93_94.$set(240);
-        $t94_95.$set(50);
-        $t95_96.$set(228);
-        $t96_97.$set(20);
-        $t97_98.$set(10);
-        $t98_99.$set(1500);
-        $t99_100 = $t0_1.$get().addr(14);
-        $t100_101 = { $get() { return $t99_100.$get().x1; }, $set(v) { const obj = $t99_100.$get(); obj.x1 = v; $t99_100.$set(obj); } };
-        $t101_102 = { $get() { return $t99_100.$get().y1; }, $set(v) { const obj = $t99_100.$get(); obj.y1 = v; $t99_100.$set(obj); } };
-        $t102_103 = { $get() { return $t99_100.$get().x2; }, $set(v) { const obj = $t99_100.$get(); obj.x2 = v; $t99_100.$set(obj); } };
-        $t103_104 = { $get() { return $t99_100.$get().y2; }, $set(v) { const obj = $t99_100.$get(); obj.y2 = v; $t99_100.$set(obj); } };
-        $t104_105 = { $get() { return $t99_100.$get().w; }, $set(v) { const obj = $t99_100.$get(); obj.w = v; $t99_100.$set(obj); } };
-        $t105_106 = { $get() { return $t99_100.$get().d; }, $set(v) { const obj = $t99_100.$get(); obj.d = v; $t99_100.$set(obj); } };
-        $t100_101.$set(240);
-        $t101_102.$set(50);
-        $t102_103.$set(265);
-        $t103_104.$set(22);
-        $t104_105.$set(10);
-        $t105_106.$set(1550);
-        $t106_107 = $t0_1.$get().addr(15);
-        $t107_108 = { $get() { return $t106_107.$get().x1; }, $set(v) { const obj = $t106_107.$get(); obj.x1 = v; $t106_107.$set(obj); } };
-        $t108_109 = { $get() { return $t106_107.$get().y1; }, $set(v) { const obj = $t106_107.$get(); obj.y1 = v; $t106_107.$set(obj); } };
-        $t109_110 = { $get() { return $t106_107.$get().x2; }, $set(v) { const obj = $t106_107.$get(); obj.x2 = v; $t106_107.$set(obj); } };
-        $t110_111 = { $get() { return $t106_107.$get().y2; }, $set(v) { const obj = $t106_107.$get(); obj.y2 = v; $t106_107.$set(obj); } };
-        $t111_112 = { $get() { return $t106_107.$get().w; }, $set(v) { const obj = $t106_107.$get(); obj.w = v; $t106_107.$set(obj); } };
-        $t112_113 = { $get() { return $t106_107.$get().d; }, $set(v) { const obj = $t106_107.$get(); obj.d = v; $t106_107.$set(obj); } };
-        $t107_108.$set(35);
-        $t108_109.$set(25);
-        $t109_110.$set(18);
-        $t110_111.$set(8);
-        $t111_112.$set(6);
-        $t112_113.$set(1900);
-        $t113_114 = $t0_1.$get().addr(16);
-        $t114_115 = { $get() { return $t113_114.$get().x1; }, $set(v) { const obj = $t113_114.$get(); obj.x1 = v; $t113_114.$set(obj); } };
-        $t115_116 = { $get() { return $t113_114.$get().y1; }, $set(v) { const obj = $t113_114.$get(); obj.y1 = v; $t113_114.$set(obj); } };
-        $t116_117 = { $get() { return $t113_114.$get().x2; }, $set(v) { const obj = $t113_114.$get(); obj.x2 = v; $t113_114.$set(obj); } };
-        $t117_118 = { $get() { return $t113_114.$get().y2; }, $set(v) { const obj = $t113_114.$get(); obj.y2 = v; $t113_114.$set(obj); } };
-        $t118_119 = { $get() { return $t113_114.$get().w; }, $set(v) { const obj = $t113_114.$get(); obj.w = v; $t113_114.$set(obj); } };
-        $t119_120 = { $get() { return $t113_114.$get().d; }, $set(v) { const obj = $t113_114.$get(); obj.d = v; $t113_114.$set(obj); } };
-        $t114_115.$set(65);
-        $t115_116.$set(20);
-        $t116_117.$set(55);
-        $t117_118.$set(3);
-        $t118_119.$set(6);
-        $t119_120.$set(1950);
-        $t120_121 = $t0_1.$get().addr(17);
-        $t121_122 = { $get() { return $t120_121.$get().x1; }, $set(v) { const obj = $t120_121.$get(); obj.x1 = v; $t120_121.$set(obj); } };
-        $t122_123 = { $get() { return $t120_121.$get().y1; }, $set(v) { const obj = $t120_121.$get(); obj.y1 = v; $t120_121.$set(obj); } };
-        $t123_124 = { $get() { return $t120_121.$get().x2; }, $set(v) { const obj = $t120_121.$get(); obj.x2 = v; $t120_121.$set(obj); } };
-        $t124_125 = { $get() { return $t120_121.$get().y2; }, $set(v) { const obj = $t120_121.$get(); obj.y2 = v; $t120_121.$set(obj); } };
-        $t125_126 = { $get() { return $t120_121.$get().w; }, $set(v) { const obj = $t120_121.$get(); obj.w = v; $t120_121.$set(obj); } };
-        $t126_127 = { $get() { return $t120_121.$get().d; }, $set(v) { const obj = $t120_121.$get(); obj.d = v; $t120_121.$set(obj); } };
-        $t121_122.$set(105);
-        $t122_123.$set(18);
-        $t123_124.$set(95);
-        $t124_125.$set(2);
-        $t125_126.$set(6);
-        $t126_127.$set(2000);
-        $t127_128 = $t0_1.$get().addr(18);
-        $t128_129 = { $get() { return $t127_128.$get().x1; }, $set(v) { const obj = $t127_128.$get(); obj.x1 = v; $t127_128.$set(obj); } };
-        $t129_130 = { $get() { return $t127_128.$get().y1; }, $set(v) { const obj = $t127_128.$get(); obj.y1 = v; $t127_128.$set(obj); } };
-        $t130_131 = { $get() { return $t127_128.$get().x2; }, $set(v) { const obj = $t127_128.$get(); obj.x2 = v; $t127_128.$set(obj); } };
-        $t131_132 = { $get() { return $t127_128.$get().y2; }, $set(v) { const obj = $t127_128.$get(); obj.y2 = v; $t127_128.$set(obj); } };
-        $t132_133 = { $get() { return $t127_128.$get().w; }, $set(v) { const obj = $t127_128.$get(); obj.w = v; $t127_128.$set(obj); } };
-        $t133_134 = { $get() { return $t127_128.$get().d; }, $set(v) { const obj = $t127_128.$get(); obj.d = v; $t127_128.$set(obj); } };
-        $t128_129.$set(138);
-        $t129_130.$set(15);
-        $t130_131.$set(145);
-        $t131_132.$set(0);
-        $t132_133.$set(6);
-        $t133_134.$set(2050);
-        $t134_135 = $t0_1.$get().addr(19);
-        $t135_136 = { $get() { return $t134_135.$get().x1; }, $set(v) { const obj = $t134_135.$get(); obj.x1 = v; $t134_135.$set(obj); } };
-        $t136_137 = { $get() { return $t134_135.$get().y1; }, $set(v) { const obj = $t134_135.$get(); obj.y1 = v; $t134_135.$set(obj); } };
-        $t137_138 = { $get() { return $t134_135.$get().x2; }, $set(v) { const obj = $t134_135.$get(); obj.x2 = v; $t134_135.$set(obj); } };
-        $t138_139 = { $get() { return $t134_135.$get().y2; }, $set(v) { const obj = $t134_135.$get(); obj.y2 = v; $t134_135.$set(obj); } };
-        $t139_140 = { $get() { return $t134_135.$get().w; }, $set(v) { const obj = $t134_135.$get(); obj.w = v; $t134_135.$set(obj); } };
-        $t140_141 = { $get() { return $t134_135.$get().d; }, $set(v) { const obj = $t134_135.$get(); obj.d = v; $t134_135.$set(obj); } };
-        $t135_136.$set(170);
-        $t136_137.$set(12);
-        $t137_138.$set(158);
-        $t138_139.$set(0);
-        $t139_140.$set(6);
-        $t140_141.$set(2100);
-        $t141_142 = $t0_1.$get().addr(20);
-        $t142_143 = { $get() { return $t141_142.$get().x1; }, $set(v) { const obj = $t141_142.$get(); obj.x1 = v; $t141_142.$set(obj); } };
-        $t143_144 = { $get() { return $t141_142.$get().y1; }, $set(v) { const obj = $t141_142.$get(); obj.y1 = v; $t141_142.$set(obj); } };
-        $t144_145 = { $get() { return $t141_142.$get().x2; }, $set(v) { const obj = $t141_142.$get(); obj.x2 = v; $t141_142.$set(obj); } };
-        $t145_146 = { $get() { return $t141_142.$get().y2; }, $set(v) { const obj = $t141_142.$get(); obj.y2 = v; $t141_142.$set(obj); } };
-        $t146_147 = { $get() { return $t141_142.$get().w; }, $set(v) { const obj = $t141_142.$get(); obj.w = v; $t141_142.$set(obj); } };
-        $t147_148 = { $get() { return $t141_142.$get().d; }, $set(v) { const obj = $t141_142.$get(); obj.d = v; $t141_142.$set(obj); } };
-        $t142_143.$set(198);
-        $t143_144.$set(10);
-        $t144_145.$set(205);
-        $t145_146.$set(0);
-        $t146_147.$set(6);
-        $t147_148.$set(2150);
-        $t148_149 = $t0_1.$get().addr(21);
-        $t149_150 = { $get() { return $t148_149.$get().x1; }, $set(v) { const obj = $t148_149.$get(); obj.x1 = v; $t148_149.$set(obj); } };
-        $t150_151 = { $get() { return $t148_149.$get().y1; }, $set(v) { const obj = $t148_149.$get(); obj.y1 = v; $t148_149.$set(obj); } };
-        $t151_152 = { $get() { return $t148_149.$get().x2; }, $set(v) { const obj = $t148_149.$get(); obj.x2 = v; $t148_149.$set(obj); } };
-        $t152_153 = { $get() { return $t148_149.$get().y2; }, $set(v) { const obj = $t148_149.$get(); obj.y2 = v; $t148_149.$set(obj); } };
-        $t153_154 = { $get() { return $t148_149.$get().w; }, $set(v) { const obj = $t148_149.$get(); obj.w = v; $t148_149.$set(obj); } };
-        $t154_155 = { $get() { return $t148_149.$get().d; }, $set(v) { const obj = $t148_149.$get(); obj.d = v; $t148_149.$set(obj); } };
-        $t149_150.$set(228);
-        $t150_151.$set(20);
-        $t151_152.$set(218);
-        $t152_153.$set(5);
-        $t153_154.$set(6);
-        $t154_155.$set(2200);
-        $t155_156 = $t0_1.$get().addr(22);
-        $t156_157 = { $get() { return $t155_156.$get().x1; }, $set(v) { const obj = $t155_156.$get(); obj.x1 = v; $t155_156.$set(obj); } };
-        $t157_158 = { $get() { return $t155_156.$get().y1; }, $set(v) { const obj = $t155_156.$get(); obj.y1 = v; $t155_156.$set(obj); } };
-        $t158_159 = { $get() { return $t155_156.$get().x2; }, $set(v) { const obj = $t155_156.$get(); obj.x2 = v; $t155_156.$set(obj); } };
-        $t159_160 = { $get() { return $t155_156.$get().y2; }, $set(v) { const obj = $t155_156.$get(); obj.y2 = v; $t155_156.$set(obj); } };
-        $t160_161 = { $get() { return $t155_156.$get().w; }, $set(v) { const obj = $t155_156.$get(); obj.w = v; $t155_156.$set(obj); } };
-        $t161_162 = { $get() { return $t155_156.$get().d; }, $set(v) { const obj = $t155_156.$get(); obj.d = v; $t155_156.$set(obj); } };
-        $t156_157.$set(265);
-        $t157_158.$set(22);
-        $t158_159.$set(280);
-        $t159_160.$set(8);
-        $t160_161.$set(6);
-        $t161_162.$set(2250);
-        $t162_163 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-        $t163_164 = $rt.builtin.len($t162_163);
-        $t164_165 = '<svg width="300" height="250" viewBox="0 0 300 250" xmlns="http://www.w3.org/2000/svg"><style>@keyframes grow{from{stroke-dashoffset:var(--len)}to{stroke-dashoffset:0}}.d{stroke:var(--accent,#f59e0b);stroke-linecap:round;fill:none;stroke-dasharray:var(--len);stroke-dashoffset:var(--len);animation:grow 0.6s ease forwards}</style>';
-        $t165_166 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t166_167 = ($t165_166 + 1);
-        $t167_168 = ($t166_167 < $t163_164);
-        if ($t167_168) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t168_169 = $t162_163.addr($t166_167);
-        $t169_170 = $t168_169.$get();
-        $t170_171 = { $value: { x1: 0, y1: 0, x2: 0, y2: 0, w: 0, d: 0 }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t170_171.$set($rt.builtin.cloneValue($t169_170));
-        $t171_172 = { $get() { return $t170_171.$get().x2; }, $set(v) { const obj = $t170_171.$get(); obj.x2 = v; $t170_171.$set(obj); } };
-        $t172_173 = $t171_172.$get();
-        $t173_174 = { $get() { return $t170_171.$get().x1; }, $set(v) { const obj = $t170_171.$get(); obj.x1 = v; $t170_171.$set(obj); } };
-        $t174_175 = $t173_174.$get();
-        $t175_176 = ($t172_173 - $t174_175);
-        $t176_177 = { $get() { return $t170_171.$get().y2; }, $set(v) { const obj = $t170_171.$get(); obj.y2 = v; $t170_171.$set(obj); } };
-        $t177_178 = $t176_177.$get();
-        $t178_179 = { $get() { return $t170_171.$get().y1; }, $set(v) { const obj = $t170_171.$get(); obj.y1 = v; $t170_171.$set(obj); } };
-        $t179_180 = $t178_179.$get();
-        $t180_181 = ($t177_178 - $t179_180);
-        $t181_182 = ($t175_176 < 0);
-        if ($t181_182) {
-          $block = 4; break;
-        }
-        else {
-          $t184_185 = $t175_176;
-          $block = 5; break;
-        }
-        break;
-      }
-      case 3: {
-        $t182_183 = ($t164_165 + '</svg>');
-        return $t182_183;
-        break;
-      }
-      case 4: {
-        $t183_184 = -$t175_176;
-        $t184_185 = $t183_184;
-        $block = 5; break;
-        break;
-      }
-      case 5: {
-        $t185_186 = ($t180_181 < 0);
-        if ($t185_186) {
-          $block = 6; break;
-        }
-        else {
-          $t187_188 = $t180_181;
-          $block = 7; break;
-        }
-        break;
-      }
-      case 6: {
-        $t186_187 = -$t180_181;
-        $t187_188 = $t186_187;
-        $block = 7; break;
-        break;
-      }
-      case 7: {
-        $t188_189 = ($t184_185 + $t187_188);
-        $t189_190 = ($t188_189 < 10);
-        if ($t189_190) {
-          $block = 8; break;
-        }
-        else {
-          $t190_191 = $t188_189;
-          $block = 9; break;
-        }
-        break;
-      }
-      case 8: {
-        $t190_191 = 10;
-        $block = 9; break;
-        break;
-      }
-      case 9: {
-        $t191_192 = { $get() { return $t170_171.$get().x1; }, $set(v) { const obj = $t170_171.$get(); obj.x1 = v; $t170_171.$set(obj); } };
-        $t192_193 = $t191_192.$get();
-        $t193_194 = itoa($t192_193);
-        $t194_195 = ('<line class="d" x1="' + $t193_194);
-        $t195_196 = ($t194_195 + '" y1="');
-        $t196_197 = { $get() { return $t170_171.$get().y1; }, $set(v) { const obj = $t170_171.$get(); obj.y1 = v; $t170_171.$set(obj); } };
-        $t197_198 = $t196_197.$get();
-        $t198_199 = itoa($t197_198);
-        $t199_200 = ($t195_196 + $t198_199);
-        $t200_201 = ($t199_200 + '" x2="');
-        $t201_202 = { $get() { return $t170_171.$get().x2; }, $set(v) { const obj = $t170_171.$get(); obj.x2 = v; $t170_171.$set(obj); } };
-        $t202_203 = $t201_202.$get();
-        $t203_204 = itoa($t202_203);
-        $t204_205 = ($t200_201 + $t203_204);
-        $t205_206 = ($t204_205 + '" y2="');
-        $t206_207 = { $get() { return $t170_171.$get().y2; }, $set(v) { const obj = $t170_171.$get(); obj.y2 = v; $t170_171.$set(obj); } };
-        $t207_208 = $t206_207.$get();
-        $t208_209 = itoa($t207_208);
-        $t209_210 = ($t205_206 + $t208_209);
-        $t210_211 = ($t209_210 + '" stroke-width="');
-        $t211_212 = { $get() { return $t170_171.$get().w; }, $set(v) { const obj = $t170_171.$get(); obj.w = v; $t170_171.$set(obj); } };
-        $t212_213 = $t211_212.$get();
-        $t213_214 = itoaF10($t212_213);
-        $t214_215 = ($t210_211 + $t213_214);
-        $t215_216 = ($t214_215 + '" style="--len:');
-        $t216_217 = itoa($t190_191);
-        $t217_218 = ($t215_216 + $t216_217);
-        $t218_219 = ($t217_218 + ';animation-delay:');
-        $t219_220 = { $get() { return $t170_171.$get().d; }, $set(v) { const obj = $t170_171.$get(); obj.d = v; $t170_171.$set(obj); } };
-        $t220_221 = $t219_220.$get();
-        $t221_222 = itoa($t220_221);
-        $t222_223 = ($t218_219 + $t221_222);
-        $t223_224 = ($t222_223 + 'ms"/>');
-        $t224_225 = ($t164_165 + $t223_224);
-        $t164_165 = $t224_225;
-        $t165_166 = $t166_167;
-        $block = 1; break;
-        break;
-      }
-    }
-  }
-}
-
-export function itoaF10(n) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = Math.trunc(n / 10);
-        $t1_2 = (n % 10);
-        $t2_3 = ($t1_2 === 0);
-        if ($t2_3) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t3_4 = itoa($t0_1);
-        return $t3_4;
-        break;
-      }
-      case 2: {
-        $t4_5 = itoa($t0_1);
-        $t5_6 = ($t4_5 + '.');
-        $t6_7 = itoa($t1_2);
-        $t7_8 = ($t5_6 + $t6_7);
-        return $t7_8;
         break;
       }
     }

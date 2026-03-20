@@ -56,6 +56,7 @@ Key architectural principles:
 - If a session produces 1000+ line changes, something went wrong — scope was too broad
 - When fixing a bug, understand the root cause before writing code
 - Do not refactor adjacent code while fixing a bug
+- There is no such thing as an "irrelevant" warning. All console warnings, DOM warnings, and log noise must be fixed. They obscure real issues and increase the time needed to diagnose problems.
 
 ## Nostr Protocol Notes
 

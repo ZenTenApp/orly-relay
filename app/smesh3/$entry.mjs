@@ -5,6 +5,7 @@ import * as $rt from './$runtime/index.mjs';
 import * as $main from './smesh3.mjs';
 
 async function $start() {
+  if ($rt.crypto && $rt.crypto.init) await $rt.crypto.init();
   if ($main.init) await $main.init();
   if ($main.main) await $main.main();
 }

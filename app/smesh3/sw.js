@@ -82,9 +82,24 @@ function connectSSE() {
     }
     if (v !== currentVersion) {
       currentVersion = v;
-      refreshAndReload();
+      notifyClients({ type: 'update-available' });
     }
   };
+}
+
+// --- Update on user click ---
+
+self.addEventListener('message', (event) => {
+  if (event.data === 'activate-update') {
+    refreshAndReload();
+  }
+});
+
+async function notifyClients(msg) {
+  const all = await self.clients.matchAll({ type: 'window' });
+  for (const client of all) {
+    client.postMessage(msg);
+  }
 }
 
 async function refreshAndReload() {
@@ -101,7 +116,6 @@ async function refreshAndReload() {
   } catch (err) {
     console.error('sm3sh sw: refresh failed', err);
   }
-  // Reload all clients.
   const all = await self.clients.matchAll({ type: 'window' });
   for (const client of all) {
     client.navigate(client.url);

@@ -203,6 +203,11 @@ func (l *Listener) sendIngestionResult(env *eventenvelope.Submission, result ing
 	}
 
 	if !result.Accepted {
+		// Route rate-limited messages through Ok.RateLimited for correct NIP-01 prefix
+		if strings.HasPrefix(result.Message, "rate-limited: ") {
+			msg := strings.TrimPrefix(result.Message, "rate-limited: ")
+			return Ok.RateLimited(l, env, msg)
+		}
 		return Ok.Blocked(l, env, result.Message)
 	}
 

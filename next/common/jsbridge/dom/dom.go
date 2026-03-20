@@ -75,3 +75,6 @@ func InsertBefore(parent, newChild, refChild Element) { panic("jsbridge") }
 
 // ReleaseElement releases a DOM element handle.
 func ReleaseElement(el Element) { panic("jsbridge") }
+
+// FetchText fetches a URL and calls fn with the response text.
+func FetchText(url string, fn func(string)) { panic("jsbridge") }

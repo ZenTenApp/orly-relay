@@ -50,6 +50,16 @@ func showLogin() {
 	dom.SetStyle(wrap, "height", "100vh")
 	dom.SetStyle(wrap, "flexDirection", "column")
 
+	// Smesh loader animation.
+	loader := dom.CreateElement("div")
+	dom.SetStyle(loader, "width", "180px")
+	dom.SetStyle(loader, "height", "180px")
+	dom.SetStyle(loader, "marginBottom", "16px")
+	dom.FetchText("./smesh-loader.svg", func(svg string) {
+		dom.SetInnerHTML(loader, svg)
+	})
+	dom.AppendChild(wrap, loader)
+
 	// Title.
 	h1 := dom.CreateElement("h1")
 	dom.SetTextContent(h1, "sm3sh")
@@ -63,6 +73,11 @@ func showLogin() {
 	dom.SetStyle(sub, "color", "var(--muted)")
 	dom.SetStyle(sub, "marginBottom", "32px")
 	dom.AppendChild(wrap, sub)
+
+	// Form wrapper (suppresses browser password-field-outside-form warning).
+	form := dom.CreateElement("form")
+	dom.AddEventListener(form, "submit", dom.RegisterCallback(func() {}))
+	dom.SetAttribute(form, "onsubmit", "return false")
 
 	// Nsec input.
 	input := dom.CreateElement("input")
@@ -81,7 +96,7 @@ func showLogin() {
 	dom.SetStyle(input, "color", "var(--fg)")
 	dom.SetStyle(input, "outline", "none")
 	dom.SetStyle(input, "marginBottom", "12px")
-	dom.AppendChild(wrap, input)
+	dom.AppendChild(form, input)
 
 	// Error message (hidden).
 	errEl := dom.CreateElement("div")
@@ -89,11 +104,12 @@ func showLogin() {
 	dom.SetStyle(errEl, "fontSize", "13px")
 	dom.SetStyle(errEl, "marginBottom", "12px")
 	dom.SetStyle(errEl, "minHeight", "18px")
-	dom.AppendChild(wrap, errEl)
+	dom.AppendChild(form, errEl)
 
 	// Login button.
 	btn := dom.CreateElement("button")
 	dom.SetTextContent(btn, "login with nsec")
+	dom.SetAttribute(btn, "type", "button")
 	dom.SetStyle(btn, "padding", "10px 32px")
 	dom.SetStyle(btn, "fontFamily", "monospace")
 	dom.SetStyle(btn, "fontSize", "14px")
@@ -102,7 +118,9 @@ func showLogin() {
 	dom.SetStyle(btn, "border", "none")
 	dom.SetStyle(btn, "borderRadius", "4px")
 	dom.SetStyle(btn, "cursor", "pointer")
-	dom.AppendChild(wrap, btn)
+	dom.AppendChild(form, btn)
+
+	dom.AppendChild(wrap, form)
 
 	cb := dom.RegisterCallback(func() {
 		nsecStr := dom.GetProperty(input, "value")
@@ -206,7 +224,7 @@ func showApp() {
 	feedContainer = dom.CreateElement("div")
 	dom.AppendChild(appContainer, feedContainer)
 
-	go connectRelay()
+	go connectRelays()
 }
 
 func doLogout() {
@@ -228,29 +246,37 @@ func doLogout() {
 
 // --- Relay + feed ---
 
-func connectRelay() {
-	url := "wss://relay.damus.io"
-	conn := relay.Dial(url)
+var relays = []string{
+	"wss://nostr.wine",
+	"wss://nostr.land",
+	"wss://nostr1.com",
+}
 
-	if !conn.WaitOpen() {
-		dom.SetTextContent(statusEl, "failed: "+url)
-		dom.SetStyle(statusEl, "color", "#e55")
-		return
-	}
+func connectRelays() {
+	connected := 0
+	for _, url := range relays {
+		u := url
+		conn := relay.Dial(u)
+		conn.OnReady(func(ok bool) {
+			if !ok {
+				return
+			}
+			connected++
+			dom.SetTextContent(statusEl, itoa(connected)+"/"+itoa(len(relays))+" relays")
 
-	dom.SetTextContent(statusEl, "connected: "+url)
-
-	filter := &nostr.Filter{
-		Kinds: []int{1},
-		Limit: 20,
-	}
-	sub := conn.Subscribe("feed", []*nostr.Filter{filter})
-	sub.OnEvent = func(ev *nostr.Event) {
-		eventCount++
-		renderNote(ev)
-	}
-	sub.OnEOSE = func() {
-		dom.SetTextContent(statusEl, url+" | "+itoa(eventCount)+" events")
+			filter := &nostr.Filter{
+				Kinds: []int{1},
+				Limit: 20,
+			}
+			sub := conn.Subscribe("feed", []*nostr.Filter{filter})
+			sub.OnEvent = func(ev *nostr.Event) {
+				eventCount++
+				renderNote(ev)
+			}
+			sub.OnEOSE = func() {
+				dom.SetTextContent(statusEl, itoa(connected)+"/"+itoa(len(relays))+" relays | "+itoa(eventCount)+" events")
+			}
+		})
 	}
 }
 
@@ -294,6 +320,7 @@ func renderNote(ev *nostr.Event) {
 }
 
 // --- Helpers ---
+
 
 func clearChildren(el dom.Element) {
 	dom.SetInnerHTML(el, "")

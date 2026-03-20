@@ -55,7 +55,7 @@ html, body {
 <script>
 // Service worker registration and update snackbar.
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').then(reg => {
+  navigator.serviceWorker.register('./$sw/$entry.mjs', { type: 'module' }).then(reg => {
     console.log('sm3sh: sw registered');
   });
 

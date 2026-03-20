@@ -9,19 +9,19 @@ import (
 const (
 	StateConnecting = 0
 	StateOpen       = 1
-	StateClosing    = 2
-	StateClosed     = 3
+	StateClosed     = 2
 )
 
 // Conn is a single relay WebSocket connection.
 type Conn struct {
-	URL     string
-	wsConn  ws.Conn
-	msgCh   chan string
-	openCh  chan struct{}
-	closeCh chan struct{}
-	closed  bool
-	subs    map[string]*Sub
+	URL    string
+	wsConn ws.Conn
+	state  int
+	subs   map[string]*Sub
+
+	// Callbacks set before Dial returns.
+	onReady func(bool)
+
 	onEvent func(string, *nostr.Event)
 	onEOSE  func(string)
 	onOK    func(string, bool, string)
@@ -29,73 +29,61 @@ type Conn struct {
 }
 
 // Dial opens a connection to a relay.
+// Call OnReady to receive the open/fail notification, then Start to begin processing.
 func Dial(url string) *Conn {
 	c := &Conn{
-		URL:     url,
-		msgCh:   make(chan string, 64),
-		openCh:  make(chan struct{}, 1),
-		closeCh: make(chan struct{}, 1),
-		subs:    make(map[string]*Sub),
+		URL:   url,
+		state: StateConnecting,
+		subs:  make(map[string]*Sub),
 	}
 
 	c.wsConn = ws.Dial(
 		url,
 		func(connID int, data string) {
-			select {
-			case c.msgCh <- data:
-			default:
-				// Drop message if buffer full.
-			}
+			c.handleMessage(data)
 		},
 		func(connID int) {
-			select {
-			case c.openCh <- struct{}{}:
-			default:
+			c.state = StateOpen
+			if c.onReady != nil {
+				c.onReady(true)
+				c.onReady = nil
 			}
 		},
 		func(connID int, code int, reason string) {
-			c.closed = true
-			select {
-			case c.closeCh <- struct{}{}:
-			default:
+			c.state = StateClosed
+			if c.onReady != nil {
+				c.onReady(false)
+				c.onReady = nil
 			}
 		},
 		func(connID int) {
-			c.closed = true
-			select {
-			case c.closeCh <- struct{}{}:
-			default:
+			c.state = StateClosed
+			if c.onReady != nil {
+				c.onReady(false)
+				c.onReady = nil
 			}
 		},
 	)
 
-	// Start read loop.
-	go c.readLoop()
-
 	return c
 }
 
-// WaitOpen blocks until the connection is open or closed.
-// Returns true if connected.
-func (c *Conn) WaitOpen() bool {
-	select {
-	case <-c.openCh:
-		return true
-	case <-c.closeCh:
-		return false
+// OnReady sets a callback that fires once when the connection opens (true) or fails (false).
+func (c *Conn) OnReady(fn func(bool)) {
+	if c.state == StateOpen {
+		fn(true)
+		return
 	}
+	if c.state == StateClosed {
+		fn(false)
+		return
+	}
+	c.onReady = fn
 }
 
-// readLoop processes incoming messages.
-func (c *Conn) readLoop() {
-	for {
-		select {
-		case msg := <-c.msgCh:
-			c.handleMessage(msg)
-		case <-c.closeCh:
-			return
-		}
-	}
+// IsOpen returns whether the connection is open.
+func (c *Conn) IsOpen() bool {
+	return c.state == StateOpen
 }
 
 func (c *Conn) handleMessage(msg string) {
@@ -107,7 +95,6 @@ func (c *Conn) handleMessage(msg string) {
 		if ev == nil {
 			return
 		}
-		// Dispatch to subscription handler.
 		if sub, ok := c.subs[subID]; ok {
 			if sub.OnEvent != nil {
 				sub.OnEvent(ev)
@@ -145,7 +132,6 @@ func (c *Conn) handleMessage(msg string) {
 		}
 
 	case "NOTICE":
-		// Log notices but don't crash.
 		_ = payload
 	}
 }
@@ -159,7 +145,6 @@ func (c *Conn) Subscribe(id string, filters []*nostr.Filter) *Sub {
 	}
 	c.subs[id] = sub
 
-	// Build REQ message: ["REQ","subId",filter1,filter2,...]
 	msg := "[\"REQ\",\"" + id + "\""
 	for _, f := range filters {
 		msg += "," + f.Serialize()
@@ -185,31 +170,30 @@ func (c *Conn) CloseSubscription(id string) {
 
 // Close closes the connection.
 func (c *Conn) Close() {
-	c.closed = true
+	c.state = StateClosed
 	ws.Close(c.wsConn)
 }
 
-// OnEvent sets a global event handler (all subscriptions).
-func (c *Conn) OnEvent(fn func(string, *nostr.Event)) {
+// SetOnEvent sets a global event handler (all subscriptions).
+func (c *Conn) SetOnEvent(fn func(string, *nostr.Event)) {
 	c.onEvent = fn
 }
 
-// OnEOSE sets a global EOSE handler.
-func (c *Conn) OnEOSE(fn func(string)) {
+// SetOnEOSE sets a global EOSE handler.
+func (c *Conn) SetOnEOSE(fn func(string)) {
 	c.onEOSE = fn
 }
 
-// OnOK sets a handler for OK responses.
-func (c *Conn) OnOK(fn func(string, bool, string)) {
+// SetOnOK sets a handler for OK responses.
+func (c *Conn) SetOnOK(fn func(string, bool, string)) {
 	c.onOK = fn
 }
 
-// OnAuth sets a handler for AUTH challenges.
-func (c *Conn) OnAuth(fn func(string)) {
+// SetOnAuth sets a handler for AUTH challenges.
+func (c *Conn) SetOnAuth(fn func(string)) {
 	c.onAuth = fn
 }
 
-// eventJSON serializes an Event to JSON object string.
 func eventJSON(ev *nostr.Event) string {
 	buf := make([]byte, 0, 512)
 	buf = append(buf, '{')

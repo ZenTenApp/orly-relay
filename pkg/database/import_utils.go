@@ -127,7 +127,11 @@ func (d *D) processJSONLEventsWithPolicy(ctx context.Context, rr io.Reader, poli
 
 		// Apply rate limiting before write operation if limiter is configured
 		if d.rateLimiter != nil && d.rateLimiter.IsEnabled() {
-			d.rateLimiter.Wait(ctx, WriteOpType)
+			if _, err := d.rateLimiter.Wait(ctx, WriteOpType); err != nil {
+				ev.Free()
+				saveErrors++
+				continue
+			}
 		}
 
 		if _, err := d.SaveEvent(ctx, ev); err != nil {

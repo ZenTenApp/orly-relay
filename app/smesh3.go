@@ -80,6 +80,9 @@ func (s *Smesh3Server) Start(ctx context.Context) error {
 		if strings.HasSuffix(path, ".mjs") {
 			w.Header().Set("Content-Type", "application/javascript")
 		}
+		if strings.Contains(path, "$sw/") {
+			w.Header().Set("Service-Worker-Allowed", "/")
+		}
 
 		// No caching in disk/dev mode; short cache in embedded/prod.
 		if s.dir != "" {
@@ -176,7 +179,7 @@ func (s *Smesh3Server) startWatcher(ctx context.Context) error {
 	}
 	s.watcher = w
 
-	// Watch the root dir and immediate subdirectories.
+	// Watch the root dir and all subdirectories (2 levels).
 	if err := w.Add(s.dir); err != nil {
 		return err
 	}
@@ -185,6 +188,12 @@ func (s *Smesh3Server) startWatcher(ctx context.Context) error {
 		if e.IsDir() {
 			subdir := filepath.Join(s.dir, e.Name())
 			w.Add(subdir)
+			sub2, _ := os.ReadDir(subdir)
+			for _, e2 := range sub2 {
+				if e2.IsDir() {
+					w.Add(filepath.Join(subdir, e2.Name()))
+				}
+			}
 		}
 	}
 

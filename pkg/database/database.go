@@ -30,7 +30,7 @@ const DefaultMaxConcurrentQueries = 3
 // RateLimiterInterface defines the minimal interface for rate limiting during import
 type RateLimiterInterface interface {
 	IsEnabled() bool
-	Wait(ctx context.Context, opType int) time.Duration
+	Wait(ctx context.Context, opType int) (time.Duration, error)
 }
 
 // WriteOpType is the operation type constant for write operations
