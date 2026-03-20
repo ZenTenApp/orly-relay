@@ -194,7 +194,7 @@ export function serializeTags(buf, tags) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t1_2 = $t0_1.$get().addr(0);
         $t1_2.$set(91);
@@ -205,7 +205,8 @@ export function serializeTags(buf, tags) {
         $t6_7 = -1;
         $block = 1; break;
         break;
-      case 1:
+      }
+      case 1: {
         $t7_8 = ($t6_7 + 1);
         $t8_9 = ($t7_8 < $t4_5);
         if ($t8_9) {
@@ -215,7 +216,8 @@ export function serializeTags(buf, tags) {
           $block = 3; break;
         }
         break;
-      case 2:
+      }
+      case 2: {
         $t9_10 = tags.addr($t7_8);
         $t10_11 = $t9_10.$get();
         $t11_12 = ($t7_8 > 0);
@@ -227,7 +229,8 @@ export function serializeTags(buf, tags) {
           $block = 5; break;
         }
         break;
-      case 3:
+      }
+      case 3: {
         $t12_13 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t13_14 = $t12_13.$get().addr(0);
         $t13_14.$set(93);
@@ -235,7 +238,8 @@ export function serializeTags(buf, tags) {
         $t15_16 = $rt.builtin.appendSlice($t5_6, $t14_15);
         return $t15_16;
         break;
-      case 4:
+      }
+      case 4: {
         $t16_17 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t17_18 = $t16_17.$get().addr(0);
         $t17_18.$set(44);
@@ -244,7 +248,8 @@ export function serializeTags(buf, tags) {
         $t20_21 = $t19_20;
         $block = 5; break;
         break;
-      case 5:
+      }
+      case 5: {
         $t21_22 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t22_23 = $t21_22.$get().addr(0);
         $t22_23.$set(91);
@@ -255,7 +260,8 @@ export function serializeTags(buf, tags) {
         $t27_28 = -1;
         $block = 6; break;
         break;
-      case 6:
+      }
+      case 6: {
         $t28_29 = ($t27_28 + 1);
         $t29_30 = ($t28_29 < $t25_26);
         if ($t29_30) {
@@ -265,7 +271,8 @@ export function serializeTags(buf, tags) {
           $block = 8; break;
         }
         break;
-      case 7:
+      }
+      case 7: {
         $t30_31 = $t10_11.addr($t28_29);
         $t31_32 = $t30_31.$get();
         $t32_33 = ($t28_29 > 0);
@@ -277,7 +284,8 @@ export function serializeTags(buf, tags) {
           $block = 10; break;
         }
         break;
-      case 8:
+      }
+      case 8: {
         $t33_34 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t34_35 = $t33_34.$get().addr(0);
         $t34_35.$set(93);
@@ -287,7 +295,8 @@ export function serializeTags(buf, tags) {
         $t6_7 = $t7_8;
         $block = 1; break;
         break;
-      case 9:
+      }
+      case 9: {
         $t37_38 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t38_39 = $t37_38.$get().addr(0);
         $t38_39.$set(44);
@@ -296,7 +305,8 @@ export function serializeTags(buf, tags) {
         $t41_42 = $t40_41;
         $block = 10; break;
         break;
-      case 10:
+      }
+      case 10: {
         $t42_43 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t43_44 = $t42_43.$get().addr(0);
         $t43_44.$set(34);
@@ -312,6 +322,7 @@ export function serializeTags(buf, tags) {
         $t27_28 = $t28_29;
         $block = 6; break;
         break;
+      }
     }
   }
 }
@@ -321,12 +332,13 @@ export function appendEscaped(buf, s) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = buf;
         $t1_2 = 0;
         $block = 1; break;
         break;
-      case 1:
+      }
+      case 1: {
         $t2_3 = $rt.builtin.len(s);
         $t3_4 = ($t1_2 < $t2_3);
         if ($t3_4) {
@@ -336,7 +348,8 @@ export function appendEscaped(buf, s) {
           $block = 3; break;
         }
         break;
-      case 2:
+      }
+      case 2: {
         $rt.runtime.boundsCheck($t1_2, s.length);
         $t4_5 = s.charCodeAt($t1_2);
         $t5_6 = ($t4_5 === 34);
@@ -347,16 +360,19 @@ export function appendEscaped(buf, s) {
           $block = 7; break;
         }
         break;
-      case 3:
+      }
+      case 3: {
         return $t0_1;
         break;
-      case 4:
+      }
+      case 4: {
         $t7_8 = ($t1_2 + 1);
         $t0_1 = $t6_7;
         $t1_2 = $t7_8;
         $block = 1; break;
         break;
-      case 5:
+      }
+      case 5: {
         $t8_9 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t9_10 = $t8_9.$get().addr(0);
         $t9_10.$set(92);
@@ -367,7 +383,8 @@ export function appendEscaped(buf, s) {
         $t6_7 = $t12_13;
         $block = 4; break;
         break;
-      case 6:
+      }
+      case 6: {
         $t13_14 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t14_15 = $t13_14.$get().addr(0);
         $t14_15.$set(92);
@@ -378,7 +395,8 @@ export function appendEscaped(buf, s) {
         $t6_7 = $t17_18;
         $block = 4; break;
         break;
-      case 7:
+      }
+      case 7: {
         $t18_19 = ($t4_5 === 92);
         if ($t18_19) {
           $block = 6; break;
@@ -387,7 +405,8 @@ export function appendEscaped(buf, s) {
           $block = 9; break;
         }
         break;
-      case 8:
+      }
+      case 8: {
         $t19_20 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t20_21 = $t19_20.$get().addr(0);
         $t20_21.$set(92);
@@ -398,7 +417,8 @@ export function appendEscaped(buf, s) {
         $t6_7 = $t23_24;
         $block = 4; break;
         break;
-      case 9:
+      }
+      case 9: {
         $t24_25 = ($t4_5 === 10);
         if ($t24_25) {
           $block = 8; break;
@@ -407,7 +427,8 @@ export function appendEscaped(buf, s) {
           $block = 11; break;
         }
         break;
-      case 10:
+      }
+      case 10: {
         $t25_26 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t26_27 = $t25_26.$get().addr(0);
         $t26_27.$set(92);
@@ -418,7 +439,8 @@ export function appendEscaped(buf, s) {
         $t6_7 = $t29_30;
         $block = 4; break;
         break;
-      case 11:
+      }
+      case 11: {
         $t30_31 = ($t4_5 === 13);
         if ($t30_31) {
           $block = 10; break;
@@ -427,7 +449,8 @@ export function appendEscaped(buf, s) {
           $block = 13; break;
         }
         break;
-      case 12:
+      }
+      case 12: {
         $t31_32 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t32_33 = $t31_32.$get().addr(0);
         $t32_33.$set(92);
@@ -438,7 +461,8 @@ export function appendEscaped(buf, s) {
         $t6_7 = $t35_36;
         $block = 4; break;
         break;
-      case 13:
+      }
+      case 13: {
         $t36_37 = ($t4_5 === 9);
         if ($t36_37) {
           $block = 12; break;
@@ -447,7 +471,8 @@ export function appendEscaped(buf, s) {
           $block = 14; break;
         }
         break;
-      case 14:
+      }
+      case 14: {
         $t37_38 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t38_39 = $t37_38.$get().addr(0);
         $t38_39.$set($t4_5);
@@ -456,6 +481,7 @@ export function appendEscaped(buf, s) {
         $t6_7 = $t40_41;
         $block = 4; break;
         break;
+      }
     }
   }
 }
@@ -465,7 +491,7 @@ export function itoa(n) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = (n === 0);
         if ($t0_1) {
           $block = 1; break;
@@ -474,10 +500,12 @@ export function itoa(n) {
           $block = 2; break;
         }
         break;
-      case 1:
+      }
+      case 1: {
         return '0';
         break;
-      case 2:
+      }
+      case 2: {
         $t1_2 = (n < 0);
         if ($t1_2) {
           $block = 3; break;
@@ -488,19 +516,22 @@ export function itoa(n) {
           $block = 4; break;
         }
         break;
-      case 3:
+      }
+      case 3: {
         $t2_3 = -n;
         $t3_4 = $t2_3;
         $t4_5 = true;
         $block = 4; break;
         break;
-      case 4:
+      }
+      case 4: {
         $t5_6 = { $value: $rt.builtin.makeSlice(20, 20, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t12_13 = $t3_4;
         $t13_14 = 20;
         $block = 7; break;
         break;
-      case 5:
+      }
+      case 5: {
         $t6_7 = ($t13_14 - 1);
         $t7_8 = ($t12_13 % 10);
         $t8_9 = (48 + $t7_8);
@@ -512,7 +543,8 @@ export function itoa(n) {
         $t13_14 = $t6_7;
         $block = 7; break;
         break;
-      case 6:
+      }
+      case 6: {
         if ($t4_5) {
           $block = 8; break;
         }
@@ -521,7 +553,8 @@ export function itoa(n) {
           $block = 9; break;
         }
         break;
-      case 7:
+      }
+      case 7: {
         $t14_15 = ($t12_13 > 0);
         if ($t14_15) {
           $block = 5; break;
@@ -530,18 +563,21 @@ export function itoa(n) {
           $block = 6; break;
         }
         break;
-      case 8:
+      }
+      case 8: {
         $t15_16 = ($t13_14 - 1);
         $t16_17 = $t5_6.$get().addr($t15_16);
         $t16_17.$set(45);
         $t17_18 = $t15_16;
         $block = 9; break;
         break;
-      case 9:
+      }
+      case 9: {
         $t18_19 = $rt.builtin.sliceSlice($t5_6.$get(), $t17_18, undefined, undefined);
         $t19_20 = $rt.builtin.bytesToString($t18_19);
         return $t19_20;
         break;
+      }
     }
   }
 }
@@ -551,11 +587,12 @@ export function indexOf(s, c) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = 0;
         $block = 1; break;
         break;
-      case 1:
+      }
+      case 1: {
         $t1_2 = $rt.builtin.len(s);
         $t2_3 = ($t0_1 < $t1_2);
         if ($t2_3) {
@@ -565,7 +602,8 @@ export function indexOf(s, c) {
           $block = 3; break;
         }
         break;
-      case 2:
+      }
+      case 2: {
         $rt.runtime.boundsCheck($t0_1, s.length);
         $t3_4 = s.charCodeAt($t0_1);
         $t4_5 = ($t3_4 === c);
@@ -576,17 +614,21 @@ export function indexOf(s, c) {
           $block = 5; break;
         }
         break;
-      case 3:
+      }
+      case 3: {
         return -1;
         break;
-      case 4:
+      }
+      case 4: {
         return $t0_1;
         break;
-      case 5:
+      }
+      case 5: {
         $t5_6 = ($t0_1 + 1);
         $t0_1 = $t5_6;
         $block = 1; break;
         break;
+      }
     }
   }
 }
@@ -607,7 +649,7 @@ export function Sub$Close(s) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = { $get() { return s.$get().conn; }, $set(v) { const obj = s.$get(); obj.conn = v; s.$set(obj); } };
         $t1_2 = $t0_1.$get();
         $t2_3 = ($t1_2 !== null);
@@ -618,7 +660,8 @@ export function Sub$Close(s) {
           $block = 2; break;
         }
         break;
-      case 1:
+      }
+      case 1: {
         $t3_4 = { $get() { return s.$get().conn; }, $set(v) { const obj = s.$get(); obj.conn = v; s.$set(obj); } };
         $t4_5 = $t3_4.$get();
         $t5_6 = { $get() { return s.$get().ID; }, $set(v) { const obj = s.$get(); obj.ID = v; s.$set(obj); } };
@@ -626,9 +669,11 @@ export function Sub$Close(s) {
         $t7_8 = Conn$CloseSubscription($t4_5, $t6_7);
         $block = 2; break;
         break;
-      case 2:
+      }
+      case 2: {
         return;
         break;
+      }
     }
   }
 }
@@ -716,7 +761,7 @@ export function Conn$Subscribe(c, id, filters) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = { $value: { ID: '', Filters: null, OnEvent: null, OnEOSE: null, conn: null, gotEOSE: false }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t1_2 = { $get() { return $t0_1.$get().ID; }, $set(v) { const obj = $t0_1.$get(); obj.ID = v; $t0_1.$set(obj); } };
         $t2_3 = { $get() { return $t0_1.$get().Filters; }, $set(v) { const obj = $t0_1.$get(); obj.Filters = v; $t0_1.$set(obj); } };
@@ -734,7 +779,8 @@ export function Conn$Subscribe(c, id, filters) {
         $t10_11 = -1;
         $block = 1; break;
         break;
-      case 1:
+      }
+      case 1: {
         $t11_12 = ($t10_11 + 1);
         $t12_13 = ($t11_12 < $t8_9);
         if ($t12_13) {
@@ -744,7 +790,8 @@ export function Conn$Subscribe(c, id, filters) {
           $block = 3; break;
         }
         break;
-      case 2:
+      }
+      case 2: {
         $t13_14 = filters.addr($t11_12);
         $t14_15 = $t13_14.$get();
         $t15_16 = common$nostr.Filter$Serialize($t14_15);
@@ -754,13 +801,15 @@ export function Conn$Subscribe(c, id, filters) {
         $t10_11 = $t11_12;
         $block = 1; break;
         break;
-      case 3:
+      }
+      case 3: {
         $t18_19 = ($t9_10 + ']');
         $t19_20 = { $get() { return c.$get().wsConn; }, $set(v) { const obj = c.$get(); obj.wsConn = v; c.$set(obj); } };
         $t20_21 = $t19_20.$get();
         $t21_22 = common$jsbridge$ws.Send($t20_21, $t18_19);
         return $t0_1;
         break;
+      }
     }
   }
 }
@@ -771,7 +820,7 @@ export async function Conn$WaitOpen(c) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = { $get() { return c.$get().openCh; }, $set(v) { const obj = c.$get(); obj.openCh = v; c.$set(obj); } };
         $t1_2 = $t0_1.$get();
         $t2_3 = { $get() { return c.$get().closeCh; }, $set(v) { const obj = c.$get(); obj.closeCh = v; c.$set(obj); } };
@@ -786,10 +835,12 @@ export async function Conn$WaitOpen(c) {
           $block = 2; break;
         }
         break;
-      case 1:
+      }
+      case 1: {
         return true;
         break;
-      case 2:
+      }
+      case 2: {
         $t7_8 = ($t5_6 === 1);
         if ($t7_8) {
           $block = 3; break;
@@ -798,13 +849,16 @@ export async function Conn$WaitOpen(c) {
           $block = 4; break;
         }
         break;
-      case 3:
+      }
+      case 3: {
         return false;
         break;
-      case 4:
+      }
+      case 4: {
         $t8_9 = $rt.types.makeInterface('string', 'blocking select matched no case');
         $rt.runtime.panic($t8_9);
         break;
+      }
     }
   }
 }
@@ -815,7 +869,7 @@ export function Conn$handleMessage(c, msg) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = common$nostr.ParseRelayMessage(msg);
         $t1_2 = $t0_1[0];
         $t2_3 = $t0_1[1];
@@ -828,10 +882,12 @@ export function Conn$handleMessage(c, msg) {
           $block = 4; break;
         }
         break;
-      case 1:
+      }
+      case 1: {
         return;
         break;
-      case 2:
+      }
+      case 2: {
         $t5_6 = common$nostr.ParseEvent($t3_4);
         $t6_7 = ($t5_6 === null);
         if ($t6_7) {
@@ -841,7 +897,8 @@ export function Conn$handleMessage(c, msg) {
           $block = 6; break;
         }
         break;
-      case 3:
+      }
+      case 3: {
         $t7_8 = { $get() { return c.$get().subs; }, $set(v) { const obj = c.$get(); obj.subs = v; c.$set(obj); } };
         $t8_9 = $t7_8.$get();
         { const $r = $rt.builtin.mapLookup($t8_9, $t2_3); $t9_10 = [$r.value, $r.ok]; }
@@ -854,7 +911,8 @@ export function Conn$handleMessage(c, msg) {
           $block = 14; break;
         }
         break;
-      case 4:
+      }
+      case 4: {
         $t12_13 = ($t1_2 === 'EOSE');
         if ($t12_13) {
           $block = 3; break;
@@ -863,10 +921,12 @@ export function Conn$handleMessage(c, msg) {
           $block = 12; break;
         }
         break;
-      case 5:
+      }
+      case 5: {
         return;
         break;
-      case 6:
+      }
+      case 6: {
         $t13_14 = { $get() { return c.$get().subs; }, $set(v) { const obj = c.$get(); obj.subs = v; c.$set(obj); } };
         $t14_15 = $t13_14.$get();
         { const $r = $rt.builtin.mapLookup($t14_15, $t2_3); $t15_16 = [$r.value, $r.ok]; }
@@ -879,7 +939,8 @@ export function Conn$handleMessage(c, msg) {
           $block = 8; break;
         }
         break;
-      case 7:
+      }
+      case 7: {
         $t18_19 = { $get() { return $t16_17.$get().OnEvent; }, $set(v) { const obj = $t16_17.$get(); obj.OnEvent = v; $t16_17.$set(obj); } };
         $t19_20 = $t18_19.$get();
         $t20_21 = ($t19_20 !== null);
@@ -890,7 +951,8 @@ export function Conn$handleMessage(c, msg) {
           $block = 8; break;
         }
         break;
-      case 8:
+      }
+      case 8: {
         $t21_22 = { $get() { return c.$get().onEvent; }, $set(v) { const obj = c.$get(); obj.onEvent = v; c.$set(obj); } };
         $t22_23 = $t21_22.$get();
         $t23_24 = ($t22_23 !== null);
@@ -901,19 +963,22 @@ export function Conn$handleMessage(c, msg) {
           $block = 1; break;
         }
         break;
-      case 9:
+      }
+      case 9: {
         $t24_25 = { $get() { return $t16_17.$get().OnEvent; }, $set(v) { const obj = $t16_17.$get(); obj.OnEvent = v; $t16_17.$set(obj); } };
         $t25_26 = $t24_25.$get();
         $t26_27 = $t25_26($t5_6);
         $block = 8; break;
         break;
-      case 10:
+      }
+      case 10: {
         $t27_28 = { $get() { return c.$get().onEvent; }, $set(v) { const obj = c.$get(); obj.onEvent = v; c.$set(obj); } };
         $t28_29 = $t27_28.$get();
         $t29_30 = $t28_29($t2_3, $t5_6);
         $block = 1; break;
         break;
-      case 11:
+      }
+      case 11: {
         $t30_31 = $rt.builtin.len($t3_4);
         $t31_32 = ($t30_31 > 0);
         if ($t31_32) {
@@ -924,7 +989,8 @@ export function Conn$handleMessage(c, msg) {
           $block = 20; break;
         }
         break;
-      case 12:
+      }
+      case 12: {
         $t32_33 = ($t1_2 === 'OK');
         if ($t32_33) {
           $block = 11; break;
@@ -933,7 +999,8 @@ export function Conn$handleMessage(c, msg) {
           $block = 18; break;
         }
         break;
-      case 13:
+      }
+      case 13: {
         $t33_34 = { $get() { return $t10_11.$get().gotEOSE; }, $set(v) { const obj = $t10_11.$get(); obj.gotEOSE = v; $t10_11.$set(obj); } };
         $t33_34.$set(true);
         $t34_35 = { $get() { return $t10_11.$get().OnEOSE; }, $set(v) { const obj = $t10_11.$get(); obj.OnEOSE = v; $t10_11.$set(obj); } };
@@ -946,7 +1013,8 @@ export function Conn$handleMessage(c, msg) {
           $block = 14; break;
         }
         break;
-      case 14:
+      }
+      case 14: {
         $t37_38 = { $get() { return c.$get().onEOSE; }, $set(v) { const obj = c.$get(); obj.onEOSE = v; c.$set(obj); } };
         $t38_39 = $t37_38.$get();
         $t39_40 = ($t38_39 !== null);
@@ -957,19 +1025,22 @@ export function Conn$handleMessage(c, msg) {
           $block = 1; break;
         }
         break;
-      case 15:
+      }
+      case 15: {
         $t40_41 = { $get() { return $t10_11.$get().OnEOSE; }, $set(v) { const obj = $t10_11.$get(); obj.OnEOSE = v; $t10_11.$set(obj); } };
         $t41_42 = $t40_41.$get();
         $t42_43 = $t41_42();
         $block = 14; break;
         break;
-      case 16:
+      }
+      case 16: {
         $t43_44 = { $get() { return c.$get().onEOSE; }, $set(v) { const obj = c.$get(); obj.onEOSE = v; c.$set(obj); } };
         $t44_45 = $t43_44.$get();
         $t45_46 = $t44_45($t2_3);
         $block = 1; break;
         break;
-      case 17:
+      }
+      case 17: {
         $t46_47 = { $get() { return c.$get().onAuth; }, $set(v) { const obj = c.$get(); obj.onAuth = v; c.$set(obj); } };
         $t47_48 = $t46_47.$get();
         $t48_49 = ($t47_48 !== null);
@@ -980,7 +1051,8 @@ export function Conn$handleMessage(c, msg) {
           $block = 1; break;
         }
         break;
-      case 18:
+      }
+      case 18: {
         $t49_50 = ($t1_2 === 'AUTH');
         if ($t49_50) {
           $block = 17; break;
@@ -989,14 +1061,16 @@ export function Conn$handleMessage(c, msg) {
           $block = 26; break;
         }
         break;
-      case 19:
+      }
+      case 19: {
         $rt.runtime.boundsCheck(0, $t3_4.length);
         $t50_51 = $t3_4.charCodeAt(0);
         $t51_52 = ($t50_51 === 116);
         $t52_53 = $t51_52;
         $block = 20; break;
         break;
-      case 20:
+      }
+      case 20: {
         $t53_54 = indexOf($t3_4, 58);
         $t54_55 = ($t53_54 >= 0);
         if ($t54_55) {
@@ -1007,13 +1081,15 @@ export function Conn$handleMessage(c, msg) {
           $block = 22; break;
         }
         break;
-      case 21:
+      }
+      case 21: {
         $t55_56 = ($t53_54 + 1);
         $t56_57 = $rt.builtin.stringSlice($t3_4, $t55_56, undefined);
         $t57_58 = $t56_57;
         $block = 22; break;
         break;
-      case 22:
+      }
+      case 22: {
         $t58_59 = { $get() { return c.$get().onOK; }, $set(v) { const obj = c.$get(); obj.onOK = v; c.$set(obj); } };
         $t59_60 = $t58_59.$get();
         $t60_61 = ($t59_60 !== null);
@@ -1024,7 +1100,8 @@ export function Conn$handleMessage(c, msg) {
           $block = 1; break;
         }
         break;
-      case 23:
+      }
+      case 23: {
         $t61_62 = ($t53_54 + 1);
         $t62_63 = $rt.builtin.len($t3_4);
         $t63_64 = ($t61_62 < $t62_63);
@@ -1036,16 +1113,19 @@ export function Conn$handleMessage(c, msg) {
           $block = 22; break;
         }
         break;
-      case 24:
+      }
+      case 24: {
         $t64_65 = { $get() { return c.$get().onOK; }, $set(v) { const obj = c.$get(); obj.onOK = v; c.$set(obj); } };
         $t65_66 = $t64_65.$get();
         $t66_67 = $t65_66($t2_3, $t52_53, $t57_58);
         $block = 1; break;
         break;
-      case 25:
+      }
+      case 25: {
         $block = 1; break;
         break;
-      case 26:
+      }
+      case 26: {
         $t67_68 = ($t1_2 === 'NOTICE');
         if ($t67_68) {
           $block = 25; break;
@@ -1054,12 +1134,14 @@ export function Conn$handleMessage(c, msg) {
           $block = 1; break;
         }
         break;
-      case 27:
+      }
+      case 27: {
         $t68_69 = { $get() { return c.$get().onAuth; }, $set(v) { const obj = c.$get(); obj.onAuth = v; c.$set(obj); } };
         $t69_70 = $t68_69.$get();
         $t70_71 = $t69_70($t3_4);
         $block = 1; break;
         break;
+      }
     }
   }
 }
@@ -1070,10 +1152,11 @@ export async function Conn$readLoop(c) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $block = 1; break;
         break;
-      case 1:
+      }
+      case 1: {
         $t0_1 = { $get() { return c.$get().msgCh; }, $set(v) { const obj = c.$get(); obj.msgCh = v; c.$set(obj); } };
         $t1_2 = $t0_1.$get();
         $t2_3 = { $get() { return c.$get().closeCh; }, $set(v) { const obj = c.$get(); obj.closeCh = v; c.$set(obj); } };
@@ -1088,12 +1171,14 @@ export async function Conn$readLoop(c) {
           $block = 3; break;
         }
         break;
-      case 2:
+      }
+      case 2: {
         $t7_8 = $t4_5[2];
         $t8_9 = Conn$handleMessage(c, $t7_8);
         $block = 1; break;
         break;
-      case 3:
+      }
+      case 3: {
         $t9_10 = ($t5_6 === 1);
         if ($t9_10) {
           $block = 4; break;
@@ -1102,13 +1187,16 @@ export async function Conn$readLoop(c) {
           $block = 5; break;
         }
         break;
-      case 4:
+      }
+      case 4: {
         return;
         break;
-      case 5:
+      }
+      case 5: {
         $t10_11 = $rt.types.makeInterface('string', 'blocking select matched no case');
         $rt.runtime.panic($t10_11);
         break;
+      }
     }
   }
 }
@@ -1119,13 +1207,14 @@ export function Pool$CloseAll(p) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
         $t1_2 = $t0_1.$get();
         $t2_3 = { $entries: [...$t1_2.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
         $block = 1; break;
         break;
-      case 1:
+      }
+      case 1: {
         $t3_4 = $t2_3.next();
         $t4_5 = $t3_4[0];
         if ($t4_5) {
@@ -1135,7 +1224,8 @@ export function Pool$CloseAll(p) {
           $block = 3; break;
         }
         break;
-      case 2:
+      }
+      case 2: {
         $t5_6 = $t3_4[1];
         $t6_7 = $t3_4[2];
         $t7_8 = Conn$Close($t6_7);
@@ -1144,9 +1234,11 @@ export function Pool$CloseAll(p) {
         $t10_11 = $rt.builtin.mapDelete($t9_10, $t5_6);
         $block = 1; break;
         break;
-      case 3:
+      }
+      case 3: {
         return;
         break;
+      }
     }
   }
 }
@@ -1157,7 +1249,7 @@ export async function Pool$Connect(p, url) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
         $t1_2 = $t0_1.$get();
         { const $r = $rt.builtin.mapLookup($t1_2, url); $t2_3 = [$r.value, $r.ok]; }
@@ -1170,10 +1262,12 @@ export async function Pool$Connect(p, url) {
           $block = 2; break;
         }
         break;
-      case 1:
+      }
+      case 1: {
         return $t3_4;
         break;
-      case 2:
+      }
+      case 2: {
         $t5_6 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
         $t6_7 = $t5_6.$get();
         $t7_8 = $rt.builtin.len($t6_7);
@@ -1187,7 +1281,8 @@ export async function Pool$Connect(p, url) {
           $block = 5; break;
         }
         break;
-      case 3:
+      }
+      case 3: {
         $t11_12 = { $get() { return $t3_4.$get().closed; }, $set(v) { const obj = $t3_4.$get(); obj.closed = v; $t3_4.$set(obj); } };
         $t12_13 = $t11_12.$get();
         if ($t12_13) {
@@ -1197,17 +1292,20 @@ export async function Pool$Connect(p, url) {
           $block = 1; break;
         }
         break;
-      case 4:
+      }
+      case 4: {
         $t13_14 = Pool$evictOne(p);
         $block = 5; break;
         break;
-      case 5:
+      }
+      case 5: {
         $t14_15 = await Dial(url);
         $t15_16 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
         $t16_17 = $t15_16.$get();
         $rt.builtin.mapUpdate($t16_17, url, $t14_15);
         return $t14_15;
         break;
+      }
     }
   }
 }
@@ -1218,7 +1316,7 @@ export function Pool$Disconnect(p, url) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
         $t1_2 = $t0_1.$get();
         { const $r = $rt.builtin.mapLookup($t1_2, url); $t2_3 = [$r.value, $r.ok]; }
@@ -1231,16 +1329,19 @@ export function Pool$Disconnect(p, url) {
           $block = 2; break;
         }
         break;
-      case 1:
+      }
+      case 1: {
         $t5_6 = Conn$Close($t3_4);
         $t6_7 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
         $t7_8 = $t6_7.$get();
         $t8_9 = $rt.builtin.mapDelete($t7_8, url);
         $block = 2; break;
         break;
-      case 2:
+      }
+      case 2: {
         return;
         break;
+      }
     }
   }
 }
@@ -1251,7 +1352,7 @@ export function Pool$Get(p, url) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
         $t1_2 = $t0_1.$get();
         { const $r = $rt.builtin.mapLookup($t1_2, url); $t2_3 = [$r.value, $r.ok]; }
@@ -1264,13 +1365,16 @@ export function Pool$Get(p, url) {
           $block = 1; break;
         }
         break;
-      case 1:
+      }
+      case 1: {
         return null;
         break;
-      case 2:
+      }
+      case 2: {
         return $t3_4;
         break;
-      case 3:
+      }
+      case 3: {
         $t5_6 = { $get() { return $t3_4.$get().closed; }, $set(v) { const obj = $t3_4.$get(); obj.closed = v; $t3_4.$set(obj); } };
         $t6_7 = $t5_6.$get();
         if ($t6_7) {
@@ -1280,6 +1384,7 @@ export function Pool$Get(p, url) {
           $block = 2; break;
         }
         break;
+      }
     }
   }
 }
@@ -1290,12 +1395,13 @@ export async function Pool$Publish(p, relays, ev) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = $rt.builtin.len(relays);
         $t1_2 = -1;
         $block = 1; break;
         break;
-      case 1:
+      }
+      case 1: {
         $t2_3 = ($t1_2 + 1);
         $t3_4 = ($t2_3 < $t0_1);
         if ($t3_4) {
@@ -1305,7 +1411,8 @@ export async function Pool$Publish(p, relays, ev) {
           $block = 3; break;
         }
         break;
-      case 2:
+      }
+      case 2: {
         $t4_5 = relays.addr($t2_3);
         $t5_6 = $t4_5.$get();
         $t6_7 = await Pool$Connect(p, $t5_6);
@@ -1318,14 +1425,17 @@ export async function Pool$Publish(p, relays, ev) {
           $block = 1; break;
         }
         break;
-      case 3:
+      }
+      case 3: {
         return;
         break;
-      case 4:
+      }
+      case 4: {
         $t8_9 = Conn$Publish($t6_7, ev);
         $t1_2 = $t2_3;
         $block = 1; break;
         break;
+      }
     }
   }
 }
@@ -1336,13 +1446,14 @@ export async function Pool$Subscribe(p, relays, id, filters) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = $rt.builtin.len(relays);
         $t1_2 = null;
         $t2_3 = -1;
         $block = 1; break;
         break;
-      case 1:
+      }
+      case 1: {
         $t3_4 = ($t2_3 + 1);
         $t4_5 = ($t3_4 < $t0_1);
         if ($t4_5) {
@@ -1352,7 +1463,8 @@ export async function Pool$Subscribe(p, relays, id, filters) {
           $block = 3; break;
         }
         break;
-      case 2:
+      }
+      case 2: {
         $t5_6 = relays.addr($t3_4);
         $t6_7 = $t5_6.$get();
         $t7_8 = await Pool$Connect(p, $t6_7);
@@ -1361,17 +1473,19 @@ export async function Pool$Subscribe(p, relays, id, filters) {
           $block = 4; break;
         }
         else {
-          const $phi0 = $t1_2;
-          const $phi1 = $t3_4;
+          let $phi0 = $t1_2;
+          let $phi1 = $t3_4;
           $t1_2 = $phi0;
           $t2_3 = $phi1;
           $block = 1; break;
         }
         break;
-      case 3:
+      }
+      case 3: {
         return $t1_2;
         break;
-      case 4:
+      }
+      case 4: {
         $t9_10 = Conn$Subscribe($t7_8, id, filters);
         $t10_11 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t11_12 = $t10_11.$get().addr(0);
@@ -1382,6 +1496,7 @@ export async function Pool$Subscribe(p, relays, id, filters) {
         $t2_3 = $t3_4;
         $block = 1; break;
         break;
+      }
     }
   }
 }
@@ -1392,14 +1507,15 @@ export function Pool$URLs(p) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
         $t1_2 = $t0_1.$get();
         $t2_3 = { $entries: [...$t1_2.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
         $t3_4 = null;
         $block = 1; break;
         break;
-      case 1:
+      }
+      case 1: {
         $t4_5 = $t2_3.next();
         $t5_6 = $t4_5[0];
         if ($t5_6) {
@@ -1409,7 +1525,8 @@ export function Pool$URLs(p) {
           $block = 3; break;
         }
         break;
-      case 2:
+      }
+      case 2: {
         $t6_7 = $t4_5[1];
         $t7_8 = $t4_5[2];
         $t8_9 = { $get() { return $t7_8.$get().closed; }, $set(v) { const obj = $t7_8.$get(); obj.closed = v; $t7_8.$set(obj); } };
@@ -1422,10 +1539,12 @@ export function Pool$URLs(p) {
           $block = 4; break;
         }
         break;
-      case 3:
+      }
+      case 3: {
         return $t3_4;
         break;
-      case 4:
+      }
+      case 4: {
         $t10_11 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t11_12 = $t10_11.$get().addr(0);
         $t11_12.$set($t6_7);
@@ -1434,6 +1553,7 @@ export function Pool$URLs(p) {
         $t3_4 = $t13_14;
         $block = 1; break;
         break;
+      }
     }
   }
 }
@@ -1444,13 +1564,14 @@ export function Pool$evictOne(p) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
         $t1_2 = $t0_1.$get();
         $t2_3 = { $entries: [...$t1_2.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
         $block = 1; break;
         break;
-      case 1:
+      }
+      case 1: {
         $t3_4 = $t2_3.next();
         $t4_5 = $t3_4[0];
         if ($t4_5) {
@@ -1460,7 +1581,8 @@ export function Pool$evictOne(p) {
           $block = 3; break;
         }
         break;
-      case 2:
+      }
+      case 2: {
         $t5_6 = $t3_4[1];
         $t6_7 = $t3_4[2];
         $t7_8 = { $get() { return $t6_7.$get().closed; }, $set(v) { const obj = $t6_7.$get(); obj.closed = v; $t6_7.$set(obj); } };
@@ -1472,7 +1594,8 @@ export function Pool$evictOne(p) {
           $block = 1; break;
         }
         break;
-      case 3:
+      }
+      case 3: {
         $t9_10 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
         $t10_11 = $t9_10.$get();
         $t11_12 = { $entries: [...$t10_11.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
@@ -1485,13 +1608,15 @@ export function Pool$evictOne(p) {
           $block = 6; break;
         }
         break;
-      case 4:
+      }
+      case 4: {
         $t14_15 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
         $t15_16 = $t14_15.$get();
         $t16_17 = $rt.builtin.mapDelete($t15_16, $t5_6);
         return;
         break;
-      case 5:
+      }
+      case 5: {
         $t17_18 = $t12_13[1];
         $t18_19 = $t12_13[2];
         $t19_20 = Conn$Close($t18_19);
@@ -1500,9 +1625,11 @@ export function Pool$evictOne(p) {
         $t22_23 = $rt.builtin.mapDelete($t21_22, $t17_18);
         return;
         break;
-      case 6:
+      }
+      case 6: {
         return;
         break;
+      }
     }
   }
 }

@@ -1,24 +1,23 @@
 // sm3sh service worker — SSE-driven hot reload.
 //
-// Caches all app files on install. Maintains an SSE connection to /__sse
-// for version updates. When the server signals a new version, fetches
-// updated files into a staging cache, then notifies all clients.
-// The new version activates only when the user clicks the snackbar.
+// On install: caches all app files, activates immediately.
+// On activate: connects to /__sse for version updates.
+// On version change: purges cache, refetches, reloads all clients.
 
-const CACHE_PREFIX = 'sm3sh-v';
+const CACHE = 'sm3sh';
 const APP_FILES = [
   './',
   './index.html',
   './$entry.mjs',
   './smesh3.mjs',
-  './smesh3_crypto_sha256.mjs',
-  './smesh3_helpers.mjs',
-  './smesh3_jsbridge_crypto.mjs',
-  './smesh3_jsbridge_dom.mjs',
-  './smesh3_jsbridge_localstorage.mjs',
-  './smesh3_jsbridge_ws.mjs',
-  './smesh3_nostr.mjs',
-  './smesh3_relay.mjs',
+  './common_crypto_sha256.mjs',
+  './common_helpers.mjs',
+  './common_jsbridge_crypto.mjs',
+  './common_jsbridge_dom.mjs',
+  './common_jsbridge_localstorage.mjs',
+  './common_jsbridge_ws.mjs',
+  './common_nostr.mjs',
+  './common_relay.mjs',
   './$runtime/index.mjs',
   './$runtime/runtime.mjs',
   './$runtime/goroutine.mjs',
@@ -35,7 +34,6 @@ const APP_FILES = [
 ];
 
 let currentVersion = null;
-let pendingVersion = null;
 let sse = null;
 
 // --- Lifecycle ---
@@ -46,7 +44,7 @@ self.addEventListener('install', (event) => {
       .then(r => r.text())
       .then(v => {
         currentVersion = v.trim();
-        return caches.open(CACHE_PREFIX + currentVersion);
+        return caches.open(CACHE);
       })
       .then(cache => cache.addAll(APP_FILES))
       .then(() => self.skipWaiting())
@@ -55,120 +53,57 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    purgeOldCaches().then(() => {
-      connectSSE();
-      return self.clients.claim();
-    })
+    self.clients.claim().then(() => connectSSE())
   );
 });
 
-// --- Fetch: cache-first ---
+// --- Fetch: cache-first, network fallback ---
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-
-  // Don't cache SSE or version endpoints.
-  if (url.pathname === '/__sse' || url.pathname === '/__version') {
-    return;
-  }
+  if (url.pathname === '/__sse' || url.pathname === '/__version') return;
 
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      return cached || fetch(event.request);
-    })
+    caches.match(event.request).then(cached => cached || fetch(event.request))
   );
 });
 
-// --- Messages from clients ---
-
-self.addEventListener('message', (event) => {
-  if (event.data === 'activate-update' && pendingVersion) {
-    activateUpdate();
-  }
-  if (event.data === 'get-status') {
-    event.source.postMessage({
-      type: 'status',
-      currentVersion,
-      pendingVersion,
-    });
-  }
-});
-
-// --- SSE connection ---
+// --- SSE: version change → purge + reload ---
 
 function connectSSE() {
-  if (sse) {
-    sse.close();
-  }
-
+  if (sse) sse.close();
   sse = new EventSource('/__sse');
 
   sse.onmessage = (event) => {
-    const serverVersion = event.data.trim();
+    const v = event.data.trim();
     if (!currentVersion) {
-      currentVersion = serverVersion;
+      currentVersion = v;
       return;
     }
-    if (serverVersion !== currentVersion && serverVersion !== pendingVersion) {
-      stageUpdate(serverVersion);
+    if (v !== currentVersion) {
+      currentVersion = v;
+      refreshAndReload();
     }
-  };
-
-  sse.onerror = () => {
-    // EventSource auto-reconnects. Nothing to do.
   };
 }
 
-// --- Update staging ---
-
-async function stageUpdate(newVersion) {
+async function refreshAndReload() {
   try {
-    const cache = await caches.open(CACHE_PREFIX + newVersion);
-    // Fetch all files with cache-busting.
-    const bust = '?v=' + newVersion;
+    const cache = await caches.open(CACHE);
+    const bust = '?v=' + currentVersion;
     await Promise.all(
       APP_FILES.map(file =>
         fetch(file + bust).then(resp => {
-          if (resp.ok) {
-            // Store without the query string.
-            return cache.put(new Request(file), resp);
-          }
+          if (resp.ok) return cache.put(new Request(file), resp);
         })
       )
     );
-    pendingVersion = newVersion;
-    notifyClients({ type: 'update-available', version: newVersion });
   } catch (err) {
-    console.error('sm3sh sw: staging failed', err);
+    console.error('sm3sh sw: refresh failed', err);
   }
-}
-
-async function activateUpdate() {
-  if (!pendingVersion) return;
-
-  currentVersion = pendingVersion;
-  pendingVersion = null;
-
-  await purgeOldCaches();
-  notifyClients({ type: 'update-activated' });
-}
-
-// --- Helpers ---
-
-async function purgeOldCaches() {
-  const keys = await caches.keys();
-  const keep = CACHE_PREFIX + currentVersion;
-  const pending = pendingVersion ? CACHE_PREFIX + pendingVersion : null;
-  await Promise.all(
-    keys
-      .filter(k => k.startsWith(CACHE_PREFIX) && k !== keep && k !== pending)
-      .map(k => caches.delete(k))
-  );
-}
-
-async function notifyClients(msg) {
+  // Reload all clients.
   const all = await self.clients.matchAll({ type: 'window' });
   for (const client of all) {
-    client.postMessage(msg);
+    client.navigate(client.url);
   }
 }

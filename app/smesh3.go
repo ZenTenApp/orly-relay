@@ -81,8 +81,10 @@ func (s *Smesh3Server) Start(ctx context.Context) error {
 			w.Header().Set("Content-Type", "application/javascript")
 		}
 
-		// No caching for HTML and SW.
-		if path == "/" || strings.HasSuffix(path, ".html") || path == "/sw.js" {
+		// No caching in disk/dev mode; short cache in embedded/prod.
+		if s.dir != "" {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		} else if path == "/" || strings.HasSuffix(path, ".html") || path == "/sw.js" {
 			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		}
 

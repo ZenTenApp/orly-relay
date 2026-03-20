@@ -192,12 +192,13 @@ export function block(h, data) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = { $value: $rt.builtin.makeSlice(64, 64, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t1_2 = 0;
         $block = 1; break;
         break;
-      case 1:
+      }
+      case 1: {
         $t2_3 = ($t1_2 < 16);
         if ($t2_3) {
           $block = 2; break;
@@ -206,7 +207,8 @@ export function block(h, data) {
           $block = 3; break;
         }
         break;
-      case 2:
+      }
+      case 2: {
         $t3_4 = ($t1_2 * 4);
         $t4_5 = data.addr($t3_4);
         $t5_6 = $t4_5.$get();
@@ -235,11 +237,13 @@ export function block(h, data) {
         $t1_2 = $t26_27;
         $block = 1; break;
         break;
-      case 3:
+      }
+      case 3: {
         $t27_28 = 16;
         $block = 4; break;
         break;
-      case 4:
+      }
+      case 4: {
         $t28_29 = ($t27_28 < 64);
         if ($t28_29) {
           $block = 5; break;
@@ -248,7 +252,8 @@ export function block(h, data) {
           $block = 6; break;
         }
         break;
-      case 5:
+      }
+      case 5: {
         $t29_30 = ($t27_28 - 15);
         $t30_31 = $t0_1.$get().addr($t29_30);
         $t31_32 = $t30_31.$get();
@@ -292,7 +297,8 @@ export function block(h, data) {
         $t27_28 = $t67_68;
         $block = 4; break;
         break;
-      case 6:
+      }
+      case 6: {
         $t68_69 = h.$get().addr(0);
         $t69_70 = $t68_69.$get();
         $t70_71 = h.$get().addr(1);
@@ -320,7 +326,8 @@ export function block(h, data) {
         $t92_93 = 0;
         $block = 7; break;
         break;
-      case 7:
+      }
+      case 7: {
         $t93_94 = ($t92_93 < 64);
         if ($t93_94) {
           $block = 8; break;
@@ -329,7 +336,8 @@ export function block(h, data) {
           $block = 9; break;
         }
         break;
-      case 8:
+      }
+      case 8: {
         $t94_95 = rotr($t88_89, 6);
         $t95_96 = rotr($t88_89, 11);
         $t96_97 = (($t94_95 ^ $t95_96) >>> 0);
@@ -361,15 +369,15 @@ export function block(h, data) {
         $t122_123 = (($t87_88 + $t110_111) >>> 0);
         $t123_124 = (($t110_111 + $t121_122) >>> 0);
         $t124_125 = ($t92_93 + 1);
-        const $phi0 = $t123_124;
-        const $phi1 = $t84_85;
-        const $phi2 = $t85_86;
-        const $phi3 = $t86_87;
-        const $phi4 = $t122_123;
-        const $phi5 = $t88_89;
-        const $phi6 = $t89_90;
-        const $phi7 = $t90_91;
-        const $phi8 = $t124_125;
+        let $phi0 = $t123_124;
+        let $phi1 = $t84_85;
+        let $phi2 = $t85_86;
+        let $phi3 = $t86_87;
+        let $phi4 = $t122_123;
+        let $phi5 = $t88_89;
+        let $phi6 = $t89_90;
+        let $phi7 = $t90_91;
+        let $phi8 = $t124_125;
         $t84_85 = $phi0;
         $t85_86 = $phi1;
         $t86_87 = $phi2;
@@ -381,7 +389,8 @@ export function block(h, data) {
         $t92_93 = $phi8;
         $block = 7; break;
         break;
-      case 9:
+      }
+      case 9: {
         $t125_126 = h.$get().addr(0);
         $t126_127 = $t125_126.$get();
         $t127_128 = (($t126_127 + $t84_85) >>> 0);
@@ -424,6 +433,7 @@ export function block(h, data) {
         $t156_157.$set($t155_156);
         return;
         break;
+      }
     }
   }
 }
@@ -442,7 +452,7 @@ export function bytesToHex(b) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = $rt.builtin.len(b);
         $t1_2 = ($t0_1 * 2);
         $t2_3 = $rt.builtin.makeSlice($t1_2, $t1_2, 0);
@@ -450,7 +460,8 @@ export function bytesToHex(b) {
         $t4_5 = -1;
         $block = 1; break;
         break;
-      case 1:
+      }
+      case 1: {
         $t5_6 = ($t4_5 + 1);
         $t6_7 = ($t5_6 < $t3_4);
         if ($t6_7) {
@@ -460,7 +471,8 @@ export function bytesToHex(b) {
           $block = 3; break;
         }
         break;
-      case 2:
+      }
+      case 2: {
         $t7_8 = b.addr($t5_6);
         $t8_9 = $t7_8.$get();
         $t9_10 = ($t5_6 * 2);
@@ -479,10 +491,12 @@ export function bytesToHex(b) {
         $t4_5 = $t5_6;
         $block = 1; break;
         break;
-      case 3:
+      }
+      case 3: {
         $t18_19 = $rt.builtin.bytesToString($t2_3);
         return $t18_19;
         break;
+      }
     }
   }
 }
@@ -505,7 +519,7 @@ export function digest$Sum(d) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = { $value: $rt.builtin.makeSlice(64, 64, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t1_2 = $t0_1.$get().addr(0);
         $t1_2.$set(128);
@@ -522,7 +536,8 @@ export function digest$Sum(d) {
           $block = 3; break;
         }
         break;
-      case 1:
+      }
+      case 1: {
         $t8_9 = { $get() { return d.$get().len; }, $set(v) { const obj = d.$get(); obj.len = v; d.$set(obj); } };
         $t9_10 = $t8_9.$get();
         $t10_11 = (56 - $t9_10);
@@ -530,7 +545,8 @@ export function digest$Sum(d) {
         $t12_13 = digest$Write(d, $t11_12);
         $block = 2; break;
         break;
-      case 2:
+      }
+      case 2: {
         $t13_14 = { $value: $rt.builtin.makeSlice(8, 8, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t14_15 = Math.trunc($t4_5 / (2 ** 56));
         $t15_16 = ($t14_15 & 0xFF);
@@ -569,7 +585,8 @@ export function digest$Sum(d) {
         $t45_46 = 0;
         $block = 4; break;
         break;
-      case 3:
+      }
+      case 3: {
         $t40_41 = { $get() { return d.$get().len; }, $set(v) { const obj = d.$get(); obj.len = v; d.$set(obj); } };
         $t41_42 = $t40_41.$get();
         $t42_43 = (120 - $t41_42);
@@ -577,7 +594,8 @@ export function digest$Sum(d) {
         $t44_45 = digest$Write(d, $t43_44);
         $block = 2; break;
         break;
-      case 4:
+      }
+      case 4: {
         $t46_47 = ($t45_46 < 8);
         if ($t46_47) {
           $block = 5; break;
@@ -586,7 +604,8 @@ export function digest$Sum(d) {
           $block = 6; break;
         }
         break;
-      case 5:
+      }
+      case 5: {
         $t47_48 = ($t45_46 * 4);
         $t48_49 = { $get() { return d.$get().h; }, $set(v) { const obj = d.$get(); obj.h = v; d.$set(obj); } };
         $t49_50 = $t48_49.$get().addr($t45_46);
@@ -625,10 +644,12 @@ export function digest$Sum(d) {
         $t45_46 = $t77_78;
         $block = 4; break;
         break;
-      case 6:
+      }
+      case 6: {
         $t78_79 = $t39_40.$get();
         return $t78_79;
         break;
+      }
     }
   }
 }
@@ -639,7 +660,7 @@ export function digest$Write(d, p) {
   let $block = 0;
   while (true) {
     switch ($block) {
-      case 0:
+      case 0: {
         $t0_1 = $rt.builtin.len(p);
         $t1_2 = $t0_1;
         $t2_3 = { $get() { return d.$get().tot; }, $set(v) { const obj = d.$get(); obj.tot = v; d.$set(obj); } };
@@ -658,7 +679,8 @@ export function digest$Write(d, p) {
           $block = 5; break;
         }
         break;
-      case 1:
+      }
+      case 1: {
         $t9_10 = { $get() { return d.$get().buf; }, $set(v) { const obj = d.$get(); obj.buf = v; d.$set(obj); } };
         $t10_11 = { $get() { return d.$get().len; }, $set(v) { const obj = d.$get(); obj.len = v; d.$set(obj); } };
         $t11_12 = $t10_11.$get();
@@ -681,7 +703,8 @@ export function digest$Write(d, p) {
           $block = 5; break;
         }
         break;
-      case 2:
+      }
+      case 2: {
         $t22_23 = { $get() { return d.$get().h; }, $set(v) { const obj = d.$get(); obj.h = v; d.$set(obj); } };
         $t23_24 = { $get() { return d.$get().buf; }, $set(v) { const obj = d.$get(); obj.buf = v; d.$set(obj); } };
         $t24_25 = $rt.builtin.sliceSlice($t23_24.$get(), undefined, undefined, undefined);
@@ -691,7 +714,8 @@ export function digest$Write(d, p) {
         $t33_34 = $t18_19;
         $block = 5; break;
         break;
-      case 3:
+      }
+      case 3: {
         $t27_28 = { $get() { return d.$get().h; }, $set(v) { const obj = d.$get(); obj.h = v; d.$set(obj); } };
         $t28_29 = $rt.builtin.sliceSlice($t33_34, undefined, 64, undefined);
         $t29_30 = block($t27_28, $t28_29);
@@ -699,7 +723,8 @@ export function digest$Write(d, p) {
         $t33_34 = $t30_31;
         $block = 5; break;
         break;
-      case 4:
+      }
+      case 4: {
         $t31_32 = $rt.builtin.len($t33_34);
         $t32_33 = ($t31_32 > 0);
         if ($t32_33) {
@@ -709,7 +734,8 @@ export function digest$Write(d, p) {
           $block = 7; break;
         }
         break;
-      case 5:
+      }
+      case 5: {
         $t34_35 = $rt.builtin.len($t33_34);
         $t35_36 = ($t34_35 >= 64);
         if ($t35_36) {
@@ -719,7 +745,8 @@ export function digest$Write(d, p) {
           $block = 4; break;
         }
         break;
-      case 6:
+      }
+      case 6: {
         $t36_37 = { $get() { return d.$get().buf; }, $set(v) { const obj = d.$get(); obj.buf = v; d.$set(obj); } };
         $t37_38 = $rt.builtin.sliceSlice($t36_37.$get(), undefined, undefined, undefined);
         $t38_39 = $rt.builtin.copy($t37_38, $t33_34);
@@ -727,9 +754,11 @@ export function digest$Write(d, p) {
         $t39_40.$set($t38_39);
         $block = 7; break;
         break;
-      case 7:
+      }
+      case 7: {
         return;
         break;
+      }
     }
   }
 }

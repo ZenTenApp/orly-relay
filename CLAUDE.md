@@ -94,6 +94,32 @@ Wu Xing cycles (generating/overcoming) and I Ching hexagrams are operational too
 
 **Imaginary Parameters**: i=temporal inversion in every fundamental law. Teleology (final causation) encoded as imaginary sector of physics. T=imaginary time. Absolute zero=infinite backward evolution. Hadamard rotation connects real/imaginary sectors. SVP hardness=third law. Links to hamadryad cryptosystem and Dendrite.
 
+## Deployment
+
+VPS at 69.164.249.71 (Ubuntu), accessed via `ssh orly` (WireGuard tunnel to 10.0.0.1).
+
+**Stack**: Caddy → orly binary (relay on :3334, smesh2 on :8089, sm3sh on :8090)
+**Service**: systemd `orly.service`, binary at `/home/mleku/.local/bin/orly`
+**sm3sh assets**: `/home/mleku/sm3sh/` — served in disk mode, fsnotify watches for changes, SSE pushes version to service worker which reloads all clients.
+
+No Go on VPS. Cross-compile + rsync:
+```sh
+CGO_ENABLED=1 CC=x86_64-linux-gnu-gcc GOOS=linux GOARCH=amd64 go build -o /tmp/orly-deploy ./cmd/orly
+scp /tmp/orly-deploy orly:/home/mleku/.local/bin/orly.new
+rsync -avz --exclude='*.go' app/smesh3/ orly:/home/mleku/sm3sh/
+ssh orly "mv /home/mleku/.local/bin/orly{,.bak} && mv /home/mleku/.local/bin/orly{.new,} && chmod +x /home/mleku/.local/bin/orly && systemctl restart orly"
+```
+
+Asset-only deploy (no binary change): just rsync, fsnotify triggers reload automatically.
+
+## tinyjs Build
+
+Source: `next/sm3sh/` (app) + `next/common/` (shared libs)
+Compile: `cd next/sm3sh && tinyjs -o ../../app/smesh3 .`
+Output: `app/smesh3/*.mjs` — module name maps to filename (`common/helpers` → `common_helpers.mjs`)
+The .mjs files are gitignored — use `git add -f` when committing.
+sw.js `APP_FILES` list must match actual output filenames after any module rename.
+
 ## What NOT To Do
 
 - Never suggest sleep, rest, or taking a break
