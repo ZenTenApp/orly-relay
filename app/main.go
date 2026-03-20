@@ -774,6 +774,15 @@ func Run(
 		}
 	}
 
+	// Start embedded Smesh3 web client if enabled
+	if cfg.Smesh3Enabled && cfg.Smesh3Port > 0 {
+		l.smesh3Server = NewSmesh3Server(cfg.Smesh3Port, cfg.Smesh3Dir)
+		if err := l.smesh3Server.Start(ctx); err != nil {
+			log.E.F("failed to start smesh3 server: %v", err)
+			l.smesh3Server = nil
+		}
+	}
+
 	// Ensure a relay identity secret key exists when subscriptions and NWC are enabled
 	if cfg.SubscriptionEnabled && cfg.NWCUri != "" {
 		if skb, e := db.GetOrCreateRelayIdentitySecret(); e != nil {
@@ -998,6 +1007,12 @@ func Run(
 		if l.smesh2Server != nil {
 			l.smesh2Server.Stop()
 			log.I.F("smesh2 server stopped")
+		}
+
+		// Stop smesh3 server if running
+		if l.smesh3Server != nil {
+			l.smesh3Server.Stop()
+			log.I.F("smesh3 server stopped")
 		}
 
 		// Stop NRC bridge if running

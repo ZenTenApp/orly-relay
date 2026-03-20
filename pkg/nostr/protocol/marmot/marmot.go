@@ -44,6 +44,10 @@ type Client struct {
 	kpp    *mls.KeyPairPackage // our current key pair package
 	groups map[string]*GroupState
 	mu     sync.RWMutex
+
+	// groupsChanged is signalled when a new group is added so callers
+	// can refresh subscription filters.
+	groupsChanged chan struct{}
 }
 
 // NewClient creates a Marmot client. The signer provides identity and
@@ -56,12 +60,13 @@ func NewClient(sign signer.I, store GroupStore, relay RelayConnection, relays ..
 	}
 
 	c := &Client{
-		sign:   sign,
-		store:  store,
-		relay:  relay,
-		relays: relays,
-		kpp:    kpp,
-		groups: make(map[string]*GroupState),
+		sign:          sign,
+		store:         store,
+		relay:         relay,
+		relays:        relays,
+		kpp:           kpp,
+		groups:        make(map[string]*GroupState),
+		groupsChanged: make(chan struct{}, 1),
 	}
 
 	// Load persisted groups
@@ -239,6 +244,12 @@ func (c *Client) handleWelcome(ctx context.Context, ev *event.E) error {
 
 	c.persistGroup(gs)
 
+	// Signal that filters need refreshing
+	select {
+	case c.groupsChanged <- struct{}{}:
+	default:
+	}
+
 	log.I.F("joined DM group with %s (nostr_group_id: %s)", hex.Enc(senderPub), hex.Enc(gs.NostrGroupID))
 	return nil
 }
@@ -349,6 +360,13 @@ func (c *Client) SubscriptionFilters() *filter.S {
 		filters = append(filters, gmf)
 	}
 	return filter.NewS(filters...)
+}
+
+// GroupsChanged returns a channel that is signalled whenever a new group
+// is added (e.g. after processing a Welcome). Callers should use this to
+// refresh subscription filters that include group-specific "#h" tags.
+func (c *Client) GroupsChanged() <-chan struct{} {
+	return c.groupsChanged
 }
 
 // ActiveGroupIDs returns hex-encoded nostr_group_ids of all active groups.

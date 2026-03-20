@@ -149,6 +149,31 @@ body { font-family: var(--font); background: var(--bg); color: var(--fg); height
 .hashtag-input { width: 100%; background: var(--bg2); color: var(--fg); border: none; border-bottom: 1px solid var(--border); padding: 10px 12px; font-size: 14px; font-family: var(--font); outline: none; }
 .hashtag-input:focus { border-color: var(--accent); }
 
+/* DMs */
+.dm-list { flex: 1; overflow-y: auto; }
+.dm-list-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.dm-list-item:hover { background: var(--bg2); }
+.dm-preview { flex: 1; min-width: 0; }
+.dm-preview-name { font-size: 14px; font-weight: 600; }
+.dm-preview-text { font-size: 13px; color: var(--fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dm-preview-time { font-size: 11px; color: var(--fg2); flex-shrink: 0; }
+.dm-chat { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+.dm-messages { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.dm-bubble { max-width: 75%; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.4; word-break: break-word; white-space: pre-wrap; }
+.dm-bubble.mine { background: var(--accent); color: #000; align-self: flex-end; border-bottom-right-radius: 4px; }
+.dm-bubble.theirs { background: var(--bg2); align-self: flex-start; border-bottom-left-radius: 4px; }
+.dm-protocol { font-size: 10px; color: var(--fg2); margin-top: 2px; }
+.dm-protocol.legacy { color: #ef4444; }
+.dm-time { font-size: 10px; color: var(--fg2); margin-top: 1px; }
+.dm-compose { padding: 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+.dm-compose textarea { flex: 1; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; font-family: var(--font); font-size: 14px; resize: none; min-height: 40px; max-height: 100px; }
+.dm-compose textarea:focus { outline: none; border-color: var(--accent); }
+.dm-compose button { background: var(--accent); color: #000; border: none; border-radius: var(--radius); padding: 8px 16px; font-weight: 600; cursor: pointer; font-size: 14px; align-self: flex-end; }
+.dm-compose button:disabled { opacity: 0.4; cursor: not-allowed; }
+.dm-new-input { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.dm-new-input input { width: 100%; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; font-size: 13px; font-family: var(--mono); }
+.dm-new-input input:focus { outline: none; border-color: var(--accent); }
+
 /* loading */
 .loading { display: flex; align-items: center; justify-content: center; height: 100dvh; color: var(--fg2); }
 
@@ -203,6 +228,30 @@ function signViaSW(event) {
     })
     send(['SIGN', id, event])
   })
+}
+
+// ─── extension mode crypto bridge ─────────────────────────────────
+
+async function handleCryptoRequest(type, reqId, pubkey, text) {
+  if (!window.nostr) {
+    send(['CRYPTO_RESULT', reqId, null, 'no extension'])
+    return
+  }
+  try {
+    let result
+    if (type === 'DECRYPT_NIP04') {
+      result = await window.nostr.nip04.decrypt(pubkey, text)
+    } else if (type === 'ENCRYPT_NIP04') {
+      result = await window.nostr.nip04.encrypt(pubkey, text)
+    } else if (type === 'DECRYPT_NIP44') {
+      result = await window.nostr.nip44.decrypt(pubkey, text)
+    } else if (type === 'ENCRYPT_NIP44') {
+      result = await window.nostr.nip44.encrypt(pubkey, text)
+    }
+    send(['CRYPTO_RESULT', reqId, result, null])
+  } catch (err) {
+    send(['CRYPTO_RESULT', reqId, null, err.message])
+  }
 }
 
 // ─── nsec encryption (PBKDF2 + AES-256-GCM) ────────────────────────
@@ -444,6 +493,10 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
         <div class="feed-item ${state.activeTab === 'feed' ? 'active' : ''}"
              onClick=${() => dispatch({ type: 'SET_TAB', tab: 'feed' })}>
           Following
+        </div>
+        <div class="feed-item ${state.activeTab === 'dms' ? 'active' : ''}"
+             onClick=${() => dispatch({ type: 'SET_TAB', tab: 'dms' })}>
+          DMs
         </div>
         <div class="feed-item ${state.activeTab === 'relays' ? 'active' : ''}"
              onClick=${() => dispatch({ type: 'SET_TAB', tab: 'relays' })}>
@@ -848,6 +901,16 @@ function Settings() {
         ${state.pubkey
           ? html`<div style="font-family: var(--mono); font-size: 12px; word-break: break-all">${state.pubkey}</div>`
           : html`<div style="color: var(--fg2)">not logged in</div>`}
+        ${state.pubkey && html`
+          <button onClick=${() => {
+            const targets = profileRelays(state.relays)
+            send(['BROADCAST', state.pubkey, targets])
+            dispatch({ type: 'SET_SNACKBAR', message: 'broadcasting...' })
+          }} style="margin-top: 12px; background: var(--accent); color: #000; border: none; border-radius: var(--radius); padding: 8px 16px; font-size: 13px; cursor: pointer; font-weight: 600;">
+            broadcast identity
+          </button>
+          <div style="font-size: 12px; color: var(--fg2); margin-top: 4px">publish profile, contacts, relay list, DM inbox + MLS relays to ${PROFILE_RELAYS.length + Math.min(state.relays.length, 3)} relays</div>
+        `}
         ${state.loginMode === 'nsec' && html`
           <button onClick=${() => {
             send(['CLEAR_KEY'])
@@ -861,6 +924,159 @@ function Settings() {
       </section>
     </div>
   `
+}
+
+function DMList() {
+  const { state, dispatch } = useApp()
+  const [showNew, setShowNew] = useState(false)
+  const [newPubkey, setNewPubkey] = useState('')
+
+  useEffect(() => {
+    send(['DM_LIST'])
+    send(['DM_SUB', state.relays])
+  }, [])
+
+  const openConversation = (peer) => {
+    dispatch({ type: 'OPEN_DM', peer })
+  }
+
+  const startNew = () => {
+    let pk = newPubkey.trim()
+    if (!pk) return
+    try {
+      if (pk.startsWith('npub1')) {
+        const d = nip19Decode(pk)
+        if (d.type === 'npub') pk = d.data
+      }
+    } catch {}
+    if (pk.length !== 64) return
+    setNewPubkey('')
+    setShowNew(false)
+    openConversation(pk)
+  }
+
+  return html`
+    <div class="dm-list">
+      <div style="padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border)">
+        <span style="font-size: 14px; font-weight: 600">conversations</span>
+        <button onClick=${() => setShowNew(!showNew)} style="background: var(--accent); color: #000; border: none; border-radius: var(--radius); padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer">new</button>
+      </div>
+      ${showNew && html`
+        <div class="dm-new-input">
+          <input
+            value=${newPubkey}
+            onInput=${(e) => setNewPubkey(e.target.value)}
+            placeholder="npub or hex pubkey"
+            onKeyDown=${(e) => { if (e.key === 'Enter') startNew() }}
+          />
+        </div>
+      `}
+      ${(state.conversations || []).map((c) => {
+        const profile = state.profiles.get(c.peer) || {}
+        return html`
+          <div class="dm-list-item" onClick=${() => openConversation(c.peer)}>
+            ${profile.picture
+              ? html`<img class="note-avatar" src=${profile.picture} />`
+              : html`<div class="note-avatar" />`}
+            <div class="dm-preview">
+              <div class="dm-preview-name">${profile.name || shortId(c.peer)}</div>
+              <div class="dm-preview-text">${c.lastMessage}</div>
+            </div>
+            <span class="dm-preview-time">${relativeTime(c.lastTs)}</span>
+          </div>
+        `
+      })}
+      ${(!state.conversations || state.conversations.length === 0) && html`
+        <div style="padding: 24px; text-align: center; color: var(--fg2); font-size: 14px">
+          no conversations yet
+        </div>
+      `}
+    </div>
+  `
+}
+
+function DMChat() {
+  const { state, dispatch } = useApp()
+  const peer = state.activeDM
+  const profile = state.profiles.get(peer) || {}
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+  const messagesRef = useRef(null)
+  const endRef = useRef(null)
+
+  useEffect(() => {
+    if (!peer) return
+    send(['DM_HISTORY', peer, 50, null])
+    // fetch peer profile if unknown
+    if (!state.profiles.has(peer)) {
+      send(['PROXY', 'dm-profile-' + peer.slice(0, 8), { kinds: [0], authors: [peer], limit: 1 }, ...profileRelays(state.relays)])
+    }
+  }, [peer])
+
+  // scroll to bottom on new messages
+  useEffect(() => {
+    if (endRef.current) endRef.current.scrollIntoView({ behavior: 'smooth' })
+  }, [state.dmMessages?.length])
+
+  const goBack = () => dispatch({ type: 'SET_DM_TAB', tab: 'list' })
+
+  const sendMessage = useCallback(async () => {
+    if (!text.trim() || !peer) return
+    setSending(true)
+    try {
+      send(['SEND_DM', peer, text.trim(), state.relays])
+      setText('')
+    } finally {
+      setSending(false)
+    }
+  }, [text, peer, state.relays])
+
+  const messages = useMemo(
+    () => [...(state.dmMessages || [])].sort((a, b) => a.created_at - b.created_at),
+    [state.dmMessages]
+  )
+
+  return html`
+    <div class="dm-chat">
+      <div style="padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px">
+        <span style="cursor: pointer; color: var(--accent); font-size: 16px" onClick=${goBack}>←</span>
+        ${profile.picture
+          ? html`<img class="note-avatar" src=${profile.picture} />`
+          : html`<div class="note-avatar" />`}
+        <span style="font-size: 14px; font-weight: 600">${profile.name || shortId(peer)}</span>
+      </div>
+      <div class="dm-messages" ref=${messagesRef}>
+        ${messages.map((m) => html`
+          <div key=${m.id} style="align-self: ${m.from === state.pubkey ? 'flex-end' : 'flex-start'}; max-width: 75%">
+            <div class="dm-bubble ${m.from === state.pubkey ? 'mine' : 'theirs'}">${m.content}</div>
+            <div style="display: flex; gap: 6px; justify-content: ${m.from === state.pubkey ? 'flex-end' : 'flex-start'}">
+              <span class="dm-protocol ${m.protocol === 'nip04' ? 'legacy' : ''}">${m.protocol}</span>
+              <span class="dm-time">${relativeTime(m.created_at)}</span>
+            </div>
+          </div>
+        `)}
+        <div ref=${endRef} />
+        ${messages.length === 0 && html`
+          <div style="text-align: center; color: var(--fg2); padding: 24px; font-size: 14px">no messages yet</div>
+        `}
+      </div>
+      <div class="dm-compose">
+        <textarea
+          value=${text}
+          onInput=${(e) => setText(e.target.value)}
+          placeholder="message..."
+          onKeyDown=${(e) => { if (e.key === 'Enter' && e.ctrlKey) sendMessage() }}
+        />
+        <button onClick=${sendMessage} disabled=${sending || !text.trim()}>send</button>
+      </div>
+    </div>
+  `
+}
+
+function DMView() {
+  const { state } = useApp()
+  if (state.dmTab === 'chat' && state.activeDM) return html`<${DMChat} />`
+  return html`<${DMList} />`
 }
 
 function ProfileView() {
@@ -1039,6 +1255,7 @@ function LoginScreen() {
     }
     try {
       const pubkey = await window.nostr.getPublicKey()
+      send(['SET_PUBKEY', pubkey])
       dispatch({ type: 'LOGIN', pubkey, loginMode: 'extension' })
     } catch (err) {
       setError('login failed: ' + err.message)
@@ -1172,6 +1389,7 @@ function UpdateSnackbar() {
 
   const update = () => {
     if (pendingWorker) pendingWorker.postMessage(['SKIP_WAITING'])
+    window.location.reload()
   }
 
   return html`
@@ -1272,6 +1490,25 @@ function reducer(state, action) {
       return { ...state, lightboxUrl: action.url }
     case 'CLOSE_LIGHTBOX':
       return { ...state, lightboxUrl: null }
+    case 'SET_DM_TAB':
+      return { ...state, dmTab: action.tab }
+    case 'OPEN_DM':
+      return { ...state, activeTab: 'dms', dmTab: 'chat', activeDM: action.peer, dmMessages: [] }
+    case 'SET_CONVERSATIONS':
+      return { ...state, conversations: action.conversations }
+    case 'SET_DM_MESSAGES':
+      return { ...state, dmMessages: action.messages }
+    case 'ADD_DM_MESSAGE': {
+      const msg = action.message
+      if (msg.peer !== state.activeDM) return state
+      if (state.dmMessages.some((m) => m.id === msg.id)) return state
+      return { ...state, dmMessages: [...state.dmMessages, msg] }
+    }
+    case 'ADD_CONVERSATION': {
+      const c = action.conversation
+      const existing = (state.conversations || []).filter((x) => x.peer !== c.peer)
+      return { ...state, conversations: [c, ...existing].sort((a, b) => b.lastTs - a.lastTs) }
+    }
     case 'SET_HASHTAG_QUERY':
       return { ...state, hashtagQuery: action.query, hashtagFeed: [], hashtagPage: 0, hashtagExhausted: false, hashtagLoading: false, hashtagLenBefore: 0 }
     case 'ADD_HASHTAG_EVENT': {
@@ -1346,6 +1583,10 @@ function App() {
     relayFeedPage: 0,
     relayFeedExhausted: false,
     relayFeedLenBefore: 0,
+    conversations: [],
+    activeDM: null,
+    dmMessages: [],
+    dmTab: 'list',
   })
 
   const dispatch = useCallback((action) => {
@@ -1437,23 +1678,83 @@ function App() {
           if (cb) { signCallbacks.delete(requestId); cb(signedEvent) }
           break
         }
+        case 'BROADCAST_DONE': {
+          const [eventCount, relayCount] = args
+          dispatch({ type: 'SET_SNACKBAR', message: eventCount ? 'broadcast ' + eventCount + ' events to ' + relayCount + ' relays' : 'no identity events found to broadcast' })
+          break
+        }
         case 'SIGN_ERROR': {
           const [requestId, errMsg] = args
           signCallbacks.delete(requestId)
           dispatch({ type: 'SET_SNACKBAR', message: 'sign error: ' + errMsg })
           break
         }
+        case 'DM_LIST': {
+          dispatch({ type: 'SET_CONVERSATIONS', conversations: args[0] })
+          break
+        }
+        case 'DM_HISTORY': {
+          const [peer, messages] = args
+          if (peer === state.activeDM) dispatch({ type: 'SET_DM_MESSAGES', messages })
+          break
+        }
+        case 'DM_RECEIVED': {
+          const dm = args[0]
+          dispatch({ type: 'ADD_CONVERSATION', conversation: { peer: dm.peer, lastMessage: dm.content.slice(0, 80), lastTs: dm.created_at, from: dm.from } })
+          // always dispatch — reducer checks if peer matches activeDM
+          dispatch({ type: 'ADD_DM_MESSAGE', message: dm })
+          break
+        }
+        case 'DM_SENT': {
+          const [recipientPubkey, success, errMsg] = args
+          if (!success) dispatch({ type: 'SET_SNACKBAR', message: 'DM error: ' + errMsg })
+          break
+        }
+        case 'DM_SEND_VIA_EXT': {
+          // Extension mode: SW can't encrypt/sign, do it here with window.nostr
+          const [dmRecipient, dmContent, dmRelayUrls] = args
+          ;(async () => {
+            try {
+              if (!window.nostr?.nip04) throw new Error('extension has no nip04')
+              const ciphertext = await window.nostr.nip04.encrypt(dmRecipient, dmContent)
+              const unsigned = {
+                kind: 4,
+                content: ciphertext,
+                tags: [['p', dmRecipient]],
+                created_at: Math.floor(Date.now() / 1000),
+                pubkey: state.pubkey,
+              }
+              const signed = await window.nostr.signEvent(unsigned)
+              send(['EVENT', signed])
+              send(['DM_EXT_RESULT', dmRecipient, dmContent, true, ''])
+            } catch (err) {
+              send(['DM_EXT_RESULT', dmRecipient, dmContent, false, err.message])
+            }
+          })()
+          break
+        }
+        case 'DECRYPT_NIP04':
+        case 'DECRYPT_NIP44':
+        case 'ENCRYPT_NIP04':
+        case 'ENCRYPT_NIP44': {
+          // Extension mode: SW asking us to do crypto
+          const [reqId, pubkey, text] = args
+          handleCryptoRequest(type, reqId, pubkey, text)
+          break
+        }
       }
     }
     navigator.serviceWorker.addEventListener('message', handler)
     return () => navigator.serviceWorker.removeEventListener('message', handler)
-  }, [state.pubkey])
+  }, [state.pubkey, state.activeDM])
 
   // on login, fetch profile + contacts + relay list from remote relays
   useEffect(() => {
     if (!state.pubkey) return
     // tell SW which relays to propagate fetched events to
     send(['SET_WRITE_RELAYS', state.relays])
+    // ensure SW has our pubkey for DM routing (extension mode doesn't send SET_KEY)
+    if (state.loginMode === 'extension') send(['SET_PUBKEY', state.pubkey])
     const relays = state.relays.slice(0, 3)
     send(['PROXY', 'init-profile', { kinds: [0], authors: [state.pubkey], limit: 1 }, ...profileRelays(relays)])
     send(['PROXY', 'init-contacts', { kinds: [3], authors: [state.pubkey], limit: 1 }, ...relays])
@@ -1477,22 +1778,21 @@ function App() {
       .filter((t) => t[0] === 'e')
       .map((t) => t[1])
       .filter((id) => id !== rootId)
-    // all IDs we're about to query for
-    const allFetchIds = [rootId, ...ancestorIds]
 
-    // mark all as queried so deepen effect doesn't re-query
-    dispatch({ type: 'MARK_THREAD_QUERIED', ids: allFetchIds })
+    // mark root + ancestors as queried so deepen effect doesn't re-query
+    dispatch({ type: 'MARK_THREAD_QUERIED', ids: [rootId, ...ancestorIds] })
 
-    // fetch root + all ancestors in one request
-    send(['PROXY', 'thread-root', { ids: allFetchIds }, ...allRelays])
+    // fetch root + all ancestors by ID
+    send(['PROXY', 'thread-root', { ids: [rootId, ...ancestorIds] }, ...allRelays])
 
-    // fetch replies to root AND all ancestors
+    // fetch ALL events that reference the root in any e tag — this gets the
+    // entire thread tree, not just direct replies to ancestors in our lineage
     if (orly) {
       const hintRelays = [...new Set([...hints, ...relays.filter((r) => r !== orly)])]
-      send(['PROXY', 'thread-replies', { '#e': allFetchIds, kinds: [1], limit: 500, _proxy: hintRelays }, orly])
+      send(['PROXY', 'thread-replies', { '#e': [rootId], kinds: [1], limit: 500, _proxy: hintRelays }, orly])
       send(['PROXY', 'thread-graph', { _graph: [rootId, 3, 'ee', 'in'], kinds: [1] }, orly])
     } else {
-      send(['PROXY', 'thread-replies', { '#e': allFetchIds, kinds: [1], limit: 500 }, ...relays])
+      send(['PROXY', 'thread-replies', { '#e': [rootId], kinds: [1], limit: 500 }, ...relays])
     }
   }, [state.activeTab, state.threadRootId])
 
@@ -1538,7 +1838,7 @@ function App() {
     send(['REQ', 'feed-live', { kinds: [1, 6], authors: batch }])
   }, [state.contacts])
 
-  const tabTitle = { feed: 'Following', relays: 'Relays', hashtags: 'Hashtags', profile: 'Profile', settings: 'Settings', thread: 'Thread' }
+  const tabTitle = { feed: 'Following', dms: 'DMs', relays: 'Relays', hashtags: 'Hashtags', profile: 'Profile', settings: 'Settings', thread: 'Thread' }
 
   return html`
     <${AppContext.Provider} value=${{ state, dispatch }}>
@@ -1556,6 +1856,7 @@ function App() {
             </div>
             ${state.activeTab === 'feed' && html`<${Feed} />`}
             ${state.activeTab === 'feed' && html`<${Compose} />`}
+            ${state.activeTab === 'dms' && html`<${DMView} />`}
             ${state.activeTab === 'relays' && html`<${RelayFeed} />`}
             ${state.activeTab === 'hashtags' && html`<${HashtagFeed} />`}
             ${state.activeTab === 'thread' && html`<${ThreadView} />`}

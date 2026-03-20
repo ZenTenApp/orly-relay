@@ -320,6 +320,11 @@ type C struct {
 	Smesh2Enabled bool `env:"ORLY_SMESH2_ENABLED" default:"true" usage:"enable embedded Smesh2 web client on a dedicated port"`
 	Smesh2Port    int  `env:"ORLY_SMESH2_PORT" default:"8089" usage:"port for the embedded Smesh2 web client"`
 
+	// Smesh3 embedded web client (tinygo/js)
+	Smesh3Enabled bool   `env:"ORLY_SMESH3_ENABLED" default:"true" usage:"enable embedded Smesh3 web client on a dedicated port"`
+	Smesh3Port    int    `env:"ORLY_SMESH3_PORT" default:"8090" usage:"port for the embedded Smesh3 web client"`
+	Smesh3Dir     string `env:"ORLY_SMESH3_DIR" usage:"serve sm3sh from disk directory (enables hot-reload via fsnotify + SSE)"`
+
 	// ServeMode is set programmatically by the 'serve' subcommand to grant full owner
 	// access to all users (no env tag - internal use only)
 	ServeMode bool

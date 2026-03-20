@@ -38,8 +38,13 @@ func (b *Bridge) initMLS() error {
 		return fmt.Errorf("create MLS group store: %w", err)
 	}
 
+	relayURL := b.cfg.PublicRelayURL
+	if relayURL == "" {
+		relayURL = b.cfg.RelayURL
+	}
+
 	adapter := &relayAdapter{relay: b.relay}
-	client, err := marmot.NewClient(b.sign, store, adapter)
+	client, err := marmot.NewClient(b.sign, store, adapter, relayURL)
 	if err != nil {
 		return fmt.Errorf("create MLS client: %w", err)
 	}
@@ -55,10 +60,6 @@ func (b *Bridge) initMLS() error {
 	}
 
 	// Publish key package relay list
-	relayURL := b.cfg.PublicRelayURL
-	if relayURL == "" {
-		relayURL = b.cfg.RelayURL
-	}
 	if relayURL != "" {
 		if err := client.PublishKeyPackageRelays(b.ctx, []string{relayURL}); err != nil {
 			log.W.F("publish MLS key package relays: %v", err)
@@ -148,12 +149,15 @@ func (b *Bridge) mlsSubscribeAndProcess() error {
 		select {
 		case <-b.ctx.Done():
 			return nil
+		case <-b.mlsClient.GroupsChanged():
+			log.I.F("MLS group added, refreshing subscription filters")
+			return nil // causes mlsWatchLoop to re-subscribe with updated filters
 		case ev, ok := <-sub.Events():
 			if !ok {
 				return fmt.Errorf("MLS event channel closed")
 			}
 			if err := b.mlsClient.HandleEvent(b.ctx, ev); err != nil {
-				log.D.F("MLS event handling: %v", err)
+				log.W.F("MLS event handling: %v", err)
 			}
 		}
 	}
