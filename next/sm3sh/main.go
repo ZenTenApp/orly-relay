@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	version     = "v0.65.13"
+	version     = "v0.65.14"
 	lsKeyPubkey = "sm3sh-pubkey"
 	lsKeyMode   = "sm3sh-mode"
 	lsKeyTheme  = "sm3sh-theme"
@@ -58,6 +58,10 @@ var (
 	pendingNotes map[string][]dom.Element // pubkey hex -> author header divs awaiting profile
 	fetchedK0    map[string]bool         // pubkey hex -> already tried kind 0 fetch
 	fetchedK10k  map[string]bool         // pubkey hex -> already tried kind 10002 fetch
+
+	// Relay frequency — how many kind 10002 lists include each relay URL.
+	relayFreq    map[string]int
+	idbLoaded    bool
 )
 
 var defaultRelays = []string{
@@ -200,6 +204,21 @@ func showApp() {
 	pendingNotes = make(map[string][]dom.Element)
 	fetchedK0 = make(map[string]bool)
 	fetchedK10k = make(map[string]bool)
+	relayFreq = make(map[string]int)
+
+	// Load cached profiles from IndexedDB.
+	dom.IDBGetAll("profiles", func(key, val string) {
+		name := helpers.JsonGetString(val, "name")
+		pic := helpers.JsonGetString(val, "picture")
+		if name != "" {
+			authorNames[key] = name
+		}
+		if pic != "" {
+			authorPics[key] = pic
+		}
+	}, func() {
+		idbLoaded = true
+	})
 
 	// === Top bar ===
 	bar := dom.CreateElement("div")
@@ -230,7 +249,9 @@ func showApp() {
 	dom.AppendChild(left, avatarEl)
 
 	nameEl = dom.CreateElement("span")
-	dom.SetStyle(nameEl, "fontSize", "13px")
+	dom.SetStyle(nameEl, "fontSize", "18px")
+	dom.SetStyle(nameEl, "fontFamily", "system-ui, sans-serif, 'Noto Color Emoji'")
+	dom.SetStyle(nameEl, "fontWeight", "bold")
 	dom.SetStyle(nameEl, "overflow", "hidden")
 	dom.SetStyle(nameEl, "textOverflow", "ellipsis")
 	dom.SetStyle(nameEl, "whiteSpace", "nowrap")
@@ -514,6 +535,7 @@ func handleProfileEvent(ev *nostr.Event) {
 		}
 	case 10002:
 		// NIP-65 relay list — connect to user's preferred relays.
+		recordRelayFreq(ev)
 		tags := ev.Tags.GetAll("r")
 		if tags != nil {
 			for _, tag := range tags {
@@ -562,10 +584,10 @@ func renderNote(ev *nostr.Event) {
 	dom.SetStyle(avatar, "flexShrink", "0")
 
 	nameSpan := dom.CreateElement("span")
-	dom.SetStyle(nameSpan, "fontSize", "12px")
+	dom.SetStyle(nameSpan, "fontSize", "18px")
 	dom.SetStyle(nameSpan, "fontFamily", "system-ui, sans-serif, 'Noto Color Emoji'")
 	dom.SetStyle(nameSpan, "fontWeight", "bold")
-	dom.SetStyle(nameSpan, "color", "var(--muted)")
+	dom.SetStyle(nameSpan, "color", "var(--fg)")
 
 	pk := ev.PubKey
 	if pic, ok := authorPics[pk]; ok && pic != "" {
@@ -600,11 +622,35 @@ func renderNote(ev *nostr.Event) {
 	dom.SetStyle(content, "lineHeight", "1.5")
 	dom.SetStyle(content, "wordBreak", "break-word")
 	text := ev.Content
-	if len(text) > 500 {
+	truncated := len(text) > 500
+	if truncated {
 		text = text[:500] + "..."
 	}
 	dom.SetInnerHTML(content, renderMarkdown(text))
 	dom.AppendChild(note, content)
+
+	if truncated {
+		more := dom.CreateElement("span")
+		dom.SetTextContent(more, "show more")
+		dom.SetStyle(more, "color", "var(--accent)")
+		dom.SetStyle(more, "cursor", "pointer")
+		dom.SetStyle(more, "fontSize", "13px")
+		dom.SetStyle(more, "display", "inline-block")
+		dom.SetStyle(more, "marginTop", "4px")
+		fullContent := ev.Content
+		expanded := false
+		dom.AddEventListener(more, "click", dom.RegisterCallback(func() {
+			expanded = !expanded
+			if expanded {
+				dom.SetInnerHTML(content, renderMarkdown(fullContent))
+				dom.SetTextContent(more, "show less")
+			} else {
+				dom.SetInnerHTML(content, renderMarkdown(fullContent[:500]+"..."))
+				dom.SetTextContent(more, "show more")
+			}
+		}))
+		dom.AppendChild(note, more)
+	}
 
 	// Prepend (newest first).
 	first := dom.FirstChild(feedContainer)
@@ -637,7 +683,72 @@ func getAnyConn() *relay.Conn {
 
 var profileSubCounter int
 
-// fetchAuthorProfile fetches kind 0 for an author via a proxy-capable relay.
+// topRelays returns the n most frequently seen relay URLs from kind 10002 events.
+func topRelays(n int) []string {
+	if relayFreq == nil {
+		return nil
+	}
+	// Simple selection sort — n is small.
+	type kv struct {
+		url   string
+		count int
+	}
+	var all []kv
+	for url, count := range relayFreq {
+		all = append(all, kv{url, count})
+	}
+	// Sort descending by count.
+	for i := 0; i < len(all); i++ {
+		for j := i + 1; j < len(all); j++ {
+			if all[j].count > all[i].count {
+				all[i], all[j] = all[j], all[i]
+			}
+		}
+	}
+	var result []string
+	for i := 0; i < len(all) && i < n; i++ {
+		result = append(result, all[i].url)
+	}
+	return result
+}
+
+// recordRelayFreq records relay URLs from a kind 10002 event into the frequency table.
+func recordRelayFreq(ev *nostr.Event) {
+	tags := ev.Tags.GetAll("r")
+	if tags == nil {
+		return
+	}
+	var urls []string
+	for _, tag := range tags {
+		u := tag.Value()
+		if u != "" {
+			urls = append(urls, u)
+			if _, ok := relayFreq[u]; ok {
+				relayFreq[u] = relayFreq[u] + 1
+			} else {
+				relayFreq[u] = 1
+			}
+		}
+	}
+	if len(urls) > 0 {
+		authorRelays[ev.PubKey] = urls
+	}
+}
+
+// buildProxy builds a _proxy relay list for a pubkey.
+// Priority: author's own relays > top frequency relays > purplepag.es.
+func buildProxy(pk string) []string {
+	if rels, ok := authorRelays[pk]; ok && len(rels) > 0 {
+		return rels
+	}
+	top := topRelays(5)
+	if len(top) > 0 {
+		return top
+	}
+	return []string{"wss://purplepag.es"}
+}
+
+// fetchAuthorProfile fetches kind 0 + kind 10002 for an author.
 func fetchAuthorProfile(pk string) {
 	if fetchedK0[pk] {
 		return
@@ -647,7 +758,7 @@ func fetchAuthorProfile(pk string) {
 	proxyConn := getProxyConn()
 	anyConn := getAnyConn()
 	if proxyConn == nil && anyConn == nil {
-		fetchedK0[pk] = false // retry later
+		fetchedK0[pk] = false
 		return
 	}
 
@@ -655,30 +766,32 @@ func fetchAuthorProfile(pk string) {
 	subID := "ap-" + itoa(profileSubCounter)
 
 	if proxyConn != nil {
-		// Use _proxy to fetch from author's relays or purplepag.es.
-		proxy := authorRelays[pk]
-		if len(proxy) == 0 {
-			proxy = []string{"wss://purplepag.es"}
-		}
+		proxy := buildProxy(pk)
 		sub := proxyConn.Subscribe(subID, []*nostr.Filter{{
 			Authors: []string{pk},
-			Kinds:   []int{0},
-			Limit:   1,
+			Kinds:   []int{0, 10002},
+			Limit:   3,
 			Proxy:   proxy,
 		}})
 		sub.OnEvent = func(ev *nostr.Event) {
 			if ev.Kind == 0 {
 				applyAuthorProfile(pk, ev)
+			} else if ev.Kind == 10002 {
+				recordRelayFreq(ev)
 			}
 		}
 		sub.OnEOSE = func() {
 			sub.Close()
-			if _, got := authorNames[pk]; !got && !fetchedK10k[pk] {
-				fetchAuthorRelayList(pk)
+			// If no profile found but we discovered relays, retry with those.
+			if _, got := authorNames[pk]; !got {
+				if rels, ok := authorRelays[pk]; ok && len(rels) > 0 && !fetchedK10k[pk] {
+					fetchedK10k[pk] = true
+					fetchedK0[pk] = false
+					fetchAuthorProfile(pk)
+				}
 			}
 		}
 	} else {
-		// No proxy relay — plain fetch from connected relay.
 		sub := anyConn.Subscribe(subID, []*nostr.Filter{{
 			Authors: []string{pk},
 			Kinds:   []int{0},
@@ -691,53 +804,6 @@ func fetchAuthorProfile(pk string) {
 		}
 		sub.OnEOSE = func() {
 			sub.Close()
-		}
-	}
-}
-
-// fetchAuthorRelayList fetches kind 10002 for an author, then retries kind 0.
-func fetchAuthorRelayList(pk string) {
-	if fetchedK10k[pk] {
-		return
-	}
-	fetchedK10k[pk] = true
-
-	proxyConn := getProxyConn()
-	if proxyConn == nil {
-		return
-	}
-
-	profileSubCounter++
-	subID := "ar-" + itoa(profileSubCounter)
-
-	sub := proxyConn.Subscribe(subID, []*nostr.Filter{{
-		Authors: []string{pk},
-		Kinds:   []int{10002},
-		Limit:   1,
-		Proxy:   []string{"wss://purplepag.es"},
-	}})
-	sub.OnEvent = func(ev *nostr.Event) {
-		if ev.Kind == 10002 {
-			tags := ev.Tags.GetAll("r")
-			if tags != nil {
-				var urls []string
-				for _, tag := range tags {
-					u := tag.Value()
-					if u != "" {
-						urls = append(urls, u)
-					}
-				}
-				if len(urls) > 0 {
-					authorRelays[pk] = urls
-				}
-			}
-		}
-	}
-	sub.OnEOSE = func() {
-		sub.Close()
-		if len(authorRelays[pk]) > 0 {
-			fetchedK0[pk] = false
-			fetchAuthorProfile(pk)
 		}
 	}
 }
@@ -758,6 +824,11 @@ func applyAuthorProfile(pk string, ev *nostr.Event) {
 	}
 	if pic != "" {
 		authorPics[pk] = pic
+	}
+
+	// Cache to IndexedDB.
+	if name != "" || pic != "" {
+		dom.IDBPut("profiles", pk, "{\"name\":\""+jsonEsc(name)+"\",\"picture\":\""+jsonEsc(pic)+"\"}")
 	}
 
 	// Update logged-in user's header too.
@@ -932,6 +1003,16 @@ func isImageURL(url string) bool {
 
 func hasSuffix(s, suffix string) bool {
 	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
+}
+
+// jsonEsc escapes a string for embedding in a JSON value.
+func jsonEsc(s string) string {
+	s = strReplace(s, "\\", "\\\\")
+	s = strReplace(s, "\"", "\\\"")
+	s = strReplace(s, "\n", "\\n")
+	s = strReplace(s, "\r", "\\r")
+	s = strReplace(s, "\t", "\\t")
+	return s
 }
 
 // strIndex finds substring in string. Returns -1 if not found.

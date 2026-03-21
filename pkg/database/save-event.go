@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/dgraph-io/badger/v4"
 	"next.orly.dev/pkg/lol/chk"
@@ -158,6 +159,12 @@ func (d *D) SaveEvent(c context.Context, ev *event.E) (
 ) {
 	if ev == nil {
 		err = errors.New("nil event")
+		return
+	}
+
+	// Reject events with invalid UTF-8 content
+	if !utf8.Valid(ev.Content) {
+		err = errors.New("blocked: event content is not valid UTF-8")
 		return
 	}
 

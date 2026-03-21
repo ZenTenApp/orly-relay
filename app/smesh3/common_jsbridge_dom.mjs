@@ -144,6 +144,21 @@ export function FetchRelayInfo(url, fn) {
   $rt.dom.FetchRelayInfo(url, fn);
 }
 
+// jsbridge: dom.IDBGet
+export function IDBGet(store, key, fn) {
+  $rt.dom.IDBGet(store, key, fn);
+}
+
+// jsbridge: dom.IDBPut
+export function IDBPut(store, key, value) {
+  $rt.dom.IDBPut(store, key, value);
+}
+
+// jsbridge: dom.IDBGetAll
+export function IDBGetAll(store, fn, done) {
+  $rt.dom.IDBGetAll(store, fn, done);
+}
+
 // jsbridge: dom.ConsoleLog
 export function ConsoleLog(msg) {
   $rt.dom.ConsoleLog(msg);

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gorilla/websocket"
 	"next.orly.dev/pkg/lol/errorf"
@@ -110,6 +111,10 @@ func (l *Listener) QueueMessage(data []byte, remote string) bool {
 
 
 func (l *Listener) Write(p []byte) (n int, err error) {
+	if !utf8.Valid(p) {
+		log.E.F("ws->%s dropping message with invalid UTF-8 (%d bytes)", l.remote, len(p))
+		return 0, errorf.E("invalid UTF-8")
+	}
 	// Defensive: recover from any panic when sending to closed channel
 	defer func() {
 		if r := recover(); r != nil {

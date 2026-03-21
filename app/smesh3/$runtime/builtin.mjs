@@ -97,10 +97,11 @@ export function append(s, ...elems) {
   return new Slice(newArr, 0, needed, newCap);
 }
 
-// Append a string's bytes to a byte slice: append([]byte, string...)
+// Append a string's UTF-8 bytes to a byte slice: append([]byte, string...)
 export function appendString(dst, s) {
+  const bytes = utf8Bytes(s);
   const elems = [];
-  for (let i = 0; i < s.length; i++) elems.push(s.charCodeAt(i));
+  for (let i = 0; i < bytes.length; i++) elems.push(bytes[i]);
   return append(dst, ...elems);
 }
 
@@ -115,11 +116,12 @@ export function appendSlice(dst, src) {
 
 // Copy from src to dst. Returns number of elements copied.
 export function copy(dst, src) {
-  // Handle string source.
+  // Handle string source — copy UTF-8 bytes.
   if (typeof src === 'string') {
-    const n = Math.min(dst.$length, src.length);
+    const bytes = utf8Bytes(src);
+    const n = Math.min(dst.$length, bytes.length);
     for (let i = 0; i < n; i++) {
-      dst.$array[dst.$offset + i] = src.charCodeAt(i);
+      dst.$array[dst.$offset + i] = bytes[i];
     }
     return n;
   }
@@ -141,7 +143,7 @@ export function copy(dst, src) {
 // Len.
 export function len(v) {
   if (v === null || v === undefined) return 0;
-  if (typeof v === 'string') return v.length;
+  if (typeof v === 'string') return utf8Bytes(v).length;
   if (v instanceof Slice) return v.$length;
   if (v instanceof Map) return v.size;
   if (v instanceof GoMap) return v.size();
@@ -254,12 +256,66 @@ export function mapDelete(m, key) {
   }
 }
 
-// --- Strings ---
+// --- Strings (UTF-8 byte semantics) ---
+
+const _enc = new TextEncoder();
+const _dec = new TextDecoder();
+
+// One-string cache: amortizes TextEncoder cost when a loop indexes the same string.
+let _cacheStr = '';
+let _cacheBytes = new Uint8Array(0);
+
+export function utf8Bytes(s) {
+  if (s !== _cacheStr) {
+    _cacheStr = s;
+    _cacheBytes = _enc.encode(s);
+  }
+  return _cacheBytes;
+}
+
+// UTF-8 byte length of a string.
+export function byteLen(s) {
+  return utf8Bytes(s).length;
+}
+
+// UTF-8 byte at byte position i.
+export function stringByteAt(s, i) {
+  return utf8Bytes(s)[i];
+}
+
+// for range over string — returns (byteIndex, rune) using UTF-8.
+export function stringRange(s) {
+  const bytes = utf8Bytes(s);
+  return {
+    $bytes: bytes,
+    $pos: 0,
+    next() {
+      if (this.$pos >= this.$bytes.length) return [false, 0, 0];
+      const start = this.$pos;
+      const b0 = this.$bytes[this.$pos];
+      let cp;
+      if (b0 < 0x80) {
+        cp = b0; this.$pos += 1;
+      } else if (b0 < 0xE0) {
+        cp = ((b0 & 0x1F) << 6) | (this.$bytes[this.$pos + 1] & 0x3F);
+        this.$pos += 2;
+      } else if (b0 < 0xF0) {
+        cp = ((b0 & 0x0F) << 12) | ((this.$bytes[this.$pos + 1] & 0x3F) << 6) |
+             (this.$bytes[this.$pos + 2] & 0x3F);
+        this.$pos += 3;
+      } else {
+        cp = ((b0 & 0x07) << 18) | ((this.$bytes[this.$pos + 1] & 0x3F) << 12) |
+             ((this.$bytes[this.$pos + 2] & 0x3F) << 6) | (this.$bytes[this.$pos + 3] & 0x3F);
+        this.$pos += 4;
+      }
+      return [true, start, cp];
+    }
+  };
+}
 
 // String to byte slice.
 export function stringToBytes(s) {
-  const encoder = new TextEncoder();
-  const bytes = encoder.encode(s);
+  const bytes = _enc.encode(s);
   const arr = Array.from(bytes);
   return new Slice(arr, 0, arr.length, arr.length);
 }
@@ -271,7 +327,7 @@ export function bytesToString(sl) {
   for (let i = 0; i < sl.$length; i++) {
     bytes[i] = sl.$array[sl.$offset + i];
   }
-  return new TextDecoder().decode(bytes);
+  return _dec.decode(bytes);
 }
 
 // String to rune slice.
@@ -301,13 +357,12 @@ export function stringCompare(a, b) {
   return 0;
 }
 
-// String slice: s[low:high]
+// String slice: s[low:high] — operates on UTF-8 byte boundaries.
 export function stringSlice(s, low, high) {
+  const bytes = utf8Bytes(s);
   if (low === undefined) low = 0;
-  if (high === undefined) high = s.length;
-  // Go string slicing operates on bytes, but for now we use JS chars.
-  // TODO: handle UTF-8 byte semantics properly.
-  return s.substring(low, high);
+  if (high === undefined) high = bytes.length;
+  return _dec.decode(bytes.subarray(low, high));
 }
 
 // --- Deep equality for map keys ---

@@ -8,20 +8,6 @@ import * as common$nostr from './common_nostr.mjs';
 
 // Package-level variables
 
-$rt.types.registerType('common/relay.Sub', {
-  id: 'common/relay.Sub',
-  kind: 'struct',
-  methods: new Map(),
-  fields: [
-    { name: 'ID', type: 'string', tag: '', embedded: false },
-    { name: 'Filters', type: '[]*common/nostr.Filter', tag: '', embedded: false },
-    { name: 'OnEvent', type: 'func', tag: '', embedded: false },
-    { name: 'OnEOSE', type: 'func', tag: '', embedded: false },
-    { name: 'conn', type: '*common/relay.Conn', tag: '', embedded: false },
-    { name: 'gotEOSE', type: 'bool', tag: '', embedded: false },
-  ],
-  zero: () => ({ ID: '', Filters: null, OnEvent: null, OnEOSE: null, conn: null, gotEOSE: false }),
-});
 $rt.types.registerType('common/relay.Conn', {
   id: 'common/relay.Conn',
   kind: 'struct',
@@ -48,6 +34,20 @@ $rt.types.registerType('common/relay.Pool', {
     { name: 'maxSize', type: 'int', tag: '', embedded: false },
   ],
   zero: () => ({ conns: null, maxSize: 0 }),
+});
+$rt.types.registerType('common/relay.Sub', {
+  id: 'common/relay.Sub',
+  kind: 'struct',
+  methods: new Map(),
+  fields: [
+    { name: 'ID', type: 'string', tag: '', embedded: false },
+    { name: 'Filters', type: '[]*common/nostr.Filter', tag: '', embedded: false },
+    { name: 'OnEvent', type: 'func', tag: '', embedded: false },
+    { name: 'OnEOSE', type: 'func', tag: '', embedded: false },
+    { name: 'conn', type: '*common/relay.Conn', tag: '', embedded: false },
+    { name: 'gotEOSE', type: 'bool', tag: '', embedded: false },
+  ],
+  zero: () => ({ ID: '', Filters: null, OnEvent: null, OnEOSE: null, conn: null, gotEOSE: false }),
 });
 export function init() {
   return;
@@ -416,8 +416,8 @@ export function appendEscaped(buf, s) {
         break;
       }
       case 2: {
-        $rt.runtime.boundsCheck($t1_2, s.length);
-        $t4_5 = s.charCodeAt($t1_2);
+        $rt.runtime.boundsCheck($t1_2, $rt.builtin.byteLen(s));
+        $t4_5 = $rt.builtin.stringByteAt(s, $t1_2);
         $t5_6 = ($t4_5 === 34);
         if ($t5_6) {
           $block = 5; break;
@@ -670,8 +670,8 @@ export function indexOf(s, c) {
         break;
       }
       case 2: {
-        $rt.runtime.boundsCheck($t0_1, s.length);
-        $t3_4 = s.charCodeAt($t0_1);
+        $rt.runtime.boundsCheck($t0_1, $rt.builtin.byteLen(s));
+        $t3_4 = $rt.builtin.stringByteAt(s, $t0_1);
         $t4_5 = ($t3_4 === c);
         if ($t4_5) {
           $block = 4; break;
@@ -710,49 +710,6 @@ export function NewPool(maxSize) {
   return $t0_1;
 }
 
-export function Sub$Close(s) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $get() { return s.$get().conn; }, $set(v) { const obj = s.$get(); obj.conn = v; s.$set(obj); } };
-        $t1_2 = $t0_1.$get();
-        $t2_3 = ($t1_2 !== null);
-        if ($t2_3) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t3_4 = { $get() { return s.$get().conn; }, $set(v) { const obj = s.$get(); obj.conn = v; s.$set(obj); } };
-        $t4_5 = $t3_4.$get();
-        $t5_6 = { $get() { return s.$get().ID; }, $set(v) { const obj = s.$get(); obj.ID = v; s.$set(obj); } };
-        $t6_7 = $t5_6.$get();
-        $t7_8 = Conn$CloseSubscription($t4_5, $t6_7);
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        return;
-        break;
-      }
-    }
-  }
-}
-
-$rt.types.getType('common/relay.Sub')?.methods?.set('Close', Sub$Close);
-export function Sub$GotEOSE(s) {
-  let $t0_1, $t1_2;
-  $t0_1 = { $get() { return s.$get().gotEOSE; }, $set(v) { const obj = s.$get(); obj.gotEOSE = v; s.$set(obj); } };
-  $t1_2 = $t0_1.$get();
-  return $t1_2;
-}
-
-$rt.types.getType('common/relay.Sub')?.methods?.set('GotEOSE', Sub$GotEOSE);
 export function Conn$Close(c) {
   let $t0_1, $t1_2, $t2_3, $t3_4;
   $t0_1 = { $get() { return c.$get().state; }, $set(v) { const obj = c.$get(); obj.state = v; c.$set(obj); } };
@@ -1139,8 +1096,8 @@ export function Conn$handleMessage(c, msg) {
         break;
       }
       case 19: {
-        $rt.runtime.boundsCheck(0, $t3_4.length);
-        $t50_51 = $t3_4.charCodeAt(0);
+        $rt.runtime.boundsCheck(0, $rt.builtin.byteLen($t3_4));
+        $t50_51 = $rt.builtin.stringByteAt($t3_4, 0);
         $t51_52 = ($t50_51 === 116);
         $t52_53 = $t51_52;
         $block = 20; break;
@@ -1542,3 +1499,46 @@ export function Pool$evictOne(p) {
 }
 
 $rt.types.getType('common/relay.Pool')?.methods?.set('evictOne', Pool$evictOne);
+export function Sub$Close(s) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $get() { return s.$get().conn; }, $set(v) { const obj = s.$get(); obj.conn = v; s.$set(obj); } };
+        $t1_2 = $t0_1.$get();
+        $t2_3 = ($t1_2 !== null);
+        if ($t2_3) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t3_4 = { $get() { return s.$get().conn; }, $set(v) { const obj = s.$get(); obj.conn = v; s.$set(obj); } };
+        $t4_5 = $t3_4.$get();
+        $t5_6 = { $get() { return s.$get().ID; }, $set(v) { const obj = s.$get(); obj.ID = v; s.$set(obj); } };
+        $t6_7 = $t5_6.$get();
+        $t7_8 = Conn$CloseSubscription($t4_5, $t6_7);
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        return;
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/relay.Sub')?.methods?.set('Close', Sub$Close);
+export function Sub$GotEOSE(s) {
+  let $t0_1, $t1_2;
+  $t0_1 = { $get() { return s.$get().gotEOSE; }, $set(v) { const obj = s.$get(); obj.gotEOSE = v; s.$set(obj); } };
+  $t1_2 = $t0_1.$get();
+  return $t1_2;
+}
+
+$rt.types.getType('common/relay.Sub')?.methods?.set('GotEOSE', Sub$GotEOSE);

@@ -212,6 +212,68 @@ export function FetchRelayInfo(url, fn) {
     .catch(() => { if (fn) fn(''); });
 }
 
+// --- IndexedDB ---
+
+let _db = null;
+let _dbReady = [];
+
+function ensureDB(cb) {
+  if (_db) { cb(_db); return; }
+  _dbReady.push(cb);
+  if (_dbReady.length > 1) return; // already opening
+  const req = indexedDB.open('sm3sh', 2);
+  req.onupgradeneeded = (e) => {
+    const db = e.target.result;
+    if (!db.objectStoreNames.contains('profiles')) db.createObjectStore('profiles');
+    if (!db.objectStoreNames.contains('relays')) db.createObjectStore('relays');
+  };
+  req.onsuccess = (e) => {
+    _db = e.target.result;
+    for (const fn of _dbReady) fn(_db);
+    _dbReady = [];
+  };
+  req.onerror = () => { _dbReady = []; };
+}
+
+export function IDBGet(store, key, fn) {
+  ensureDB((db) => {
+    try {
+      const tx = db.transaction(store, 'readonly');
+      const req = tx.objectStore(store).get(key);
+      req.onsuccess = () => { fn(req.result ?? ''); };
+      req.onerror = () => { fn(''); };
+    } catch(e) { fn(''); }
+  });
+}
+
+export function IDBPut(store, key, value) {
+  ensureDB((db) => {
+    try {
+      const tx = db.transaction(store, 'readwrite');
+      tx.objectStore(store).put(value, key);
+    } catch(e) {}
+  });
+}
+
+export function IDBGetAll(store, fn, done) {
+  ensureDB((db) => {
+    try {
+      const tx = db.transaction(store, 'readonly');
+      const req = tx.objectStore(store).openCursor();
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          fn(String(cursor.key), String(cursor.value ?? ''));
+          cursor.continue();
+        } else {
+          done();
+        }
+      };
+      req.onerror = () => { done(); };
+    } catch(e) { done(); }
+  });
+}
+
 // Log a message to the browser console.
 export function ConsoleLog(msg) {
   console.log('[sm3sh]', msg);
