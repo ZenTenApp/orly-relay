@@ -54,7 +54,11 @@ func GetRequestURL(event Event) string { panic("jsbridge") }
 func GetRequestPath(event Event) string { panic("jsbridge") }
 
 // GetMessageData returns the string data from a message event.
+// If data is not a string, returns JSON.stringify(data).
 func GetMessageData(event Event) string { panic("jsbridge") }
+
+// GetMessageClientID returns the source client ID from a message event.
+func GetMessageClientID(event Event) string { panic("jsbridge") }
 
 // --- SW globals ---
 
@@ -67,8 +71,14 @@ func ClaimClients(done func()) { panic("jsbridge") }
 // MatchClients gets all window clients. Calls fn with each client.
 func MatchClients(fn func(Client)) { panic("jsbridge") }
 
-// PostMessage sends a message to a client.
+// PostMessage sends a string message to a client.
 func PostMessage(client Client, msg string) { panic("jsbridge") }
+
+// PostMessageJSON sends a raw JSON message to a client (parsed by receiver).
+func PostMessageJSON(client Client, json string) { panic("jsbridge") }
+
+// GetClientByID looks up a client by ID. Calls fn with (client, true) or (0, false).
+func GetClientByID(id string, fn func(Client, bool)) { panic("jsbridge") }
 
 // Navigate navigates a client to a URL.
 func Navigate(client Client, url string) { panic("jsbridge") }
@@ -106,7 +116,29 @@ func SSEConnect(url string, onMessage func(string)) SSE { panic("jsbridge") }
 // SSEClose closes an EventSource.
 func SSEClose(id SSE) { panic("jsbridge") }
 
+// --- Timers ---
+
+// Timer is an opaque handle to a setTimeout/setInterval.
+type Timer int
+
+// SetTimeout calls fn after ms milliseconds. Returns timer handle.
+func SetTimeout(ms int, fn func()) Timer { panic("jsbridge") }
+
+// ClearTimeout cancels a timer.
+func ClearTimeout(t Timer) { panic("jsbridge") }
+
+// --- Time ---
+
+// NowSeconds returns current time as Unix seconds.
+func NowSeconds() int64 { panic("jsbridge") }
+
+// NowMillis returns current time as Unix milliseconds.
+func NowMillis() int64 { panic("jsbridge") }
+
 // --- Logging ---
 
 // Log writes to console.log in the SW context.
 func Log(msg string) { panic("jsbridge") }
+
+// Warn writes to console.warn in the SW context.
+func Warn(msg string) { panic("jsbridge") }

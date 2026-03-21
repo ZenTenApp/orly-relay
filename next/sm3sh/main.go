@@ -6,11 +6,10 @@ import (
 	"common/jsbridge/localstorage"
 	"common/jsbridge/signer"
 	"common/nostr"
-	"common/relay"
 )
 
 const (
-	version     = "v0.65.14"
+	version     = "v0.65.15"
 	lsKeyPubkey = "sm3sh-pubkey"
 	lsKeyMode   = "sm3sh-mode"
 	lsKeyTheme  = "sm3sh-theme"
@@ -39,13 +38,10 @@ var (
 	root dom.Element
 
 	// Relay tracking — parallel slices, grown dynamically.
-	relayURLs      []string
-	relayConns     []*relay.Conn
-	relayDots      []dom.Element
-	relayLabels    []dom.Element
-	relayConnected []bool
-	relayUserPick  []bool // true = from user's kind 10002
-	relayHasProxy  []bool // true = relay supports _proxy extension
+	relayURLs     []string
+	relayDots     []dom.Element
+	relayLabels   []dom.Element
+	relayUserPick []bool // true = from user's kind 10002
 
 	eventCount  int
 	popoverOpen bool
@@ -58,6 +54,7 @@ var (
 	pendingNotes map[string][]dom.Element // pubkey hex -> author header divs awaiting profile
 	fetchedK0    map[string]bool         // pubkey hex -> already tried kind 0 fetch
 	fetchedK10k  map[string]bool         // pubkey hex -> already tried kind 10002 fetch
+	authorSubPK  map[string]string       // subID -> pubkey hex for author profile subs
 
 	// Relay frequency — how many kind 10002 lists include each relay URL.
 	relayFreq    map[string]int
@@ -205,6 +202,11 @@ func showApp() {
 	fetchedK0 = make(map[string]bool)
 	fetchedK10k = make(map[string]bool)
 	relayFreq = make(map[string]int)
+	authorSubPK = make(map[string]string)
+
+	// Set up SW communication.
+	dom.OnSWMessage(onSWMessage)
+	dom.PostToSW("[\"SET_PUBKEY\"," + jstr(pubhex) + "]")
 
 	// Load cached profiles from IndexedDB.
 	dom.IDBGetAll("profiles", func(key, val string) {
@@ -378,22 +380,24 @@ func showApp() {
 	dom.SetStyle(popoverEl, "zIndex", "99")
 	dom.AppendChild(root, popoverEl)
 
-	// Add default relays and connect.
+	// Add default relays.
 	for _, url := range defaultRelays {
 		addRelay(url, false)
 	}
 
-	go fetchProfile()
+	// Tell SW about relays and subscribe.
+	sendWriteRelays()
+	subscribeProfile()
+	subscribeFeed()
 }
 
-// addRelay adds a relay to the list, creates its popover row, and connects.
+// addRelay adds a relay to the list and creates its popover row.
 // userPick=true means it came from the user's kind 10002 relay list.
 func addRelay(url string, userPick bool) {
 	url = normalizeURL(url)
 	// Dedup.
 	for i, u := range relayURLs {
 		if u == url {
-			// Promote to user pick if needed.
 			if userPick && !relayUserPick[i] {
 				relayUserPick[i] = true
 				dom.SetStyle(relayLabels[i], "fontWeight", "bold")
@@ -402,20 +406,16 @@ func addRelay(url string, userPick bool) {
 		}
 	}
 
-	idx := len(relayURLs)
 	relayURLs = append(relayURLs, url)
-	relayConns = append(relayConns, nil)
-	relayConnected = append(relayConnected, false)
 	relayUserPick = append(relayUserPick, userPick)
-	relayHasProxy = append(relayHasProxy, false)
 
 	// Popover row.
 	row := dom.CreateElement("div")
 	dom.SetStyle(row, "padding", "3px 0")
 
 	dot := dom.CreateElement("span")
-	dom.SetTextContent(dot, "\u25CF") // ●
-	dom.SetStyle(dot, "color", "var(--muted)")
+	dom.SetTextContent(dot, "\u25CF")
+	dom.SetStyle(dot, "color", "#5b5")
 	dom.SetStyle(dot, "marginRight", "8px")
 	relayDots = append(relayDots, dot)
 	dom.AppendChild(row, dot)
@@ -429,56 +429,7 @@ func addRelay(url string, userPick bool) {
 	dom.AppendChild(row, label)
 
 	dom.AppendChild(popoverEl, row)
-
-	// Fetch NIP-11 relay info to check for _proxy support.
-	infoURL := wsToHTTP(url)
-	dom.FetchRelayInfo(infoURL, func(body string) {
-		if len(body) > 0 {
-			pq := strIndex(body, "\"proxy_query\"")
-			if pq >= 0 {
-				chunk := body[pq:]
-				if strIndex(chunk, "\"enabled\":true") >= 0 || strIndex(chunk, "\"enabled\": true") >= 0 {
-					relayHasProxy[idx] = true
-				}
-			}
-		}
-	})
-
-	// Connect.
-	conn := relay.Dial(url)
-	conn.OnReady(func(ok bool) {
-		if !ok {
-			dom.SetStyle(relayDots[idx], "color", "#e55")
-			return
-		}
-		relayConns[idx] = conn
-		relayConnected[idx] = true
-		dom.SetStyle(relayDots[idx], "color", "#5b5")
-		updateStatus()
-
-		// Profile data.
-		profSub := conn.Subscribe("prof", []*nostr.Filter{{
-			Authors: []string{pubhex},
-			Kinds:   []int{0, 10002, 10050},
-			Limit:   5,
-		}})
-		profSub.OnEvent = func(ev *nostr.Event) {
-			handleProfileEvent(ev)
-		}
-
-		// Feed.
-		feedSub := conn.Subscribe("feed", []*nostr.Filter{{
-			Kinds: []int{1},
-			Limit: 20,
-		}})
-		feedSub.OnEvent = func(ev *nostr.Event) {
-			eventCount++
-			renderNote(ev)
-		}
-		feedSub.OnEOSE = func() {
-			updateStatus()
-		}
-	})
+	updateStatus()
 }
 
 func togglePopover() {
@@ -490,26 +441,172 @@ func togglePopover() {
 	}
 }
 
-// fetchProfile queries purplepag.es for relay lists and profile metadata.
-func fetchProfile() {
-	conn := relay.Dial("wss://purplepag.es")
-	conn.OnReady(func(ok bool) {
+func subscribeProfile() {
+	urls := make([]string, 0, len(relayURLs)+1)
+	urls = append(urls, "wss://purplepag.es")
+	urls = append(urls, relayURLs...)
+	dom.PostToSW(buildProxyMsg("prof",
+		"{\"authors\":["+jstr(pubhex)+"],\"kinds\":[0,10002,10050],\"limit\":5}",
+		urls))
+}
+
+func subscribeFeed() {
+	dom.PostToSW(buildProxyMsg("feed", "{\"kinds\":[1],\"limit\":20}", relayURLs))
+}
+
+func sendWriteRelays() {
+	msg := "[\"SET_WRITE_RELAYS\",["
+	for i, url := range relayURLs {
+		if i > 0 {
+			msg += ","
+		}
+		msg += jstr(url)
+	}
+	dom.PostToSW(msg + "]]")
+}
+
+func buildProxyMsg(subID, filterJSON string, urls []string) string {
+	msg := "[\"PROXY\"," + jstr(subID) + "," + filterJSON + ",["
+	for i, url := range urls {
+		if i > 0 {
+			msg += ","
+		}
+		msg += jstr(url)
+	}
+	return msg + "]]"
+}
+
+func jstr(s string) string {
+	return "\"" + jsonEsc(s) + "\""
+}
+
+// --- SW message handling ---
+
+func onSWMessage(raw string) {
+	if len(raw) < 5 || raw[0] != '[' {
+		return
+	}
+	typ, pos := nextStr(raw, 1)
+	switch typ {
+	case "EVENT":
+		subID, pos2 := nextStr(raw, pos)
+		evJSON := extractValue(raw, pos2)
+		if evJSON == "" {
+			return
+		}
+		ev := nostr.ParseEvent(evJSON)
+		if ev == nil {
+			return
+		}
+		dispatchEvent(subID, ev)
+	case "EOSE":
+		subID, _ := nextStr(raw, pos)
+		dispatchEOSE(subID)
+	}
+}
+
+func dispatchEvent(subID string, ev *nostr.Event) {
+	if subID == "prof" {
+		handleProfileEvent(ev)
+	} else if subID == "feed" {
+		eventCount++
+		renderNote(ev)
+	} else if len(subID) > 3 && subID[:3] == "ap-" {
+		if ev.Kind == 0 {
+			applyAuthorProfile(ev.PubKey, ev)
+		} else if ev.Kind == 10002 {
+			recordRelayFreq(ev)
+		}
+	}
+}
+
+func dispatchEOSE(subID string) {
+	if subID == "feed" {
+		updateStatus()
+	} else if len(subID) > 3 && subID[:3] == "ap-" {
+		dom.PostToSW("[\"CLOSE\"," + jstr(subID) + "]")
+		pk, ok := authorSubPK[subID]
 		if !ok {
 			return
 		}
-		sub := conn.Subscribe("prof", []*nostr.Filter{{
-			Authors: []string{pubhex},
-			Kinds:   []int{0, 10002, 10050},
-			Limit:   5,
-		}})
-		sub.OnEvent = func(ev *nostr.Event) {
-			handleProfileEvent(ev)
+		delete(authorSubPK, subID)
+		if _, got := authorNames[pk]; !got {
+			if rels, ok := authorRelays[pk]; ok && len(rels) > 0 && !fetchedK10k[pk] {
+				fetchedK10k[pk] = true
+				fetchedK0[pk] = false
+				fetchAuthorProfile(pk)
+			}
 		}
-		sub.OnEOSE = func() {
-			sub.Close()
-			conn.Close()
+	}
+}
+
+// nextStr extracts the next quoted string from s starting at pos.
+func nextStr(s string, pos int) (string, int) {
+	for pos < len(s) && s[pos] != '"' {
+		pos++
+	}
+	if pos >= len(s) {
+		return "", pos
+	}
+	pos++
+	start := pos
+	for pos < len(s) {
+		if s[pos] == '\\' {
+			pos += 2
+			continue
 		}
-	})
+		if s[pos] == '"' {
+			break
+		}
+		pos++
+	}
+	if pos >= len(s) {
+		return "", pos
+	}
+	val := s[start:pos]
+	pos++
+	for pos < len(s) && (s[pos] == ',' || s[pos] == ' ') {
+		pos++
+	}
+	return val, pos
+}
+
+// extractValue extracts a JSON object/array value starting at pos.
+func extractValue(s string, pos int) string {
+	for pos < len(s) && (s[pos] == ',' || s[pos] == ' ') {
+		pos++
+	}
+	if pos >= len(s) {
+		return ""
+	}
+	if s[pos] != '{' && s[pos] != '[' {
+		return ""
+	}
+	start := pos
+	depth := 0
+	for pos < len(s) {
+		c := s[pos]
+		if c == '{' || c == '[' {
+			depth++
+		}
+		if c == '}' || c == ']' {
+			depth--
+			if depth == 0 {
+				return s[start : pos+1]
+			}
+		}
+		if c == '"' {
+			pos++
+			for pos < len(s) && s[pos] != '"' {
+				if s[pos] == '\\' {
+					pos++
+				}
+				pos++
+			}
+		}
+		pos++
+	}
+	return s[start:]
 }
 
 func handleProfileEvent(ev *nostr.Event) {
@@ -534,17 +631,16 @@ func handleProfileEvent(ev *nostr.Event) {
 			dom.SetStyle(avatarEl, "display", "block")
 		}
 	case 10002:
-		// NIP-65 relay list — connect to user's preferred relays.
+		// NIP-65 relay list — add user's preferred relays.
 		recordRelayFreq(ev)
-		tags := ev.Tags.GetAll("r")
-		if tags != nil {
-			for _, tag := range tags {
-				url := tag.Value()
-				if url != "" {
-					addRelay(url, true)
-				}
+		for _, tag := range ev.Tags.GetAll("r") {
+			url := tag.Value()
+			if url != "" {
+				addRelay(url, true)
 			}
 		}
+		sendWriteRelays()
+		subscribeFeed()
 	case 10050:
 		// DM inbox relay list — stored for future use.
 		_ = ev.Tags.GetAll("relay")
@@ -552,14 +648,8 @@ func handleProfileEvent(ev *nostr.Event) {
 }
 
 func updateStatus() {
-	connected := 0
-	for _, c := range relayConnected {
-		if c {
-			connected++
-		}
-	}
 	dom.SetTextContent(statusEl,
-		itoa(connected)+"/"+itoa(len(relayURLs))+" relays | "+itoa(eventCount)+" events")
+		itoa(len(relayURLs))+" relays | "+itoa(eventCount)+" events")
 }
 
 // --- Feed rendering ---
@@ -661,26 +751,6 @@ func renderNote(ev *nostr.Event) {
 	}
 }
 
-// getProxyConn returns the first connected relay that supports _proxy, or nil.
-func getProxyConn() *relay.Conn {
-	for i, c := range relayConns {
-		if c != nil && relayConnected[i] && relayHasProxy[i] {
-			return c
-		}
-	}
-	return nil
-}
-
-// getAnyConn returns the first connected relay, or nil.
-func getAnyConn() *relay.Conn {
-	for i, c := range relayConns {
-		if c != nil && relayConnected[i] {
-			return c
-		}
-	}
-	return nil
-}
-
 var profileSubCounter int
 
 // topRelays returns the n most frequently seen relay URLs from kind 10002 events.
@@ -748,64 +818,21 @@ func buildProxy(pk string) []string {
 	return []string{"wss://purplepag.es"}
 }
 
-// fetchAuthorProfile fetches kind 0 + kind 10002 for an author.
+// fetchAuthorProfile fetches kind 0 + kind 10002 for an author via SW PROXY.
 func fetchAuthorProfile(pk string) {
 	if fetchedK0[pk] {
 		return
 	}
 	fetchedK0[pk] = true
 
-	proxyConn := getProxyConn()
-	anyConn := getAnyConn()
-	if proxyConn == nil && anyConn == nil {
-		fetchedK0[pk] = false
-		return
-	}
-
 	profileSubCounter++
 	subID := "ap-" + itoa(profileSubCounter)
+	authorSubPK[subID] = pk
 
-	if proxyConn != nil {
-		proxy := buildProxy(pk)
-		sub := proxyConn.Subscribe(subID, []*nostr.Filter{{
-			Authors: []string{pk},
-			Kinds:   []int{0, 10002},
-			Limit:   3,
-			Proxy:   proxy,
-		}})
-		sub.OnEvent = func(ev *nostr.Event) {
-			if ev.Kind == 0 {
-				applyAuthorProfile(pk, ev)
-			} else if ev.Kind == 10002 {
-				recordRelayFreq(ev)
-			}
-		}
-		sub.OnEOSE = func() {
-			sub.Close()
-			// If no profile found but we discovered relays, retry with those.
-			if _, got := authorNames[pk]; !got {
-				if rels, ok := authorRelays[pk]; ok && len(rels) > 0 && !fetchedK10k[pk] {
-					fetchedK10k[pk] = true
-					fetchedK0[pk] = false
-					fetchAuthorProfile(pk)
-				}
-			}
-		}
-	} else {
-		sub := anyConn.Subscribe(subID, []*nostr.Filter{{
-			Authors: []string{pk},
-			Kinds:   []int{0},
-			Limit:   1,
-		}})
-		sub.OnEvent = func(ev *nostr.Event) {
-			if ev.Kind == 0 {
-				applyAuthorProfile(pk, ev)
-			}
-		}
-		sub.OnEOSE = func() {
-			sub.Close()
-		}
-	}
+	proxyRelays := buildProxy(pk)
+	dom.PostToSW(buildProxyMsg(subID,
+		"{\"authors\":["+jstr(pk)+"],\"kinds\":[0,10002],\"limit\":3}",
+		proxyRelays))
 }
 
 // applyAuthorProfile updates cache and all pending note headers for a pubkey.
@@ -874,6 +901,11 @@ func updateNoteHeader(header dom.Element, name, pic string) {
 // --- Logout ---
 
 func doLogout() {
+	// Tell SW to clean up.
+	dom.PostToSW("[\"CLOSE\",\"prof\"]")
+	dom.PostToSW("[\"CLOSE\",\"feed\"]")
+	dom.PostToSW("[\"CLEAR_KEY\"]")
+
 	pubkey = nil
 	pubhex = ""
 	profileName = ""
@@ -886,7 +918,6 @@ func doLogout() {
 	relayURLs = nil
 	relayDots = nil
 	relayLabels = nil
-	relayConnected = nil
 	relayUserPick = nil
 
 	localstorage.RemoveItem(lsKeyPubkey)
@@ -1027,17 +1058,6 @@ func strIndex(s, sub string) int {
 }
 
 // --- Helpers ---
-
-// wsToHTTP converts wss:// to https:// and ws:// to http://.
-func wsToHTTP(u string) string {
-	if len(u) > 6 && u[:6] == "wss://" {
-		return "https://" + u[6:]
-	}
-	if len(u) > 5 && u[:5] == "ws://" {
-		return "http://" + u[5:]
-	}
-	return u
-}
 
 // normalizeURL strips trailing slashes and lowercases the scheme+host.
 func normalizeURL(u string) string {

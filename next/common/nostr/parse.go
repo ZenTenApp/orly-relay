@@ -192,6 +192,156 @@ func ParseRelayMessage(s string) (label, subID, payload string) {
 	return
 }
 
+// ParseFilter parses a JSON filter object into a Filter.
+func ParseFilter(s string) *Filter {
+	f := &Filter{}
+	i := skipWS(s, 0)
+	if i >= len(s) || s[i] != '{' {
+		return nil
+	}
+	i++
+	for i < len(s) {
+		i = skipWS(s, i)
+		if i >= len(s) {
+			return nil
+		}
+		if s[i] == '}' {
+			return f
+		}
+		if s[i] == ',' {
+			i++
+			continue
+		}
+		key, ni := parseString(s, i)
+		if ni < 0 {
+			return nil
+		}
+		i = skipWS(s, ni)
+		if i >= len(s) || s[i] != ':' {
+			return nil
+		}
+		i = skipWS(s, i+1)
+
+		switch key {
+		case "ids":
+			f.IDs, i = parseStrArray(s, i)
+		case "authors":
+			f.Authors, i = parseStrArray(s, i)
+		case "kinds":
+			f.Kinds, i = parseIntArray(s, i)
+		case "since":
+			f.Since, i = parseInt(s, i)
+		case "until":
+			f.Until, i = parseInt(s, i)
+		case "limit":
+			var l int64
+			l, i = parseInt(s, i)
+			f.Limit = int(l)
+		default:
+			if len(key) == 2 && key[0] == '#' {
+				if f.Tags == nil {
+					f.Tags = make(map[string][]string)
+				}
+				f.Tags[key], i = parseStrArray(s, i)
+			} else {
+				i = skipValue(s, i)
+			}
+		}
+		if i < 0 {
+			return nil
+		}
+	}
+	return f
+}
+
+// ParseEventsJSON parses a JSON array of event objects.
+func ParseEventsJSON(s string) []*Event {
+	i := skipWS(s, 0)
+	if i >= len(s) || s[i] != '[' {
+		return nil
+	}
+	i++
+	var events []*Event
+	for {
+		i = skipWS(s, i)
+		if i >= len(s) {
+			return events
+		}
+		if s[i] == ']' {
+			return events
+		}
+		if s[i] == ',' {
+			i++
+			continue
+		}
+		start := i
+		i = skipValue(s, i)
+		if i < 0 {
+			return events
+		}
+		ev := ParseEvent(s[start:i])
+		if ev != nil {
+			events = append(events, ev)
+		}
+	}
+}
+
+func parseStrArray(s string, i int) ([]string, int) {
+	i = skipWS(s, i)
+	if i >= len(s) || s[i] != '[' {
+		return nil, -1
+	}
+	i++
+	var out []string
+	for {
+		i = skipWS(s, i)
+		if i >= len(s) {
+			return nil, -1
+		}
+		if s[i] == ']' {
+			return out, i + 1
+		}
+		if s[i] == ',' {
+			i++
+			continue
+		}
+		v, ni := parseString(s, i)
+		if ni < 0 {
+			return nil, -1
+		}
+		out = append(out, v)
+		i = ni
+	}
+}
+
+func parseIntArray(s string, i int) ([]int, int) {
+	i = skipWS(s, i)
+	if i >= len(s) || s[i] != '[' {
+		return nil, -1
+	}
+	i++
+	var out []int
+	for {
+		i = skipWS(s, i)
+		if i >= len(s) {
+			return nil, -1
+		}
+		if s[i] == ']' {
+			return out, i + 1
+		}
+		if s[i] == ',' {
+			i++
+			continue
+		}
+		n, ni := parseInt(s, i)
+		if ni < 0 {
+			return nil, -1
+		}
+		out = append(out, int(n))
+		i = ni
+	}
+}
+
 // --- Low-level JSON parsing ---
 
 func skipWS(s string, i int) int {

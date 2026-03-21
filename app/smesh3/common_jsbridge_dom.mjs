@@ -164,3 +164,13 @@ export function ConsoleLog(msg) {
   $rt.dom.ConsoleLog(msg);
 }
 
+// jsbridge: dom.PostToSW
+export function PostToSW(msg) {
+  $rt.dom.PostToSW(msg);
+}
+
+// jsbridge: dom.OnSWMessage
+export function OnSWMessage(fn) {
+  $rt.dom.OnSWMessage(fn);
+}
+

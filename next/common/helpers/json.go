@@ -4,41 +4,44 @@ package helpers
 // No encoding/json dependency.
 
 // JsonString returns a JSON-escaped string with surrounding quotes.
+// Uses string concat to preserve non-ASCII in tinyjs.
 func JsonString(s string) string {
-	buf := make([]byte, 0, len(s)+2)
-	buf = append(buf, '"')
+	result := "\""
+	start := 0
 	for i := 0; i < len(s); i++ {
 		c := s[i]
+		var esc string
 		switch c {
 		case '"':
-			buf = append(buf, '\\', '"')
+			esc = "\\\""
 		case '\\':
-			buf = append(buf, '\\', '\\')
+			esc = "\\\\"
 		case '\n':
-			buf = append(buf, '\\', 'n')
+			esc = "\\n"
 		case '\r':
-			buf = append(buf, '\\', 'r')
+			esc = "\\r"
 		case '\t':
-			buf = append(buf, '\\', 't')
+			esc = "\\t"
 		case '\b':
-			buf = append(buf, '\\', 'b')
+			esc = "\\b"
 		case '\f':
-			buf = append(buf, '\\', 'f')
+			esc = "\\f"
 		default:
 			if c < 0x20 {
-				buf = append(buf, '\\', 'u', '0', '0',
-					hexChars[c>>4], hexChars[c&0x0f])
+				esc = "\\u00" + string(hexChars[c>>4]) + string(hexChars[c&0x0f])
 			} else {
-				buf = append(buf, c)
+				continue
 			}
 		}
+		result += s[start:i] + esc
+		start = i + 1
 	}
-	buf = append(buf, '"')
-	return string(buf)
+	return result + s[start:] + "\""
 }
 
 // JsonGetString extracts a string value for the given key from a JSON object.
 // Returns empty string if not found. Handles basic escape sequences.
+// Uses string concat (not []byte) to preserve non-ASCII characters in tinyjs.
 func JsonGetString(s, key string) string {
 	kq := "\"" + key + "\""
 	kqLen := len(kq)
@@ -59,29 +62,31 @@ func JsonGetString(s, key string) string {
 				continue
 			}
 			j++
-			var buf []byte
+			start := j
+			result := ""
 			for j < len(s) {
 				if s[j] == '\\' && j+1 < len(s) {
+					result += s[start:j]
 					j++
 					switch s[j] {
 					case '"', '\\', '/':
-						buf = append(buf, s[j])
+						result += s[j : j+1]
 					case 'n':
-						buf = append(buf, '\n')
+						result += "\n"
 					case 'r':
-						buf = append(buf, '\r')
+						result += "\r"
 					case 't':
-						buf = append(buf, '\t')
+						result += "\t"
 					default:
-						buf = append(buf, s[j])
+						result += s[j : j+1]
 					}
 					j++
+					start = j
 					continue
 				}
 				if s[j] == '"' {
-					return string(buf)
+					return result + s[start:j]
 				}
-				buf = append(buf, s[j])
 				j++
 			}
 		}

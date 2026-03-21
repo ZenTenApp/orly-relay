@@ -168,6 +168,11 @@ func (c *Conn) CloseSubscription(id string) {
 	ws.Send(c.wsConn, msg)
 }
 
+// Send sends a raw JSON message string.
+func (c *Conn) Send(msg string) {
+	ws.Send(c.wsConn, msg)
+}
+
 // Close closes the connection.
 func (c *Conn) Close() {
 	c.state = StateClosed

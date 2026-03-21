@@ -279,6 +279,30 @@ export function ConsoleLog(msg) {
   console.log('[sm3sh]', msg);
 }
 
+// Send a raw JSON string to the service worker controller.
+export function PostToSW(msg) {
+  const sw = navigator.serviceWorker;
+  if (!sw) return;
+  if (sw.controller) {
+    sw.controller.postMessage(msg);
+  } else {
+    sw.addEventListener('controllerchange', () => {
+      if (sw.controller) sw.controller.postMessage(msg);
+    }, { once: true });
+  }
+}
+
+// Register a handler for JSON array messages from the service worker.
+export function OnSWMessage(fn) {
+  if (!navigator.serviceWorker) return;
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    const d = event.data;
+    if (Array.isArray(d) && d.length > 0) {
+      fn(JSON.stringify(d));
+    }
+  });
+}
+
 // Get raw element (for advanced use within JS runtime only).
 export function getRawElement(id) {
   return _elements.get(id);

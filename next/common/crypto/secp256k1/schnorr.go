@@ -124,6 +124,26 @@ func PubKeyFromSecKey(seckey [32]byte) (pubkey [32]byte, ok bool) {
 	return feToBytes(P.X), true
 }
 
+// ECDH computes the shared secret x-coordinate: seckey * pubkey.
+// pubkey is a 32-byte x-only public key.
+// Returns the 32-byte x-coordinate and true on success.
+func ECDH(seckey, pubkey [32]byte) ([32]byte, bool) {
+	sk := scalarFromBytes(seckey[:])
+	if scalarIsZero(sk) {
+		return [32]byte{}, false
+	}
+	px := feFromBytes(pubkey[:])
+	P, ok := LiftX(px)
+	if !ok {
+		return [32]byte{}, false
+	}
+	R := ScalarMult(pointFromAffine(P), sk).toAffine()
+	if feIsZero(R.X) && feIsZero(R.Y) {
+		return [32]byte{}, false
+	}
+	return feToBytes(R.X), true
+}
+
 // tagged_hash(tag, msg) = SHA256(SHA256(tag) || SHA256(tag) || msg)
 func taggedHash(tag string, msg []byte) [32]byte {
 	tagHash := sha256.Sum([]byte(tag))

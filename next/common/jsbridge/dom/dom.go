@@ -85,5 +85,22 @@ func FetchText(url string, fn func(string)) { panic("jsbridge") }
 // FetchRelayInfo fetches NIP-11 relay info document from URL. Adds Accept header.
 func FetchRelayInfo(url string, fn func(string)) { panic("jsbridge") }
 
+// IDBGet retrieves a value from IndexedDB by key. Calls fn with "" if not found.
+func IDBGet(store, key string, fn func(string)) { panic("jsbridge") }
+
+// IDBPut stores a key-value pair in IndexedDB.
+func IDBPut(store, key, value string) { panic("jsbridge") }
+
+// IDBGetAll retrieves all key-value pairs from an IndexedDB store.
+// Calls fn once per entry with (key, value). Calls done() when finished.
+func IDBGetAll(store string, fn func(string, string), done func()) { panic("jsbridge") }
+
 // ConsoleLog logs a message to the browser console.
 func ConsoleLog(msg string) { panic("jsbridge") }
+
+// PostToSW sends a JSON message string to the service worker controller.
+func PostToSW(msg string) { panic("jsbridge") }
+
+// OnSWMessage registers a handler for JSON array messages from the service worker.
+// fn receives the JSON-stringified array for each message.
+func OnSWMessage(fn func(string)) { panic("jsbridge") }
