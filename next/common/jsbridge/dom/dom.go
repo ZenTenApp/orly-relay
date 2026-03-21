@@ -70,6 +70,9 @@ func SetTimeout(fn func(), ms int) int { panic("jsbridge") }
 // FirstChild returns the first child element, or 0 if none.
 func FirstChild(el Element) Element { panic("jsbridge") }
 
+// NextSibling returns the next sibling element, or 0 if none.
+func NextSibling(el Element) Element { panic("jsbridge") }
+
 // InsertBefore inserts newChild before refChild in parent.
 func InsertBefore(parent, newChild, refChild Element) { panic("jsbridge") }
 
@@ -78,3 +81,9 @@ func ReleaseElement(el Element) { panic("jsbridge") }
 
 // FetchText fetches a URL and calls fn with the response text.
 func FetchText(url string, fn func(string)) { panic("jsbridge") }
+
+// FetchRelayInfo fetches NIP-11 relay info document from URL. Adds Accept header.
+func FetchRelayInfo(url string, fn func(string)) { panic("jsbridge") }
+
+// ConsoleLog logs a message to the browser console.
+func ConsoleLog(msg string) { panic("jsbridge") }

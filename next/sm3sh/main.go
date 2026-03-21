@@ -10,6 +10,7 @@ import (
 )
 
 const (
+	version     = "v0.65.13"
 	lsKeyPubkey = "sm3sh-pubkey"
 	lsKeyMode   = "sm3sh-mode"
 	lsKeyTheme  = "sm3sh-theme"
@@ -37,14 +38,29 @@ var (
 	// App root — content goes here, not body (snackbar stays outside).
 	root dom.Element
 
-	// Relay tracking.
-	eventCount     int
-	connectedCount int
+	// Relay tracking — parallel slices, grown dynamically.
+	relayURLs      []string
+	relayConns     []*relay.Conn
 	relayDots      []dom.Element
-	popoverOpen    bool
+	relayLabels    []dom.Element
+	relayConnected []bool
+	relayUserPick  []bool // true = from user's kind 10002
+	relayHasProxy  []bool // true = relay supports _proxy extension
+
+	eventCount  int
+	popoverOpen bool
+
+	// Author profile cache.
+	authorNames  map[string]string       // pubkey hex -> display name
+	authorPics   map[string]string       // pubkey hex -> avatar URL
+	authorTs     map[string]int64        // pubkey hex -> created_at of cached kind 0
+	authorRelays map[string][]string     // pubkey hex -> relay URLs from kind 10002
+	pendingNotes map[string][]dom.Element // pubkey hex -> author header divs awaiting profile
+	fetchedK0    map[string]bool         // pubkey hex -> already tried kind 0 fetch
+	fetchedK10k  map[string]bool         // pubkey hex -> already tried kind 10002 fetch
 )
 
-var relays = []string{
+var defaultRelays = []string{
 	"wss://relay.orly.dev",
 	"wss://nostr.wine",
 	"wss://nostr.land",
@@ -176,14 +192,22 @@ func showLogin() {
 // --- Main app ---
 
 func showApp() {
+	// Init profile cache maps.
+	authorNames = make(map[string]string)
+	authorPics = make(map[string]string)
+	authorTs = make(map[string]int64)
+	authorRelays = make(map[string][]string)
+	pendingNotes = make(map[string][]dom.Element)
+	fetchedK0 = make(map[string]bool)
+	fetchedK10k = make(map[string]bool)
 
 	// === Top bar ===
 	bar := dom.CreateElement("div")
 	dom.SetStyle(bar, "display", "flex")
 	dom.SetStyle(bar, "alignItems", "center")
 	dom.SetStyle(bar, "padding", "8px 16px")
-	dom.SetStyle(bar, "borderBottom", "2px solid var(--muted)")
-	dom.SetStyle(bar, "background", "var(--bg)")
+
+	dom.SetStyle(bar, "background", "var(--bg2)")
 	dom.SetStyle(bar, "position", "sticky")
 	dom.SetStyle(bar, "top", "0")
 	dom.SetStyle(bar, "zIndex", "100")
@@ -200,6 +224,7 @@ func showApp() {
 	dom.SetAttribute(avatarEl, "width", "28")
 	dom.SetAttribute(avatarEl, "height", "28")
 	dom.SetStyle(avatarEl, "borderRadius", "50%")
+	dom.SetStyle(avatarEl, "objectFit", "cover")
 	dom.SetStyle(avatarEl, "display", "none")
 	dom.SetAttribute(avatarEl, "onerror", "this.style.display='none'")
 	dom.AppendChild(left, avatarEl)
@@ -262,11 +287,12 @@ func showApp() {
 	dom.SetTextContent(logout, "logout")
 	dom.SetStyle(logout, "fontFamily", "'Fira Code', monospace")
 	dom.SetStyle(logout, "fontSize", "12px")
-	dom.SetStyle(logout, "background", "none")
-	dom.SetStyle(logout, "border", "2px solid var(--muted)")
+	dom.SetStyle(logout, "background", "color-mix(in srgb, var(--fg) 40%, transparent)")
+	dom.SetStyle(logout, "border", "none")
 	dom.SetStyle(logout, "color", "var(--fg)")
 	dom.SetStyle(logout, "borderRadius", "4px")
-	dom.SetStyle(logout, "padding", "6px 16px")
+	dom.SetStyle(logout, "height", "32px")
+	dom.SetStyle(logout, "padding", "0 16px")
 	dom.SetStyle(logout, "cursor", "pointer")
 	dom.AddEventListener(logout, "click", dom.RegisterCallback(func() {
 		doLogout()
@@ -294,8 +320,8 @@ func showApp() {
 	dom.SetStyle(bottomBar, "display", "flex")
 	dom.SetStyle(bottomBar, "alignItems", "center")
 	dom.SetStyle(bottomBar, "padding", "0 16px")
-	dom.SetStyle(bottomBar, "borderTop", "2px solid var(--muted)")
-	dom.SetStyle(bottomBar, "background", "var(--bg)")
+
+	dom.SetStyle(bottomBar, "background", "var(--bg2)")
 	dom.SetStyle(bottomBar, "fontSize", "12px")
 	dom.SetStyle(bottomBar, "color", "var(--fg)")
 	dom.SetStyle(bottomBar, "cursor", "pointer")
@@ -305,9 +331,16 @@ func showApp() {
 	dom.SetTextContent(statusEl, "connecting...")
 	dom.AppendChild(bottomBar, statusEl)
 
-	dom.AddEventListener(bottomBar, "click", dom.RegisterCallback(func() {
+	dom.AddEventListener(statusEl, "click", dom.RegisterCallback(func() {
 		togglePopover()
 	}))
+
+	ver := dom.CreateElement("span")
+	dom.SetTextContent(ver, "sm3sh "+version)
+	dom.SetStyle(ver, "marginLeft", "auto")
+	dom.SetStyle(ver, "color", "var(--accent)")
+	dom.AppendChild(bottomBar, ver)
+
 	dom.AppendChild(root, bottomBar)
 
 	// === Relay popover (hidden) ===
@@ -322,29 +355,109 @@ func showApp() {
 	dom.SetStyle(popoverEl, "fontSize", "12px")
 	dom.SetStyle(popoverEl, "display", "none")
 	dom.SetStyle(popoverEl, "zIndex", "99")
-
-	relayDots = make([]dom.Element, len(relays))
-	for i, url := range relays {
-		row := dom.CreateElement("div")
-		dom.SetStyle(row, "padding", "3px 0")
-
-		dot := dom.CreateElement("span")
-		dom.SetTextContent(dot, "\u25CF") // ●
-		dom.SetStyle(dot, "color", "var(--muted)")
-		dom.SetStyle(dot, "marginRight", "8px")
-		relayDots[i] = dot
-		dom.AppendChild(row, dot)
-
-		label := dom.CreateElement("span")
-		dom.SetTextContent(label, url)
-		dom.AppendChild(row, label)
-
-		dom.AppendChild(popoverEl, row)
-	}
 	dom.AppendChild(root, popoverEl)
 
-	go connectRelays()
+	// Add default relays and connect.
+	for _, url := range defaultRelays {
+		addRelay(url, false)
+	}
+
 	go fetchProfile()
+}
+
+// addRelay adds a relay to the list, creates its popover row, and connects.
+// userPick=true means it came from the user's kind 10002 relay list.
+func addRelay(url string, userPick bool) {
+	url = normalizeURL(url)
+	// Dedup.
+	for i, u := range relayURLs {
+		if u == url {
+			// Promote to user pick if needed.
+			if userPick && !relayUserPick[i] {
+				relayUserPick[i] = true
+				dom.SetStyle(relayLabels[i], "fontWeight", "bold")
+			}
+			return
+		}
+	}
+
+	idx := len(relayURLs)
+	relayURLs = append(relayURLs, url)
+	relayConns = append(relayConns, nil)
+	relayConnected = append(relayConnected, false)
+	relayUserPick = append(relayUserPick, userPick)
+	relayHasProxy = append(relayHasProxy, false)
+
+	// Popover row.
+	row := dom.CreateElement("div")
+	dom.SetStyle(row, "padding", "3px 0")
+
+	dot := dom.CreateElement("span")
+	dom.SetTextContent(dot, "\u25CF") // ●
+	dom.SetStyle(dot, "color", "var(--muted)")
+	dom.SetStyle(dot, "marginRight", "8px")
+	relayDots = append(relayDots, dot)
+	dom.AppendChild(row, dot)
+
+	label := dom.CreateElement("span")
+	dom.SetTextContent(label, url)
+	if userPick {
+		dom.SetStyle(label, "fontWeight", "bold")
+	}
+	relayLabels = append(relayLabels, label)
+	dom.AppendChild(row, label)
+
+	dom.AppendChild(popoverEl, row)
+
+	// Fetch NIP-11 relay info to check for _proxy support.
+	infoURL := wsToHTTP(url)
+	dom.FetchRelayInfo(infoURL, func(body string) {
+		if len(body) > 0 {
+			pq := strIndex(body, "\"proxy_query\"")
+			if pq >= 0 {
+				chunk := body[pq:]
+				if strIndex(chunk, "\"enabled\":true") >= 0 || strIndex(chunk, "\"enabled\": true") >= 0 {
+					relayHasProxy[idx] = true
+				}
+			}
+		}
+	})
+
+	// Connect.
+	conn := relay.Dial(url)
+	conn.OnReady(func(ok bool) {
+		if !ok {
+			dom.SetStyle(relayDots[idx], "color", "#e55")
+			return
+		}
+		relayConns[idx] = conn
+		relayConnected[idx] = true
+		dom.SetStyle(relayDots[idx], "color", "#5b5")
+		updateStatus()
+
+		// Profile data.
+		profSub := conn.Subscribe("prof", []*nostr.Filter{{
+			Authors: []string{pubhex},
+			Kinds:   []int{0, 10002, 10050},
+			Limit:   5,
+		}})
+		profSub.OnEvent = func(ev *nostr.Event) {
+			handleProfileEvent(ev)
+		}
+
+		// Feed.
+		feedSub := conn.Subscribe("feed", []*nostr.Filter{{
+			Kinds: []int{1},
+			Limit: 20,
+		}})
+		feedSub.OnEvent = func(ev *nostr.Event) {
+			eventCount++
+			renderNote(ev)
+		}
+		feedSub.OnEOSE = func() {
+			updateStatus()
+		}
+	})
 }
 
 func togglePopover() {
@@ -353,48 +466,6 @@ func togglePopover() {
 		dom.SetStyle(popoverEl, "display", "block")
 	} else {
 		dom.SetStyle(popoverEl, "display", "none")
-	}
-}
-
-// --- Relay connections ---
-
-func connectRelays() {
-	for i, url := range relays {
-		u := url
-		idx := i
-		conn := relay.Dial(u)
-		conn.OnReady(func(ok bool) {
-			if !ok {
-				dom.SetStyle(relayDots[idx], "color", "#e55")
-				return
-			}
-			connectedCount++
-			dom.SetStyle(relayDots[idx], "color", "#5b5")
-			updateStatus()
-
-			// Profile data from this relay too.
-			profSub := conn.Subscribe("prof", []*nostr.Filter{{
-				Authors: []string{pubhex},
-				Kinds:   []int{0, 10002, 10050},
-				Limit:   5,
-			}})
-			profSub.OnEvent = func(ev *nostr.Event) {
-				handleProfileEvent(ev)
-			}
-
-			// Feed.
-			feedSub := conn.Subscribe("feed", []*nostr.Filter{{
-				Kinds: []int{1},
-				Limit: 20,
-			}})
-			feedSub.OnEvent = func(ev *nostr.Event) {
-				eventCount++
-				renderNote(ev)
-			}
-			feedSub.OnEOSE = func() {
-				updateStatus()
-			}
-		})
 	}
 }
 
@@ -427,9 +498,9 @@ func handleProfileEvent(ev *nostr.Event) {
 			return
 		}
 		profileTs = ev.CreatedAt
-		name := helpers.JsonGetString(ev.Content, "display_name")
+		name := helpers.JsonGetString(ev.Content, "name")
 		if name == "" {
-			name = helpers.JsonGetString(ev.Content, "name")
+			name = helpers.JsonGetString(ev.Content, "display_name")
 		}
 		pic := helpers.JsonGetString(ev.Content, "picture")
 		if name != "" {
@@ -442,8 +513,16 @@ func handleProfileEvent(ev *nostr.Event) {
 			dom.SetStyle(avatarEl, "display", "block")
 		}
 	case 10002:
-		// NIP-65 relay list — stored for future use.
-		_ = ev.Tags.GetAll("r")
+		// NIP-65 relay list — connect to user's preferred relays.
+		tags := ev.Tags.GetAll("r")
+		if tags != nil {
+			for _, tag := range tags {
+				url := tag.Value()
+				if url != "" {
+					addRelay(url, true)
+				}
+			}
+		}
 	case 10050:
 		// DM inbox relay list — stored for future use.
 		_ = ev.Tags.GetAll("relay")
@@ -451,8 +530,14 @@ func handleProfileEvent(ev *nostr.Event) {
 }
 
 func updateStatus() {
+	connected := 0
+	for _, c := range relayConnected {
+		if c {
+			connected++
+		}
+	}
 	dom.SetTextContent(statusEl,
-		itoa(connectedCount)+"/"+itoa(len(relays))+" relays | "+itoa(eventCount)+" events")
+		itoa(connected)+"/"+itoa(len(relayURLs))+" relays | "+itoa(eventCount)+" events")
 }
 
 // --- Feed rendering ---
@@ -462,21 +547,55 @@ func renderNote(ev *nostr.Event) {
 	dom.SetStyle(note, "borderBottom", "1px solid var(--border)")
 	dom.SetStyle(note, "padding", "12px 0")
 
-	// Author.
-	author := dom.CreateElement("div")
-	dom.SetStyle(author, "fontSize", "12px")
-	dom.SetStyle(author, "color", "var(--muted)")
-	dom.SetStyle(author, "marginBottom", "4px")
-	npub := helpers.EncodeNpub(helpers.HexDecode(ev.PubKey))
-	if len(npub) > 20 {
-		dom.SetTextContent(author, npub[:12]+"..."+npub[len(npub)-4:])
+	// Author header: avatar + name.
+	header := dom.CreateElement("div")
+	dom.SetStyle(header, "display", "flex")
+	dom.SetStyle(header, "alignItems", "center")
+	dom.SetStyle(header, "gap", "8px")
+	dom.SetStyle(header, "marginBottom", "4px")
+
+	avatar := dom.CreateElement("img")
+	dom.SetAttribute(avatar, "width", "24")
+	dom.SetAttribute(avatar, "height", "24")
+	dom.SetStyle(avatar, "borderRadius", "50%")
+	dom.SetStyle(avatar, "objectFit", "cover")
+	dom.SetStyle(avatar, "flexShrink", "0")
+
+	nameSpan := dom.CreateElement("span")
+	dom.SetStyle(nameSpan, "fontSize", "12px")
+	dom.SetStyle(nameSpan, "fontFamily", "system-ui, sans-serif, 'Noto Color Emoji'")
+	dom.SetStyle(nameSpan, "fontWeight", "bold")
+	dom.SetStyle(nameSpan, "color", "var(--muted)")
+
+	pk := ev.PubKey
+	if pic, ok := authorPics[pk]; ok && pic != "" {
+		dom.SetAttribute(avatar, "src", pic)
+		dom.SetAttribute(avatar, "onerror", "this.style.display='none'")
 	} else {
-		dom.SetTextContent(author, helpers.PubkeyShort(ev.PubKey))
+		dom.SetStyle(avatar, "display", "none")
 	}
-	dom.AppendChild(note, author)
+	if name, ok := authorNames[pk]; ok && name != "" {
+		dom.SetTextContent(nameSpan, name)
+	} else {
+		npub := helpers.EncodeNpub(helpers.HexDecode(pk))
+		if len(npub) > 20 {
+			dom.SetTextContent(nameSpan, npub[:12]+"..."+npub[len(npub)-4:])
+		}
+	}
+
+	dom.AppendChild(header, avatar)
+	dom.AppendChild(header, nameSpan)
+	dom.AppendChild(note, header)
+
+	// Queue profile fetch if not cached.
+	if _, cached := authorNames[pk]; !cached && !fetchedK0[pk] {
+		pendingNotes[pk] = append(pendingNotes[pk], header)
+		fetchAuthorProfile(pk)
+	}
 
 	// Content.
 	content := dom.CreateElement("div")
+	dom.SetStyle(content, "fontFamily", "system-ui, sans-serif, 'Noto Color Emoji'")
 	dom.SetStyle(content, "fontSize", "14px")
 	dom.SetStyle(content, "lineHeight", "1.5")
 	dom.SetStyle(content, "wordBreak", "break-word")
@@ -484,7 +603,7 @@ func renderNote(ev *nostr.Event) {
 	if len(text) > 500 {
 		text = text[:500] + "..."
 	}
-	dom.SetTextContent(content, text)
+	dom.SetInnerHTML(content, renderMarkdown(text))
 	dom.AppendChild(note, content)
 
 	// Prepend (newest first).
@@ -496,6 +615,191 @@ func renderNote(ev *nostr.Event) {
 	}
 }
 
+// getProxyConn returns the first connected relay that supports _proxy, or nil.
+func getProxyConn() *relay.Conn {
+	for i, c := range relayConns {
+		if c != nil && relayConnected[i] && relayHasProxy[i] {
+			return c
+		}
+	}
+	return nil
+}
+
+// getAnyConn returns the first connected relay, or nil.
+func getAnyConn() *relay.Conn {
+	for i, c := range relayConns {
+		if c != nil && relayConnected[i] {
+			return c
+		}
+	}
+	return nil
+}
+
+var profileSubCounter int
+
+// fetchAuthorProfile fetches kind 0 for an author via a proxy-capable relay.
+func fetchAuthorProfile(pk string) {
+	if fetchedK0[pk] {
+		return
+	}
+	fetchedK0[pk] = true
+
+	proxyConn := getProxyConn()
+	anyConn := getAnyConn()
+	if proxyConn == nil && anyConn == nil {
+		fetchedK0[pk] = false // retry later
+		return
+	}
+
+	profileSubCounter++
+	subID := "ap-" + itoa(profileSubCounter)
+
+	if proxyConn != nil {
+		// Use _proxy to fetch from author's relays or purplepag.es.
+		proxy := authorRelays[pk]
+		if len(proxy) == 0 {
+			proxy = []string{"wss://purplepag.es"}
+		}
+		sub := proxyConn.Subscribe(subID, []*nostr.Filter{{
+			Authors: []string{pk},
+			Kinds:   []int{0},
+			Limit:   1,
+			Proxy:   proxy,
+		}})
+		sub.OnEvent = func(ev *nostr.Event) {
+			if ev.Kind == 0 {
+				applyAuthorProfile(pk, ev)
+			}
+		}
+		sub.OnEOSE = func() {
+			sub.Close()
+			if _, got := authorNames[pk]; !got && !fetchedK10k[pk] {
+				fetchAuthorRelayList(pk)
+			}
+		}
+	} else {
+		// No proxy relay — plain fetch from connected relay.
+		sub := anyConn.Subscribe(subID, []*nostr.Filter{{
+			Authors: []string{pk},
+			Kinds:   []int{0},
+			Limit:   1,
+		}})
+		sub.OnEvent = func(ev *nostr.Event) {
+			if ev.Kind == 0 {
+				applyAuthorProfile(pk, ev)
+			}
+		}
+		sub.OnEOSE = func() {
+			sub.Close()
+		}
+	}
+}
+
+// fetchAuthorRelayList fetches kind 10002 for an author, then retries kind 0.
+func fetchAuthorRelayList(pk string) {
+	if fetchedK10k[pk] {
+		return
+	}
+	fetchedK10k[pk] = true
+
+	proxyConn := getProxyConn()
+	if proxyConn == nil {
+		return
+	}
+
+	profileSubCounter++
+	subID := "ar-" + itoa(profileSubCounter)
+
+	sub := proxyConn.Subscribe(subID, []*nostr.Filter{{
+		Authors: []string{pk},
+		Kinds:   []int{10002},
+		Limit:   1,
+		Proxy:   []string{"wss://purplepag.es"},
+	}})
+	sub.OnEvent = func(ev *nostr.Event) {
+		if ev.Kind == 10002 {
+			tags := ev.Tags.GetAll("r")
+			if tags != nil {
+				var urls []string
+				for _, tag := range tags {
+					u := tag.Value()
+					if u != "" {
+						urls = append(urls, u)
+					}
+				}
+				if len(urls) > 0 {
+					authorRelays[pk] = urls
+				}
+			}
+		}
+	}
+	sub.OnEOSE = func() {
+		sub.Close()
+		if len(authorRelays[pk]) > 0 {
+			fetchedK0[pk] = false
+			fetchAuthorProfile(pk)
+		}
+	}
+}
+
+// applyAuthorProfile updates cache and all pending note headers for a pubkey.
+func applyAuthorProfile(pk string, ev *nostr.Event) {
+	if ev.CreatedAt <= authorTs[pk] {
+		return
+	}
+	authorTs[pk] = ev.CreatedAt
+	name := helpers.JsonGetString(ev.Content, "name")
+	if name == "" {
+		name = helpers.JsonGetString(ev.Content, "display_name")
+	}
+	pic := helpers.JsonGetString(ev.Content, "picture")
+	if name != "" {
+		authorNames[pk] = name
+	}
+	if pic != "" {
+		authorPics[pk] = pic
+	}
+
+	// Update logged-in user's header too.
+	if pk == pubhex {
+		if name != "" {
+			profileName = name
+			dom.SetTextContent(nameEl, name)
+		}
+		if pic != "" {
+			profilePic = pic
+			dom.SetAttribute(avatarEl, "src", pic)
+			dom.SetStyle(avatarEl, "display", "block")
+		}
+	}
+
+	// Update all pending note headers.
+	if headers, ok := pendingNotes[pk]; ok {
+		for _, h := range headers {
+			updateNoteHeader(h, name, pic)
+		}
+		delete(pendingNotes, pk)
+	}
+}
+
+// updateNoteHeader fills in avatar+name on a note's author header div.
+func updateNoteHeader(header dom.Element, name, pic string) {
+	// First child is <img>, second is <span>.
+	img := dom.FirstChild(header)
+	if img == 0 {
+		return
+	}
+	span := dom.NextSibling(img)
+	if pic != "" {
+		dom.SetAttribute(img, "src", pic)
+		dom.SetAttribute(img, "onerror", "this.style.display='none'")
+		dom.SetStyle(img, "display", "")
+	}
+	if name != "" {
+		dom.SetTextContent(span, name)
+	}
+}
+
 // --- Logout ---
 
 func doLogout() {
@@ -504,9 +808,15 @@ func doLogout() {
 	profileName = ""
 	profilePic = ""
 	profileTs = 0
-	connectedCount = 0
 	eventCount = 0
 	popoverOpen = false
+
+	// Reset relay tracking.
+	relayURLs = nil
+	relayDots = nil
+	relayLabels = nil
+	relayConnected = nil
+	relayUserPick = nil
 
 	localstorage.RemoveItem(lsKeyPubkey)
 	localstorage.RemoveItem(lsKeyMode)
@@ -515,7 +825,167 @@ func doLogout() {
 	showLogin()
 }
 
+// --- Markdown rendering ---
+// All functions use string concatenation and indexOf — no byte-level ops.
+// tinyjs compiles Go strings to JS strings (UTF-16); byte indexing corrupts emoji.
+
+// renderMarkdown converts note text to safe HTML.
+func renderMarkdown(s string) string {
+	s = strReplace(s, "&", "&amp;")
+	s = strReplace(s, "<", "&lt;")
+	s = strReplace(s, ">", "&gt;")
+	s = strReplace(s, "\"", "&quot;")
+	s = wrapDelimited(s, "`", "<code>", "</code>")
+	s = wrapDelimited(s, "**", "<strong>", "</strong>")
+	s = wrapDelimited(s, "*", "<em>", "</em>")
+	s = autoLinkURLs(s)
+	s = strReplace(s, "\n", "<br>")
+	return s
+}
+
+// strReplace replaces all occurrences of old with new using indexOf.
+func strReplace(s, old, nw string) string {
+	out := ""
+	for {
+		idx := strIndex(s, old)
+		if idx < 0 {
+			return out + s
+		}
+		out += s[:idx] + nw
+		s = s[idx+len(old):]
+	}
+}
+
+// wrapDelimited finds matching pairs of delim and wraps content in open/close tags.
+func wrapDelimited(s, delim, open, close string) string {
+	out := ""
+	for {
+		start := strIndex(s, delim)
+		if start < 0 {
+			return out + s
+		}
+		end := strIndex(s[start+len(delim):], delim)
+		if end < 0 {
+			return out + s
+		}
+		end += start + len(delim)
+		inner := s[start+len(delim) : end]
+		if len(inner) == 0 {
+			out += s[:start+len(delim)]
+			s = s[start+len(delim):]
+			continue
+		}
+		out += s[:start] + open + inner + close
+		s = s[end+len(delim):]
+	}
+}
+
+func autoLinkURLs(s string) string {
+	out := ""
+	for {
+		hi := strIndex(s, "https://")
+		lo := strIndex(s, "http://")
+		idx := -1
+		if hi >= 0 && (lo < 0 || hi <= lo) {
+			idx = hi
+		} else if lo >= 0 {
+			idx = lo
+		}
+		if idx < 0 {
+			return out + s
+		}
+		out += s[:idx]
+		s = s[idx:]
+		// Find end of URL.
+		end := 0
+		for end < len(s) {
+			c := s[end : end+1]
+			if c == " " || c == "\n" || c == "\r" || c == "\t" || c == "<" || c == ">" {
+				break
+			}
+			end++
+		}
+		// Trim trailing punctuation.
+		for end > 0 {
+			c := s[end-1 : end]
+			if c == "." || c == "," || c == ")" || c == ";" {
+				end--
+			} else {
+				break
+			}
+		}
+		url := s[:end]
+		if isImageURL(url) {
+			out += "<img src=\"" + url + "\" style=\"display:block;max-width:100%;border-radius:8px;margin:4px 0\" loading=\"lazy\">"
+		} else {
+			out += "<a href=\"" + url + "\" target=\"_blank\" rel=\"noopener\" style=\"color:var(--accent);word-break:break-all\">" + url + "</a>"
+		}
+		s = s[end:]
+	}
+}
+
+func isImageURL(url string) bool {
+	u := toLower(url)
+	return hasSuffix(u, ".jpg") || hasSuffix(u, ".jpeg") || hasSuffix(u, ".png") ||
+		hasSuffix(u, ".gif") || hasSuffix(u, ".webp") || hasSuffix(u, ".svg")
+}
+
+func hasSuffix(s, suffix string) bool {
+	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
+}
+
+// strIndex finds substring in string. Returns -1 if not found.
+func strIndex(s, sub string) int {
+	sl := len(sub)
+	for i := 0; i <= len(s)-sl; i++ {
+		if s[i:i+sl] == sub {
+			return i
+		}
+	}
+	return -1
+}
+
 // --- Helpers ---
+
+// wsToHTTP converts wss:// to https:// and ws:// to http://.
+func wsToHTTP(u string) string {
+	if len(u) > 6 && u[:6] == "wss://" {
+		return "https://" + u[6:]
+	}
+	if len(u) > 5 && u[:5] == "ws://" {
+		return "http://" + u[5:]
+	}
+	return u
+}
+
+// normalizeURL strips trailing slashes and lowercases the scheme+host.
+func normalizeURL(u string) string {
+	for len(u) > 0 && u[len(u)-1] == '/' {
+		u = u[:len(u)-1]
+	}
+	// Lowercase scheme and host (before first / after ://).
+	if len(u) > 6 && (u[:6] == "wss://" || u[:6] == "ws:///") {
+		rest := u[6:]
+		slash := strIndex(rest, "/")
+		if slash < 0 {
+			return u[:6] + toLower(rest)
+		}
+		return u[:6] + toLower(rest[:slash]) + rest[slash:]
+	}
+	return u
+}
+
+func toLower(s string) string {
+	b := make([]byte, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 32
+		}
+		b[i] = c
+	}
+	return string(b)
+}
 
 func clearChildren(el dom.Element) {
 	dom.SetInnerHTML(el, "")

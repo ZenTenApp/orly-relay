@@ -35,8 +35,9 @@ $rt.types.registerType('common/nostr.Filter', {
     { name: 'Since', type: 'int64', tag: '', embedded: false },
     { name: 'Until', type: 'int64', tag: '', embedded: false },
     { name: 'Limit', type: 'int', tag: '', embedded: false },
+    { name: 'Proxy', type: '[]string', tag: '', embedded: false },
   ],
-  zero: () => ({ IDs: null, Authors: null, Kinds: null, Tags: null, Since: 0, Until: 0, Limit: 0 }),
+  zero: () => ({ IDs: null, Authors: null, Kinds: null, Tags: null, Since: 0, Until: 0, Limit: 0, Proxy: null }),
 });
 export function init() {
   return;
@@ -165,408 +166,6 @@ export function serializeTags(buf, tags) {
         $t26_27 = $t43_44;
         $t27_28 = $t28_29;
         $block = 6; break;
-        break;
-      }
-    }
-  }
-}
-
-export function appendField(buf, first) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = first.$get();
-        if ($t0_1) {
-          $t5_6 = buf;
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        $t1_2 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t2_3 = $t1_2.$get().addr(0);
-        $t2_3.$set(44);
-        $t3_4 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
-        $t4_5 = $rt.builtin.appendSlice(buf, $t3_4);
-        $t5_6 = $t4_5;
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        first.$set(false);
-        return $t5_6;
-        break;
-      }
-    }
-  }
-}
-
-export function appendStrArray(buf, ss) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2 = $t0_1.$get().addr(0);
-        $t1_2.$set(91);
-        $t2_3 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-        $t3_4 = $rt.builtin.appendSlice(buf, $t2_3);
-        $t4_5 = $rt.builtin.len(ss);
-        $t5_6 = $t3_4;
-        $t6_7 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t7_8 = ($t6_7 + 1);
-        $t8_9 = ($t7_8 < $t4_5);
-        if ($t8_9) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t9_10 = ss.addr($t7_8);
-        $t10_11 = $t9_10.$get();
-        $t11_12 = ($t7_8 > 0);
-        if ($t11_12) {
-          $block = 4; break;
-        }
-        else {
-          $t20_21 = $t5_6;
-          $block = 5; break;
-        }
-        break;
-      }
-      case 3: {
-        $t12_13 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t13_14 = $t12_13.$get().addr(0);
-        $t13_14.$set(93);
-        $t14_15 = $rt.builtin.sliceSlice($t12_13.$get(), undefined, undefined, undefined);
-        $t15_16 = $rt.builtin.appendSlice($t5_6, $t14_15);
-        return $t15_16;
-        break;
-      }
-      case 4: {
-        $t16_17 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t17_18 = $t16_17.$get().addr(0);
-        $t17_18.$set(44);
-        $t18_19 = $rt.builtin.sliceSlice($t16_17.$get(), undefined, undefined, undefined);
-        $t19_20 = $rt.builtin.appendSlice($t5_6, $t18_19);
-        $t20_21 = $t19_20;
-        $block = 5; break;
-        break;
-      }
-      case 5: {
-        $t21_22 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t22_23 = $t21_22.$get().addr(0);
-        $t22_23.$set(34);
-        $t23_24 = $rt.builtin.sliceSlice($t21_22.$get(), undefined, undefined, undefined);
-        $t24_25 = $rt.builtin.appendSlice($t20_21, $t23_24);
-        $t25_26 = $rt.builtin.appendString($t24_25, $t10_11);
-        $t26_27 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t27_28 = $t26_27.$get().addr(0);
-        $t27_28.$set(34);
-        $t28_29 = $rt.builtin.sliceSlice($t26_27.$get(), undefined, undefined, undefined);
-        $t29_30 = $rt.builtin.appendSlice($t25_26, $t28_29);
-        $t5_6 = $t29_30;
-        $t6_7 = $t7_8;
-        $block = 1; break;
-        break;
-      }
-    }
-  }
-}
-
-export function intToStr(n) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = (n === 0);
-        if ($t0_1) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return '0';
-        break;
-      }
-      case 2: {
-        $t1_2 = (n < 0);
-        if ($t1_2) {
-          $block = 3; break;
-        }
-        else {
-          $t3_4 = n;
-          $t4_5 = false;
-          $block = 4; break;
-        }
-        break;
-      }
-      case 3: {
-        $t2_3 = -n;
-        $t3_4 = $t2_3;
-        $t4_5 = true;
-        $block = 4; break;
-        break;
-      }
-      case 4: {
-        $t5_6 = { $value: $rt.builtin.makeSlice(20, 20, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t12_13 = $t3_4;
-        $t13_14 = 20;
-        $block = 7; break;
-        break;
-      }
-      case 5: {
-        $t6_7 = ($t13_14 - 1);
-        $t7_8 = ($t12_13 % 10);
-        $t8_9 = (48 + $t7_8);
-        $t9_10 = ($t8_9 & 0xFF);
-        $t10_11 = $t5_6.$get().addr($t6_7);
-        $t10_11.$set($t9_10);
-        $t11_12 = Math.trunc($t12_13 / 10);
-        $t12_13 = $t11_12;
-        $t13_14 = $t6_7;
-        $block = 7; break;
-        break;
-      }
-      case 6: {
-        if ($t4_5) {
-          $block = 8; break;
-        }
-        else {
-          $t17_18 = $t13_14;
-          $block = 9; break;
-        }
-        break;
-      }
-      case 7: {
-        $t14_15 = ($t12_13 > 0);
-        if ($t14_15) {
-          $block = 5; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 8: {
-        $t15_16 = ($t13_14 - 1);
-        $t16_17 = $t5_6.$get().addr($t15_16);
-        $t16_17.$set(45);
-        $t17_18 = $t15_16;
-        $block = 9; break;
-        break;
-      }
-      case 9: {
-        $t18_19 = $rt.builtin.sliceSlice($t5_6.$get(), $t17_18, undefined, undefined);
-        $t19_20 = $rt.builtin.bytesToString($t18_19);
-        return $t19_20;
-        break;
-      }
-    }
-  }
-}
-
-export function containsStr(ss, s) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(ss);
-        $t1_2 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t2_3 = ($t1_2 + 1);
-        $t3_4 = ($t2_3 < $t0_1);
-        if ($t3_4) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t4_5 = ss.addr($t2_3);
-        $t5_6 = $t4_5.$get();
-        $t6_7 = ($t5_6 === s);
-        if ($t6_7) {
-          $block = 4; break;
-        }
-        else {
-          $t1_2 = $t2_3;
-          $block = 1; break;
-        }
-        break;
-      }
-      case 3: {
-        return false;
-        break;
-      }
-      case 4: {
-        return true;
-        break;
-      }
-    }
-  }
-}
-
-export function containsInt(ns, n) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(ns);
-        $t1_2 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t2_3 = ($t1_2 + 1);
-        $t3_4 = ($t2_3 < $t0_1);
-        if ($t3_4) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t4_5 = ns.addr($t2_3);
-        $t5_6 = $t4_5.$get();
-        $t6_7 = ($t5_6 === n);
-        if ($t6_7) {
-          $block = 4; break;
-        }
-        else {
-          $t1_2 = $t2_3;
-          $block = 1; break;
-        }
-        break;
-      }
-      case 3: {
-        return false;
-        break;
-      }
-      case 4: {
-        return true;
-        break;
-      }
-    }
-  }
-}
-
-export function eventHasTagValue(e, tagKey, values) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $get() { return e.$get().Tags; }, $set(v) { const obj = e.$get(); obj.Tags = v; e.$set(obj); } };
-        $t1_2 = $t0_1.$get();
-        $t2_3 = $rt.builtin.len($t1_2);
-        $t3_4 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t4_5 = ($t3_4 + 1);
-        $t5_6 = ($t4_5 < $t2_3);
-        if ($t5_6) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t6_7 = $t1_2.addr($t4_5);
-        $t7_8 = $t6_7.$get();
-        $t8_9 = $rt.builtin.len($t7_8);
-        $t9_10 = ($t8_9 > 1);
-        if ($t9_10) {
-          $block = 5; break;
-        }
-        else {
-          $t3_4 = $t4_5;
-          $block = 1; break;
-        }
-        break;
-      }
-      case 3: {
-        return false;
-        break;
-      }
-      case 4: {
-        $t10_11 = $rt.builtin.len(values);
-        $t14_15 = -1;
-        $block = 6; break;
-        break;
-      }
-      case 5: {
-        $t11_12 = $t7_8.addr(0);
-        $t12_13 = $t11_12.$get();
-        $t13_14 = ($t12_13 === tagKey);
-        if ($t13_14) {
-          $block = 4; break;
-        }
-        else {
-          $t3_4 = $t4_5;
-          $block = 1; break;
-        }
-        break;
-      }
-      case 6: {
-        $t15_16 = ($t14_15 + 1);
-        $t16_17 = ($t15_16 < $t10_11);
-        if ($t16_17) {
-          $block = 7; break;
-        }
-        else {
-          $t3_4 = $t4_5;
-          $block = 1; break;
-        }
-        break;
-      }
-      case 7: {
-        $t17_18 = values.addr($t15_16);
-        $t18_19 = $t17_18.$get();
-        $t19_20 = $t7_8.addr(1);
-        $t20_21 = $t19_20.$get();
-        $t21_22 = ($t20_21 === $t18_19);
-        if ($t21_22) {
-          $block = 8; break;
-        }
-        else {
-          $t14_15 = $t15_16;
-          $block = 6; break;
-        }
-        break;
-      }
-      case 8: {
-        return true;
         break;
       }
     }
@@ -1574,7 +1173,7 @@ export function skipWS(s, i) {
 }
 
 export function parseString(s, i) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -1595,19 +1194,17 @@ export function parseString(s, i) {
       }
       case 2: {
         $t2_3 = (i + 1);
-        $t3_4 = { $value: $rt.builtin.makeSlice(64, 64, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t4_5 = $rt.builtin.sliceSlice($t3_4.$get(), undefined, 0, undefined);
-        $t9_10 = $t2_3;
-        $t10_11 = $t2_3;
-        $t11_12 = $t4_5;
+        $t7_8 = $t2_3;
+        $t8_9 = $t2_3;
+        $t9_10 = '';
         $block = 6; break;
         break;
       }
       case 3: {
         $rt.runtime.boundsCheck(i, s.length);
-        $t5_6 = s.charCodeAt(i);
-        $t6_7 = ($t5_6 !== 34);
-        if ($t6_7) {
+        $t3_4 = s.charCodeAt(i);
+        $t4_5 = ($t3_4 !== 34);
+        if ($t4_5) {
           $block = 1; break;
         }
         else {
@@ -1616,10 +1213,10 @@ export function parseString(s, i) {
         break;
       }
       case 4: {
-        $rt.runtime.boundsCheck($t9_10, s.length);
-        $t7_8 = s.charCodeAt($t9_10);
-        $t8_9 = ($t7_8 === 92);
-        if ($t8_9) {
+        $rt.runtime.boundsCheck($t7_8, s.length);
+        $t5_6 = s.charCodeAt($t7_8);
+        $t6_7 = ($t5_6 === 92);
+        if ($t6_7) {
           $block = 7; break;
         }
         else {
@@ -1632,9 +1229,9 @@ export function parseString(s, i) {
         break;
       }
       case 6: {
-        $t12_13 = $rt.builtin.len(s);
-        $t13_14 = ($t9_10 < $t12_13);
-        if ($t13_14) {
+        $t10_11 = $rt.builtin.len(s);
+        $t11_12 = ($t7_8 < $t10_11);
+        if ($t11_12) {
           $block = 4; break;
         }
         else {
@@ -1643,12 +1240,12 @@ export function parseString(s, i) {
         break;
       }
       case 7: {
-        $t14_15 = $rt.builtin.stringSlice(s, $t10_11, $t9_10);
-        $t15_16 = $rt.builtin.appendString($t11_12, $t14_15);
-        $t16_17 = ($t9_10 + 1);
-        $t17_18 = $rt.builtin.len(s);
-        $t18_19 = ($t16_17 >= $t17_18);
-        if ($t18_19) {
+        $t12_13 = $rt.builtin.stringSlice(s, $t8_9, $t7_8);
+        $t13_14 = ($t9_10 + $t12_13);
+        $t14_15 = ($t7_8 + 1);
+        $t15_16 = $rt.builtin.len(s);
+        $t16_17 = ($t14_15 >= $t15_16);
+        if ($t16_17) {
           $block = 9; break;
         }
         else {
@@ -1657,14 +1254,14 @@ export function parseString(s, i) {
         break;
       }
       case 8: {
-        $rt.runtime.boundsCheck($t9_10, s.length);
-        $t19_20 = s.charCodeAt($t9_10);
-        $t20_21 = ($t19_20 === 34);
-        if ($t20_21) {
-          $block = 35; break;
+        $rt.runtime.boundsCheck($t7_8, s.length);
+        $t17_18 = s.charCodeAt($t7_8);
+        $t18_19 = ($t17_18 === 34);
+        if ($t18_19) {
+          $block = 38; break;
         }
         else {
-          $block = 36; break;
+          $block = 39; break;
         }
         break;
       }
@@ -1673,10 +1270,10 @@ export function parseString(s, i) {
         break;
       }
       case 10: {
-        $rt.runtime.boundsCheck($t16_17, s.length);
-        $t21_22 = s.charCodeAt($t16_17);
-        $t22_23 = ($t21_22 === 34);
-        if ($t22_23) {
+        $rt.runtime.boundsCheck($t14_15, s.length);
+        $t19_20 = s.charCodeAt($t14_15);
+        $t20_21 = ($t19_20 === 34);
+        if ($t20_21) {
           $block = 12; break;
         }
         else {
@@ -1685,40 +1282,32 @@ export function parseString(s, i) {
         break;
       }
       case 11: {
-        $t25_26 = ($t23_24 + 1);
-        $t9_10 = $t25_26;
-        $t10_11 = $t25_26;
-        $t11_12 = $t24_25;
+        $t23_24 = ($t21_22 + 1);
+        $t7_8 = $t23_24;
+        $t8_9 = $t23_24;
+        $t9_10 = $t22_23;
         $block = 6; break;
         break;
       }
       case 12: {
-        $rt.runtime.boundsCheck($t16_17, s.length);
-        $t26_27 = s.charCodeAt($t16_17);
-        $t27_28 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t28_29 = $t27_28.$get().addr(0);
-        $t28_29.$set($t26_27);
-        $t29_30 = $rt.builtin.sliceSlice($t27_28.$get(), undefined, undefined, undefined);
-        $t30_31 = $rt.builtin.appendSlice($t15_16, $t29_30);
-        $t23_24 = $t16_17;
-        $t24_25 = $t30_31;
+        $t24_25 = ($t14_15 + 1);
+        $t25_26 = $rt.builtin.stringSlice(s, $t14_15, $t24_25);
+        $t26_27 = ($t13_14 + $t25_26);
+        $t21_22 = $t14_15;
+        $t22_23 = $t26_27;
         $block = 11; break;
         break;
       }
       case 13: {
-        $t31_32 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t32_33 = $t31_32.$get().addr(0);
-        $t32_33.$set(10);
-        $t33_34 = $rt.builtin.sliceSlice($t31_32.$get(), undefined, undefined, undefined);
-        $t34_35 = $rt.builtin.appendSlice($t15_16, $t33_34);
-        $t23_24 = $t16_17;
-        $t24_25 = $t34_35;
+        $t27_28 = ($t13_14 + '\n');
+        $t21_22 = $t14_15;
+        $t22_23 = $t27_28;
         $block = 11; break;
         break;
       }
       case 14: {
-        $t35_36 = ($t21_22 === 92);
-        if ($t35_36) {
+        $t28_29 = ($t19_20 === 92);
+        if ($t28_29) {
           $block = 12; break;
         }
         else {
@@ -1727,8 +1316,8 @@ export function parseString(s, i) {
         break;
       }
       case 15: {
-        $t36_37 = ($t21_22 === 47);
-        if ($t36_37) {
+        $t29_30 = ($t19_20 === 47);
+        if ($t29_30) {
           $block = 12; break;
         }
         else {
@@ -1737,8 +1326,8 @@ export function parseString(s, i) {
         break;
       }
       case 16: {
-        $t37_38 = ($t21_22 === 110);
-        if ($t37_38) {
+        $t30_31 = ($t19_20 === 110);
+        if ($t30_31) {
           $block = 13; break;
         }
         else {
@@ -1747,19 +1336,15 @@ export function parseString(s, i) {
         break;
       }
       case 17: {
-        $t38_39 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t39_40 = $t38_39.$get().addr(0);
-        $t39_40.$set(13);
-        $t40_41 = $rt.builtin.sliceSlice($t38_39.$get(), undefined, undefined, undefined);
-        $t41_42 = $rt.builtin.appendSlice($t15_16, $t40_41);
-        $t23_24 = $t16_17;
-        $t24_25 = $t41_42;
+        $t31_32 = ($t13_14 + '\r');
+        $t21_22 = $t14_15;
+        $t22_23 = $t31_32;
         $block = 11; break;
         break;
       }
       case 18: {
-        $t42_43 = ($t21_22 === 114);
-        if ($t42_43) {
+        $t32_33 = ($t19_20 === 114);
+        if ($t32_33) {
           $block = 17; break;
         }
         else {
@@ -1768,19 +1353,15 @@ export function parseString(s, i) {
         break;
       }
       case 19: {
-        $t43_44 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t44_45 = $t43_44.$get().addr(0);
-        $t44_45.$set(9);
-        $t45_46 = $rt.builtin.sliceSlice($t43_44.$get(), undefined, undefined, undefined);
-        $t46_47 = $rt.builtin.appendSlice($t15_16, $t45_46);
-        $t23_24 = $t16_17;
-        $t24_25 = $t46_47;
+        $t33_34 = ($t13_14 + '\t');
+        $t21_22 = $t14_15;
+        $t22_23 = $t33_34;
         $block = 11; break;
         break;
       }
       case 20: {
-        $t47_48 = ($t21_22 === 116);
-        if ($t47_48) {
+        $t34_35 = ($t19_20 === 116);
+        if ($t34_35) {
           $block = 19; break;
         }
         else {
@@ -1789,19 +1370,15 @@ export function parseString(s, i) {
         break;
       }
       case 21: {
-        $t48_49 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t49_50 = $t48_49.$get().addr(0);
-        $t49_50.$set(8);
-        $t50_51 = $rt.builtin.sliceSlice($t48_49.$get(), undefined, undefined, undefined);
-        $t51_52 = $rt.builtin.appendSlice($t15_16, $t50_51);
-        $t23_24 = $t16_17;
-        $t24_25 = $t51_52;
+        $t35_36 = ($t13_14 + '\x08');
+        $t21_22 = $t14_15;
+        $t22_23 = $t35_36;
         $block = 11; break;
         break;
       }
       case 22: {
-        $t52_53 = ($t21_22 === 98);
-        if ($t52_53) {
+        $t36_37 = ($t19_20 === 98);
+        if ($t36_37) {
           $block = 21; break;
         }
         else {
@@ -1810,19 +1387,15 @@ export function parseString(s, i) {
         break;
       }
       case 23: {
-        $t53_54 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t54_55 = $t53_54.$get().addr(0);
-        $t54_55.$set(12);
-        $t55_56 = $rt.builtin.sliceSlice($t53_54.$get(), undefined, undefined, undefined);
-        $t56_57 = $rt.builtin.appendSlice($t15_16, $t55_56);
-        $t23_24 = $t16_17;
-        $t24_25 = $t56_57;
+        $t37_38 = ($t13_14 + '\x0c');
+        $t21_22 = $t14_15;
+        $t22_23 = $t37_38;
         $block = 11; break;
         break;
       }
       case 24: {
-        $t57_58 = ($t21_22 === 102);
-        if ($t57_58) {
+        $t38_39 = ($t19_20 === 102);
+        if ($t38_39) {
           $block = 23; break;
         }
         else {
@@ -1831,10 +1404,10 @@ export function parseString(s, i) {
         break;
       }
       case 25: {
-        $t58_59 = ($t16_17 + 4);
-        $t59_60 = $rt.builtin.len(s);
-        $t60_61 = ($t58_59 >= $t59_60);
-        if ($t60_61) {
+        $t39_40 = ($t14_15 + 4);
+        $t40_41 = $rt.builtin.len(s);
+        $t41_42 = ($t39_40 >= $t40_41);
+        if ($t41_42) {
           $block = 28; break;
         }
         else {
@@ -1843,8 +1416,8 @@ export function parseString(s, i) {
         break;
       }
       case 26: {
-        $t61_62 = ($t21_22 === 117);
-        if ($t61_62) {
+        $t42_43 = ($t19_20 === 117);
+        if ($t42_43) {
           $block = 25; break;
         }
         else {
@@ -1853,15 +1426,11 @@ export function parseString(s, i) {
         break;
       }
       case 27: {
-        $rt.runtime.boundsCheck($t16_17, s.length);
-        $t62_63 = s.charCodeAt($t16_17);
-        $t63_64 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t64_65 = $t63_64.$get().addr(0);
-        $t64_65.$set($t62_63);
-        $t65_66 = $rt.builtin.sliceSlice($t63_64.$get(), undefined, undefined, undefined);
-        $t66_67 = $rt.builtin.appendSlice($t15_16, $t65_66);
-        $t23_24 = $t16_17;
-        $t24_25 = $t66_67;
+        $t43_44 = ($t14_15 + 1);
+        $t44_45 = $rt.builtin.stringSlice(s, $t14_15, $t43_44);
+        $t45_46 = ($t13_14 + $t44_45);
+        $t21_22 = $t14_15;
+        $t22_23 = $t45_46;
         $block = 11; break;
         break;
       }
@@ -1870,123 +1439,178 @@ export function parseString(s, i) {
         break;
       }
       case 29: {
-        $t67_68 = ($t16_17 + 1);
-        $rt.runtime.boundsCheck($t67_68, s.length);
-        $t68_69 = s.charCodeAt($t67_68);
-        $t69_70 = hexVal($t68_69);
-        $t70_71 = ($t69_70 * (2 ** 12));
-        $t71_72 = ($t16_17 + 2);
-        $rt.runtime.boundsCheck($t71_72, s.length);
-        $t72_73 = s.charCodeAt($t71_72);
-        $t73_74 = hexVal($t72_73);
-        $t74_75 = ($t73_74 * (2 ** 8));
-        $t75_76 = $rt.builtin.int64or($t70_71, $t74_75);
-        $t76_77 = ($t16_17 + 3);
-        $rt.runtime.boundsCheck($t76_77, s.length);
-        $t77_78 = s.charCodeAt($t76_77);
-        $t78_79 = hexVal($t77_78);
-        $t79_80 = ($t78_79 * (2 ** 4));
-        $t80_81 = $rt.builtin.int64or($t75_76, $t79_80);
-        $t81_82 = ($t16_17 + 4);
-        $rt.runtime.boundsCheck($t81_82, s.length);
-        $t82_83 = s.charCodeAt($t81_82);
-        $t83_84 = hexVal($t82_83);
-        $t84_85 = $rt.builtin.int64or($t80_81, $t83_84);
-        $t85_86 = ($t84_85 < 128);
-        if ($t85_86) {
-          $block = 30; break;
+        $t46_47 = ($t14_15 + 1);
+        $rt.runtime.boundsCheck($t46_47, s.length);
+        $t47_48 = s.charCodeAt($t46_47);
+        $t48_49 = hexVal($t47_48);
+        $t49_50 = ($t48_49 * (2 ** 12));
+        $t50_51 = ($t14_15 + 2);
+        $rt.runtime.boundsCheck($t50_51, s.length);
+        $t51_52 = s.charCodeAt($t50_51);
+        $t52_53 = hexVal($t51_52);
+        $t53_54 = ($t52_53 * (2 ** 8));
+        $t54_55 = $rt.builtin.int64or($t49_50, $t53_54);
+        $t55_56 = ($t14_15 + 3);
+        $rt.runtime.boundsCheck($t55_56, s.length);
+        $t56_57 = s.charCodeAt($t55_56);
+        $t57_58 = hexVal($t56_57);
+        $t58_59 = ($t57_58 * (2 ** 4));
+        $t59_60 = $rt.builtin.int64or($t54_55, $t58_59);
+        $t60_61 = ($t14_15 + 4);
+        $rt.runtime.boundsCheck($t60_61, s.length);
+        $t61_62 = s.charCodeAt($t60_61);
+        $t62_63 = hexVal($t61_62);
+        $t63_64 = $rt.builtin.int64or($t59_60, $t62_63);
+        $t64_65 = ($t63_64 >= 55296);
+        if ($t64_65) {
+          $block = 35; break;
         }
         else {
-          $block = 32; break;
+          $t84_85 = $t14_15;
+          $t85_86 = $t63_64;
+          $block = 31; break;
         }
         break;
       }
       case 30: {
-        $t86_87 = ($t84_85 & 0xFF);
-        $t87_88 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t88_89 = $t87_88.$get().addr(0);
-        $t88_89.$set($t86_87);
-        $t89_90 = $rt.builtin.sliceSlice($t87_88.$get(), undefined, undefined, undefined);
-        $t90_91 = $rt.builtin.appendSlice($t15_16, $t89_90);
-        $t91_92 = $t90_91;
-        $block = 31; break;
+        $t65_66 = ($t14_15 + 7);
+        $rt.runtime.boundsCheck($t65_66, s.length);
+        $t66_67 = s.charCodeAt($t65_66);
+        $t67_68 = hexVal($t66_67);
+        $t68_69 = ($t67_68 * (2 ** 12));
+        $t69_70 = ($t14_15 + 8);
+        $rt.runtime.boundsCheck($t69_70, s.length);
+        $t70_71 = s.charCodeAt($t69_70);
+        $t71_72 = hexVal($t70_71);
+        $t72_73 = ($t71_72 * (2 ** 8));
+        $t73_74 = $rt.builtin.int64or($t68_69, $t72_73);
+        $t74_75 = ($t14_15 + 9);
+        $rt.runtime.boundsCheck($t74_75, s.length);
+        $t75_76 = s.charCodeAt($t74_75);
+        $t76_77 = hexVal($t75_76);
+        $t77_78 = ($t76_77 * (2 ** 4));
+        $t78_79 = $rt.builtin.int64or($t73_74, $t77_78);
+        $t79_80 = ($t14_15 + 10);
+        $rt.runtime.boundsCheck($t79_80, s.length);
+        $t80_81 = s.charCodeAt($t79_80);
+        $t81_82 = hexVal($t80_81);
+        $t82_83 = $rt.builtin.int64or($t78_79, $t81_82);
+        $t83_84 = ($t82_83 >= 56320);
+        if ($t83_84) {
+          $block = 37; break;
+        }
+        else {
+          $t84_85 = $t14_15;
+          $t85_86 = $t63_64;
+          $block = 31; break;
+        }
         break;
       }
       case 31: {
-        $t92_93 = ($t16_17 + 4);
-        $t23_24 = $t92_93;
-        $t24_25 = $t91_92;
+        $t86_87 = ($t85_86 | 0);
+        $t87_88 = String.fromCodePoint($t86_87);
+        $t88_89 = ($t13_14 + $t87_88);
+        $t89_90 = ($t84_85 + 4);
+        $t21_22 = $t89_90;
+        $t22_23 = $t88_89;
         $block = 11; break;
         break;
       }
       case 32: {
-        $t93_94 = ($t84_85 < 2048);
-        if ($t93_94) {
-          $block = 33; break;
+        $t90_91 = ($t14_15 + 6);
+        $rt.runtime.boundsCheck($t90_91, s.length);
+        $t91_92 = s.charCodeAt($t90_91);
+        $t92_93 = ($t91_92 === 117);
+        if ($t92_93) {
+          $block = 30; break;
         }
         else {
-          $block = 34; break;
+          $t84_85 = $t14_15;
+          $t85_86 = $t63_64;
+          $block = 31; break;
         }
         break;
       }
       case 33: {
-        $t94_95 = Math.trunc($t84_85 / (2 ** 6));
-        $t95_96 = $rt.builtin.int64or(192, $t94_95);
-        $t96_97 = ($t95_96 & 0xFF);
-        $t97_98 = $rt.builtin.int64and($t84_85, 63);
-        $t98_99 = $rt.builtin.int64or(128, $t97_98);
-        $t99_100 = ($t98_99 & 0xFF);
-        $t100_101 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t101_102 = $t100_101.$get().addr(0);
-        $t101_102.$set($t96_97);
-        $t102_103 = $t100_101.$get().addr(1);
-        $t102_103.$set($t99_100);
-        $t103_104 = $rt.builtin.sliceSlice($t100_101.$get(), undefined, undefined, undefined);
-        $t104_105 = $rt.builtin.appendSlice($t15_16, $t103_104);
-        $t91_92 = $t104_105;
-        $block = 31; break;
+        $t93_94 = ($t14_15 + 5);
+        $rt.runtime.boundsCheck($t93_94, s.length);
+        $t94_95 = s.charCodeAt($t93_94);
+        $t95_96 = ($t94_95 === 92);
+        if ($t95_96) {
+          $block = 32; break;
+        }
+        else {
+          $t84_85 = $t14_15;
+          $t85_86 = $t63_64;
+          $block = 31; break;
+        }
         break;
       }
       case 34: {
-        $t105_106 = Math.trunc($t84_85 / (2 ** 12));
-        $t106_107 = $rt.builtin.int64or(224, $t105_106);
-        $t107_108 = ($t106_107 & 0xFF);
-        $t108_109 = Math.trunc($t84_85 / (2 ** 6));
-        $t109_110 = $rt.builtin.int64and($t108_109, 63);
-        $t110_111 = $rt.builtin.int64or(128, $t109_110);
-        $t111_112 = ($t110_111 & 0xFF);
-        $t112_113 = $rt.builtin.int64and($t84_85, 63);
-        $t113_114 = $rt.builtin.int64or(128, $t112_113);
-        $t114_115 = ($t113_114 & 0xFF);
-        $t115_116 = { $value: $rt.builtin.makeSlice(3, 3, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t116_117 = $t115_116.$get().addr(0);
-        $t116_117.$set($t107_108);
-        $t117_118 = $t115_116.$get().addr(1);
-        $t117_118.$set($t111_112);
-        $t118_119 = $t115_116.$get().addr(2);
-        $t118_119.$set($t114_115);
-        $t119_120 = $rt.builtin.sliceSlice($t115_116.$get(), undefined, undefined, undefined);
-        $t120_121 = $rt.builtin.appendSlice($t15_16, $t119_120);
-        $t91_92 = $t120_121;
-        $block = 31; break;
+        $t96_97 = ($t14_15 + 10);
+        $t97_98 = $rt.builtin.len(s);
+        $t98_99 = ($t96_97 <= $t97_98);
+        if ($t98_99) {
+          $block = 33; break;
+        }
+        else {
+          $t84_85 = $t14_15;
+          $t85_86 = $t63_64;
+          $block = 31; break;
+        }
         break;
       }
       case 35: {
-        $t121_122 = $rt.builtin.stringSlice(s, $t10_11, $t9_10);
-        $t122_123 = $rt.builtin.appendString($t11_12, $t121_122);
-        $t123_124 = $rt.builtin.bytesToString($t122_123);
-        $t124_125 = ($t9_10 + 1);
-        return [$t123_124, $t124_125];
+        $t99_100 = ($t63_64 <= 56319);
+        if ($t99_100) {
+          $block = 34; break;
+        }
+        else {
+          $t84_85 = $t14_15;
+          $t85_86 = $t63_64;
+          $block = 31; break;
+        }
         break;
       }
       case 36: {
-        $t125_126 = ($t9_10 + 1);
-        let $phi0 = $t125_126;
-        let $phi1 = $t10_11;
-        let $phi2 = $t11_12;
-        $t9_10 = $phi0;
-        $t10_11 = $phi1;
-        $t11_12 = $phi2;
+        $t100_101 = ($t63_64 - 55296);
+        $t101_102 = ($t100_101 * 1024);
+        $t102_103 = (65536 + $t101_102);
+        $t103_104 = ($t82_83 - 56320);
+        $t104_105 = ($t102_103 + $t103_104);
+        $t105_106 = ($t14_15 + 6);
+        $t84_85 = $t105_106;
+        $t85_86 = $t104_105;
+        $block = 31; break;
+        break;
+      }
+      case 37: {
+        $t106_107 = ($t82_83 <= 57343);
+        if ($t106_107) {
+          $block = 36; break;
+        }
+        else {
+          $t84_85 = $t14_15;
+          $t85_86 = $t63_64;
+          $block = 31; break;
+        }
+        break;
+      }
+      case 38: {
+        $t107_108 = $rt.builtin.stringSlice(s, $t8_9, $t7_8);
+        $t108_109 = ($t9_10 + $t107_108);
+        $t109_110 = ($t7_8 + 1);
+        return [$t108_109, $t109_110];
+        break;
+      }
+      case 39: {
+        $t110_111 = ($t7_8 + 1);
+        let $phi0 = $t110_111;
+        let $phi1 = $t8_9;
+        let $phi2 = $t9_10;
+        $t7_8 = $phi0;
+        $t8_9 = $phi1;
+        $t9_10 = $phi2;
         $block = 6; break;
         break;
       }
@@ -2906,6 +2530,408 @@ export function skipBracketed(s, i, open, close) {
   }
 }
 
+export function appendField(buf, first) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = first.$get();
+        if ($t0_1) {
+          $t5_6 = buf;
+          $block = 2; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+      case 1: {
+        $t1_2 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t2_3 = $t1_2.$get().addr(0);
+        $t2_3.$set(44);
+        $t3_4 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
+        $t4_5 = $rt.builtin.appendSlice(buf, $t3_4);
+        $t5_6 = $t4_5;
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        first.$set(false);
+        return $t5_6;
+        break;
+      }
+    }
+  }
+}
+
+export function appendStrArray(buf, ss) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2 = $t0_1.$get().addr(0);
+        $t1_2.$set(91);
+        $t2_3 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+        $t3_4 = $rt.builtin.appendSlice(buf, $t2_3);
+        $t4_5 = $rt.builtin.len(ss);
+        $t5_6 = $t3_4;
+        $t6_7 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t7_8 = ($t6_7 + 1);
+        $t8_9 = ($t7_8 < $t4_5);
+        if ($t8_9) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t9_10 = ss.addr($t7_8);
+        $t10_11 = $t9_10.$get();
+        $t11_12 = ($t7_8 > 0);
+        if ($t11_12) {
+          $block = 4; break;
+        }
+        else {
+          $t20_21 = $t5_6;
+          $block = 5; break;
+        }
+        break;
+      }
+      case 3: {
+        $t12_13 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t13_14 = $t12_13.$get().addr(0);
+        $t13_14.$set(93);
+        $t14_15 = $rt.builtin.sliceSlice($t12_13.$get(), undefined, undefined, undefined);
+        $t15_16 = $rt.builtin.appendSlice($t5_6, $t14_15);
+        return $t15_16;
+        break;
+      }
+      case 4: {
+        $t16_17 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t17_18 = $t16_17.$get().addr(0);
+        $t17_18.$set(44);
+        $t18_19 = $rt.builtin.sliceSlice($t16_17.$get(), undefined, undefined, undefined);
+        $t19_20 = $rt.builtin.appendSlice($t5_6, $t18_19);
+        $t20_21 = $t19_20;
+        $block = 5; break;
+        break;
+      }
+      case 5: {
+        $t21_22 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t22_23 = $t21_22.$get().addr(0);
+        $t22_23.$set(34);
+        $t23_24 = $rt.builtin.sliceSlice($t21_22.$get(), undefined, undefined, undefined);
+        $t24_25 = $rt.builtin.appendSlice($t20_21, $t23_24);
+        $t25_26 = $rt.builtin.appendString($t24_25, $t10_11);
+        $t26_27 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t27_28 = $t26_27.$get().addr(0);
+        $t27_28.$set(34);
+        $t28_29 = $rt.builtin.sliceSlice($t26_27.$get(), undefined, undefined, undefined);
+        $t29_30 = $rt.builtin.appendSlice($t25_26, $t28_29);
+        $t5_6 = $t29_30;
+        $t6_7 = $t7_8;
+        $block = 1; break;
+        break;
+      }
+    }
+  }
+}
+
+export function intToStr(n) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = (n === 0);
+        if ($t0_1) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return '0';
+        break;
+      }
+      case 2: {
+        $t1_2 = (n < 0);
+        if ($t1_2) {
+          $block = 3; break;
+        }
+        else {
+          $t3_4 = n;
+          $t4_5 = false;
+          $block = 4; break;
+        }
+        break;
+      }
+      case 3: {
+        $t2_3 = -n;
+        $t3_4 = $t2_3;
+        $t4_5 = true;
+        $block = 4; break;
+        break;
+      }
+      case 4: {
+        $t5_6 = { $value: $rt.builtin.makeSlice(20, 20, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t12_13 = $t3_4;
+        $t13_14 = 20;
+        $block = 7; break;
+        break;
+      }
+      case 5: {
+        $t6_7 = ($t13_14 - 1);
+        $t7_8 = ($t12_13 % 10);
+        $t8_9 = (48 + $t7_8);
+        $t9_10 = ($t8_9 & 0xFF);
+        $t10_11 = $t5_6.$get().addr($t6_7);
+        $t10_11.$set($t9_10);
+        $t11_12 = Math.trunc($t12_13 / 10);
+        $t12_13 = $t11_12;
+        $t13_14 = $t6_7;
+        $block = 7; break;
+        break;
+      }
+      case 6: {
+        if ($t4_5) {
+          $block = 8; break;
+        }
+        else {
+          $t17_18 = $t13_14;
+          $block = 9; break;
+        }
+        break;
+      }
+      case 7: {
+        $t14_15 = ($t12_13 > 0);
+        if ($t14_15) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 8: {
+        $t15_16 = ($t13_14 - 1);
+        $t16_17 = $t5_6.$get().addr($t15_16);
+        $t16_17.$set(45);
+        $t17_18 = $t15_16;
+        $block = 9; break;
+        break;
+      }
+      case 9: {
+        $t18_19 = $rt.builtin.sliceSlice($t5_6.$get(), $t17_18, undefined, undefined);
+        $t19_20 = $rt.builtin.bytesToString($t18_19);
+        return $t19_20;
+        break;
+      }
+    }
+  }
+}
+
+export function containsStr(ss, s) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(ss);
+        $t1_2 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t2_3 = ($t1_2 + 1);
+        $t3_4 = ($t2_3 < $t0_1);
+        if ($t3_4) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t4_5 = ss.addr($t2_3);
+        $t5_6 = $t4_5.$get();
+        $t6_7 = ($t5_6 === s);
+        if ($t6_7) {
+          $block = 4; break;
+        }
+        else {
+          $t1_2 = $t2_3;
+          $block = 1; break;
+        }
+        break;
+      }
+      case 3: {
+        return false;
+        break;
+      }
+      case 4: {
+        return true;
+        break;
+      }
+    }
+  }
+}
+
+export function containsInt(ns, n) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(ns);
+        $t1_2 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t2_3 = ($t1_2 + 1);
+        $t3_4 = ($t2_3 < $t0_1);
+        if ($t3_4) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t4_5 = ns.addr($t2_3);
+        $t5_6 = $t4_5.$get();
+        $t6_7 = ($t5_6 === n);
+        if ($t6_7) {
+          $block = 4; break;
+        }
+        else {
+          $t1_2 = $t2_3;
+          $block = 1; break;
+        }
+        break;
+      }
+      case 3: {
+        return false;
+        break;
+      }
+      case 4: {
+        return true;
+        break;
+      }
+    }
+  }
+}
+
+export function eventHasTagValue(e, tagKey, values) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $get() { return e.$get().Tags; }, $set(v) { const obj = e.$get(); obj.Tags = v; e.$set(obj); } };
+        $t1_2 = $t0_1.$get();
+        $t2_3 = $rt.builtin.len($t1_2);
+        $t3_4 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t4_5 = ($t3_4 + 1);
+        $t5_6 = ($t4_5 < $t2_3);
+        if ($t5_6) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t6_7 = $t1_2.addr($t4_5);
+        $t7_8 = $t6_7.$get();
+        $t8_9 = $rt.builtin.len($t7_8);
+        $t9_10 = ($t8_9 > 1);
+        if ($t9_10) {
+          $block = 5; break;
+        }
+        else {
+          $t3_4 = $t4_5;
+          $block = 1; break;
+        }
+        break;
+      }
+      case 3: {
+        return false;
+        break;
+      }
+      case 4: {
+        $t10_11 = $rt.builtin.len(values);
+        $t14_15 = -1;
+        $block = 6; break;
+        break;
+      }
+      case 5: {
+        $t11_12 = $t7_8.addr(0);
+        $t12_13 = $t11_12.$get();
+        $t13_14 = ($t12_13 === tagKey);
+        if ($t13_14) {
+          $block = 4; break;
+        }
+        else {
+          $t3_4 = $t4_5;
+          $block = 1; break;
+        }
+        break;
+      }
+      case 6: {
+        $t15_16 = ($t14_15 + 1);
+        $t16_17 = ($t15_16 < $t10_11);
+        if ($t16_17) {
+          $block = 7; break;
+        }
+        else {
+          $t3_4 = $t4_5;
+          $block = 1; break;
+        }
+        break;
+      }
+      case 7: {
+        $t17_18 = values.addr($t15_16);
+        $t18_19 = $t17_18.$get();
+        $t19_20 = $t7_8.addr(1);
+        $t20_21 = $t19_20.$get();
+        $t21_22 = ($t20_21 === $t18_19);
+        if ($t21_22) {
+          $block = 8; break;
+        }
+        else {
+          $t14_15 = $t15_16;
+          $block = 6; break;
+        }
+        break;
+      }
+      case 8: {
+        return true;
+        break;
+      }
+    }
+  }
+}
+
 export function Event$CheckID(e) {
   let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
   $t0_1 = Event$Serialize(e);
@@ -2995,7 +3021,7 @@ export function Event$Serialize(e) {
 
 $rt.types.getType('common/nostr.Event')?.methods?.set('Serialize', Event$Serialize);
 export function Filter$Matches(f, e) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -3141,8 +3167,13 @@ export function Filter$Matches(f, e) {
       case 14: {
         $t38_39 = { $get() { return f.$get().Tags; }, $set(v) { const obj = f.$get(); obj.Tags = v; f.$set(obj); } };
         $t39_40 = $t38_39.$get();
-        $t40_41 = { $entries: [...$t39_40.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
-        $block = 16; break;
+        $t40_41 = ($t39_40 !== null);
+        if ($t40_41) {
+          $block = 16; break;
+        }
+        else {
+          $block = 17; break;
+        }
         break;
       }
       case 15: {
@@ -3160,38 +3191,34 @@ export function Filter$Matches(f, e) {
         break;
       }
       case 16: {
-        $t46_47 = $t40_41.next();
-        $t47_48 = $t46_47[0];
-        if ($t47_48) {
-          $block = 17; break;
-        }
-        else {
-          $block = 18; break;
-        }
+        $t46_47 = { $get() { return f.$get().Tags; }, $set(v) { const obj = f.$get(); obj.Tags = v; f.$set(obj); } };
+        $t47_48 = $t46_47.$get();
+        $t48_49 = { $entries: [...$t47_48.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
+        $block = 18; break;
         break;
       }
       case 17: {
-        $t48_49 = $t46_47[1];
-        $t49_50 = $t46_47[2];
-        $t50_51 = $rt.builtin.len($t48_49);
-        $t51_52 = ($t50_51 < 2);
-        if ($t51_52) {
-          $block = 16; break;
-        }
-        else {
-          $block = 20; break;
-        }
-        break;
-      }
-      case 18: {
         return true;
         break;
       }
+      case 18: {
+        $t49_50 = $t48_49.next();
+        $t50_51 = $t49_50[0];
+        if ($t50_51) {
+          $block = 19; break;
+        }
+        else {
+          $block = 17; break;
+        }
+        break;
+      }
       case 19: {
-        $t52_53 = $rt.builtin.stringSlice($t48_49, 1, undefined);
-        $t53_54 = eventHasTagValue(e, $t52_53, $t49_50);
-        if ($t53_54) {
-          $block = 16; break;
+        $t51_52 = $t49_50[1];
+        $t52_53 = $t49_50[2];
+        $t53_54 = $rt.builtin.len($t51_52);
+        $t54_55 = ($t53_54 < 2);
+        if ($t54_55) {
+          $block = 18; break;
         }
         else {
           $block = 21; break;
@@ -3199,18 +3226,29 @@ export function Filter$Matches(f, e) {
         break;
       }
       case 20: {
-        $rt.runtime.boundsCheck(0, $t48_49.length);
-        $t54_55 = $t48_49.charCodeAt(0);
-        $t55_56 = ($t54_55 !== 35);
-        if ($t55_56) {
-          $block = 16; break;
+        $t55_56 = $rt.builtin.stringSlice($t51_52, 1, undefined);
+        $t56_57 = eventHasTagValue(e, $t55_56, $t52_53);
+        if ($t56_57) {
+          $block = 18; break;
         }
         else {
-          $block = 19; break;
+          $block = 22; break;
         }
         break;
       }
       case 21: {
+        $rt.runtime.boundsCheck(0, $t51_52.length);
+        $t57_58 = $t51_52.charCodeAt(0);
+        $t58_59 = ($t57_58 !== 35);
+        if ($t58_59) {
+          $block = 18; break;
+        }
+        else {
+          $block = 20; break;
+        }
+        break;
+      }
+      case 22: {
         return false;
         break;
       }
@@ -3220,7 +3258,7 @@ export function Filter$Matches(f, e) {
 
 $rt.types.getType('common/nostr.Filter')?.methods?.set('Matches', Filter$Matches);
 export function Filter$Serialize(f) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -3309,9 +3347,14 @@ export function Filter$Serialize(f) {
       case 6: {
         $t37_38 = { $get() { return f.$get().Tags; }, $set(v) { const obj = f.$get(); obj.Tags = v; f.$set(obj); } };
         $t38_39 = $t37_38.$get();
-        $t39_40 = { $entries: [...$t38_39.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
-        $t58_59 = $t36_37;
-        $block = 12; break;
+        $t39_40 = ($t38_39 !== null);
+        if ($t39_40) {
+          $block = 12; break;
+        }
+        else {
+          $t61_62 = $t36_37;
+          $block = 13; break;
+        }
         break;
       }
       case 7: {
@@ -3367,114 +3410,147 @@ export function Filter$Serialize(f) {
         break;
       }
       case 12: {
-        $t59_60 = $t39_40.next();
-        $t60_61 = $t59_60[0];
-        if ($t60_61) {
-          $block = 13; break;
-        }
-        else {
-          $block = 14; break;
-        }
+        $t58_59 = { $get() { return f.$get().Tags; }, $set(v) { const obj = f.$get(); obj.Tags = v; f.$set(obj); } };
+        $t59_60 = $t58_59.$get();
+        $t60_61 = { $entries: [...$t59_60.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
+        $t65_66 = $t36_37;
+        $block = 14; break;
         break;
       }
       case 13: {
-        $t61_62 = $t59_60[1];
-        $t62_63 = $t59_60[2];
-        $t63_64 = appendField($t58_59, $t6_7);
-        $t64_65 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t65_66 = $t64_65.$get().addr(0);
-        $t65_66.$set(34);
-        $t66_67 = $rt.builtin.sliceSlice($t64_65.$get(), undefined, undefined, undefined);
-        $t67_68 = $rt.builtin.appendSlice($t63_64, $t66_67);
-        $t68_69 = $rt.builtin.appendString($t67_68, $t61_62);
-        $t69_70 = $rt.builtin.appendString($t68_69, '":');
-        $t70_71 = appendStrArray($t69_70, $t62_63);
-        $t58_59 = $t70_71;
-        $block = 12; break;
+        $t62_63 = { $get() { return f.$get().Since; }, $set(v) { const obj = f.$get(); obj.Since = v; f.$set(obj); } };
+        $t63_64 = $t62_63.$get();
+        $t64_65 = ($t63_64 > 0);
+        if ($t64_65) {
+          $block = 16; break;
+        }
+        else {
+          $t85_86 = $t61_62;
+          $block = 17; break;
+        }
         break;
       }
       case 14: {
-        $t71_72 = { $get() { return f.$get().Since; }, $set(v) { const obj = f.$get(); obj.Since = v; f.$set(obj); } };
-        $t72_73 = $t71_72.$get();
-        $t73_74 = ($t72_73 > 0);
-        if ($t73_74) {
+        $t66_67 = $t60_61.next();
+        $t67_68 = $t66_67[0];
+        if ($t67_68) {
           $block = 15; break;
         }
         else {
-          $t81_82 = $t58_59;
-          $block = 16; break;
+          $t61_62 = $t65_66;
+          $block = 13; break;
         }
         break;
       }
       case 15: {
-        $t74_75 = appendField($t58_59, $t6_7);
-        $t75_76 = $rt.builtin.appendString($t74_75, '"since":');
-        $t76_77 = { $get() { return f.$get().Since; }, $set(v) { const obj = f.$get(); obj.Since = v; f.$set(obj); } };
-        $t77_78 = $t76_77.$get();
-        $t78_79 = $t77_78;
-        $t79_80 = intToStr($t78_79);
-        $t80_81 = $rt.builtin.appendString($t75_76, $t79_80);
-        $t81_82 = $t80_81;
-        $block = 16; break;
+        $t68_69 = $t66_67[1];
+        $t69_70 = $t66_67[2];
+        $t70_71 = appendField($t65_66, $t6_7);
+        $t71_72 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t72_73 = $t71_72.$get().addr(0);
+        $t72_73.$set(34);
+        $t73_74 = $rt.builtin.sliceSlice($t71_72.$get(), undefined, undefined, undefined);
+        $t74_75 = $rt.builtin.appendSlice($t70_71, $t73_74);
+        $t75_76 = $rt.builtin.appendString($t74_75, $t68_69);
+        $t76_77 = $rt.builtin.appendString($t75_76, '":');
+        $t77_78 = appendStrArray($t76_77, $t69_70);
+        $t65_66 = $t77_78;
+        $block = 14; break;
         break;
       }
       case 16: {
-        $t82_83 = { $get() { return f.$get().Until; }, $set(v) { const obj = f.$get(); obj.Until = v; f.$set(obj); } };
-        $t83_84 = $t82_83.$get();
-        $t84_85 = ($t83_84 > 0);
-        if ($t84_85) {
-          $block = 17; break;
-        }
-        else {
-          $t92_93 = $t81_82;
-          $block = 18; break;
-        }
+        $t78_79 = appendField($t61_62, $t6_7);
+        $t79_80 = $rt.builtin.appendString($t78_79, '"since":');
+        $t80_81 = { $get() { return f.$get().Since; }, $set(v) { const obj = f.$get(); obj.Since = v; f.$set(obj); } };
+        $t81_82 = $t80_81.$get();
+        $t82_83 = $t81_82;
+        $t83_84 = intToStr($t82_83);
+        $t84_85 = $rt.builtin.appendString($t79_80, $t83_84);
+        $t85_86 = $t84_85;
+        $block = 17; break;
         break;
       }
       case 17: {
-        $t85_86 = appendField($t81_82, $t6_7);
-        $t86_87 = $rt.builtin.appendString($t85_86, '"until":');
-        $t87_88 = { $get() { return f.$get().Until; }, $set(v) { const obj = f.$get(); obj.Until = v; f.$set(obj); } };
-        $t88_89 = $t87_88.$get();
-        $t89_90 = $t88_89;
-        $t90_91 = intToStr($t89_90);
-        $t91_92 = $rt.builtin.appendString($t86_87, $t90_91);
-        $t92_93 = $t91_92;
-        $block = 18; break;
+        $t86_87 = { $get() { return f.$get().Until; }, $set(v) { const obj = f.$get(); obj.Until = v; f.$set(obj); } };
+        $t87_88 = $t86_87.$get();
+        $t88_89 = ($t87_88 > 0);
+        if ($t88_89) {
+          $block = 18; break;
+        }
+        else {
+          $t96_97 = $t85_86;
+          $block = 19; break;
+        }
         break;
       }
       case 18: {
-        $t93_94 = { $get() { return f.$get().Limit; }, $set(v) { const obj = f.$get(); obj.Limit = v; f.$set(obj); } };
-        $t94_95 = $t93_94.$get();
-        $t95_96 = ($t94_95 > 0);
-        if ($t95_96) {
-          $block = 19; break;
-        }
-        else {
-          $t102_103 = $t92_93;
-          $block = 20; break;
-        }
+        $t89_90 = appendField($t85_86, $t6_7);
+        $t90_91 = $rt.builtin.appendString($t89_90, '"until":');
+        $t91_92 = { $get() { return f.$get().Until; }, $set(v) { const obj = f.$get(); obj.Until = v; f.$set(obj); } };
+        $t92_93 = $t91_92.$get();
+        $t93_94 = $t92_93;
+        $t94_95 = intToStr($t93_94);
+        $t95_96 = $rt.builtin.appendString($t90_91, $t94_95);
+        $t96_97 = $t95_96;
+        $block = 19; break;
         break;
       }
       case 19: {
-        $t96_97 = appendField($t92_93, $t6_7);
-        $t97_98 = $rt.builtin.appendString($t96_97, '"limit":');
-        $t98_99 = { $get() { return f.$get().Limit; }, $set(v) { const obj = f.$get(); obj.Limit = v; f.$set(obj); } };
-        $t99_100 = $t98_99.$get();
-        $t100_101 = intToStr($t99_100);
-        $t101_102 = $rt.builtin.appendString($t97_98, $t100_101);
-        $t102_103 = $t101_102;
-        $block = 20; break;
+        $t97_98 = { $get() { return f.$get().Limit; }, $set(v) { const obj = f.$get(); obj.Limit = v; f.$set(obj); } };
+        $t98_99 = $t97_98.$get();
+        $t99_100 = ($t98_99 > 0);
+        if ($t99_100) {
+          $block = 20; break;
+        }
+        else {
+          $t106_107 = $t96_97;
+          $block = 21; break;
+        }
         break;
       }
       case 20: {
-        $t103_104 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t104_105 = $t103_104.$get().addr(0);
-        $t104_105.$set(125);
-        $t105_106 = $rt.builtin.sliceSlice($t103_104.$get(), undefined, undefined, undefined);
-        $t106_107 = $rt.builtin.appendSlice($t102_103, $t105_106);
-        $t107_108 = $rt.builtin.bytesToString($t106_107);
-        return $t107_108;
+        $t100_101 = appendField($t96_97, $t6_7);
+        $t101_102 = $rt.builtin.appendString($t100_101, '"limit":');
+        $t102_103 = { $get() { return f.$get().Limit; }, $set(v) { const obj = f.$get(); obj.Limit = v; f.$set(obj); } };
+        $t103_104 = $t102_103.$get();
+        $t104_105 = intToStr($t103_104);
+        $t105_106 = $rt.builtin.appendString($t101_102, $t104_105);
+        $t106_107 = $t105_106;
+        $block = 21; break;
+        break;
+      }
+      case 21: {
+        $t107_108 = { $get() { return f.$get().Proxy; }, $set(v) { const obj = f.$get(); obj.Proxy = v; f.$set(obj); } };
+        $t108_109 = $t107_108.$get();
+        $t109_110 = $rt.builtin.len($t108_109);
+        $t110_111 = ($t109_110 > 0);
+        if ($t110_111) {
+          $block = 22; break;
+        }
+        else {
+          $t116_117 = $t106_107;
+          $block = 23; break;
+        }
+        break;
+      }
+      case 22: {
+        $t111_112 = appendField($t106_107, $t6_7);
+        $t112_113 = $rt.builtin.appendString($t111_112, '"_proxy":');
+        $t113_114 = { $get() { return f.$get().Proxy; }, $set(v) { const obj = f.$get(); obj.Proxy = v; f.$set(obj); } };
+        $t114_115 = $t113_114.$get();
+        $t115_116 = appendStrArray($t112_113, $t114_115);
+        $t116_117 = $t115_116;
+        $block = 23; break;
+        break;
+      }
+      case 23: {
+        $t117_118 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t118_119 = $t117_118.$get().addr(0);
+        $t118_119.$set(125);
+        $t119_120 = $rt.builtin.sliceSlice($t117_118.$get(), undefined, undefined, undefined);
+        $t120_121 = $rt.builtin.appendSlice($t116_117, $t119_120);
+        $t121_122 = $rt.builtin.bytesToString($t120_121);
+        return $t121_122;
         break;
       }
     }

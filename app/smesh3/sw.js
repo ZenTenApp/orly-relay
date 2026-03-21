@@ -35,6 +35,8 @@ const APP_FILES = [
   './$wasm/secp256k1.wasm',
   './fonts/FiraCode-Regular.woff2',
   './fonts/FiraCode-Bold.woff2',
+  './fonts/NotoColorEmoji-Regular.woff2',
+  './favicon.svg',
 ];
 
 let currentVersion = null;
@@ -65,7 +67,7 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  if (url.pathname === '/__sse' || url.pathname === '/__version') return;
+  if (url.pathname === '/__sse' || url.pathname === '/__version' || url.pathname.endsWith('.woff2')) return;
 
   event.respondWith(
     caches.match(event.request).then(cached => cached || fetch(event.request))

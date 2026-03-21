@@ -207,51 +207,53 @@ func parseString(s string, i int) (string, int) {
 	}
 	i++
 	start := i
-	buf := make([]byte, 0, 64)
+	// Use string concat, not []byte — tinyjs strings are UTF-16, byte ops corrupt emoji.
+	result := ""
 	for i < len(s) {
 		if s[i] == '\\' {
-			buf = append(buf, s[start:i]...)
+			result += s[start:i]
 			i++
 			if i >= len(s) {
 				return "", -1
 			}
 			switch s[i] {
 			case '"', '\\', '/':
-				buf = append(buf, s[i])
+				result += s[i : i+1]
 			case 'n':
-				buf = append(buf, '\n')
+				result += "\n"
 			case 'r':
-				buf = append(buf, '\r')
+				result += "\r"
 			case 't':
-				buf = append(buf, '\t')
+				result += "\t"
 			case 'b':
-				buf = append(buf, '\b')
+				result += "\b"
 			case 'f':
-				buf = append(buf, '\f')
+				result += "\f"
 			case 'u':
-				// 4 hex digits — decode basic BMP only.
 				if i+4 >= len(s) {
 					return "", -1
 				}
 				cp := hexVal(s[i+1])<<12 | hexVal(s[i+2])<<8 | hexVal(s[i+3])<<4 | hexVal(s[i+4])
-				if cp < 0x80 {
-					buf = append(buf, byte(cp))
-				} else if cp < 0x800 {
-					buf = append(buf, byte(0xc0|(cp>>6)), byte(0x80|(cp&0x3f)))
-				} else {
-					buf = append(buf, byte(0xe0|(cp>>12)), byte(0x80|((cp>>6)&0x3f)), byte(0x80|(cp&0x3f)))
+				// Surrogate pair: \uD800-\uDBFF followed by \uDC00-\uDFFF.
+				if cp >= 0xD800 && cp <= 0xDBFF && i+10 <= len(s) && s[i+5] == '\\' && s[i+6] == 'u' {
+					lo := hexVal(s[i+7])<<12 | hexVal(s[i+8])<<8 | hexVal(s[i+9])<<4 | hexVal(s[i+10])
+					if lo >= 0xDC00 && lo <= 0xDFFF {
+						cp = 0x10000 + (cp-0xD800)*0x400 + (lo - 0xDC00)
+						i += 6
+					}
 				}
+				result += string(rune(cp))
 				i += 4
 			default:
-				buf = append(buf, s[i])
+				result += s[i : i+1]
 			}
 			i++
 			start = i
 			continue
 		}
 		if s[i] == '"' {
-			buf = append(buf, s[start:i]...)
-			return string(buf), i + 1
+			result += s[start:i]
+			return result, i + 1
 		}
 		i++
 	}

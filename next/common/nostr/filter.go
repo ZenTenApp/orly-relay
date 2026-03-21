@@ -9,6 +9,7 @@ type Filter struct {
 	Since   int64
 	Until   int64
 	Limit   int
+	Proxy   []string // _proxy extension: relay URLs to fetch from via orly relay
 }
 
 // Matches checks if an event passes the filter.
@@ -28,13 +29,15 @@ func (f *Filter) Matches(e *Event) bool {
 	if f.Until > 0 && e.CreatedAt > f.Until {
 		return false
 	}
-	for key, values := range f.Tags {
-		if len(key) < 2 || key[0] != '#' {
-			continue
-		}
-		tagKey := string(key[1:])
-		if !eventHasTagValue(e, tagKey, values) {
-			return false
+	if f.Tags != nil {
+		for key, values := range f.Tags {
+			if len(key) < 2 || key[0] != '#' {
+				continue
+			}
+			tagKey := string(key[1:])
+			if !eventHasTagValue(e, tagKey, values) {
+				return false
+			}
 		}
 	}
 	return true
@@ -67,12 +70,14 @@ func (f *Filter) Serialize() string {
 		}
 		buf = append(buf, ']')
 	}
-	for key, values := range f.Tags {
-		buf = appendField(buf, &first)
-		buf = append(buf, '"')
-		buf = append(buf, key...)
-		buf = append(buf, "\":"...)
-		buf = appendStrArray(buf, values)
+	if f.Tags != nil {
+		for key, values := range f.Tags {
+			buf = appendField(buf, &first)
+			buf = append(buf, '"')
+			buf = append(buf, key...)
+			buf = append(buf, "\":"...)
+			buf = appendStrArray(buf, values)
+		}
 	}
 	if f.Since > 0 {
 		buf = appendField(buf, &first)
@@ -88,6 +93,11 @@ func (f *Filter) Serialize() string {
 		buf = appendField(buf, &first)
 		buf = append(buf, "\"limit\":"...)
 		buf = append(buf, intToStr(f.Limit)...)
+	}
+	if len(f.Proxy) > 0 {
+		buf = appendField(buf, &first)
+		buf = append(buf, "\"_proxy\":"...)
+		buf = appendStrArray(buf, f.Proxy)
 	}
 
 	buf = append(buf, '}')

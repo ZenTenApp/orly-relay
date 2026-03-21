@@ -119,6 +119,11 @@ export function FirstChild(el) {
   return $rt.dom.FirstChild(el);
 }
 
+// jsbridge: dom.NextSibling
+export function NextSibling(el) {
+  return $rt.dom.NextSibling(el);
+}
+
 // jsbridge: dom.InsertBefore
 export function InsertBefore(parent, newChild, refChild) {
   $rt.dom.InsertBefore(parent, newChild, refChild);
@@ -132,5 +137,15 @@ export function ReleaseElement(el) {
 // jsbridge: dom.FetchText
 export function FetchText(url, fn) {
   $rt.dom.FetchText(url, fn);
+}
+
+// jsbridge: dom.FetchRelayInfo
+export function FetchRelayInfo(url, fn) {
+  $rt.dom.FetchRelayInfo(url, fn);
+}
+
+// jsbridge: dom.ConsoleLog
+export function ConsoleLog(msg) {
+  $rt.dom.ConsoleLog(msg);
 }
 
