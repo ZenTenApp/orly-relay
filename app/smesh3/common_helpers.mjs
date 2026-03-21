@@ -9,6 +9,791 @@ export function init() {
   return;
 }
 
+export function JsonString(s) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(s);
+        $t1_2 = ($t0_1 + 2);
+        $t2_3 = $rt.builtin.makeSlice(0, $t1_2, 0);
+        $t3_4 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t4_5 = $t3_4.$get().addr(0);
+        $t4_5.$set(34);
+        $t5_6 = $rt.builtin.sliceSlice($t3_4.$get(), undefined, undefined, undefined);
+        $t6_7 = $rt.builtin.appendSlice($t2_3, $t5_6);
+        $t7_8 = $t6_7;
+        $t8_9 = 0;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t9_10 = $rt.builtin.len(s);
+        $t10_11 = ($t8_9 < $t9_10);
+        if ($t10_11) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $rt.runtime.boundsCheck($t8_9, s.length);
+        $t11_12 = s.charCodeAt($t8_9);
+        $t12_13 = ($t11_12 === 34);
+        if ($t12_13) {
+          $block = 5; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 3: {
+        $t13_14 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t14_15 = $t13_14.$get().addr(0);
+        $t14_15.$set(34);
+        $t15_16 = $rt.builtin.sliceSlice($t13_14.$get(), undefined, undefined, undefined);
+        $t16_17 = $rt.builtin.appendSlice($t7_8, $t15_16);
+        $t17_18 = $rt.builtin.bytesToString($t16_17);
+        return $t17_18;
+        break;
+      }
+      case 4: {
+        $t19_20 = ($t8_9 + 1);
+        $t7_8 = $t18_19;
+        $t8_9 = $t19_20;
+        $block = 1; break;
+        break;
+      }
+      case 5: {
+        $t20_21 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t21_22 = $t20_21.$get().addr(0);
+        $t21_22.$set(92);
+        $t22_23 = $t20_21.$get().addr(1);
+        $t22_23.$set(34);
+        $t23_24 = $rt.builtin.sliceSlice($t20_21.$get(), undefined, undefined, undefined);
+        $t24_25 = $rt.builtin.appendSlice($t7_8, $t23_24);
+        $t18_19 = $t24_25;
+        $block = 4; break;
+        break;
+      }
+      case 6: {
+        $t25_26 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t26_27 = $t25_26.$get().addr(0);
+        $t26_27.$set(92);
+        $t27_28 = $t25_26.$get().addr(1);
+        $t27_28.$set(92);
+        $t28_29 = $rt.builtin.sliceSlice($t25_26.$get(), undefined, undefined, undefined);
+        $t29_30 = $rt.builtin.appendSlice($t7_8, $t28_29);
+        $t18_19 = $t29_30;
+        $block = 4; break;
+        break;
+      }
+      case 7: {
+        $t30_31 = ($t11_12 === 92);
+        if ($t30_31) {
+          $block = 6; break;
+        }
+        else {
+          $block = 9; break;
+        }
+        break;
+      }
+      case 8: {
+        $t31_32 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t32_33 = $t31_32.$get().addr(0);
+        $t32_33.$set(92);
+        $t33_34 = $t31_32.$get().addr(1);
+        $t33_34.$set(110);
+        $t34_35 = $rt.builtin.sliceSlice($t31_32.$get(), undefined, undefined, undefined);
+        $t35_36 = $rt.builtin.appendSlice($t7_8, $t34_35);
+        $t18_19 = $t35_36;
+        $block = 4; break;
+        break;
+      }
+      case 9: {
+        $t36_37 = ($t11_12 === 10);
+        if ($t36_37) {
+          $block = 8; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 10: {
+        $t37_38 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t38_39 = $t37_38.$get().addr(0);
+        $t38_39.$set(92);
+        $t39_40 = $t37_38.$get().addr(1);
+        $t39_40.$set(114);
+        $t40_41 = $rt.builtin.sliceSlice($t37_38.$get(), undefined, undefined, undefined);
+        $t41_42 = $rt.builtin.appendSlice($t7_8, $t40_41);
+        $t18_19 = $t41_42;
+        $block = 4; break;
+        break;
+      }
+      case 11: {
+        $t42_43 = ($t11_12 === 13);
+        if ($t42_43) {
+          $block = 10; break;
+        }
+        else {
+          $block = 13; break;
+        }
+        break;
+      }
+      case 12: {
+        $t43_44 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t44_45 = $t43_44.$get().addr(0);
+        $t44_45.$set(92);
+        $t45_46 = $t43_44.$get().addr(1);
+        $t45_46.$set(116);
+        $t46_47 = $rt.builtin.sliceSlice($t43_44.$get(), undefined, undefined, undefined);
+        $t47_48 = $rt.builtin.appendSlice($t7_8, $t46_47);
+        $t18_19 = $t47_48;
+        $block = 4; break;
+        break;
+      }
+      case 13: {
+        $t48_49 = ($t11_12 === 9);
+        if ($t48_49) {
+          $block = 12; break;
+        }
+        else {
+          $block = 15; break;
+        }
+        break;
+      }
+      case 14: {
+        $t49_50 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t50_51 = $t49_50.$get().addr(0);
+        $t50_51.$set(92);
+        $t51_52 = $t49_50.$get().addr(1);
+        $t51_52.$set(98);
+        $t52_53 = $rt.builtin.sliceSlice($t49_50.$get(), undefined, undefined, undefined);
+        $t53_54 = $rt.builtin.appendSlice($t7_8, $t52_53);
+        $t18_19 = $t53_54;
+        $block = 4; break;
+        break;
+      }
+      case 15: {
+        $t54_55 = ($t11_12 === 8);
+        if ($t54_55) {
+          $block = 14; break;
+        }
+        else {
+          $block = 17; break;
+        }
+        break;
+      }
+      case 16: {
+        $t55_56 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t56_57 = $t55_56.$get().addr(0);
+        $t56_57.$set(92);
+        $t57_58 = $t55_56.$get().addr(1);
+        $t57_58.$set(102);
+        $t58_59 = $rt.builtin.sliceSlice($t55_56.$get(), undefined, undefined, undefined);
+        $t59_60 = $rt.builtin.appendSlice($t7_8, $t58_59);
+        $t18_19 = $t59_60;
+        $block = 4; break;
+        break;
+      }
+      case 17: {
+        $t60_61 = ($t11_12 === 12);
+        if ($t60_61) {
+          $block = 16; break;
+        }
+        else {
+          $block = 18; break;
+        }
+        break;
+      }
+      case 18: {
+        $t61_62 = ($t11_12 < 32);
+        if ($t61_62) {
+          $block = 19; break;
+        }
+        else {
+          $block = 20; break;
+        }
+        break;
+      }
+      case 19: {
+        $t62_63 = (($t11_12 & 0xFF) >> 4);
+        $rt.runtime.boundsCheck($t62_63, '0123456789abcdef'.length);
+        $t63_64 = '0123456789abcdef'.charCodeAt($t62_63);
+        $t64_65 = ($t11_12 & 15);
+        $rt.runtime.boundsCheck($t64_65, '0123456789abcdef'.length);
+        $t65_66 = '0123456789abcdef'.charCodeAt($t64_65);
+        $t66_67 = { $value: $rt.builtin.makeSlice(6, 6, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t67_68 = $t66_67.$get().addr(0);
+        $t67_68.$set(92);
+        $t68_69 = $t66_67.$get().addr(1);
+        $t68_69.$set(117);
+        $t69_70 = $t66_67.$get().addr(2);
+        $t69_70.$set(48);
+        $t70_71 = $t66_67.$get().addr(3);
+        $t70_71.$set(48);
+        $t71_72 = $t66_67.$get().addr(4);
+        $t71_72.$set($t63_64);
+        $t72_73 = $t66_67.$get().addr(5);
+        $t72_73.$set($t65_66);
+        $t73_74 = $rt.builtin.sliceSlice($t66_67.$get(), undefined, undefined, undefined);
+        $t74_75 = $rt.builtin.appendSlice($t7_8, $t73_74);
+        $t18_19 = $t74_75;
+        $block = 4; break;
+        break;
+      }
+      case 20: {
+        $t75_76 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t76_77 = $t75_76.$get().addr(0);
+        $t76_77.$set($t11_12);
+        $t77_78 = $rt.builtin.sliceSlice($t75_76.$get(), undefined, undefined, undefined);
+        $t78_79 = $rt.builtin.appendSlice($t7_8, $t77_78);
+        $t18_19 = $t78_79;
+        $block = 4; break;
+        break;
+      }
+    }
+  }
+}
+
+export function JsonGetString(s, key) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = ('"' + key);
+        $t1_2 = ($t0_1 + '"');
+        $t2_3 = $rt.builtin.len($t1_2);
+        $t3_4 = 0;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t4_5 = $rt.builtin.len(s);
+        $t5_6 = ($t4_5 - $t2_3);
+        $t6_7 = ($t3_4 <= $t5_6);
+        if ($t6_7) {
+          $block = 2; break;
+        }
+        else {
+          $block = 4; break;
+        }
+        break;
+      }
+      case 2: {
+        $t7_8 = ($t3_4 + $t2_3);
+        $t8_9 = $rt.builtin.stringSlice(s, $t3_4, $t7_8);
+        $t9_10 = ($t8_9 === $t1_2);
+        if ($t9_10) {
+          $block = 5; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 3: {
+        $t10_11 = ($t3_4 + 1);
+        $t3_4 = $t10_11;
+        $block = 1; break;
+        break;
+      }
+      case 4: {
+        return '';
+        break;
+      }
+      case 5: {
+        $t11_12 = ($t3_4 + $t2_3);
+        $t15_16 = $t11_12;
+        $block = 8; break;
+        break;
+      }
+      case 6: {
+        $t12_13 = ($t15_16 + 1);
+        $t15_16 = $t12_13;
+        $block = 8; break;
+        break;
+      }
+      case 7: {
+        $t13_14 = $rt.builtin.len(s);
+        $t14_15 = ($t15_16 >= $t13_14);
+        if ($t14_15) {
+          $block = 3; break;
+        }
+        else {
+          $block = 14; break;
+        }
+        break;
+      }
+      case 8: {
+        $t16_17 = $rt.builtin.len(s);
+        $t17_18 = ($t15_16 < $t16_17);
+        if ($t17_18) {
+          $block = 9; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 9: {
+        $rt.runtime.boundsCheck($t15_16, s.length);
+        $t18_19 = s.charCodeAt($t15_16);
+        $t19_20 = ($t18_19 === 32);
+        if ($t19_20) {
+          $block = 6; break;
+        }
+        else {
+          $block = 12; break;
+        }
+        break;
+      }
+      case 10: {
+        $rt.runtime.boundsCheck($t15_16, s.length);
+        $t20_21 = s.charCodeAt($t15_16);
+        $t21_22 = ($t20_21 === 13);
+        if ($t21_22) {
+          $block = 6; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 11: {
+        $rt.runtime.boundsCheck($t15_16, s.length);
+        $t22_23 = s.charCodeAt($t15_16);
+        $t23_24 = ($t22_23 === 10);
+        if ($t23_24) {
+          $block = 6; break;
+        }
+        else {
+          $block = 10; break;
+        }
+        break;
+      }
+      case 12: {
+        $rt.runtime.boundsCheck($t15_16, s.length);
+        $t24_25 = s.charCodeAt($t15_16);
+        $t25_26 = ($t24_25 === 9);
+        if ($t25_26) {
+          $block = 6; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 13: {
+        $t26_27 = ($t15_16 + 1);
+        $t32_33 = $t26_27;
+        $block = 17; break;
+        break;
+      }
+      case 14: {
+        $rt.runtime.boundsCheck($t15_16, s.length);
+        $t27_28 = s.charCodeAt($t15_16);
+        $t28_29 = ($t27_28 !== 58);
+        if ($t28_29) {
+          $block = 3; break;
+        }
+        else {
+          $block = 13; break;
+        }
+        break;
+      }
+      case 15: {
+        $t29_30 = ($t32_33 + 1);
+        $t32_33 = $t29_30;
+        $block = 17; break;
+        break;
+      }
+      case 16: {
+        $t30_31 = $rt.builtin.len(s);
+        $t31_32 = ($t32_33 >= $t30_31);
+        if ($t31_32) {
+          $block = 3; break;
+        }
+        else {
+          $block = 23; break;
+        }
+        break;
+      }
+      case 17: {
+        $t33_34 = $rt.builtin.len(s);
+        $t34_35 = ($t32_33 < $t33_34);
+        if ($t34_35) {
+          $block = 18; break;
+        }
+        else {
+          $block = 16; break;
+        }
+        break;
+      }
+      case 18: {
+        $rt.runtime.boundsCheck($t32_33, s.length);
+        $t35_36 = s.charCodeAt($t32_33);
+        $t36_37 = ($t35_36 === 32);
+        if ($t36_37) {
+          $block = 15; break;
+        }
+        else {
+          $block = 21; break;
+        }
+        break;
+      }
+      case 19: {
+        $rt.runtime.boundsCheck($t32_33, s.length);
+        $t37_38 = s.charCodeAt($t32_33);
+        $t38_39 = ($t37_38 === 13);
+        if ($t38_39) {
+          $block = 15; break;
+        }
+        else {
+          $block = 16; break;
+        }
+        break;
+      }
+      case 20: {
+        $rt.runtime.boundsCheck($t32_33, s.length);
+        $t39_40 = s.charCodeAt($t32_33);
+        $t40_41 = ($t39_40 === 10);
+        if ($t40_41) {
+          $block = 15; break;
+        }
+        else {
+          $block = 19; break;
+        }
+        break;
+      }
+      case 21: {
+        $rt.runtime.boundsCheck($t32_33, s.length);
+        $t41_42 = s.charCodeAt($t32_33);
+        $t42_43 = ($t41_42 === 9);
+        if ($t42_43) {
+          $block = 15; break;
+        }
+        else {
+          $block = 20; break;
+        }
+        break;
+      }
+      case 22: {
+        $t43_44 = ($t32_33 + 1);
+        $t48_49 = $t43_44;
+        $t49_50 = null;
+        $block = 25; break;
+        break;
+      }
+      case 23: {
+        $rt.runtime.boundsCheck($t32_33, s.length);
+        $t44_45 = s.charCodeAt($t32_33);
+        $t45_46 = ($t44_45 !== 34);
+        if ($t45_46) {
+          $block = 3; break;
+        }
+        else {
+          $block = 22; break;
+        }
+        break;
+      }
+      case 24: {
+        $rt.runtime.boundsCheck($t48_49, s.length);
+        $t46_47 = s.charCodeAt($t48_49);
+        $t47_48 = ($t46_47 === 92);
+        if ($t47_48) {
+          $block = 28; break;
+        }
+        else {
+          $block = 27; break;
+        }
+        break;
+      }
+      case 25: {
+        $t50_51 = $rt.builtin.len(s);
+        $t51_52 = ($t48_49 < $t50_51);
+        if ($t51_52) {
+          $block = 24; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 26: {
+        $t52_53 = ($t48_49 + 1);
+        $rt.runtime.boundsCheck($t52_53, s.length);
+        $t53_54 = s.charCodeAt($t52_53);
+        $t54_55 = ($t53_54 === 34);
+        if ($t54_55) {
+          $block = 30; break;
+        }
+        else {
+          $block = 32; break;
+        }
+        break;
+      }
+      case 27: {
+        $rt.runtime.boundsCheck($t48_49, s.length);
+        $t55_56 = s.charCodeAt($t48_49);
+        $t56_57 = ($t55_56 === 34);
+        if ($t56_57) {
+          $block = 40; break;
+        }
+        else {
+          $block = 41; break;
+        }
+        break;
+      }
+      case 28: {
+        $t57_58 = ($t48_49 + 1);
+        $t58_59 = $rt.builtin.len(s);
+        $t59_60 = ($t57_58 < $t58_59);
+        if ($t59_60) {
+          $block = 26; break;
+        }
+        else {
+          $block = 27; break;
+        }
+        break;
+      }
+      case 29: {
+        $t61_62 = ($t52_53 + 1);
+        $t48_49 = $t61_62;
+        $t49_50 = $t60_61;
+        $block = 25; break;
+        break;
+      }
+      case 30: {
+        $rt.runtime.boundsCheck($t52_53, s.length);
+        $t62_63 = s.charCodeAt($t52_53);
+        $t63_64 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t64_65 = $t63_64.$get().addr(0);
+        $t64_65.$set($t62_63);
+        $t65_66 = $rt.builtin.sliceSlice($t63_64.$get(), undefined, undefined, undefined);
+        $t66_67 = $rt.builtin.appendSlice($t49_50, $t65_66);
+        $t60_61 = $t66_67;
+        $block = 29; break;
+        break;
+      }
+      case 31: {
+        $t67_68 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t68_69 = $t67_68.$get().addr(0);
+        $t68_69.$set(10);
+        $t69_70 = $rt.builtin.sliceSlice($t67_68.$get(), undefined, undefined, undefined);
+        $t70_71 = $rt.builtin.appendSlice($t49_50, $t69_70);
+        $t60_61 = $t70_71;
+        $block = 29; break;
+        break;
+      }
+      case 32: {
+        $t71_72 = ($t53_54 === 92);
+        if ($t71_72) {
+          $block = 30; break;
+        }
+        else {
+          $block = 33; break;
+        }
+        break;
+      }
+      case 33: {
+        $t72_73 = ($t53_54 === 47);
+        if ($t72_73) {
+          $block = 30; break;
+        }
+        else {
+          $block = 34; break;
+        }
+        break;
+      }
+      case 34: {
+        $t73_74 = ($t53_54 === 110);
+        if ($t73_74) {
+          $block = 31; break;
+        }
+        else {
+          $block = 36; break;
+        }
+        break;
+      }
+      case 35: {
+        $t74_75 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t75_76 = $t74_75.$get().addr(0);
+        $t75_76.$set(13);
+        $t76_77 = $rt.builtin.sliceSlice($t74_75.$get(), undefined, undefined, undefined);
+        $t77_78 = $rt.builtin.appendSlice($t49_50, $t76_77);
+        $t60_61 = $t77_78;
+        $block = 29; break;
+        break;
+      }
+      case 36: {
+        $t78_79 = ($t53_54 === 114);
+        if ($t78_79) {
+          $block = 35; break;
+        }
+        else {
+          $block = 38; break;
+        }
+        break;
+      }
+      case 37: {
+        $t79_80 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t80_81 = $t79_80.$get().addr(0);
+        $t80_81.$set(9);
+        $t81_82 = $rt.builtin.sliceSlice($t79_80.$get(), undefined, undefined, undefined);
+        $t82_83 = $rt.builtin.appendSlice($t49_50, $t81_82);
+        $t60_61 = $t82_83;
+        $block = 29; break;
+        break;
+      }
+      case 38: {
+        $t83_84 = ($t53_54 === 116);
+        if ($t83_84) {
+          $block = 37; break;
+        }
+        else {
+          $block = 39; break;
+        }
+        break;
+      }
+      case 39: {
+        $rt.runtime.boundsCheck($t52_53, s.length);
+        $t84_85 = s.charCodeAt($t52_53);
+        $t85_86 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t86_87 = $t85_86.$get().addr(0);
+        $t86_87.$set($t84_85);
+        $t87_88 = $rt.builtin.sliceSlice($t85_86.$get(), undefined, undefined, undefined);
+        $t88_89 = $rt.builtin.appendSlice($t49_50, $t87_88);
+        $t60_61 = $t88_89;
+        $block = 29; break;
+        break;
+      }
+      case 40: {
+        $t89_90 = $rt.builtin.bytesToString($t49_50);
+        return $t89_90;
+        break;
+      }
+      case 41: {
+        $rt.runtime.boundsCheck($t48_49, s.length);
+        $t90_91 = s.charCodeAt($t48_49);
+        $t91_92 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t92_93 = $t91_92.$get().addr(0);
+        $t92_93.$set($t90_91);
+        $t93_94 = $rt.builtin.sliceSlice($t91_92.$get(), undefined, undefined, undefined);
+        $t94_95 = $rt.builtin.appendSlice($t49_50, $t93_94);
+        $t95_96 = ($t48_49 + 1);
+        $t48_49 = $t95_96;
+        $t49_50 = $t94_95;
+        $block = 25; break;
+        break;
+      }
+    }
+  }
+}
+
+export function Itoa(n) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = (n === 0);
+        if ($t0_1) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return '0';
+        break;
+      }
+      case 2: {
+        $t1_2 = (n < 0);
+        if ($t1_2) {
+          $block = 3; break;
+        }
+        else {
+          $t3_4 = n;
+          $t4_5 = false;
+          $block = 4; break;
+        }
+        break;
+      }
+      case 3: {
+        $t2_3 = -n;
+        $t3_4 = $t2_3;
+        $t4_5 = true;
+        $block = 4; break;
+        break;
+      }
+      case 4: {
+        $t5_6 = { $value: $rt.builtin.makeSlice(20, 20, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t12_13 = $t3_4;
+        $t13_14 = 20;
+        $block = 7; break;
+        break;
+      }
+      case 5: {
+        $t6_7 = ($t13_14 - 1);
+        $t7_8 = ($t12_13 % 10);
+        $t8_9 = (48 + $t7_8);
+        $t9_10 = ($t8_9 & 0xFF);
+        $t10_11 = $t5_6.$get().addr($t6_7);
+        $t10_11.$set($t9_10);
+        $t11_12 = Math.trunc($t12_13 / 10);
+        $t12_13 = $t11_12;
+        $t13_14 = $t6_7;
+        $block = 7; break;
+        break;
+      }
+      case 6: {
+        if ($t4_5) {
+          $block = 8; break;
+        }
+        else {
+          $t17_18 = $t13_14;
+          $block = 9; break;
+        }
+        break;
+      }
+      case 7: {
+        $t14_15 = ($t12_13 > 0);
+        if ($t14_15) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 8: {
+        $t15_16 = ($t13_14 - 1);
+        $t16_17 = $t5_6.$get().addr($t15_16);
+        $t16_17.$set(45);
+        $t17_18 = $t15_16;
+        $block = 9; break;
+        break;
+      }
+      case 9: {
+        $t18_19 = $rt.builtin.sliceSlice($t5_6.$get(), $t17_18, undefined, undefined);
+        $t19_20 = $rt.builtin.bytesToString($t18_19);
+        return $t19_20;
+        break;
+      }
+    }
+  }
+}
+
 export function Bech32Encode(hrp, data) {
   let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26;
   let $block = 0;
@@ -872,355 +1657,6 @@ export function charsetIndex(c) {
         $t4_5 = ($t0_1 + 1);
         $t0_1 = $t4_5;
         $block = 1; break;
-        break;
-      }
-    }
-  }
-}
-
-export function JsonString(s) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(s);
-        $t1_2 = ($t0_1 + 2);
-        $t2_3 = $rt.builtin.makeSlice(0, $t1_2, 0);
-        $t3_4 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t4_5 = $t3_4.$get().addr(0);
-        $t4_5.$set(34);
-        $t5_6 = $rt.builtin.sliceSlice($t3_4.$get(), undefined, undefined, undefined);
-        $t6_7 = $rt.builtin.appendSlice($t2_3, $t5_6);
-        $t7_8 = $t6_7;
-        $t8_9 = 0;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t9_10 = $rt.builtin.len(s);
-        $t10_11 = ($t8_9 < $t9_10);
-        if ($t10_11) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $rt.runtime.boundsCheck($t8_9, s.length);
-        $t11_12 = s.charCodeAt($t8_9);
-        $t12_13 = ($t11_12 === 34);
-        if ($t12_13) {
-          $block = 5; break;
-        }
-        else {
-          $block = 7; break;
-        }
-        break;
-      }
-      case 3: {
-        $t13_14 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t14_15 = $t13_14.$get().addr(0);
-        $t14_15.$set(34);
-        $t15_16 = $rt.builtin.sliceSlice($t13_14.$get(), undefined, undefined, undefined);
-        $t16_17 = $rt.builtin.appendSlice($t7_8, $t15_16);
-        $t17_18 = $rt.builtin.bytesToString($t16_17);
-        return $t17_18;
-        break;
-      }
-      case 4: {
-        $t19_20 = ($t8_9 + 1);
-        $t7_8 = $t18_19;
-        $t8_9 = $t19_20;
-        $block = 1; break;
-        break;
-      }
-      case 5: {
-        $t20_21 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t21_22 = $t20_21.$get().addr(0);
-        $t21_22.$set(92);
-        $t22_23 = $t20_21.$get().addr(1);
-        $t22_23.$set(34);
-        $t23_24 = $rt.builtin.sliceSlice($t20_21.$get(), undefined, undefined, undefined);
-        $t24_25 = $rt.builtin.appendSlice($t7_8, $t23_24);
-        $t18_19 = $t24_25;
-        $block = 4; break;
-        break;
-      }
-      case 6: {
-        $t25_26 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t26_27 = $t25_26.$get().addr(0);
-        $t26_27.$set(92);
-        $t27_28 = $t25_26.$get().addr(1);
-        $t27_28.$set(92);
-        $t28_29 = $rt.builtin.sliceSlice($t25_26.$get(), undefined, undefined, undefined);
-        $t29_30 = $rt.builtin.appendSlice($t7_8, $t28_29);
-        $t18_19 = $t29_30;
-        $block = 4; break;
-        break;
-      }
-      case 7: {
-        $t30_31 = ($t11_12 === 92);
-        if ($t30_31) {
-          $block = 6; break;
-        }
-        else {
-          $block = 9; break;
-        }
-        break;
-      }
-      case 8: {
-        $t31_32 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t32_33 = $t31_32.$get().addr(0);
-        $t32_33.$set(92);
-        $t33_34 = $t31_32.$get().addr(1);
-        $t33_34.$set(110);
-        $t34_35 = $rt.builtin.sliceSlice($t31_32.$get(), undefined, undefined, undefined);
-        $t35_36 = $rt.builtin.appendSlice($t7_8, $t34_35);
-        $t18_19 = $t35_36;
-        $block = 4; break;
-        break;
-      }
-      case 9: {
-        $t36_37 = ($t11_12 === 10);
-        if ($t36_37) {
-          $block = 8; break;
-        }
-        else {
-          $block = 11; break;
-        }
-        break;
-      }
-      case 10: {
-        $t37_38 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t38_39 = $t37_38.$get().addr(0);
-        $t38_39.$set(92);
-        $t39_40 = $t37_38.$get().addr(1);
-        $t39_40.$set(114);
-        $t40_41 = $rt.builtin.sliceSlice($t37_38.$get(), undefined, undefined, undefined);
-        $t41_42 = $rt.builtin.appendSlice($t7_8, $t40_41);
-        $t18_19 = $t41_42;
-        $block = 4; break;
-        break;
-      }
-      case 11: {
-        $t42_43 = ($t11_12 === 13);
-        if ($t42_43) {
-          $block = 10; break;
-        }
-        else {
-          $block = 13; break;
-        }
-        break;
-      }
-      case 12: {
-        $t43_44 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t44_45 = $t43_44.$get().addr(0);
-        $t44_45.$set(92);
-        $t45_46 = $t43_44.$get().addr(1);
-        $t45_46.$set(116);
-        $t46_47 = $rt.builtin.sliceSlice($t43_44.$get(), undefined, undefined, undefined);
-        $t47_48 = $rt.builtin.appendSlice($t7_8, $t46_47);
-        $t18_19 = $t47_48;
-        $block = 4; break;
-        break;
-      }
-      case 13: {
-        $t48_49 = ($t11_12 === 9);
-        if ($t48_49) {
-          $block = 12; break;
-        }
-        else {
-          $block = 15; break;
-        }
-        break;
-      }
-      case 14: {
-        $t49_50 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t50_51 = $t49_50.$get().addr(0);
-        $t50_51.$set(92);
-        $t51_52 = $t49_50.$get().addr(1);
-        $t51_52.$set(98);
-        $t52_53 = $rt.builtin.sliceSlice($t49_50.$get(), undefined, undefined, undefined);
-        $t53_54 = $rt.builtin.appendSlice($t7_8, $t52_53);
-        $t18_19 = $t53_54;
-        $block = 4; break;
-        break;
-      }
-      case 15: {
-        $t54_55 = ($t11_12 === 8);
-        if ($t54_55) {
-          $block = 14; break;
-        }
-        else {
-          $block = 17; break;
-        }
-        break;
-      }
-      case 16: {
-        $t55_56 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t56_57 = $t55_56.$get().addr(0);
-        $t56_57.$set(92);
-        $t57_58 = $t55_56.$get().addr(1);
-        $t57_58.$set(102);
-        $t58_59 = $rt.builtin.sliceSlice($t55_56.$get(), undefined, undefined, undefined);
-        $t59_60 = $rt.builtin.appendSlice($t7_8, $t58_59);
-        $t18_19 = $t59_60;
-        $block = 4; break;
-        break;
-      }
-      case 17: {
-        $t60_61 = ($t11_12 === 12);
-        if ($t60_61) {
-          $block = 16; break;
-        }
-        else {
-          $block = 18; break;
-        }
-        break;
-      }
-      case 18: {
-        $t61_62 = ($t11_12 < 32);
-        if ($t61_62) {
-          $block = 19; break;
-        }
-        else {
-          $block = 20; break;
-        }
-        break;
-      }
-      case 19: {
-        $t62_63 = (($t11_12 & 0xFF) >> 4);
-        $rt.runtime.boundsCheck($t62_63, '0123456789abcdef'.length);
-        $t63_64 = '0123456789abcdef'.charCodeAt($t62_63);
-        $t64_65 = ($t11_12 & 15);
-        $rt.runtime.boundsCheck($t64_65, '0123456789abcdef'.length);
-        $t65_66 = '0123456789abcdef'.charCodeAt($t64_65);
-        $t66_67 = { $value: $rt.builtin.makeSlice(6, 6, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t67_68 = $t66_67.$get().addr(0);
-        $t67_68.$set(92);
-        $t68_69 = $t66_67.$get().addr(1);
-        $t68_69.$set(117);
-        $t69_70 = $t66_67.$get().addr(2);
-        $t69_70.$set(48);
-        $t70_71 = $t66_67.$get().addr(3);
-        $t70_71.$set(48);
-        $t71_72 = $t66_67.$get().addr(4);
-        $t71_72.$set($t63_64);
-        $t72_73 = $t66_67.$get().addr(5);
-        $t72_73.$set($t65_66);
-        $t73_74 = $rt.builtin.sliceSlice($t66_67.$get(), undefined, undefined, undefined);
-        $t74_75 = $rt.builtin.appendSlice($t7_8, $t73_74);
-        $t18_19 = $t74_75;
-        $block = 4; break;
-        break;
-      }
-      case 20: {
-        $t75_76 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t76_77 = $t75_76.$get().addr(0);
-        $t76_77.$set($t11_12);
-        $t77_78 = $rt.builtin.sliceSlice($t75_76.$get(), undefined, undefined, undefined);
-        $t78_79 = $rt.builtin.appendSlice($t7_8, $t77_78);
-        $t18_19 = $t78_79;
-        $block = 4; break;
-        break;
-      }
-    }
-  }
-}
-
-export function Itoa(n) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = (n === 0);
-        if ($t0_1) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return '0';
-        break;
-      }
-      case 2: {
-        $t1_2 = (n < 0);
-        if ($t1_2) {
-          $block = 3; break;
-        }
-        else {
-          $t3_4 = n;
-          $t4_5 = false;
-          $block = 4; break;
-        }
-        break;
-      }
-      case 3: {
-        $t2_3 = -n;
-        $t3_4 = $t2_3;
-        $t4_5 = true;
-        $block = 4; break;
-        break;
-      }
-      case 4: {
-        $t5_6 = { $value: $rt.builtin.makeSlice(20, 20, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t12_13 = $t3_4;
-        $t13_14 = 20;
-        $block = 7; break;
-        break;
-      }
-      case 5: {
-        $t6_7 = ($t13_14 - 1);
-        $t7_8 = ($t12_13 % 10);
-        $t8_9 = (48 + $t7_8);
-        $t9_10 = ($t8_9 & 0xFF);
-        $t10_11 = $t5_6.$get().addr($t6_7);
-        $t10_11.$set($t9_10);
-        $t11_12 = Math.trunc($t12_13 / 10);
-        $t12_13 = $t11_12;
-        $t13_14 = $t6_7;
-        $block = 7; break;
-        break;
-      }
-      case 6: {
-        if ($t4_5) {
-          $block = 8; break;
-        }
-        else {
-          $t17_18 = $t13_14;
-          $block = 9; break;
-        }
-        break;
-      }
-      case 7: {
-        $t14_15 = ($t12_13 > 0);
-        if ($t14_15) {
-          $block = 5; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 8: {
-        $t15_16 = ($t13_14 - 1);
-        $t16_17 = $t5_6.$get().addr($t15_16);
-        $t16_17.$set(45);
-        $t17_18 = $t15_16;
-        $block = 9; break;
-        break;
-      }
-      case 9: {
-        $t18_19 = $rt.builtin.sliceSlice($t5_6.$get(), $t17_18, undefined, undefined);
-        $t19_20 = $rt.builtin.bytesToString($t18_19);
-        return $t19_20;
         break;
       }
     }

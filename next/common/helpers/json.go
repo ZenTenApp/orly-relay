@@ -37,6 +37,58 @@ func JsonString(s string) string {
 	return string(buf)
 }
 
+// JsonGetString extracts a string value for the given key from a JSON object.
+// Returns empty string if not found. Handles basic escape sequences.
+func JsonGetString(s, key string) string {
+	kq := "\"" + key + "\""
+	kqLen := len(kq)
+	for i := 0; i <= len(s)-kqLen; i++ {
+		if s[i:i+kqLen] == kq {
+			j := i + kqLen
+			for j < len(s) && (s[j] == ' ' || s[j] == '\t' || s[j] == '\n' || s[j] == '\r') {
+				j++
+			}
+			if j >= len(s) || s[j] != ':' {
+				continue
+			}
+			j++
+			for j < len(s) && (s[j] == ' ' || s[j] == '\t' || s[j] == '\n' || s[j] == '\r') {
+				j++
+			}
+			if j >= len(s) || s[j] != '"' {
+				continue
+			}
+			j++
+			var buf []byte
+			for j < len(s) {
+				if s[j] == '\\' && j+1 < len(s) {
+					j++
+					switch s[j] {
+					case '"', '\\', '/':
+						buf = append(buf, s[j])
+					case 'n':
+						buf = append(buf, '\n')
+					case 'r':
+						buf = append(buf, '\r')
+					case 't':
+						buf = append(buf, '\t')
+					default:
+						buf = append(buf, s[j])
+					}
+					j++
+					continue
+				}
+				if s[j] == '"' {
+					return string(buf)
+				}
+				buf = append(buf, s[j])
+				j++
+			}
+		}
+	}
+	return ""
+}
+
 // Itoa converts int64 to decimal string.
 func Itoa(n int64) string {
 	if n == 0 {

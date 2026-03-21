@@ -15,6 +15,7 @@ const APP_FILES = [
   './common_jsbridge_crypto.mjs',
   './common_jsbridge_dom.mjs',
   './common_jsbridge_localstorage.mjs',
+  './common_jsbridge_signer.mjs',
   './common_jsbridge_ws.mjs',
   './common_nostr.mjs',
   './common_relay.mjs',
@@ -29,8 +30,11 @@ const APP_FILES = [
   './$runtime/ws.mjs',
   './$runtime/localstorage.mjs',
   './$runtime/crypto.mjs',
+  './$runtime/signer.mjs',
   './$wasm/secp256k1.mjs',
   './$wasm/secp256k1.wasm',
+  './fonts/FiraCode-Regular.woff2',
+  './fonts/FiraCode-Bold.woff2',
 ];
 
 let currentVersion = null;
