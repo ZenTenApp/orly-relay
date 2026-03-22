@@ -4,46 +4,22 @@ import (
 	"common/helpers"
 	"common/jsbridge/subtle"
 	"common/jsbridge/sw"
-	"common/nostr"
-	"common/relay"
 )
 
-// Module state.
+// Shared state not yet assigned to a specific domain.
 var (
-	seckey      [32]byte
-	hasKey      bool
-	myPubkey    string
-	writeRelays []string
-	rpool       *relay.Pool
-	clientSubs  map[string]*clientSub
-	proxySubs   map[string]*proxySub
-	dmSubIDs    map[string]bool
-	dmRelayURLs []string
-	cryptoCBs   map[int]func(string, string)
+	dmSubIDs     map[string]bool
+	dmRelayURLs  []string
+	cryptoCBs    map[int]func(string, string)
 	nextCryptoID int
 )
 
-type clientSub struct {
-	filter    *nostr.Filter
-	filterRaw string
-	clientID  string
-}
-
-type proxySub struct {
-	remoteIDs  map[string]bool
-	relayCount int
-	eoseCount  int
-	timer      sw.Timer
-	done       bool
-}
-
-func initState() {
-	rpool = relay.NewPool(16)
-	clientSubs = make(map[string]*clientSub)
-	proxySubs = make(map[string]*proxySub)
+func initSharedState() {
 	dmSubIDs = make(map[string]bool)
 	cryptoCBs = make(map[int]func(string, string))
 }
+
+// --- Shared utilities ---
 
 func sendToClient(clientID, msg string) {
 	sw.GetClientByID(clientID, func(c sw.Client, ok bool) {

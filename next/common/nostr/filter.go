@@ -82,12 +82,12 @@ func (f *Filter) Serialize() string {
 	if f.Since > 0 {
 		buf = appendField(buf, &first)
 		buf = append(buf, "\"since\":"...)
-		buf = append(buf, intToStr(int(f.Since))...)
+		buf = append(buf, i64ToStr(f.Since)...)
 	}
 	if f.Until > 0 {
 		buf = appendField(buf, &first)
 		buf = append(buf, "\"until\":"...)
-		buf = append(buf, intToStr(int(f.Until))...)
+		buf = append(buf, i64ToStr(f.Until)...)
 	}
 	if f.Limit > 0 {
 		buf = appendField(buf, &first)
@@ -124,6 +124,29 @@ func appendStrArray(buf []byte, ss []string) []byte {
 	}
 	buf = append(buf, ']')
 	return buf
+}
+
+func i64ToStr(n int64) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := false
+	if n < 0 {
+		neg = true
+		n = -n
+	}
+	var b [20]byte
+	i := len(b)
+	for n > 0 {
+		i--
+		b[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		b[i] = '-'
+	}
+	return string(b[i:])
 }
 
 func intToStr(n int) string {

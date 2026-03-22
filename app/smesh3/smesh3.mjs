@@ -1068,43 +1068,13 @@ export function jstr(s) {
 }
 
 export function onSWMessage(raw) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = $rt.builtin.len(raw);
-        $t1_2 = ($t0_1 < 5);
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t2_3 = nextStr(raw, 1);
-        $t3_4 = $t2_3[0];
-        $t4_5 = $t2_3[1];
-        $t5_6 = ($t3_4 === 'EVENT');
-        if ($t5_6) {
-          $block = 5; break;
-        }
-        else {
-          $block = 7; break;
-        }
-        break;
-      }
-      case 3: {
-        $rt.runtime.boundsCheck(0, $rt.builtin.byteLen(raw));
-        $t6_7 = $rt.builtin.stringByteAt(raw, 0);
-        $t7_8 = ($t6_7 !== 91);
-        if ($t7_8) {
+        $t0_1 = (raw === 'update-available');
+        if ($t0_1) {
           $block = 1; break;
         }
         else {
@@ -1112,54 +1082,84 @@ export function onSWMessage(raw) {
         }
         break;
       }
-      case 4: {
+      case 1: {
+        $t1_2 = common$jsbridge$dom.PostToSW('activate-update');
         return;
         break;
       }
-      case 5: {
-        $t8_9 = nextStr(raw, $t4_5);
-        $t9_10 = $t8_9[0];
-        $t10_11 = $t8_9[1];
-        $t11_12 = extractValue(raw, $t10_11);
-        $t12_13 = ($t11_12 === '');
-        if ($t12_13) {
-          $block = 8; break;
+      case 2: {
+        $t2_3 = $rt.builtin.len(raw);
+        $t3_4 = ($t2_3 < 5);
+        if ($t3_4) {
+          $block = 3; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 3: {
+        return;
+        break;
+      }
+      case 4: {
+        $t4_5 = nextStr(raw, 1);
+        $t5_6 = $t4_5[0];
+        $t6_7 = $t4_5[1];
+        $t7_8 = ($t5_6 === 'EVENT');
+        if ($t7_8) {
+          $block = 7; break;
         }
         else {
           $block = 9; break;
         }
         break;
       }
-      case 6: {
-        $t13_14 = nextStr(raw, $t4_5);
-        $t14_15 = $t13_14[0];
-        $t15_16 = $t13_14[1];
-        $t16_17 = dispatchEOSE($t14_15);
-        $block = 4; break;
-        break;
-      }
-      case 7: {
-        $t17_18 = ($t3_4 === 'EOSE');
-        if ($t17_18) {
-          $block = 6; break;
+      case 5: {
+        $rt.runtime.boundsCheck(0, $rt.builtin.byteLen(raw));
+        $t8_9 = $rt.builtin.stringByteAt(raw, 0);
+        $t9_10 = ($t8_9 !== 91);
+        if ($t9_10) {
+          $block = 3; break;
         }
         else {
           $block = 4; break;
         }
         break;
       }
-      case 8: {
+      case 6: {
         return;
         break;
       }
-      case 9: {
-        $t18_19 = common$nostr.ParseEvent($t11_12);
-        $t19_20 = ($t18_19 === null);
-        if ($t19_20) {
+      case 7: {
+        $t10_11 = nextStr(raw, $t6_7);
+        $t11_12 = $t10_11[0];
+        $t12_13 = $t10_11[1];
+        $t13_14 = extractValue(raw, $t12_13);
+        $t14_15 = ($t13_14 === '');
+        if ($t14_15) {
           $block = 10; break;
         }
         else {
           $block = 11; break;
+        }
+        break;
+      }
+      case 8: {
+        $t15_16 = nextStr(raw, $t6_7);
+        $t16_17 = $t15_16[0];
+        $t17_18 = $t15_16[1];
+        $t18_19 = dispatchEOSE($t16_17);
+        $block = 6; break;
+        break;
+      }
+      case 9: {
+        $t19_20 = ($t5_6 === 'EOSE');
+        if ($t19_20) {
+          $block = 8; break;
+        }
+        else {
+          $block = 6; break;
         }
         break;
       }
@@ -1168,8 +1168,23 @@ export function onSWMessage(raw) {
         break;
       }
       case 11: {
-        $t20_21 = dispatchEvent($t9_10, $t18_19);
-        $block = 4; break;
+        $t20_21 = common$nostr.ParseEvent($t13_14);
+        $t21_22 = ($t20_21 === null);
+        if ($t21_22) {
+          $block = 12; break;
+        }
+        else {
+          $block = 13; break;
+        }
+        break;
+      }
+      case 12: {
+        return;
+        break;
+      }
+      case 13: {
+        $t22_23 = dispatchEvent($t11_12, $t20_21);
+        $block = 6; break;
         break;
       }
     }
@@ -2656,7 +2671,7 @@ export function recordRelayFreq(ev) {
 }
 
 export function buildProxy(pk) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -2674,14 +2689,15 @@ export function buildProxy(pk) {
         break;
       }
       case 1: {
-        return $t2_3;
+        $t4_5 = appendUnique($t2_3, 'wss://purplepag.es');
+        return $t4_5;
         break;
       }
       case 2: {
-        $t4_5 = topRelays(5);
-        $t5_6 = $rt.builtin.len($t4_5);
-        $t6_7 = ($t5_6 > 0);
-        if ($t6_7) {
+        $t5_6 = topRelays(5);
+        $t6_7 = $rt.builtin.len($t5_6);
+        $t7_8 = ($t6_7 > 0);
+        if ($t7_8) {
           $block = 4; break;
         }
         else {
@@ -2690,9 +2706,9 @@ export function buildProxy(pk) {
         break;
       }
       case 3: {
-        $t7_8 = $rt.builtin.len($t2_3);
-        $t8_9 = ($t7_8 > 0);
-        if ($t8_9) {
+        $t8_9 = $rt.builtin.len($t2_3);
+        $t9_10 = ($t8_9 > 0);
+        if ($t9_10) {
           $block = 1; break;
         }
         else {
@@ -2701,15 +2717,68 @@ export function buildProxy(pk) {
         break;
       }
       case 4: {
-        return $t4_5;
+        $t10_11 = appendUnique($t5_6, 'wss://purplepag.es');
+        return $t10_11;
         break;
       }
       case 5: {
-        $t9_10 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t10_11 = $t9_10.$get().addr(0);
-        $t10_11.$set('wss://purplepag.es');
-        $t11_12 = $rt.builtin.sliceSlice($t9_10.$get(), undefined, undefined, undefined);
-        return $t11_12;
+        $t11_12 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t12_13 = $t11_12.$get().addr(0);
+        $t12_13.$set('wss://purplepag.es');
+        $t13_14 = $rt.builtin.sliceSlice($t11_12.$get(), undefined, undefined, undefined);
+        return $t13_14;
+        break;
+      }
+    }
+  }
+}
+
+export function appendUnique(list, val) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(list);
+        $t1_2 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t2_3 = ($t1_2 + 1);
+        $t3_4 = ($t2_3 < $t0_1);
+        if ($t3_4) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t4_5 = list.addr($t2_3);
+        $t5_6 = $t4_5.$get();
+        $t6_7 = ($t5_6 === val);
+        if ($t6_7) {
+          $block = 4; break;
+        }
+        else {
+          $t1_2 = $t2_3;
+          $block = 1; break;
+        }
+        break;
+      }
+      case 3: {
+        $t7_8 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t8_9 = $t7_8.$get().addr(0);
+        $t8_9.$set(val);
+        $t9_10 = $rt.builtin.sliceSlice($t7_8.$get(), undefined, undefined, undefined);
+        $t10_11 = $rt.builtin.appendSlice(list, $t9_10);
+        return $t10_11;
+        break;
+      }
+      case 4: {
+        return list;
         break;
       }
     }
@@ -3656,7 +3725,7 @@ export function strIndex(s, sub) {
 }
 
 export function normalizeURL(u) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -3714,31 +3783,27 @@ export function normalizeURL(u) {
         $t13_14 = strIndex($t12_13, '/');
         $t14_15 = ($t13_14 < 0);
         if ($t14_15) {
-          $block = 9; break;
+          $block = 8; break;
         }
         else {
-          $block = 10; break;
+          $block = 9; break;
         }
         break;
       }
       case 6: {
-        return $t5_6;
+        $t15_16 = $rt.builtin.len($t5_6);
+        $t16_17 = ($t15_16 > 5);
+        if ($t16_17) {
+          $block = 12; break;
+        }
+        else {
+          $block = 11; break;
+        }
         break;
       }
       case 7: {
-        $t15_16 = $rt.builtin.stringSlice($t5_6, undefined, 6);
-        $t16_17 = ($t15_16 === 'wss://');
-        if ($t16_17) {
-          $block = 5; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 8: {
         $t17_18 = $rt.builtin.stringSlice($t5_6, undefined, 6);
-        $t18_19 = ($t17_18 === 'ws:///');
+        $t18_19 = ($t17_18 === 'wss://');
         if ($t18_19) {
           $block = 5; break;
         }
@@ -3747,14 +3812,14 @@ export function normalizeURL(u) {
         }
         break;
       }
-      case 9: {
+      case 8: {
         $t19_20 = $rt.builtin.stringSlice($t5_6, undefined, 6);
         $t20_21 = toLower($t12_13);
         $t21_22 = ($t19_20 + $t20_21);
         return $t21_22;
         break;
       }
-      case 10: {
+      case 9: {
         $t22_23 = $rt.builtin.stringSlice($t5_6, undefined, 6);
         $t23_24 = $rt.builtin.stringSlice($t12_13, undefined, $t13_14);
         $t24_25 = toLower($t23_24);
@@ -3762,6 +3827,50 @@ export function normalizeURL(u) {
         $t26_27 = $rt.builtin.stringSlice($t12_13, $t13_14, undefined);
         $t27_28 = ($t25_26 + $t26_27);
         return $t27_28;
+        break;
+      }
+      case 10: {
+        $t28_29 = $rt.builtin.stringSlice($t5_6, 5, undefined);
+        $t29_30 = strIndex($t28_29, '/');
+        $t30_31 = ($t29_30 < 0);
+        if ($t30_31) {
+          $block = 13; break;
+        }
+        else {
+          $block = 14; break;
+        }
+        break;
+      }
+      case 11: {
+        return $t5_6;
+        break;
+      }
+      case 12: {
+        $t31_32 = $rt.builtin.stringSlice($t5_6, undefined, 5);
+        $t32_33 = ($t31_32 === 'ws://');
+        if ($t32_33) {
+          $block = 10; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 13: {
+        $t33_34 = $rt.builtin.stringSlice($t5_6, undefined, 5);
+        $t34_35 = toLower($t28_29);
+        $t35_36 = ($t33_34 + $t34_35);
+        return $t35_36;
+        break;
+      }
+      case 14: {
+        $t36_37 = $rt.builtin.stringSlice($t5_6, undefined, 5);
+        $t37_38 = $rt.builtin.stringSlice($t28_29, undefined, $t29_30);
+        $t38_39 = toLower($t37_38);
+        $t39_40 = ($t36_37 + $t38_39);
+        $t40_41 = $rt.builtin.stringSlice($t28_29, $t29_30, undefined);
+        $t41_42 = ($t39_40 + $t40_41);
+        return $t41_42;
         break;
       }
     }

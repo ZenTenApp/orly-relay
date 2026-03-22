@@ -292,12 +292,14 @@ export function PostToSW(msg) {
   }
 }
 
-// Register a handler for JSON array messages from the service worker.
+// Register a handler for messages from the service worker.
 export function OnSWMessage(fn) {
   if (!navigator.serviceWorker) return;
   navigator.serviceWorker.addEventListener('message', (event) => {
     const d = event.data;
-    if (Array.isArray(d) && d.length > 0) {
+    if (typeof d === 'string') {
+      fn(d);
+    } else if (Array.isArray(d) && d.length > 0) {
       fn(JSON.stringify(d));
     }
   });

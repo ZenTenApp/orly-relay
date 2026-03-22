@@ -483,6 +483,10 @@ func jstr(s string) string {
 // --- SW message handling ---
 
 func onSWMessage(raw string) {
+	if raw == "update-available" {
+		dom.PostToSW("activate-update")
+		return
+	}
 	if len(raw) < 5 || raw[0] != '[' {
 		return
 	}
@@ -806,16 +810,26 @@ func recordRelayFreq(ev *nostr.Event) {
 }
 
 // buildProxy builds a _proxy relay list for a pubkey.
-// Priority: author's own relays > top frequency relays > purplepag.es.
+// Always includes purplepag.es for metadata discovery.
 func buildProxy(pk string) []string {
+	pp := "wss://purplepag.es"
 	if rels, ok := authorRelays[pk]; ok && len(rels) > 0 {
-		return rels
+		return appendUnique(rels, pp)
 	}
 	top := topRelays(5)
 	if len(top) > 0 {
-		return top
+		return appendUnique(top, pp)
 	}
-	return []string{"wss://purplepag.es"}
+	return []string{pp}
+}
+
+func appendUnique(list []string, val string) []string {
+	for _, v := range list {
+		if v == val {
+			return list
+		}
+	}
+	return append(list, val)
 }
 
 // fetchAuthorProfile fetches kind 0 + kind 10002 for an author via SW PROXY.
@@ -1065,13 +1079,21 @@ func normalizeURL(u string) string {
 		u = u[:len(u)-1]
 	}
 	// Lowercase scheme and host (before first / after ://).
-	if len(u) > 6 && (u[:6] == "wss://" || u[:6] == "ws:///") {
+	if len(u) > 6 && u[:6] == "wss://" {
 		rest := u[6:]
 		slash := strIndex(rest, "/")
 		if slash < 0 {
 			return u[:6] + toLower(rest)
 		}
 		return u[:6] + toLower(rest[:slash]) + rest[slash:]
+	}
+	if len(u) > 5 && u[:5] == "ws://" {
+		rest := u[5:]
+		slash := strIndex(rest, "/")
+		if slash < 0 {
+			return u[:5] + toLower(rest)
+		}
+		return u[:5] + toLower(rest[:slash]) + rest[slash:]
 	}
 	return u
 }

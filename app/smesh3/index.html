@@ -93,15 +93,18 @@ body.dark {
 <div id="update-snackbar">new version available — click to update</div>
 <script>
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./$sw/$entry.mjs', { type: 'module' }).then(reg => {
+  navigator.serviceWorker.register('./$sw/$entry.mjs', { type: 'module', scope: '/' }).then(reg => {
     console.log('sm3sh: sw registered');
+  }).catch(err => {
+    console.error('sm3sh: sw registration failed:', err);
   });
 
   navigator.serviceWorker.addEventListener('message', (event) => {
-    if (event.data.type === 'update-available') {
+    const d = event.data;
+    if (d === 'update-available') {
       document.getElementById('update-snackbar').classList.add('visible');
     }
-    if (event.data.type === 'update-activated') {
+    if (d === 'update-activated') {
       window.location.reload();
     }
   });

@@ -48,6 +48,7 @@ func Dial(url string) *Conn {
 				c.onReady(true)
 				c.onReady = nil
 			}
+			c.flushSubs()
 		},
 		func(connID int, code int, reason string) {
 			c.state = StateClosed
@@ -197,6 +198,18 @@ func (c *Conn) SetOnOK(fn func(string, bool, string)) {
 // SetOnAuth sets a handler for AUTH challenges.
 func (c *Conn) SetOnAuth(fn func(string)) {
 	c.onAuth = fn
+}
+
+// flushSubs re-sends REQ for all stored subscriptions (used after WS opens).
+func (c *Conn) flushSubs() {
+	for _, sub := range c.subs {
+		msg := "[\"REQ\",\"" + sub.ID + "\""
+		for _, f := range sub.Filters {
+			msg += "," + f.Serialize()
+		}
+		msg += "]"
+		ws.Send(c.wsConn, msg)
+	}
 }
 
 func eventJSON(ev *nostr.Event) string {
