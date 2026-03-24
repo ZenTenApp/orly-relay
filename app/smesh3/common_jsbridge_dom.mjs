@@ -159,6 +159,11 @@ export function IDBGetAll(store, fn, done) {
   $rt.dom.IDBGetAll(store, fn, done);
 }
 
+// jsbridge: dom.PrefersDark
+export function PrefersDark() {
+  return $rt.dom.PrefersDark();
+}
+
 // jsbridge: dom.ConsoleLog
 export function ConsoleLog(msg) {
   $rt.dom.ConsoleLog(msg);

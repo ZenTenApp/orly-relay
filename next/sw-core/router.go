@@ -2,13 +2,13 @@ package main
 
 import (
 	"common/helpers"
+	"common/jsbridge/registry"
 	"common/jsbridge/sw"
 	"common/nostr"
 )
 
-// Subscription Router domain — the central dispatcher (spine).
-// Connects all other domains: Cache, Relay Proxy, DM Crypto, Identity.
-// Owns client subscriptions, filter matching, message dispatch.
+// Subscription Router domain — central dispatcher.
+// Extension calls (crypto, marmot) go through the registry.
 
 var (
 	clientSubs map[string]*clientSub
@@ -34,7 +34,6 @@ func initRouter() {
 	proxySubs = make(map[string]*proxySub)
 }
 
-// routeMessage dispatches an app-level message from a browser client.
 func routeMessage(clientID string, w *mw, msgType string) {
 	switch msgType {
 	case "REQ":
@@ -106,22 +105,44 @@ func routeMessage(clientID string, w *mw, msgType string) {
 
 	case "MLS_INIT":
 		relayURLs := w.strs()
-		marmotInit(relayURLs)
+		json := stringsToJSON(relayURLs)
+		if !registry.HasHook("marmotInit") {
+			registry.LoadModule("swmarmot", func() { registry.MarmotInit(json) })
+		} else {
+			registry.MarmotInit(json)
+		}
 
 	case "MLS_SEND":
 		recipient := w.str()
 		content := w.str()
-		marmotSend(recipient, content)
+		if !registry.HasHook("marmotSend") {
+			registry.LoadModule("swmarmot", func() { registry.MarmotSend(recipient, content) })
+		} else {
+			registry.MarmotSend(recipient, content)
+		}
 
 	case "MLS_SUB":
-		marmotSubscribe()
+		if !registry.HasHook("marmotSubscribe") {
+			registry.LoadModule("swmarmot", func() { registry.MarmotSubscribe() })
+		} else {
+			registry.MarmotSubscribe()
+		}
 
 	case "MLS_PUBLISH_KP":
 		relayURLs := w.strs()
-		marmotPublishKP(relayURLs)
+		json := stringsToJSON(relayURLs)
+		if !registry.HasHook("marmotPublishKP") {
+			registry.LoadModule("swmarmot", func() { registry.MarmotPublishKP(json) })
+		} else {
+			registry.MarmotPublishKP(json)
+		}
 
 	case "MLS_LIST_GROUPS":
-		marmotListGroups(clientID)
+		if !registry.HasHook("marmotListGroups") {
+			registry.LoadModule("swmarmot", func() { registry.MarmotListGroups(clientID) })
+		} else {
+			registry.MarmotListGroups(clientID)
+		}
 
 	case "CRYPTO_RESULT":
 		id := int(w.num())
@@ -131,12 +152,15 @@ func routeMessage(clientID string, w *mw, msgType string) {
 			delete(cryptoCBs, id)
 			fn(result, errMsg)
 		}
+
+	case "PAGE":
+		page := w.str()
+		routerPageHint(page)
 	}
 }
 
 // --- REQ / CLOSE / EVENT ---
 
-// routerReq handles REQ from UI — registers subscription, queries cache, sends results.
 func routerReq(clientID, subID, filterRaw string) {
 	f := nostr.ParseFilter(filterRaw)
 	if f == nil {
@@ -153,13 +177,11 @@ func routerReq(clientID, subID, filterRaw string) {
 	})
 }
 
-// routerClose closes a client subscription and any associated proxy.
 func routerClose(subID string) {
 	delete(clientSubs, subID)
 	routerCleanupProxy(subID)
 }
 
-// routerPublish handles EVENT from UI — store in cache, push to subs, publish to relays.
 func routerPublish(clientID, eventRaw string) {
 	ev := nostr.ParseEvent(eventRaw)
 	if ev == nil {
@@ -178,7 +200,6 @@ func routerPublish(clientID, eventRaw string) {
 
 // --- PROXY subscriptions ---
 
-// routerProxy sets up a multi-relay proxy subscription.
 func routerProxy(clientID, subID, filterRaw string, relayURLs []string) {
 	routerCleanupProxy(subID)
 
@@ -204,7 +225,6 @@ func routerProxy(clientID, subID, filterRaw string, relayURLs []string) {
 		c.Subscribe(rSubID, []*nostr.Filter{f})
 	}
 
-	// Timeout: send EOSE to client if relays are too slow.
 	proxyID := subID
 	proxySubs[subID].timer = sw.SetTimeout(5000, func() {
 		info, ok := proxySubs[proxyID]
@@ -217,7 +237,6 @@ func routerProxy(clientID, subID, filterRaw string, relayURLs []string) {
 	})
 }
 
-// routerCleanupProxy closes remote subscriptions and removes proxy state.
 func routerCleanupProxy(proxyID string) {
 	info, ok := proxySubs[proxyID]
 	if !ok {
@@ -245,16 +264,13 @@ func routerCleanupProxy(proxyID string) {
 
 // --- Relay event callbacks ---
 
-// routerOnRelayEvent is called by the Relay Proxy when an event arrives from a relay.
 func routerOnRelayEvent(relayURL string, ev *nostr.Event) {
 	evJSON := ev.ToJSON()
 
 	sw.Log("relay event kind=" + helpers.Itoa(int64(ev.Kind)) + " from=" + relayURL)
 
-	// Immediate client notification.
 	pushToMatchingSubs(ev)
 
-	// Async IDB storage + relay propagation.
 	cacheStore(evJSON, func(saved bool) {
 		if saved {
 			if ev.Kind != 4 && ev.Kind != 1059 {
@@ -262,20 +278,27 @@ func routerOnRelayEvent(relayURL string, ev *nostr.Event) {
 			}
 		}
 		if ev.Kind == 4 || ev.Kind == 1059 {
-			decryptIncomingDM(ev, func(rec *DMRecord) {
-				routerSaveDMRecord(rec)
-			})
+			decryptFn := func() {
+				registry.DecryptDM(evJSON, func(dmRecJSON string) {
+					if dmRecJSON != "" {
+						routerSaveDMRecordJSON(dmRecJSON)
+					}
+				})
+			}
+			if !registry.HasHook("decryptDM") {
+				registry.LoadModule("swcrypto", func() { decryptFn() })
+			} else {
+				decryptFn()
+			}
 		}
 	})
 }
 
-// routerOnRelayEOSE handles EOSE from the Relay Proxy.
 func routerOnRelayEOSE(subID string) {
 	for proxyID, info := range proxySubs {
 		if info.remoteIDs[subID] {
 			info.eoseCount++
-			// Send EOSE after first relay responds — don't wait for all.
-			if info.eoseCount >= 1 && !info.done {
+			if info.eoseCount >= info.relayCount && !info.done {
 				info.done = true
 				sw.ClearTimeout(info.timer)
 				if cs, ok := clientSubs[proxyID]; ok {
@@ -286,7 +309,6 @@ func routerOnRelayEOSE(subID string) {
 	}
 }
 
-// pushToMatchingSubs sends an event to all browser clients with matching subscriptions.
 func pushToMatchingSubs(ev *nostr.Event) {
 	for subID, cs := range clientSubs {
 		if cs.filter.Matches(ev) {
@@ -316,9 +338,8 @@ func routerSign(clientID, requestID, eventRaw string) {
 
 // --- DM routing ---
 
-// routerSaveDMRecord stores a DM record and notifies clients.
-func routerSaveDMRecord(rec *DMRecord) {
-	dmJSON := rec.ToJSON()
+// routerSaveDMRecordJSON stores a DM record (JSON) and notifies clients.
+func routerSaveDMRecordJSON(dmJSON string) {
 	cacheSaveDM(dmJSON, func(result string) {
 		if result != "duplicate" {
 			broadcastToClients("[\"DM_RECEIVED\"," + dmJSON + "]")
@@ -326,48 +347,63 @@ func routerSaveDMRecord(rec *DMRecord) {
 	})
 }
 
-// routerSendDM handles SEND_DM from UI.
 func routerSendDM(clientID, recipientPubkey, content string, relayURLs []string) {
 	if myPubkey == "" || !hasKey {
 		return
 	}
+	if !registry.HasHook("encryptNip04") {
+		registry.LoadModule("swcrypto", func() {
+			routerSendDM(clientID, recipientPubkey, content, relayURLs)
+		})
+		return
+	}
 
-	// NIP-04.
-	encryptNip04DM(recipientPubkey, content, func(ev04 *nostr.Event) {
-		cacheStore(ev04.ToJSON(), func(_ bool) {})
-		for _, url := range relayURLs {
-			getConn(url).Publish(ev04)
+	// NIP-04 via crypto extension.
+	registry.EncryptNip04(recipientPubkey, content, func(ev04JSON string) {
+		cacheStore(ev04JSON, func(_ bool) {})
+		ev04 := nostr.ParseEvent(ev04JSON)
+		if ev04 != nil {
+			for _, url := range relayURLs {
+				getConn(url).Publish(ev04)
+			}
 		}
 	})
 
-	// NIP-17.
-	recipientWrap, senderWrap := encryptNip17DM(recipientPubkey, content)
-	if recipientWrap != nil {
-		for _, url := range relayURLs {
-			getConn(url).Publish(recipientWrap)
+	// NIP-17 via crypto extension.
+	registry.EncryptNip17(recipientPubkey, content, func(recipientJSON, senderJSON string) {
+		if recipientJSON != "" {
+			rw := nostr.ParseEvent(recipientJSON)
+			if rw != nil {
+				for _, url := range relayURLs {
+					getConn(url).Publish(rw)
+				}
+			}
 		}
-	}
-	if senderWrap != nil {
-		for _, url := range relayURLs {
-			getConn(url).Publish(senderWrap)
+		if senderJSON != "" {
+			swEv := nostr.ParseEvent(senderJSON)
+			if swEv != nil {
+				for _, url := range relayURLs {
+					getConn(url).Publish(swEv)
+				}
+			}
 		}
-	}
+	})
 
 	// Save sent DM record.
 	now := sw.NowSeconds()
-	rec := makeDMRecord(recipientPubkey, myPubkey, content, now, "nip17", "")
-	routerSaveDMRecord(rec)
+	recJSON := registry.MakeDMRecord(recipientPubkey, myPubkey, content, now, "nip17", "")
+	if recJSON != "" {
+		routerSaveDMRecordJSON(recJSON)
+	}
 	sendToClient(clientID, "[\"DM_SENT\","+jstr(recipientPubkey)+",true,\"\"]")
 }
 
-// routerDMSub handles DM_SUB — opens DM subscriptions on relays.
 func routerDMSub(_ string, relayURLs []string) {
 	if myPubkey == "" || len(relayURLs) == 0 {
 		return
 	}
 	dmRelayURLs = relayURLs
 
-	// Close existing DM subs.
 	for rSubID := range dmSubIDs {
 		for _, url := range rpool.URLs() {
 			c := rpool.Get(url)
@@ -411,7 +447,6 @@ func routerDMHistory(clientID, peer string, limit int, until int64) {
 
 // --- Broadcast ---
 
-// routerBroadcast handles BROADCAST — publishes identity events to relays.
 func routerBroadcast(clientID, pubkey string, relayURLs []string) {
 	filterJSON := "{\"authors\":[" + jstr(pubkey) + "],\"kinds\":[0,3,10002,10050,10051]}"
 	cacheQuery(filterJSON, func(eventsJSON string) {
@@ -423,7 +458,6 @@ func routerBroadcast(clientID, pubkey string, relayURLs []string) {
 			}
 		}
 
-		// Auto-create 10050/10051 if missing.
 		userRelays := relayURLs
 		if relayEv, ok := byKind[10002]; ok {
 			userRelays = nil
@@ -450,7 +484,6 @@ func routerBroadcast(clientID, pubkey string, relayURLs []string) {
 			}
 		}
 
-		// Publish to relays.
 		count := 0
 		for _, ev := range byKind {
 			for _, url := range relayURLs {
@@ -478,4 +511,33 @@ func createRelayListEvent(kind int, _ string, relays []string) *nostr.Event {
 		return nil
 	}
 	return ev
+}
+
+// --- Page hints (Phase 4) ---
+
+func routerPageHint(page string) {
+	if page == "messaging" {
+		if !registry.HasHook("encryptNip04") {
+			registry.LoadModule("swcrypto", nil)
+		}
+		if !registry.HasHook("marmotInit") {
+			registry.LoadModule("swmarmot", nil)
+		}
+	}
+}
+
+// --- Helpers ---
+
+func stringsToJSON(ss []string) string {
+	if len(ss) == 0 {
+		return "[]"
+	}
+	b := "["
+	for i, s := range ss {
+		if i > 0 {
+			b += ","
+		}
+		b += jstr(s)
+	}
+	return b + "]"
 }

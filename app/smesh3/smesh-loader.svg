@@ -1,7 +1,18 @@
 <svg viewBox="160.68 160.68 478.65 478.65" xmlns="http://www.w3.org/2000/svg">
 <style>
-.e{stroke-linecap:round;opacity:0;animation:ef 0.4s ease forwards}
-@keyframes ef{to{opacity:1}}
+.e{stroke-linecap:round;opacity:0}
+.e[stroke-width="63.9"]{animation:ef0 0.4s ease forwards}
+.e[stroke-width="35.7"]{animation:ef1 0.4s ease forwards}
+.e[stroke-width="20.0"]{animation:ef2 0.4s ease forwards}
+.e[stroke-width="11.1"]{animation:ef3 0.4s ease forwards}
+.e[stroke-width="6.2"]{animation:ef4 0.4s ease forwards}
+.e[stroke-width="3.6"]{animation:ef5 0.4s ease forwards}
+@keyframes ef0{to{opacity:0.33}}
+@keyframes ef1{to{opacity:0.41}}
+@keyframes ef2{to{opacity:0.51}}
+@keyframes ef3{to{opacity:0.64}}
+@keyframes ef4{to{opacity:0.80}}
+@keyframes ef5{to{opacity:1}}
 .c{opacity:0;animation:cp 0.3s ease forwards;transform-origin:400px 400px}
 @keyframes cp{0%{opacity:0;transform:scale(0)}70%{transform:scale(1.2)}100%{opacity:1;transform:scale(1)}}
 </style>

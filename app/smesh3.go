@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"embed"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"net"
@@ -29,6 +30,9 @@ type Smesh3Server struct {
 	watcher  *fsnotify.Watcher
 	port     int
 	dir      string
+	dataDir  string
+
+	deployPub []byte // 32-byte x-only pubkey for /__deploy auth
 
 	mu       sync.RWMutex
 	version  int64
@@ -38,13 +42,23 @@ type Smesh3Server struct {
 
 // NewSmesh3Server creates a new sm3sh HTTP server.
 // If dir is non-empty, files are served from disk with hot-reload.
-func NewSmesh3Server(port int, dir string) *Smesh3Server {
-	return &Smesh3Server{
+// dataDir is the storage root for marmot group state.
+// deployPubHex is the hex-encoded pubkey authorized for /__deploy (empty disables).
+func NewSmesh3Server(port int, dir, dataDir, deployPubHex string) *Smesh3Server {
+	s := &Smesh3Server{
 		port:    port,
 		dir:     dir,
+		dataDir: dataDir,
 		version: time.Now().UnixMilli(),
 		clients: make(map[chan int64]struct{}),
 	}
+	if len(deployPubHex) == 64 {
+		pub, err := hex.DecodeString(deployPubHex)
+		if err == nil && len(pub) == 32 {
+			s.deployPub = pub
+		}
+	}
+	return s
 }
 
 // Start begins serving the sm3sh client.
@@ -72,6 +86,15 @@ func (s *Smesh3Server) Start(ctx context.Context) error {
 
 	// Version endpoint (quick poll fallback).
 	mux.HandleFunc("/__version", s.handleVersion)
+
+	// Marmot WebSocket endpoint for MLS-based DMs.
+	mux.HandleFunc("/__marmot", s.handleMarmot)
+
+	// Signed bundle deploy endpoint.
+	if len(s.deployPub) == 32 {
+		mux.HandleFunc("/__deploy", s.handleDeploy)
+		log.I.F("sm3sh: /__deploy enabled for pubkey %x", s.deployPub)
+	}
 
 	// File serving with MIME fix and SPA fallback.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

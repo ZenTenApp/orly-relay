@@ -323,7 +323,8 @@ type C struct {
 	// Smesh3 embedded web client (tinygo/js)
 	Smesh3Enabled bool   `env:"ORLY_SMESH3_ENABLED" default:"true" usage:"enable embedded Smesh3 web client on a dedicated port"`
 	Smesh3Port    int    `env:"ORLY_SMESH3_PORT" default:"8090" usage:"port for the embedded Smesh3 web client"`
-	Smesh3Dir     string `env:"ORLY_SMESH3_DIR" usage:"serve sm3sh from disk directory (enables hot-reload via fsnotify + SSE)"`
+	Smesh3Dir       string `env:"ORLY_SMESH3_DIR" usage:"serve sm3sh from disk directory (enables hot-reload via fsnotify + SSE)"`
+	Smesh3DeployPub string `env:"ORLY_DEPLOY_PUBKEY" usage:"hex pubkey authorized to push signed asset bundles to /__deploy"`
 
 	// ServeMode is set programmatically by the 'serve' subcommand to grant full owner
 	// access to all users (no env tag - internal use only)

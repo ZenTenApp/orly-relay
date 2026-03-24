@@ -88,7 +88,7 @@ body.dark {
 </style>
 </head>
 <body>
-<script>if(localStorage.getItem('sm3sh-theme')==='dark')document.body.classList.add('dark')</script>
+<script>{let t=localStorage.getItem('sm3sh-theme');if(t==='dark'||(t===null&&matchMedia('(prefers-color-scheme:dark)').matches))document.body.classList.add('dark')}</script>
 <div id="app-root"></div>
 <div id="update-snackbar">new version available — click to update</div>
 <script>

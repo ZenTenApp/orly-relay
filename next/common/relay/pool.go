@@ -2,26 +2,22 @@ package relay
 
 // Pool manages connections to multiple relays.
 type Pool struct {
-	conns   map[string]*Conn
-	maxSize int
+	conns map[string]*Conn
 }
 
 // NewPool creates a relay pool.
-func NewPool(maxSize int) *Pool {
+func NewPool() *Pool {
 	return &Pool{
-		conns:   make(map[string]*Conn),
-		maxSize: maxSize,
+		conns: make(map[string]*Conn),
 	}
 }
 
 // Connect gets or creates a connection to a relay.
 func (p *Pool) Connect(url string) *Conn {
-	if c, ok := p.conns[url]; ok && c.IsOpen() {
+	if c, ok := p.conns[url]; ok && c.state != StateClosed {
 		return c
 	}
-	if len(p.conns) >= p.maxSize {
-		p.evictOne()
-	}
+	p.evictClosed()
 	c := Dial(url)
 	p.conns[url] = c
 	return c
@@ -63,16 +59,11 @@ func (p *Pool) URLs() []string {
 	return out
 }
 
-func (p *Pool) evictOne() {
+// evictClosed removes all closed connections from the pool.
+func (p *Pool) evictClosed() {
 	for url, c := range p.conns {
 		if c.state == StateClosed {
 			delete(p.conns, url)
-			return
 		}
-	}
-	for url, c := range p.conns {
-		c.Close()
-		delete(p.conns, url)
-		return
 	}
 }

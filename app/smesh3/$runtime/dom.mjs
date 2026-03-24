@@ -274,6 +274,14 @@ export function IDBGetAll(store, fn, done) {
   });
 }
 
+// Check if browser prefers dark color scheme.
+export function PrefersDark() {
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  return false;
+}
+
 // Log a message to the browser console.
 export function ConsoleLog(msg) {
   console.log('[sm3sh]', msg);

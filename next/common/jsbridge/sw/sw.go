@@ -62,6 +62,9 @@ func GetMessageClientID(event Event) string { panic("jsbridge") }
 
 // --- SW globals ---
 
+// Origin returns self.location.origin (e.g. "https://example.com").
+func Origin() string { panic("jsbridge") }
+
 // SkipWaiting forces the waiting service worker to become active.
 func SkipWaiting() { panic("jsbridge") }
 

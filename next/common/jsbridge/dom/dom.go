@@ -95,6 +95,9 @@ func IDBPut(store, key, value string) { panic("jsbridge") }
 // Calls fn once per entry with (key, value). Calls done() when finished.
 func IDBGetAll(store string, fn func(string, string), done func()) { panic("jsbridge") }
 
+// PrefersDark returns true if the browser prefers dark color scheme.
+func PrefersDark() bool { panic("jsbridge") }
+
 // ConsoleLog logs a message to the browser console.
 func ConsoleLog(msg string) { panic("jsbridge") }
 

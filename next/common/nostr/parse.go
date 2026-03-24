@@ -237,6 +237,8 @@ func ParseFilter(s string) *Filter {
 			var l int64
 			l, i = parseInt(s, i)
 			f.Limit = int(l)
+		case "_proxy":
+			f.Proxy, i = parseStrArray(s, i)
 		default:
 			if len(key) == 2 && key[0] == '#' {
 				if f.Tags == nil {
