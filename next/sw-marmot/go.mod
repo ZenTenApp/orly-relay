@@ -1,4 +1,4 @@
-module swmarmot
+module sw-marmot
 
 go 1.23
 

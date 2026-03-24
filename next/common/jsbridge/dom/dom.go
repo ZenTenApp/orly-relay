@@ -110,3 +110,16 @@ func PostToSW(msg string) { panic("jsbridge") }
 // OnSWMessage registers a handler for JSON array messages from the service worker.
 // fn receives the JSON-stringified array for each message.
 func OnSWMessage(fn func(string)) { panic("jsbridge") }
+
+// PushState pushes a new browser history entry with the given path.
+func PushState(path string) { panic("jsbridge") }
+
+// ReplaceState replaces the current browser history entry with the given path.
+func ReplaceState(path string) { panic("jsbridge") }
+
+// GetPath returns the current location.pathname.
+func GetPath() string { panic("jsbridge") }
+
+// OnPopState registers a handler for browser back/forward navigation.
+// fn receives the new location.pathname.
+func OnPopState(fn func(string)) { panic("jsbridge") }

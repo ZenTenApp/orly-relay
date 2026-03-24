@@ -1,6 +1,7 @@
 package main
 
 import (
+	"common/crypto/secp256k1"
 	"common/helpers"
 	"common/jsbridge/dom"
 	"common/jsbridge/localstorage"
@@ -9,7 +10,7 @@ import (
 )
 
 const (
-	version     = "v0.65.22"
+	version     = "v0.65.33"
 	lsKeyPubkey = "sm3sh-pubkey"
 	lsKeyMode   = "sm3sh-mode"
 	lsKeyTheme  = "sm3sh-theme"
@@ -44,10 +45,6 @@ var (
 
 	// App root — content goes here, not body (snackbar stays outside).
 	root dom.Element
-
-	// Messaging protocol selector.
-	msgProtocol  = "marmot" // "nip04", "nip17", "marmot"
-	msgProtoBtns map[string]dom.Element
 
 	// Messaging UI state.
 	msgListContainer   dom.Element // conversation list view
@@ -95,6 +92,9 @@ var (
 	authorMutes          map[string][]string
 	profileNotesSeen     map[string]bool
 	activeProfileNoteSub string
+
+	// History/routing.
+	navPop bool // true during popstate — suppresses pushState
 )
 
 const orlyRelay = "wss://relay.orly.dev"
@@ -231,6 +231,71 @@ func showLogin() {
 	})
 	dom.AddEventListener(btn, "click", cb)
 
+	// nsec login — gives SW the secret key for DM crypto + marmot auth.
+	sep := dom.CreateElement("div")
+	dom.SetStyle(sep, "marginTop", "24px")
+	dom.SetStyle(sep, "color", "var(--muted)")
+	dom.SetStyle(sep, "fontSize", "12px")
+	dom.SetTextContent(sep, "or paste nsec")
+	dom.AppendChild(wrap, sep)
+
+	nsecInp := dom.CreateElement("input")
+	dom.SetAttribute(nsecInp, "type", "password")
+	dom.SetAttribute(nsecInp, "placeholder", "nsec1...")
+	dom.SetStyle(nsecInp, "marginTop", "8px")
+	dom.SetStyle(nsecInp, "padding", "8px 12px")
+	dom.SetStyle(nsecInp, "width", "320px")
+	dom.SetStyle(nsecInp, "maxWidth", "90vw")
+	dom.SetStyle(nsecInp, "fontFamily", "'Fira Code', monospace")
+	dom.SetStyle(nsecInp, "fontSize", "12px")
+	dom.SetStyle(nsecInp, "background", "var(--bg)")
+	dom.SetStyle(nsecInp, "border", "1px solid var(--border)")
+	dom.SetStyle(nsecInp, "borderRadius", "4px")
+	dom.SetStyle(nsecInp, "color", "var(--fg)")
+	dom.SetStyle(nsecInp, "textAlign", "center")
+	dom.AppendChild(wrap, nsecInp)
+
+	nsecBtn := dom.CreateElement("button")
+	dom.SetTextContent(nsecBtn, "login with nsec")
+	dom.SetStyle(nsecBtn, "marginTop", "8px")
+	dom.SetStyle(nsecBtn, "padding", "10px 32px")
+	dom.SetStyle(nsecBtn, "fontFamily", "'Fira Code', monospace")
+	dom.SetStyle(nsecBtn, "fontSize", "14px")
+	dom.SetStyle(nsecBtn, "background", "var(--bg2)")
+	dom.SetStyle(nsecBtn, "color", "var(--fg)")
+	dom.SetStyle(nsecBtn, "border", "1px solid var(--border)")
+	dom.SetStyle(nsecBtn, "borderRadius", "4px")
+	dom.SetStyle(nsecBtn, "cursor", "pointer")
+	dom.AppendChild(wrap, nsecBtn)
+
+	nsecCb := dom.RegisterCallback(func() {
+		val := dom.GetProperty(nsecInp, "value")
+		if val == "" {
+			dom.SetTextContent(errEl, "paste your nsec key")
+			return
+		}
+		secBytes := helpers.DecodeNsec(val)
+		if secBytes == nil {
+			dom.SetTextContent(errEl, "invalid nsec")
+			return
+		}
+		var sk [32]byte
+		copy(sk[:], secBytes)
+		pk, ok := secp256k1.PubKeyFromSecKey(sk)
+		if !ok {
+			dom.SetTextContent(errEl, "invalid secret key")
+			return
+		}
+		pubhex = helpers.HexEncode(pk[:])
+		pubkey = pk[:]
+		localstorage.SetItem(lsKeyPubkey, pubhex)
+		localstorage.SetItem(lsKeyMode, "nsec")
+		localstorage.SetItem("sm3sh-key", helpers.HexEncode(sk[:]))
+		clearChildren(root)
+		showApp()
+	})
+	dom.AddEventListener(nsecBtn, "click", nsecCb)
+	dom.SetAttribute(nsecInp, "onkeydown", "if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click()}")
 }
 
 // --- Sidebar ---
@@ -287,14 +352,84 @@ func switchPage(name string) {
 		dom.SetStyle(feedPage, "display", "block")
 		dom.SetStyle(sidebarFeed, "background", "var(--accent)")
 		dom.SetStyle(sidebarFeed, "color", "#000")
+		if !navPop {
+			dom.PushState("/")
+		}
 	case "messaging":
 		dom.SetStyle(msgPage, "display", "block")
 		dom.SetStyle(sidebarMsg, "background", "var(--accent)")
 		dom.SetStyle(sidebarMsg, "color", "#000")
 		dom.PostToSW("[\"PAGE\",\"messaging\"]")
 		initMessaging()
+		if !navPop {
+			dom.PushState("/msg")
+		}
 	case "profile":
 		dom.SetStyle(profilePage, "display", "block")
+		// Profile URL is pushed by showProfile, not here.
+	}
+}
+
+// navigateToPath handles URL-based routing for back/forward and initial load.
+// fullPath may include a hash fragment, e.g. "/p/npub1...#follows".
+func navigateToPath(fullPath string) {
+	path := fullPath
+	hash := ""
+	for i := 0; i < len(fullPath); i++ {
+		if fullPath[i] == '#' {
+			path = fullPath[:i]
+			hash = fullPath[i+1:]
+			break
+		}
+	}
+
+	if path == "/" || path == "/feed" || path == "" {
+		switchPage("feed")
+	} else if path == "/msg" {
+		switchPage("messaging")
+		if msgView == "thread" {
+			closeThread()
+		}
+	} else if len(path) > 5 && path[:5] == "/msg/" {
+		pk := npubToHex(path[5:])
+		if pk != "" {
+			switchPage("messaging")
+			openThread(pk)
+		}
+	} else if len(path) > 3 && path[:3] == "/p/" {
+		pk := npubToHex(path[3:])
+		if pk != "" {
+			showProfile(pk)
+			if hash != "" {
+				selectProfileTab(hash, pk)
+			}
+		}
+	}
+}
+
+func npubToHex(npub string) string {
+	b := helpers.DecodeNpub(npub)
+	if b == nil {
+		return ""
+	}
+	return helpers.HexEncode(b)
+}
+
+func initRouter() {
+	dom.OnPopState(func(path string) {
+		navPop = true
+		navigateToPath(path)
+		navPop = false
+	})
+
+	// Navigate to initial URL if not root.
+	path := dom.GetPath()
+	if path != "/" && path != "" {
+		navPop = true
+		navigateToPath(path)
+		navPop = false
+	} else {
+		dom.ReplaceState("/")
 	}
 }
 
@@ -309,19 +444,6 @@ func makeProtoBtn(label string) dom.Element {
 	dom.SetStyle(btn, "background", "transparent")
 	dom.SetStyle(btn, "color", "var(--fg)")
 	return btn
-}
-
-func selectMsgProtocol(id string) {
-	msgProtocol = id
-	for pid, btn := range msgProtoBtns {
-		if pid == id {
-			dom.SetStyle(btn, "background", "var(--accent)")
-			dom.SetStyle(btn, "color", "#000")
-		} else {
-			dom.SetStyle(btn, "background", "transparent")
-			dom.SetStyle(btn, "color", "var(--fg)")
-		}
-	}
 }
 
 // --- Main app ---
@@ -346,7 +468,12 @@ func showApp() {
 
 	// Set up SW communication.
 	dom.OnSWMessage(onSWMessage)
-	dom.PostToSW("[\"SET_PUBKEY\"," + jstr(pubhex) + "]")
+	hexKey := localstorage.GetItem("sm3sh-key")
+	if hexKey != "" {
+		dom.PostToSW("[\"SET_KEY\"," + jstr(hexKey) + "]")
+	} else {
+		dom.PostToSW("[\"SET_PUBKEY\"," + jstr(pubhex) + "]")
+	}
 
 	// Load cached profiles from IndexedDB.
 	dom.IDBGetAll("profiles", func(key, val string) {
@@ -545,43 +672,6 @@ func showApp() {
 	dom.SetStyle(msgPage, "height", "100%")
 	dom.SetStyle(msgPage, "boxSizing", "border-box")
 
-	// Protocol selector bar.
-	protoBar := dom.CreateElement("div")
-	dom.SetStyle(protoBar, "display", "flex")
-	dom.SetStyle(protoBar, "gap", "0")
-	dom.SetStyle(protoBar, "marginBottom", "16px")
-	dom.SetStyle(protoBar, "border", "1px solid var(--border)")
-	dom.SetStyle(protoBar, "borderRadius", "6px")
-	dom.SetStyle(protoBar, "overflow", "hidden")
-	dom.SetStyle(protoBar, "width", "fit-content")
-
-	msgProtoBtns = make(map[string]dom.Element)
-
-	// Unrolled — tinyjs range loops over struct slices can alias the label.
-	btnNip04 := makeProtoBtn("nip-04")
-	dom.SetStyle(btnNip04, "opacity", "0.3")
-	dom.SetStyle(btnNip04, "pointerEvents", "none")
-	msgProtoBtns["nip04"] = btnNip04
-	dom.AppendChild(protoBar, btnNip04)
-
-	btnNip17 := makeProtoBtn("nip-17")
-	dom.SetStyle(btnNip17, "opacity", "0.3")
-	dom.SetStyle(btnNip17, "pointerEvents", "none")
-	msgProtoBtns["nip17"] = btnNip17
-	dom.AppendChild(protoBar, btnNip17)
-
-	btnMarmot := makeProtoBtn("marmot")
-	dom.SetStyle(btnMarmot, "background", "var(--accent)")
-	dom.SetStyle(btnMarmot, "color", "#000")
-	dom.SetStyle(btnMarmot, "cursor", "pointer")
-	dom.AddEventListener(btnMarmot, "click", dom.RegisterCallback(func() {
-		selectMsgProtocol("marmot")
-	}))
-	msgProtoBtns["marmot"] = btnMarmot
-	dom.AppendChild(protoBar, btnMarmot)
-
-	dom.AppendChild(msgPage, protoBar)
-
 	// Conversation list view.
 	msgListContainer = dom.CreateElement("div")
 	dom.AppendChild(msgPage, msgListContainer)
@@ -705,6 +795,9 @@ func showApp() {
 	sendWriteRelays()
 	subscribeProfile()
 	subscribeFeed()
+
+	// Wire up browser history navigation.
+	initRouter()
 }
 
 // addRelay adds a relay to the list and creates its popover row.
@@ -850,6 +943,8 @@ func onSWMessage(raw string) {
 		// Confirmation — optimistic render already done.
 	case "MLS_GROUPS":
 		// Store for future use.
+	case "CRYPTO_REQ":
+		handleCryptoReq(raw, pos)
 	}
 }
 
@@ -878,6 +973,7 @@ func dispatchEvent(subID string, ev *nostr.Event) {
 				}
 			}
 			authorFollows[ev.PubKey] = pks
+			refreshProfileTab(ev.PubKey)
 		} else if ev.Kind == 10002 {
 			recordRelayFreq(ev)
 		} else if ev.Kind == 10000 {
@@ -888,6 +984,7 @@ func dispatchEvent(subID string, ev *nostr.Event) {
 				}
 			}
 			authorMutes[ev.PubKey] = pks
+			refreshProfileTab(ev.PubKey)
 		}
 	} else if len(subID) > 3 && subID[:3] == "pn-" {
 		if profileNotesSeen[ev.ID] {
@@ -907,8 +1004,13 @@ func dispatchEOSE(subID string) {
 		updateStatus()
 		retryMissingProfiles()
 	} else if len(subID) > 9 && subID[:9] == "ap-batch-" {
-		dom.PostToSW("[\"CLOSE\"," + jstr(subID) + "]")
-		// Debounce: schedule follow-up retry 3s after last batch EOSE (max 3 rounds).
+		// Delay CLOSE: server-side _proxy fan-out to external relays takes 5-15s.
+		// Keep sub alive so late-arriving events flow through pushToMatchingSubs.
+		closeID := subID
+		dom.SetTimeout(func() {
+			dom.PostToSW("[\"CLOSE\"," + jstr(closeID) + "]")
+		}, 15000)
+		// Debounce: schedule follow-up retry 10s after last batch EOSE (max 3 rounds).
 		if retryRound <= 3 {
 			if retryTimer != 0 {
 				dom.ClearTimeout(retryTimer)
@@ -916,10 +1018,13 @@ func dispatchEOSE(subID string) {
 			retryTimer = dom.SetTimeout(func() {
 				retryTimer = 0
 				retryMissingProfiles()
-			}, 3000)
+			}, 10000)
 		}
 	} else if len(subID) > 3 && subID[:3] == "ap-" {
-		dom.PostToSW("[\"CLOSE\"," + jstr(subID) + "]")
+		closeID := subID
+		dom.SetTimeout(func() {
+			dom.PostToSW("[\"CLOSE\"," + jstr(closeID) + "]")
+		}, 15000)
 		pk, ok := authorSubPK[subID]
 		if !ok {
 			return
@@ -933,6 +1038,84 @@ func dispatchEOSE(subID string) {
 			}
 		}
 	}
+}
+
+// handleCryptoReq processes CRYPTO_REQ from the SW, calling the NIP-07
+// extension and posting CRYPTO_RESULT back.
+// Format: ["CRYPTO_REQ", id, "method", "peerPubkey", "data"]
+func handleCryptoReq(raw string, pos int) {
+	// id is a bare number, not a quoted string.
+	idStr := nextNum(raw, pos)
+	// Skip past the number and comma to find the method string.
+	pos2 := pos
+	for pos2 < len(raw) && raw[pos2] != ',' {
+		pos2++
+	}
+	pos2++
+	method, pos3 := nextStr(raw, pos2)
+	peer, pos4 := nextStr(raw, pos3)
+	data, _ := nextStr(raw, pos4)
+
+	sendResult := func(result, errMsg string) {
+		dom.PostToSW("[\"CRYPTO_RESULT\"," + idStr + "," + jstr(result) + "," + jstr(errMsg) + "]")
+	}
+
+	switch method {
+	case "signEvent":
+		signer.SignEvent(data, func(signed string) {
+			if signed == "" {
+				sendResult("", "sign failed")
+			} else {
+				sendResult(signed, "")
+			}
+		})
+	case "nip04.decrypt":
+		signer.Nip04Decrypt(peer, data, func(plain string) {
+			if plain == "" {
+				sendResult("", "decrypt failed")
+			} else {
+				sendResult(plain, "")
+			}
+		})
+	case "nip04.encrypt":
+		signer.Nip04Encrypt(peer, data, func(ct string) {
+			if ct == "" {
+				sendResult("", "encrypt failed")
+			} else {
+				sendResult(ct, "")
+			}
+		})
+	case "nip44.decrypt":
+		signer.Nip44Decrypt(peer, data, func(plain string) {
+			if plain == "" {
+				sendResult("", "decrypt failed")
+			} else {
+				sendResult(plain, "")
+			}
+		})
+	case "nip44.encrypt":
+		signer.Nip44Encrypt(peer, data, func(ct string) {
+			if ct == "" {
+				sendResult("", "encrypt failed")
+			} else {
+				sendResult(ct, "")
+			}
+		})
+	default:
+		sendResult("", "unknown method: "+method)
+	}
+}
+
+// nextNum extracts a bare number from s starting at pos, returning it as a string.
+func nextNum(s string, pos int) string {
+	for pos < len(s) && (s[pos] == ' ' || s[pos] == ',') {
+		pos++
+	}
+	start := pos
+	for pos < len(s) && s[pos] >= '0' && s[pos] <= '9' {
+		pos++
+	}
+	return s[start:pos]
 }
 
 // nextStr extracts the next quoted string from s starting at pos.
@@ -1039,6 +1222,7 @@ func handleProfileEvent(ev *nostr.Event) {
 			}
 		}
 		authorFollows[pubhex] = pks
+		refreshProfileTab(pubhex)
 	case 10000:
 		var pks []string
 		for _, tag := range ev.Tags.GetAll("p") {
@@ -1047,6 +1231,7 @@ func handleProfileEvent(ev *nostr.Event) {
 			}
 		}
 		authorMutes[pubhex] = pks
+		refreshProfileTab(pubhex)
 	case 10002:
 		// NIP-65 relay list — add user's preferred relays.
 		recordRelayFreq(ev)
@@ -1121,10 +1306,12 @@ func renderNote(ev *nostr.Event) {
 	dom.AppendChild(header, nameSpan)
 	dom.AppendChild(note, header)
 
-	// Queue profile fetch if not cached.
-	if _, cached := authorNames[pk]; !cached && !fetchedK0[pk] {
+	// Track header for update when profile arrives; trigger fetch if not yet started.
+	if _, cached := authorNames[pk]; !cached {
 		pendingNotes[pk] = append(pendingNotes[pk], header)
-		queueProfileFetch(pk)
+		if !fetchedK0[pk] {
+			queueProfileFetch(pk)
+		}
 	}
 
 	// Content.
@@ -1241,6 +1428,9 @@ var discoveryRelays = []string{
 func buildProxy(pk string) []string {
 	out := make([]string, len(discoveryRelays))
 	copy(out, discoveryRelays)
+	for _, u := range relayURLs {
+		out = appendUnique(out, u)
+	}
 	if rels, ok := authorRelays[pk]; ok {
 		for _, r := range rels {
 			out = appendUnique(out, r)
@@ -1306,6 +1496,9 @@ func flushFetchQueue() {
 
 	proxy := make([]string, len(discoveryRelays))
 	copy(proxy, discoveryRelays)
+	for _, u := range relayURLs {
+		proxy = appendUnique(proxy, u)
+	}
 	for _, pk := range queue {
 		if rels, ok := authorRelays[pk]; ok {
 			for _, r := range rels {
@@ -1336,8 +1529,15 @@ func flushFetchQueue() {
 		profileSubCounter++
 		subID := "ap-batch-q-" + itoa(profileSubCounter)
 		dom.PostToSW(buildProxyMsg(subID,
-			"{\"authors\":"+authors+",\"kinds\":[0,3,10002,10000],\"_proxy\":"+jstrArr(proxy)+",\"limit\":"+itoa(len(chunk)*4)+"}",
+			"{\"authors\":"+authors+",\"kinds\":[0],\"_proxy\":"+jstrArr(proxy)+",\"limit\":"+itoa(len(chunk))+"}",
 			[]string{orlyRelay}))
+		// Also query feed relays directly — they have the kind 1 notes
+		// so they almost certainly have kind 0 for the same authors.
+		// Uses the SW's existing WebSocket connections, bypasses server proxy.
+		profileSubCounter++
+		dom.PostToSW(buildProxyMsg("ap-d-"+itoa(profileSubCounter),
+			"{\"authors\":"+authors+",\"kinds\":[0],\"limit\":"+itoa(len(chunk))+"}",
+			relayURLs))
 	}
 }
 
@@ -1392,8 +1592,13 @@ func retryMissingProfiles() {
 		subID := "ap-batch-" + itoa(retryRound) + "-" + itoa(batchNum)
 		batchNum++
 		dom.PostToSW(buildProxyMsg(subID,
-			"{\"authors\":"+authors+",\"kinds\":[0,3,10002,10000],\"_proxy\":"+jstrArr(proxy)+",\"limit\":"+itoa(len(chunk)*4)+"}",
+			"{\"authors\":"+authors+",\"kinds\":[0,10002],\"_proxy\":"+jstrArr(proxy)+",\"limit\":"+itoa(len(chunk)*2)+"}",
 			[]string{orlyRelay}))
+		// Direct query to feed relays.
+		profileSubCounter++
+		dom.PostToSW(buildProxyMsg("ap-d-"+itoa(profileSubCounter),
+			"{\"authors\":"+authors+",\"kinds\":[0],\"limit\":"+itoa(len(chunk))+"}",
+			relayURLs))
 	}
 	retryRound++
 }
@@ -1436,7 +1641,7 @@ func applyAuthorProfile(pk string, ev *nostr.Event) {
 	}
 
 	// Update all pending note headers.
-	if headers, ok := pendingNotes[pk]; ok {
+	if headers, ok := pendingNotes[pk]; ok && name != "" {
 		for _, h := range headers {
 			updateNoteHeader(h, name, pic)
 		}
@@ -1488,6 +1693,11 @@ func showProfile(pk string) {
 	activePage = "" // force switchPage to run
 	switchPage("profile")
 	dom.SetTextContent(pageTitleEl, title)
+
+	if !navPop {
+		npub := helpers.EncodeNpub(helpers.HexDecode(pk))
+		dom.PushState("/p/" + npub)
+	}
 }
 
 func renderProfilePage(pk string) {
@@ -1571,19 +1781,31 @@ func renderProfilePage(pk string) {
 		dom.AppendChild(info, nip05El)
 	}
 
-	// npub (truncated).
+	// npub (truncated) with copy button.
 	npubBytes := helpers.HexDecode(pk)
 	npubStr := helpers.EncodeNpub(npubBytes)
-	npubEl := dom.CreateElement("div")
+	npubRow := dom.CreateElement("div")
+	dom.SetStyle(npubRow, "display", "flex")
+	dom.SetStyle(npubRow, "alignItems", "center")
+	dom.SetStyle(npubRow, "gap", "6px")
+	dom.SetStyle(npubRow, "marginTop", "2px")
+	npubEl := dom.CreateElement("span")
 	dom.SetStyle(npubEl, "color", "var(--muted)")
 	dom.SetStyle(npubEl, "fontSize", "12px")
-	dom.SetStyle(npubEl, "marginTop", "2px")
 	if len(npubStr) > 20 {
 		dom.SetTextContent(npubEl, npubStr[:16]+"..."+npubStr[len(npubStr)-8:])
 	} else {
 		dom.SetTextContent(npubEl, npubStr)
 	}
-	dom.AppendChild(info, npubEl)
+	dom.AppendChild(npubRow, npubEl)
+	copyBtn := dom.CreateElement("span")
+	dom.SetTextContent(copyBtn, "copy")
+	dom.SetStyle(copyBtn, "color", "var(--accent)")
+	dom.SetStyle(copyBtn, "fontSize", "11px")
+	dom.SetStyle(copyBtn, "cursor", "pointer")
+	dom.SetAttribute(copyBtn, "onclick", "navigator.clipboard.writeText('"+npubStr+"').then(()=>{this.textContent='copied!'});setTimeout(()=>{this.textContent='copy'},1500)")
+	dom.AppendChild(npubRow, copyBtn)
+	dom.AppendChild(info, npubRow)
 
 	// Website + lightning inline.
 	if website != "" || lud16 != "" {
@@ -1784,6 +2006,17 @@ func closeProfileNoteSub() {
 	}
 }
 
+// refreshProfileTab re-renders the active tab if we're viewing this author's profile.
+func refreshProfileTab(pk string) {
+	if profileViewPK != pk || profileTab == "" {
+		return
+	}
+	// Force re-render by clearing current tab and re-selecting.
+	saved := profileTab
+	profileTab = ""
+	selectProfileTab(saved, pk)
+}
+
 func selectProfileTab(tab, pk string) {
 	if tab == profileTab {
 		return
@@ -1800,6 +2033,12 @@ func selectProfileTab(tab, pk string) {
 			dom.SetStyle(btn, "background", "transparent")
 			dom.SetStyle(btn, "color", "var(--fg)")
 		}
+	}
+
+	// Update URL hash to reflect active tab.
+	if !navPop && profileViewPK != "" {
+		npub := helpers.EncodeNpub(helpers.HexDecode(profileViewPK))
+		dom.ReplaceState("/p/" + npub + "#" + tab)
 	}
 
 	switch tab {
@@ -2008,8 +2247,11 @@ func makeProfileRow(pk string) dom.Element {
 		showProfile(rowPK)
 	}))
 
-	if _, cached := authorNames[pk]; !cached && !fetchedK0[pk] {
-		fetchAuthorProfile(pk)
+	if _, cached := authorNames[pk]; !cached {
+		pendingNotes[pk] = append(pendingNotes[pk], row)
+		if !fetchedK0[pk] {
+			queueProfileFetch(pk)
+		}
 	}
 
 	return row
@@ -2165,11 +2407,8 @@ func formatTime(ts int64) string {
 }
 
 func initMessaging() {
-	// Request conversation list.
+	// Request conversation list from cache.
 	dom.PostToSW("[\"DM_LIST\"]")
-
-	// Subscribe to incoming DMs on relays.
-	dom.PostToSW("[\"DM_SUB\"," + relayURLsJSON() + "]")
 
 	// Init marmot if not already done.
 	if !marmotInited {
@@ -2444,6 +2683,11 @@ func openThread(peer string) {
 	msgCurrentPeer = peer
 	msgView = "thread"
 
+	if !navPop {
+		npub := helpers.EncodeNpub(helpers.HexDecode(peer))
+		dom.PushState("/msg/" + npub)
+	}
+
 	// Hide list, show thread.
 	dom.SetStyle(msgListContainer, "display", "none")
 	dom.SetStyle(msgThreadContainer, "display", "flex")
@@ -2473,6 +2717,9 @@ func openThread(peer string) {
 	}))
 	dom.AppendChild(hdr, backBtn)
 
+	// Thread header avatar + name — uses same img-then-span structure
+	// as note headers so pendingNotes/updateNoteHeader can update them.
+	threadHdrInner := dom.CreateElement("div")
 	av := dom.CreateElement("img")
 	dom.SetAttribute(av, "width", "28")
 	dom.SetAttribute(av, "height", "28")
@@ -2485,7 +2732,7 @@ func openThread(peer string) {
 		dom.SetStyle(av, "display", "none")
 	}
 	dom.SetAttribute(av, "onerror", "this.style.display='none'")
-	dom.AppendChild(hdr, av)
+	dom.AppendChild(threadHdrInner, av)
 
 	nameSpan := dom.CreateElement("span")
 	dom.SetStyle(nameSpan, "fontSize", "15px")
@@ -2499,8 +2746,17 @@ func openThread(peer string) {
 			dom.SetTextContent(nameSpan, npub[:12]+"..."+npub[len(npub)-4:])
 		}
 	}
-	dom.AppendChild(hdr, nameSpan)
+	dom.AppendChild(threadHdrInner, nameSpan)
+	dom.SetStyle(threadHdrInner, "display", "flex")
+	dom.SetStyle(threadHdrInner, "alignItems", "center")
+	dom.SetStyle(threadHdrInner, "gap", "10px")
+	dom.AppendChild(hdr, threadHdrInner)
 	dom.AppendChild(msgThreadContainer, hdr)
+
+	// Track for live update when profile arrives.
+	if _, cached := authorNames[peer]; !cached {
+		pendingNotes[peer] = append(pendingNotes[peer], threadHdrInner)
+	}
 
 	// Message area.
 	msgThreadMessages = dom.CreateElement("div")
@@ -2551,8 +2807,8 @@ func openThread(peer string) {
 	dom.AppendChild(msgThreadContainer, compose)
 
 	// Fetch profile if needed.
-	if _, cached := authorNames[peer]; !cached && !fetchedK0[peer] {
-		fetchAuthorProfile(peer)
+	if !fetchedK0[peer] {
+		queueProfileFetch(peer)
 	}
 
 	// Request history.
@@ -2565,6 +2821,10 @@ func closeThread() {
 
 	dom.SetStyle(msgThreadContainer, "display", "none")
 	dom.SetStyle(msgListContainer, "display", "block")
+
+	if !navPop {
+		dom.PushState("/msg")
+	}
 
 	// Refresh list.
 	dom.PostToSW("[\"DM_LIST\"]")
@@ -2702,12 +2962,7 @@ func sendMessage() {
 	// Clear input.
 	dom.SetProperty(msgComposeInput, "value", "")
 
-	// Route by protocol.
-	if msgProtocol == "marmot" {
-		dom.PostToSW("[\"MLS_SEND\"," + jstr(msgCurrentPeer) + "," + jstr(content) + "]")
-	} else {
-		dom.PostToSW("[\"SEND_DM\"," + jstr(msgCurrentPeer) + "," + jstr(content) + "," + relayURLsJSON() + "]")
-	}
+	dom.PostToSW("[\"MLS_SEND\"," + jstr(msgCurrentPeer) + "," + jstr(content) + "]")
 
 	// Optimistic render (ts=0 — timestamp not shown for "just sent").
 	appendBubble(pubhex, content, 0)
@@ -2760,6 +3015,7 @@ func doLogout() {
 
 	localstorage.RemoveItem(lsKeyPubkey)
 	localstorage.RemoveItem(lsKeyMode)
+	localstorage.RemoveItem("sm3sh-key")
 
 	clearChildren(root)
 	showLogin()

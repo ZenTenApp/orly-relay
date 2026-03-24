@@ -41,12 +41,13 @@ type signer = *p8k.Signer
 
 // marmotReq is the JSON-RPC request from the client.
 type marmotReq struct {
-	Method    string   `json:"method"`
-	Pubkey    string   `json:"pubkey,omitempty"`
-	Sig       string   `json:"sig,omitempty"`
-	Recipient string   `json:"recipient,omitempty"`
-	Content   string   `json:"content,omitempty"`
-	Relays    []string `json:"relays,omitempty"`
+	Method    string          `json:"method"`
+	Pubkey    string          `json:"pubkey,omitempty"`
+	Sig       string          `json:"sig,omitempty"`
+	Event     json.RawMessage `json:"event,omitempty"`
+	Recipient string          `json:"recipient,omitempty"`
+	Content   string          `json:"content,omitempty"`
+	Relays    []string        `json:"relays,omitempty"`
 }
 
 // marmotResp is the JSON-RPC response to the client.
@@ -61,12 +62,14 @@ type marmotResp struct {
 }
 
 func (s *Smesh3Server) handleMarmot(w http.ResponseWriter, r *http.Request) {
+	log.I.F("marmot: WS connection from %s", r.RemoteAddr)
 	conn, err := marmotUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.W.F("marmot: upgrade failed: %v", err)
 		return
 	}
 	defer conn.Close()
+	log.I.F("marmot: WS upgraded successfully")
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
@@ -80,8 +83,11 @@ func (s *Smesh3Server) handleMarmot(w http.ResponseWriter, r *http.Request) {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
 				log.W.F("marmot: read error: %v", err)
 			}
+			log.I.F("marmot: client disconnected")
 			return
 		}
+
+		log.I.F("marmot: recv: %s", string(msg))
 
 		var req marmotReq
 		if err := json.Unmarshal(msg, &req); err != nil {
@@ -93,6 +99,7 @@ func (s *Smesh3Server) handleMarmot(w http.ResponseWriter, r *http.Request) {
 		case "auth":
 			sess.handleAuth(ctx, s.dataDir, req)
 		case "send_dm":
+			log.I.F("marmot: send_dm to=%s content=%q", req.Recipient, req.Content)
 			sess.handleSendDM(ctx, req)
 		case "subscribe":
 			sess.handleSubscribe(ctx)
@@ -107,41 +114,44 @@ func (s *Smesh3Server) handleMarmot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (sess *marmotSession) handleAuth(ctx context.Context, dataDir string, req marmotReq) {
-	if req.Pubkey == "" || req.Sig == "" {
-		sess.writeResp(marmotResp{Method: "auth", Error: "pubkey and sig required"})
-		return
-	}
+	var pubkeyHex string
 
-	pub, err := hex.Dec(req.Pubkey)
-	if err != nil || len(pub) != 32 {
-		sess.writeResp(marmotResp{Method: "auth", Error: "invalid pubkey"})
-		return
-	}
-
-	// Verify challenge signature.
-	// For simplicity, verify that the sig is a valid BIP-340 signature of
-	// the pubkey bytes (self-auth). In production this would use a
-	// server-issued nonce.
-	sig, err := hex.Dec(req.Sig)
-	if err != nil || len(sig) != 64 {
-		sess.writeResp(marmotResp{Method: "auth", Error: "invalid signature"})
-		return
-	}
-
-	verifier, err := p8k.New()
-	if err != nil {
-		sess.writeResp(marmotResp{Method: "auth", Error: "signer init failed"})
-		return
-	}
-	if err := verifier.InitPub(pub); err != nil {
-		sess.writeResp(marmotResp{Method: "auth", Error: "pubkey init failed"})
-		return
-	}
-	// Verify SHA256(pubkey) — matches what the SW signs.
-	msgHash := sha256.Sum256(pub)
-	ok, err := verifier.Verify(msgHash[:], sig)
-	if err != nil || !ok {
-		sess.writeResp(marmotResp{Method: "auth", Error: "signature verification failed"})
+	if len(req.Event) > 0 {
+		// Event-based auth (NIP-07 extension mode).
+		pubkeyHex = sess.handleEventAuth(req)
+		if pubkeyHex == "" {
+			return
+		}
+	} else if req.Pubkey != "" && req.Sig != "" {
+		// Direct Schnorr signature auth.
+		pubkeyHex = req.Pubkey
+		pub, err := hex.Dec(req.Pubkey)
+		if err != nil || len(pub) != 32 {
+			sess.writeResp(marmotResp{Method: "auth", Error: "invalid pubkey"})
+			return
+		}
+		sig, err := hex.Dec(req.Sig)
+		if err != nil || len(sig) != 64 {
+			sess.writeResp(marmotResp{Method: "auth", Error: "invalid signature"})
+			return
+		}
+		verifier, err := p8k.New()
+		if err != nil {
+			sess.writeResp(marmotResp{Method: "auth", Error: "signer init failed"})
+			return
+		}
+		if err := verifier.InitPub(pub); err != nil {
+			sess.writeResp(marmotResp{Method: "auth", Error: "pubkey init failed"})
+			return
+		}
+		msgHash := sha256.Sum256(pub)
+		ok, err := verifier.Verify(msgHash[:], sig)
+		if err != nil || !ok {
+			sess.writeResp(marmotResp{Method: "auth", Error: "signature verification failed"})
+			return
+		}
+	} else {
+		sess.writeResp(marmotResp{Method: "auth", Error: "pubkey+sig or event required"})
 		return
 	}
 
@@ -162,7 +172,7 @@ func (sess *marmotSession) handleAuth(ctx context.Context, dataDir string, req m
 	}
 
 	// Create group store.
-	storeDir := filepath.Join(dataDir, "marmot", req.Pubkey)
+	storeDir := filepath.Join(dataDir, "marmot", pubkeyHex)
 	store, err := marmot.NewFileGroupStore(storeDir)
 	if err != nil {
 		sess.writeResp(marmotResp{Method: "auth", Error: "store creation failed: " + err.Error()})
@@ -198,7 +208,102 @@ func (sess *marmotSession) handleAuth(ctx context.Context, dataDir string, req m
 	sess.client = client
 	sess.sign = sign
 	sess.writeResp(marmotResp{Method: "auth", OK: true})
-	log.I.F("marmot: authenticated session for %s", req.Pubkey)
+	log.I.F("marmot: authenticated session for %s", pubkeyHex)
+}
+
+// handleEventAuth verifies a signed kind 22242 auth event.
+// Returns the pubkey hex on success, empty string on failure.
+func (sess *marmotSession) handleEventAuth(req marmotReq) string {
+	var ev struct {
+		ID        string     `json:"id"`
+		PubKey    string     `json:"pubkey"`
+		Kind      int        `json:"kind"`
+		Content   string     `json:"content"`
+		Sig       string     `json:"sig"`
+		CreatedAt int64      `json:"created_at"`
+		Tags      [][]string `json:"tags"`
+	}
+	if err := json.Unmarshal(req.Event, &ev); err != nil {
+		sess.writeResp(marmotResp{Method: "auth", Error: "invalid event json"})
+		return ""
+	}
+	if ev.Kind != 22242 {
+		sess.writeResp(marmotResp{Method: "auth", Error: "wrong event kind"})
+		return ""
+	}
+	if ev.PubKey == "" || ev.Sig == "" || ev.ID == "" {
+		sess.writeResp(marmotResp{Method: "auth", Error: "incomplete event"})
+		return ""
+	}
+
+	// Verify event signature.
+	pub, err := hex.Dec(ev.PubKey)
+	if err != nil || len(pub) != 32 {
+		sess.writeResp(marmotResp{Method: "auth", Error: "invalid event pubkey"})
+		return ""
+	}
+	sig, err := hex.Dec(ev.Sig)
+	if err != nil || len(sig) != 64 {
+		sess.writeResp(marmotResp{Method: "auth", Error: "invalid event signature"})
+		return ""
+	}
+
+	// Verify the event ID matches the serialized content.
+	serialized := serializeEvent(ev.Kind, ev.PubKey, ev.CreatedAt, ev.Tags, ev.Content)
+	idHash := sha256.Sum256([]byte(serialized))
+	computedID := fmt.Sprintf("%x", idHash)
+	if computedID != ev.ID {
+		sess.writeResp(marmotResp{Method: "auth", Error: "event id mismatch"})
+		return ""
+	}
+
+	// Verify BIP-340 signature over the event ID hash.
+	verifier, err := p8k.New()
+	if err != nil {
+		sess.writeResp(marmotResp{Method: "auth", Error: "signer init failed"})
+		return ""
+	}
+	if err := verifier.InitPub(pub); err != nil {
+		sess.writeResp(marmotResp{Method: "auth", Error: "pubkey init failed"})
+		return ""
+	}
+	ok, err := verifier.Verify(idHash[:], sig)
+	if err != nil || !ok {
+		sess.writeResp(marmotResp{Method: "auth", Error: "event signature verification failed"})
+		return ""
+	}
+
+	// Check freshness — reject events older than 5 minutes.
+	now := time.Now().Unix()
+	if ev.CreatedAt < now-300 || ev.CreatedAt > now+60 {
+		sess.writeResp(marmotResp{Method: "auth", Error: "event too old or too far in future"})
+		return ""
+	}
+
+	return ev.PubKey
+}
+
+// serializeEvent produces the NIP-01 serialization for event ID computation.
+func serializeEvent(kind int, pubkey string, createdAt int64, tags [][]string, content string) string {
+	s := fmt.Sprintf("[0,%q,%d,%d,", pubkey, createdAt, kind)
+	// Tags.
+	s += "["
+	for i, tag := range tags {
+		if i > 0 {
+			s += ","
+		}
+		s += "["
+		for j, v := range tag {
+			if j > 0 {
+				s += ","
+			}
+			s += fmt.Sprintf("%q", v)
+		}
+		s += "]"
+	}
+	s += "],"
+	s += fmt.Sprintf("%q]", content)
+	return s
 }
 
 func (sess *marmotSession) handleSendDM(ctx context.Context, req marmotReq) {
@@ -312,6 +417,7 @@ func (sess *marmotSession) writeResp(resp marmotResp) {
 		log.W.F("marmot: marshal response failed: %v", err)
 		return
 	}
+	log.I.F("marmot: send: %s", string(data))
 	if err := sess.conn.WriteMessage(websocket.TextMessage, data); err != nil {
 		log.W.F("marmot: write failed: %v", err)
 	}

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"common/jsbridge/idb"
 	"common/jsbridge/sw"
 )
 
@@ -12,8 +11,9 @@ const cacheName = "sm3sh"
 
 var appFiles = []string{
 	// Main app — absolute paths so cache.addAll resolves correctly from SW location.
+	// Note: /index.html omitted — Go FileServer 301-redirects it to /, which
+	// causes cache.addAll to fail (Cache API rejects redirect responses).
 	"/",
-	"/index.html",
 	"/$entry.mjs",
 	"/smesh3.mjs",
 	"/common_crypto_secp256k1.mjs",
@@ -36,23 +36,15 @@ var appFiles = []string{
 	"/$wasm/secp256k1.mjs",
 	"/$wasm/secp256k1.wasm",
 	"/smesh-loader.svg",
-	// Service worker.
+	// Service worker (shell SW).
 	"/$sw/$entry.mjs",
 	"/$sw/sw.mjs",
 	"/$sw/common_jsbridge_sw.mjs",
-	"/$sw/common_jsbridge_idb.mjs",
 	"/$sw/common_jsbridge_ws.mjs",
 	"/$sw/common_jsbridge_subtle.mjs",
 	"/$sw/common_crypto_secp256k1.mjs",
 	"/$sw/common_crypto_sha256.mjs",
-	"/$sw/common_crypto_chacha20.mjs",
-	"/$sw/common_crypto_hmac.mjs",
-	"/$sw/common_crypto_hkdf.mjs",
-	"/$sw/common_crypto_nip44.mjs",
-	"/$sw/common_crypto_nip04.mjs",
 	"/$sw/common_helpers.mjs",
-	"/$sw/common_nostr.mjs",
-	"/$sw/common_relay.mjs",
 	"/$sw/$runtime/index.mjs",
 	"/$sw/$runtime/runtime.mjs",
 	"/$sw/$runtime/goroutine.mjs",
@@ -61,23 +53,15 @@ var appFiles = []string{
 	"/$sw/$runtime/types.mjs",
 	"/$sw/$runtime/sync.mjs",
 	"/$sw/$runtime/sw.mjs",
-	"/$sw/$runtime/idb.mjs",
 	"/$sw/$runtime/subtle.mjs",
 	"/$sw/$runtime/crypto.mjs",
-	"/$sw/$runtime/dom.mjs",
-	"/$sw/$runtime/localstorage.mjs",
 	"/$sw/$runtime/ws.mjs",
 }
 
 var currentVersion string
 
 func main() {
-	initRouter()
-	initRelayProxy()
 	initSharedState()
-	idb.Open(func() {
-		sw.Log("IDB ready")
-	})
 	sw.OnInstall(onInstall)
 	sw.OnActivate(onActivate)
 	sw.OnFetch(onFetch)
@@ -104,14 +88,21 @@ func onActivate(event sw.Event) {
 	sw.WaitUntil(event, func(done func()) {
 		sw.ClaimClients(func() {
 			connectSSE()
+			connectBus()
 			done()
 		})
 	})
 }
 
 func onFetch(event sw.Event) {
+	url := sw.GetRequestURL(event)
+	origin := sw.Origin()
+	// Only intercept same-origin requests.
+	if len(url) < len(origin) || url[:len(origin)] != origin {
+		return
+	}
 	path := sw.GetRequestPath(event)
-	if path == "/__sse" || path == "/__version" {
+	if path == "/__sse" || path == "/__version" || path == "/__marmot" || path == "/__sw-error" || path == "/__bus" {
 		return
 	}
 	// SW module files: always fetch from network to avoid serving
@@ -126,6 +117,7 @@ func onFetch(event sw.Event) {
 func onMessage(event sw.Event) {
 	data := sw.GetMessageData(event)
 	clientID := sw.GetMessageClientID(event)
+	sw.Log("sw: msg from " + clientID + ": " + data[:min(len(data), 60)])
 
 	// Simple string messages — App Shell handles directly.
 	if data == "activate-update" {

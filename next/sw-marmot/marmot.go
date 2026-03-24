@@ -4,54 +4,25 @@ import (
 	"common/crypto/secp256k1"
 	"common/crypto/sha256"
 	"common/helpers"
-	"common/jsbridge/registry"
-	"common/jsbridge/subtle"
 	"common/jsbridge/sw"
 	"common/jsbridge/ws"
 )
 
-func hexTo32(s string) [32]byte {
-	out, _ := helpers.HexDecode32(s)
-	return out
-}
-
-func random32() [32]byte {
-	var b [32]byte
-	subtle.RandomBytes(b[:])
-	return b
-}
+// Marmot WS proxy — connects to /__marmot on own origin,
+// routes DM results back to shell SW via bus.
 
 var (
-	conn    ws.Conn
-	ready   bool
-	pending []string
+	marmotConn    ws.Conn
+	marmotReady   bool
+	marmotPending []string
 )
 
-func init() {
-	registry.OnMarmotInit(func(_ string) {
-		marmotInit()
-	})
-	registry.OnMarmotSend(func(recipient, content string) {
-		marmotSend(recipient, content)
-	})
-	registry.OnMarmotSubscribe(func() {
-		marmotSubscribe()
-	})
-	registry.OnMarmotPublishKP(func(relaysJSON string) {
-		marmotPublishKP(relaysJSON)
-	})
-	registry.OnMarmotListGroups(func(_ string) {
-		marmotListGroups()
-	})
-}
-
-func main() {}
-
-func marmotInit() {
-	if ready {
+func marmotInit(relayURLs []string) {
+	if marmotReady {
 		return
 	}
 	wsURL := sw.Origin()
+	sw.Log("marmot-sw: connecting to " + wsURL + "/__marmot")
 	if len(wsURL) > 5 && wsURL[:5] == "https" {
 		wsURL = "wss" + wsURL[5:]
 	} else if len(wsURL) > 4 && wsURL[:4] == "http" {
@@ -59,92 +30,112 @@ func marmotInit() {
 	}
 	wsURL += "/__marmot"
 
-	pending = nil
-	conn = ws.Dial(wsURL,
-		func(connID int, msg string) { onMessage(msg) },
-		func(connID int) { onOpen() },
+	marmotPending = nil
+	marmotConn = ws.Dial(wsURL,
+		func(connID int, msg string) { marmotOnMessage(msg) },
+		func(connID int) { marmotOnOpen() },
 		func(connID int, code int, reason string) {
-			sw.Log("marmot: ws closed code=" + helpers.Itoa(int64(code)))
-			onClose()
+			sw.Log("marmot-sw: marmot ws closed code=" + helpers.Itoa(int64(code)))
+			marmotOnClose()
 		},
-		func(connID int) { onClose() },
+		func(connID int) { marmotOnClose() },
 	)
 }
 
-func onOpen() {
-	ready = true
-	sw.Log("marmot: connected")
-	if registry.Pubkey() != "" && registry.HasKey() {
-		auth()
+func marmotOnOpen() {
+	marmotReady = true
+	sw.Log("marmot-sw: marmot connected")
+	if myPubkey != "" {
+		marmotAuth()
 	}
-	for _, msg := range pending {
-		ws.Send(conn, msg)
-	}
-	pending = nil
 }
 
-func onClose() {
-	ready = false
-	sw.Log("marmot: disconnected")
+func marmotOnClose() {
+	marmotReady = false
 }
 
-func auth() {
-	pub := registry.Pubkey()
-	if pub == "" || !registry.HasKey() {
+func marmotAuth() {
+	if myPubkey == "" {
 		return
 	}
-	pubBytes := helpers.HexDecode(pub)
+	if !hasKey {
+		// NIP-07 extension mode: proxy signing through shell SW via bus.
+		now := sw.NowSeconds()
+		evJSON := "{\"kind\":22242,\"content\":\"marmot-auth\",\"tags\":[]," +
+			"\"created_at\":" + helpers.Itoa(now) + ",\"pubkey\":" + jstr(myPubkey) + "}"
+		cryptoProxy("signEvent", "", evJSON, func(signedJSON, errMsg string) {
+			if errMsg != "" || signedJSON == "" {
+				sw.Log("marmot-sw: extension sign failed: " + errMsg)
+				return
+			}
+			marmotSendJSON("{\"method\":\"auth\",\"event\":" + signedJSON + "}")
+		})
+		return
+	}
+	// Direct Schnorr auth.
+	pubBytes := helpers.HexDecode(myPubkey)
 	if pubBytes == nil {
 		return
 	}
 	msgHash := sha256.Sum(pubBytes)
 	aux := random32()
-	sig, ok := secp256k1.SignSchnorr(hexTo32(registry.Seckey()), msgHash, aux)
+	sig, ok := secp256k1.SignSchnorr(seckey, msgHash, aux)
 	if !ok {
-		sw.Log("marmot: auth sign failed")
+		sw.Log("marmot-sw: auth sign failed")
 		return
 	}
-	sendJSON("{\"method\":\"auth\",\"pubkey\":" + helpers.JsonString(pub) + ",\"sig\":" + helpers.JsonString(helpers.HexEncode(sig[:])) + "}")
+	marmotSendJSON("{\"method\":\"auth\",\"pubkey\":" + jstr(myPubkey) + ",\"sig\":" + jstr(helpers.HexEncode(sig[:])) + "}")
 }
 
 func marmotSend(recipient, content string) {
-	sendJSON("{\"method\":\"send_dm\",\"recipient\":" + helpers.JsonString(recipient) + ",\"content\":" + helpers.JsonString(content) + "}")
+	marmotSendJSON("{\"method\":\"send_dm\",\"recipient\":" + jstr(recipient) + ",\"content\":" + jstr(content) + "}")
 }
 
 func marmotSubscribe() {
-	sendJSON("{\"method\":\"subscribe\"}")
+	marmotSendJSON("{\"method\":\"subscribe\"}")
 }
 
-func marmotPublishKP(relaysJSON string) {
+func marmotPublishKP(relays []string) {
 	msg := "{\"method\":\"publish_kp\""
-	if relaysJSON != "[]" && relaysJSON != "" {
-		msg += ",\"relays\":" + relaysJSON
+	if len(relays) > 0 {
+		msg += ",\"relays\":["
+		for i, r := range relays {
+			if i > 0 {
+				msg += ","
+			}
+			msg += jstr(r)
+		}
+		msg += "]"
 	}
 	msg += "}"
-	sendJSON(msg)
+	marmotSendJSON(msg)
 }
 
 func marmotListGroups() {
-	sendJSON("{\"method\":\"list_groups\"}")
+	marmotSendJSON("{\"method\":\"list_groups\"}")
 }
 
-func sendJSON(msg string) {
-	if !ready {
-		pending = append(pending, msg)
+func marmotSendJSON(msg string) {
+	if !marmotReady {
+		marmotPending = append(marmotPending, msg)
 		return
 	}
-	ws.Send(conn, msg)
+	ws.Send(marmotConn, msg)
 }
 
-func onMessage(msg string) {
+func marmotOnMessage(msg string) {
 	method := jsonField(msg, "method")
 	switch method {
 	case "auth":
 		errMsg := jsonField(msg, "error")
 		if errMsg != "" {
-			sw.Log("marmot: auth failed: " + errMsg)
+			sw.Log("marmot-sw: auth failed: " + errMsg)
 		} else {
-			sw.Log("marmot: authenticated")
+			sw.Log("marmot-sw: authenticated")
+			for _, p := range marmotPending {
+				ws.Send(marmotConn, p)
+			}
+			marmotPending = nil
 			marmotSubscribe()
 		}
 
@@ -154,38 +145,36 @@ func onMessage(msg string) {
 		tsStr := jsonField(msg, "ts")
 		ts := parseInt(tsStr)
 		if peer != "" && content != "" {
-			recJSON := registry.MakeDMRecord(peer, peer, content, ts, "marmot", "")
-			if recJSON != "" {
-				registry.SaveDMRecord(recJSON)
-			}
+			rec := makeDMRecord(peer, peer, content, ts, "marmot", "")
+			busSend("shell", "[\"DM_RECEIVED\","+rec.ToJSON()+"]")
 		}
 
 	case "send_dm":
 		errMsg := jsonField(msg, "error")
 		if errMsg != "" {
-			sw.Log("marmot: send_dm error: " + errMsg)
+			sw.Log("marmot-sw: send_dm error: " + errMsg)
 		}
 
 	case "subscribe":
 		errMsg := jsonField(msg, "error")
 		if errMsg != "" {
-			sw.Log("marmot: subscribe error: " + errMsg)
+			sw.Log("marmot-sw: subscribe error: " + errMsg)
 		} else {
-			sw.Log("marmot: subscribed")
+			sw.Log("marmot-sw: subscribed")
 		}
 
 	case "publish_kp":
 		errMsg := jsonField(msg, "error")
 		if errMsg != "" {
-			sw.Log("marmot: publish_kp error: " + errMsg)
+			sw.Log("marmot-sw: publish_kp error: " + errMsg)
 		}
 
 	case "list_groups":
-		registry.BroadcastToClients("[\"MLS_GROUPS\"," + msg + "]")
+		busSend("shell", "[\"MLS_GROUPS\","+msg+"]")
 
 	case "error":
 		errMsg := jsonField(msg, "error")
-		sw.Log("marmot: server error: " + errMsg)
+		sw.Log("marmot-sw: server error: " + errMsg)
 	}
 }
 

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<base href="/">
 <title>sm3sh</title>
 <link rel="icon" type="image/svg+xml" href="./favicon.svg">
 <style>
@@ -33,11 +34,9 @@ body {
   --muted: #888;
   --border: #ddd;
   --bg2: #f5f5f5;
-  --c1: #3344cc;
-  --c2: #006600;
-  --c3: #dd0000;
-  --hex-fill: #fff;
-  --hex-stroke: #fff;
+  --c1: #f59e0b;
+  --c2: #cc33ff;
+  --c3: #00aabb;
   margin: 0;
   padding: 0;
   min-height: 100vh;
@@ -55,14 +54,10 @@ body.dark {
   --c1: #f59e0b;
   --c2: #cc33ff;
   --c3: #00aabb;
-  --hex-fill: #000;
-  --hex-stroke: #000;
 }
 [stroke="#e07030"] { stroke: var(--c1); }
 [stroke="#8833bb"] { stroke: var(--c2); }
 [stroke="#00aabb"] { stroke: var(--c3); }
-[fill="#e8e4da"] { fill: var(--hex-fill); }
-[stroke="#0a0a0e"] { stroke: var(--hex-stroke); }
 #update-snackbar {
   position: fixed;
   bottom: 37px;
@@ -91,6 +86,19 @@ body.dark {
 <script>{let t=localStorage.getItem('sm3sh-theme');if(t==='dark'||(t===null&&matchMedia('(prefers-color-scheme:dark)').matches))document.body.classList.add('dark')}</script>
 <div id="app-root"></div>
 <div id="update-snackbar">new version available — click to update</div>
+<script type="module">
+// Diagnostic: import and RUN SW modules in page context to surface the error.
+try {
+  const $rt = await import('./$sw/$runtime/index.mjs');
+  console.log('sw-diag: runtime OK');
+  const $main = await import('./$sw/sw.mjs');
+  console.log('sw-diag: sw.mjs OK');
+  if ($main.init) { $main.init(); console.log('sw-diag: init() OK'); }
+  if ($main.main) { $main.main(); console.log('sw-diag: main() OK'); }
+} catch(e) {
+  console.error('sw-diag: FAILED:', e);
+}
+</script>
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./$sw/$entry.mjs', { type: 'module', scope: '/' }).then(reg => {
@@ -101,6 +109,14 @@ if ('serviceWorker' in navigator) {
 
   navigator.serviceWorker.addEventListener('message', (event) => {
     const d = event.data;
+    if (typeof d === 'string' && d.startsWith('sw-error:')) {
+      console.error('SW RUNTIME ERROR:', d.slice(9));
+      return;
+    }
+    if (typeof d === 'string' && d === 'sw-started') {
+      console.log('sm3sh: SW main() OK');
+      return;
+    }
     if (d === 'update-available') {
       document.getElementById('update-snackbar').classList.add('visible');
     }
@@ -114,6 +130,22 @@ if ('serviceWorker' in navigator) {
       navigator.serviceWorker.controller.postMessage('activate-update');
     }
   });
+}
+</script>
+<script>
+// Satellite SW iframes — register SWs on satellite origins for thread isolation.
+// Skipped on localhost/127.0.0.1 where subdomains aren't available.
+{
+  const h = location.hostname;
+  if (h !== 'localhost' && h !== '127.0.0.1') {
+    const proto = location.protocol;
+    ['marmot','relay'].forEach(name => {
+      const f = document.createElement('iframe');
+      f.hidden = true;
+      f.src = proto + '//' + name + '.' + h + '/loader.html';
+      document.body.appendChild(f);
+    });
+  }
 }
 </script>
 <script type="module" src="./$entry.mjs"></script>

@@ -34,6 +34,8 @@ type Smesh3Server struct {
 
 	deployPub []byte // 32-byte x-only pubkey for /__deploy auth
 
+	bus *busHub // inter-SW message bus
+
 	mu       sync.RWMutex
 	version  int64
 	clients  map[chan int64]struct{}
@@ -49,6 +51,7 @@ func NewSmesh3Server(port int, dir, dataDir, deployPubHex string) *Smesh3Server 
 		port:    port,
 		dir:     dir,
 		dataDir: dataDir,
+		bus:     newBusHub(),
 		version: time.Now().UnixMilli(),
 		clients: make(map[chan int64]struct{}),
 	}
@@ -90,6 +93,16 @@ func (s *Smesh3Server) Start(ctx context.Context) error {
 	// Marmot WebSocket endpoint for MLS-based DMs.
 	mux.HandleFunc("/__marmot", s.handleMarmot)
 
+	// Inter-SW message bus.
+	mux.HandleFunc("/__bus", s.handleBus)
+
+	// SW error reporting — logs errors from service worker to server console.
+	mux.HandleFunc("/__sw-error", func(w http.ResponseWriter, r *http.Request) {
+		msg := r.URL.Query().Get("msg")
+		log.W.F("SW ERROR: %s", msg)
+		w.WriteHeader(200)
+	})
+
 	// Signed bundle deploy endpoint.
 	if len(s.deployPub) == 32 {
 		mux.HandleFunc("/__deploy", s.handleDeploy)
@@ -98,12 +111,22 @@ func (s *Smesh3Server) Start(ctx context.Context) error {
 
 	// File serving with MIME fix and SPA fallback.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Satellite subdomain routing — serve loader + SW files for isolated SWs.
+		host := r.Host
+		if idx := strings.IndexByte(host, ':'); idx >= 0 {
+			host = host[:idx]
+		}
+		if swDir := satelliteSWDir(host); swDir != "" {
+			serveSatellite(w, r, swDir, fileHandler)
+			return
+		}
+
 		path := r.URL.Path
 
 		if strings.HasSuffix(path, ".mjs") {
 			w.Header().Set("Content-Type", "application/javascript")
 		}
-		if strings.Contains(path, "$sw/") {
+		if strings.Contains(path, "$sw") {
 			w.Header().Set("Service-Worker-Allowed", "/")
 		}
 
@@ -335,4 +358,44 @@ func (s *Smesh3Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+// satelliteSWDir returns the SW output directory for a satellite subdomain,
+// or "" if the host is the main domain.
+func satelliteSWDir(host string) string {
+	if strings.HasPrefix(host, "marmot.") {
+		return "$sw-marmot"
+	}
+	if strings.HasPrefix(host, "relay.") {
+		return "$sw-relay"
+	}
+	return ""
+}
+
+// serveSatellite handles requests on satellite subdomains.
+// Serves a minimal loader.html for "/" and delegates SW file serving to fileHandler.
+func serveSatellite(w http.ResponseWriter, r *http.Request, swDir string, fileHandler http.Handler) {
+	path := r.URL.Path
+	if path == "/" || path == "/loader.html" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		fmt.Fprintf(w, `<!DOCTYPE html><html><body>
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./%s/$entry.mjs',{type:'module',scope:'/'})
+    .then(()=>console.log('%s SW registered'))
+    .catch(e=>console.error('%s SW failed:',e));
+}
+</script>
+</body></html>`, swDir, swDir, swDir)
+		return
+	}
+	if strings.HasSuffix(path, ".mjs") {
+		w.Header().Set("Content-Type", "application/javascript")
+	}
+	if strings.Contains(path, "$sw") {
+		w.Header().Set("Service-Worker-Allowed", "/")
+	}
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	fileHandler.ServeHTTP(w, r)
 }

@@ -8,15 +8,21 @@ import (
 
 // Shared state not yet assigned to a specific domain.
 var (
-	dmSubIDs     map[string]bool
-	dmRelayURLs  []string
 	cryptoCBs    map[int]func(string, string)
 	nextCryptoID int
 )
 
 func initSharedState() {
-	dmSubIDs = make(map[string]bool)
 	cryptoCBs = make(map[int]func(string, string))
+}
+
+// cryptoProxy sends a crypto request to the main page (NIP-07 extension)
+// and calls cb with (result, error) when CRYPTO_RESULT comes back.
+func cryptoProxy(method, peerPubkey, data string, cb func(string, string)) {
+	id := nextCryptoID
+	nextCryptoID++
+	cryptoCBs[id] = cb
+	broadcastToClients("[\"CRYPTO_REQ\"," + helpers.Itoa(int64(id)) + "," + jstr(method) + "," + jstr(peerPubkey) + "," + jstr(data) + "]")
 }
 
 // --- Shared utilities ---

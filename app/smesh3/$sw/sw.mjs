@@ -3,46 +3,24 @@
 
 import * as $rt from './$runtime/index.mjs';
 
-import * as common$crypto$nip04 from './common_crypto_nip04.mjs';
-import * as common$crypto$nip44 from './common_crypto_nip44.mjs';
 import * as common$crypto$secp256k1 from './common_crypto_secp256k1.mjs';
 import * as common$crypto$sha256 from './common_crypto_sha256.mjs';
 import * as common$helpers from './common_helpers.mjs';
-import * as common$jsbridge$idb from './common_jsbridge_idb.mjs';
 import * as common$jsbridge$subtle from './common_jsbridge_subtle.mjs';
 import * as common$jsbridge$sw from './common_jsbridge_sw.mjs';
 import * as common$jsbridge$ws from './common_jsbridge_ws.mjs';
-import * as common$nostr from './common_nostr.mjs';
-import * as common$relay from './common_relay.mjs';
 
 // Package-level variables
-export let rpool = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let writeRelays = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let dmSubIDs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let dmRelayURLs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let cryptoCBs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let nextCryptoID = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let appFiles = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let currentVersion = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let marmotConn = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let marmotReady = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let marmotPending = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let clientSubs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let proxySubs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let seckey = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let hasKey = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let myPubkey = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let appFiles = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let currentVersion = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let busConn = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let busReady = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let cryptoCBs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let nextCryptoID = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 
-$rt.types.registerType('sw.mw', {
-  id: 'sw.mw',
-  kind: 'struct',
-  methods: new Map(),
-  fields: [
-    { name: 's', type: 'string', tag: '', embedded: false },
-    { name: 'i', type: 'int', tag: '', embedded: false },
-  ],
-  zero: () => ({ s: '', i: 0 }),
-});
 $rt.types.registerType('sw.DMRecord', {
   id: 'sw.DMRecord',
   kind: 'struct',
@@ -58,334 +36,678 @@ $rt.types.registerType('sw.DMRecord', {
   ],
   zero: () => ({ ID: '', Peer: '', From: '', Content: '', CreatedAt: 0, Protocol: '', EventID: '' }),
 });
-$rt.types.registerType('sw.clientSub', {
-  id: 'sw.clientSub',
+$rt.types.registerType('sw.mw', {
+  id: 'sw.mw',
   kind: 'struct',
   methods: new Map(),
   fields: [
-    { name: 'filter', type: '*common/nostr.Filter', tag: '', embedded: false },
-    { name: 'filterRaw', type: 'string', tag: '', embedded: false },
-    { name: 'clientID', type: 'string', tag: '', embedded: false },
+    { name: 's', type: 'string', tag: '', embedded: false },
+    { name: 'i', type: 'int', tag: '', embedded: false },
   ],
-  zero: () => ({ filter: null, filterRaw: '', clientID: '' }),
-});
-$rt.types.registerType('sw.proxySub', {
-  id: 'sw.proxySub',
-  kind: 'struct',
-  methods: new Map(),
-  fields: [
-    { name: 'remoteIDs', type: 'map[string]bool', tag: '', embedded: false },
-    { name: 'relayCount', type: 'int', tag: '', embedded: false },
-    { name: 'eoseCount', type: 'int', tag: '', embedded: false },
-    { name: 'timer', type: 'common/jsbridge/sw.Timer', tag: '', embedded: false },
-    { name: 'done', type: 'bool', tag: '', embedded: false },
-  ],
-  zero: () => ({ remoteIDs: null, relayCount: 0, eoseCount: 0, timer: 0, done: false }),
+  zero: () => ({ s: '', i: 0 }),
 });
 export function init() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56;
-  $t0_1 = { $value: $rt.builtin.makeSlice(54, 54, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44;
+  $t0_1 = { $value: $rt.builtin.makeSlice(42, 42, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
   $t1_2 = $t0_1.$get().addr(0);
   $t1_2.$set('/');
   $t2_3 = $t0_1.$get().addr(1);
-  $t2_3.$set('/index.html');
+  $t2_3.$set('/$entry.mjs');
   $t3_4 = $t0_1.$get().addr(2);
-  $t3_4.$set('/$entry.mjs');
+  $t3_4.$set('/smesh3.mjs');
   $t4_5 = $t0_1.$get().addr(3);
-  $t4_5.$set('/smesh3.mjs');
+  $t4_5.$set('/common_crypto_secp256k1.mjs');
   $t5_6 = $t0_1.$get().addr(4);
-  $t5_6.$set('/common_crypto_secp256k1.mjs');
+  $t5_6.$set('/common_crypto_sha256.mjs');
   $t6_7 = $t0_1.$get().addr(5);
-  $t6_7.$set('/common_crypto_sha256.mjs');
+  $t6_7.$set('/common_helpers.mjs');
   $t7_8 = $t0_1.$get().addr(6);
-  $t7_8.$set('/common_helpers.mjs');
+  $t7_8.$set('/common_jsbridge_dom.mjs');
   $t8_9 = $t0_1.$get().addr(7);
-  $t8_9.$set('/common_jsbridge_dom.mjs');
+  $t8_9.$set('/common_jsbridge_localstorage.mjs');
   $t9_10 = $t0_1.$get().addr(8);
-  $t9_10.$set('/common_jsbridge_localstorage.mjs');
+  $t9_10.$set('/common_jsbridge_signer.mjs');
   $t10_11 = $t0_1.$get().addr(9);
-  $t10_11.$set('/common_jsbridge_signer.mjs');
+  $t10_11.$set('/common_nostr.mjs');
   $t11_12 = $t0_1.$get().addr(10);
-  $t11_12.$set('/common_nostr.mjs');
+  $t11_12.$set('/$runtime/index.mjs');
   $t12_13 = $t0_1.$get().addr(11);
-  $t12_13.$set('/$runtime/index.mjs');
+  $t12_13.$set('/$runtime/runtime.mjs');
   $t13_14 = $t0_1.$get().addr(12);
-  $t13_14.$set('/$runtime/runtime.mjs');
+  $t13_14.$set('/$runtime/goroutine.mjs');
   $t14_15 = $t0_1.$get().addr(13);
-  $t14_15.$set('/$runtime/goroutine.mjs');
+  $t14_15.$set('/$runtime/channel.mjs');
   $t15_16 = $t0_1.$get().addr(14);
-  $t15_16.$set('/$runtime/channel.mjs');
+  $t15_16.$set('/$runtime/builtin.mjs');
   $t16_17 = $t0_1.$get().addr(15);
-  $t16_17.$set('/$runtime/builtin.mjs');
+  $t16_17.$set('/$runtime/types.mjs');
   $t17_18 = $t0_1.$get().addr(16);
-  $t17_18.$set('/$runtime/types.mjs');
+  $t17_18.$set('/$runtime/sync.mjs');
   $t18_19 = $t0_1.$get().addr(17);
-  $t18_19.$set('/$runtime/sync.mjs');
+  $t18_19.$set('/$runtime/dom.mjs');
   $t19_20 = $t0_1.$get().addr(18);
-  $t19_20.$set('/$runtime/dom.mjs');
+  $t19_20.$set('/$runtime/localstorage.mjs');
   $t20_21 = $t0_1.$get().addr(19);
-  $t20_21.$set('/$runtime/localstorage.mjs');
+  $t20_21.$set('/$runtime/signer.mjs');
   $t21_22 = $t0_1.$get().addr(20);
-  $t21_22.$set('/$runtime/signer.mjs');
+  $t21_22.$set('/$wasm/secp256k1.mjs');
   $t22_23 = $t0_1.$get().addr(21);
-  $t22_23.$set('/$wasm/secp256k1.mjs');
+  $t22_23.$set('/$wasm/secp256k1.wasm');
   $t23_24 = $t0_1.$get().addr(22);
-  $t23_24.$set('/$wasm/secp256k1.wasm');
+  $t23_24.$set('/smesh-loader.svg');
   $t24_25 = $t0_1.$get().addr(23);
-  $t24_25.$set('/smesh-loader.svg');
+  $t24_25.$set('/$sw/$entry.mjs');
   $t25_26 = $t0_1.$get().addr(24);
-  $t25_26.$set('/$sw/$entry.mjs');
+  $t25_26.$set('/$sw/sw.mjs');
   $t26_27 = $t0_1.$get().addr(25);
-  $t26_27.$set('/$sw/sw.mjs');
+  $t26_27.$set('/$sw/common_jsbridge_sw.mjs');
   $t27_28 = $t0_1.$get().addr(26);
-  $t27_28.$set('/$sw/common_jsbridge_sw.mjs');
+  $t27_28.$set('/$sw/common_jsbridge_ws.mjs');
   $t28_29 = $t0_1.$get().addr(27);
-  $t28_29.$set('/$sw/common_jsbridge_idb.mjs');
+  $t28_29.$set('/$sw/common_jsbridge_subtle.mjs');
   $t29_30 = $t0_1.$get().addr(28);
-  $t29_30.$set('/$sw/common_jsbridge_ws.mjs');
+  $t29_30.$set('/$sw/common_crypto_secp256k1.mjs');
   $t30_31 = $t0_1.$get().addr(29);
-  $t30_31.$set('/$sw/common_jsbridge_subtle.mjs');
+  $t30_31.$set('/$sw/common_crypto_sha256.mjs');
   $t31_32 = $t0_1.$get().addr(30);
-  $t31_32.$set('/$sw/common_crypto_secp256k1.mjs');
+  $t31_32.$set('/$sw/common_helpers.mjs');
   $t32_33 = $t0_1.$get().addr(31);
-  $t32_33.$set('/$sw/common_crypto_sha256.mjs');
+  $t32_33.$set('/$sw/$runtime/index.mjs');
   $t33_34 = $t0_1.$get().addr(32);
-  $t33_34.$set('/$sw/common_crypto_chacha20.mjs');
+  $t33_34.$set('/$sw/$runtime/runtime.mjs');
   $t34_35 = $t0_1.$get().addr(33);
-  $t34_35.$set('/$sw/common_crypto_hmac.mjs');
+  $t34_35.$set('/$sw/$runtime/goroutine.mjs');
   $t35_36 = $t0_1.$get().addr(34);
-  $t35_36.$set('/$sw/common_crypto_hkdf.mjs');
+  $t35_36.$set('/$sw/$runtime/channel.mjs');
   $t36_37 = $t0_1.$get().addr(35);
-  $t36_37.$set('/$sw/common_crypto_nip44.mjs');
+  $t36_37.$set('/$sw/$runtime/builtin.mjs');
   $t37_38 = $t0_1.$get().addr(36);
-  $t37_38.$set('/$sw/common_crypto_nip04.mjs');
+  $t37_38.$set('/$sw/$runtime/types.mjs');
   $t38_39 = $t0_1.$get().addr(37);
-  $t38_39.$set('/$sw/common_helpers.mjs');
+  $t38_39.$set('/$sw/$runtime/sync.mjs');
   $t39_40 = $t0_1.$get().addr(38);
-  $t39_40.$set('/$sw/common_nostr.mjs');
+  $t39_40.$set('/$sw/$runtime/sw.mjs');
   $t40_41 = $t0_1.$get().addr(39);
-  $t40_41.$set('/$sw/common_relay.mjs');
+  $t40_41.$set('/$sw/$runtime/subtle.mjs');
   $t41_42 = $t0_1.$get().addr(40);
-  $t41_42.$set('/$sw/$runtime/index.mjs');
+  $t41_42.$set('/$sw/$runtime/crypto.mjs');
   $t42_43 = $t0_1.$get().addr(41);
-  $t42_43.$set('/$sw/$runtime/runtime.mjs');
-  $t43_44 = $t0_1.$get().addr(42);
-  $t43_44.$set('/$sw/$runtime/goroutine.mjs');
-  $t44_45 = $t0_1.$get().addr(43);
-  $t44_45.$set('/$sw/$runtime/channel.mjs');
-  $t45_46 = $t0_1.$get().addr(44);
-  $t45_46.$set('/$sw/$runtime/builtin.mjs');
-  $t46_47 = $t0_1.$get().addr(45);
-  $t46_47.$set('/$sw/$runtime/types.mjs');
-  $t47_48 = $t0_1.$get().addr(46);
-  $t47_48.$set('/$sw/$runtime/sync.mjs');
-  $t48_49 = $t0_1.$get().addr(47);
-  $t48_49.$set('/$sw/$runtime/sw.mjs');
-  $t49_50 = $t0_1.$get().addr(48);
-  $t49_50.$set('/$sw/$runtime/idb.mjs');
-  $t50_51 = $t0_1.$get().addr(49);
-  $t50_51.$set('/$sw/$runtime/subtle.mjs');
-  $t51_52 = $t0_1.$get().addr(50);
-  $t51_52.$set('/$sw/$runtime/crypto.mjs');
-  $t52_53 = $t0_1.$get().addr(51);
-  $t52_53.$set('/$sw/$runtime/dom.mjs');
-  $t53_54 = $t0_1.$get().addr(52);
-  $t53_54.$set('/$sw/$runtime/localstorage.mjs');
-  $t54_55 = $t0_1.$get().addr(53);
-  $t54_55.$set('/$sw/$runtime/ws.mjs');
-  $t55_56 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-  appFiles.$set($t55_56);
+  $t42_43.$set('/$sw/$runtime/ws.mjs');
+  $t43_44 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+  appFiles.$set($t43_44);
   return;
 }
 
-export function initRelayProxy() {
+export function identitySetKey(hexKey) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = hexTo32(hexKey);
+        seckey.$set($rt.builtin.cloneValue($t0_1));
+        hasKey.$set(true);
+        $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t2_3 = seckey.$get();
+        $t3_4 = common$crypto$secp256k1.PubKeyFromSecKey($t2_3);
+        $t4_5 = $t3_4[0];
+        $t1_2.$set($rt.builtin.cloneValue($t4_5));
+        $t5_6 = $t3_4[1];
+        if ($t5_6) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t6_7 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
+        $t7_8 = common$helpers.HexEncode($t6_7);
+        myPubkey.$set($t7_8);
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        return;
+        break;
+      }
+    }
+  }
+}
+
+export function identitySetPubkey(hex) {
+  myPubkey.$set(hex);
+  return;
+}
+
+export function identityClearKey() {
+  seckey.$set($rt.builtin.cloneValue($rt.builtin.makeSlice(32, 32, 0)));
+  hasKey.$set(false);
+  myPubkey.$set('');
+  return;
+}
+
+export function main() {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
+  $t0_1 = initSharedState();
+  $t1_2 = common$jsbridge$sw.OnInstall(onInstall);
+  $t2_3 = common$jsbridge$sw.OnActivate(onActivate);
+  $t3_4 = common$jsbridge$sw.OnFetch(onFetch);
+  $t4_5 = common$jsbridge$sw.OnMessage(onMessage);
+  return;
+}
+
+export function onInstall(event) {
   let $t0_1;
-  $t0_1 = common$relay.NewPool();
-  rpool.$set($t0_1);
+  $t0_1 = common$jsbridge$sw.WaitUntil(event, onInstall$1);
   return;
 }
 
-export function getConn(url) {
+function onInstall$1(done) {
   let $t0_1, $t1_2, $t2_3;
-  $t0_1 = rpool.$get();
-  $t1_2 = common$relay.Pool$Connect($t0_1, url);
-  $t2_3 = wireConn($t1_2, url);
-  return $t1_2;
-}
-
-export function wireConn(c, url) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
-  $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t0_1.$set(url);
-  $t1_2 = wireConn$1.bind(null, $t0_1);
-  $t2_3 = common$relay.Conn$SetOnEvent(c, $t1_2);
-  $t3_4 = common$relay.Conn$SetOnEOSE(c, wireConn$2);
-  $t4_5 = common$relay.Conn$SetOnOK(c, wireConn$3);
-  $t5_6 = wireConn$4.bind(null, $t0_1);
-  $t6_7 = common$relay.Conn$SetOnAuth(c, $t5_6);
+  $t0_1 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t0_1.$set(done);
+  $t1_2 = onInstall$1$1.bind(null, $t0_1);
+  $t2_3 = common$jsbridge$sw.Fetch('/__version', $t1_2);
   return;
 }
 
-function wireConn$1(url, _, ev) {
+function onInstall$1$1(done, resp, ok) {
   let $t0_1, $t1_2;
-  $t0_1 = url.$get();
-  $t1_2 = routerOnRelayEvent($t0_1, ev);
+  $t0_1 = onInstall$1$1$1.bind(null, done);
+  $t1_2 = common$jsbridge$sw.CacheOpen('sm3sh', $t0_1);
   return;
 }
 
-function wireConn$2(subID) {
+function onInstall$1$1$1(done, cache) {
+  let $t0_1, $t1_2, $t2_3;
+  $t0_1 = appFiles.$get();
+  $t1_2 = onInstall$1$1$1$1.bind(null, done);
+  $t2_3 = common$jsbridge$sw.CacheAddAll(cache, $t0_1, $t1_2);
+  return;
+}
+
+function onInstall$1$1$1$1(done) {
+  let $t0_1, $t1_2, $t2_3;
+  $t0_1 = common$jsbridge$sw.SkipWaiting();
+  $t1_2 = done.$get();
+  $t2_3 = $t1_2();
+  return;
+}
+
+export function onActivate(event) {
   let $t0_1;
-  $t0_1 = routerOnRelayEOSE(subID);
+  $t0_1 = common$jsbridge$sw.WaitUntil(event, onActivate$1);
   return;
 }
 
-function wireConn$3(eventID, ok, msg) {
+function onActivate$1(done) {
+  let $t0_1, $t1_2, $t2_3;
+  $t0_1 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t0_1.$set(done);
+  $t1_2 = onActivate$1$1.bind(null, $t0_1);
+  $t2_3 = common$jsbridge$sw.ClaimClients($t1_2);
+  return;
+}
+
+function onActivate$1$1(done) {
+  let $t0_1, $t1_2, $t2_3, $t3_4;
+  $t0_1 = connectSSE();
+  $t1_2 = connectBus();
+  $t2_3 = done.$get();
+  $t3_4 = $t2_3();
+  return;
+}
+
+export function onFetch(event) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = common$jsbridge$sw.GetRequestURL(event);
+        $t1_2 = common$jsbridge$sw.Origin();
+        $t2_3 = $rt.builtin.len($t0_1);
+        $t3_4 = $rt.builtin.len($t1_2);
+        $t4_5 = ($t2_3 < $t3_4);
+        if ($t4_5) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 1: {
+        return;
+        break;
+      }
+      case 2: {
+        $t5_6 = common$jsbridge$sw.GetRequestPath(event);
+        $t6_7 = ($t5_6 === '/__sse');
+        if ($t6_7) {
+          $block = 4; break;
+        }
+        else {
+          $block = 9; break;
+        }
+        break;
+      }
+      case 3: {
+        $t7_8 = $rt.builtin.len($t1_2);
+        $t8_9 = $rt.builtin.stringSlice($t0_1, undefined, $t7_8);
+        $t9_10 = ($t8_9 !== $t1_2);
+        if ($t9_10) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 4: {
+        return;
+        break;
+      }
+      case 5: {
+        $t10_11 = $rt.builtin.len($t5_6);
+        $t11_12 = ($t10_11 > 4);
+        if ($t11_12) {
+          $block = 12; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 6: {
+        $t12_13 = ($t5_6 === '/__bus');
+        if ($t12_13) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 7: {
+        $t13_14 = ($t5_6 === '/__sw-error');
+        if ($t13_14) {
+          $block = 4; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 8: {
+        $t14_15 = ($t5_6 === '/__marmot');
+        if ($t14_15) {
+          $block = 4; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 9: {
+        $t15_16 = ($t5_6 === '/__version');
+        if ($t15_16) {
+          $block = 4; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 10: {
+        return;
+        break;
+      }
+      case 11: {
+        $t16_17 = common$jsbridge$sw.RespondWithCacheFirst(event);
+        return;
+        break;
+      }
+      case 12: {
+        $t17_18 = $rt.builtin.stringSlice($t5_6, undefined, 5);
+        $t18_19 = ($t17_18 === '/$sw/');
+        if ($t18_19) {
+          $block = 10; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function onMessage(event) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = common$jsbridge$sw.GetMessageData(event);
+        $t1_2 = common$jsbridge$sw.GetMessageClientID(event);
+        $t2_3 = ('sw: msg from ' + $t1_2);
+        $t3_4 = ($t2_3 + ': ');
+        $t4_5 = $rt.builtin.len($t0_1);
+        $t5_6 = Math.min($t4_5, 60);
+        $t6_7 = $rt.builtin.stringSlice($t0_1, undefined, $t5_6);
+        $t7_8 = ($t3_4 + $t6_7);
+        $t8_9 = common$jsbridge$sw.Log($t7_8);
+        $t9_10 = ($t0_1 === 'activate-update');
+        if ($t9_10) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t10_11 = refreshAndReload();
+        return;
+        break;
+      }
+      case 2: {
+        $t11_12 = { $value: { s: '', i: 0 }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t12_13 = newMW($t0_1);
+        $t11_12.$set($rt.builtin.cloneValue($t12_13));
+        $t13_14 = mw$str($t11_12);
+        $t14_15 = ($t13_14 === 'SKIP_WAITING');
+        if ($t14_15) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 3: {
+        return;
+        break;
+      }
+      case 4: {
+        $t15_16 = common$jsbridge$sw.SkipWaiting();
+        $block = 3; break;
+        break;
+      }
+      case 5: {
+        $t16_17 = routeMessage($t1_2, $t11_12, $t13_14);
+        $block = 3; break;
+        break;
+      }
+    }
+  }
+}
+
+export function connectSSE() {
+  let $t0_1;
+  $t0_1 = common$jsbridge$sw.SSEConnect('/__sse', connectSSE$1);
+  return;
+}
+
+function connectSSE$1(data) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = currentVersion.$get();
+        $t1_2 = ($t0_1 === '');
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        currentVersion.$set(data);
+        return;
+        break;
+      }
+      case 2: {
+        $t2_3 = currentVersion.$get();
+        $t3_4 = (data !== $t2_3);
+        if ($t3_4) {
+          $block = 3; break;
+        }
+        else {
+          $block = 4; break;
+        }
+        break;
+      }
+      case 3: {
+        currentVersion.$set(data);
+        $t4_5 = notifyUpdate();
+        $block = 4; break;
+        break;
+      }
+      case 4: {
+        return;
+        break;
+      }
+    }
+  }
+}
+
+export function notifyUpdate() {
+  let $t0_1;
+  $t0_1 = refreshAndReload();
+  return;
+}
+
+export function refreshAndReload() {
+  let $t0_1;
+  $t0_1 = common$jsbridge$sw.CacheOpen('sm3sh', refreshAndReload$1);
+  return;
+}
+
+function refreshAndReload$1(cache) {
+  let $t0_1;
+  $t0_1 = refreshFiles(cache, 0, refreshAndReload$1$1);
+  return;
+}
+
+function refreshAndReload$1$1() {
+  let $t0_1;
+  $t0_1 = common$jsbridge$sw.MatchClients(refreshAndReload$1$1$1);
+  return;
+}
+
+function refreshAndReload$1$1$1(client) {
+  let $t0_1;
+  $t0_1 = common$jsbridge$sw.Navigate(client, '');
+  return;
+}
+
+export function refreshFiles(cache, idx, done) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set(cache);
+        $t1_2 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2.$set(idx);
+        $t2_3 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t2_3.$set(done);
+        $t3_4 = $t1_2.$get();
+        $t4_5 = appFiles.$get();
+        $t5_6 = $rt.builtin.len($t4_5);
+        $t6_7 = ($t3_4 >= $t5_6);
+        if ($t6_7) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t7_8 = $t2_3.$get();
+        $t8_9 = $t7_8();
+        return;
+        break;
+      }
+      case 2: {
+        $t9_10 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t10_11 = appFiles.$get();
+        $t11_12 = $t1_2.$get();
+        $t12_13 = $t10_11.addr($t11_12);
+        $t13_14 = $t12_13.$get();
+        $t9_10.$set($t13_14);
+        $t14_15 = $t9_10.$get();
+        $t15_16 = ($t14_15 + '?v=');
+        $t16_17 = currentVersion.$get();
+        $t17_18 = ($t15_16 + $t16_17);
+        $t18_19 = refreshFiles$1.bind(null, $t0_1, $t9_10, $t1_2, $t2_3);
+        $t19_20 = common$jsbridge$sw.Fetch($t17_18, $t18_19);
+        return;
+        break;
+      }
+    }
+  }
+}
+
+function refreshFiles$1(cache, file, idx, done, resp, ok) {
   let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
         if (ok) {
-          $t0_1 = 'true';
-          $block = 2; break;
+          $block = 4; break;
         }
         else {
-          $block = 1; break;
+          $block = 3; break;
         }
         break;
       }
       case 1: {
-        $t0_1 = 'false';
+        $t0_1 = cache.$get();
+        $t1_2 = file.$get();
+        $t2_3 = refreshFiles$1$1.bind(null, cache, idx, done);
+        $t3_4 = common$jsbridge$sw.CachePut($t0_1, $t1_2, resp, $t2_3);
         $block = 2; break;
         break;
       }
       case 2: {
-        $t1_2 = jstr(eventID);
-        $t2_3 = ('["OK",' + $t1_2);
-        $t3_4 = ($t2_3 + ',');
-        $t4_5 = ($t3_4 + $t0_1);
-        $t5_6 = ($t4_5 + ',');
-        $t6_7 = jstr(msg);
-        $t7_8 = ($t5_6 + $t6_7);
-        $t8_9 = ($t7_8 + ']');
-        $t9_10 = broadcastToClients($t8_9);
         return;
+        break;
+      }
+      case 3: {
+        $t4_5 = cache.$get();
+        $t5_6 = idx.$get();
+        $t6_7 = ($t5_6 + 1);
+        $t7_8 = done.$get();
+        $t8_9 = refreshFiles($t4_5, $t6_7, $t7_8);
+        $block = 2; break;
+        break;
+      }
+      case 4: {
+        $t9_10 = common$jsbridge$sw.ResponseOK(resp);
+        if ($t9_10) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
         break;
       }
     }
   }
 }
 
-function wireConn$4(url, challenge) {
-  let $t0_1, $t1_2;
-  $t0_1 = url.$get();
-  $t1_2 = onRelayAuth($t0_1, challenge);
+function refreshFiles$1$1(cache, idx, done) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
+  $t0_1 = cache.$get();
+  $t1_2 = idx.$get();
+  $t2_3 = ($t1_2 + 1);
+  $t3_4 = done.$get();
+  $t4_5 = refreshFiles($t0_1, $t2_3, $t3_4);
   return;
 }
 
-export function onRelayAuth(relayURL, challenge) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30;
+export function connectBus() {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = hasKey.$get();
-        if ($t0_1) {
-          $block = 3; break;
+        $t0_1 = common$jsbridge$sw.Origin();
+        $t1_2 = $rt.builtin.len($t0_1);
+        $t2_3 = ($t1_2 > 5);
+        if ($t2_3) {
+          $block = 4; break;
         }
         else {
-          $block = 1; break;
+          $block = 3; break;
         }
         break;
       }
       case 1: {
-        return;
+        $t3_4 = $rt.builtin.stringSlice($t0_1, 5, undefined);
+        $t4_5 = ('wss' + $t3_4);
+        $t5_6 = $t4_5;
+        $block = 2; break;
         break;
       }
       case 2: {
-        $t1_2 = { $value: { ID: '', PubKey: '', CreatedAt: 0, Kind: 0, Tags: null, Content: '', Sig: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t2_3 = { $get() { return $t1_2.$get().Kind; }, $set(v) { const obj = $t1_2.$get(); obj.Kind = v; $t1_2.$set(obj); } };
-        $t3_4 = { $get() { return $t1_2.$get().Content; }, $set(v) { const obj = $t1_2.$get(); obj.Content = v; $t1_2.$set(obj); } };
-        $t4_5 = { $get() { return $t1_2.$get().Tags; }, $set(v) { const obj = $t1_2.$get(); obj.Tags = v; $t1_2.$set(obj); } };
-        $t5_6 = { $value: $rt.builtin.makeSlice(2, 2, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t6_7 = $t5_6.$get().addr(0);
-        $t7_8 = { $value: $rt.builtin.makeSlice(2, 2, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t8_9 = $t7_8.$get().addr(0);
-        $t8_9.$set('relay');
-        $t9_10 = $t7_8.$get().addr(1);
-        $t9_10.$set(relayURL);
-        $t10_11 = $rt.builtin.sliceSlice($t7_8.$get(), undefined, undefined, undefined);
-        $t6_7.$set($t10_11);
-        $t11_12 = $t5_6.$get().addr(1);
-        $t12_13 = { $value: $rt.builtin.makeSlice(2, 2, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t13_14 = $t12_13.$get().addr(0);
-        $t13_14.$set('challenge');
-        $t14_15 = $t12_13.$get().addr(1);
-        $t14_15.$set(challenge);
-        $t15_16 = $rt.builtin.sliceSlice($t12_13.$get(), undefined, undefined, undefined);
-        $t11_12.$set($t15_16);
-        $t16_17 = $rt.builtin.sliceSlice($t5_6.$get(), undefined, undefined, undefined);
-        $t17_18 = { $get() { return $t1_2.$get().CreatedAt; }, $set(v) { const obj = $t1_2.$get(); obj.CreatedAt = v; $t1_2.$set(obj); } };
-        $t18_19 = common$jsbridge$sw.NowSeconds();
-        $t2_3.$set(22242);
-        $t3_4.$set('');
-        $t4_5.$set($t16_17);
-        $t17_18.$set($t18_19);
-        $t19_20 = identitySignEvent($t1_2);
-        if ($t19_20) {
-          $block = 5; break;
-        }
-        else {
-          $block = 4; break;
-        }
+        $t6_7 = ($t5_6 + '/__bus');
+        $t7_8 = common$jsbridge$sw.Log('shell-sw: connecting to bus');
+        $t8_9 = common$jsbridge$ws.Dial($t6_7, connectBus$1, connectBus$2, connectBus$3, connectBus$4);
+        busConn.$set($t8_9);
+        return;
         break;
       }
       case 3: {
-        $t20_21 = myPubkey.$get();
-        $t21_22 = ($t20_21 === '');
-        if ($t21_22) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 4: {
-        return;
-        break;
-      }
-      case 5: {
-        $t22_23 = rpool.$get();
-        $t23_24 = common$relay.Pool$Get($t22_23, relayURL);
-        $t24_25 = ($t23_24 !== null);
-        if ($t24_25) {
-          $block = 8; break;
-        }
-        else {
-          $block = 7; break;
-        }
-        break;
-      }
-      case 6: {
-        $t25_26 = common$nostr.Event$ToJSON($t1_2);
-        $t26_27 = ('["AUTH",' + $t25_26);
-        $t27_28 = ($t26_27 + ']');
-        $t28_29 = common$relay.Conn$Send($t23_24, $t27_28);
-        $block = 7; break;
-        break;
-      }
-      case 7: {
-        return;
-        break;
-      }
-      case 8: {
-        $t29_30 = common$relay.Conn$IsOpen($t23_24);
-        if ($t29_30) {
+        $t9_10 = $rt.builtin.len($t0_1);
+        $t10_11 = ($t9_10 > 4);
+        if ($t10_11) {
           $block = 6; break;
         }
         else {
-          $block = 7; break;
+          $t5_6 = $t0_1;
+          $block = 2; break;
+        }
+        break;
+      }
+      case 4: {
+        $t11_12 = $rt.builtin.stringSlice($t0_1, undefined, 5);
+        $t12_13 = ($t11_12 === 'https');
+        if ($t12_13) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 5: {
+        $t13_14 = $rt.builtin.stringSlice($t0_1, 4, undefined);
+        $t14_15 = ('ws' + $t13_14);
+        $t5_6 = $t14_15;
+        $block = 2; break;
+        break;
+      }
+      case 6: {
+        $t15_16 = $rt.builtin.stringSlice($t0_1, undefined, 4);
+        $t16_17 = ($t15_16 === 'http');
+        if ($t16_17) {
+          $block = 5; break;
+        }
+        else {
+          $t5_6 = $t0_1;
+          $block = 2; break;
         }
         break;
       }
@@ -393,267 +715,198 @@ export function onRelayAuth(relayURL, challenge) {
   }
 }
 
-export function relayPublish(ev) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = writeRelays.$get();
-        $t1_2 = $rt.builtin.len($t0_1);
-        $t2_3 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t3_4 = ($t2_3 + 1);
-        $t4_5 = ($t3_4 < $t1_2);
-        if ($t4_5) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t5_6 = $t0_1.addr($t3_4);
-        $t6_7 = $t5_6.$get();
-        $t7_8 = getConn($t6_7);
-        $t8_9 = common$relay.Conn$Publish($t7_8, ev);
-        $t2_3 = $t3_4;
-        $block = 1; break;
-        break;
-      }
-      case 3: {
-        return;
-        break;
-      }
-    }
-  }
+function connectBus$1(connID, msg) {
+  let $t0_1;
+  $t0_1 = onBusMessage(msg);
+  return;
 }
 
-export function relayPublishExcept(ev, exceptURL) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
+function connectBus$2(connID) {
+  let $t0_1;
+  $t0_1 = onBusOpen();
+  return;
+}
+
+function connectBus$3(connID, code, reason) {
+  let $t0_1, $t1_2;
+  $t0_1 = common$jsbridge$sw.Log('shell-sw: bus closed');
+  busReady.$set(false);
+  $t1_2 = common$jsbridge$sw.SetTimeout(2000, connectBus$3$1);
+  return;
+}
+
+function connectBus$3$1() {
+  let $t0_1;
+  $t0_1 = connectBus();
+  return;
+}
+
+function connectBus$4(connID) {
+  let $t0_1;
+  busReady.$set(false);
+  $t0_1 = common$jsbridge$sw.SetTimeout(2000, connectBus$4$1);
+  return;
+}
+
+function connectBus$4$1() {
+  let $t0_1;
+  $t0_1 = connectBus();
+  return;
+}
+
+export function onBusOpen() {
+  let $t0_1, $t1_2, $t2_3;
+  busReady.$set(true);
+  $t0_1 = common$jsbridge$sw.Log('shell-sw: bus connected');
+  $t1_2 = busConn.$get();
+  $t2_3 = common$jsbridge$ws.Send($t1_2, '{"role":"shell"}');
+  return;
+}
+
+export function busSend(to, msg) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = writeRelays.$get();
-        $t1_2 = $rt.builtin.len($t0_1);
-        $t2_3 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t3_4 = ($t2_3 + 1);
-        $t4_5 = ($t3_4 < $t1_2);
-        if ($t4_5) {
+        $t0_1 = busReady.$get();
+        if ($t0_1) {
           $block = 2; break;
         }
         else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t5_6 = $t0_1.addr($t3_4);
-        $t6_7 = $t5_6.$get();
-        $t7_8 = ($t6_7 !== exceptURL);
-        if ($t7_8) {
-          $block = 4; break;
-        }
-        else {
-          $t2_3 = $t3_4;
           $block = 1; break;
         }
         break;
       }
-      case 3: {
+      case 1: {
         return;
         break;
       }
-      case 4: {
-        $t8_9 = getConn($t6_7);
-        $t9_10 = common$relay.Conn$Publish($t8_9, ev);
-        $t2_3 = $t3_4;
-        $block = 1; break;
+      case 2: {
+        $t1_2 = busConn.$get();
+        $t2_3 = jstr(to);
+        $t3_4 = ('{"to":' + $t2_3);
+        $t4_5 = ($t3_4 + ',"msg":');
+        $t5_6 = ($t4_5 + msg);
+        $t6_7 = ($t5_6 + '}');
+        $t7_8 = common$jsbridge$ws.Send($t1_2, $t6_7);
+        return;
         break;
       }
     }
   }
 }
 
-export function urlSuffix(url) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21;
+export function onBusMessage(msg) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = $rt.builtin.len(url);
-        $t1_2 = Math.min($t0_1, 8);
-        $t2_3 = $rt.builtin.makeSlice(0, $t1_2, 0);
-        $t3_4 = $rt.builtin.len(url);
-        $t4_5 = ($t3_4 - $t1_2);
-        $t5_6 = $t2_3;
-        $t6_7 = $t4_5;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t7_8 = $rt.builtin.len(url);
-        $t8_9 = ($t6_7 < $t7_8);
+        $t0_1 = $rt.builtin.len(msg);
+        $t1_2 = Math.min($t0_1, 80);
+        $t2_3 = $rt.builtin.stringSlice(msg, undefined, $t1_2);
+        $t3_4 = ('shell-sw: bus: ' + $t2_3);
+        $t4_5 = common$jsbridge$sw.Log($t3_4);
+        $t5_6 = { $value: { s: '', i: 0 }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t6_7 = newMW(msg);
+        $t5_6.$set($rt.builtin.cloneValue($t6_7));
+        $t7_8 = mw$str($t5_6);
+        $t8_9 = ($t7_8 === 'FWD');
         if ($t8_9) {
           $block = 2; break;
         }
         else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $rt.runtime.boundsCheck($t6_7, $rt.builtin.byteLen(url));
-        $t9_10 = $rt.builtin.stringByteAt(url, $t6_7);
-        $t10_11 = ($t9_10 >= 97);
-        if ($t10_11) {
-          $block = 7; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 3: {
-        $t11_12 = $rt.builtin.bytesToString($t5_6);
-        return $t11_12;
-        break;
-      }
-      case 4: {
-        $t12_13 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t13_14 = $t12_13.$get().addr(0);
-        $t13_14.$set($t9_10);
-        $t14_15 = $rt.builtin.sliceSlice($t12_13.$get(), undefined, undefined, undefined);
-        $t15_16 = $rt.builtin.appendSlice($t5_6, $t14_15);
-        $t16_17 = $t15_16;
-        $block = 5; break;
-        break;
-      }
-      case 5: {
-        $t17_18 = ($t6_7 + 1);
-        $t5_6 = $t16_17;
-        $t6_7 = $t17_18;
-        $block = 1; break;
-        break;
-      }
-      case 6: {
-        $t18_19 = ($t9_10 >= 48);
-        if ($t18_19) {
-          $block = 8; break;
-        }
-        else {
-          $t16_17 = $t5_6;
-          $block = 5; break;
-        }
-        break;
-      }
-      case 7: {
-        $t19_20 = ($t9_10 <= 122);
-        if ($t19_20) {
           $block = 4; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 8: {
-        $t20_21 = ($t9_10 <= 57);
-        if ($t20_21) {
-          $block = 4; break;
-        }
-        else {
-          $t16_17 = $t5_6;
-          $block = 5; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-export function handleRelayInfo(clientID, relayURL) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set(clientID);
-        $t1_2 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2.$set(relayURL);
-        $t2_3 = $t1_2.$get();
-        $t3_4 = $rt.builtin.len($t2_3);
-        $t4_5 = ($t3_4 > 6);
-        if ($t4_5) {
-          $block = 4; break;
-        }
-        else {
-          $block = 3; break;
         }
         break;
       }
       case 1: {
-        $t5_6 = $rt.builtin.stringSlice($t2_3, 6, undefined);
-        $t6_7 = ('https://' + $t5_6);
-        $t7_8 = $t6_7;
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        $t8_9 = handleRelayInfo$1.bind(null, $t0_1, $t1_2);
-        $t9_10 = common$jsbridge$sw.Fetch($t7_8, $t8_9);
         return;
         break;
       }
+      case 2: {
+        $t9_10 = mw$str($t5_6);
+        $t10_11 = mw$raw($t5_6);
+        $t11_12 = sendToClient($t9_10, $t10_11);
+        $block = 1; break;
+        break;
+      }
       case 3: {
-        $t10_11 = $rt.builtin.len($t2_3);
-        $t11_12 = ($t10_11 > 5);
-        if ($t11_12) {
-          $block = 6; break;
-        }
-        else {
-          $t7_8 = $t2_3;
-          $block = 2; break;
-        }
+        $t12_13 = mw$raw($t5_6);
+        $t13_14 = broadcastToClients($t12_13);
+        $block = 1; break;
         break;
       }
       case 4: {
-        $t12_13 = $rt.builtin.stringSlice($t2_3, undefined, 6);
-        $t13_14 = ($t12_13 === 'wss://');
-        if ($t13_14) {
-          $block = 1; break;
+        $t14_15 = ($t7_8 === 'FWD_ALL');
+        if ($t14_15) {
+          $block = 3; break;
         }
         else {
-          $block = 3; break;
+          $block = 6; break;
         }
         break;
       }
       case 5: {
-        $t14_15 = $rt.builtin.stringSlice($t2_3, 5, undefined);
-        $t15_16 = ('http://' + $t14_15);
-        $t7_8 = $t15_16;
-        $block = 2; break;
+        $t15_16 = mw$raw($t5_6);
+        $t16_17 = ('["SAVE_DM",' + $t15_16);
+        $t17_18 = ($t16_17 + ']');
+        $t18_19 = busSend('relay', $t17_18);
+        $block = 1; break;
         break;
       }
       case 6: {
-        $t16_17 = $rt.builtin.stringSlice($t2_3, undefined, 5);
-        $t17_18 = ($t16_17 === 'ws://');
-        if ($t17_18) {
+        $t19_20 = ($t7_8 === 'DM_RECEIVED');
+        if ($t19_20) {
           $block = 5; break;
         }
         else {
-          $t7_8 = $t2_3;
-          $block = 2; break;
+          $block = 8; break;
+        }
+        break;
+      }
+      case 7: {
+        $t20_21 = mw$raw($t5_6);
+        $t21_22 = ('["MLS_GROUPS",' + $t20_21);
+        $t22_23 = ($t21_22 + ']');
+        $t23_24 = broadcastToClients($t22_23);
+        $block = 1; break;
+        break;
+      }
+      case 8: {
+        $t24_25 = ($t7_8 === 'MLS_GROUPS');
+        if ($t24_25) {
+          $block = 7; break;
+        }
+        else {
+          $block = 10; break;
+        }
+        break;
+      }
+      case 9: {
+        $t25_26 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t26_27 = mw$str($t5_6);
+        $t25_26.$set($t26_27);
+        $t27_28 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t28_29 = mw$num($t5_6);
+        $t29_30 = $t28_29;
+        $t27_28.$set($t29_30);
+        $t30_31 = mw$str($t5_6);
+        $t31_32 = mw$str($t5_6);
+        $t32_33 = mw$str($t5_6);
+        $t33_34 = onBusMessage$1.bind(null, $t25_26, $t27_28);
+        $t34_35 = cryptoProxy($t30_31, $t31_32, $t32_33, $t33_34);
+        $block = 1; break;
+        break;
+      }
+      case 10: {
+        $t35_36 = ($t7_8 === 'CRYPTO_REQ');
+        if ($t35_36) {
+          $block = 9; break;
+        }
+        else {
+          $block = 1; break;
         }
         break;
       }
@@ -661,23 +914,618 @@ export function handleRelayInfo(clientID, relayURL) {
   }
 }
 
-function handleRelayInfo$1(clientID, relayURL, resp, ok) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6;
-  $t0_1 = clientID.$get();
-  $t1_2 = relayURL.$get();
-  $t2_3 = jstr($t1_2);
-  $t3_4 = ('["RELAY_INFO",' + $t2_3);
-  $t4_5 = ($t3_4 + ',null]');
-  $t5_6 = sendToClient($t0_1, $t4_5);
+function onBusMessage$1(from, id, result, errMsg) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13;
+  $t0_1 = from.$get();
+  $t1_2 = id.$get();
+  $t2_3 = $t1_2;
+  $t3_4 = common$helpers.Itoa($t2_3);
+  $t4_5 = ('["CRYPTO_RESULT",' + $t3_4);
+  $t5_6 = ($t4_5 + ',');
+  $t6_7 = jstr(result);
+  $t7_8 = ($t5_6 + $t6_7);
+  $t8_9 = ($t7_8 + ',');
+  $t9_10 = jstr(errMsg);
+  $t10_11 = ($t8_9 + $t9_10);
+  $t11_12 = ($t10_11 + ']');
+  $t12_13 = busSend($t0_1, $t11_12);
   return;
 }
 
+export function strsJSON(ss) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(ss);
+        $t1_2 = ($t0_1 === 0);
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return '[]';
+        break;
+      }
+      case 2: {
+        $t2_3 = $rt.builtin.len(ss);
+        $t3_4 = '[';
+        $t4_5 = -1;
+        $block = 3; break;
+        break;
+      }
+      case 3: {
+        $t5_6 = ($t4_5 + 1);
+        $t6_7 = ($t5_6 < $t2_3);
+        if ($t6_7) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 4: {
+        $t7_8 = ss.addr($t5_6);
+        $t8_9 = $t7_8.$get();
+        $t9_10 = ($t5_6 > 0);
+        if ($t9_10) {
+          $block = 6; break;
+        }
+        else {
+          $t12_13 = $t3_4;
+          $block = 7; break;
+        }
+        break;
+      }
+      case 5: {
+        $t10_11 = ($t3_4 + ']');
+        return $t10_11;
+        break;
+      }
+      case 6: {
+        $t11_12 = ($t3_4 + ',');
+        $t12_13 = $t11_12;
+        $block = 7; break;
+        break;
+      }
+      case 7: {
+        $t13_14 = jstr($t8_9);
+        $t14_15 = ($t12_13 + $t13_14);
+        $t3_4 = $t14_15;
+        $t4_5 = $t5_6;
+        $block = 3; break;
+        break;
+      }
+    }
+  }
+}
+
+export function routeMessage(clientID, w, msgType) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129, $t129_130, $t130_131, $t131_132, $t132_133, $t133_134, $t134_135, $t135_136, $t136_137, $t137_138, $t138_139, $t139_140, $t140_141, $t141_142, $t142_143, $t143_144, $t144_145, $t145_146, $t146_147, $t147_148, $t148_149, $t149_150, $t150_151, $t151_152, $t152_153, $t153_154, $t154_155, $t155_156, $t156_157, $t157_158, $t158_159, $t159_160, $t160_161, $t161_162, $t162_163, $t163_164, $t164_165, $t165_166, $t166_167, $t167_168, $t168_169, $t169_170, $t170_171;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = (msgType === 'SET_KEY');
+        if ($t0_1) {
+          $block = 2; break;
+        }
+        else {
+          $block = 4; break;
+        }
+        break;
+      }
+      case 1: {
+        return;
+        break;
+      }
+      case 2: {
+        $t1_2 = mw$str(w);
+        $t2_3 = identitySetKey($t1_2);
+        $t3_4 = jstr($t1_2);
+        $t4_5 = ('["SET_KEY",' + $t3_4);
+        $t5_6 = ($t4_5 + ']');
+        $t6_7 = busSend('*', $t5_6);
+        $t7_8 = sendToClient(clientID, '["KEY_SET"]');
+        $block = 1; break;
+        break;
+      }
+      case 3: {
+        $t8_9 = mw$str(w);
+        $t9_10 = identitySetPubkey($t8_9);
+        $t10_11 = jstr($t8_9);
+        $t11_12 = ('["SET_PUBKEY",' + $t10_11);
+        $t12_13 = ($t11_12 + ']');
+        $t13_14 = busSend('*', $t12_13);
+        $block = 1; break;
+        break;
+      }
+      case 4: {
+        $t14_15 = (msgType === 'SET_PUBKEY');
+        if ($t14_15) {
+          $block = 3; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 5: {
+        $t15_16 = identityClearKey();
+        $t16_17 = busSend('*', '["CLEAR_KEY"]');
+        $block = 1; break;
+        break;
+      }
+      case 6: {
+        $t17_18 = (msgType === 'CLEAR_KEY');
+        if ($t17_18) {
+          $block = 5; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 7: {
+        $t18_19 = mw$str(w);
+        $t19_20 = mw$raw(w);
+        $t20_21 = jstr(clientID);
+        $t21_22 = ('["REQ",' + $t20_21);
+        $t22_23 = ($t21_22 + ',');
+        $t23_24 = jstr($t18_19);
+        $t24_25 = ($t22_23 + $t23_24);
+        $t25_26 = ($t24_25 + ',');
+        $t26_27 = ($t25_26 + $t19_20);
+        $t27_28 = ($t26_27 + ']');
+        $t28_29 = busSend('relay', $t27_28);
+        $block = 1; break;
+        break;
+      }
+      case 8: {
+        $t29_30 = (msgType === 'REQ');
+        if ($t29_30) {
+          $block = 7; break;
+        }
+        else {
+          $block = 10; break;
+        }
+        break;
+      }
+      case 9: {
+        $t30_31 = mw$str(w);
+        $t31_32 = jstr($t30_31);
+        $t32_33 = ('["CLOSE",' + $t31_32);
+        $t33_34 = ($t32_33 + ']');
+        $t34_35 = busSend('relay', $t33_34);
+        $block = 1; break;
+        break;
+      }
+      case 10: {
+        $t35_36 = (msgType === 'CLOSE');
+        if ($t35_36) {
+          $block = 9; break;
+        }
+        else {
+          $block = 12; break;
+        }
+        break;
+      }
+      case 11: {
+        $t36_37 = mw$raw(w);
+        $t37_38 = jstr(clientID);
+        $t38_39 = ('["EVENT",' + $t37_38);
+        $t39_40 = ($t38_39 + ',');
+        $t40_41 = ($t39_40 + $t36_37);
+        $t41_42 = ($t40_41 + ']');
+        $t42_43 = busSend('relay', $t41_42);
+        $block = 1; break;
+        break;
+      }
+      case 12: {
+        $t43_44 = (msgType === 'EVENT');
+        if ($t43_44) {
+          $block = 11; break;
+        }
+        else {
+          $block = 14; break;
+        }
+        break;
+      }
+      case 13: {
+        $t44_45 = mw$str(w);
+        $t45_46 = mw$raw(w);
+        $t46_47 = mw$strs(w);
+        $t47_48 = jstr(clientID);
+        $t48_49 = ('["PROXY",' + $t47_48);
+        $t49_50 = ($t48_49 + ',');
+        $t50_51 = jstr($t44_45);
+        $t51_52 = ($t49_50 + $t50_51);
+        $t52_53 = ($t51_52 + ',');
+        $t53_54 = ($t52_53 + $t45_46);
+        $t54_55 = ($t53_54 + ',');
+        $t55_56 = strsJSON($t46_47);
+        $t56_57 = ($t54_55 + $t55_56);
+        $t57_58 = ($t56_57 + ']');
+        $t58_59 = busSend('relay', $t57_58);
+        $block = 1; break;
+        break;
+      }
+      case 14: {
+        $t59_60 = (msgType === 'PROXY');
+        if ($t59_60) {
+          $block = 13; break;
+        }
+        else {
+          $block = 16; break;
+        }
+        break;
+      }
+      case 15: {
+        $t60_61 = mw$str(w);
+        $t61_62 = jstr(clientID);
+        $t62_63 = ('["RELAY_INFO",' + $t61_62);
+        $t63_64 = ($t62_63 + ',');
+        $t64_65 = jstr($t60_61);
+        $t65_66 = ($t63_64 + $t64_65);
+        $t66_67 = ($t65_66 + ']');
+        $t67_68 = busSend('relay', $t66_67);
+        $block = 1; break;
+        break;
+      }
+      case 16: {
+        $t68_69 = (msgType === 'RELAY_INFO');
+        if ($t68_69) {
+          $block = 15; break;
+        }
+        else {
+          $block = 18; break;
+        }
+        break;
+      }
+      case 17: {
+        $t69_70 = mw$strs(w);
+        $t70_71 = strsJSON($t69_70);
+        $t71_72 = ('["SET_WRITE_RELAYS",' + $t70_71);
+        $t72_73 = ($t71_72 + ']');
+        $t73_74 = busSend('relay', $t72_73);
+        $block = 1; break;
+        break;
+      }
+      case 18: {
+        $t74_75 = (msgType === 'SET_WRITE_RELAYS');
+        if ($t74_75) {
+          $block = 17; break;
+        }
+        else {
+          $block = 20; break;
+        }
+        break;
+      }
+      case 19: {
+        $t75_76 = mw$str(w);
+        $t76_77 = mw$raw(w);
+        $t77_78 = jstr(clientID);
+        $t78_79 = ('["SIGN",' + $t77_78);
+        $t79_80 = ($t78_79 + ',');
+        $t80_81 = jstr($t75_76);
+        $t81_82 = ($t79_80 + $t80_81);
+        $t82_83 = ($t81_82 + ',');
+        $t83_84 = ($t82_83 + $t76_77);
+        $t84_85 = ($t83_84 + ']');
+        $t85_86 = busSend('relay', $t84_85);
+        $block = 1; break;
+        break;
+      }
+      case 20: {
+        $t86_87 = (msgType === 'SIGN');
+        if ($t86_87) {
+          $block = 19; break;
+        }
+        else {
+          $block = 22; break;
+        }
+        break;
+      }
+      case 21: {
+        $t87_88 = mw$str(w);
+        $t88_89 = mw$strs(w);
+        $t89_90 = jstr(clientID);
+        $t90_91 = ('["BROADCAST",' + $t89_90);
+        $t91_92 = ($t90_91 + ',');
+        $t92_93 = jstr($t87_88);
+        $t93_94 = ($t91_92 + $t92_93);
+        $t94_95 = ($t93_94 + ',');
+        $t95_96 = strsJSON($t88_89);
+        $t96_97 = ($t94_95 + $t95_96);
+        $t97_98 = ($t96_97 + ']');
+        $t98_99 = busSend('relay', $t97_98);
+        $block = 1; break;
+        break;
+      }
+      case 22: {
+        $t99_100 = (msgType === 'BROADCAST');
+        if ($t99_100) {
+          $block = 21; break;
+        }
+        else {
+          $block = 24; break;
+        }
+        break;
+      }
+      case 23: {
+        $t100_101 = jstr(clientID);
+        $t101_102 = ('["DM_LIST",' + $t100_101);
+        $t102_103 = ($t101_102 + ']');
+        $t103_104 = busSend('relay', $t102_103);
+        $block = 1; break;
+        break;
+      }
+      case 24: {
+        $t104_105 = (msgType === 'DM_LIST');
+        if ($t104_105) {
+          $block = 23; break;
+        }
+        else {
+          $block = 26; break;
+        }
+        break;
+      }
+      case 25: {
+        $t105_106 = mw$str(w);
+        $t106_107 = mw$num(w);
+        $t107_108 = $t106_107;
+        $t108_109 = mw$num(w);
+        $t109_110 = jstr(clientID);
+        $t110_111 = ('["DM_HISTORY",' + $t109_110);
+        $t111_112 = ($t110_111 + ',');
+        $t112_113 = jstr($t105_106);
+        $t113_114 = ($t111_112 + $t112_113);
+        $t114_115 = ($t113_114 + ',');
+        $t115_116 = $t107_108;
+        $t116_117 = common$helpers.Itoa($t115_116);
+        $t117_118 = ($t114_115 + $t116_117);
+        $t118_119 = ($t117_118 + ',');
+        $t119_120 = common$helpers.Itoa($t108_109);
+        $t120_121 = ($t118_119 + $t119_120);
+        $t121_122 = ($t120_121 + ']');
+        $t122_123 = busSend('relay', $t121_122);
+        $block = 1; break;
+        break;
+      }
+      case 26: {
+        $t123_124 = (msgType === 'DM_HISTORY');
+        if ($t123_124) {
+          $block = 25; break;
+        }
+        else {
+          $block = 28; break;
+        }
+        break;
+      }
+      case 27: {
+        $t124_125 = mw$strs(w);
+        $t125_126 = strsJSON($t124_125);
+        $t126_127 = ('["MLS_INIT",' + $t125_126);
+        $t127_128 = ($t126_127 + ']');
+        $t128_129 = busSend('marmot', $t127_128);
+        $block = 1; break;
+        break;
+      }
+      case 28: {
+        $t129_130 = (msgType === 'MLS_INIT');
+        if ($t129_130) {
+          $block = 27; break;
+        }
+        else {
+          $block = 30; break;
+        }
+        break;
+      }
+      case 29: {
+        $t130_131 = mw$str(w);
+        $t131_132 = mw$str(w);
+        $t132_133 = jstr($t130_131);
+        $t133_134 = ('["MLS_SEND",' + $t132_133);
+        $t134_135 = ($t133_134 + ',');
+        $t135_136 = jstr($t131_132);
+        $t136_137 = ($t134_135 + $t135_136);
+        $t137_138 = ($t136_137 + ']');
+        $t138_139 = busSend('marmot', $t137_138);
+        $t139_140 = myPubkey.$get();
+        $t140_141 = ($t139_140 !== '');
+        if ($t140_141) {
+          $block = 33; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+      case 30: {
+        $t141_142 = (msgType === 'MLS_SEND');
+        if ($t141_142) {
+          $block = 29; break;
+        }
+        else {
+          $block = 32; break;
+        }
+        break;
+      }
+      case 31: {
+        $t142_143 = busSend('marmot', '["MLS_SUB"]');
+        $block = 1; break;
+        break;
+      }
+      case 32: {
+        $t143_144 = (msgType === 'MLS_SUB');
+        if ($t143_144) {
+          $block = 31; break;
+        }
+        else {
+          $block = 35; break;
+        }
+        break;
+      }
+      case 33: {
+        $t144_145 = common$jsbridge$sw.NowSeconds();
+        $t145_146 = myPubkey.$get();
+        $t146_147 = makeDMRecord($t130_131, $t145_146, $t131_132, $t144_145, 'marmot', '');
+        $t147_148 = DMRecord$ToJSON($t146_147);
+        $t148_149 = ('["SAVE_DM",' + $t147_148);
+        $t149_150 = ($t148_149 + ']');
+        $t150_151 = busSend('relay', $t149_150);
+        $block = 1; break;
+        break;
+      }
+      case 34: {
+        $t151_152 = mw$strs(w);
+        $t152_153 = strsJSON($t151_152);
+        $t153_154 = ('["MLS_PUBLISH_KP",' + $t152_153);
+        $t154_155 = ($t153_154 + ']');
+        $t155_156 = busSend('marmot', $t154_155);
+        $block = 1; break;
+        break;
+      }
+      case 35: {
+        $t156_157 = (msgType === 'MLS_PUBLISH_KP');
+        if ($t156_157) {
+          $block = 34; break;
+        }
+        else {
+          $block = 37; break;
+        }
+        break;
+      }
+      case 36: {
+        $t157_158 = busSend('marmot', '["MLS_LIST_GROUPS"]');
+        $block = 1; break;
+        break;
+      }
+      case 37: {
+        $t158_159 = (msgType === 'MLS_LIST_GROUPS');
+        if ($t158_159) {
+          $block = 36; break;
+        }
+        else {
+          $block = 39; break;
+        }
+        break;
+      }
+      case 38: {
+        $t159_160 = mw$num(w);
+        $t160_161 = $t159_160;
+        $t161_162 = mw$str(w);
+        $t162_163 = mw$str(w);
+        $t163_164 = cryptoCBs.$get();
+        { const $r = $rt.builtin.mapLookup($t163_164, $t160_161); $t164_165 = [$r.value, $r.ok]; }
+        $t165_166 = $t164_165[0];
+        $t166_167 = $t164_165[1];
+        if ($t166_167) {
+          $block = 40; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+      case 39: {
+        $t167_168 = (msgType === 'CRYPTO_RESULT');
+        if ($t167_168) {
+          $block = 38; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+      case 40: {
+        $t168_169 = cryptoCBs.$get();
+        $t169_170 = $rt.builtin.mapDelete($t168_169, $t160_161);
+        $t170_171 = $t165_166($t161_162, $t162_163);
+        $block = 1; break;
+        break;
+      }
+    }
+  }
+}
+
+export function makeDMRecord(peer, from, content, createdAt, protocol, eventID) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
+  $t0_1 = { $value: { ID: '', Peer: '', From: '', Content: '', CreatedAt: 0, Protocol: '', EventID: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t1_2 = { $get() { return $t0_1.$get().ID; }, $set(v) { const obj = $t0_1.$get(); obj.ID = v; $t0_1.$set(obj); } };
+  $t2_3 = dmDedupID(peer, content, createdAt);
+  $t3_4 = { $get() { return $t0_1.$get().Peer; }, $set(v) { const obj = $t0_1.$get(); obj.Peer = v; $t0_1.$set(obj); } };
+  $t4_5 = { $get() { return $t0_1.$get().From; }, $set(v) { const obj = $t0_1.$get(); obj.From = v; $t0_1.$set(obj); } };
+  $t5_6 = { $get() { return $t0_1.$get().Content; }, $set(v) { const obj = $t0_1.$get(); obj.Content = v; $t0_1.$set(obj); } };
+  $t6_7 = { $get() { return $t0_1.$get().CreatedAt; }, $set(v) { const obj = $t0_1.$get(); obj.CreatedAt = v; $t0_1.$set(obj); } };
+  $t7_8 = { $get() { return $t0_1.$get().Protocol; }, $set(v) { const obj = $t0_1.$get(); obj.Protocol = v; $t0_1.$set(obj); } };
+  $t8_9 = { $get() { return $t0_1.$get().EventID; }, $set(v) { const obj = $t0_1.$get(); obj.EventID = v; $t0_1.$set(obj); } };
+  $t1_2.$set($t2_3);
+  $t3_4.$set(peer);
+  $t4_5.$set(from);
+  $t5_6.$set(content);
+  $t6_7.$set(createdAt);
+  $t7_8.$set(protocol);
+  $t8_9.$set(eventID);
+  return $t0_1;
+}
+
+export function dmDedupID(peer, content, createdAt) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
+  $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t1_2 = $rt.builtin.stringToBytes(content);
+  $t2_3 = common$crypto$sha256.Sum($t1_2);
+  $t0_1.$set($rt.builtin.cloneValue($t2_3));
+  $t3_4 = Math.trunc(createdAt / 300);
+  $t4_5 = common$helpers.Itoa($t3_4);
+  $t5_6 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t6_7 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+  $t7_8 = common$helpers.HexEncode($t6_7);
+  $t8_9 = (peer + $t7_8);
+  $t9_10 = ($t8_9 + $t4_5);
+  $t10_11 = $rt.builtin.stringToBytes($t9_10);
+  $t11_12 = common$crypto$sha256.Sum($t10_11);
+  $t5_6.$set($rt.builtin.cloneValue($t11_12));
+  $t12_13 = $rt.builtin.sliceSlice($t5_6.$get(), undefined, undefined, undefined);
+  $t13_14 = common$helpers.HexEncode($t12_13);
+  return $t13_14;
+}
+
 export function initSharedState() {
-  let $t0_1, $t1_2;
-  $t0_1 = $rt.builtin.makeMap('string');
-  dmSubIDs.$set($t0_1);
-  $t1_2 = $rt.builtin.makeMap('int');
-  cryptoCBs.$set($t1_2);
+  let $t0_1;
+  $t0_1 = $rt.builtin.makeMap('int');
+  cryptoCBs.$set($t0_1);
+  return;
+}
+
+export function cryptoProxy(method, peerPubkey, data, cb) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18;
+  $t0_1 = nextCryptoID.$get();
+  $t1_2 = nextCryptoID.$get();
+  $t2_3 = ($t1_2 + 1);
+  nextCryptoID.$set($t2_3);
+  $t3_4 = cryptoCBs.$get();
+  $rt.builtin.mapUpdate($t3_4, $t0_1, cb);
+  $t4_5 = $t0_1;
+  $t5_6 = common$helpers.Itoa($t4_5);
+  $t6_7 = ('["CRYPTO_REQ",' + $t5_6);
+  $t7_8 = ($t6_7 + ',');
+  $t8_9 = jstr(method);
+  $t9_10 = ($t7_8 + $t8_9);
+  $t10_11 = ($t9_10 + ',');
+  $t11_12 = jstr(peerPubkey);
+  $t12_13 = ($t10_11 + $t11_12);
+  $t13_14 = ($t12_13 + ',');
+  $t14_15 = jstr(data);
+  $t15_16 = ($t13_14 + $t14_15);
+  $t16_17 = ($t15_16 + ']');
+  $t17_18 = broadcastToClients($t16_17);
   return;
 }
 
@@ -1312,4476 +2160,47 @@ export function skipBrack(s, i, open, close) {
   }
 }
 
-export function main() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
-  $t0_1 = initRouter();
-  $t1_2 = initRelayProxy();
-  $t2_3 = initSharedState();
-  $t3_4 = common$jsbridge$idb.Open(main$1);
-  $t4_5 = common$jsbridge$sw.OnInstall(onInstall);
-  $t5_6 = common$jsbridge$sw.OnActivate(onActivate);
-  $t6_7 = common$jsbridge$sw.OnFetch(onFetch);
-  $t7_8 = common$jsbridge$sw.OnMessage(onMessage);
-  return;
-}
-
-function main$1() {
-  let $t0_1;
-  $t0_1 = common$jsbridge$sw.Log('IDB ready');
-  return;
-}
-
-export function onInstall(event) {
-  let $t0_1;
-  $t0_1 = common$jsbridge$sw.WaitUntil(event, onInstall$1);
-  return;
-}
-
-function onInstall$1(done) {
-  let $t0_1, $t1_2, $t2_3;
-  $t0_1 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t0_1.$set(done);
-  $t1_2 = onInstall$1$1.bind(null, $t0_1);
-  $t2_3 = common$jsbridge$sw.Fetch('/__version', $t1_2);
-  return;
-}
-
-function onInstall$1$1(done, resp, ok) {
-  let $t0_1, $t1_2;
-  $t0_1 = onInstall$1$1$1.bind(null, done);
-  $t1_2 = common$jsbridge$sw.CacheOpen('sm3sh', $t0_1);
-  return;
-}
-
-function onInstall$1$1$1(done, cache) {
-  let $t0_1, $t1_2, $t2_3;
-  $t0_1 = appFiles.$get();
-  $t1_2 = onInstall$1$1$1$1.bind(null, done);
-  $t2_3 = common$jsbridge$sw.CacheAddAll(cache, $t0_1, $t1_2);
-  return;
-}
-
-function onInstall$1$1$1$1(done) {
-  let $t0_1, $t1_2, $t2_3;
-  $t0_1 = common$jsbridge$sw.SkipWaiting();
-  $t1_2 = done.$get();
-  $t2_3 = $t1_2();
-  return;
-}
-
-export function onActivate(event) {
-  let $t0_1;
-  $t0_1 = common$jsbridge$sw.WaitUntil(event, onActivate$1);
-  return;
-}
-
-function onActivate$1(done) {
-  let $t0_1, $t1_2, $t2_3;
-  $t0_1 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t0_1.$set(done);
-  $t1_2 = onActivate$1$1.bind(null, $t0_1);
-  $t2_3 = common$jsbridge$sw.ClaimClients($t1_2);
-  return;
-}
-
-function onActivate$1$1(done) {
-  let $t0_1, $t1_2, $t2_3;
-  $t0_1 = connectSSE();
-  $t1_2 = done.$get();
-  $t2_3 = $t1_2();
-  return;
-}
-
-export function onFetch(event) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = common$jsbridge$sw.GetRequestPath(event);
-        $t1_2 = ($t0_1 === '/__sse');
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t2_3 = $rt.builtin.len($t0_1);
-        $t3_4 = ($t2_3 > 4);
-        if ($t3_4) {
-          $block = 6; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 3: {
-        $t4_5 = ($t0_1 === '/__version');
-        if ($t4_5) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 4: {
-        return;
-        break;
-      }
-      case 5: {
-        $t5_6 = common$jsbridge$sw.RespondWithCacheFirst(event);
-        return;
-        break;
-      }
-      case 6: {
-        $t6_7 = $rt.builtin.stringSlice($t0_1, undefined, 5);
-        $t7_8 = ($t6_7 === '/$sw/');
-        if ($t7_8) {
-          $block = 4; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-export function onMessage(event) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = common$jsbridge$sw.GetMessageData(event);
-        $t1_2 = common$jsbridge$sw.GetMessageClientID(event);
-        $t2_3 = ($t0_1 === 'activate-update');
-        if ($t2_3) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t3_4 = refreshAndReload();
-        return;
-        break;
-      }
-      case 2: {
-        $t4_5 = { $value: { s: '', i: 0 }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t5_6 = newMW($t0_1);
-        $t4_5.$set($rt.builtin.cloneValue($t5_6));
-        $t6_7 = mw$str($t4_5);
-        $t7_8 = ($t6_7 === 'SKIP_WAITING');
-        if ($t7_8) {
-          $block = 4; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 3: {
-        return;
-        break;
-      }
-      case 4: {
-        $t8_9 = common$jsbridge$sw.SkipWaiting();
-        $block = 3; break;
-        break;
-      }
-      case 5: {
-        $t9_10 = routeMessage($t1_2, $t4_5, $t6_7);
-        $block = 3; break;
-        break;
-      }
-    }
-  }
-}
-
-export function connectSSE() {
-  let $t0_1;
-  $t0_1 = common$jsbridge$sw.SSEConnect('/__sse', connectSSE$1);
-  return;
-}
-
-function connectSSE$1(data) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = currentVersion.$get();
-        $t1_2 = ($t0_1 === '');
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        currentVersion.$set(data);
-        return;
-        break;
-      }
-      case 2: {
-        $t2_3 = currentVersion.$get();
-        $t3_4 = (data !== $t2_3);
-        if ($t3_4) {
-          $block = 3; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 3: {
-        currentVersion.$set(data);
-        $t4_5 = notifyUpdate();
-        $block = 4; break;
-        break;
-      }
-      case 4: {
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function notifyUpdate() {
-  let $t0_1;
-  $t0_1 = refreshAndReload();
-  return;
-}
-
-export function refreshAndReload() {
-  let $t0_1;
-  $t0_1 = common$jsbridge$sw.CacheOpen('sm3sh', refreshAndReload$1);
-  return;
-}
-
-function refreshAndReload$1(cache) {
-  let $t0_1;
-  $t0_1 = refreshFiles(cache, 0, refreshAndReload$1$1);
-  return;
-}
-
-function refreshAndReload$1$1() {
-  let $t0_1;
-  $t0_1 = common$jsbridge$sw.MatchClients(refreshAndReload$1$1$1);
-  return;
-}
-
-function refreshAndReload$1$1$1(client) {
-  let $t0_1;
-  $t0_1 = common$jsbridge$sw.Navigate(client, '');
-  return;
-}
-
-export function refreshFiles(cache, idx, done) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set(cache);
-        $t1_2 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2.$set(idx);
-        $t2_3 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t2_3.$set(done);
-        $t3_4 = $t1_2.$get();
-        $t4_5 = appFiles.$get();
-        $t5_6 = $rt.builtin.len($t4_5);
-        $t6_7 = ($t3_4 >= $t5_6);
-        if ($t6_7) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t7_8 = $t2_3.$get();
-        $t8_9 = $t7_8();
-        return;
-        break;
-      }
-      case 2: {
-        $t9_10 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t10_11 = appFiles.$get();
-        $t11_12 = $t1_2.$get();
-        $t12_13 = $t10_11.addr($t11_12);
-        $t13_14 = $t12_13.$get();
-        $t9_10.$set($t13_14);
-        $t14_15 = $t9_10.$get();
-        $t15_16 = ($t14_15 + '?v=');
-        $t16_17 = currentVersion.$get();
-        $t17_18 = ($t15_16 + $t16_17);
-        $t18_19 = refreshFiles$1.bind(null, $t0_1, $t9_10, $t1_2, $t2_3);
-        $t19_20 = common$jsbridge$sw.Fetch($t17_18, $t18_19);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-function refreshFiles$1(cache, file, idx, done, resp, ok) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        if (ok) {
-          $block = 4; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 1: {
-        $t0_1 = cache.$get();
-        $t1_2 = file.$get();
-        $t2_3 = refreshFiles$1$1.bind(null, cache, idx, done);
-        $t3_4 = common$jsbridge$sw.CachePut($t0_1, $t1_2, resp, $t2_3);
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        return;
-        break;
-      }
-      case 3: {
-        $t4_5 = cache.$get();
-        $t5_6 = idx.$get();
-        $t6_7 = ($t5_6 + 1);
-        $t7_8 = done.$get();
-        $t8_9 = refreshFiles($t4_5, $t6_7, $t7_8);
-        $block = 2; break;
-        break;
-      }
-      case 4: {
-        $t9_10 = common$jsbridge$sw.ResponseOK(resp);
-        if ($t9_10) {
-          $block = 1; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-function refreshFiles$1$1(cache, idx, done) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
-  $t0_1 = cache.$get();
-  $t1_2 = idx.$get();
-  $t2_3 = ($t1_2 + 1);
-  $t3_4 = done.$get();
-  $t4_5 = refreshFiles($t0_1, $t2_3, $t3_4);
-  return;
-}
-
-export function marmotInit(relayURLs) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = marmotReady.$get();
-        if ($t0_1) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t1_2 = common$jsbridge$sw.Origin();
-        $t2_3 = $rt.builtin.len($t1_2);
-        $t3_4 = ($t2_3 > 5);
-        if ($t3_4) {
-          $block = 6; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 3: {
-        $t4_5 = $rt.builtin.stringSlice($t1_2, 5, undefined);
-        $t5_6 = ('wss' + $t4_5);
-        $t6_7 = $t5_6;
-        $block = 4; break;
-        break;
-      }
-      case 4: {
-        $t7_8 = ($t6_7 + '/__marmot');
-        marmotPending.$set(null);
-        $t8_9 = common$jsbridge$ws.Dial($t7_8, marmotInit$1, marmotInit$2, marmotInit$3, marmotInit$4);
-        marmotConn.$set($t8_9);
-        return;
-        break;
-      }
-      case 5: {
-        $t9_10 = $rt.builtin.len($t1_2);
-        $t10_11 = ($t9_10 > 4);
-        if ($t10_11) {
-          $block = 8; break;
-        }
-        else {
-          $t6_7 = $t1_2;
-          $block = 4; break;
-        }
-        break;
-      }
-      case 6: {
-        $t11_12 = $rt.builtin.stringSlice($t1_2, undefined, 5);
-        $t12_13 = ($t11_12 === 'https');
-        if ($t12_13) {
-          $block = 3; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 7: {
-        $t13_14 = $rt.builtin.stringSlice($t1_2, 4, undefined);
-        $t14_15 = ('ws' + $t13_14);
-        $t6_7 = $t14_15;
-        $block = 4; break;
-        break;
-      }
-      case 8: {
-        $t15_16 = $rt.builtin.stringSlice($t1_2, undefined, 4);
-        $t16_17 = ($t15_16 === 'http');
-        if ($t16_17) {
-          $block = 7; break;
-        }
-        else {
-          $t6_7 = $t1_2;
-          $block = 4; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-function marmotInit$1(connID, msg) {
-  let $t0_1;
-  $t0_1 = marmotOnMessage(msg);
-  return;
-}
-
-function marmotInit$2(connID) {
-  let $t0_1;
-  $t0_1 = marmotOnOpen();
-  return;
-}
-
-function marmotInit$3(connID, code, reason) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
-  $t0_1 = code;
-  $t1_2 = common$helpers.Itoa($t0_1);
-  $t2_3 = ('marmot: ws closed code=' + $t1_2);
-  $t3_4 = common$jsbridge$sw.Log($t2_3);
-  $t4_5 = marmotOnClose();
-  return;
-}
-
-function marmotInit$4(connID) {
-  let $t0_1;
-  $t0_1 = marmotOnClose();
-  return;
-}
-
-export function marmotOnOpen() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        marmotReady.$set(true);
-        $t0_1 = common$jsbridge$sw.Log('marmot: connected');
-        $t1_2 = myPubkey.$get();
-        $t2_3 = ($t1_2 !== '');
-        if ($t2_3) {
-          $block = 3; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t3_4 = marmotAuth();
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        $t4_5 = marmotPending.$get();
-        $t5_6 = $rt.builtin.len($t4_5);
-        $t7_8 = -1;
-        $block = 4; break;
-        break;
-      }
-      case 3: {
-        $t6_7 = hasKey.$get();
-        if ($t6_7) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 4: {
-        $t8_9 = ($t7_8 + 1);
-        $t9_10 = ($t8_9 < $t5_6);
-        if ($t9_10) {
-          $block = 5; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 5: {
-        $t10_11 = $t4_5.addr($t8_9);
-        $t11_12 = $t10_11.$get();
-        $t12_13 = marmotConn.$get();
-        $t13_14 = common$jsbridge$ws.Send($t12_13, $t11_12);
-        $t7_8 = $t8_9;
-        $block = 4; break;
-        break;
-      }
-      case 6: {
-        marmotPending.$set(null);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function marmotOnClose() {
-  let $t0_1;
-  marmotReady.$set(false);
-  $t0_1 = common$jsbridge$sw.Log('marmot: disconnected');
-  return;
-}
-
-export function marmotAuth() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = myPubkey.$get();
-        $t1_2 = ($t0_1 === '');
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t2_3 = myPubkey.$get();
-        $t3_4 = common$helpers.HexDecode($t2_3);
-        $t4_5 = ($t3_4 === null);
-        if ($t4_5) {
-          $block = 4; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 3: {
-        $t5_6 = hasKey.$get();
-        if ($t5_6) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 4: {
-        return;
-        break;
-      }
-      case 5: {
-        $t6_7 = common$crypto$sha256.Sum($t3_4);
-        $t7_8 = random32();
-        $t8_9 = { $value: $rt.builtin.makeSlice(64, 64, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t9_10 = seckey.$get();
-        $t10_11 = common$crypto$secp256k1.SignSchnorr($t9_10, $t6_7, $t7_8);
-        $t11_12 = $t10_11[0];
-        $t8_9.$set($rt.builtin.cloneValue($t11_12));
-        $t12_13 = $t10_11[1];
-        if ($t12_13) {
-          $block = 7; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 6: {
-        $t13_14 = common$jsbridge$sw.Log('marmot: auth sign failed');
-        return;
-        break;
-      }
-      case 7: {
-        $t14_15 = myPubkey.$get();
-        $t15_16 = jstr($t14_15);
-        $t16_17 = ('{"method":"auth","pubkey":' + $t15_16);
-        $t17_18 = ($t16_17 + ',"sig":');
-        $t18_19 = $rt.builtin.sliceSlice($t8_9.$get(), undefined, undefined, undefined);
-        $t19_20 = common$helpers.HexEncode($t18_19);
-        $t20_21 = jstr($t19_20);
-        $t21_22 = ($t17_18 + $t20_21);
-        $t22_23 = ($t21_22 + '}');
-        $t23_24 = marmotSendJSON($t22_23);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function marmotSend(recipient, content) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
-  $t0_1 = jstr(recipient);
-  $t1_2 = ('{"method":"send_dm","recipient":' + $t0_1);
-  $t2_3 = ($t1_2 + ',"content":');
-  $t3_4 = jstr(content);
-  $t4_5 = ($t2_3 + $t3_4);
-  $t5_6 = ($t4_5 + '}');
-  $t6_7 = marmotSendJSON($t5_6);
-  return;
-}
-
-export function marmotSubscribe() {
-  let $t0_1;
-  $t0_1 = marmotSendJSON('{"method":"subscribe"}');
-  return;
-}
-
-export function marmotPublishKP(relays) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(relays);
-        $t1_2 = ($t0_1 > 0);
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $t4_5 = '{"method":"publish_kp"';
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t2_3 = ('{"method":"publish_kp"' + ',"relays":[');
-        $t3_4 = $rt.builtin.len(relays);
-        $t7_8 = $t2_3;
-        $t8_9 = -1;
-        $block = 3; break;
-        break;
-      }
-      case 2: {
-        $t5_6 = ($t4_5 + '}');
-        $t6_7 = marmotSendJSON($t5_6);
-        return;
-        break;
-      }
-      case 3: {
-        $t9_10 = ($t8_9 + 1);
-        $t10_11 = ($t9_10 < $t3_4);
-        if ($t10_11) {
-          $block = 4; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 4: {
-        $t11_12 = relays.addr($t9_10);
-        $t12_13 = $t11_12.$get();
-        $t13_14 = ($t9_10 > 0);
-        if ($t13_14) {
-          $block = 6; break;
-        }
-        else {
-          $t16_17 = $t7_8;
-          $block = 7; break;
-        }
-        break;
-      }
-      case 5: {
-        $t14_15 = ($t7_8 + ']');
-        $t4_5 = $t14_15;
-        $block = 2; break;
-        break;
-      }
-      case 6: {
-        $t15_16 = ($t7_8 + ',');
-        $t16_17 = $t15_16;
-        $block = 7; break;
-        break;
-      }
-      case 7: {
-        $t17_18 = jstr($t12_13);
-        $t18_19 = ($t16_17 + $t17_18);
-        $t7_8 = $t18_19;
-        $t8_9 = $t9_10;
-        $block = 3; break;
-        break;
-      }
-    }
-  }
-}
-
-export function marmotListGroups(clientID) {
-  let $t0_1;
-  $t0_1 = marmotSendJSON('{"method":"list_groups"}');
-  return;
-}
-
-export function marmotSendJSON(msg) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = marmotReady.$get();
-        if ($t0_1) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        $t1_2 = marmotPending.$get();
-        $t2_3 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t3_4 = $t2_3.$get().addr(0);
-        $t3_4.$set(msg);
-        $t4_5 = $rt.builtin.sliceSlice($t2_3.$get(), undefined, undefined, undefined);
-        $t5_6 = $rt.builtin.appendSlice($t1_2, $t4_5);
-        marmotPending.$set($t5_6);
-        return;
-        break;
-      }
-      case 2: {
-        $t6_7 = marmotConn.$get();
-        $t7_8 = common$jsbridge$ws.Send($t6_7, msg);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function marmotOnMessage(msg) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = jsonField(msg, 'method');
-        $t1_2 = ($t0_1 === 'auth');
-        if ($t1_2) {
-          $block = 2; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t2_3 = jsonField(msg, 'error');
-        $t3_4 = ($t2_3 !== '');
-        if ($t3_4) {
-          $block = 5; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 3: {
-        $t4_5 = jsonField(msg, 'peer');
-        $t5_6 = jsonField(msg, 'content');
-        $t6_7 = jsonField(msg, 'ts');
-        $t7_8 = parseInt($t6_7);
-        $t8_9 = ($t4_5 !== '');
-        if ($t8_9) {
-          $block = 10; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 4: {
-        $t9_10 = ($t0_1 === 'dm_received');
-        if ($t9_10) {
-          $block = 3; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 5: {
-        $t10_11 = ('marmot: auth failed: ' + $t2_3);
-        $t11_12 = common$jsbridge$sw.Log($t10_11);
-        $block = 1; break;
-        break;
-      }
-      case 6: {
-        $t12_13 = common$jsbridge$sw.Log('marmot: authenticated');
-        $t13_14 = marmotSubscribe();
-        $block = 1; break;
-        break;
-      }
-      case 7: {
-        $t14_15 = jsonField(msg, 'error');
-        $t15_16 = ($t14_15 !== '');
-        if ($t15_16) {
-          $block = 13; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 8: {
-        $t16_17 = ($t0_1 === 'send_dm');
-        if ($t16_17) {
-          $block = 7; break;
-        }
-        else {
-          $block = 12; break;
-        }
-        break;
-      }
-      case 9: {
-        $t17_18 = makeDMRecord($t4_5, $t4_5, $t5_6, $t7_8, 'marmot', '');
-        $t18_19 = routerSaveDMRecord($t17_18);
-        $block = 1; break;
-        break;
-      }
-      case 10: {
-        $t19_20 = ($t5_6 !== '');
-        if ($t19_20) {
-          $block = 9; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 11: {
-        $t20_21 = jsonField(msg, 'error');
-        $t21_22 = ($t20_21 !== '');
-        if ($t21_22) {
-          $block = 16; break;
-        }
-        else {
-          $block = 17; break;
-        }
-        break;
-      }
-      case 12: {
-        $t22_23 = ($t0_1 === 'subscribe');
-        if ($t22_23) {
-          $block = 11; break;
-        }
-        else {
-          $block = 15; break;
-        }
-        break;
-      }
-      case 13: {
-        $t23_24 = ('marmot: send_dm error: ' + $t14_15);
-        $t24_25 = common$jsbridge$sw.Log($t23_24);
-        $block = 1; break;
-        break;
-      }
-      case 14: {
-        $t25_26 = jsonField(msg, 'error');
-        $t26_27 = ($t25_26 !== '');
-        if ($t26_27) {
-          $block = 20; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 15: {
-        $t27_28 = ($t0_1 === 'publish_kp');
-        if ($t27_28) {
-          $block = 14; break;
-        }
-        else {
-          $block = 19; break;
-        }
-        break;
-      }
-      case 16: {
-        $t28_29 = ('marmot: subscribe error: ' + $t20_21);
-        $t29_30 = common$jsbridge$sw.Log($t28_29);
-        $block = 1; break;
-        break;
-      }
-      case 17: {
-        $t30_31 = common$jsbridge$sw.Log('marmot: subscribed');
-        $block = 1; break;
-        break;
-      }
-      case 18: {
-        $t31_32 = ('["MLS_GROUPS",' + msg);
-        $t32_33 = ($t31_32 + ']');
-        $t33_34 = broadcastToClients($t32_33);
-        $block = 1; break;
-        break;
-      }
-      case 19: {
-        $t34_35 = ($t0_1 === 'list_groups');
-        if ($t34_35) {
-          $block = 18; break;
-        }
-        else {
-          $block = 22; break;
-        }
-        break;
-      }
-      case 20: {
-        $t35_36 = ('marmot: publish_kp error: ' + $t25_26);
-        $t36_37 = common$jsbridge$sw.Log($t35_36);
-        $block = 1; break;
-        break;
-      }
-      case 21: {
-        $t37_38 = jsonField(msg, 'error');
-        $t38_39 = ('marmot: server error: ' + $t37_38);
-        $t39_40 = common$jsbridge$sw.Log($t38_39);
-        $block = 1; break;
-        break;
-      }
-      case 22: {
-        $t40_41 = ($t0_1 === 'error');
-        if ($t40_41) {
-          $block = 21; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-export function jsonField(json, key) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = ('"' + key);
-        $t1_2 = ($t0_1 + '":');
-        $t2_3 = 0;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t3_4 = $rt.builtin.len(json);
-        $t4_5 = $rt.builtin.len($t1_2);
-        $t5_6 = ($t3_4 - $t4_5);
-        $t6_7 = ($t2_3 <= $t5_6);
-        if ($t6_7) {
-          $block = 2; break;
-        }
-        else {
-          $t11_12 = -1;
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t7_8 = $rt.builtin.len($t1_2);
-        $t8_9 = ($t2_3 + $t7_8);
-        $t9_10 = $rt.builtin.stringSlice(json, $t2_3, $t8_9);
-        $t10_11 = ($t9_10 === $t1_2);
-        if ($t10_11) {
-          $block = 4; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 3: {
-        $t12_13 = ($t11_12 < 0);
-        if ($t12_13) {
-          $block = 6; break;
-        }
-        else {
-          $t19_20 = $t11_12;
-          $block = 9; break;
-        }
-        break;
-      }
-      case 4: {
-        $t13_14 = $rt.builtin.len($t1_2);
-        $t14_15 = ($t2_3 + $t13_14);
-        $t11_12 = $t14_15;
-        $block = 3; break;
-        break;
-      }
-      case 5: {
-        $t15_16 = ($t2_3 + 1);
-        $t2_3 = $t15_16;
-        $block = 1; break;
-        break;
-      }
-      case 6: {
-        return '';
-        break;
-      }
-      case 7: {
-        $t16_17 = ($t19_20 + 1);
-        $t19_20 = $t16_17;
-        $block = 9; break;
-        break;
-      }
-      case 8: {
-        $t17_18 = $rt.builtin.len(json);
-        $t18_19 = ($t19_20 >= $t17_18);
-        if ($t18_19) {
-          $block = 12; break;
-        }
-        else {
-          $block = 13; break;
-        }
-        break;
-      }
-      case 9: {
-        $t20_21 = $rt.builtin.len(json);
-        $t21_22 = ($t19_20 < $t20_21);
-        if ($t21_22) {
-          $block = 10; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 10: {
-        $rt.runtime.boundsCheck($t19_20, $rt.builtin.byteLen(json));
-        $t22_23 = $rt.builtin.stringByteAt(json, $t19_20);
-        $t23_24 = ($t22_23 === 32);
-        if ($t23_24) {
-          $block = 7; break;
-        }
-        else {
-          $block = 11; break;
-        }
-        break;
-      }
-      case 11: {
-        $rt.runtime.boundsCheck($t19_20, $rt.builtin.byteLen(json));
-        $t24_25 = $rt.builtin.stringByteAt(json, $t19_20);
-        $t25_26 = ($t24_25 === 9);
-        if ($t25_26) {
-          $block = 7; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 12: {
-        return '';
-        break;
-      }
-      case 13: {
-        $rt.runtime.boundsCheck($t19_20, $rt.builtin.byteLen(json));
-        $t26_27 = $rt.builtin.stringByteAt(json, $t19_20);
-        $t27_28 = ($t26_27 === 34);
-        if ($t27_28) {
-          $block = 14; break;
-        }
-        else {
-          $block = 15; break;
-        }
-        break;
-      }
-      case 14: {
-        $t28_29 = ($t19_20 + 1);
-        $t32_33 = $t28_29;
-        $block = 18; break;
-        break;
-      }
-      case 15: {
-        $t42_43 = $t19_20;
-        $block = 24; break;
-        break;
-      }
-      case 16: {
-        $rt.runtime.boundsCheck($t32_33, $rt.builtin.byteLen(json));
-        $t29_30 = $rt.builtin.stringByteAt(json, $t32_33);
-        $t30_31 = ($t29_30 === 92);
-        if ($t30_31) {
-          $block = 20; break;
-        }
-        else {
-          $t38_39 = $t32_33;
-          $block = 21; break;
-        }
-        break;
-      }
-      case 17: {
-        $t31_32 = $rt.builtin.stringSlice(json, $t28_29, $t32_33);
-        return $t31_32;
-        break;
-      }
-      case 18: {
-        $t33_34 = $rt.builtin.len(json);
-        $t34_35 = ($t32_33 < $t33_34);
-        if ($t34_35) {
-          $block = 19; break;
-        }
-        else {
-          $block = 17; break;
-        }
-        break;
-      }
-      case 19: {
-        $rt.runtime.boundsCheck($t32_33, $rt.builtin.byteLen(json));
-        $t35_36 = $rt.builtin.stringByteAt(json, $t32_33);
-        $t36_37 = ($t35_36 !== 34);
-        if ($t36_37) {
-          $block = 16; break;
-        }
-        else {
-          $block = 17; break;
-        }
-        break;
-      }
-      case 20: {
-        $t37_38 = ($t32_33 + 1);
-        $t38_39 = $t37_38;
-        $block = 21; break;
-        break;
-      }
-      case 21: {
-        $t39_40 = ($t38_39 + 1);
-        $t32_33 = $t39_40;
-        $block = 18; break;
-        break;
-      }
-      case 22: {
-        $t40_41 = ($t42_43 + 1);
-        $t42_43 = $t40_41;
-        $block = 24; break;
-        break;
-      }
-      case 23: {
-        $t41_42 = $rt.builtin.stringSlice(json, $t19_20, $t42_43);
-        return $t41_42;
-        break;
-      }
-      case 24: {
-        $t43_44 = $rt.builtin.len(json);
-        $t44_45 = ($t42_43 < $t43_44);
-        if ($t44_45) {
-          $block = 27; break;
-        }
-        else {
-          $block = 23; break;
-        }
-        break;
-      }
-      case 25: {
-        $rt.runtime.boundsCheck($t42_43, $rt.builtin.byteLen(json));
-        $t45_46 = $rt.builtin.stringByteAt(json, $t42_43);
-        $t46_47 = ($t45_46 !== 32);
-        if ($t46_47) {
-          $block = 22; break;
-        }
-        else {
-          $block = 23; break;
-        }
-        break;
-      }
-      case 26: {
-        $rt.runtime.boundsCheck($t42_43, $rt.builtin.byteLen(json));
-        $t47_48 = $rt.builtin.stringByteAt(json, $t42_43);
-        $t48_49 = ($t47_48 !== 125);
-        if ($t48_49) {
-          $block = 25; break;
-        }
-        else {
-          $block = 23; break;
-        }
-        break;
-      }
-      case 27: {
-        $rt.runtime.boundsCheck($t42_43, $rt.builtin.byteLen(json));
-        $t49_50 = $rt.builtin.stringByteAt(json, $t42_43);
-        $t50_51 = ($t49_50 !== 44);
-        if ($t50_51) {
-          $block = 26; break;
-        }
-        else {
-          $block = 23; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-export function parseInt(s) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = 0;
-        $t1_2 = 0;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t2_3 = $rt.builtin.len(s);
-        $t3_4 = ($t1_2 < $t2_3);
-        if ($t3_4) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $rt.runtime.boundsCheck($t1_2, $rt.builtin.byteLen(s));
-        $t4_5 = $rt.builtin.stringByteAt(s, $t1_2);
-        $t5_6 = ($t4_5 >= 48);
-        if ($t5_6) {
-          $block = 6; break;
-        }
-        else {
-          $t11_12 = $t0_1;
-          $block = 5; break;
-        }
-        break;
-      }
-      case 3: {
-        return $t0_1;
-        break;
-      }
-      case 4: {
-        $t6_7 = ($t0_1 * 10);
-        $rt.runtime.boundsCheck($t1_2, $rt.builtin.byteLen(s));
-        $t7_8 = $rt.builtin.stringByteAt(s, $t1_2);
-        $t8_9 = (($t7_8 - 48) & 0xFF);
-        $t9_10 = $t8_9;
-        $t10_11 = ($t6_7 + $t9_10);
-        $t11_12 = $t10_11;
-        $block = 5; break;
-        break;
-      }
-      case 5: {
-        $t12_13 = ($t1_2 + 1);
-        $t0_1 = $t11_12;
-        $t1_2 = $t12_13;
-        $block = 1; break;
-        break;
-      }
-      case 6: {
-        $rt.runtime.boundsCheck($t1_2, $rt.builtin.byteLen(s));
-        $t13_14 = $rt.builtin.stringByteAt(s, $t1_2);
-        $t14_15 = ($t13_14 <= 57);
-        if ($t14_15) {
-          $block = 4; break;
-        }
-        else {
-          $t11_12 = $t0_1;
-          $block = 5; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-export function decryptIncomingDM(ev, cb) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = myPubkey.$get();
-        $t1_2 = ($t0_1 === '');
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t2_3 = { $get() { return ev.$get().Kind; }, $set(v) { const obj = ev.$get(); obj.Kind = v; ev.$set(obj); } };
-        $t3_4 = $t2_3.$get();
-        $t4_5 = ($t3_4 === 4);
-        if ($t4_5) {
-          $block = 3; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 3: {
-        $t5_6 = decryptNip04(ev, cb);
-        $block = 4; break;
-        break;
-      }
-      case 4: {
-        return;
-        break;
-      }
-      case 5: {
-        $t6_7 = { $get() { return ev.$get().Kind; }, $set(v) { const obj = ev.$get(); obj.Kind = v; ev.$set(obj); } };
-        $t7_8 = $t6_7.$get();
-        $t8_9 = ($t7_8 === 1059);
-        if ($t8_9) {
-          $block = 6; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 6: {
-        $t9_10 = decryptNip17(ev, cb);
-        $block = 4; break;
-        break;
-      }
-    }
-  }
-}
-
-export function decryptNip04(ev, cb) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set(ev);
-        $t1_2 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2.$set(cb);
-        $t2_3 = $t0_1.$get();
-        $t3_4 = { $get() { return $t2_3.$get().Tags; }, $set(v) { const obj = $t2_3.$get(); obj.Tags = v; $t2_3.$set(obj); } };
-        $t4_5 = $t3_4.$get();
-        $t5_6 = common$nostr.Tags$GetFirst($t4_5, 'p');
-        $t6_7 = ($t5_6 === null);
-        if ($t6_7) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t7_8 = common$nostr.Tag$Value($t5_6);
-        $t8_9 = $t0_1.$get();
-        $t9_10 = { $get() { return $t8_9.$get().PubKey; }, $set(v) { const obj = $t8_9.$get(); obj.PubKey = v; $t8_9.$set(obj); } };
-        $t10_11 = $t9_10.$get();
-        $t11_12 = myPubkey.$get();
-        $t12_13 = ($t10_11 === $t11_12);
-        $t13_14 = myPubkey.$get();
-        $t14_15 = ($t7_8 === $t13_14);
-        if ($t12_13) {
-          $block = 4; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 3: {
-        return;
-        break;
-      }
-      case 4: {
-        $t15_16 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t15_16.$set($t7_8);
-        if ($t12_13) {
-          $block = 7; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 5: {
-        if ($t14_15) {
-          $block = 4; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 6: {
-        $t16_17 = $t0_1.$get();
-        $t17_18 = { $get() { return $t16_17.$get().PubKey; }, $set(v) { const obj = $t16_17.$get(); obj.PubKey = v; $t16_17.$set(obj); } };
-        $t18_19 = $t17_18.$get();
-        $t15_16.$set($t18_19);
-        $block = 7; break;
-        break;
-      }
-      case 7: {
-        $t19_20 = seckey.$get();
-        $t20_21 = $t15_16.$get();
-        $t21_22 = hexTo32($t20_21);
-        $t22_23 = common$crypto$nip04.SharedKey($t19_20, $t21_22);
-        $t23_24 = $t22_23[0];
-        $t24_25 = $t22_23[1];
-        if ($t24_25) {
-          $block = 9; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 8: {
-        return;
-        break;
-      }
-      case 9: {
-        $t25_26 = $t0_1.$get();
-        $t26_27 = { $get() { return $t25_26.$get().Content; }, $set(v) { const obj = $t25_26.$get(); obj.Content = v; $t25_26.$set(obj); } };
-        $t27_28 = $t26_27.$get();
-        $t28_29 = decryptNip04$1.bind(null, $t1_2, $t15_16, $t0_1);
-        $t29_30 = common$crypto$nip04.Decrypt($t23_24, $t27_28, $t28_29);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-function decryptNip04$1(cb, peer, ev, plaintext) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = (plaintext === '');
-        if ($t0_1) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t1_2 = cb.$get();
-        $t2_3 = peer.$get();
-        $t3_4 = ev.$get();
-        $t4_5 = { $get() { return $t3_4.$get().PubKey; }, $set(v) { const obj = $t3_4.$get(); obj.PubKey = v; $t3_4.$set(obj); } };
-        $t5_6 = $t4_5.$get();
-        $t6_7 = ev.$get();
-        $t7_8 = { $get() { return $t6_7.$get().CreatedAt; }, $set(v) { const obj = $t6_7.$get(); obj.CreatedAt = v; $t6_7.$set(obj); } };
-        $t8_9 = $t7_8.$get();
-        $t9_10 = ev.$get();
-        $t10_11 = { $get() { return $t9_10.$get().ID; }, $set(v) { const obj = $t9_10.$get(); obj.ID = v; $t9_10.$set(obj); } };
-        $t11_12 = $t10_11.$get();
-        $t12_13 = makeDMRecord($t2_3, $t5_6, plaintext, $t8_9, 'nip04', $t11_12);
-        $t13_14 = $t1_2($t12_13);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function decryptNip17(ev, cb) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = hasKey.$get();
-        if ($t0_1) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t1_2 = seckey.$get();
-        $t2_3 = { $get() { return ev.$get().PubKey; }, $set(v) { const obj = ev.$get(); obj.PubKey = v; ev.$set(obj); } };
-        $t3_4 = $t2_3.$get();
-        $t4_5 = hexTo32($t3_4);
-        $t5_6 = common$crypto$nip44.ConversationKey($t1_2, $t4_5);
-        $t6_7 = $t5_6[0];
-        $t7_8 = $t5_6[1];
-        if ($t7_8) {
-          $block = 4; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 3: {
-        return;
-        break;
-      }
-      case 4: {
-        $t8_9 = { $get() { return ev.$get().Content; }, $set(v) { const obj = ev.$get(); obj.Content = v; ev.$set(obj); } };
-        $t9_10 = $t8_9.$get();
-        $t10_11 = common$crypto$nip44.Decrypt($t9_10, $t6_7);
-        $t11_12 = $t10_11[0];
-        $t12_13 = $t10_11[1];
-        if ($t12_13) {
-          $block = 6; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 5: {
-        return;
-        break;
-      }
-      case 6: {
-        $t13_14 = common$nostr.ParseEvent($t11_12);
-        $t14_15 = ($t13_14 === null);
-        if ($t14_15) {
-          $block = 7; break;
-        }
-        else {
-          $block = 9; break;
-        }
-        break;
-      }
-      case 7: {
-        return;
-        break;
-      }
-      case 8: {
-        $t15_16 = seckey.$get();
-        $t16_17 = { $get() { return $t13_14.$get().PubKey; }, $set(v) { const obj = $t13_14.$get(); obj.PubKey = v; $t13_14.$set(obj); } };
-        $t17_18 = $t16_17.$get();
-        $t18_19 = hexTo32($t17_18);
-        $t19_20 = common$crypto$nip44.ConversationKey($t15_16, $t18_19);
-        $t20_21 = $t19_20[0];
-        $t21_22 = $t19_20[1];
-        if ($t21_22) {
-          $block = 11; break;
-        }
-        else {
-          $block = 10; break;
-        }
-        break;
-      }
-      case 9: {
-        $t22_23 = { $get() { return $t13_14.$get().Kind; }, $set(v) { const obj = $t13_14.$get(); obj.Kind = v; $t13_14.$set(obj); } };
-        $t23_24 = $t22_23.$get();
-        $t24_25 = ($t23_24 !== 13);
-        if ($t24_25) {
-          $block = 7; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 10: {
-        return;
-        break;
-      }
-      case 11: {
-        $t25_26 = { $get() { return $t13_14.$get().Content; }, $set(v) { const obj = $t13_14.$get(); obj.Content = v; $t13_14.$set(obj); } };
-        $t26_27 = $t25_26.$get();
-        $t27_28 = common$crypto$nip44.Decrypt($t26_27, $t20_21);
-        $t28_29 = $t27_28[0];
-        $t29_30 = $t27_28[1];
-        if ($t29_30) {
-          $block = 13; break;
-        }
-        else {
-          $block = 12; break;
-        }
-        break;
-      }
-      case 12: {
-        return;
-        break;
-      }
-      case 13: {
-        $t30_31 = common$nostr.ParseEvent($t28_29);
-        $t31_32 = ($t30_31 === null);
-        if ($t31_32) {
-          $block = 14; break;
-        }
-        else {
-          $block = 16; break;
-        }
-        break;
-      }
-      case 14: {
-        return;
-        break;
-      }
-      case 15: {
-        $t32_33 = { $get() { return $t13_14.$get().PubKey; }, $set(v) { const obj = $t13_14.$get(); obj.PubKey = v; $t13_14.$set(obj); } };
-        $t33_34 = $t32_33.$get();
-        $t34_35 = { $get() { return $t30_31.$get().Tags; }, $set(v) { const obj = $t30_31.$get(); obj.Tags = v; $t30_31.$set(obj); } };
-        $t35_36 = $t34_35.$get();
-        $t36_37 = common$nostr.Tags$GetFirst($t35_36, 'p');
-        $t37_38 = ($t36_37 !== null);
-        if ($t37_38) {
-          $block = 17; break;
-        }
-        else {
-          $t42_43 = '';
-          $block = 18; break;
-        }
-        break;
-      }
-      case 16: {
-        $t38_39 = { $get() { return $t30_31.$get().Kind; }, $set(v) { const obj = $t30_31.$get(); obj.Kind = v; $t30_31.$set(obj); } };
-        $t39_40 = $t38_39.$get();
-        $t40_41 = ($t39_40 !== 14);
-        if ($t40_41) {
-          $block = 14; break;
-        }
-        else {
-          $block = 15; break;
-        }
-        break;
-      }
-      case 17: {
-        $t41_42 = common$nostr.Tag$Value($t36_37);
-        $t42_43 = $t41_42;
-        $block = 18; break;
-        break;
-      }
-      case 18: {
-        $t43_44 = myPubkey.$get();
-        $t44_45 = ($t33_34 === $t43_44);
-        if ($t44_45) {
-          $block = 19; break;
-        }
-        else {
-          $t45_46 = $t33_34;
-          $block = 20; break;
-        }
-        break;
-      }
-      case 19: {
-        $t45_46 = $t42_43;
-        $block = 20; break;
-        break;
-      }
-      case 20: {
-        $t46_47 = ($t45_46 === '');
-        if ($t46_47) {
-          $block = 21; break;
-        }
-        else {
-          $block = 22; break;
-        }
-        break;
-      }
-      case 21: {
-        return;
-        break;
-      }
-      case 22: {
-        $t47_48 = { $get() { return $t30_31.$get().CreatedAt; }, $set(v) { const obj = $t30_31.$get(); obj.CreatedAt = v; $t30_31.$set(obj); } };
-        $t48_49 = $t47_48.$get();
-        $t49_50 = ($t48_49 === 0);
-        if ($t49_50) {
-          $block = 23; break;
-        }
-        else {
-          $t52_53 = $t48_49;
-          $block = 24; break;
-        }
-        break;
-      }
-      case 23: {
-        $t50_51 = { $get() { return ev.$get().CreatedAt; }, $set(v) { const obj = ev.$get(); obj.CreatedAt = v; ev.$set(obj); } };
-        $t51_52 = $t50_51.$get();
-        $t52_53 = $t51_52;
-        $block = 24; break;
-        break;
-      }
-      case 24: {
-        $t53_54 = { $get() { return $t30_31.$get().Content; }, $set(v) { const obj = $t30_31.$get(); obj.Content = v; $t30_31.$set(obj); } };
-        $t54_55 = $t53_54.$get();
-        $t55_56 = { $get() { return ev.$get().ID; }, $set(v) { const obj = ev.$get(); obj.ID = v; ev.$set(obj); } };
-        $t56_57 = $t55_56.$get();
-        $t57_58 = makeDMRecord($t45_46, $t33_34, $t54_55, $t52_53, 'nip17', $t56_57);
-        $t58_59 = cb($t57_58);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function makeDMRecord(peer, from, content, createdAt, protocol, eventID) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
-  $t0_1 = { $value: { ID: '', Peer: '', From: '', Content: '', CreatedAt: 0, Protocol: '', EventID: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2 = { $get() { return $t0_1.$get().ID; }, $set(v) { const obj = $t0_1.$get(); obj.ID = v; $t0_1.$set(obj); } };
-  $t2_3 = dmDedupID(peer, content, createdAt);
-  $t3_4 = { $get() { return $t0_1.$get().Peer; }, $set(v) { const obj = $t0_1.$get(); obj.Peer = v; $t0_1.$set(obj); } };
-  $t4_5 = { $get() { return $t0_1.$get().From; }, $set(v) { const obj = $t0_1.$get(); obj.From = v; $t0_1.$set(obj); } };
-  $t5_6 = { $get() { return $t0_1.$get().Content; }, $set(v) { const obj = $t0_1.$get(); obj.Content = v; $t0_1.$set(obj); } };
-  $t6_7 = { $get() { return $t0_1.$get().CreatedAt; }, $set(v) { const obj = $t0_1.$get(); obj.CreatedAt = v; $t0_1.$set(obj); } };
-  $t7_8 = { $get() { return $t0_1.$get().Protocol; }, $set(v) { const obj = $t0_1.$get(); obj.Protocol = v; $t0_1.$set(obj); } };
-  $t8_9 = { $get() { return $t0_1.$get().EventID; }, $set(v) { const obj = $t0_1.$get(); obj.EventID = v; $t0_1.$set(obj); } };
-  $t1_2.$set($t2_3);
-  $t3_4.$set(peer);
-  $t4_5.$set(from);
-  $t5_6.$set(content);
-  $t6_7.$set(createdAt);
-  $t7_8.$set(protocol);
-  $t8_9.$set(eventID);
-  return $t0_1;
-}
-
-export function dmDedupID(peer, content, createdAt) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
-  $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2 = $rt.builtin.stringToBytes(content);
-  $t2_3 = common$crypto$sha256.Sum($t1_2);
-  $t0_1.$set($rt.builtin.cloneValue($t2_3));
-  $t3_4 = Math.trunc(createdAt / 300);
-  $t4_5 = common$helpers.Itoa($t3_4);
-  $t5_6 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t6_7 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-  $t7_8 = common$helpers.HexEncode($t6_7);
-  $t8_9 = (peer + $t7_8);
-  $t9_10 = ($t8_9 + $t4_5);
-  $t10_11 = $rt.builtin.stringToBytes($t9_10);
-  $t11_12 = common$crypto$sha256.Sum($t10_11);
-  $t5_6.$set($rt.builtin.cloneValue($t11_12));
-  $t12_13 = $rt.builtin.sliceSlice($t5_6.$get(), undefined, undefined, undefined);
-  $t13_14 = common$helpers.HexEncode($t12_13);
-  return $t13_14;
-}
-
-export function encryptNip04DM(recipientPubkey, content, cb) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set(recipientPubkey);
-        $t1_2 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2.$set(cb);
-        $t2_3 = seckey.$get();
-        $t3_4 = $t0_1.$get();
-        $t4_5 = hexTo32($t3_4);
-        $t5_6 = common$crypto$nip04.SharedKey($t2_3, $t4_5);
-        $t6_7 = $t5_6[0];
-        $t7_8 = $t5_6[1];
-        if ($t7_8) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t8_9 = encryptNip04DM$1.bind(null, $t0_1, $t1_2);
-        $t9_10 = common$crypto$nip04.Encrypt($t6_7, content, $t8_9);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-function encryptNip04DM$1(recipientPubkey, cb, ciphertext) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: { ID: '', PubKey: '', CreatedAt: 0, Kind: 0, Tags: null, Content: '', Sig: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2 = { $get() { return $t0_1.$get().Kind; }, $set(v) { const obj = $t0_1.$get(); obj.Kind = v; $t0_1.$set(obj); } };
-        $t2_3 = { $get() { return $t0_1.$get().Content; }, $set(v) { const obj = $t0_1.$get(); obj.Content = v; $t0_1.$set(obj); } };
-        $t3_4 = { $get() { return $t0_1.$get().Tags; }, $set(v) { const obj = $t0_1.$get(); obj.Tags = v; $t0_1.$set(obj); } };
-        $t4_5 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t5_6 = $t4_5.$get().addr(0);
-        $t6_7 = { $value: $rt.builtin.makeSlice(2, 2, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t7_8 = $t6_7.$get().addr(0);
-        $t7_8.$set('p');
-        $t8_9 = $t6_7.$get().addr(1);
-        $t9_10 = recipientPubkey.$get();
-        $t8_9.$set($t9_10);
-        $t10_11 = $rt.builtin.sliceSlice($t6_7.$get(), undefined, undefined, undefined);
-        $t5_6.$set($t10_11);
-        $t11_12 = $rt.builtin.sliceSlice($t4_5.$get(), undefined, undefined, undefined);
-        $t12_13 = { $get() { return $t0_1.$get().CreatedAt; }, $set(v) { const obj = $t0_1.$get(); obj.CreatedAt = v; $t0_1.$set(obj); } };
-        $t13_14 = common$jsbridge$sw.NowSeconds();
-        $t1_2.$set(4);
-        $t2_3.$set(ciphertext);
-        $t3_4.$set($t11_12);
-        $t12_13.$set($t13_14);
-        $t14_15 = identitySignEvent($t0_1);
-        if ($t14_15) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t15_16 = cb.$get();
-        $t16_17 = $t15_16($t0_1);
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function encryptNip17DM(recipientPubkey, content) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = common$jsbridge$sw.NowSeconds();
-        $t1_2 = { $value: { ID: '', PubKey: '', CreatedAt: 0, Kind: 0, Tags: null, Content: '', Sig: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t2_3 = { $get() { return $t1_2.$get().Kind; }, $set(v) { const obj = $t1_2.$get(); obj.Kind = v; $t1_2.$set(obj); } };
-        $t3_4 = { $get() { return $t1_2.$get().Content; }, $set(v) { const obj = $t1_2.$get(); obj.Content = v; $t1_2.$set(obj); } };
-        $t4_5 = { $get() { return $t1_2.$get().Tags; }, $set(v) { const obj = $t1_2.$get(); obj.Tags = v; $t1_2.$set(obj); } };
-        $t5_6 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t6_7 = $t5_6.$get().addr(0);
-        $t7_8 = { $value: $rt.builtin.makeSlice(2, 2, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t8_9 = $t7_8.$get().addr(0);
-        $t8_9.$set('p');
-        $t9_10 = $t7_8.$get().addr(1);
-        $t9_10.$set(recipientPubkey);
-        $t10_11 = $rt.builtin.sliceSlice($t7_8.$get(), undefined, undefined, undefined);
-        $t6_7.$set($t10_11);
-        $t11_12 = $rt.builtin.sliceSlice($t5_6.$get(), undefined, undefined, undefined);
-        $t12_13 = { $get() { return $t1_2.$get().CreatedAt; }, $set(v) { const obj = $t1_2.$get(); obj.CreatedAt = v; $t1_2.$set(obj); } };
-        $t2_3.$set(14);
-        $t3_4.$set(content);
-        $t4_5.$set($t11_12);
-        $t12_13.$set($t0_1);
-        $t13_14 = identitySignEvent($t1_2);
-        if ($t13_14) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        return [null, null];
-        break;
-      }
-      case 2: {
-        $t14_15 = common$nostr.Event$ToJSON($t1_2);
-        $t15_16 = seckey.$get();
-        $t16_17 = hexTo32(recipientPubkey);
-        $t17_18 = common$crypto$nip44.ConversationKey($t15_16, $t16_17);
-        $t18_19 = $t17_18[0];
-        $t19_20 = $t17_18[1];
-        if ($t19_20) {
-          $block = 4; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 3: {
-        return [null, null];
-        break;
-      }
-      case 4: {
-        $t20_21 = random32();
-        $t21_22 = common$crypto$nip44.Encrypt($t14_15, $t18_19, $t20_21);
-        $t22_23 = { $value: { ID: '', PubKey: '', CreatedAt: 0, Kind: 0, Tags: null, Content: '', Sig: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t23_24 = { $get() { return $t22_23.$get().Kind; }, $set(v) { const obj = $t22_23.$get(); obj.Kind = v; $t22_23.$set(obj); } };
-        $t24_25 = { $get() { return $t22_23.$get().Content; }, $set(v) { const obj = $t22_23.$get(); obj.Content = v; $t22_23.$set(obj); } };
-        $t25_26 = { $get() { return $t22_23.$get().Tags; }, $set(v) { const obj = $t22_23.$get(); obj.Tags = v; $t22_23.$set(obj); } };
-        $t26_27 = { $value: $rt.builtin.makeSlice(0, 0, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t27_28 = $rt.builtin.sliceSlice($t26_27.$get(), undefined, undefined, undefined);
-        $t28_29 = { $get() { return $t22_23.$get().CreatedAt; }, $set(v) { const obj = $t22_23.$get(); obj.CreatedAt = v; $t22_23.$set(obj); } };
-        $t29_30 = randomizeTimestamp($t0_1);
-        $t23_24.$set(13);
-        $t24_25.$set($t21_22);
-        $t25_26.$set($t27_28);
-        $t28_29.$set($t29_30);
-        $t30_31 = identitySignEvent($t22_23);
-        if ($t30_31) {
-          $block = 6; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 5: {
-        return [null, null];
-        break;
-      }
-      case 6: {
-        $t31_32 = giftWrap($t22_23, recipientPubkey, $t0_1);
-        $t32_33 = seckey.$get();
-        $t33_34 = myPubkey.$get();
-        $t34_35 = hexTo32($t33_34);
-        $t35_36 = common$crypto$nip44.ConversationKey($t32_33, $t34_35);
-        $t36_37 = $t35_36[0];
-        $t37_38 = $t35_36[1];
-        if ($t37_38) {
-          $block = 8; break;
-        }
-        else {
-          $block = 7; break;
-        }
-        break;
-      }
-      case 7: {
-        return [$t31_32, null];
-        break;
-      }
-      case 8: {
-        $t38_39 = random32();
-        $t39_40 = common$crypto$nip44.Encrypt($t14_15, $t36_37, $t38_39);
-        $t40_41 = { $value: { ID: '', PubKey: '', CreatedAt: 0, Kind: 0, Tags: null, Content: '', Sig: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t41_42 = { $get() { return $t40_41.$get().Kind; }, $set(v) { const obj = $t40_41.$get(); obj.Kind = v; $t40_41.$set(obj); } };
-        $t42_43 = { $get() { return $t40_41.$get().Content; }, $set(v) { const obj = $t40_41.$get(); obj.Content = v; $t40_41.$set(obj); } };
-        $t43_44 = { $get() { return $t40_41.$get().Tags; }, $set(v) { const obj = $t40_41.$get(); obj.Tags = v; $t40_41.$set(obj); } };
-        $t44_45 = { $value: $rt.builtin.makeSlice(0, 0, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t45_46 = $rt.builtin.sliceSlice($t44_45.$get(), undefined, undefined, undefined);
-        $t46_47 = { $get() { return $t40_41.$get().CreatedAt; }, $set(v) { const obj = $t40_41.$get(); obj.CreatedAt = v; $t40_41.$set(obj); } };
-        $t47_48 = randomizeTimestamp($t0_1);
-        $t41_42.$set(13);
-        $t42_43.$set($t39_40);
-        $t43_44.$set($t45_46);
-        $t46_47.$set($t47_48);
-        $t48_49 = identitySignEvent($t40_41);
-        if ($t48_49) {
-          $block = 10; break;
-        }
-        else {
-          $block = 9; break;
-        }
-        break;
-      }
-      case 9: {
-        return [$t31_32, null];
-        break;
-      }
-      case 10: {
-        $t49_50 = myPubkey.$get();
-        $t50_51 = giftWrap($t40_41, $t49_50, $t0_1);
-        return [$t31_32, $t50_51];
-        break;
-      }
-    }
-  }
-}
-
-export function giftWrap(seal, recipientPubkey, baseTime) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = random32();
-        $t1_2 = common$crypto$secp256k1.PubKeyFromSecKey($t0_1);
-        $t2_3 = $t1_2[0];
-        $t3_4 = $t1_2[1];
-        if ($t3_4) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        return null;
-        break;
-      }
-      case 2: {
-        $t4_5 = hexTo32(recipientPubkey);
-        $t5_6 = common$crypto$nip44.ConversationKey($t0_1, $t4_5);
-        $t6_7 = $t5_6[0];
-        $t7_8 = $t5_6[1];
-        if ($t7_8) {
-          $block = 4; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 3: {
-        return null;
-        break;
-      }
-      case 4: {
-        $t8_9 = common$nostr.Event$ToJSON(seal);
-        $t9_10 = random32();
-        $t10_11 = common$crypto$nip44.Encrypt($t8_9, $t6_7, $t9_10);
-        $t11_12 = { $value: { ID: '', PubKey: '', CreatedAt: 0, Kind: 0, Tags: null, Content: '', Sig: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t12_13 = { $get() { return $t11_12.$get().Kind; }, $set(v) { const obj = $t11_12.$get(); obj.Kind = v; $t11_12.$set(obj); } };
-        $t13_14 = { $get() { return $t11_12.$get().Content; }, $set(v) { const obj = $t11_12.$get(); obj.Content = v; $t11_12.$set(obj); } };
-        $t14_15 = { $get() { return $t11_12.$get().Tags; }, $set(v) { const obj = $t11_12.$get(); obj.Tags = v; $t11_12.$set(obj); } };
-        $t15_16 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t16_17 = $t15_16.$get().addr(0);
-        $t17_18 = { $value: $rt.builtin.makeSlice(2, 2, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t18_19 = $t17_18.$get().addr(0);
-        $t18_19.$set('p');
-        $t19_20 = $t17_18.$get().addr(1);
-        $t19_20.$set(recipientPubkey);
-        $t20_21 = $rt.builtin.sliceSlice($t17_18.$get(), undefined, undefined, undefined);
-        $t16_17.$set($t20_21);
-        $t21_22 = $rt.builtin.sliceSlice($t15_16.$get(), undefined, undefined, undefined);
-        $t22_23 = { $get() { return $t11_12.$get().CreatedAt; }, $set(v) { const obj = $t11_12.$get(); obj.CreatedAt = v; $t11_12.$set(obj); } };
-        $t23_24 = randomizeTimestamp(baseTime);
-        $t12_13.$set(1059);
-        $t13_14.$set($t10_11);
-        $t14_15.$set($t21_22);
-        $t22_23.$set($t23_24);
-        $t24_25 = random32();
-        $t25_26 = common$nostr.Event$Sign($t11_12, $t0_1, $t24_25);
-        if ($t25_26) {
-          $block = 6; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 5: {
-        return null;
-        break;
-      }
-      case 6: {
-        return $t11_12;
-        break;
-      }
-    }
-  }
-}
-
-export function randomizeTimestamp(baseTime) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2 = random32();
-        $t0_1.$set($rt.builtin.cloneValue($t1_2));
-        $t2_3 = $t0_1.$get().addr(0);
-        $t3_4 = $t2_3.$get();
-        $t4_5 = $t3_4;
-        $t5_6 = ($t4_5 * (2 ** 24));
-        $t6_7 = $t0_1.$get().addr(1);
-        $t7_8 = $t6_7.$get();
-        $t8_9 = $t7_8;
-        $t9_10 = ($t8_9 * (2 ** 16));
-        $t10_11 = $rt.builtin.int64or($t5_6, $t9_10);
-        $t11_12 = $t0_1.$get().addr(2);
-        $t12_13 = $t11_12.$get();
-        $t13_14 = $t12_13;
-        $t14_15 = ($t13_14 * (2 ** 8));
-        $t15_16 = $rt.builtin.int64or($t10_11, $t14_15);
-        $t16_17 = $t0_1.$get().addr(3);
-        $t17_18 = $t16_17.$get();
-        $t18_19 = $t17_18;
-        $t19_20 = $rt.builtin.int64or($t15_16, $t18_19);
-        $t20_21 = ($t19_20 < 0);
-        if ($t20_21) {
-          $block = 1; break;
-        }
-        else {
-          $t22_23 = $t19_20;
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t21_22 = -$t19_20;
-        $t22_23 = $t21_22;
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        $t23_24 = ($t22_23 % 172800);
-        $t24_25 = (baseTime - $t23_24);
-        return $t24_25;
-        break;
-      }
-    }
-  }
-}
-
-export function initRouter() {
-  let $t0_1, $t1_2;
-  $t0_1 = $rt.builtin.makeMap('string');
-  clientSubs.$set($t0_1);
-  $t1_2 = $rt.builtin.makeMap('string');
-  proxySubs.$set($t1_2);
-  return;
-}
-
-export function routeMessage(clientID, w, msgType) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = (msgType === 'REQ');
-        if ($t0_1) {
-          $block = 2; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t1_2 = mw$str(w);
-        $t2_3 = mw$raw(w);
-        $t3_4 = routerReq(clientID, $t1_2, $t2_3);
-        $block = 1; break;
-        break;
-      }
-      case 3: {
-        $t4_5 = mw$str(w);
-        $t5_6 = routerClose($t4_5);
-        $block = 1; break;
-        break;
-      }
-      case 4: {
-        $t6_7 = (msgType === 'CLOSE');
-        if ($t6_7) {
-          $block = 3; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 5: {
-        $t7_8 = mw$raw(w);
-        $t8_9 = routerPublish(clientID, $t7_8);
-        $block = 1; break;
-        break;
-      }
-      case 6: {
-        $t9_10 = (msgType === 'EVENT');
-        if ($t9_10) {
-          $block = 5; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 7: {
-        $t10_11 = mw$str(w);
-        $t11_12 = mw$raw(w);
-        $t12_13 = mw$strs(w);
-        $t13_14 = routerProxy(clientID, $t10_11, $t11_12, $t12_13);
-        $block = 1; break;
-        break;
-      }
-      case 8: {
-        $t14_15 = (msgType === 'PROXY');
-        if ($t14_15) {
-          $block = 7; break;
-        }
-        else {
-          $block = 10; break;
-        }
-        break;
-      }
-      case 9: {
-        $t15_16 = mw$str(w);
-        $t16_17 = handleRelayInfo(clientID, $t15_16);
-        $block = 1; break;
-        break;
-      }
-      case 10: {
-        $t17_18 = (msgType === 'RELAY_INFO');
-        if ($t17_18) {
-          $block = 9; break;
-        }
-        else {
-          $block = 12; break;
-        }
-        break;
-      }
-      case 11: {
-        $t18_19 = mw$str(w);
-        $t19_20 = identitySetKey($t18_19);
-        $t20_21 = sendToClient(clientID, '["KEY_SET"]');
-        $block = 1; break;
-        break;
-      }
-      case 12: {
-        $t21_22 = (msgType === 'SET_KEY');
-        if ($t21_22) {
-          $block = 11; break;
-        }
-        else {
-          $block = 14; break;
-        }
-        break;
-      }
-      case 13: {
-        $t22_23 = mw$str(w);
-        $t23_24 = identitySetPubkey($t22_23);
-        $block = 1; break;
-        break;
-      }
-      case 14: {
-        $t24_25 = (msgType === 'SET_PUBKEY');
-        if ($t24_25) {
-          $block = 13; break;
-        }
-        else {
-          $block = 16; break;
-        }
-        break;
-      }
-      case 15: {
-        $t25_26 = identityClearKey();
-        writeRelays.$set(null);
-        $block = 1; break;
-        break;
-      }
-      case 16: {
-        $t26_27 = (msgType === 'CLEAR_KEY');
-        if ($t26_27) {
-          $block = 15; break;
-        }
-        else {
-          $block = 18; break;
-        }
-        break;
-      }
-      case 17: {
-        $t27_28 = mw$strs(w);
-        writeRelays.$set($t27_28);
-        $block = 1; break;
-        break;
-      }
-      case 18: {
-        $t28_29 = (msgType === 'SET_WRITE_RELAYS');
-        if ($t28_29) {
-          $block = 17; break;
-        }
-        else {
-          $block = 20; break;
-        }
-        break;
-      }
-      case 19: {
-        $t29_30 = mw$str(w);
-        $t30_31 = mw$raw(w);
-        $t31_32 = routerSign(clientID, $t29_30, $t30_31);
-        $block = 1; break;
-        break;
-      }
-      case 20: {
-        $t32_33 = (msgType === 'SIGN');
-        if ($t32_33) {
-          $block = 19; break;
-        }
-        else {
-          $block = 22; break;
-        }
-        break;
-      }
-      case 21: {
-        $t33_34 = mw$str(w);
-        $t34_35 = mw$strs(w);
-        $t35_36 = routerBroadcast(clientID, $t33_34, $t34_35);
-        $block = 1; break;
-        break;
-      }
-      case 22: {
-        $t36_37 = (msgType === 'BROADCAST');
-        if ($t36_37) {
-          $block = 21; break;
-        }
-        else {
-          $block = 24; break;
-        }
-        break;
-      }
-      case 23: {
-        $t37_38 = mw$str(w);
-        $t38_39 = mw$str(w);
-        $t39_40 = mw$strs(w);
-        $t40_41 = routerSendDM(clientID, $t37_38, $t38_39, $t39_40);
-        $block = 1; break;
-        break;
-      }
-      case 24: {
-        $t41_42 = (msgType === 'SEND_DM');
-        if ($t41_42) {
-          $block = 23; break;
-        }
-        else {
-          $block = 26; break;
-        }
-        break;
-      }
-      case 25: {
-        $t42_43 = mw$strs(w);
-        $t43_44 = routerDMSub(clientID, $t42_43);
-        $block = 1; break;
-        break;
-      }
-      case 26: {
-        $t44_45 = (msgType === 'DM_SUB');
-        if ($t44_45) {
-          $block = 25; break;
-        }
-        else {
-          $block = 28; break;
-        }
-        break;
-      }
-      case 27: {
-        $t45_46 = routerDMList(clientID);
-        $block = 1; break;
-        break;
-      }
-      case 28: {
-        $t46_47 = (msgType === 'DM_LIST');
-        if ($t46_47) {
-          $block = 27; break;
-        }
-        else {
-          $block = 30; break;
-        }
-        break;
-      }
-      case 29: {
-        $t47_48 = mw$str(w);
-        $t48_49 = mw$num(w);
-        $t49_50 = $t48_49;
-        $t50_51 = mw$num(w);
-        $t51_52 = routerDMHistory(clientID, $t47_48, $t49_50, $t50_51);
-        $block = 1; break;
-        break;
-      }
-      case 30: {
-        $t52_53 = (msgType === 'DM_HISTORY');
-        if ($t52_53) {
-          $block = 29; break;
-        }
-        else {
-          $block = 32; break;
-        }
-        break;
-      }
-      case 31: {
-        $t53_54 = mw$strs(w);
-        $t54_55 = marmotInit($t53_54);
-        $block = 1; break;
-        break;
-      }
-      case 32: {
-        $t55_56 = (msgType === 'MLS_INIT');
-        if ($t55_56) {
-          $block = 31; break;
-        }
-        else {
-          $block = 34; break;
-        }
-        break;
-      }
-      case 33: {
-        $t56_57 = mw$str(w);
-        $t57_58 = mw$str(w);
-        $t58_59 = marmotSend($t56_57, $t57_58);
-        $block = 1; break;
-        break;
-      }
-      case 34: {
-        $t59_60 = (msgType === 'MLS_SEND');
-        if ($t59_60) {
-          $block = 33; break;
-        }
-        else {
-          $block = 36; break;
-        }
-        break;
-      }
-      case 35: {
-        $t60_61 = marmotSubscribe();
-        $block = 1; break;
-        break;
-      }
-      case 36: {
-        $t61_62 = (msgType === 'MLS_SUB');
-        if ($t61_62) {
-          $block = 35; break;
-        }
-        else {
-          $block = 38; break;
-        }
-        break;
-      }
-      case 37: {
-        $t62_63 = mw$strs(w);
-        $t63_64 = marmotPublishKP($t62_63);
-        $block = 1; break;
-        break;
-      }
-      case 38: {
-        $t64_65 = (msgType === 'MLS_PUBLISH_KP');
-        if ($t64_65) {
-          $block = 37; break;
-        }
-        else {
-          $block = 40; break;
-        }
-        break;
-      }
-      case 39: {
-        $t65_66 = marmotListGroups(clientID);
-        $block = 1; break;
-        break;
-      }
-      case 40: {
-        $t66_67 = (msgType === 'MLS_LIST_GROUPS');
-        if ($t66_67) {
-          $block = 39; break;
-        }
-        else {
-          $block = 42; break;
-        }
-        break;
-      }
-      case 41: {
-        $t67_68 = mw$num(w);
-        $t68_69 = $t67_68;
-        $t69_70 = mw$str(w);
-        $t70_71 = mw$str(w);
-        $t71_72 = cryptoCBs.$get();
-        { const $r = $rt.builtin.mapLookup($t71_72, $t68_69); $t72_73 = [$r.value, $r.ok]; }
-        $t73_74 = $t72_73[0];
-        $t74_75 = $t72_73[1];
-        if ($t74_75) {
-          $block = 43; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 42: {
-        $t75_76 = (msgType === 'CRYPTO_RESULT');
-        if ($t75_76) {
-          $block = 41; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 43: {
-        $t76_77 = cryptoCBs.$get();
-        $t77_78 = $rt.builtin.mapDelete($t76_77, $t68_69);
-        $t78_79 = $t73_74($t69_70, $t70_71);
-        $block = 1; break;
-        break;
-      }
-    }
-  }
-}
-
-export function routerReq(clientID, subID, filterRaw) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set(clientID);
-        $t1_2 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2.$set(subID);
-        $t2_3 = common$nostr.ParseFilter(filterRaw);
-        $t3_4 = ($t2_3 === null);
-        if ($t3_4) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t4_5 = clientSubs.$get();
-        $t5_6 = $t1_2.$get();
-        $t6_7 = { $value: { filter: null, filterRaw: '', clientID: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t7_8 = { $get() { return $t6_7.$get().filter; }, $set(v) { const obj = $t6_7.$get(); obj.filter = v; $t6_7.$set(obj); } };
-        $t8_9 = { $get() { return $t6_7.$get().filterRaw; }, $set(v) { const obj = $t6_7.$get(); obj.filterRaw = v; $t6_7.$set(obj); } };
-        $t9_10 = { $get() { return $t6_7.$get().clientID; }, $set(v) { const obj = $t6_7.$get(); obj.clientID = v; $t6_7.$set(obj); } };
-        $t10_11 = $t0_1.$get();
-        $t7_8.$set($t2_3);
-        $t8_9.$set(filterRaw);
-        $t9_10.$set($t10_11);
-        $rt.builtin.mapUpdate($t4_5, $t5_6, $t6_7);
-        $t11_12 = routerReq$1.bind(null, $t0_1, $t1_2);
-        $t12_13 = cacheQuery(filterRaw, $t11_12);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-function routerReq$1(clientID, subID, eventsJSON) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = common$nostr.ParseEventsJSON(eventsJSON);
-        $t1_2 = $rt.builtin.len($t0_1);
-        $t2_3 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t3_4 = ($t2_3 + 1);
-        $t4_5 = ($t3_4 < $t1_2);
-        if ($t4_5) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t5_6 = $t0_1.addr($t3_4);
-        $t6_7 = $t5_6.$get();
-        $t7_8 = clientID.$get();
-        $t8_9 = subID.$get();
-        $t9_10 = jstr($t8_9);
-        $t10_11 = ('["EVENT",' + $t9_10);
-        $t11_12 = ($t10_11 + ',');
-        $t12_13 = common$nostr.Event$ToJSON($t6_7);
-        $t13_14 = ($t11_12 + $t12_13);
-        $t14_15 = ($t13_14 + ']');
-        $t15_16 = sendToClient($t7_8, $t14_15);
-        $t2_3 = $t3_4;
-        $block = 1; break;
-        break;
-      }
-      case 3: {
-        $t16_17 = clientID.$get();
-        $t17_18 = subID.$get();
-        $t18_19 = jstr($t17_18);
-        $t19_20 = ('["EOSE",' + $t18_19);
-        $t20_21 = ($t19_20 + ']');
-        $t21_22 = sendToClient($t16_17, $t20_21);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function routerClose(subID) {
-  let $t0_1, $t1_2, $t2_3;
-  $t0_1 = clientSubs.$get();
-  $t1_2 = $rt.builtin.mapDelete($t0_1, subID);
-  $t2_3 = routerCleanupProxy(subID);
-  return;
-}
-
-export function routerPublish(clientID, eventRaw) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2 = common$nostr.ParseEvent(eventRaw);
-        $t0_1.$set($t1_2);
-        $t2_3 = $t0_1.$get();
-        $t3_4 = ($t2_3 === null);
-        if ($t3_4) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t4_5 = routerPublish$1.bind(null, $t0_1);
-        $t5_6 = cacheStore(eventRaw, $t4_5);
-        $t6_7 = $t0_1.$get();
-        $t7_8 = relayPublish($t6_7);
-        $t8_9 = $t0_1.$get();
-        $t9_10 = { $get() { return $t8_9.$get().ID; }, $set(v) { const obj = $t8_9.$get(); obj.ID = v; $t8_9.$set(obj); } };
-        $t10_11 = $t9_10.$get();
-        $t11_12 = jstr($t10_11);
-        $t12_13 = ('["OK",' + $t11_12);
-        $t13_14 = ($t12_13 + ',true,""]');
-        $t14_15 = sendToClient(clientID, $t13_14);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-function routerPublish$1(ev, saved) {
-  let $t0_1, $t1_2;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        if (saved) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t0_1 = ev.$get();
-        $t1_2 = pushToMatchingSubs($t0_1);
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function routerProxy(clientID, subID, filterRaw, relayURLs) {
+export function DMRecord$ToJSON(r) {
   let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = routerCleanupProxy(subID);
-        $t1_2 = common$nostr.ParseFilter(filterRaw);
-        $t2_3 = ($t1_2 === null);
-        if ($t2_3) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t3_4 = clientSubs.$get();
-        $t4_5 = { $value: { filter: null, filterRaw: '', clientID: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t5_6 = { $get() { return $t4_5.$get().filter; }, $set(v) { const obj = $t4_5.$get(); obj.filter = v; $t4_5.$set(obj); } };
-        $t6_7 = { $get() { return $t4_5.$get().filterRaw; }, $set(v) { const obj = $t4_5.$get(); obj.filterRaw = v; $t4_5.$set(obj); } };
-        $t7_8 = { $get() { return $t4_5.$get().clientID; }, $set(v) { const obj = $t4_5.$get(); obj.clientID = v; $t4_5.$set(obj); } };
-        $t5_6.$set($t1_2);
-        $t6_7.$set(filterRaw);
-        $t7_8.$set(clientID);
-        $rt.builtin.mapUpdate($t3_4, subID, $t4_5);
-        $t8_9 = $rt.builtin.makeMap('string');
-        $t9_10 = ('p_' + subID);
-        $t10_11 = ($t9_10 + '_');
-        $t11_12 = proxySubs.$get();
-        $t12_13 = { $value: { remoteIDs: null, relayCount: 0, eoseCount: 0, timer: 0, done: false }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t13_14 = { $get() { return $t12_13.$get().remoteIDs; }, $set(v) { const obj = $t12_13.$get(); obj.remoteIDs = v; $t12_13.$set(obj); } };
-        $t14_15 = { $get() { return $t12_13.$get().relayCount; }, $set(v) { const obj = $t12_13.$get(); obj.relayCount = v; $t12_13.$set(obj); } };
-        $t15_16 = $rt.builtin.len(relayURLs);
-        $t13_14.$set($t8_9);
-        $t14_15.$set($t15_16);
-        $rt.builtin.mapUpdate($t11_12, subID, $t12_13);
-        $t16_17 = $rt.builtin.len(relayURLs);
-        $t17_18 = -1;
-        $block = 3; break;
-        break;
-      }
-      case 3: {
-        $t18_19 = ($t17_18 + 1);
-        $t19_20 = ($t18_19 < $t16_17);
-        if ($t19_20) {
-          $block = 4; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 4: {
-        $t20_21 = relayURLs.addr($t18_19);
-        $t21_22 = $t20_21.$get();
-        $t22_23 = urlSuffix($t21_22);
-        $t23_24 = ($t10_11 + $t22_23);
-        $rt.builtin.mapUpdate($t8_9, $t23_24, true);
-        $t24_25 = getConn($t21_22);
-        $t25_26 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t26_27 = $t25_26.$get().addr(0);
-        $t26_27.$set($t1_2);
-        $t27_28 = $rt.builtin.sliceSlice($t25_26.$get(), undefined, undefined, undefined);
-        $t28_29 = common$relay.Conn$Subscribe($t24_25, $t23_24, $t27_28);
-        $t17_18 = $t18_19;
-        $block = 3; break;
-        break;
-      }
-      case 5: {
-        $t29_30 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t29_30.$set(subID);
-        $t30_31 = proxySubs.$get();
-        $t31_32 = $rt.builtin.mapLookup($t30_31, subID).value;
-        $t32_33 = routerProxy$1.bind(null, $t29_30);
-        $t33_34 = common$jsbridge$sw.SetTimeout(5000, $t32_33);
-        $t34_35 = { $get() { return $t31_32.$get().timer; }, $set(v) { const obj = $t31_32.$get(); obj.timer = v; $t31_32.$set(obj); } };
-        $t34_35.$set($t33_34);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-function routerProxy$1(proxyID) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = proxySubs.$get();
-        $t1_2 = proxyID.$get();
-        { const $r = $rt.builtin.mapLookup($t0_1, $t1_2); $t2_3 = [$r.value, $r.ok]; }
-        $t3_4 = $t2_3[0];
-        $t4_5 = $t2_3[1];
-        if ($t4_5) {
-          $block = 3; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t5_6 = { $get() { return $t3_4.$get().done; }, $set(v) { const obj = $t3_4.$get(); obj.done = v; $t3_4.$set(obj); } };
-        $t5_6.$set(true);
-        $t6_7 = clientSubs.$get();
-        $t7_8 = proxyID.$get();
-        { const $r = $rt.builtin.mapLookup($t6_7, $t7_8); $t8_9 = [$r.value, $r.ok]; }
-        $t9_10 = $t8_9[0];
-        $t10_11 = $t8_9[1];
-        if ($t10_11) {
-          $block = 4; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 2: {
-        return;
-        break;
-      }
-      case 3: {
-        $t11_12 = { $get() { return $t3_4.$get().done; }, $set(v) { const obj = $t3_4.$get(); obj.done = v; $t3_4.$set(obj); } };
-        $t12_13 = $t11_12.$get();
-        if ($t12_13) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 4: {
-        $t13_14 = { $get() { return $t9_10.$get().clientID; }, $set(v) { const obj = $t9_10.$get(); obj.clientID = v; $t9_10.$set(obj); } };
-        $t14_15 = $t13_14.$get();
-        $t15_16 = proxyID.$get();
-        $t16_17 = jstr($t15_16);
-        $t17_18 = ('["EOSE",' + $t16_17);
-        $t18_19 = ($t17_18 + ']');
-        $t19_20 = sendToClient($t14_15, $t18_19);
-        $block = 2; break;
-        break;
-      }
-    }
-  }
-}
-
-export function routerCleanupProxy(proxyID) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = proxySubs.$get();
-        { const $r = $rt.builtin.mapLookup($t0_1, proxyID); $t1_2 = [$r.value, $r.ok]; }
-        $t2_3 = $t1_2[0];
-        $t3_4 = $t1_2[1];
-        if ($t3_4) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t4_5 = { $get() { return $t2_3.$get().timer; }, $set(v) { const obj = $t2_3.$get(); obj.timer = v; $t2_3.$set(obj); } };
-        $t5_6 = $t4_5.$get();
-        $t6_7 = common$jsbridge$sw.ClearTimeout($t5_6);
-        $t7_8 = { $get() { return $t2_3.$get().done; }, $set(v) { const obj = $t2_3.$get(); obj.done = v; $t2_3.$set(obj); } };
-        $t8_9 = $t7_8.$get();
-        if ($t8_9) {
-          $block = 4; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 3: {
-        $t9_10 = clientSubs.$get();
-        { const $r = $rt.builtin.mapLookup($t9_10, proxyID); $t10_11 = [$r.value, $r.ok]; }
-        $t11_12 = $t10_11[0];
-        $t12_13 = $t10_11[1];
-        if ($t12_13) {
-          $block = 5; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 4: {
-        $t13_14 = { $get() { return $t2_3.$get().remoteIDs; }, $set(v) { const obj = $t2_3.$get(); obj.remoteIDs = v; $t2_3.$set(obj); } };
-        $t14_15 = $t13_14.$get();
-        $t15_16 = { $entries: [...$t14_15.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
-        $block = 6; break;
-        break;
-      }
-      case 5: {
-        $t16_17 = { $get() { return $t11_12.$get().clientID; }, $set(v) { const obj = $t11_12.$get(); obj.clientID = v; $t11_12.$set(obj); } };
-        $t17_18 = $t16_17.$get();
-        $t18_19 = jstr(proxyID);
-        $t19_20 = ('["EOSE",' + $t18_19);
-        $t20_21 = ($t19_20 + ']');
-        $t21_22 = sendToClient($t17_18, $t20_21);
-        $block = 4; break;
-        break;
-      }
-      case 6: {
-        $t22_23 = $t15_16.next();
-        $t23_24 = $t22_23[0];
-        if ($t23_24) {
-          $block = 7; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 7: {
-        $t24_25 = $t22_23[1];
-        $t25_26 = rpool.$get();
-        $t26_27 = common$relay.Pool$URLs($t25_26);
-        $t27_28 = $rt.builtin.len($t26_27);
-        $t32_33 = -1;
-        $block = 9; break;
-        break;
-      }
-      case 8: {
-        $t28_29 = proxySubs.$get();
-        $t29_30 = $rt.builtin.mapDelete($t28_29, proxyID);
-        $t30_31 = clientSubs.$get();
-        $t31_32 = $rt.builtin.mapDelete($t30_31, proxyID);
-        return;
-        break;
-      }
-      case 9: {
-        $t33_34 = ($t32_33 + 1);
-        $t34_35 = ($t33_34 < $t27_28);
-        if ($t34_35) {
-          $block = 10; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 10: {
-        $t35_36 = $t26_27.addr($t33_34);
-        $t36_37 = $t35_36.$get();
-        $t37_38 = rpool.$get();
-        $t38_39 = common$relay.Pool$Get($t37_38, $t36_37);
-        $t39_40 = ($t38_39 !== null);
-        if ($t39_40) {
-          $block = 12; break;
-        }
-        else {
-          $t32_33 = $t33_34;
-          $block = 9; break;
-        }
-        break;
-      }
-      case 11: {
-        $t40_41 = common$relay.Conn$CloseSubscription($t38_39, $t24_25);
-        $t32_33 = $t33_34;
-        $block = 9; break;
-        break;
-      }
-      case 12: {
-        $t41_42 = common$relay.Conn$IsOpen($t38_39);
-        if ($t41_42) {
-          $block = 11; break;
-        }
-        else {
-          $t32_33 = $t33_34;
-          $block = 9; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-export function routerOnRelayEvent(relayURL, ev) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18;
-  $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t0_1.$set(relayURL);
-  $t1_2 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2.$set(ev);
-  $t2_3 = $t1_2.$get();
-  $t3_4 = common$nostr.Event$ToJSON($t2_3);
-  $t4_5 = $t1_2.$get();
-  $t5_6 = { $get() { return $t4_5.$get().Kind; }, $set(v) { const obj = $t4_5.$get(); obj.Kind = v; $t4_5.$set(obj); } };
-  $t6_7 = $t5_6.$get();
-  $t7_8 = $t6_7;
-  $t8_9 = common$helpers.Itoa($t7_8);
-  $t9_10 = ('relay event kind=' + $t8_9);
-  $t10_11 = ($t9_10 + ' from=');
-  $t11_12 = $t0_1.$get();
-  $t12_13 = ($t10_11 + $t11_12);
-  $t13_14 = common$jsbridge$sw.Log($t12_13);
-  $t14_15 = $t1_2.$get();
-  $t15_16 = pushToMatchingSubs($t14_15);
-  $t16_17 = routerOnRelayEvent$1.bind(null, $t1_2, $t0_1);
-  $t17_18 = cacheStore($t3_4, $t16_17);
-  return;
-}
-
-function routerOnRelayEvent$1(ev, relayURL, saved) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        if (saved) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t0_1 = ev.$get();
-        $t1_2 = { $get() { return $t0_1.$get().Kind; }, $set(v) { const obj = $t0_1.$get(); obj.Kind = v; $t0_1.$set(obj); } };
-        $t2_3 = $t1_2.$get();
-        $t3_4 = ($t2_3 !== 4);
-        if ($t3_4) {
-          $block = 4; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 2: {
-        $t4_5 = ev.$get();
-        $t5_6 = { $get() { return $t4_5.$get().Kind; }, $set(v) { const obj = $t4_5.$get(); obj.Kind = v; $t4_5.$set(obj); } };
-        $t6_7 = $t5_6.$get();
-        $t7_8 = ($t6_7 === 4);
-        if ($t7_8) {
-          $block = 5; break;
-        }
-        else {
-          $block = 7; break;
-        }
-        break;
-      }
-      case 3: {
-        $t8_9 = ev.$get();
-        $t9_10 = relayURL.$get();
-        $t10_11 = relayPublishExcept($t8_9, $t9_10);
-        $block = 2; break;
-        break;
-      }
-      case 4: {
-        $t11_12 = ev.$get();
-        $t12_13 = { $get() { return $t11_12.$get().Kind; }, $set(v) { const obj = $t11_12.$get(); obj.Kind = v; $t11_12.$set(obj); } };
-        $t13_14 = $t12_13.$get();
-        $t14_15 = ($t13_14 !== 1059);
-        if ($t14_15) {
-          $block = 3; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 5: {
-        $t15_16 = ev.$get();
-        $t16_17 = decryptIncomingDM($t15_16, routerOnRelayEvent$1$1);
-        $block = 6; break;
-        break;
-      }
-      case 6: {
-        return;
-        break;
-      }
-      case 7: {
-        $t17_18 = ev.$get();
-        $t18_19 = { $get() { return $t17_18.$get().Kind; }, $set(v) { const obj = $t17_18.$get(); obj.Kind = v; $t17_18.$set(obj); } };
-        $t19_20 = $t18_19.$get();
-        $t20_21 = ($t19_20 === 1059);
-        if ($t20_21) {
-          $block = 5; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-function routerOnRelayEvent$1$1(rec) {
-  let $t0_1;
-  $t0_1 = routerSaveDMRecord(rec);
-  return;
-}
-
-export function routerOnRelayEOSE(subID) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = proxySubs.$get();
-        $t1_2 = { $entries: [...$t0_1.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t2_3 = $t1_2.next();
-        $t3_4 = $t2_3[0];
-        if ($t3_4) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t4_5 = $t2_3[1];
-        $t5_6 = $t2_3[2];
-        $t6_7 = { $get() { return $t5_6.$get().remoteIDs; }, $set(v) { const obj = $t5_6.$get(); obj.remoteIDs = v; $t5_6.$set(obj); } };
-        $t7_8 = $t6_7.$get();
-        $t8_9 = $rt.builtin.mapLookup($t7_8, subID).value;
-        if ($t8_9) {
-          $block = 4; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 3: {
-        return;
-        break;
-      }
-      case 4: {
-        $t9_10 = { $get() { return $t5_6.$get().eoseCount; }, $set(v) { const obj = $t5_6.$get(); obj.eoseCount = v; $t5_6.$set(obj); } };
-        $t10_11 = $t9_10.$get();
-        $t11_12 = ($t10_11 + 1);
-        $t12_13 = { $get() { return $t5_6.$get().eoseCount; }, $set(v) { const obj = $t5_6.$get(); obj.eoseCount = v; $t5_6.$set(obj); } };
-        $t12_13.$set($t11_12);
-        $t13_14 = { $get() { return $t5_6.$get().done; }, $set(v) { const obj = $t5_6.$get(); obj.done = v; $t5_6.$set(obj); } };
-        $t14_15 = $t13_14.$get();
-        if ($t14_15) {
-          $block = 1; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 5: {
-        $t15_16 = { $get() { return $t5_6.$get().timer; }, $set(v) { const obj = $t5_6.$get(); obj.timer = v; $t5_6.$set(obj); } };
-        $t16_17 = $t15_16.$get();
-        $t17_18 = common$jsbridge$sw.ClearTimeout($t16_17);
-        $t18_19 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t18_19.$set($t4_5);
-        $t19_20 = routerOnRelayEOSE$1.bind(null, $t18_19);
-        $t20_21 = common$jsbridge$sw.SetTimeout(3000, $t19_20);
-        $t21_22 = { $get() { return $t5_6.$get().timer; }, $set(v) { const obj = $t5_6.$get(); obj.timer = v; $t5_6.$set(obj); } };
-        $t21_22.$set($t20_21);
-        $block = 1; break;
-        break;
-      }
-    }
-  }
-}
-
-function routerOnRelayEOSE$1(pid) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = proxySubs.$get();
-        $t1_2 = pid.$get();
-        { const $r = $rt.builtin.mapLookup($t0_1, $t1_2); $t2_3 = [$r.value, $r.ok]; }
-        $t3_4 = $t2_3[0];
-        $t4_5 = $t2_3[1];
-        if ($t4_5) {
-          $block = 3; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t5_6 = { $get() { return $t3_4.$get().done; }, $set(v) { const obj = $t3_4.$get(); obj.done = v; $t3_4.$set(obj); } };
-        $t5_6.$set(true);
-        $t6_7 = clientSubs.$get();
-        $t7_8 = pid.$get();
-        { const $r = $rt.builtin.mapLookup($t6_7, $t7_8); $t8_9 = [$r.value, $r.ok]; }
-        $t9_10 = $t8_9[0];
-        $t10_11 = $t8_9[1];
-        if ($t10_11) {
-          $block = 4; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 2: {
-        return;
-        break;
-      }
-      case 3: {
-        $t11_12 = { $get() { return $t3_4.$get().done; }, $set(v) { const obj = $t3_4.$get(); obj.done = v; $t3_4.$set(obj); } };
-        $t12_13 = $t11_12.$get();
-        if ($t12_13) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 4: {
-        $t13_14 = { $get() { return $t9_10.$get().clientID; }, $set(v) { const obj = $t9_10.$get(); obj.clientID = v; $t9_10.$set(obj); } };
-        $t14_15 = $t13_14.$get();
-        $t15_16 = pid.$get();
-        $t16_17 = jstr($t15_16);
-        $t17_18 = ('["EOSE",' + $t16_17);
-        $t18_19 = ($t17_18 + ']');
-        $t19_20 = sendToClient($t14_15, $t18_19);
-        $block = 2; break;
-        break;
-      }
-    }
-  }
-}
-
-export function pushToMatchingSubs(ev) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = clientSubs.$get();
-        $t1_2 = { $entries: [...$t0_1.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t2_3 = $t1_2.next();
-        $t3_4 = $t2_3[0];
-        if ($t3_4) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t4_5 = $t2_3[1];
-        $t5_6 = $t2_3[2];
-        $t6_7 = { $get() { return $t5_6.$get().filter; }, $set(v) { const obj = $t5_6.$get(); obj.filter = v; $t5_6.$set(obj); } };
-        $t7_8 = $t6_7.$get();
-        $t8_9 = common$nostr.Filter$Matches($t7_8, ev);
-        if ($t8_9) {
-          $block = 4; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 3: {
-        return;
-        break;
-      }
-      case 4: {
-        $t9_10 = { $get() { return $t5_6.$get().clientID; }, $set(v) { const obj = $t5_6.$get(); obj.clientID = v; $t5_6.$set(obj); } };
-        $t10_11 = $t9_10.$get();
-        $t11_12 = jstr($t4_5);
-        $t12_13 = ('["EVENT",' + $t11_12);
-        $t13_14 = ($t12_13 + ',');
-        $t14_15 = common$nostr.Event$ToJSON(ev);
-        $t15_16 = ($t13_14 + $t14_15);
-        $t16_17 = ($t15_16 + ']');
-        $t17_18 = sendToClient($t10_11, $t16_17);
-        $block = 1; break;
-        break;
-      }
-    }
-  }
-}
-
-export function routerSign(clientID, requestID, eventRaw) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = hasKey.$get();
-        if ($t0_1) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        $t1_2 = jstr(requestID);
-        $t2_3 = ('["SIGN_ERROR",' + $t1_2);
-        $t3_4 = ($t2_3 + ',"no key"]');
-        $t4_5 = sendToClient(clientID, $t3_4);
-        return;
-        break;
-      }
-      case 2: {
-        $t5_6 = common$nostr.ParseEvent(eventRaw);
-        $t6_7 = ($t5_6 === null);
-        if ($t6_7) {
-          $block = 3; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 3: {
-        $t7_8 = jstr(requestID);
-        $t8_9 = ('["SIGN_ERROR",' + $t7_8);
-        $t9_10 = ($t8_9 + ',"parse error"]');
-        $t10_11 = sendToClient(clientID, $t9_10);
-        return;
-        break;
-      }
-      case 4: {
-        $t11_12 = identitySignEvent($t5_6);
-        if ($t11_12) {
-          $block = 5; break;
-        }
-        else {
-          $block = 7; break;
-        }
-        break;
-      }
-      case 5: {
-        $t12_13 = jstr(requestID);
-        $t13_14 = ('["SIGNED",' + $t12_13);
-        $t14_15 = ($t13_14 + ',');
-        $t15_16 = common$nostr.Event$ToJSON($t5_6);
-        $t16_17 = ($t14_15 + $t15_16);
-        $t17_18 = ($t16_17 + ']');
-        $t18_19 = sendToClient(clientID, $t17_18);
-        $block = 6; break;
-        break;
-      }
-      case 6: {
-        return;
-        break;
-      }
-      case 7: {
-        $t19_20 = jstr(requestID);
-        $t20_21 = ('["SIGN_ERROR",' + $t19_20);
-        $t21_22 = ($t20_21 + ',"sign failed"]');
-        $t22_23 = sendToClient(clientID, $t21_22);
-        $block = 6; break;
-        break;
-      }
-    }
-  }
-}
-
-export function routerSaveDMRecord(rec) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
-  $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2 = DMRecord$ToJSON(rec);
-  $t0_1.$set($t1_2);
-  $t2_3 = $t0_1.$get();
-  $t3_4 = routerSaveDMRecord$1.bind(null, $t0_1);
-  $t4_5 = cacheSaveDM($t2_3, $t3_4);
-  return;
-}
-
-function routerSaveDMRecord$1(dmJSON, result) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = (result !== 'duplicate');
-        if ($t0_1) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t1_2 = dmJSON.$get();
-        $t2_3 = ('["DM_RECEIVED",' + $t1_2);
-        $t3_4 = ($t2_3 + ']');
-        $t4_5 = broadcastToClients($t3_4);
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function routerSendDM(clientID, recipientPubkey, content, relayURLs) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set(relayURLs);
-        $t1_2 = myPubkey.$get();
-        $t2_3 = ($t1_2 === '');
-        if ($t2_3) {
-          $block = 1; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t3_4 = routerSendDM$1.bind(null, $t0_1);
-        $t4_5 = encryptNip04DM(recipientPubkey, content, $t3_4);
-        $t5_6 = encryptNip17DM(recipientPubkey, content);
-        $t6_7 = $t5_6[0];
-        $t7_8 = $t5_6[1];
-        $t8_9 = ($t6_7 !== null);
-        if ($t8_9) {
-          $block = 4; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 3: {
-        $t9_10 = hasKey.$get();
-        if ($t9_10) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 4: {
-        $t10_11 = $t0_1.$get();
-        $t11_12 = $rt.builtin.len($t10_11);
-        $t13_14 = -1;
-        $block = 6; break;
-        break;
-      }
-      case 5: {
-        $t12_13 = ($t7_8 !== null);
-        if ($t12_13) {
-          $block = 8; break;
-        }
-        else {
-          $block = 9; break;
-        }
-        break;
-      }
-      case 6: {
-        $t14_15 = ($t13_14 + 1);
-        $t15_16 = ($t14_15 < $t11_12);
-        if ($t15_16) {
-          $block = 7; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 7: {
-        $t16_17 = $t10_11.addr($t14_15);
-        $t17_18 = $t16_17.$get();
-        $t18_19 = getConn($t17_18);
-        $t19_20 = common$relay.Conn$Publish($t18_19, $t6_7);
-        $t13_14 = $t14_15;
-        $block = 6; break;
-        break;
-      }
-      case 8: {
-        $t20_21 = $t0_1.$get();
-        $t21_22 = $rt.builtin.len($t20_21);
-        $t30_31 = -1;
-        $block = 10; break;
-        break;
-      }
-      case 9: {
-        $t22_23 = common$jsbridge$sw.NowSeconds();
-        $t23_24 = myPubkey.$get();
-        $t24_25 = makeDMRecord(recipientPubkey, $t23_24, content, $t22_23, 'nip17', '');
-        $t25_26 = routerSaveDMRecord($t24_25);
-        $t26_27 = jstr(recipientPubkey);
-        $t27_28 = ('["DM_SENT",' + $t26_27);
-        $t28_29 = ($t27_28 + ',true,""]');
-        $t29_30 = sendToClient(clientID, $t28_29);
-        return;
-        break;
-      }
-      case 10: {
-        $t31_32 = ($t30_31 + 1);
-        $t32_33 = ($t31_32 < $t21_22);
-        if ($t32_33) {
-          $block = 11; break;
-        }
-        else {
-          $block = 9; break;
-        }
-        break;
-      }
-      case 11: {
-        $t33_34 = $t20_21.addr($t31_32);
-        $t34_35 = $t33_34.$get();
-        $t35_36 = getConn($t34_35);
-        $t36_37 = common$relay.Conn$Publish($t35_36, $t7_8);
-        $t30_31 = $t31_32;
-        $block = 10; break;
-        break;
-      }
-    }
-  }
-}
-
-function routerSendDM$1(relayURLs, ev04) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = common$nostr.Event$ToJSON(ev04);
-        $t1_2 = cacheStore($t0_1, routerSendDM$1$1);
-        $t2_3 = relayURLs.$get();
-        $t3_4 = $rt.builtin.len($t2_3);
-        $t4_5 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t5_6 = ($t4_5 + 1);
-        $t6_7 = ($t5_6 < $t3_4);
-        if ($t6_7) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t7_8 = $t2_3.addr($t5_6);
-        $t8_9 = $t7_8.$get();
-        $t9_10 = getConn($t8_9);
-        $t10_11 = common$relay.Conn$Publish($t9_10, ev04);
-        $t4_5 = $t5_6;
-        $block = 1; break;
-        break;
-      }
-      case 3: {
-        return;
-        break;
-      }
-    }
-  }
-}
-
-function routerSendDM$1$1(_) {
-  return;
-}
-
-export function routerDMSub(_, relayURLs) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = myPubkey.$get();
-        $t1_2 = ($t0_1 === '');
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        dmRelayURLs.$set(relayURLs);
-        $t2_3 = dmSubIDs.$get();
-        $t3_4 = { $entries: [...$t2_3.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
-        $block = 4; break;
-        break;
-      }
-      case 3: {
-        $t4_5 = $rt.builtin.len(relayURLs);
-        $t5_6 = ($t4_5 === 0);
-        if ($t5_6) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 4: {
-        $t6_7 = $t3_4.next();
-        $t7_8 = $t6_7[0];
-        if ($t7_8) {
-          $block = 5; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 5: {
-        $t8_9 = $t6_7[1];
-        $t9_10 = rpool.$get();
-        $t10_11 = common$relay.Pool$URLs($t9_10);
-        $t11_12 = $rt.builtin.len($t10_11);
-        $t14_15 = -1;
-        $block = 7; break;
-        break;
-      }
-      case 6: {
-        $t12_13 = $rt.builtin.makeMap('string');
-        dmSubIDs.$set($t12_13);
-        $t13_14 = $rt.builtin.len(relayURLs);
-        $t24_25 = -1;
-        $block = 11; break;
-        break;
-      }
-      case 7: {
-        $t15_16 = ($t14_15 + 1);
-        $t16_17 = ($t15_16 < $t11_12);
-        if ($t16_17) {
-          $block = 8; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 8: {
-        $t17_18 = $t10_11.addr($t15_16);
-        $t18_19 = $t17_18.$get();
-        $t19_20 = rpool.$get();
-        $t20_21 = common$relay.Pool$Get($t19_20, $t18_19);
-        $t21_22 = ($t20_21 !== null);
-        if ($t21_22) {
-          $block = 10; break;
-        }
-        else {
-          $t14_15 = $t15_16;
-          $block = 7; break;
-        }
-        break;
-      }
-      case 9: {
-        $t22_23 = common$relay.Conn$CloseSubscription($t20_21, $t8_9);
-        $t14_15 = $t15_16;
-        $block = 7; break;
-        break;
-      }
-      case 10: {
-        $t23_24 = common$relay.Conn$IsOpen($t20_21);
-        if ($t23_24) {
-          $block = 9; break;
-        }
-        else {
-          $t14_15 = $t15_16;
-          $block = 7; break;
-        }
-        break;
-      }
-      case 11: {
-        $t25_26 = ($t24_25 + 1);
-        $t26_27 = ($t25_26 < $t13_14);
-        if ($t26_27) {
-          $block = 12; break;
-        }
-        else {
-          $block = 13; break;
-        }
-        break;
-      }
-      case 12: {
-        $t27_28 = relayURLs.addr($t25_26);
-        $t28_29 = $t27_28.$get();
-        $t29_30 = urlSuffix($t28_29);
-        $t30_31 = ('dm4in_' + $t29_30);
-        $t31_32 = ('dm4out_' + $t29_30);
-        $t32_33 = ('dm17_' + $t29_30);
-        $t33_34 = dmSubIDs.$get();
-        $rt.builtin.mapUpdate($t33_34, $t30_31, true);
-        $t34_35 = dmSubIDs.$get();
-        $rt.builtin.mapUpdate($t34_35, $t31_32, true);
-        $t35_36 = dmSubIDs.$get();
-        $rt.builtin.mapUpdate($t35_36, $t32_33, true);
-        $t36_37 = getConn($t28_29);
-        $t37_38 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t38_39 = $t37_38.$get().addr(0);
-        $t39_40 = { $value: { IDs: null, Authors: null, Kinds: null, Tags: null, Since: 0, Until: 0, Limit: 0, Proxy: null }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t40_41 = { $get() { return $t39_40.$get().Kinds; }, $set(v) { const obj = $t39_40.$get(); obj.Kinds = v; $t39_40.$set(obj); } };
-        $t41_42 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t42_43 = $t41_42.$get().addr(0);
-        $t42_43.$set(4);
-        $t43_44 = $rt.builtin.sliceSlice($t41_42.$get(), undefined, undefined, undefined);
-        $t44_45 = { $get() { return $t39_40.$get().Tags; }, $set(v) { const obj = $t39_40.$get(); obj.Tags = v; $t39_40.$set(obj); } };
-        $t45_46 = $rt.builtin.makeMap('string');
-        $t46_47 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t47_48 = $t46_47.$get().addr(0);
-        $t48_49 = myPubkey.$get();
-        $t47_48.$set($t48_49);
-        $t49_50 = $rt.builtin.sliceSlice($t46_47.$get(), undefined, undefined, undefined);
-        $rt.builtin.mapUpdate($t45_46, '#p', $t49_50);
-        $t50_51 = { $get() { return $t39_40.$get().Limit; }, $set(v) { const obj = $t39_40.$get(); obj.Limit = v; $t39_40.$set(obj); } };
-        $t40_41.$set($t43_44);
-        $t44_45.$set($t45_46);
-        $t50_51.$set(100);
-        $t38_39.$set($t39_40);
-        $t51_52 = $rt.builtin.sliceSlice($t37_38.$get(), undefined, undefined, undefined);
-        $t52_53 = common$relay.Conn$Subscribe($t36_37, $t30_31, $t51_52);
-        $t53_54 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t54_55 = $t53_54.$get().addr(0);
-        $t55_56 = { $value: { IDs: null, Authors: null, Kinds: null, Tags: null, Since: 0, Until: 0, Limit: 0, Proxy: null }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t56_57 = { $get() { return $t55_56.$get().Kinds; }, $set(v) { const obj = $t55_56.$get(); obj.Kinds = v; $t55_56.$set(obj); } };
-        $t57_58 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t58_59 = $t57_58.$get().addr(0);
-        $t58_59.$set(4);
-        $t59_60 = $rt.builtin.sliceSlice($t57_58.$get(), undefined, undefined, undefined);
-        $t60_61 = { $get() { return $t55_56.$get().Authors; }, $set(v) { const obj = $t55_56.$get(); obj.Authors = v; $t55_56.$set(obj); } };
-        $t61_62 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t62_63 = $t61_62.$get().addr(0);
-        $t63_64 = myPubkey.$get();
-        $t62_63.$set($t63_64);
-        $t64_65 = $rt.builtin.sliceSlice($t61_62.$get(), undefined, undefined, undefined);
-        $t65_66 = { $get() { return $t55_56.$get().Limit; }, $set(v) { const obj = $t55_56.$get(); obj.Limit = v; $t55_56.$set(obj); } };
-        $t56_57.$set($t59_60);
-        $t60_61.$set($t64_65);
-        $t65_66.$set(100);
-        $t54_55.$set($t55_56);
-        $t66_67 = $rt.builtin.sliceSlice($t53_54.$get(), undefined, undefined, undefined);
-        $t67_68 = common$relay.Conn$Subscribe($t36_37, $t31_32, $t66_67);
-        $t68_69 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t69_70 = $t68_69.$get().addr(0);
-        $t70_71 = { $value: { IDs: null, Authors: null, Kinds: null, Tags: null, Since: 0, Until: 0, Limit: 0, Proxy: null }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t71_72 = { $get() { return $t70_71.$get().Kinds; }, $set(v) { const obj = $t70_71.$get(); obj.Kinds = v; $t70_71.$set(obj); } };
-        $t72_73 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t73_74 = $t72_73.$get().addr(0);
-        $t73_74.$set(1059);
-        $t74_75 = $rt.builtin.sliceSlice($t72_73.$get(), undefined, undefined, undefined);
-        $t75_76 = { $get() { return $t70_71.$get().Tags; }, $set(v) { const obj = $t70_71.$get(); obj.Tags = v; $t70_71.$set(obj); } };
-        $t76_77 = $rt.builtin.makeMap('string');
-        $t77_78 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t78_79 = $t77_78.$get().addr(0);
-        $t79_80 = myPubkey.$get();
-        $t78_79.$set($t79_80);
-        $t80_81 = $rt.builtin.sliceSlice($t77_78.$get(), undefined, undefined, undefined);
-        $rt.builtin.mapUpdate($t76_77, '#p', $t80_81);
-        $t81_82 = { $get() { return $t70_71.$get().Limit; }, $set(v) { const obj = $t70_71.$get(); obj.Limit = v; $t70_71.$set(obj); } };
-        $t71_72.$set($t74_75);
-        $t75_76.$set($t76_77);
-        $t81_82.$set(100);
-        $t69_70.$set($t70_71);
-        $t82_83 = $rt.builtin.sliceSlice($t68_69.$get(), undefined, undefined, undefined);
-        $t83_84 = common$relay.Conn$Subscribe($t36_37, $t32_33, $t82_83);
-        $t24_25 = $t25_26;
-        $block = 11; break;
-        break;
-      }
-      case 13: {
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function routerDMList(clientID) {
-  let $t0_1, $t1_2, $t2_3;
-  $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t0_1.$set(clientID);
-  $t1_2 = routerDMList$1.bind(null, $t0_1);
-  $t2_3 = cacheGetConversationList($t1_2);
-  return;
-}
-
-function routerDMList$1(clientID, listJSON) {
-  let $t0_1, $t1_2, $t2_3, $t3_4;
-  $t0_1 = clientID.$get();
-  $t1_2 = ('["DM_LIST",' + listJSON);
-  $t2_3 = ($t1_2 + ']');
-  $t3_4 = sendToClient($t0_1, $t2_3);
-  return;
-}
-
-export function routerDMHistory(clientID, peer, limit, until) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set(clientID);
-        $t1_2 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2.$set(peer);
-        $t2_3 = (limit <= 0);
-        if ($t2_3) {
-          $block = 1; break;
-        }
-        else {
-          $t3_4 = limit;
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t3_4 = 50;
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        $t4_5 = $t1_2.$get();
-        $t5_6 = routerDMHistory$1.bind(null, $t0_1, $t1_2);
-        $t6_7 = cacheQueryDMs($t4_5, $t3_4, until, $t5_6);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-function routerDMHistory$1(clientID, peer, msgsJSON) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
-  $t0_1 = clientID.$get();
-  $t1_2 = peer.$get();
+  $t0_1 = { $get() { return r.$get().ID; }, $set(v) { const obj = r.$get(); obj.ID = v; r.$set(obj); } };
+  $t1_2 = $t0_1.$get();
   $t2_3 = jstr($t1_2);
-  $t3_4 = ('["DM_HISTORY",' + $t2_3);
-  $t4_5 = ($t3_4 + ',');
-  $t5_6 = ($t4_5 + msgsJSON);
-  $t6_7 = ($t5_6 + ']');
-  $t7_8 = sendToClient($t0_1, $t6_7);
-  return;
+  $t3_4 = ('{"id":' + $t2_3);
+  $t4_5 = ($t3_4 + ',"peer":');
+  $t5_6 = { $get() { return r.$get().Peer; }, $set(v) { const obj = r.$get(); obj.Peer = v; r.$set(obj); } };
+  $t6_7 = $t5_6.$get();
+  $t7_8 = jstr($t6_7);
+  $t8_9 = ($t4_5 + $t7_8);
+  $t9_10 = ($t8_9 + ',"from":');
+  $t10_11 = { $get() { return r.$get().From; }, $set(v) { const obj = r.$get(); obj.From = v; r.$set(obj); } };
+  $t11_12 = $t10_11.$get();
+  $t12_13 = jstr($t11_12);
+  $t13_14 = ($t9_10 + $t12_13);
+  $t14_15 = ($t13_14 + ',"content":');
+  $t15_16 = { $get() { return r.$get().Content; }, $set(v) { const obj = r.$get(); obj.Content = v; r.$set(obj); } };
+  $t16_17 = $t15_16.$get();
+  $t17_18 = jstr($t16_17);
+  $t18_19 = ($t14_15 + $t17_18);
+  $t19_20 = ($t18_19 + ',"created_at":');
+  $t20_21 = { $get() { return r.$get().CreatedAt; }, $set(v) { const obj = r.$get(); obj.CreatedAt = v; r.$set(obj); } };
+  $t21_22 = $t20_21.$get();
+  $t22_23 = common$helpers.Itoa($t21_22);
+  $t23_24 = ($t19_20 + $t22_23);
+  $t24_25 = ($t23_24 + ',"protocol":');
+  $t25_26 = { $get() { return r.$get().Protocol; }, $set(v) { const obj = r.$get(); obj.Protocol = v; r.$set(obj); } };
+  $t26_27 = $t25_26.$get();
+  $t27_28 = jstr($t26_27);
+  $t28_29 = ($t24_25 + $t27_28);
+  $t29_30 = ($t28_29 + ',"eventId":');
+  $t30_31 = { $get() { return r.$get().EventID; }, $set(v) { const obj = r.$get(); obj.EventID = v; r.$set(obj); } };
+  $t31_32 = $t30_31.$get();
+  $t32_33 = jstr($t31_32);
+  $t33_34 = ($t29_30 + $t32_33);
+  $t34_35 = ($t33_34 + '}');
+  return $t34_35;
 }
 
-export function routerBroadcast(clientID, pubkey, relayURLs) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
-  $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t0_1.$set(clientID);
-  $t1_2 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2.$set(pubkey);
-  $t2_3 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t2_3.$set(relayURLs);
-  $t3_4 = $t1_2.$get();
-  $t4_5 = jstr($t3_4);
-  $t5_6 = ('{"authors":[' + $t4_5);
-  $t6_7 = ($t5_6 + '],"kinds":[0,3,10002,10050,10051]}');
-  $t7_8 = routerBroadcast$1.bind(null, $t2_3, $t1_2, $t0_1);
-  $t8_9 = cacheQuery($t6_7, $t7_8);
-  return;
-}
-
-function routerBroadcast$1(relayURLs, pubkey, clientID, eventsJSON) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = common$nostr.ParseEventsJSON(eventsJSON);
-        $t1_2 = $rt.builtin.makeMap('int');
-        $t2_3 = $rt.builtin.len($t0_1);
-        $t3_4 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t4_5 = ($t3_4 + 1);
-        $t5_6 = ($t4_5 < $t2_3);
-        if ($t5_6) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t6_7 = $t0_1.addr($t4_5);
-        $t7_8 = $t6_7.$get();
-        $t8_9 = { $get() { return $t7_8.$get().Kind; }, $set(v) { const obj = $t7_8.$get(); obj.Kind = v; $t7_8.$set(obj); } };
-        $t9_10 = $t8_9.$get();
-        { const $r = $rt.builtin.mapLookup($t1_2, $t9_10); $t10_11 = [$r.value, $r.ok]; }
-        $t11_12 = $t10_11[0];
-        $t12_13 = $t10_11[1];
-        if ($t12_13) {
-          $block = 5; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 3: {
-        $t13_14 = relayURLs.$get();
-        { const $r = $rt.builtin.mapLookup($t1_2, 10002); $t14_15 = [$r.value, $r.ok]; }
-        $t15_16 = $t14_15[0];
-        $t16_17 = $t14_15[1];
-        if ($t16_17) {
-          $block = 6; break;
-        }
-        else {
-          $t28_29 = $t13_14;
-          $block = 7; break;
-        }
-        break;
-      }
-      case 4: {
-        $t17_18 = { $get() { return $t7_8.$get().Kind; }, $set(v) { const obj = $t7_8.$get(); obj.Kind = v; $t7_8.$set(obj); } };
-        $t18_19 = $t17_18.$get();
-        $rt.builtin.mapUpdate($t1_2, $t18_19, $t7_8);
-        $t3_4 = $t4_5;
-        $block = 1; break;
-        break;
-      }
-      case 5: {
-        $t19_20 = { $get() { return $t7_8.$get().CreatedAt; }, $set(v) { const obj = $t7_8.$get(); obj.CreatedAt = v; $t7_8.$set(obj); } };
-        $t20_21 = $t19_20.$get();
-        $t21_22 = { $get() { return $t11_12.$get().CreatedAt; }, $set(v) { const obj = $t11_12.$get(); obj.CreatedAt = v; $t11_12.$set(obj); } };
-        $t22_23 = $t21_22.$get();
-        $t23_24 = ($t20_21 > $t22_23);
-        if ($t23_24) {
-          $block = 4; break;
-        }
-        else {
-          $t3_4 = $t4_5;
-          $block = 1; break;
-        }
-        break;
-      }
-      case 6: {
-        $t24_25 = { $get() { return $t15_16.$get().Tags; }, $set(v) { const obj = $t15_16.$get(); obj.Tags = v; $t15_16.$set(obj); } };
-        $t25_26 = $t24_25.$get();
-        $t26_27 = common$nostr.Tags$GetAll($t25_26, 'r');
-        $t27_28 = $rt.builtin.len($t26_27);
-        $t31_32 = null;
-        $t32_33 = -1;
-        $block = 8; break;
-        break;
-      }
-      case 7: {
-        $t29_30 = $rt.builtin.len($t28_29);
-        $t30_31 = ($t29_30 === 0);
-        if ($t30_31) {
-          $block = 10; break;
-        }
-        else {
-          $t43_44 = $t28_29;
-          $block = 11; break;
-        }
-        break;
-      }
-      case 8: {
-        $t33_34 = ($t32_33 + 1);
-        $t34_35 = ($t33_34 < $t27_28);
-        if ($t34_35) {
-          $block = 9; break;
-        }
-        else {
-          $t28_29 = $t31_32;
-          $block = 7; break;
-        }
-        break;
-      }
-      case 9: {
-        $t35_36 = $t26_27.addr($t33_34);
-        $t36_37 = $t35_36.$get();
-        $t37_38 = common$nostr.Tag$Value($t36_37);
-        $t38_39 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t39_40 = $t38_39.$get().addr(0);
-        $t39_40.$set($t37_38);
-        $t40_41 = $rt.builtin.sliceSlice($t38_39.$get(), undefined, undefined, undefined);
-        $t41_42 = $rt.builtin.appendSlice($t31_32, $t40_41);
-        $t31_32 = $t41_42;
-        $t32_33 = $t33_34;
-        $block = 8; break;
-        break;
-      }
-      case 10: {
-        $t42_43 = writeRelays.$get();
-        $t43_44 = $t42_43;
-        $block = 11; break;
-        break;
-      }
-      case 11: {
-        { const $r = $rt.builtin.mapLookup($t1_2, 10050); $t44_45 = [$r.value, $r.ok]; }
-        $t45_46 = $t44_45[0];
-        $t46_47 = $t44_45[1];
-        if ($t46_47) {
-          $block = 13; break;
-        }
-        else {
-          $block = 15; break;
-        }
-        break;
-      }
-      case 12: {
-        $t47_48 = pubkey.$get();
-        $t48_49 = createRelayListEvent(10050, $t47_48, $t43_44);
-        $t49_50 = ($t48_49 !== null);
-        if ($t49_50) {
-          $block = 16; break;
-        }
-        else {
-          $block = 13; break;
-        }
-        break;
-      }
-      case 13: {
-        { const $r = $rt.builtin.mapLookup($t1_2, 10051); $t50_51 = [$r.value, $r.ok]; }
-        $t51_52 = $t50_51[0];
-        $t52_53 = $t50_51[1];
-        if ($t52_53) {
-          $block = 18; break;
-        }
-        else {
-          $block = 20; break;
-        }
-        break;
-      }
-      case 14: {
-        $t53_54 = $rt.builtin.len($t43_44);
-        $t54_55 = ($t53_54 > 0);
-        if ($t54_55) {
-          $block = 12; break;
-        }
-        else {
-          $block = 13; break;
-        }
-        break;
-      }
-      case 15: {
-        $t55_56 = hasKey.$get();
-        if ($t55_56) {
-          $block = 14; break;
-        }
-        else {
-          $block = 13; break;
-        }
-        break;
-      }
-      case 16: {
-        $t56_57 = common$nostr.Event$ToJSON($t48_49);
-        $t57_58 = cacheStore($t56_57, routerBroadcast$1$1);
-        $rt.builtin.mapUpdate($t1_2, 10050, $t48_49);
-        $block = 13; break;
-        break;
-      }
-      case 17: {
-        $t58_59 = pubkey.$get();
-        $t59_60 = createRelayListEvent(10051, $t58_59, $t43_44);
-        $t60_61 = ($t59_60 !== null);
-        if ($t60_61) {
-          $block = 21; break;
-        }
-        else {
-          $block = 18; break;
-        }
-        break;
-      }
-      case 18: {
-        $t61_62 = { $entries: [...$t1_2.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
-        $t67_68 = 0;
-        $block = 22; break;
-        break;
-      }
-      case 19: {
-        $t62_63 = $rt.builtin.len($t43_44);
-        $t63_64 = ($t62_63 > 0);
-        if ($t63_64) {
-          $block = 17; break;
-        }
-        else {
-          $block = 18; break;
-        }
-        break;
-      }
-      case 20: {
-        $t64_65 = hasKey.$get();
-        if ($t64_65) {
-          $block = 19; break;
-        }
-        else {
-          $block = 18; break;
-        }
-        break;
-      }
-      case 21: {
-        $t65_66 = common$nostr.Event$ToJSON($t59_60);
-        $t66_67 = cacheStore($t65_66, routerBroadcast$1$2);
-        $rt.builtin.mapUpdate($t1_2, 10051, $t59_60);
-        $block = 18; break;
-        break;
-      }
-      case 22: {
-        $t68_69 = $t61_62.next();
-        $t69_70 = $t68_69[0];
-        if ($t69_70) {
-          $block = 23; break;
-        }
-        else {
-          $block = 24; break;
-        }
-        break;
-      }
-      case 23: {
-        $t70_71 = $t68_69[2];
-        $t71_72 = relayURLs.$get();
-        $t72_73 = $rt.builtin.len($t71_72);
-        $t85_86 = -1;
-        $block = 25; break;
-        break;
-      }
-      case 24: {
-        $t73_74 = clientID.$get();
-        $t74_75 = $t67_68;
-        $t75_76 = common$helpers.Itoa($t74_75);
-        $t76_77 = ('["BROADCAST_DONE",' + $t75_76);
-        $t77_78 = ($t76_77 + ',');
-        $t78_79 = relayURLs.$get();
-        $t79_80 = $rt.builtin.len($t78_79);
-        $t80_81 = $t79_80;
-        $t81_82 = common$helpers.Itoa($t80_81);
-        $t82_83 = ($t77_78 + $t81_82);
-        $t83_84 = ($t82_83 + ']');
-        $t84_85 = sendToClient($t73_74, $t83_84);
-        return;
-        break;
-      }
-      case 25: {
-        $t86_87 = ($t85_86 + 1);
-        $t87_88 = ($t86_87 < $t72_73);
-        if ($t87_88) {
-          $block = 26; break;
-        }
-        else {
-          $block = 27; break;
-        }
-        break;
-      }
-      case 26: {
-        $t88_89 = $t71_72.addr($t86_87);
-        $t89_90 = $t88_89.$get();
-        $t90_91 = getConn($t89_90);
-        $t91_92 = common$relay.Conn$Publish($t90_91, $t70_71);
-        $t85_86 = $t86_87;
-        $block = 25; break;
-        break;
-      }
-      case 27: {
-        $t92_93 = ($t67_68 + 1);
-        $t67_68 = $t92_93;
-        $block = 22; break;
-        break;
-      }
-    }
-  }
-}
-
-function routerBroadcast$1$1(_) {
-  return;
-}
-
-function routerBroadcast$1$2(_) {
-  return;
-}
-
-export function createRelayListEvent(kind, _, relays) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(relays);
-        $t1_2 = null;
-        $t2_3 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t3_4 = ($t2_3 + 1);
-        $t4_5 = ($t3_4 < $t0_1);
-        if ($t4_5) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t5_6 = relays.addr($t3_4);
-        $t6_7 = $t5_6.$get();
-        $t7_8 = { $value: $rt.builtin.makeSlice(2, 2, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t8_9 = $t7_8.$get().addr(0);
-        $t8_9.$set('relay');
-        $t9_10 = $t7_8.$get().addr(1);
-        $t9_10.$set($t6_7);
-        $t10_11 = $rt.builtin.sliceSlice($t7_8.$get(), undefined, undefined, undefined);
-        $t11_12 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t12_13 = $t11_12.$get().addr(0);
-        $t12_13.$set($t10_11);
-        $t13_14 = $rt.builtin.sliceSlice($t11_12.$get(), undefined, undefined, undefined);
-        $t14_15 = $rt.builtin.appendSlice($t1_2, $t13_14);
-        $t1_2 = $t14_15;
-        $t2_3 = $t3_4;
-        $block = 1; break;
-        break;
-      }
-      case 3: {
-        $t15_16 = { $value: { ID: '', PubKey: '', CreatedAt: 0, Kind: 0, Tags: null, Content: '', Sig: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t16_17 = { $get() { return $t15_16.$get().Kind; }, $set(v) { const obj = $t15_16.$get(); obj.Kind = v; $t15_16.$set(obj); } };
-        $t17_18 = { $get() { return $t15_16.$get().Content; }, $set(v) { const obj = $t15_16.$get(); obj.Content = v; $t15_16.$set(obj); } };
-        $t18_19 = { $get() { return $t15_16.$get().Tags; }, $set(v) { const obj = $t15_16.$get(); obj.Tags = v; $t15_16.$set(obj); } };
-        $t19_20 = { $get() { return $t15_16.$get().CreatedAt; }, $set(v) { const obj = $t15_16.$get(); obj.CreatedAt = v; $t15_16.$set(obj); } };
-        $t20_21 = common$jsbridge$sw.NowSeconds();
-        $t16_17.$set(kind);
-        $t17_18.$set('');
-        $t18_19.$set($t1_2);
-        $t19_20.$set($t20_21);
-        $t21_22 = identitySignEvent($t15_16);
-        if ($t21_22) {
-          $block = 5; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 4: {
-        return null;
-        break;
-      }
-      case 5: {
-        return $t15_16;
-        break;
-      }
-    }
-  }
-}
-
-export function identitySetKey(hexKey) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = hexTo32(hexKey);
-        seckey.$set($rt.builtin.cloneValue($t0_1));
-        hasKey.$set(true);
-        $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t2_3 = seckey.$get();
-        $t3_4 = common$crypto$secp256k1.PubKeyFromSecKey($t2_3);
-        $t4_5 = $t3_4[0];
-        $t1_2.$set($rt.builtin.cloneValue($t4_5));
-        $t5_6 = $t3_4[1];
-        if ($t5_6) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t6_7 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
-        $t7_8 = common$helpers.HexEncode($t6_7);
-        myPubkey.$set($t7_8);
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function identitySetPubkey(hex) {
-  myPubkey.$set(hex);
-  return;
-}
-
-export function identityClearKey() {
-  seckey.$set($rt.builtin.cloneValue($rt.builtin.makeSlice(32, 32, 0)));
-  hasKey.$set(false);
-  myPubkey.$set('');
-  return;
-}
-
-export function identitySignEvent(ev) {
-  let $t0_1, $t1_2, $t2_3, $t3_4;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = hasKey.$get();
-        if ($t0_1) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        return false;
-        break;
-      }
-      case 2: {
-        $t1_2 = random32();
-        $t2_3 = seckey.$get();
-        $t3_4 = common$nostr.Event$Sign(ev, $t2_3, $t1_2);
-        return $t3_4;
-        break;
-      }
-    }
-  }
-}
-
-export function cacheQuery(filterRaw, cb) {
-  let $t0_1;
-  $t0_1 = common$jsbridge$idb.QueryEvents(filterRaw, cb);
-  return;
-}
-
-export function cacheStore(evJSON, cb) {
-  let $t0_1;
-  $t0_1 = common$jsbridge$idb.SaveEvent(evJSON, cb);
-  return;
-}
-
-export function cacheSaveDM(dmJSON, cb) {
-  let $t0_1;
-  $t0_1 = common$jsbridge$idb.SaveDM(dmJSON, cb);
-  return;
-}
-
-export function cacheGetConversationList(cb) {
-  let $t0_1;
-  $t0_1 = common$jsbridge$idb.GetConversationList(cb);
-  return;
-}
-
-export function cacheQueryDMs(peer, limit, until, cb) {
-  let $t0_1;
-  $t0_1 = common$jsbridge$idb.QueryDMs(peer, limit, until, cb);
-  return;
-}
-
+$rt.types.getType('sw.DMRecord')?.methods?.set('ToJSON', DMRecord$ToJSON);
 export function mw$num(w) {
   let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52;
   let $block = 0;
@@ -6464,44 +2883,3 @@ export function mw$strs(w) {
 }
 
 $rt.types.getType('sw.mw')?.methods?.set('strs', mw$strs);
-export function DMRecord$ToJSON(r) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35;
-  $t0_1 = { $get() { return r.$get().ID; }, $set(v) { const obj = r.$get(); obj.ID = v; r.$set(obj); } };
-  $t1_2 = $t0_1.$get();
-  $t2_3 = jstr($t1_2);
-  $t3_4 = ('{"id":' + $t2_3);
-  $t4_5 = ($t3_4 + ',"peer":');
-  $t5_6 = { $get() { return r.$get().Peer; }, $set(v) { const obj = r.$get(); obj.Peer = v; r.$set(obj); } };
-  $t6_7 = $t5_6.$get();
-  $t7_8 = jstr($t6_7);
-  $t8_9 = ($t4_5 + $t7_8);
-  $t9_10 = ($t8_9 + ',"from":');
-  $t10_11 = { $get() { return r.$get().From; }, $set(v) { const obj = r.$get(); obj.From = v; r.$set(obj); } };
-  $t11_12 = $t10_11.$get();
-  $t12_13 = jstr($t11_12);
-  $t13_14 = ($t9_10 + $t12_13);
-  $t14_15 = ($t13_14 + ',"content":');
-  $t15_16 = { $get() { return r.$get().Content; }, $set(v) { const obj = r.$get(); obj.Content = v; r.$set(obj); } };
-  $t16_17 = $t15_16.$get();
-  $t17_18 = jstr($t16_17);
-  $t18_19 = ($t14_15 + $t17_18);
-  $t19_20 = ($t18_19 + ',"created_at":');
-  $t20_21 = { $get() { return r.$get().CreatedAt; }, $set(v) { const obj = r.$get(); obj.CreatedAt = v; r.$set(obj); } };
-  $t21_22 = $t20_21.$get();
-  $t22_23 = common$helpers.Itoa($t21_22);
-  $t23_24 = ($t19_20 + $t22_23);
-  $t24_25 = ($t23_24 + ',"protocol":');
-  $t25_26 = { $get() { return r.$get().Protocol; }, $set(v) { const obj = r.$get(); obj.Protocol = v; r.$set(obj); } };
-  $t26_27 = $t25_26.$get();
-  $t27_28 = jstr($t26_27);
-  $t28_29 = ($t24_25 + $t27_28);
-  $t29_30 = ($t28_29 + ',"eventId":');
-  $t30_31 = { $get() { return r.$get().EventID; }, $set(v) { const obj = r.$get(); obj.EventID = v; r.$set(obj); } };
-  $t31_32 = $t30_31.$get();
-  $t32_33 = jstr($t31_32);
-  $t33_34 = ($t29_30 + $t32_33);
-  $t34_35 = ($t33_34 + '}');
-  return $t34_35;
-}
-
-$rt.types.getType('sw.DMRecord')?.methods?.set('ToJSON', DMRecord$ToJSON);

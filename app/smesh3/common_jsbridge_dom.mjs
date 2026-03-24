@@ -184,3 +184,23 @@ export function OnSWMessage(fn) {
   $rt.dom.OnSWMessage(fn);
 }
 
+// jsbridge: dom.PushState
+export function PushState(path) {
+  $rt.dom.PushState(path);
+}
+
+// jsbridge: dom.ReplaceState
+export function ReplaceState(path) {
+  $rt.dom.ReplaceState(path);
+}
+
+// jsbridge: dom.GetPath
+export function GetPath() {
+  return $rt.dom.GetPath();
+}
+
+// jsbridge: dom.OnPopState
+export function OnPopState(fn) {
+  $rt.dom.OnPopState(fn);
+}
+

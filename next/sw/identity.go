@@ -3,11 +3,10 @@ package main
 import (
 	"common/crypto/secp256k1"
 	"common/helpers"
-	"common/nostr"
 )
 
-// Identity domain — key management and signing.
-// Execution context: Service Worker (receives key from main thread).
+// Identity domain — key management.
+// Shell SW stores keys for pubkey derivation. Signing is done by relay SW.
 
 var (
 	seckey   [32]byte
@@ -32,13 +31,4 @@ func identityClearKey() {
 	seckey = [32]byte{}
 	hasKey = false
 	myPubkey = ""
-}
-
-// identitySignEvent signs an event with the stored secret key.
-func identitySignEvent(ev *nostr.Event) bool {
-	if !hasKey {
-		return false
-	}
-	aux := random32()
-	return ev.Sign(seckey, aux)
 }

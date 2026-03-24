@@ -221,14 +221,28 @@ function ensureDB(cb) {
   if (_db) { cb(_db); return; }
   _dbReady.push(cb);
   if (_dbReady.length > 1) return; // already opening
-  const req = indexedDB.open('sm3sh', 2);
+  const req = indexedDB.open('sm3sh', 3);
   req.onupgradeneeded = (e) => {
     const db = e.target.result;
     if (!db.objectStoreNames.contains('profiles')) db.createObjectStore('profiles');
     if (!db.objectStoreNames.contains('relays')) db.createObjectStore('relays');
+    if (!db.objectStoreNames.contains('events')) {
+      const store = db.createObjectStore('events', { keyPath: 'id' });
+      store.createIndex('pubkey', 'pubkey', { unique: false });
+      store.createIndex('kind', 'kind', { unique: false });
+      store.createIndex('pubkey_kind', ['pubkey', 'kind'], { unique: false });
+      store.createIndex('created_at', 'created_at', { unique: false });
+    }
+    if (!db.objectStoreNames.contains('dms')) {
+      const dms = db.createObjectStore('dms', { keyPath: 'id' });
+      dms.createIndex('peer', 'peer', { unique: false });
+      dms.createIndex('peer_ts', ['peer', 'created_at'], { unique: false });
+    }
   };
+  req.onblocked = () => { console.warn('[sm3sh] IDB upgrade blocked — close other tabs'); };
   req.onsuccess = (e) => {
     _db = e.target.result;
+    _db.onversionchange = () => { _db.close(); _db = null; };
     for (const fn of _dbReady) fn(_db);
     _dbReady = [];
   };
@@ -288,15 +302,24 @@ export function ConsoleLog(msg) {
 }
 
 // Send a raw JSON string to the service worker controller.
+// Messages sent before the SW is active are queued and flushed on controllerchange.
+let _swQueue = null;
 export function PostToSW(msg) {
   const sw = navigator.serviceWorker;
   if (!sw) return;
   if (sw.controller) {
     sw.controller.postMessage(msg);
   } else {
-    sw.addEventListener('controllerchange', () => {
-      if (sw.controller) sw.controller.postMessage(msg);
-    }, { once: true });
+    if (!_swQueue) {
+      _swQueue = [];
+      sw.addEventListener('controllerchange', () => {
+        if (sw.controller) {
+          for (const m of _swQueue) sw.controller.postMessage(m);
+        }
+        _swQueue = null;
+      }, { once: true });
+    }
+    _swQueue.push(msg);
   }
 }
 
@@ -310,6 +333,26 @@ export function OnSWMessage(fn) {
     } else if (Array.isArray(d) && d.length > 0) {
       fn(JSON.stringify(d));
     }
+  });
+}
+
+// --- History API ---
+
+export function PushState(path) {
+  history.pushState(null, '', path);
+}
+
+export function ReplaceState(path) {
+  history.replaceState(null, '', path);
+}
+
+export function GetPath() {
+  return location.pathname + location.hash;
+}
+
+export function OnPopState(fn) {
+  window.addEventListener('popstate', () => {
+    fn(location.pathname + location.hash);
   });
 }
 
