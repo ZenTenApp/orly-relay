@@ -61,6 +61,8 @@ export let relayFreq = { $value: null, $get() { return this.$value; }, $set(v) {
 export let idbLoaded = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let retryRound = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let retryTimer = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let fetchQueue = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let fetchTimer = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let profileTab = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let profileTabContent = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let profileTabBtns = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
@@ -3399,7 +3401,7 @@ export function renderNote(ev) {
         $t65_66 = $rt.builtin.sliceSlice($t63_64.$get(), undefined, undefined, undefined);
         $t66_67 = $rt.builtin.appendSlice($t62_63, $t65_66);
         $rt.builtin.mapUpdate($t60_61, $t27_28, $t66_67);
-        $t67_68 = fetchAuthorProfile($t27_28);
+        $t67_68 = queueProfileFetch($t27_28);
         $block = 11; break;
         break;
       }
@@ -4063,6 +4065,309 @@ export function fetchAuthorProfile(pk) {
         $t19_20 = buildProxyMsg($t7_8, $t15_16, $t18_19);
         $t20_21 = common$jsbridge$dom.PostToSW($t19_20);
         return;
+        break;
+      }
+    }
+  }
+}
+
+export function queueProfileFetch(pk) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = fetchedK0.$get();
+        $t1_2 = $rt.builtin.mapLookup($t0_1, pk).value;
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return;
+        break;
+      }
+      case 2: {
+        $t2_3 = fetchedK0.$get();
+        $rt.builtin.mapUpdate($t2_3, pk, true);
+        $t3_4 = fetchQueue.$get();
+        $t4_5 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t5_6 = $t4_5.$get().addr(0);
+        $t5_6.$set(pk);
+        $t6_7 = $rt.builtin.sliceSlice($t4_5.$get(), undefined, undefined, undefined);
+        $t7_8 = $rt.builtin.appendSlice($t3_4, $t6_7);
+        fetchQueue.$set($t7_8);
+        $t8_9 = fetchTimer.$get();
+        $t9_10 = ($t8_9 !== 0);
+        if ($t9_10) {
+          $block = 3; break;
+        }
+        else {
+          $block = 4; break;
+        }
+        break;
+      }
+      case 3: {
+        $t10_11 = fetchTimer.$get();
+        $t11_12 = common$jsbridge$dom.ClearTimeout($t10_11);
+        $block = 4; break;
+        break;
+      }
+      case 4: {
+        $t12_13 = common$jsbridge$dom.SetTimeout(queueProfileFetch$1, 300);
+        fetchTimer.$set($t12_13);
+        return;
+        break;
+      }
+    }
+  }
+}
+
+function queueProfileFetch$1() {
+  let $t0_1;
+  fetchTimer.$set(0);
+  $t0_1 = flushFetchQueue();
+  return;
+}
+
+export function flushFetchQueue() {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = fetchQueue.$get();
+        $t1_2 = $rt.builtin.len($t0_1);
+        $t2_3 = ($t1_2 === 0);
+        if ($t2_3) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return;
+        break;
+      }
+      case 2: {
+        $t3_4 = fetchQueue.$get();
+        fetchQueue.$set(null);
+        $t4_5 = discoveryRelays.$get();
+        $t5_6 = $rt.builtin.len($t4_5);
+        $t6_7 = $rt.builtin.makeSlice($t5_6, $t5_6, '');
+        $t7_8 = discoveryRelays.$get();
+        $t8_9 = $rt.builtin.copy($t6_7, $t7_8);
+        $t9_10 = $rt.builtin.len($t3_4);
+        $t10_11 = $t6_7;
+        $t11_12 = -1;
+        $block = 3; break;
+        break;
+      }
+      case 3: {
+        $t12_13 = ($t11_12 + 1);
+        $t13_14 = ($t12_13 < $t9_10);
+        if ($t13_14) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 4: {
+        $t14_15 = $t3_4.addr($t12_13);
+        $t15_16 = $t14_15.$get();
+        $t16_17 = authorRelays.$get();
+        { const $r = $rt.builtin.mapLookup($t16_17, $t15_16); $t17_18 = [$r.value, $r.ok]; }
+        $t18_19 = $t17_18[0];
+        $t19_20 = $t17_18[1];
+        if ($t19_20) {
+          $block = 6; break;
+        }
+        else {
+          let $phi0 = $t10_11;
+          let $phi1 = $t12_13;
+          $t10_11 = $phi0;
+          $t11_12 = $phi1;
+          $block = 3; break;
+        }
+        break;
+      }
+      case 5: {
+        $t20_21 = topRelays(4);
+        $t21_22 = $rt.builtin.len($t20_21);
+        $t30_31 = $t10_11;
+        $t31_32 = -1;
+        $block = 9; break;
+        break;
+      }
+      case 6: {
+        $t22_23 = $rt.builtin.len($t18_19);
+        $t23_24 = $t10_11;
+        $t24_25 = -1;
+        $block = 7; break;
+        break;
+      }
+      case 7: {
+        $t25_26 = ($t24_25 + 1);
+        $t26_27 = ($t25_26 < $t22_23);
+        if ($t26_27) {
+          $block = 8; break;
+        }
+        else {
+          $t10_11 = $t23_24;
+          $t11_12 = $t12_13;
+          $block = 3; break;
+        }
+        break;
+      }
+      case 8: {
+        $t27_28 = $t18_19.addr($t25_26);
+        $t28_29 = $t27_28.$get();
+        $t29_30 = appendUnique($t23_24, $t28_29);
+        $t23_24 = $t29_30;
+        $t24_25 = $t25_26;
+        $block = 7; break;
+        break;
+      }
+      case 9: {
+        $t32_33 = ($t31_32 + 1);
+        $t33_34 = ($t32_33 < $t21_22);
+        if ($t33_34) {
+          $block = 10; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 10: {
+        $t34_35 = $t20_21.addr($t32_33);
+        $t35_36 = $t34_35.$get();
+        $t36_37 = appendUnique($t30_31, $t35_36);
+        $t30_31 = $t36_37;
+        $t31_32 = $t32_33;
+        $block = 9; break;
+        break;
+      }
+      case 11: {
+        $t37_38 = 0;
+        $block = 12; break;
+        break;
+      }
+      case 12: {
+        $t38_39 = $rt.builtin.len($t3_4);
+        $t39_40 = ($t37_38 < $t38_39);
+        if ($t39_40) {
+          $block = 13; break;
+        }
+        else {
+          $block = 14; break;
+        }
+        break;
+      }
+      case 13: {
+        $t40_41 = ($t37_38 + 10);
+        $t41_42 = $rt.builtin.len($t3_4);
+        $t42_43 = ($t40_41 > $t41_42);
+        if ($t42_43) {
+          $block = 15; break;
+        }
+        else {
+          $t44_45 = $t40_41;
+          $block = 16; break;
+        }
+        break;
+      }
+      case 14: {
+        return;
+        break;
+      }
+      case 15: {
+        $t43_44 = $rt.builtin.len($t3_4);
+        $t44_45 = $t43_44;
+        $block = 16; break;
+        break;
+      }
+      case 16: {
+        $t45_46 = $rt.builtin.sliceSlice($t3_4, $t37_38, $t44_45, undefined);
+        $t46_47 = $rt.builtin.len($t45_46);
+        $t47_48 = '[';
+        $t48_49 = -1;
+        $block = 17; break;
+        break;
+      }
+      case 17: {
+        $t49_50 = ($t48_49 + 1);
+        $t50_51 = ($t49_50 < $t46_47);
+        if ($t50_51) {
+          $block = 18; break;
+        }
+        else {
+          $block = 19; break;
+        }
+        break;
+      }
+      case 18: {
+        $t51_52 = $t45_46.addr($t49_50);
+        $t52_53 = $t51_52.$get();
+        $t53_54 = ($t49_50 > 0);
+        if ($t53_54) {
+          $block = 20; break;
+        }
+        else {
+          $t77_78 = $t47_48;
+          $block = 21; break;
+        }
+        break;
+      }
+      case 19: {
+        $t54_55 = ($t47_48 + ']');
+        $t55_56 = profileSubCounter.$get();
+        $t56_57 = ($t55_56 + 1);
+        profileSubCounter.$set($t56_57);
+        $t57_58 = profileSubCounter.$get();
+        $t58_59 = itoa($t57_58);
+        $t59_60 = ('ap-batch-q-' + $t58_59);
+        $t60_61 = ('{"authors":' + $t54_55);
+        $t61_62 = ($t60_61 + ',"kinds":[0,3,10002,10000],"_proxy":');
+        $t62_63 = jstrArr($t30_31);
+        $t63_64 = ($t61_62 + $t62_63);
+        $t64_65 = ($t63_64 + ',"limit":');
+        $t65_66 = $rt.builtin.len($t45_46);
+        $t66_67 = ($t65_66 * 4);
+        $t67_68 = itoa($t66_67);
+        $t68_69 = ($t64_65 + $t67_68);
+        $t69_70 = ($t68_69 + '}');
+        $t70_71 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t71_72 = $t70_71.$get().addr(0);
+        $t71_72.$set('wss://relay.orly.dev');
+        $t72_73 = $rt.builtin.sliceSlice($t70_71.$get(), undefined, undefined, undefined);
+        $t73_74 = buildProxyMsg($t59_60, $t69_70, $t72_73);
+        $t74_75 = common$jsbridge$dom.PostToSW($t73_74);
+        $t75_76 = ($t37_38 + 10);
+        $t37_38 = $t75_76;
+        $block = 12; break;
+        break;
+      }
+      case 20: {
+        $t76_77 = ($t47_48 + ',');
+        $t77_78 = $t76_77;
+        $block = 21; break;
+        break;
+      }
+      case 21: {
+        $t78_79 = jstr($t52_53);
+        $t79_80 = ($t77_78 + $t78_79);
+        $t47_48 = $t79_80;
+        $t48_49 = $t49_50;
+        $block = 17; break;
         break;
       }
     }

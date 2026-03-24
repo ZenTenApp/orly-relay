@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	version     = "v0.65.20"
+	version     = "v0.65.21"
 	lsKeyPubkey = "sm3sh-pubkey"
 	lsKeyMode   = "sm3sh-mode"
 	lsKeyTheme  = "sm3sh-theme"
@@ -84,6 +84,8 @@ var (
 	idbLoaded    bool
 	retryRound   int // metadata retry round counter
 	retryTimer   int // debounce timer for batch retries
+	fetchQueue   []string // pubkeys queued for batch profile fetch
+	fetchTimer   int      // debounce timer for fetch queue
 
 	// Profile page tab state.
 	profileTab           string
@@ -1110,7 +1112,7 @@ func renderNote(ev *nostr.Event) {
 	// Queue profile fetch if not cached.
 	if _, cached := authorNames[pk]; !cached && !fetchedK0[pk] {
 		pendingNotes[pk] = append(pendingNotes[pk], header)
-		fetchAuthorProfile(pk)
+		queueProfileFetch(pk)
 	}
 
 	// Content.
@@ -1263,6 +1265,68 @@ func fetchAuthorProfile(pk string) {
 	dom.PostToSW(buildProxyMsg(subID,
 		"{\"authors\":["+jstr(pk)+"],\"kinds\":[0,3,10002,10000],\"_proxy\":"+jstrArr(proxyRelays)+",\"limit\":6}",
 		[]string{orlyRelay}))
+}
+
+// queueProfileFetch adds a pubkey to the batch fetch queue with a debounce.
+// After 300ms of no new additions, flushFetchQueue sends one batched PROXY request.
+func queueProfileFetch(pk string) {
+	if fetchedK0[pk] {
+		return
+	}
+	fetchedK0[pk] = true
+	fetchQueue = append(fetchQueue, pk)
+	if fetchTimer != 0 {
+		dom.ClearTimeout(fetchTimer)
+	}
+	fetchTimer = dom.SetTimeout(func() {
+		fetchTimer = 0
+		flushFetchQueue()
+	}, 300)
+}
+
+// flushFetchQueue sends all queued pubkeys as chunked batch PROXY requests.
+func flushFetchQueue() {
+	if len(fetchQueue) == 0 {
+		return
+	}
+	queue := fetchQueue
+	fetchQueue = nil
+
+	proxy := make([]string, len(discoveryRelays))
+	copy(proxy, discoveryRelays)
+	for _, pk := range queue {
+		if rels, ok := authorRelays[pk]; ok {
+			for _, r := range rels {
+				proxy = appendUnique(proxy, r)
+			}
+		}
+	}
+	top := topRelays(4)
+	for _, r := range top {
+		proxy = appendUnique(proxy, r)
+	}
+
+	const batchSize = 10
+	for i := 0; i < len(queue); i += batchSize {
+		end := i + batchSize
+		if end > len(queue) {
+			end = len(queue)
+		}
+		chunk := queue[i:end]
+		authors := "["
+		for j, pk := range chunk {
+			if j > 0 {
+				authors += ","
+			}
+			authors += jstr(pk)
+		}
+		authors += "]"
+		profileSubCounter++
+		subID := "ap-batch-q-" + itoa(profileSubCounter)
+		dom.PostToSW(buildProxyMsg(subID,
+			"{\"authors\":"+authors+",\"kinds\":[0,3,10002,10000],\"_proxy\":"+jstrArr(proxy)+",\"limit\":"+itoa(len(chunk)*4)+"}",
+			[]string{orlyRelay}))
+	}
 }
 
 // retryMissingProfiles batches pubkeys that still lack a name into chunked
