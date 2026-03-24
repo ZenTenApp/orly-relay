@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	version     = "v0.65.19"
+	version     = "v0.65.20"
 	lsKeyPubkey = "sm3sh-pubkey"
 	lsKeyMode   = "sm3sh-mode"
 	lsKeyTheme  = "sm3sh-theme"
@@ -744,9 +744,11 @@ func togglePopover() {
 }
 
 func subscribeProfile() {
-	proxy := make([]string, 0, len(relayURLs)+1)
-	proxy = append(proxy, "wss://purplepag.es")
-	proxy = append(proxy, relayURLs...)
+	proxy := make([]string, len(discoveryRelays), len(discoveryRelays)+len(relayURLs))
+	copy(proxy, discoveryRelays)
+	for _, u := range relayURLs {
+		proxy = appendUnique(proxy, u)
+	}
 	dom.PostToSW(buildProxyMsg("prof",
 		"{\"authors\":["+jstr(pubhex)+"],\"kinds\":[0,3,10002,10000,10050],\"_proxy\":"+jstrArr(proxy)+",\"limit\":8}",
 		[]string{orlyRelay}))
@@ -1211,18 +1213,30 @@ func recordRelayFreq(ev *nostr.Event) {
 	}
 }
 
+// discoveryRelays are well-known relays that aggregate profile metadata.
+// Prioritized first in _proxy lists since they have the highest hit rate.
+var discoveryRelays = []string{
+	"wss://purplepag.es",
+	"wss://relay.nostr.band",
+	"wss://relay.damus.io",
+	"wss://nos.lol",
+}
+
 // buildProxy builds a _proxy relay list for a pubkey.
-// Always includes purplepag.es for metadata discovery.
+// Discovery relays first, then author-specific relays if known.
 func buildProxy(pk string) []string {
-	pp := "wss://purplepag.es"
-	if rels, ok := authorRelays[pk]; ok && len(rels) > 0 {
-		return appendUnique(rels, pp)
+	out := make([]string, len(discoveryRelays))
+	copy(out, discoveryRelays)
+	if rels, ok := authorRelays[pk]; ok {
+		for _, r := range rels {
+			out = appendUnique(out, r)
+		}
 	}
-	top := topRelays(5)
-	if len(top) > 0 {
-		return appendUnique(top, pp)
+	top := topRelays(4)
+	for _, r := range top {
+		out = appendUnique(out, r)
 	}
-	return []string{pp}
+	return out
 }
 
 func appendUnique(list []string, val string) []string {
@@ -1271,9 +1285,12 @@ func retryMissingProfiles() {
 		fetchedK0[pk] = false
 	}
 
-	// Aggressive relay list: purplepag.es + user relays + all discovered relays.
-	proxy := []string{"wss://purplepag.es"}
-	proxy = append(proxy, relayURLs...)
+	// Discovery relays first, then user relays + discovered relays.
+	proxy := make([]string, len(discoveryRelays))
+	copy(proxy, discoveryRelays)
+	for _, u := range relayURLs {
+		proxy = appendUnique(proxy, u)
+	}
 	top := topRelays(8)
 	for _, u := range top {
 		proxy = appendUnique(proxy, u)

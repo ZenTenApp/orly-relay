@@ -271,7 +271,7 @@ type C struct {
 
 	// Proxy query configuration (_proxy filter extension — relay-assisted remote fetching)
 	ProxyEnabled    bool `env:"ORLY_PROXY_ENABLED" default:"true" usage:"enable _proxy filter extension (relay fetches from client-specified relays)"`
-	ProxyMaxRelays  int  `env:"ORLY_PROXY_MAX_RELAYS" default:"8" usage:"max relay URLs allowed per _proxy query"`
+	ProxyMaxRelays  int  `env:"ORLY_PROXY_MAX_RELAYS" default:"16" usage:"max relay URLs allowed per _proxy query"`
 	ProxyTimeoutSec int  `env:"ORLY_PROXY_TIMEOUT_SEC" default:"15" usage:"timeout in seconds for proxy relay queries"`
 
 	// Archive relay configuration (query augmentation from authoritative archives)

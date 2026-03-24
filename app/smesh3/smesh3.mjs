@@ -70,9 +70,10 @@ export let profileNotesSeen = { $value: null, $get() { return this.$value; }, $s
 export let activeProfileNoteSub = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let defaultRelays = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let profileSubCounter = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let discoveryRelays = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 
 export function init() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11;
   msgProtocol.$set('marmot');
   $t0_1 = { $value: $rt.builtin.makeSlice(3, 3, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
   $t1_2 = $t0_1.$get().addr(0);
@@ -83,6 +84,17 @@ export function init() {
   $t3_4.$set('wss://nostr.land');
   $t4_5 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
   defaultRelays.$set($t4_5);
+  $t5_6 = { $value: $rt.builtin.makeSlice(4, 4, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t6_7 = $t5_6.$get().addr(0);
+  $t6_7.$set('wss://purplepag.es');
+  $t7_8 = $t5_6.$get().addr(1);
+  $t7_8.$set('wss://relay.nostr.band');
+  $t8_9 = $t5_6.$get().addr(2);
+  $t8_9.$set('wss://relay.damus.io');
+  $t9_10 = $t5_6.$get().addr(3);
+  $t9_10.$set('wss://nos.lol');
+  $t10_11 = $rt.builtin.sliceSlice($t5_6.$get(), undefined, undefined, undefined);
+  discoveryRelays.$set($t10_11);
   return;
 }
 
@@ -1035,7 +1047,7 @@ export function showApp() {
         $t342_343 = common$jsbridge$dom.RegisterCallback(showApp$12);
         $t343_344 = common$jsbridge$dom.AddEventListener($t341_342, 'click', $t342_343);
         $t344_345 = common$jsbridge$dom.CreateElement('span');
-        $t345_346 = common$jsbridge$dom.SetTextContent($t344_345, 'sm3sh v0.65.19');
+        $t345_346 = common$jsbridge$dom.SetTextContent($t344_345, 'sm3sh v0.65.20');
         $t346_347 = common$jsbridge$dom.SetStyle($t344_345, 'marginLeft', 'auto');
         $t347_348 = common$jsbridge$dom.SetStyle($t344_345, 'color', 'var(--accent)');
         $t348_349 = common$jsbridge$dom.AppendChild($t262_263, $t344_345);
@@ -1445,32 +1457,67 @@ export function togglePopover() {
 }
 
 export function subscribeProfile() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
-  $t0_1 = relayURLs.$get();
-  $t1_2 = $rt.builtin.len($t0_1);
-  $t2_3 = ($t1_2 + 1);
-  $t3_4 = $rt.builtin.makeSlice(0, $t2_3, '');
-  $t4_5 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t5_6 = $t4_5.$get().addr(0);
-  $t5_6.$set('wss://purplepag.es');
-  $t6_7 = $rt.builtin.sliceSlice($t4_5.$get(), undefined, undefined, undefined);
-  $t7_8 = $rt.builtin.appendSlice($t3_4, $t6_7);
-  $t8_9 = relayURLs.$get();
-  $t9_10 = $rt.builtin.appendSlice($t7_8, $t8_9);
-  $t10_11 = pubhex.$get();
-  $t11_12 = jstr($t10_11);
-  $t12_13 = ('{"authors":[' + $t11_12);
-  $t13_14 = ($t12_13 + '],"kinds":[0,3,10002,10000,10050],"_proxy":');
-  $t14_15 = jstrArr($t9_10);
-  $t15_16 = ($t13_14 + $t14_15);
-  $t16_17 = ($t15_16 + ',"limit":8}');
-  $t17_18 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t18_19 = $t17_18.$get().addr(0);
-  $t18_19.$set('wss://relay.orly.dev');
-  $t19_20 = $rt.builtin.sliceSlice($t17_18.$get(), undefined, undefined, undefined);
-  $t20_21 = buildProxyMsg('prof', $t16_17, $t19_20);
-  $t21_22 = common$jsbridge$dom.PostToSW($t20_21);
-  return;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = discoveryRelays.$get();
+        $t1_2 = $rt.builtin.len($t0_1);
+        $t2_3 = discoveryRelays.$get();
+        $t3_4 = $rt.builtin.len($t2_3);
+        $t4_5 = relayURLs.$get();
+        $t5_6 = $rt.builtin.len($t4_5);
+        $t6_7 = ($t3_4 + $t5_6);
+        $t7_8 = $rt.builtin.makeSlice($t1_2, $t6_7, '');
+        $t8_9 = discoveryRelays.$get();
+        $t9_10 = $rt.builtin.copy($t7_8, $t8_9);
+        $t10_11 = relayURLs.$get();
+        $t11_12 = $rt.builtin.len($t10_11);
+        $t12_13 = $t7_8;
+        $t13_14 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t14_15 = ($t13_14 + 1);
+        $t15_16 = ($t14_15 < $t11_12);
+        if ($t15_16) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t16_17 = $t10_11.addr($t14_15);
+        $t17_18 = $t16_17.$get();
+        $t18_19 = appendUnique($t12_13, $t17_18);
+        $t12_13 = $t18_19;
+        $t13_14 = $t14_15;
+        $block = 1; break;
+        break;
+      }
+      case 3: {
+        $t19_20 = pubhex.$get();
+        $t20_21 = jstr($t19_20);
+        $t21_22 = ('{"authors":[' + $t20_21);
+        $t22_23 = ($t21_22 + '],"kinds":[0,3,10002,10000,10050],"_proxy":');
+        $t23_24 = jstrArr($t12_13);
+        $t24_25 = ($t22_23 + $t23_24);
+        $t25_26 = ($t24_25 + ',"limit":8}');
+        $t26_27 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t27_28 = $t26_27.$get().addr(0);
+        $t27_28.$set('wss://relay.orly.dev');
+        $t28_29 = $rt.builtin.sliceSlice($t26_27.$get(), undefined, undefined, undefined);
+        $t29_30 = buildProxyMsg('prof', $t25_26, $t28_29);
+        $t30_31 = common$jsbridge$dom.PostToSW($t29_30);
+        return;
+        break;
+      }
+    }
+  }
 }
 
 export function subscribeFeed() {
@@ -3832,62 +3879,87 @@ export function recordRelayFreq(ev) {
 }
 
 export function buildProxy(pk) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = authorRelays.$get();
-        { const $r = $rt.builtin.mapLookup($t0_1, pk); $t1_2 = [$r.value, $r.ok]; }
-        $t2_3 = $t1_2[0];
-        $t3_4 = $t1_2[1];
-        if ($t3_4) {
-          $block = 3; break;
+        $t0_1 = discoveryRelays.$get();
+        $t1_2 = $rt.builtin.len($t0_1);
+        $t2_3 = $rt.builtin.makeSlice($t1_2, $t1_2, '');
+        $t3_4 = discoveryRelays.$get();
+        $t4_5 = $rt.builtin.copy($t2_3, $t3_4);
+        $t5_6 = authorRelays.$get();
+        { const $r = $rt.builtin.mapLookup($t5_6, pk); $t6_7 = [$r.value, $r.ok]; }
+        $t7_8 = $t6_7[0];
+        $t8_9 = $t6_7[1];
+        if ($t8_9) {
+          $block = 1; break;
         }
         else {
+          $t10_11 = $t2_3;
           $block = 2; break;
         }
         break;
       }
       case 1: {
-        $t4_5 = appendUnique($t2_3, 'wss://purplepag.es');
-        return $t4_5;
+        $t9_10 = $rt.builtin.len($t7_8);
+        $t13_14 = $t2_3;
+        $t14_15 = -1;
+        $block = 3; break;
         break;
       }
       case 2: {
-        $t5_6 = topRelays(5);
-        $t6_7 = $rt.builtin.len($t5_6);
-        $t7_8 = ($t6_7 > 0);
-        if ($t7_8) {
-          $block = 4; break;
-        }
-        else {
-          $block = 5; break;
-        }
+        $t11_12 = topRelays(4);
+        $t12_13 = $rt.builtin.len($t11_12);
+        $t20_21 = $t10_11;
+        $t21_22 = -1;
+        $block = 5; break;
         break;
       }
       case 3: {
-        $t8_9 = $rt.builtin.len($t2_3);
-        $t9_10 = ($t8_9 > 0);
-        if ($t9_10) {
-          $block = 1; break;
+        $t15_16 = ($t14_15 + 1);
+        $t16_17 = ($t15_16 < $t9_10);
+        if ($t16_17) {
+          $block = 4; break;
         }
         else {
+          $t10_11 = $t13_14;
           $block = 2; break;
         }
         break;
       }
       case 4: {
-        $t10_11 = appendUnique($t5_6, 'wss://purplepag.es');
-        return $t10_11;
+        $t17_18 = $t7_8.addr($t15_16);
+        $t18_19 = $t17_18.$get();
+        $t19_20 = appendUnique($t13_14, $t18_19);
+        $t13_14 = $t19_20;
+        $t14_15 = $t15_16;
+        $block = 3; break;
         break;
       }
       case 5: {
-        $t11_12 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t12_13 = $t11_12.$get().addr(0);
-        $t12_13.$set('wss://purplepag.es');
-        $t13_14 = $rt.builtin.sliceSlice($t11_12.$get(), undefined, undefined, undefined);
-        return $t13_14;
+        $t22_23 = ($t21_22 + 1);
+        $t23_24 = ($t22_23 < $t12_13);
+        if ($t23_24) {
+          $block = 6; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 6: {
+        $t24_25 = $t11_12.addr($t22_23);
+        $t25_26 = $t24_25.$get();
+        $t26_27 = appendUnique($t20_21, $t25_26);
+        $t20_21 = $t26_27;
+        $t21_22 = $t22_23;
+        $block = 5; break;
+        break;
+      }
+      case 7: {
+        return $t20_21;
         break;
       }
     }
@@ -3998,7 +4070,7 @@ export function fetchAuthorProfile(pk) {
 }
 
 export function retryMissingProfiles() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -4087,15 +4159,14 @@ export function retryMissingProfiles() {
         break;
       }
       case 9: {
-        $t23_24 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t24_25 = $t23_24.$get().addr(0);
-        $t24_25.$set('wss://purplepag.es');
-        $t25_26 = $rt.builtin.sliceSlice($t23_24.$get(), undefined, undefined, undefined);
-        $t26_27 = relayURLs.$get();
-        $t27_28 = $rt.builtin.appendSlice($t25_26, $t26_27);
-        $t28_29 = topRelays(8);
+        $t23_24 = discoveryRelays.$get();
+        $t24_25 = $rt.builtin.len($t23_24);
+        $t25_26 = $rt.builtin.makeSlice($t24_25, $t24_25, '');
+        $t26_27 = discoveryRelays.$get();
+        $t27_28 = $rt.builtin.copy($t25_26, $t26_27);
+        $t28_29 = relayURLs.$get();
         $t29_30 = $rt.builtin.len($t28_29);
-        $t30_31 = $t27_28;
+        $t30_31 = $t25_26;
         $t31_32 = -1;
         $block = 10; break;
         break;
@@ -4121,15 +4192,17 @@ export function retryMissingProfiles() {
         break;
       }
       case 12: {
-        $t37_38 = 0;
-        $t38_39 = 0;
+        $t37_38 = topRelays(8);
+        $t38_39 = $rt.builtin.len($t37_38);
+        $t39_40 = $t30_31;
+        $t40_41 = -1;
         $block = 13; break;
         break;
       }
       case 13: {
-        $t39_40 = $rt.builtin.len($t2_3);
-        $t40_41 = ($t38_39 < $t39_40);
-        if ($t40_41) {
+        $t41_42 = ($t40_41 + 1);
+        $t42_43 = ($t41_42 < $t38_39);
+        if ($t42_43) {
           $block = 14; break;
         }
         else {
@@ -4138,106 +4211,132 @@ export function retryMissingProfiles() {
         break;
       }
       case 14: {
-        $t41_42 = ($t38_39 + 10);
-        $t42_43 = $rt.builtin.len($t2_3);
-        $t43_44 = ($t41_42 > $t42_43);
-        if ($t43_44) {
-          $block = 16; break;
-        }
-        else {
-          $t47_48 = $t41_42;
-          $block = 17; break;
-        }
+        $t43_44 = $t37_38.addr($t41_42);
+        $t44_45 = $t43_44.$get();
+        $t45_46 = appendUnique($t39_40, $t44_45);
+        $t39_40 = $t45_46;
+        $t40_41 = $t41_42;
+        $block = 13; break;
         break;
       }
       case 15: {
-        $t44_45 = retryRound.$get();
-        $t45_46 = ($t44_45 + 1);
-        retryRound.$set($t45_46);
-        return;
+        $t46_47 = 0;
+        $t47_48 = 0;
+        $block = 16; break;
         break;
       }
       case 16: {
-        $t46_47 = $rt.builtin.len($t2_3);
-        $t47_48 = $t46_47;
-        $block = 17; break;
+        $t48_49 = $rt.builtin.len($t2_3);
+        $t49_50 = ($t47_48 < $t48_49);
+        if ($t49_50) {
+          $block = 17; break;
+        }
+        else {
+          $block = 18; break;
+        }
         break;
       }
       case 17: {
-        $t48_49 = $rt.builtin.sliceSlice($t2_3, $t38_39, $t47_48, undefined);
-        $t49_50 = $rt.builtin.len($t48_49);
-        $t50_51 = '[';
-        $t51_52 = -1;
-        $block = 18; break;
-        break;
-      }
-      case 18: {
-        $t52_53 = ($t51_52 + 1);
-        $t53_54 = ($t52_53 < $t49_50);
-        if ($t53_54) {
+        $t50_51 = ($t47_48 + 10);
+        $t51_52 = $rt.builtin.len($t2_3);
+        $t52_53 = ($t50_51 > $t51_52);
+        if ($t52_53) {
           $block = 19; break;
         }
         else {
+          $t56_57 = $t50_51;
           $block = 20; break;
         }
         break;
       }
+      case 18: {
+        $t53_54 = retryRound.$get();
+        $t54_55 = ($t53_54 + 1);
+        retryRound.$set($t54_55);
+        return;
+        break;
+      }
       case 19: {
-        $t54_55 = $t48_49.addr($t52_53);
-        $t55_56 = $t54_55.$get();
-        $t56_57 = ($t52_53 > 0);
-        if ($t56_57) {
-          $block = 21; break;
-        }
-        else {
-          $t82_83 = $t50_51;
-          $block = 22; break;
-        }
+        $t55_56 = $rt.builtin.len($t2_3);
+        $t56_57 = $t55_56;
+        $block = 20; break;
         break;
       }
       case 20: {
-        $t57_58 = ($t50_51 + ']');
-        $t58_59 = retryRound.$get();
-        $t59_60 = itoa($t58_59);
-        $t60_61 = ('ap-batch-' + $t59_60);
-        $t61_62 = ($t60_61 + '-');
-        $t62_63 = itoa($t37_38);
-        $t63_64 = ($t61_62 + $t62_63);
-        $t64_65 = ($t37_38 + 1);
-        $t65_66 = ('{"authors":' + $t57_58);
-        $t66_67 = ($t65_66 + ',"kinds":[0,3,10002,10000],"_proxy":');
-        $t67_68 = jstrArr($t30_31);
-        $t68_69 = ($t66_67 + $t67_68);
-        $t69_70 = ($t68_69 + ',"limit":');
-        $t70_71 = $rt.builtin.len($t48_49);
-        $t71_72 = ($t70_71 * 4);
-        $t72_73 = itoa($t71_72);
-        $t73_74 = ($t69_70 + $t72_73);
-        $t74_75 = ($t73_74 + '}');
-        $t75_76 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t76_77 = $t75_76.$get().addr(0);
-        $t76_77.$set('wss://relay.orly.dev');
-        $t77_78 = $rt.builtin.sliceSlice($t75_76.$get(), undefined, undefined, undefined);
-        $t78_79 = buildProxyMsg($t63_64, $t74_75, $t77_78);
-        $t79_80 = common$jsbridge$dom.PostToSW($t78_79);
-        $t80_81 = ($t38_39 + 10);
-        $t37_38 = $t64_65;
-        $t38_39 = $t80_81;
-        $block = 13; break;
+        $t57_58 = $rt.builtin.sliceSlice($t2_3, $t47_48, $t56_57, undefined);
+        $t58_59 = $rt.builtin.len($t57_58);
+        $t59_60 = '[';
+        $t60_61 = -1;
+        $block = 21; break;
         break;
       }
       case 21: {
-        $t81_82 = ($t50_51 + ',');
-        $t82_83 = $t81_82;
-        $block = 22; break;
+        $t61_62 = ($t60_61 + 1);
+        $t62_63 = ($t61_62 < $t58_59);
+        if ($t62_63) {
+          $block = 22; break;
+        }
+        else {
+          $block = 23; break;
+        }
         break;
       }
       case 22: {
-        $t83_84 = jstr($t55_56);
-        $t84_85 = ($t82_83 + $t83_84);
-        $t50_51 = $t84_85;
-        $t51_52 = $t52_53;
-        $block = 18; break;
+        $t63_64 = $t57_58.addr($t61_62);
+        $t64_65 = $t63_64.$get();
+        $t65_66 = ($t61_62 > 0);
+        if ($t65_66) {
+          $block = 24; break;
+        }
+        else {
+          $t91_92 = $t59_60;
+          $block = 25; break;
+        }
+        break;
+      }
+      case 23: {
+        $t66_67 = ($t59_60 + ']');
+        $t67_68 = retryRound.$get();
+        $t68_69 = itoa($t67_68);
+        $t69_70 = ('ap-batch-' + $t68_69);
+        $t70_71 = ($t69_70 + '-');
+        $t71_72 = itoa($t46_47);
+        $t72_73 = ($t70_71 + $t71_72);
+        $t73_74 = ($t46_47 + 1);
+        $t74_75 = ('{"authors":' + $t66_67);
+        $t75_76 = ($t74_75 + ',"kinds":[0,3,10002,10000],"_proxy":');
+        $t76_77 = jstrArr($t39_40);
+        $t77_78 = ($t75_76 + $t76_77);
+        $t78_79 = ($t77_78 + ',"limit":');
+        $t79_80 = $rt.builtin.len($t57_58);
+        $t80_81 = ($t79_80 * 4);
+        $t81_82 = itoa($t80_81);
+        $t82_83 = ($t78_79 + $t81_82);
+        $t83_84 = ($t82_83 + '}');
+        $t84_85 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t85_86 = $t84_85.$get().addr(0);
+        $t85_86.$set('wss://relay.orly.dev');
+        $t86_87 = $rt.builtin.sliceSlice($t84_85.$get(), undefined, undefined, undefined);
+        $t87_88 = buildProxyMsg($t72_73, $t83_84, $t86_87);
+        $t88_89 = common$jsbridge$dom.PostToSW($t87_88);
+        $t89_90 = ($t47_48 + 10);
+        $t46_47 = $t73_74;
+        $t47_48 = $t89_90;
+        $block = 16; break;
+        break;
+      }
+      case 24: {
+        $t90_91 = ($t59_60 + ',');
+        $t91_92 = $t90_91;
+        $block = 25; break;
+        break;
+      }
+      case 25: {
+        $t92_93 = jstr($t64_65);
+        $t93_94 = ($t91_92 + $t92_93);
+        $t59_60 = $t93_94;
+        $t60_61 = $t61_62;
+        $block = 21; break;
         break;
       }
     }
