@@ -67,6 +67,9 @@ func RequestAnimationFrame(fn func()) { panic("jsbridge") }
 // SetTimeout schedules a function to run after ms milliseconds. Returns timer ID.
 func SetTimeout(fn func(), ms int) int { panic("jsbridge") }
 
+// ClearTimeout cancels a timer created by SetTimeout.
+func ClearTimeout(id int) { panic("jsbridge") }
+
 // FirstChild returns the first child element, or 0 if none.
 func FirstChild(el Element) Element { panic("jsbridge") }
 

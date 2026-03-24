@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	version     = "v0.65.18"
+	version     = "v0.65.19"
 	lsKeyPubkey = "sm3sh-pubkey"
 	lsKeyMode   = "sm3sh-mode"
 	lsKeyTheme  = "sm3sh-theme"
@@ -82,6 +82,8 @@ var (
 	// Relay frequency — how many kind 10002 lists include each relay URL.
 	relayFreq    map[string]int
 	idbLoaded    bool
+	retryRound   int // metadata retry round counter
+	retryTimer   int // debounce timer for batch retries
 
 	// Profile page tab state.
 	profileTab           string
@@ -849,10 +851,6 @@ func dispatchEvent(subID string, ev *nostr.Event) {
 			feedLoader = 0
 		}
 		renderNote(ev)
-	} else if subID == "ap-batch" {
-		if ev.Kind == 0 {
-			applyAuthorProfile(ev.PubKey, ev)
-		}
 	} else if len(subID) > 3 && subID[:3] == "ap-" {
 		if ev.Kind == 0 {
 			applyAuthorProfile(ev.PubKey, ev)
@@ -892,8 +890,18 @@ func dispatchEOSE(subID string) {
 		}
 		updateStatus()
 		retryMissingProfiles()
-	} else if subID == "ap-batch" {
-		dom.PostToSW("[\"CLOSE\",\"ap-batch\"]")
+	} else if len(subID) > 9 && subID[:9] == "ap-batch-" {
+		dom.PostToSW("[\"CLOSE\"," + jstr(subID) + "]")
+		// Debounce: schedule follow-up retry 3s after last batch EOSE (max 3 rounds).
+		if retryRound <= 3 {
+			if retryTimer != 0 {
+				dom.ClearTimeout(retryTimer)
+			}
+			retryTimer = dom.SetTimeout(func() {
+				retryTimer = 0
+				retryMissingProfiles()
+			}, 3000)
+		}
 	} else if len(subID) > 3 && subID[:3] == "ap-" {
 		dom.PostToSW("[\"CLOSE\"," + jstr(subID) + "]")
 		pk, ok := authorSubPK[subID]
@@ -1243,8 +1251,9 @@ func fetchAuthorProfile(pk string) {
 		[]string{orlyRelay}))
 }
 
-// retryMissingProfiles batches all pubkeys that still lack a name
-// into a single PROXY request after the feed finishes loading.
+// retryMissingProfiles batches pubkeys that still lack a name into chunked
+// PROXY requests through the orly relay. Fetches all metadata kinds so
+// relay lists from kind 10002 enable second-hop discovery.
 func retryMissingProfiles() {
 	var missing []string
 	for pk := range pendingNotes {
@@ -1256,27 +1265,44 @@ func retryMissingProfiles() {
 		return
 	}
 
-	// Build JSON authors array.
-	authors := "["
-	for i, pk := range missing {
-		if i > 0 {
-			authors += ","
-		}
-		authors += jstr(pk)
+	// Reset fetchedK0 for still-missing profiles so individual re-fetches
+	// can fire if new relay info appears from other profiles' kind 10002.
+	for _, pk := range missing {
+		fetchedK0[pk] = false
 	}
-	authors += "]"
 
-	// Route through orly relay with _proxy to external relays.
+	// Aggressive relay list: purplepag.es + user relays + all discovered relays.
 	proxy := []string{"wss://purplepag.es"}
 	proxy = append(proxy, relayURLs...)
-	top := topRelays(3)
+	top := topRelays(8)
 	for _, u := range top {
 		proxy = appendUnique(proxy, u)
 	}
 
-	dom.PostToSW(buildProxyMsg("ap-batch",
-		"{\"authors\":"+authors+",\"kinds\":[0],\"_proxy\":"+jstrArr(proxy)+",\"limit\":"+itoa(len(missing))+"}",
-		[]string{orlyRelay}))
+	// Chunk into batches of 10 to avoid relay timeouts.
+	const batchSize = 10
+	batchNum := 0
+	for i := 0; i < len(missing); i += batchSize {
+		end := i + batchSize
+		if end > len(missing) {
+			end = len(missing)
+		}
+		chunk := missing[i:end]
+		authors := "["
+		for j, pk := range chunk {
+			if j > 0 {
+				authors += ","
+			}
+			authors += jstr(pk)
+		}
+		authors += "]"
+		subID := "ap-batch-" + itoa(retryRound) + "-" + itoa(batchNum)
+		batchNum++
+		dom.PostToSW(buildProxyMsg(subID,
+			"{\"authors\":"+authors+",\"kinds\":[0,3,10002,10000],\"_proxy\":"+jstrArr(proxy)+",\"limit\":"+itoa(len(chunk)*4)+"}",
+			[]string{orlyRelay}))
+	}
+	retryRound++
 }
 
 // applyAuthorProfile updates cache and all pending note headers for a pubkey.

@@ -114,6 +114,11 @@ export function SetTimeout(fn, ms) {
   return $rt.dom.SetTimeout(fn, ms);
 }
 
+// jsbridge: dom.ClearTimeout
+export function ClearTimeout(id) {
+  $rt.dom.ClearTimeout(id);
+}
+
 // jsbridge: dom.FirstChild
 export function FirstChild(el) {
   return $rt.dom.FirstChild(el);
