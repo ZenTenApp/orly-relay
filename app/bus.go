@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"next.orly.dev/pkg/lol/log"
@@ -73,6 +74,9 @@ func (s *Smesh3Server) handleBus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+
+	// Clear HTTP server's ReadDeadline so the WS connection lives indefinitely.
+	conn.SetReadDeadline(time.Time{})
 
 	// First message identifies the peer's role.
 	_, raw, err := conn.ReadMessage()

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	version     = "v0.65.33"
+	version     = "v0.65.34"
 	lsKeyPubkey = "sm3sh-pubkey"
 	lsKeyMode   = "sm3sh-mode"
 	lsKeyTheme  = "sm3sh-theme"
@@ -1127,10 +1127,30 @@ func nextStr(s string, pos int) (string, int) {
 		return "", pos
 	}
 	pos++
+	var buf []byte
+	hasEsc := false
 	start := pos
 	for pos < len(s) {
-		if s[pos] == '\\' {
-			pos += 2
+		if s[pos] == '\\' && pos+1 < len(s) {
+			if !hasEsc {
+				hasEsc = true
+				buf = append(buf, s[start:pos]...)
+			}
+			pos++
+			switch s[pos] {
+			case '"', '\\', '/':
+				buf = append(buf, s[pos])
+			case 'n':
+				buf = append(buf, '\n')
+			case 't':
+				buf = append(buf, '\t')
+			case 'r':
+				buf = append(buf, '\r')
+			default:
+				buf = append(buf, '\\', s[pos])
+			}
+			pos++
+			start = pos
 			continue
 		}
 		if s[pos] == '"' {
@@ -1141,7 +1161,13 @@ func nextStr(s string, pos int) (string, int) {
 	if pos >= len(s) {
 		return "", pos
 	}
-	val := s[start:pos]
+	var val string
+	if hasEsc {
+		buf = append(buf, s[start:pos]...)
+		val = string(buf)
+	} else {
+		val = s[start:pos]
+	}
 	pos++
 	for pos < len(s) && (s[pos] == ',' || s[pos] == ' ') {
 		pos++

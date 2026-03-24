@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -27,13 +28,17 @@ var marmotUpgrader = websocket.Upgrader{
 
 // marmotSession holds state for one authenticated Marmot WebSocket client.
 type marmotSession struct {
-	client  *marmot.Client
-	adapter *marmot.WSRelayAdapter
-	sign    signer
-	conn    *websocket.Conn
-	mu      sync.Mutex
-	cancel  context.CancelFunc
-	relays  []*ws.Client
+	client    *marmot.Client
+	adapter   *marmot.WSRelayAdapter
+	sign      signer
+	conn      *websocket.Conn
+	mu        sync.Mutex
+	cancel    context.CancelFunc
+	relays    []*ws.Client
+	pubkeyHex string
+	relayURL  string
+	subscribed bool
+	subCancel  context.CancelFunc // cancels the subscription goroutine
 }
 
 // signer wraps p8k.Signer to keep the import local.
@@ -44,21 +49,27 @@ type marmotReq struct {
 	Method    string          `json:"method"`
 	Pubkey    string          `json:"pubkey,omitempty"`
 	Sig       string          `json:"sig,omitempty"`
+	Nsec      string          `json:"nsec,omitempty"` // hex secret key — self-hosted / trusted backend auth
 	Event     json.RawMessage `json:"event,omitempty"`
 	Recipient string          `json:"recipient,omitempty"`
 	Content   string          `json:"content,omitempty"`
 	Relays    []string        `json:"relays,omitempty"`
+	Alias     string          `json:"alias,omitempty"` // NIP-05 address (user@domain)
 }
 
 // marmotResp is the JSON-RPC response to the client.
 type marmotResp struct {
-	Method  string   `json:"method"`
-	OK      bool     `json:"ok,omitempty"`
-	Error   string   `json:"error,omitempty"`
-	Peer    string   `json:"peer,omitempty"`
-	Content string   `json:"content,omitempty"`
-	Ts      int64    `json:"ts,omitempty"`
-	Groups  []string `json:"groups,omitempty"`
+	Method     string   `json:"method"`
+	OK         bool     `json:"ok,omitempty"`
+	Error      string   `json:"error,omitempty"`
+	Peer       string   `json:"peer,omitempty"`
+	Content    string   `json:"content,omitempty"`
+	Ts         int64    `json:"ts,omitempty"`
+	Groups     []string `json:"groups,omitempty"`
+	Pubkey     string   `json:"pubkey,omitempty"`     // for resolve_alias
+	Subscribed bool     `json:"subscribed,omitempty"` // for status
+	Relay      string   `json:"relay,omitempty"`      // for status
+	NumGroups  int      `json:"num_groups,omitempty"` // for status
 }
 
 func (s *Smesh3Server) handleMarmot(w http.ResponseWriter, r *http.Request) {
@@ -69,6 +80,7 @@ func (s *Smesh3Server) handleMarmot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+	conn.SetReadDeadline(time.Time{})
 	log.I.F("marmot: WS upgraded successfully")
 
 	ctx, cancel := context.WithCancel(r.Context())
@@ -107,6 +119,12 @@ func (s *Smesh3Server) handleMarmot(w http.ResponseWriter, r *http.Request) {
 			sess.handlePublishKP(ctx, req)
 		case "list_groups":
 			sess.handleListGroups()
+		case "status":
+			sess.handleStatus()
+		case "reset":
+			sess.handleReset(ctx, s.dataDir)
+		case "resolve_alias":
+			sess.handleResolveAlias(req)
 		default:
 			sess.writeResp(marmotResp{Method: "error", Error: "unknown method: " + req.Method})
 		}
@@ -116,7 +134,28 @@ func (s *Smesh3Server) handleMarmot(w http.ResponseWriter, r *http.Request) {
 func (sess *marmotSession) handleAuth(ctx context.Context, dataDir string, req marmotReq) {
 	var pubkeyHex string
 
-	if len(req.Event) > 0 {
+	if req.Nsec != "" {
+		// Direct secret key auth — self-hosted / trusted backend.
+		// The client sends the hex secret key; we derive the pubkey and
+		// use this key for all MLS operations so that key packages are
+		// discoverable by the user's actual Nostr pubkey.
+		sec, err := hex.Dec(req.Nsec)
+		if err != nil || len(sec) != 32 {
+			sess.writeResp(marmotResp{Method: "auth", Error: "invalid nsec"})
+			return
+		}
+		sign, err := p8k.New()
+		if err != nil {
+			sess.writeResp(marmotResp{Method: "auth", Error: "signer creation failed"})
+			return
+		}
+		if err := sign.InitSec(sec); err != nil {
+			sess.writeResp(marmotResp{Method: "auth", Error: "signer init failed: " + err.Error()})
+			return
+		}
+		pubkeyHex = hex.Enc(sign.Pub())
+		sess.sign = sign
+	} else if len(req.Event) > 0 {
 		// Event-based auth (NIP-07 extension mode).
 		pubkeyHex = sess.handleEventAuth(req)
 		if pubkeyHex == "" {
@@ -151,24 +190,26 @@ func (sess *marmotSession) handleAuth(ctx context.Context, dataDir string, req m
 			return
 		}
 	} else {
-		sess.writeResp(marmotResp{Method: "auth", Error: "pubkey+sig or event required"})
+		sess.writeResp(marmotResp{Method: "auth", Error: "nsec, pubkey+sig, or event required"})
 		return
 	}
 
-	// Create signer with a fresh key for this session's MLS operations.
-	sign, err := p8k.New()
-	if err != nil {
-		sess.writeResp(marmotResp{Method: "auth", Error: "signer creation failed"})
-		return
-	}
-
-	// For a self-hosted relay, the auth proves the user controls this pubkey.
-	// Generate a session key for MLS. In a real deployment the user's
-	// actual secret key would be used, but here we generate ephemeral
-	// keys for the MLS layer.
-	if err := sign.Generate(); err != nil {
-		sess.writeResp(marmotResp{Method: "auth", Error: "key generation failed"})
-		return
+	// If signer not set yet (pubkey+sig or event auth), create one.
+	// For these modes, the user's actual secret key is unavailable, so
+	// MLS uses an ephemeral key. KP discovery won't work until crypto
+	// proxying is wired through the SW bus.
+	sign := sess.sign
+	if sign == nil {
+		var err error
+		sign, err = p8k.New()
+		if err != nil {
+			sess.writeResp(marmotResp{Method: "auth", Error: "signer creation failed"})
+			return
+		}
+		if err := sign.Generate(); err != nil {
+			sess.writeResp(marmotResp{Method: "auth", Error: "key generation failed"})
+			return
+		}
 	}
 
 	// Create group store.
@@ -207,6 +248,8 @@ func (sess *marmotSession) handleAuth(ctx context.Context, dataDir string, req m
 
 	sess.client = client
 	sess.sign = sign
+	sess.pubkeyHex = pubkeyHex
+	sess.relayURL = relayURL
 	sess.writeResp(marmotResp{Method: "auth", OK: true})
 	log.I.F("marmot: authenticated session for %s", pubkeyHex)
 }
@@ -336,39 +379,53 @@ func (sess *marmotSession) handleSubscribe(ctx context.Context) {
 		return
 	}
 
-	filters := sess.client.SubscriptionFilters()
+	// Cancel previous subscription if any.
+	if sess.subCancel != nil {
+		sess.subCancel()
+	}
+
+	subCtx, subCancel := context.WithCancel(ctx)
+	sess.subCancel = subCancel
+	sess.subscribed = true
+
 	go func() {
+		defer func() { sess.subscribed = false }()
 		for {
-			stream, err := sess.adapter.Subscribe(ctx, filters)
+			filters := sess.client.SubscriptionFilters()
+			stream, err := sess.adapter.Subscribe(subCtx, filters)
 			if err != nil {
 				log.W.F("marmot: subscription failed: %v", err)
 				return
 			}
 
-			for ev := range stream.Events() {
-				if err := sess.client.HandleEvent(ctx, ev); err != nil {
-					log.W.F("marmot: handle event error: %v", err)
+			// Read events until stream ends or groups change.
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				for ev := range stream.Events() {
+					if err := sess.client.HandleEvent(subCtx, ev); err != nil {
+						log.W.F("marmot: handle event error: %v", err)
+					}
 				}
-			}
+			}()
 
-			// Check if context is done before retrying.
 			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-		}
-	}()
-
-	// Watch for group changes and refresh subscriptions.
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
+			case <-subCtx.Done():
+				stream.Close()
 				return
 			case <-sess.client.GroupsChanged():
-				filters = sess.client.SubscriptionFilters()
-				log.I.F("marmot: subscription filters refreshed")
+				log.I.F("marmot: groups changed, re-subscribing")
+				stream.Close()
+				select {
+				case <-done:
+				case <-time.After(2 * time.Second):
+				}
+			case <-done:
+				select {
+				case <-subCtx.Done():
+					return
+				default:
+				}
 			}
 		}
 	}()
@@ -407,6 +464,146 @@ func (sess *marmotSession) handleListGroups() {
 		OK:     true,
 		Groups: sess.client.ActiveGroupIDs(),
 	})
+}
+
+func (sess *marmotSession) handleStatus() {
+	if sess.client == nil {
+		sess.writeResp(marmotResp{Method: "status", Error: "not authenticated"})
+		return
+	}
+	groups := sess.client.ActiveGroupIDs()
+	sess.writeResp(marmotResp{
+		Method:     "status",
+		OK:         true,
+		Pubkey:     sess.pubkeyHex,
+		Relay:      sess.relayURL,
+		Subscribed: sess.subscribed,
+		NumGroups:  len(groups),
+		Groups:     groups,
+	})
+}
+
+func (sess *marmotSession) handleReset(ctx context.Context, dataDir string) {
+	// Cancel active subscription.
+	if sess.subCancel != nil {
+		sess.subCancel()
+		sess.subCancel = nil
+	}
+	sess.subscribed = false
+
+	// Close relay connections.
+	for _, r := range sess.relays {
+		r.Close()
+	}
+	sess.relays = nil
+	sess.adapter = nil
+	sess.client = nil
+
+	// Re-establish if we have a signer (nsec auth persists across reset).
+	if sess.sign != nil && sess.pubkeyHex != "" {
+		storeDir := filepath.Join(dataDir, "marmot", sess.pubkeyHex)
+		// Clear persisted groups for a clean slate.
+		os.RemoveAll(storeDir)
+		store, err := marmot.NewFileGroupStore(storeDir)
+		if err != nil {
+			sess.writeResp(marmotResp{Method: "reset", Error: "store: " + err.Error()})
+			return
+		}
+		relayURL := "wss://relay.orly.dev"
+		relay, err := ws.RelayConnect(ctx, relayURL)
+		if err != nil {
+			sess.writeResp(marmotResp{Method: "reset", Error: "relay: " + err.Error()})
+			return
+		}
+		sess.relays = append(sess.relays, relay)
+		sess.adapter = marmot.NewWSRelayAdapter(relay)
+		sess.relayURL = relayURL
+
+		client, err := marmot.NewClient(sess.sign, store, sess.adapter, relayURL)
+		if err != nil {
+			sess.writeResp(marmotResp{Method: "reset", Error: "client: " + err.Error()})
+			return
+		}
+		client.OnDM(func(senderPub []byte, plaintext []byte) {
+			sess.writeResp(marmotResp{
+				Method:  "dm_received",
+				Peer:    hex.Enc(senderPub),
+				Content: string(plaintext),
+				Ts:      time.Now().Unix(),
+			})
+		})
+		sess.client = client
+	}
+
+	sess.writeResp(marmotResp{Method: "reset", OK: true})
+	log.I.F("marmot: session reset for %s", sess.pubkeyHex)
+}
+
+func (sess *marmotSession) handleResolveAlias(req marmotReq) {
+	if req.Alias == "" {
+		sess.writeResp(marmotResp{Method: "resolve_alias", Error: "alias required"})
+		return
+	}
+
+	pubkey, err := resolveNIP05(req.Alias)
+	if err != nil {
+		sess.writeResp(marmotResp{Method: "resolve_alias", Error: err.Error()})
+		return
+	}
+
+	sess.writeResp(marmotResp{
+		Method: "resolve_alias",
+		OK:     true,
+		Pubkey: pubkey,
+	})
+}
+
+// resolveNIP05 resolves a NIP-05 identifier (user@domain) to a hex pubkey.
+func resolveNIP05(addr string) (string, error) {
+	parts := splitNIP05(addr)
+	if parts[0] == "" || parts[1] == "" {
+		return "", fmt.Errorf("invalid NIP-05 address: %s", addr)
+	}
+
+	url := "https://" + parts[1] + "/.well-known/nostr.json?name=" + parts[0]
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("NIP-05 fetch failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("NIP-05 returned %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Names map[string]string `json:"names"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("NIP-05 decode failed: %w", err)
+	}
+
+	pubkey, ok := result.Names[parts[0]]
+	if !ok {
+		return "", fmt.Errorf("NIP-05: name %q not found at %s", parts[0], parts[1])
+	}
+
+	if len(pubkey) != 64 {
+		return "", fmt.Errorf("NIP-05: invalid pubkey length %d", len(pubkey))
+	}
+
+	return pubkey, nil
+}
+
+func splitNIP05(addr string) [2]string {
+	for i := 0; i < len(addr); i++ {
+		if addr[i] == '@' {
+			return [2]string{addr[:i], addr[i+1:]}
+		}
+	}
+	// bare domain → "_" user per NIP-05
+	return [2]string{"_", addr}
 }
 
 func (sess *marmotSession) writeResp(resp marmotResp) {

@@ -71,17 +71,44 @@ func (w *mw) str() string {
 		return ""
 	}
 	w.i++
+	var buf []byte
+	hasEsc := false
 	start := w.i
 	for w.i < len(w.s) && w.s[w.i] != '"' {
-		if w.s[w.i] == '\\' {
+		if w.s[w.i] == '\\' && w.i+1 < len(w.s) {
+			if !hasEsc {
+				hasEsc = true
+				buf = append(buf, w.s[start:w.i]...)
+			}
 			w.i++
+			switch w.s[w.i] {
+			case '"', '\\', '/':
+				buf = append(buf, w.s[w.i])
+			case 'n':
+				buf = append(buf, '\n')
+			case 't':
+				buf = append(buf, '\t')
+			case 'r':
+				buf = append(buf, '\r')
+			default:
+				buf = append(buf, '\\', w.s[w.i])
+			}
+			w.i++
+			start = w.i
+			continue
 		}
 		w.i++
 	}
 	if w.i >= len(w.s) {
 		return ""
 	}
-	result := w.s[start:w.i]
+	var result string
+	if hasEsc {
+		buf = append(buf, w.s[start:w.i]...)
+		result = string(buf)
+	} else {
+		result = w.s[start:w.i]
+	}
 	w.i++
 	return result
 }

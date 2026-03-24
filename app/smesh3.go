@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"io/fs"
 	"net"
 	"net/http"
@@ -102,6 +103,9 @@ func (s *Smesh3Server) Start(ctx context.Context) error {
 		log.W.F("SW ERROR: %s", msg)
 		w.WriteHeader(200)
 	})
+
+	// Browser log bridge — SWs and page POST log lines here, appended to /tmp/browser-debug.log.
+	mux.HandleFunc("/__log", s.handleLog)
 
 	// Signed bundle deploy endpoint.
 	if len(s.deployPub) == 32 {
@@ -383,7 +387,14 @@ func serveSatellite(w http.ResponseWriter, r *http.Request, swDir string, fileHa
 <script>
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('./%s/$entry.mjs',{type:'module',scope:'/'})
-    .then(()=>console.log('%s SW registered'))
+    .then(()=>{
+      console.log('%s SW registered');
+      setInterval(()=>{
+        if(navigator.serviceWorker.controller){
+          navigator.serviceWorker.controller.postMessage('keepalive');
+        }
+      },20000);
+    })
     .catch(e=>console.error('%s SW failed:',e));
 }
 </script>
@@ -398,4 +409,34 @@ if('serviceWorker' in navigator){
 	}
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	fileHandler.ServeHTTP(w, r)
+}
+
+const browserLogFile = "/tmp/browser-debug.log"
+
+// handleLog receives POST log lines from browser SWs/page and appends to disk.
+func (s *Smesh3Server) handleLog(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST")
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(200)
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, 4096))
+	if err != nil || len(body) == 0 {
+		w.WriteHeader(200)
+		return
+	}
+	f, err := os.OpenFile(browserLogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		w.WriteHeader(200)
+		return
+	}
+	defer f.Close()
+	line := time.Now().Format("15:04:05.000") + " " + string(body) + "\n"
+	f.WriteString(line)
+	w.WriteHeader(200)
 }

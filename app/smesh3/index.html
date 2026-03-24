@@ -84,6 +84,7 @@ body.dark {
 </head>
 <body>
 <script>{let t=localStorage.getItem('sm3sh-theme');if(t==='dark'||(t===null&&matchMedia('(prefers-color-scheme:dark)').matches))document.body.classList.add('dark')}</script>
+<script>{const _l=console.log,_w=console.warn,_e=console.error;function _r(v,a){try{fetch('/__log',{method:'POST',body:v+' [page] '+Array.from(a).join(' ')})}catch(e){}}console.log=function(){_l.apply(console,arguments);_r('I',arguments)};console.warn=function(){_w.apply(console,arguments);_r('W',arguments)};console.error=function(){_e.apply(console,arguments);_r('E',arguments)}}</script>
 <div id="app-root"></div>
 <div id="update-snackbar">new version available — click to update</div>
 <script type="module">
@@ -136,9 +137,11 @@ if ('serviceWorker' in navigator) {
 // Satellite SW iframes — register SWs on satellite origins for thread isolation.
 // Skipped on localhost/127.0.0.1 where subdomains aren't available.
 {
-  const h = location.hostname;
-  if (h !== 'localhost' && h !== '127.0.0.1') {
+  const hn = location.hostname;
+  if (hn !== 'localhost' && hn !== '127.0.0.1') {
     const proto = location.protocol;
+    // host includes port when non-default — needed for local testing on :8090.
+    const h = location.host;
     ['marmot','relay'].forEach(name => {
       const f = document.createElement('iframe');
       f.hidden = true;

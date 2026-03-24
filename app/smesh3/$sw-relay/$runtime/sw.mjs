@@ -272,10 +272,16 @@ export function NowMillis() {
 
 // --- Logging ---
 
+function _rlog(level, msg) {
+  fetch('/__log', {method:'POST', body: level + ' [relay] ' + msg}).catch(()=>{});
+}
+
 export function Log(msg) {
   console.log('sw:', msg);
+  _rlog('I', msg);
 }
 
 export function Warn(msg) {
   console.warn('sw:', msg);
+  _rlog('W', msg);
 }

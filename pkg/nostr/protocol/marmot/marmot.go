@@ -320,7 +320,7 @@ func (c *Client) WelcomeFilter() *filter.F {
 	f := filter.New()
 	f.Kinds = kind.NewS(kind.New(KindGiftWrap))
 	f.Tags = tag.NewS(
-		tag.NewFromAny("#p", hex.Enc(c.sign.Pub())),
+		tag.NewFromAny("p", hex.Enc(c.sign.Pub())),
 	)
 	return f
 }
@@ -337,7 +337,7 @@ func (c *Client) GroupMessageFilter() *filter.F {
 	}
 
 	hValues := make([]any, 0, len(c.groups)+1)
-	hValues = append(hValues, "#h")
+	hValues = append(hValues, "h")
 	for _, gs := range c.groups {
 		if len(gs.NostrGroupID) > 0 {
 			hValues = append(hValues, hex.Enc(gs.NostrGroupID))
