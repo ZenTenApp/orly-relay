@@ -274,13 +274,21 @@ func routerOnRelayEOSE(subID string) {
 	for proxyID, info := range proxySubs {
 		if info.remoteIDs[subID] {
 			info.eoseCount++
-			// Send EOSE after first relay responds — don't wait for all.
-			if info.eoseCount >= 1 && !info.done {
-				info.done = true
+			// Relay EOSE means local DB results sent, but async proxy results
+			// may still be arriving. Reschedule the timer to allow them to flow
+			// before forwarding EOSE to the client.
+			if !info.done {
 				sw.ClearTimeout(info.timer)
-				if cs, ok := clientSubs[proxyID]; ok {
-					sendToClient(cs.clientID, "[\"EOSE\","+jstr(proxyID)+"]")
-				}
+				pid := proxyID
+				info.timer = sw.SetTimeout(3000, func() {
+					inf, ok := proxySubs[pid]
+					if ok && !inf.done {
+						inf.done = true
+						if cs, ok := clientSubs[pid]; ok {
+							sendToClient(cs.clientID, "[\"EOSE\","+jstr(pid)+"]")
+						}
+					}
+				})
 			}
 		}
 	}

@@ -160,9 +160,7 @@ func connectSSE() {
 }
 
 func notifyUpdate() {
-	sw.MatchClients(func(client sw.Client) {
-		sw.PostMessage(client, "update-available")
-	})
+	refreshAndReload()
 }
 
 func refreshAndReload() {

@@ -34,6 +34,25 @@ import (
 	"next.orly.dev/pkg/nostr/utils/pointers"
 )
 
+// subWriter wraps a Listener with a specific subscription ID so that
+// SendEvent produces a proper ["EVENT",subID,{...}] envelope instead of
+// bare event JSON. Without this, async results from archive/proxy queries
+// are silently dropped by WebSocket clients that expect relay-message format.
+type subWriter struct {
+	subID string
+	l     *Listener
+}
+
+func (w *subWriter) SendEvent(ev *event.E) error {
+	res, err := eventenvelope.NewResultWith([]byte(w.subID), ev)
+	if err != nil {
+		return err
+	}
+	return res.Write(w.l)
+}
+
+func (w *subWriter) IsConnected() bool { return w.l.IsConnected() }
+
 func (l *Listener) HandleReq(msg []byte) (err error) {
 	log.D.F("handling REQ: %s", msg)
 	// var rem []byte
@@ -856,12 +875,17 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 	if l.archiveManager != nil && l.archiveManager.IsEnabled() && len(*env.Filters) > 0 {
 		// Use first filter for archive query
 		f := (*env.Filters)[0]
+		archiveSeen := make(map[string]struct{}, len(seen))
+		for k, v := range seen {
+			archiveSeen[k] = v
+		}
+		asw := &subWriter{subID: string(env.Subscription), l: l}
 		go l.archiveManager.QueryArchive(
 			string(env.Subscription),
 			l.connectionID,
 			f,
-			seen,
-			l, // implements EventDeliveryChannel
+			archiveSeen,
+			asw,
 		)
 	}
 
@@ -889,14 +913,19 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 					}
 					timeout := time.Duration(l.proxyTimeoutSec) * time.Second
 					log.D.F("REQ %s: _proxy fetch from %d relays", env.Subscription, len(valid))
+					proxySeen := make(map[string]struct{}, len(seen))
+					for k, v := range seen {
+						proxySeen[k] = v
+					}
+					psw := &subWriter{subID: string(env.Subscription), l: l}
 					go l.archiveManager.QueryRelays(
 						string(env.Subscription),
 						l.connectionID,
 						&cleanFilter,
 						valid,
 						timeout,
-						seen,
-						l,
+						proxySeen,
+						psw,
 					)
 				}
 			}

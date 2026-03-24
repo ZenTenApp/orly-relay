@@ -1049,7 +1049,7 @@ export function showApp() {
         $t342_343 = common$jsbridge$dom.RegisterCallback(showApp$12);
         $t343_344 = common$jsbridge$dom.AddEventListener($t341_342, 'click', $t342_343);
         $t344_345 = common$jsbridge$dom.CreateElement('span');
-        $t345_346 = common$jsbridge$dom.SetTextContent($t344_345, 'sm3sh v0.65.20');
+        $t345_346 = common$jsbridge$dom.SetTextContent($t344_345, 'sm3sh v0.65.22');
         $t346_347 = common$jsbridge$dom.SetStyle($t344_345, 'marginLeft', 'auto');
         $t347_348 = common$jsbridge$dom.SetStyle($t344_345, 'color', 'var(--accent)');
         $t348_349 = common$jsbridge$dom.AppendChild($t262_263, $t344_345);
@@ -1164,8 +1164,83 @@ function showApp$1(key, val) {
 }
 
 function showApp$2() {
-  idbLoaded.$set(true);
-  return;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        idbLoaded.$set(true);
+        $t0_1 = pendingNotes.$get();
+        $t1_2 = { $entries: [...$t0_1.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t2_3 = $t1_2.next();
+        $t3_4 = $t2_3[0];
+        if ($t3_4) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t4_5 = $t2_3[1];
+        $t5_6 = $t2_3[2];
+        $t6_7 = authorNames.$get();
+        $t7_8 = $rt.builtin.mapLookup($t6_7, $t4_5).value;
+        $t8_9 = authorPics.$get();
+        $t9_10 = $rt.builtin.mapLookup($t8_9, $t4_5).value;
+        $t10_11 = ($t7_8 !== '');
+        if ($t10_11) {
+          $block = 4; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+      case 3: {
+        return;
+        break;
+      }
+      case 4: {
+        $t11_12 = $rt.builtin.len($t5_6);
+        $t12_13 = -1;
+        $block = 5; break;
+        break;
+      }
+      case 5: {
+        $t13_14 = ($t12_13 + 1);
+        $t14_15 = ($t13_14 < $t11_12);
+        if ($t14_15) {
+          $block = 6; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 6: {
+        $t15_16 = $t5_6.addr($t13_14);
+        $t16_17 = $t15_16.$get();
+        $t17_18 = updateNoteHeader($t16_17, $t7_8, $t9_10);
+        $t12_13 = $t13_14;
+        $block = 5; break;
+        break;
+      }
+      case 7: {
+        $t18_19 = pendingNotes.$get();
+        $t19_20 = $rt.builtin.mapDelete($t18_19, $t4_5);
+        $t20_21 = fetchedK0.$get();
+        $rt.builtin.mapUpdate($t20_21, $t4_5, true);
+        $block = 1; break;
+        break;
+      }
+    }
+  }
 }
 
 function showApp$3(logo, svg) {

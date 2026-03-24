@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	version     = "v0.65.21"
+	version     = "v0.65.22"
 	lsKeyPubkey = "sm3sh-pubkey"
 	lsKeyMode   = "sm3sh-mode"
 	lsKeyTheme  = "sm3sh-theme"
@@ -360,6 +360,18 @@ func showApp() {
 		}
 	}, func() {
 		idbLoaded = true
+		// Update note headers rendered before IDB finished loading.
+		for pk, headers := range pendingNotes {
+			name := authorNames[pk]
+			pic := authorPics[pk]
+			if name != "" {
+				for _, h := range headers {
+					updateNoteHeader(h, name, pic)
+				}
+				delete(pendingNotes, pk)
+				fetchedK0[pk] = true // don't fetch, already cached
+			}
+		}
 	})
 
 	// === Top bar ===
