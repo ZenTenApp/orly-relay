@@ -66,6 +66,11 @@ func main() {
 	sw.OnActivate(onActivate)
 	sw.OnFetch(onFetch)
 	sw.OnMessage(onMessage)
+	// Connect bus+SSE from main() so they survive SW thread eviction.
+	// onActivate only fires once per lifecycle; the browser can evict
+	// and restart the thread at any time, losing all in-memory state.
+	connectSSE()
+	connectBus()
 }
 
 func onInstall(event sw.Event) {
@@ -87,8 +92,6 @@ func onInstall(event sw.Event) {
 func onActivate(event sw.Event) {
 	sw.WaitUntil(event, func(done func()) {
 		sw.ClaimClients(func() {
-			connectSSE()
-			connectBus()
 			done()
 		})
 	})
@@ -115,7 +118,6 @@ func onFetch(event sw.Event) {
 func onMessage(event sw.Event) {
 	data := sw.GetMessageData(event)
 	clientID := sw.GetMessageClientID(event)
-	sw.Log("sw: msg from " + clientID + ": " + data[:min(len(data), 60)])
 
 	// Simple string messages — App Shell handles directly.
 	if data == "activate-update" {

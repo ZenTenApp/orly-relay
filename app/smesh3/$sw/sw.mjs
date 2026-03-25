@@ -11,27 +11,17 @@ import * as common$jsbridge$sw from './common_jsbridge_sw.mjs';
 import * as common$jsbridge$ws from './common_jsbridge_ws.mjs';
 
 // Package-level variables
+export let cryptoCBs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let nextCryptoID = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let busConn = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let busReady = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let busPending = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let cryptoCBs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let nextCryptoID = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let appFiles = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let currentVersion = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let seckey = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let hasKey = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let myPubkey = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let appFiles = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let currentVersion = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
 
-$rt.types.registerType('sw.busMsgPending', {
-  id: 'sw.busMsgPending',
-  kind: 'struct',
-  methods: new Map(),
-  fields: [
-    { name: 'to', type: 'string', tag: '', embedded: false },
-    { name: 'msg', type: 'string', tag: '', embedded: false },
-  ],
-  zero: () => ({ to: '', msg: '' }),
-});
 $rt.types.registerType('sw.mw', {
   id: 'sw.mw',
   kind: 'struct',
@@ -41,6 +31,16 @@ $rt.types.registerType('sw.mw', {
     { name: 'i', type: 'int', tag: '', embedded: false },
   ],
   zero: () => ({ s: '', i: 0 }),
+});
+$rt.types.registerType('sw.busMsgPending', {
+  id: 'sw.busMsgPending',
+  kind: 'struct',
+  methods: new Map(),
+  fields: [
+    { name: 'to', type: 'string', tag: '', embedded: false },
+    { name: 'msg', type: 'string', tag: '', embedded: false },
+  ],
+  zero: () => ({ to: '', msg: '' }),
 });
 $rt.types.registerType('sw.DMRecord', {
   id: 'sw.DMRecord',
@@ -147,486 +147,6 @@ export function init() {
   $t43_44 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
   appFiles.$set($t43_44);
   return;
-}
-
-export function connectBus() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = common$jsbridge$sw.Origin();
-        $t1_2 = $rt.builtin.len($t0_1);
-        $t2_3 = ($t1_2 > 5);
-        if ($t2_3) {
-          $block = 4; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 1: {
-        $t3_4 = $rt.builtin.stringSlice($t0_1, 5, undefined);
-        $t4_5 = ('wss' + $t3_4);
-        $t5_6 = $t4_5;
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        $t6_7 = ($t5_6 + '/__bus');
-        $t7_8 = common$jsbridge$sw.Log('shell-sw: connecting to bus');
-        $t8_9 = common$jsbridge$ws.Dial($t6_7, connectBus$1, connectBus$2, connectBus$3, connectBus$4);
-        busConn.$set($t8_9);
-        return;
-        break;
-      }
-      case 3: {
-        $t9_10 = $rt.builtin.len($t0_1);
-        $t10_11 = ($t9_10 > 4);
-        if ($t10_11) {
-          $block = 6; break;
-        }
-        else {
-          $t5_6 = $t0_1;
-          $block = 2; break;
-        }
-        break;
-      }
-      case 4: {
-        $t11_12 = $rt.builtin.stringSlice($t0_1, undefined, 5);
-        $t12_13 = ($t11_12 === 'https');
-        if ($t12_13) {
-          $block = 1; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 5: {
-        $t13_14 = $rt.builtin.stringSlice($t0_1, 4, undefined);
-        $t14_15 = ('ws' + $t13_14);
-        $t5_6 = $t14_15;
-        $block = 2; break;
-        break;
-      }
-      case 6: {
-        $t15_16 = $rt.builtin.stringSlice($t0_1, undefined, 4);
-        $t16_17 = ($t15_16 === 'http');
-        if ($t16_17) {
-          $block = 5; break;
-        }
-        else {
-          $t5_6 = $t0_1;
-          $block = 2; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-function connectBus$1(connID, msg) {
-  let $t0_1;
-  $t0_1 = onBusMessage(msg);
-  return;
-}
-
-function connectBus$2(connID) {
-  let $t0_1;
-  $t0_1 = onBusOpen();
-  return;
-}
-
-function connectBus$3(connID, code, reason) {
-  let $t0_1, $t1_2;
-  $t0_1 = common$jsbridge$sw.Log('shell-sw: bus closed');
-  busReady.$set(false);
-  $t1_2 = common$jsbridge$sw.SetTimeout(2000, connectBus$3$1);
-  return;
-}
-
-function connectBus$3$1() {
-  let $t0_1;
-  $t0_1 = connectBus();
-  return;
-}
-
-function connectBus$4(connID) {
-  let $t0_1;
-  busReady.$set(false);
-  $t0_1 = common$jsbridge$sw.SetTimeout(2000, connectBus$4$1);
-  return;
-}
-
-function connectBus$4$1() {
-  let $t0_1;
-  $t0_1 = connectBus();
-  return;
-}
-
-export function onBusOpen() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        busReady.$set(true);
-        $t0_1 = common$jsbridge$sw.Log('shell-sw: bus connected');
-        $t1_2 = busConn.$get();
-        $t2_3 = common$jsbridge$ws.Send($t1_2, '{"role":"shell"}');
-        $t3_4 = busPending.$get();
-        $t4_5 = $rt.builtin.len($t3_4);
-        $t5_6 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t6_7 = ($t5_6 + 1);
-        $t7_8 = ($t6_7 < $t4_5);
-        if ($t7_8) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t8_9 = $t3_4.addr($t6_7);
-        $t9_10 = $t8_9.$get();
-        $t10_11 = { $value: { to: '', msg: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t10_11.$set($rt.builtin.cloneValue($t9_10));
-        $t11_12 = busConn.$get();
-        $t12_13 = { $get() { return $t10_11.$get().to; }, $set(v) { const obj = $t10_11.$get(); obj.to = v; $t10_11.$set(obj); } };
-        $t13_14 = $t12_13.$get();
-        $t14_15 = jstr($t13_14);
-        $t15_16 = ('{"to":' + $t14_15);
-        $t16_17 = ($t15_16 + ',"msg":');
-        $t17_18 = { $get() { return $t10_11.$get().msg; }, $set(v) { const obj = $t10_11.$get(); obj.msg = v; $t10_11.$set(obj); } };
-        $t18_19 = $t17_18.$get();
-        $t19_20 = ($t16_17 + $t18_19);
-        $t20_21 = ($t19_20 + '}');
-        $t21_22 = common$jsbridge$ws.Send($t11_12, $t20_21);
-        $t5_6 = $t6_7;
-        $block = 1; break;
-        break;
-      }
-      case 3: {
-        busPending.$set(null);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function busSend(to, msg) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = busReady.$get();
-        if ($t0_1) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        $t1_2 = busPending.$get();
-        $t2_3 = { $value: { to: '', msg: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t3_4 = { $get() { return $t2_3.$get().to; }, $set(v) { const obj = $t2_3.$get(); obj.to = v; $t2_3.$set(obj); } };
-        $t4_5 = { $get() { return $t2_3.$get().msg; }, $set(v) { const obj = $t2_3.$get(); obj.msg = v; $t2_3.$set(obj); } };
-        $t3_4.$set(to);
-        $t4_5.$set(msg);
-        $t5_6 = $t2_3.$get();
-        $t6_7 = { $value: $rt.builtin.makeSlice(1, 1, { to: '', msg: '' }), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t7_8 = $t6_7.$get().addr(0);
-        $t7_8.$set($rt.builtin.cloneValue($t5_6));
-        $t8_9 = $rt.builtin.sliceSlice($t6_7.$get(), undefined, undefined, undefined);
-        $t9_10 = $rt.builtin.appendSlice($t1_2, $t8_9);
-        busPending.$set($t9_10);
-        return;
-        break;
-      }
-      case 2: {
-        $t10_11 = busConn.$get();
-        $t11_12 = jstr(to);
-        $t12_13 = ('{"to":' + $t11_12);
-        $t13_14 = ($t12_13 + ',"msg":');
-        $t14_15 = ($t13_14 + msg);
-        $t15_16 = ($t14_15 + '}');
-        $t16_17 = common$jsbridge$ws.Send($t10_11, $t15_16);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function onBusMessage(msg) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(msg);
-        $t1_2 = Math.min($t0_1, 80);
-        $t2_3 = $rt.builtin.stringSlice(msg, undefined, $t1_2);
-        $t3_4 = ('shell-sw: bus: ' + $t2_3);
-        $t4_5 = common$jsbridge$sw.Log($t3_4);
-        $t5_6 = { $value: { s: '', i: 0 }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t6_7 = newMW(msg);
-        $t5_6.$set($rt.builtin.cloneValue($t6_7));
-        $t7_8 = mw$str($t5_6);
-        $t8_9 = ($t7_8 === 'FWD');
-        if ($t8_9) {
-          $block = 2; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t9_10 = mw$str($t5_6);
-        $t10_11 = mw$raw($t5_6);
-        $t11_12 = ($t9_10 === '');
-        if ($t11_12) {
-          $block = 5; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 3: {
-        $t12_13 = mw$raw($t5_6);
-        $t13_14 = broadcastToClients($t12_13);
-        $block = 1; break;
-        break;
-      }
-      case 4: {
-        $t14_15 = ($t7_8 === 'FWD_ALL');
-        if ($t14_15) {
-          $block = 3; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 5: {
-        $t15_16 = broadcastToClients($t10_11);
-        $block = 1; break;
-        break;
-      }
-      case 6: {
-        $t16_17 = sendToClient($t9_10, $t10_11);
-        $block = 1; break;
-        break;
-      }
-      case 7: {
-        $t17_18 = mw$raw($t5_6);
-        $t18_19 = ('["SAVE_DM",' + $t17_18);
-        $t19_20 = ($t18_19 + ']');
-        $t20_21 = busSend('relay', $t19_20);
-        $block = 1; break;
-        break;
-      }
-      case 8: {
-        $t21_22 = ($t7_8 === 'DM_RECEIVED');
-        if ($t21_22) {
-          $block = 7; break;
-        }
-        else {
-          $block = 10; break;
-        }
-        break;
-      }
-      case 9: {
-        $t22_23 = mw$raw($t5_6);
-        $t23_24 = ('["MLS_GROUPS",' + $t22_23);
-        $t24_25 = ($t23_24 + ']');
-        $t25_26 = broadcastToClients($t24_25);
-        $block = 1; break;
-        break;
-      }
-      case 10: {
-        $t26_27 = ($t7_8 === 'MLS_GROUPS');
-        if ($t26_27) {
-          $block = 9; break;
-        }
-        else {
-          $block = 12; break;
-        }
-        break;
-      }
-      case 11: {
-        $t27_28 = mw$raw($t5_6);
-        $t28_29 = ('["DM_SENT",' + $t27_28);
-        $t29_30 = ($t28_29 + ']');
-        $t30_31 = broadcastToClients($t29_30);
-        $block = 1; break;
-        break;
-      }
-      case 12: {
-        $t31_32 = ($t7_8 === 'DM_SENT');
-        if ($t31_32) {
-          $block = 11; break;
-        }
-        else {
-          $block = 14; break;
-        }
-        break;
-      }
-      case 13: {
-        $t32_33 = mw$raw($t5_6);
-        $t33_34 = ('["MLS_STATUS",' + $t32_33);
-        $t34_35 = ($t33_34 + ']');
-        $t35_36 = broadcastToClients($t34_35);
-        $block = 1; break;
-        break;
-      }
-      case 14: {
-        $t36_37 = ($t7_8 === 'MLS_STATUS');
-        if ($t36_37) {
-          $block = 13; break;
-        }
-        else {
-          $block = 16; break;
-        }
-        break;
-      }
-      case 15: {
-        $t37_38 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t38_39 = mw$str($t5_6);
-        $t37_38.$set($t38_39);
-        $t39_40 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t40_41 = mw$num($t5_6);
-        $t41_42 = $t40_41;
-        $t39_40.$set($t41_42);
-        $t42_43 = mw$str($t5_6);
-        $t43_44 = mw$str($t5_6);
-        $t44_45 = mw$str($t5_6);
-        $t45_46 = onBusMessage$1.bind(null, $t37_38, $t39_40);
-        $t46_47 = cryptoProxy($t42_43, $t43_44, $t44_45, $t45_46);
-        $block = 1; break;
-        break;
-      }
-      case 16: {
-        $t47_48 = ($t7_8 === 'CRYPTO_REQ');
-        if ($t47_48) {
-          $block = 15; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-function onBusMessage$1(from, id, result, errMsg) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13;
-  $t0_1 = from.$get();
-  $t1_2 = id.$get();
-  $t2_3 = $t1_2;
-  $t3_4 = common$helpers.Itoa($t2_3);
-  $t4_5 = ('["CRYPTO_RESULT",' + $t3_4);
-  $t5_6 = ($t4_5 + ',');
-  $t6_7 = jstr(result);
-  $t7_8 = ($t5_6 + $t6_7);
-  $t8_9 = ($t7_8 + ',');
-  $t9_10 = jstr(errMsg);
-  $t10_11 = ($t8_9 + $t9_10);
-  $t11_12 = ($t10_11 + ']');
-  $t12_13 = busSend($t0_1, $t11_12);
-  return;
-}
-
-export function strsJSON(ss) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(ss);
-        $t1_2 = ($t0_1 === 0);
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return '[]';
-        break;
-      }
-      case 2: {
-        $t2_3 = $rt.builtin.len(ss);
-        $t3_4 = '[';
-        $t4_5 = -1;
-        $block = 3; break;
-        break;
-      }
-      case 3: {
-        $t5_6 = ($t4_5 + 1);
-        $t6_7 = ($t5_6 < $t2_3);
-        if ($t6_7) {
-          $block = 4; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 4: {
-        $t7_8 = ss.addr($t5_6);
-        $t8_9 = $t7_8.$get();
-        $t9_10 = ($t5_6 > 0);
-        if ($t9_10) {
-          $block = 6; break;
-        }
-        else {
-          $t12_13 = $t3_4;
-          $block = 7; break;
-        }
-        break;
-      }
-      case 5: {
-        $t10_11 = ($t3_4 + ']');
-        return $t10_11;
-        break;
-      }
-      case 6: {
-        $t11_12 = ($t3_4 + ',');
-        $t12_13 = $t11_12;
-        $block = 7; break;
-        break;
-      }
-      case 7: {
-        $t13_14 = jstr($t8_9);
-        $t14_15 = ($t12_13 + $t13_14);
-        $t3_4 = $t14_15;
-        $t4_5 = $t5_6;
-        $block = 3; break;
-        break;
-      }
-    }
-  }
 }
 
 export function initSharedState() {
@@ -1331,22 +851,416 @@ export function skipBrack(s, i, open, close) {
   }
 }
 
-export function identitySetKey(hexKey) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
+export function connectBus() {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = hexTo32(hexKey);
-        seckey.$set($rt.builtin.cloneValue($t0_1));
-        hasKey.$set(true);
-        $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t2_3 = seckey.$get();
-        $t3_4 = common$crypto$secp256k1.PubKeyFromSecKey($t2_3);
-        $t4_5 = $t3_4[0];
-        $t1_2.$set($rt.builtin.cloneValue($t4_5));
-        $t5_6 = $t3_4[1];
-        if ($t5_6) {
+        $t0_1 = common$jsbridge$sw.Origin();
+        $t1_2 = $rt.builtin.len($t0_1);
+        $t2_3 = ($t1_2 > 5);
+        if ($t2_3) {
+          $block = 4; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 1: {
+        $t3_4 = $rt.builtin.stringSlice($t0_1, 5, undefined);
+        $t4_5 = ('wss' + $t3_4);
+        $t5_6 = $t4_5;
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        $t6_7 = ($t5_6 + '/__bus');
+        $t7_8 = common$jsbridge$sw.Log('shell-sw: connecting to bus');
+        $t8_9 = common$jsbridge$ws.Dial($t6_7, connectBus$1, connectBus$2, connectBus$3, connectBus$4);
+        busConn.$set($t8_9);
+        return;
+        break;
+      }
+      case 3: {
+        $t9_10 = $rt.builtin.len($t0_1);
+        $t10_11 = ($t9_10 > 4);
+        if ($t10_11) {
+          $block = 6; break;
+        }
+        else {
+          $t5_6 = $t0_1;
+          $block = 2; break;
+        }
+        break;
+      }
+      case 4: {
+        $t11_12 = $rt.builtin.stringSlice($t0_1, undefined, 5);
+        $t12_13 = ($t11_12 === 'https');
+        if ($t12_13) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 5: {
+        $t13_14 = $rt.builtin.stringSlice($t0_1, 4, undefined);
+        $t14_15 = ('ws' + $t13_14);
+        $t5_6 = $t14_15;
+        $block = 2; break;
+        break;
+      }
+      case 6: {
+        $t15_16 = $rt.builtin.stringSlice($t0_1, undefined, 4);
+        $t16_17 = ($t15_16 === 'http');
+        if ($t16_17) {
+          $block = 5; break;
+        }
+        else {
+          $t5_6 = $t0_1;
+          $block = 2; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+function connectBus$1(connID, msg) {
+  let $t0_1;
+  $t0_1 = onBusMessage(msg);
+  return;
+}
+
+function connectBus$2(connID) {
+  let $t0_1;
+  $t0_1 = onBusOpen();
+  return;
+}
+
+function connectBus$3(connID, code, reason) {
+  let $t0_1, $t1_2;
+  $t0_1 = common$jsbridge$sw.Log('shell-sw: bus closed');
+  busReady.$set(false);
+  $t1_2 = common$jsbridge$sw.SetTimeout(2000, connectBus$3$1);
+  return;
+}
+
+function connectBus$3$1() {
+  let $t0_1;
+  $t0_1 = connectBus();
+  return;
+}
+
+function connectBus$4(connID) {
+  let $t0_1;
+  busReady.$set(false);
+  $t0_1 = common$jsbridge$sw.SetTimeout(2000, connectBus$4$1);
+  return;
+}
+
+function connectBus$4$1() {
+  let $t0_1;
+  $t0_1 = connectBus();
+  return;
+}
+
+export function onBusOpen() {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        busReady.$set(true);
+        $t0_1 = common$jsbridge$sw.Log('shell-sw: bus connected');
+        $t1_2 = busConn.$get();
+        $t2_3 = common$jsbridge$ws.Send($t1_2, '{"role":"shell"}');
+        $t3_4 = busPending.$get();
+        $t4_5 = $rt.builtin.len($t3_4);
+        $t5_6 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t6_7 = ($t5_6 + 1);
+        $t7_8 = ($t6_7 < $t4_5);
+        if ($t7_8) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t8_9 = $t3_4.addr($t6_7);
+        $t9_10 = $t8_9.$get();
+        $t10_11 = { $value: { to: '', msg: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t10_11.$set($rt.builtin.cloneValue($t9_10));
+        $t11_12 = busConn.$get();
+        $t12_13 = { $get() { return $t10_11.$get().to; }, $set(v) { const obj = $t10_11.$get(); obj.to = v; $t10_11.$set(obj); } };
+        $t13_14 = $t12_13.$get();
+        $t14_15 = jstr($t13_14);
+        $t15_16 = ('{"to":' + $t14_15);
+        $t16_17 = ($t15_16 + ',"msg":');
+        $t17_18 = { $get() { return $t10_11.$get().msg; }, $set(v) { const obj = $t10_11.$get(); obj.msg = v; $t10_11.$set(obj); } };
+        $t18_19 = $t17_18.$get();
+        $t19_20 = ($t16_17 + $t18_19);
+        $t20_21 = ($t19_20 + '}');
+        $t21_22 = common$jsbridge$ws.Send($t11_12, $t20_21);
+        $t5_6 = $t6_7;
+        $block = 1; break;
+        break;
+      }
+      case 3: {
+        busPending.$set(null);
+        return;
+        break;
+      }
+    }
+  }
+}
+
+export function busSend(to, msg) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = busReady.$get();
+        if ($t0_1) {
+          $block = 2; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+      case 1: {
+        $t1_2 = busPending.$get();
+        $t2_3 = { $value: { to: '', msg: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t3_4 = { $get() { return $t2_3.$get().to; }, $set(v) { const obj = $t2_3.$get(); obj.to = v; $t2_3.$set(obj); } };
+        $t4_5 = { $get() { return $t2_3.$get().msg; }, $set(v) { const obj = $t2_3.$get(); obj.msg = v; $t2_3.$set(obj); } };
+        $t3_4.$set(to);
+        $t4_5.$set(msg);
+        $t5_6 = $t2_3.$get();
+        $t6_7 = { $value: $rt.builtin.makeSlice(1, 1, { to: '', msg: '' }), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t7_8 = $t6_7.$get().addr(0);
+        $t7_8.$set($rt.builtin.cloneValue($t5_6));
+        $t8_9 = $rt.builtin.sliceSlice($t6_7.$get(), undefined, undefined, undefined);
+        $t9_10 = $rt.builtin.appendSlice($t1_2, $t8_9);
+        busPending.$set($t9_10);
+        return;
+        break;
+      }
+      case 2: {
+        $t10_11 = busConn.$get();
+        $t11_12 = jstr(to);
+        $t12_13 = ('{"to":' + $t11_12);
+        $t13_14 = ($t12_13 + ',"msg":');
+        $t14_15 = ($t13_14 + msg);
+        $t15_16 = ($t14_15 + '}');
+        $t16_17 = common$jsbridge$ws.Send($t10_11, $t15_16);
+        return;
+        break;
+      }
+    }
+  }
+}
+
+export function onBusMessage(msg) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: { s: '', i: 0 }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2 = newMW(msg);
+        $t0_1.$set($rt.builtin.cloneValue($t1_2));
+        $t2_3 = mw$str($t0_1);
+        $t3_4 = ($t2_3 === 'FWD');
+        if ($t3_4) {
+          $block = 2; break;
+        }
+        else {
+          $block = 4; break;
+        }
+        break;
+      }
+      case 1: {
+        return;
+        break;
+      }
+      case 2: {
+        $t4_5 = mw$str($t0_1);
+        $t5_6 = mw$raw($t0_1);
+        $t6_7 = ($t4_5 === '');
+        if ($t6_7) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 3: {
+        $t7_8 = mw$raw($t0_1);
+        $t8_9 = broadcastToClients($t7_8);
+        $block = 1; break;
+        break;
+      }
+      case 4: {
+        $t9_10 = ($t2_3 === 'FWD_ALL');
+        if ($t9_10) {
+          $block = 3; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 5: {
+        $t10_11 = broadcastToClients($t5_6);
+        $block = 1; break;
+        break;
+      }
+      case 6: {
+        $t11_12 = sendToClient($t4_5, $t5_6);
+        $block = 1; break;
+        break;
+      }
+      case 7: {
+        $t12_13 = mw$raw($t0_1);
+        $t13_14 = ('["SAVE_DM",' + $t12_13);
+        $t14_15 = ($t13_14 + ']');
+        $t15_16 = busSend('relay', $t14_15);
+        $block = 1; break;
+        break;
+      }
+      case 8: {
+        $t16_17 = ($t2_3 === 'DM_RECEIVED');
+        if ($t16_17) {
+          $block = 7; break;
+        }
+        else {
+          $block = 10; break;
+        }
+        break;
+      }
+      case 9: {
+        $t17_18 = mw$raw($t0_1);
+        $t18_19 = ('["MLS_GROUPS",' + $t17_18);
+        $t19_20 = ($t18_19 + ']');
+        $t20_21 = broadcastToClients($t19_20);
+        $block = 1; break;
+        break;
+      }
+      case 10: {
+        $t21_22 = ($t2_3 === 'MLS_GROUPS');
+        if ($t21_22) {
+          $block = 9; break;
+        }
+        else {
+          $block = 12; break;
+        }
+        break;
+      }
+      case 11: {
+        $t22_23 = mw$raw($t0_1);
+        $t23_24 = ('["DM_SENT",' + $t22_23);
+        $t24_25 = ($t23_24 + ']');
+        $t25_26 = broadcastToClients($t24_25);
+        $block = 1; break;
+        break;
+      }
+      case 12: {
+        $t26_27 = ($t2_3 === 'DM_SENT');
+        if ($t26_27) {
+          $block = 11; break;
+        }
+        else {
+          $block = 14; break;
+        }
+        break;
+      }
+      case 13: {
+        $t27_28 = mw$raw($t0_1);
+        $t28_29 = ('["MLS_STATUS",' + $t27_28);
+        $t29_30 = ($t28_29 + ']');
+        $t30_31 = broadcastToClients($t29_30);
+        $block = 1; break;
+        break;
+      }
+      case 14: {
+        $t31_32 = ($t2_3 === 'MLS_STATUS');
+        if ($t31_32) {
+          $block = 13; break;
+        }
+        else {
+          $block = 16; break;
+        }
+        break;
+      }
+      case 15: {
+        $t32_33 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t33_34 = mw$str($t0_1);
+        $t32_33.$set($t33_34);
+        $t34_35 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t35_36 = mw$num($t0_1);
+        $t36_37 = $t35_36;
+        $t34_35.$set($t36_37);
+        $t37_38 = mw$str($t0_1);
+        $t38_39 = mw$str($t0_1);
+        $t39_40 = mw$str($t0_1);
+        $t40_41 = onBusMessage$1.bind(null, $t32_33, $t34_35);
+        $t41_42 = cryptoProxy($t37_38, $t38_39, $t39_40, $t40_41);
+        $block = 1; break;
+        break;
+      }
+      case 16: {
+        $t42_43 = ($t2_3 === 'CRYPTO_REQ');
+        if ($t42_43) {
+          $block = 15; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+function onBusMessage$1(from, id, result, errMsg) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13;
+  $t0_1 = from.$get();
+  $t1_2 = id.$get();
+  $t2_3 = $t1_2;
+  $t3_4 = common$helpers.Itoa($t2_3);
+  $t4_5 = ('["CRYPTO_RESULT",' + $t3_4);
+  $t5_6 = ($t4_5 + ',');
+  $t6_7 = jstr(result);
+  $t7_8 = ($t5_6 + $t6_7);
+  $t8_9 = ($t7_8 + ',');
+  $t9_10 = jstr(errMsg);
+  $t10_11 = ($t8_9 + $t9_10);
+  $t11_12 = ($t10_11 + ']');
+  $t12_13 = busSend($t0_1, $t11_12);
+  return;
+}
+
+export function strsJSON(ss) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(ss);
+        $t1_2 = ($t0_1 === 0);
+        if ($t1_2) {
           $block = 1; break;
         }
         else {
@@ -1355,39 +1269,72 @@ export function identitySetKey(hexKey) {
         break;
       }
       case 1: {
-        $t6_7 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
-        $t7_8 = common$helpers.HexEncode($t6_7);
-        myPubkey.$set($t7_8);
-        $block = 2; break;
+        return '[]';
         break;
       }
       case 2: {
-        return;
+        $t2_3 = $rt.builtin.len(ss);
+        $t3_4 = '[';
+        $t4_5 = -1;
+        $block = 3; break;
+        break;
+      }
+      case 3: {
+        $t5_6 = ($t4_5 + 1);
+        $t6_7 = ($t5_6 < $t2_3);
+        if ($t6_7) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 4: {
+        $t7_8 = ss.addr($t5_6);
+        $t8_9 = $t7_8.$get();
+        $t9_10 = ($t5_6 > 0);
+        if ($t9_10) {
+          $block = 6; break;
+        }
+        else {
+          $t12_13 = $t3_4;
+          $block = 7; break;
+        }
+        break;
+      }
+      case 5: {
+        $t10_11 = ($t3_4 + ']');
+        return $t10_11;
+        break;
+      }
+      case 6: {
+        $t11_12 = ($t3_4 + ',');
+        $t12_13 = $t11_12;
+        $block = 7; break;
+        break;
+      }
+      case 7: {
+        $t13_14 = jstr($t8_9);
+        $t14_15 = ($t12_13 + $t13_14);
+        $t3_4 = $t14_15;
+        $t4_5 = $t5_6;
+        $block = 3; break;
         break;
       }
     }
   }
 }
 
-export function identitySetPubkey(hex) {
-  myPubkey.$set(hex);
-  return;
-}
-
-export function identityClearKey() {
-  seckey.$set($rt.builtin.cloneValue($rt.builtin.makeSlice(32, 32, 0)));
-  hasKey.$set(false);
-  myPubkey.$set('');
-  return;
-}
-
 export function main() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
   $t0_1 = initSharedState();
   $t1_2 = common$jsbridge$sw.OnInstall(onInstall);
   $t2_3 = common$jsbridge$sw.OnActivate(onActivate);
   $t3_4 = common$jsbridge$sw.OnFetch(onFetch);
   $t4_5 = common$jsbridge$sw.OnMessage(onMessage);
+  $t5_6 = connectSSE();
+  $t6_7 = connectBus();
   return;
 }
 
@@ -1445,11 +1392,9 @@ function onActivate$1(done) {
 }
 
 function onActivate$1$1(done) {
-  let $t0_1, $t1_2, $t2_3, $t3_4;
-  $t0_1 = connectSSE();
-  $t1_2 = connectBus();
-  $t2_3 = done.$get();
-  $t3_4 = $t2_3();
+  let $t0_1, $t1_2;
+  $t0_1 = done.$get();
+  $t1_2 = $t0_1();
   return;
 }
 
@@ -1601,22 +1546,15 @@ export function onFetch(event) {
 }
 
 export function onMessage(event) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
         $t0_1 = common$jsbridge$sw.GetMessageData(event);
         $t1_2 = common$jsbridge$sw.GetMessageClientID(event);
-        $t2_3 = ('sw: msg from ' + $t1_2);
-        $t3_4 = ($t2_3 + ': ');
-        $t4_5 = $rt.builtin.len($t0_1);
-        $t5_6 = Math.min($t4_5, 60);
-        $t6_7 = $rt.builtin.stringSlice($t0_1, undefined, $t5_6);
-        $t7_8 = ($t3_4 + $t6_7);
-        $t8_9 = common$jsbridge$sw.Log($t7_8);
-        $t9_10 = ($t0_1 === 'activate-update');
-        if ($t9_10) {
+        $t2_3 = ($t0_1 === 'activate-update');
+        if ($t2_3) {
           $block = 1; break;
         }
         else {
@@ -1625,17 +1563,17 @@ export function onMessage(event) {
         break;
       }
       case 1: {
-        $t10_11 = refreshAndReload();
+        $t3_4 = refreshAndReload();
         return;
         break;
       }
       case 2: {
-        $t11_12 = { $value: { s: '', i: 0 }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t12_13 = newMW($t0_1);
-        $t11_12.$set($rt.builtin.cloneValue($t12_13));
-        $t13_14 = mw$str($t11_12);
-        $t14_15 = ($t13_14 === 'SKIP_WAITING');
-        if ($t14_15) {
+        $t4_5 = { $value: { s: '', i: 0 }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t5_6 = newMW($t0_1);
+        $t4_5.$set($rt.builtin.cloneValue($t5_6));
+        $t6_7 = mw$str($t4_5);
+        $t7_8 = ($t6_7 === 'SKIP_WAITING');
+        if ($t7_8) {
           $block = 4; break;
         }
         else {
@@ -1648,12 +1586,12 @@ export function onMessage(event) {
         break;
       }
       case 4: {
-        $t15_16 = common$jsbridge$sw.SkipWaiting();
+        $t8_9 = common$jsbridge$sw.SkipWaiting();
         $block = 3; break;
         break;
       }
       case 5: {
-        $t16_17 = routeMessage($t1_2, $t11_12, $t13_14);
+        $t9_10 = routeMessage($t1_2, $t4_5, $t6_7);
         $block = 3; break;
         break;
       }
@@ -1849,6 +1787,56 @@ function refreshFiles$1$1(cache, idx, done) {
   $t2_3 = ($t1_2 + 1);
   $t3_4 = done.$get();
   $t4_5 = refreshFiles($t0_1, $t2_3, $t3_4);
+  return;
+}
+
+export function identitySetKey(hexKey) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = hexTo32(hexKey);
+        seckey.$set($rt.builtin.cloneValue($t0_1));
+        hasKey.$set(true);
+        $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t2_3 = seckey.$get();
+        $t3_4 = common$crypto$secp256k1.PubKeyFromSecKey($t2_3);
+        $t4_5 = $t3_4[0];
+        $t1_2.$set($rt.builtin.cloneValue($t4_5));
+        $t5_6 = $t3_4[1];
+        if ($t5_6) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t6_7 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
+        $t7_8 = common$helpers.HexEncode($t6_7);
+        myPubkey.$set($t7_8);
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        return;
+        break;
+      }
+    }
+  }
+}
+
+export function identitySetPubkey(hex) {
+  myPubkey.$set(hex);
+  return;
+}
+
+export function identityClearKey() {
+  seckey.$set($rt.builtin.cloneValue($rt.builtin.makeSlice(32, 32, 0)));
+  hasKey.$set(false);
+  myPubkey.$set('');
   return;
 }
 

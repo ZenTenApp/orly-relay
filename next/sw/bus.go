@@ -61,7 +61,6 @@ func busSend(to, msg string) {
 }
 
 func onBusMessage(msg string) {
-	sw.Log("shell-sw: bus: " + msg[:min(len(msg), 80)])
 	w := newMW(msg)
 	msgType := w.str()
 
