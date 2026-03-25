@@ -794,3 +794,85 @@ For maximum discoverability, include the bridge's own relay plus 2-3 popular rel
 ### Future: Automatic Relay List Publishing
 
 A future ORLY release will have the bridge publish kind 10002 automatically on startup alongside the kind 0 profile, eliminating this manual step.
+
+---
+
+## Crypto Provider Architecture
+
+The bridge and Marmot DM system use a `CryptoProvider` interface (`pkg/nostr/protocol/marmot/crypto.go`) that abstracts signing and encryption. Two implementations exist:
+
+### LocalCrypto (Direct Key)
+
+Holds a private key (nsec) and performs all crypto locally. Used by:
+- Email bridge (standalone or monolithic)
+- Bridgebot
+- Any session authenticated with an nsec
+
+```go
+crypto := &marmot.LocalCrypto{Sign: signer}
+client := marmot.NewClient(crypto, store, relay)
+```
+
+### ProxyCrypto (Extension Delegation)
+
+Delegates crypto to a browser extension (Smesh Signer) via WebSocket. The extension holds the key in an encrypted vault. Used by:
+- Web sessions authenticated via NIP-07 (pubkey + extension)
+- Any session where the private key shouldn't leave the browser
+
+```
+Page → window.nostr.nip44Encrypt() → Extension vault → ECDH + encrypt → result
+```
+
+The proxy sends requests as `{op, peerHex, data, id}` over the bus and waits up to 15 seconds for the extension to respond. On disconnect, all pending requests error with "connection closed".
+
+### Choosing a Provider
+
+| Mode | Provider | Key Location |
+|------|----------|--------------|
+| Bridge (standalone) | LocalCrypto | `ORLY_BRIDGE_NSEC` env or auto-generated file |
+| Bridge (monolithic) | LocalCrypto | Relay database |
+| Web client + extension | ProxyCrypto | Browser extension vault (Argon2id encrypted) |
+| Web client + nsec | LocalCrypto | Session memory (cleared on tab close) |
+
+---
+
+## Smesh Signer Extension
+
+The bridge's crypto proxy integrates with the [Smesh Signer](../next/signer/README.md) browser extension. The extension provides `window.nostr` (NIP-07) to web pages, enabling the SM3SH web client to sign events and encrypt DMs without exposing the private key.
+
+Install the extension, import or create an identity, then connect to SM3SH. The client detects the extension and routes all crypto through it instead of requiring an nsec.
+
+See `next/signer/README.md` for build and install instructions.
+
+---
+
+## Docker Deployment
+
+### Bridge Only (Standalone)
+
+```bash
+cp .env.bridge.example .env.bridge
+# Edit .env.bridge with your values
+
+docker compose -f docker-compose.bridge.yml up --build -d
+```
+
+The bridge connects to an external relay via WebSocket and receives inbound email on port 2525.
+
+### Full Stack (Relay + Bridge)
+
+```bash
+# Set bridge env vars in your main .env or export them
+export ORLY_BRIDGE_ENABLED=true
+export ORLY_BRIDGE_DOMAIN=yourdomain.com
+# ... other bridge vars
+
+docker build -t orly .
+docker run -d --name orly \
+  -p 3334:3334 -p 2525:2525 \
+  -v orly-data:/data \
+  --env-file .env \
+  orly
+```
+
+The unified binary runs the relay on 3334 and bridge on 2525 when `ORLY_BRIDGE_ENABLED=true`.

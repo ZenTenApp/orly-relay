@@ -1,0 +1,7 @@
+<div class="icon-button">
+  @if (isEmoji) {
+    <span class="emoji">{{ icon }}</span>
+  } @else {
+    <i [class]="'bi bi-' + icon"></i>
+  }
+</div>

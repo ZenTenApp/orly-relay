@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Test NIP-07 Signer",
+  "version": "1.0",
+  "description": "Minimal NIP-07 stub for Playwright testing",
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content.js"],
+    "run_at": "document_start"
+  }],
+  "web_accessible_resources": [{
+    "resources": ["inject.mjs", "secp256k1.mjs", "secp256k1.wasm"],
+    "matches": ["<all_urls>"]
+  }]
+}

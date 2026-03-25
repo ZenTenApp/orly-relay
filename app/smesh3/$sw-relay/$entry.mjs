@@ -5,12 +5,13 @@ import * as $rt from './$runtime/index.mjs';
 import * as $p0 from './common_crypto_sha256.mjs';
 import * as $p1 from './common_crypto_secp256k1.mjs';
 import * as $p2 from './common_helpers.mjs';
-import * as $p3 from './common_jsbridge_idb.mjs';
-import * as $p4 from './common_jsbridge_subtle.mjs';
-import * as $p5 from './common_jsbridge_sw.mjs';
-import * as $p6 from './common_jsbridge_ws.mjs';
+import * as $p3 from './common_jsbridge_bc.mjs';
+import * as $p4 from './common_jsbridge_idb.mjs';
+import * as $p5 from './common_jsbridge_subtle.mjs';
+import * as $p6 from './common_jsbridge_sw.mjs';
 import * as $p7 from './common_nostr.mjs';
-import * as $p8 from './common_relay.mjs';
+import * as $p8 from './common_jsbridge_ws.mjs';
+import * as $p9 from './common_relay.mjs';
 import * as $main from './sw_relay.mjs';
 
 async function $start() {
@@ -24,6 +25,7 @@ async function $start() {
   if ($p6.init) $p6.init();
   if ($p7.init) $p7.init();
   if ($p8.init) $p8.init();
+  if ($p9.init) $p9.init();
   if ($main.init) await $main.init();
   if ($main.main) await $main.main();
 }

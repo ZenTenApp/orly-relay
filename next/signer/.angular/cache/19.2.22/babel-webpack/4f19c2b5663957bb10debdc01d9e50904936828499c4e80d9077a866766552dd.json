@@ -1,0 +1,1 @@
+{"ast":null,"code":"\"use strict\";\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\nexports.crypto = void 0;\nexports.crypto = typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;\n//# sourceMappingURL=crypto.js.map","map":null,"metadata":{},"sourceType":"script","externalDependencies":[]}

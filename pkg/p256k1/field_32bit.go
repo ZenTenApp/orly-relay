@@ -946,6 +946,23 @@ func batchInverse16(out *[16]FieldElement, a *[16]FieldElement) {
 	}
 }
 
+// batchInverse32 computes the inverses of exactly 32 FieldElements.
+// Delegates to two batchInverse16 calls.
+func batchInverse32(out *[32]FieldElement, a *[32]FieldElement) {
+	var lo, hi [16]FieldElement
+	var alo, ahi [16]FieldElement
+	for i := 0; i < 16; i++ {
+		alo[i] = a[i]
+		ahi[i] = a[i+16]
+	}
+	batchInverse16(&lo, &alo)
+	batchInverse16(&hi, &ahi)
+	for i := 0; i < 16; i++ {
+		out[i] = lo[i]
+		out[i+16] = hi[i]
+	}
+}
+
 // Placeholder stubs for Montgomery functions (not used in 10x26 representation)
 const montgomeryPPrime = 0
 

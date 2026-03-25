@@ -6,21 +6,20 @@ import * as $rt from './$runtime/index.mjs';
 import * as common$crypto$secp256k1 from './common_crypto_secp256k1.mjs';
 import * as common$crypto$sha256 from './common_crypto_sha256.mjs';
 import * as common$helpers from './common_helpers.mjs';
+import * as common$jsbridge$bc from './common_jsbridge_bc.mjs';
 import * as common$jsbridge$subtle from './common_jsbridge_subtle.mjs';
 import * as common$jsbridge$sw from './common_jsbridge_sw.mjs';
-import * as common$jsbridge$ws from './common_jsbridge_ws.mjs';
 
 // Package-level variables
+export let bus = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let cryptoCBs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let nextCryptoID = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let busConn = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let busReady = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let busPending = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let appFiles = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let currentVersion = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let seckey = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let hasKey = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let myPubkey = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let appFiles = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let currentVersion = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let pendingSentDMs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 
 $rt.types.registerType('sw.mw', {
   id: 'sw.mw',
@@ -31,16 +30,6 @@ $rt.types.registerType('sw.mw', {
     { name: 'i', type: 'int', tag: '', embedded: false },
   ],
   zero: () => ({ s: '', i: 0 }),
-});
-$rt.types.registerType('sw.busMsgPending', {
-  id: 'sw.busMsgPending',
-  kind: 'struct',
-  methods: new Map(),
-  fields: [
-    { name: 'to', type: 'string', tag: '', embedded: false },
-    { name: 'msg', type: 'string', tag: '', embedded: false },
-  ],
-  zero: () => ({ to: '', msg: '' }),
 });
 $rt.types.registerType('sw.DMRecord', {
   id: 'sw.DMRecord',
@@ -57,9 +46,19 @@ $rt.types.registerType('sw.DMRecord', {
   ],
   zero: () => ({ ID: '', Peer: '', From: '', Content: '', CreatedAt: 0, Protocol: '', EventID: '' }),
 });
+$rt.types.registerType('sw.pendingSentDM', {
+  id: 'sw.pendingSentDM',
+  kind: 'struct',
+  methods: new Map(),
+  fields: [
+    { name: 'recipient', type: 'string', tag: '', embedded: false },
+    { name: 'content', type: 'string', tag: '', embedded: false },
+  ],
+  zero: () => ({ recipient: '', content: '' }),
+});
 export function init() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44;
-  $t0_1 = { $value: $rt.builtin.makeSlice(42, 42, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45;
+  $t0_1 = { $value: $rt.builtin.makeSlice(43, 43, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
   $t1_2 = $t0_1.$get().addr(0);
   $t1_2.$set('/');
   $t2_3 = $t0_1.$get().addr(1);
@@ -144,9 +143,576 @@ export function init() {
   $t41_42.$set('/$sw/$runtime/crypto.mjs');
   $t42_43 = $t0_1.$get().addr(41);
   $t42_43.$set('/$sw/$runtime/ws.mjs');
-  $t43_44 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-  appFiles.$set($t43_44);
+  $t43_44 = $t0_1.$get().addr(42);
+  $t43_44.$set('/$sw/$runtime/bc.mjs');
+  $t44_45 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+  appFiles.$set($t44_45);
   return;
+}
+
+export function connectBus() {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = common$jsbridge$bc.Open('smesh-bus', connectBus$1);
+        bus.$set($t0_1);
+        $t1_2 = common$jsbridge$sw.Log('shell-sw: bus connected (BroadcastChannel)');
+        $t2_3 = myPubkey.$get();
+        $t3_4 = ($t2_3 === '');
+        if ($t3_4) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t4_5 = broadcastToClients('["NEED_IDENTITY"]');
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        return;
+        break;
+      }
+    }
+  }
+}
+
+function connectBus$1(msg) {
+  let $t0_1;
+  $t0_1 = onBusMessage(msg);
+  return;
+}
+
+export function busSend(to, msg) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
+  $t0_1 = bus.$get();
+  $t1_2 = jstr(to);
+  $t2_3 = ('{"from":"shell","to":' + $t1_2);
+  $t3_4 = ($t2_3 + ',"msg":');
+  $t4_5 = ($t3_4 + msg);
+  $t5_6 = ($t4_5 + '}');
+  $t6_7 = common$jsbridge$bc.Send($t0_1, $t5_6);
+  return;
+}
+
+export function onBusMessage(raw) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = jsonField(raw, 'from');
+        $t1_2 = ($t0_1 === 'shell');
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return;
+        break;
+      }
+      case 2: {
+        $t2_3 = jsonField(raw, 'to');
+        $t3_4 = ($t2_3 !== 'shell');
+        if ($t3_4) {
+          $block = 5; break;
+        }
+        else {
+          $block = 4; break;
+        }
+        break;
+      }
+      case 3: {
+        return;
+        break;
+      }
+      case 4: {
+        $t4_5 = jsonFieldRaw(raw, 'msg');
+        $t5_6 = ($t4_5 === '');
+        if ($t5_6) {
+          $block = 6; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 5: {
+        $t6_7 = ($t2_3 !== '*');
+        if ($t6_7) {
+          $block = 3; break;
+        }
+        else {
+          $block = 4; break;
+        }
+        break;
+      }
+      case 6: {
+        return;
+        break;
+      }
+      case 7: {
+        $t7_8 = { $value: { s: '', i: 0 }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t8_9 = newMW($t4_5);
+        $t7_8.$set($rt.builtin.cloneValue($t8_9));
+        $t9_10 = mw$str($t7_8);
+        $t10_11 = ($t9_10 === 'FWD');
+        if ($t10_11) {
+          $block = 9; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 8: {
+        return;
+        break;
+      }
+      case 9: {
+        $t11_12 = mw$str($t7_8);
+        $t12_13 = mw$raw($t7_8);
+        $t13_14 = ($t11_12 === '');
+        if ($t13_14) {
+          $block = 12; break;
+        }
+        else {
+          $block = 13; break;
+        }
+        break;
+      }
+      case 10: {
+        $t14_15 = mw$raw($t7_8);
+        $t15_16 = broadcastToClients($t14_15);
+        $block = 8; break;
+        break;
+      }
+      case 11: {
+        $t16_17 = ($t9_10 === 'FWD_ALL');
+        if ($t16_17) {
+          $block = 10; break;
+        }
+        else {
+          $block = 15; break;
+        }
+        break;
+      }
+      case 12: {
+        $t17_18 = broadcastToClients($t12_13);
+        $block = 8; break;
+        break;
+      }
+      case 13: {
+        $t18_19 = sendToClient($t11_12, $t12_13);
+        $block = 8; break;
+        break;
+      }
+      case 14: {
+        $t19_20 = mw$raw($t7_8);
+        $t20_21 = ('["SAVE_DM",' + $t19_20);
+        $t21_22 = ($t20_21 + ']');
+        $t22_23 = busSend('relay', $t21_22);
+        $block = 8; break;
+        break;
+      }
+      case 15: {
+        $t23_24 = ($t9_10 === 'DM_RECEIVED');
+        if ($t23_24) {
+          $block = 14; break;
+        }
+        else {
+          $block = 17; break;
+        }
+        break;
+      }
+      case 16: {
+        $t24_25 = mw$raw($t7_8);
+        $t25_26 = ('["MLS_GROUPS",' + $t24_25);
+        $t26_27 = ($t25_26 + ']');
+        $t27_28 = broadcastToClients($t26_27);
+        $block = 8; break;
+        break;
+      }
+      case 17: {
+        $t28_29 = ($t9_10 === 'MLS_GROUPS');
+        if ($t28_29) {
+          $block = 16; break;
+        }
+        else {
+          $block = 19; break;
+        }
+        break;
+      }
+      case 18: {
+        $t29_30 = mw$raw($t7_8);
+        $t30_31 = ('["DM_SENT",' + $t29_30);
+        $t31_32 = ($t30_31 + ']');
+        $t32_33 = broadcastToClients($t31_32);
+        $block = 8; break;
+        break;
+      }
+      case 19: {
+        $t33_34 = ($t9_10 === 'DM_SENT');
+        if ($t33_34) {
+          $block = 18; break;
+        }
+        else {
+          $block = 21; break;
+        }
+        break;
+      }
+      case 20: {
+        $t34_35 = mw$raw($t7_8);
+        $t35_36 = ('["MLS_STATUS",' + $t34_35);
+        $t36_37 = ($t35_36 + ']');
+        $t37_38 = broadcastToClients($t36_37);
+        $block = 8; break;
+        break;
+      }
+      case 21: {
+        $t38_39 = ($t9_10 === 'MLS_STATUS');
+        if ($t38_39) {
+          $block = 20; break;
+        }
+        else {
+          $block = 23; break;
+        }
+        break;
+      }
+      case 22: {
+        $t39_40 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t40_41 = mw$str($t7_8);
+        $t39_40.$set($t40_41);
+        $t41_42 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t42_43 = mw$num($t7_8);
+        $t43_44 = $t42_43;
+        $t41_42.$set($t43_44);
+        $t44_45 = mw$str($t7_8);
+        $t45_46 = mw$str($t7_8);
+        $t46_47 = mw$str($t7_8);
+        $t47_48 = onBusMessage$1.bind(null, $t39_40, $t41_42);
+        $t48_49 = cryptoProxy($t44_45, $t45_46, $t46_47, $t47_48);
+        $block = 8; break;
+        break;
+      }
+      case 23: {
+        $t49_50 = ($t9_10 === 'CRYPTO_REQ');
+        if ($t49_50) {
+          $block = 22; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+function onBusMessage$1(from, id, result, errMsg) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13;
+  $t0_1 = from.$get();
+  $t1_2 = id.$get();
+  $t2_3 = $t1_2;
+  $t3_4 = common$helpers.Itoa($t2_3);
+  $t4_5 = ('["CRYPTO_RESULT",' + $t3_4);
+  $t5_6 = ($t4_5 + ',');
+  $t6_7 = jstr(result);
+  $t7_8 = ($t5_6 + $t6_7);
+  $t8_9 = ($t7_8 + ',');
+  $t9_10 = jstr(errMsg);
+  $t10_11 = ($t8_9 + $t9_10);
+  $t11_12 = ($t10_11 + ']');
+  $t12_13 = busSend($t0_1, $t11_12);
+  return;
+}
+
+export function jsonField(json, key) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = jsonFieldRaw(json, key);
+        $t1_2 = $rt.builtin.len($t0_1);
+        $t2_3 = ($t1_2 >= 2);
+        if ($t2_3) {
+          $block = 4; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t3_4 = $rt.builtin.len($t0_1);
+        $t4_5 = ($t3_4 - 1);
+        $t5_6 = $rt.builtin.stringSlice($t0_1, 1, $t4_5);
+        return $t5_6;
+        break;
+      }
+      case 2: {
+        return $t0_1;
+        break;
+      }
+      case 3: {
+        $t6_7 = $rt.builtin.len($t0_1);
+        $t7_8 = ($t6_7 - 1);
+        $rt.runtime.boundsCheck($t7_8, $rt.builtin.byteLen($t0_1));
+        $t8_9 = $rt.builtin.stringByteAt($t0_1, $t7_8);
+        $t9_10 = ($t8_9 === 34);
+        if ($t9_10) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 4: {
+        $rt.runtime.boundsCheck(0, $rt.builtin.byteLen($t0_1));
+        $t10_11 = $rt.builtin.stringByteAt($t0_1, 0);
+        $t11_12 = ($t10_11 === 34);
+        if ($t11_12) {
+          $block = 3; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function jsonFieldRaw(json, key) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = ('"' + key);
+        $t1_2 = ($t0_1 + '":');
+        $t2_3 = 0;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t3_4 = $rt.builtin.len(json);
+        $t4_5 = $rt.builtin.len($t1_2);
+        $t5_6 = ($t3_4 - $t4_5);
+        $t6_7 = ($t2_3 <= $t5_6);
+        if ($t6_7) {
+          $block = 2; break;
+        }
+        else {
+          $t11_12 = -1;
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t7_8 = $rt.builtin.len($t1_2);
+        $t8_9 = ($t2_3 + $t7_8);
+        $t9_10 = $rt.builtin.stringSlice(json, $t2_3, $t8_9);
+        $t10_11 = ($t9_10 === $t1_2);
+        if ($t10_11) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 3: {
+        $t12_13 = ($t11_12 < 0);
+        if ($t12_13) {
+          $block = 6; break;
+        }
+        else {
+          $t19_20 = $t11_12;
+          $block = 9; break;
+        }
+        break;
+      }
+      case 4: {
+        $t13_14 = $rt.builtin.len($t1_2);
+        $t14_15 = ($t2_3 + $t13_14);
+        $t11_12 = $t14_15;
+        $block = 3; break;
+        break;
+      }
+      case 5: {
+        $t15_16 = ($t2_3 + 1);
+        $t2_3 = $t15_16;
+        $block = 1; break;
+        break;
+      }
+      case 6: {
+        return '';
+        break;
+      }
+      case 7: {
+        $t16_17 = ($t19_20 + 1);
+        $t19_20 = $t16_17;
+        $block = 9; break;
+        break;
+      }
+      case 8: {
+        $t17_18 = $rt.builtin.len(json);
+        $t18_19 = ($t19_20 >= $t17_18);
+        if ($t18_19) {
+          $block = 12; break;
+        }
+        else {
+          $block = 13; break;
+        }
+        break;
+      }
+      case 9: {
+        $t20_21 = $rt.builtin.len(json);
+        $t21_22 = ($t19_20 < $t20_21);
+        if ($t21_22) {
+          $block = 10; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 10: {
+        $rt.runtime.boundsCheck($t19_20, $rt.builtin.byteLen(json));
+        $t22_23 = $rt.builtin.stringByteAt(json, $t19_20);
+        $t23_24 = ($t22_23 === 32);
+        if ($t23_24) {
+          $block = 7; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 11: {
+        $rt.runtime.boundsCheck($t19_20, $rt.builtin.byteLen(json));
+        $t24_25 = $rt.builtin.stringByteAt(json, $t19_20);
+        $t25_26 = ($t24_25 === 9);
+        if ($t25_26) {
+          $block = 7; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 12: {
+        return '';
+        break;
+      }
+      case 13: {
+        $t26_27 = skipval(json, $t19_20);
+        $t27_28 = ($t26_27 < 0);
+        if ($t27_28) {
+          $block = 14; break;
+        }
+        else {
+          $block = 15; break;
+        }
+        break;
+      }
+      case 14: {
+        return '';
+        break;
+      }
+      case 15: {
+        $t28_29 = $rt.builtin.stringSlice(json, $t19_20, $t26_27);
+        return $t28_29;
+        break;
+      }
+    }
+  }
+}
+
+export function strsJSON(ss) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(ss);
+        $t1_2 = ($t0_1 === 0);
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return '[]';
+        break;
+      }
+      case 2: {
+        $t2_3 = $rt.builtin.len(ss);
+        $t3_4 = '[';
+        $t4_5 = -1;
+        $block = 3; break;
+        break;
+      }
+      case 3: {
+        $t5_6 = ($t4_5 + 1);
+        $t6_7 = ($t5_6 < $t2_3);
+        if ($t6_7) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 4: {
+        $t7_8 = ss.addr($t5_6);
+        $t8_9 = $t7_8.$get();
+        $t9_10 = ($t5_6 > 0);
+        if ($t9_10) {
+          $block = 6; break;
+        }
+        else {
+          $t12_13 = $t3_4;
+          $block = 7; break;
+        }
+        break;
+      }
+      case 5: {
+        $t10_11 = ($t3_4 + ']');
+        return $t10_11;
+        break;
+      }
+      case 6: {
+        $t11_12 = ($t3_4 + ',');
+        $t12_13 = $t11_12;
+        $block = 7; break;
+        break;
+      }
+      case 7: {
+        $t13_14 = jstr($t8_9);
+        $t14_15 = ($t12_13 + $t13_14);
+        $t3_4 = $t14_15;
+        $t4_5 = $t5_6;
+        $block = 3; break;
+        break;
+      }
+    }
+  }
 }
 
 export function initSharedState() {
@@ -851,172 +1417,37 @@ export function skipBrack(s, i, open, close) {
   }
 }
 
-export function connectBus() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
+export function identitySetKey(hexKey) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = common$jsbridge$sw.Origin();
-        $t1_2 = $rt.builtin.len($t0_1);
-        $t2_3 = ($t1_2 > 5);
-        if ($t2_3) {
-          $block = 4; break;
+        $t0_1 = hexTo32(hexKey);
+        seckey.$set($rt.builtin.cloneValue($t0_1));
+        hasKey.$set(true);
+        $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t2_3 = seckey.$get();
+        $t3_4 = common$crypto$secp256k1.PubKeyFromSecKey($t2_3);
+        $t4_5 = $t3_4[0];
+        $t1_2.$set($rt.builtin.cloneValue($t4_5));
+        $t5_6 = $t3_4[1];
+        if ($t5_6) {
+          $block = 1; break;
         }
         else {
-          $block = 3; break;
+          $block = 2; break;
         }
         break;
       }
       case 1: {
-        $t3_4 = $rt.builtin.stringSlice($t0_1, 5, undefined);
-        $t4_5 = ('wss' + $t3_4);
-        $t5_6 = $t4_5;
+        $t6_7 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
+        $t7_8 = common$helpers.HexEncode($t6_7);
+        myPubkey.$set($t7_8);
         $block = 2; break;
         break;
       }
       case 2: {
-        $t6_7 = ($t5_6 + '/__bus');
-        $t7_8 = common$jsbridge$sw.Log('shell-sw: connecting to bus');
-        $t8_9 = common$jsbridge$ws.Dial($t6_7, connectBus$1, connectBus$2, connectBus$3, connectBus$4);
-        busConn.$set($t8_9);
-        return;
-        break;
-      }
-      case 3: {
-        $t9_10 = $rt.builtin.len($t0_1);
-        $t10_11 = ($t9_10 > 4);
-        if ($t10_11) {
-          $block = 6; break;
-        }
-        else {
-          $t5_6 = $t0_1;
-          $block = 2; break;
-        }
-        break;
-      }
-      case 4: {
-        $t11_12 = $rt.builtin.stringSlice($t0_1, undefined, 5);
-        $t12_13 = ($t11_12 === 'https');
-        if ($t12_13) {
-          $block = 1; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 5: {
-        $t13_14 = $rt.builtin.stringSlice($t0_1, 4, undefined);
-        $t14_15 = ('ws' + $t13_14);
-        $t5_6 = $t14_15;
-        $block = 2; break;
-        break;
-      }
-      case 6: {
-        $t15_16 = $rt.builtin.stringSlice($t0_1, undefined, 4);
-        $t16_17 = ($t15_16 === 'http');
-        if ($t16_17) {
-          $block = 5; break;
-        }
-        else {
-          $t5_6 = $t0_1;
-          $block = 2; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-function connectBus$1(connID, msg) {
-  let $t0_1;
-  $t0_1 = onBusMessage(msg);
-  return;
-}
-
-function connectBus$2(connID) {
-  let $t0_1;
-  $t0_1 = onBusOpen();
-  return;
-}
-
-function connectBus$3(connID, code, reason) {
-  let $t0_1, $t1_2;
-  $t0_1 = common$jsbridge$sw.Log('shell-sw: bus closed');
-  busReady.$set(false);
-  $t1_2 = common$jsbridge$sw.SetTimeout(2000, connectBus$3$1);
-  return;
-}
-
-function connectBus$3$1() {
-  let $t0_1;
-  $t0_1 = connectBus();
-  return;
-}
-
-function connectBus$4(connID) {
-  let $t0_1;
-  busReady.$set(false);
-  $t0_1 = common$jsbridge$sw.SetTimeout(2000, connectBus$4$1);
-  return;
-}
-
-function connectBus$4$1() {
-  let $t0_1;
-  $t0_1 = connectBus();
-  return;
-}
-
-export function onBusOpen() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        busReady.$set(true);
-        $t0_1 = common$jsbridge$sw.Log('shell-sw: bus connected');
-        $t1_2 = busConn.$get();
-        $t2_3 = common$jsbridge$ws.Send($t1_2, '{"role":"shell"}');
-        $t3_4 = busPending.$get();
-        $t4_5 = $rt.builtin.len($t3_4);
-        $t5_6 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t6_7 = ($t5_6 + 1);
-        $t7_8 = ($t6_7 < $t4_5);
-        if ($t7_8) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t8_9 = $t3_4.addr($t6_7);
-        $t9_10 = $t8_9.$get();
-        $t10_11 = { $value: { to: '', msg: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t10_11.$set($rt.builtin.cloneValue($t9_10));
-        $t11_12 = busConn.$get();
-        $t12_13 = { $get() { return $t10_11.$get().to; }, $set(v) { const obj = $t10_11.$get(); obj.to = v; $t10_11.$set(obj); } };
-        $t13_14 = $t12_13.$get();
-        $t14_15 = jstr($t13_14);
-        $t15_16 = ('{"to":' + $t14_15);
-        $t16_17 = ($t15_16 + ',"msg":');
-        $t17_18 = { $get() { return $t10_11.$get().msg; }, $set(v) { const obj = $t10_11.$get(); obj.msg = v; $t10_11.$set(obj); } };
-        $t18_19 = $t17_18.$get();
-        $t19_20 = ($t16_17 + $t18_19);
-        $t20_21 = ($t19_20 + '}');
-        $t21_22 = common$jsbridge$ws.Send($t11_12, $t20_21);
-        $t5_6 = $t6_7;
-        $block = 1; break;
-        break;
-      }
-      case 3: {
-        busPending.$set(null);
         return;
         break;
       }
@@ -1024,306 +1455,58 @@ export function onBusOpen() {
   }
 }
 
-export function busSend(to, msg) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = busReady.$get();
-        if ($t0_1) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        $t1_2 = busPending.$get();
-        $t2_3 = { $value: { to: '', msg: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t3_4 = { $get() { return $t2_3.$get().to; }, $set(v) { const obj = $t2_3.$get(); obj.to = v; $t2_3.$set(obj); } };
-        $t4_5 = { $get() { return $t2_3.$get().msg; }, $set(v) { const obj = $t2_3.$get(); obj.msg = v; $t2_3.$set(obj); } };
-        $t3_4.$set(to);
-        $t4_5.$set(msg);
-        $t5_6 = $t2_3.$get();
-        $t6_7 = { $value: $rt.builtin.makeSlice(1, 1, { to: '', msg: '' }), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t7_8 = $t6_7.$get().addr(0);
-        $t7_8.$set($rt.builtin.cloneValue($t5_6));
-        $t8_9 = $rt.builtin.sliceSlice($t6_7.$get(), undefined, undefined, undefined);
-        $t9_10 = $rt.builtin.appendSlice($t1_2, $t8_9);
-        busPending.$set($t9_10);
-        return;
-        break;
-      }
-      case 2: {
-        $t10_11 = busConn.$get();
-        $t11_12 = jstr(to);
-        $t12_13 = ('{"to":' + $t11_12);
-        $t13_14 = ($t12_13 + ',"msg":');
-        $t14_15 = ($t13_14 + msg);
-        $t15_16 = ($t14_15 + '}');
-        $t16_17 = common$jsbridge$ws.Send($t10_11, $t15_16);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function onBusMessage(msg) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: { s: '', i: 0 }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2 = newMW(msg);
-        $t0_1.$set($rt.builtin.cloneValue($t1_2));
-        $t2_3 = mw$str($t0_1);
-        $t3_4 = ($t2_3 === 'FWD');
-        if ($t3_4) {
-          $block = 2; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t4_5 = mw$str($t0_1);
-        $t5_6 = mw$raw($t0_1);
-        $t6_7 = ($t4_5 === '');
-        if ($t6_7) {
-          $block = 5; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 3: {
-        $t7_8 = mw$raw($t0_1);
-        $t8_9 = broadcastToClients($t7_8);
-        $block = 1; break;
-        break;
-      }
-      case 4: {
-        $t9_10 = ($t2_3 === 'FWD_ALL');
-        if ($t9_10) {
-          $block = 3; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 5: {
-        $t10_11 = broadcastToClients($t5_6);
-        $block = 1; break;
-        break;
-      }
-      case 6: {
-        $t11_12 = sendToClient($t4_5, $t5_6);
-        $block = 1; break;
-        break;
-      }
-      case 7: {
-        $t12_13 = mw$raw($t0_1);
-        $t13_14 = ('["SAVE_DM",' + $t12_13);
-        $t14_15 = ($t13_14 + ']');
-        $t15_16 = busSend('relay', $t14_15);
-        $block = 1; break;
-        break;
-      }
-      case 8: {
-        $t16_17 = ($t2_3 === 'DM_RECEIVED');
-        if ($t16_17) {
-          $block = 7; break;
-        }
-        else {
-          $block = 10; break;
-        }
-        break;
-      }
-      case 9: {
-        $t17_18 = mw$raw($t0_1);
-        $t18_19 = ('["MLS_GROUPS",' + $t17_18);
-        $t19_20 = ($t18_19 + ']');
-        $t20_21 = broadcastToClients($t19_20);
-        $block = 1; break;
-        break;
-      }
-      case 10: {
-        $t21_22 = ($t2_3 === 'MLS_GROUPS');
-        if ($t21_22) {
-          $block = 9; break;
-        }
-        else {
-          $block = 12; break;
-        }
-        break;
-      }
-      case 11: {
-        $t22_23 = mw$raw($t0_1);
-        $t23_24 = ('["DM_SENT",' + $t22_23);
-        $t24_25 = ($t23_24 + ']');
-        $t25_26 = broadcastToClients($t24_25);
-        $block = 1; break;
-        break;
-      }
-      case 12: {
-        $t26_27 = ($t2_3 === 'DM_SENT');
-        if ($t26_27) {
-          $block = 11; break;
-        }
-        else {
-          $block = 14; break;
-        }
-        break;
-      }
-      case 13: {
-        $t27_28 = mw$raw($t0_1);
-        $t28_29 = ('["MLS_STATUS",' + $t27_28);
-        $t29_30 = ($t28_29 + ']');
-        $t30_31 = broadcastToClients($t29_30);
-        $block = 1; break;
-        break;
-      }
-      case 14: {
-        $t31_32 = ($t2_3 === 'MLS_STATUS');
-        if ($t31_32) {
-          $block = 13; break;
-        }
-        else {
-          $block = 16; break;
-        }
-        break;
-      }
-      case 15: {
-        $t32_33 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t33_34 = mw$str($t0_1);
-        $t32_33.$set($t33_34);
-        $t34_35 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t35_36 = mw$num($t0_1);
-        $t36_37 = $t35_36;
-        $t34_35.$set($t36_37);
-        $t37_38 = mw$str($t0_1);
-        $t38_39 = mw$str($t0_1);
-        $t39_40 = mw$str($t0_1);
-        $t40_41 = onBusMessage$1.bind(null, $t32_33, $t34_35);
-        $t41_42 = cryptoProxy($t37_38, $t38_39, $t39_40, $t40_41);
-        $block = 1; break;
-        break;
-      }
-      case 16: {
-        $t42_43 = ($t2_3 === 'CRYPTO_REQ');
-        if ($t42_43) {
-          $block = 15; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-function onBusMessage$1(from, id, result, errMsg) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13;
-  $t0_1 = from.$get();
-  $t1_2 = id.$get();
-  $t2_3 = $t1_2;
-  $t3_4 = common$helpers.Itoa($t2_3);
-  $t4_5 = ('["CRYPTO_RESULT",' + $t3_4);
-  $t5_6 = ($t4_5 + ',');
-  $t6_7 = jstr(result);
-  $t7_8 = ($t5_6 + $t6_7);
-  $t8_9 = ($t7_8 + ',');
-  $t9_10 = jstr(errMsg);
-  $t10_11 = ($t8_9 + $t9_10);
-  $t11_12 = ($t10_11 + ']');
-  $t12_13 = busSend($t0_1, $t11_12);
+export function identitySetPubkey(hex) {
+  myPubkey.$set(hex);
   return;
 }
 
-export function strsJSON(ss) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(ss);
-        $t1_2 = ($t0_1 === 0);
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return '[]';
-        break;
-      }
-      case 2: {
-        $t2_3 = $rt.builtin.len(ss);
-        $t3_4 = '[';
-        $t4_5 = -1;
-        $block = 3; break;
-        break;
-      }
-      case 3: {
-        $t5_6 = ($t4_5 + 1);
-        $t6_7 = ($t5_6 < $t2_3);
-        if ($t6_7) {
-          $block = 4; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 4: {
-        $t7_8 = ss.addr($t5_6);
-        $t8_9 = $t7_8.$get();
-        $t9_10 = ($t5_6 > 0);
-        if ($t9_10) {
-          $block = 6; break;
-        }
-        else {
-          $t12_13 = $t3_4;
-          $block = 7; break;
-        }
-        break;
-      }
-      case 5: {
-        $t10_11 = ($t3_4 + ']');
-        return $t10_11;
-        break;
-      }
-      case 6: {
-        $t11_12 = ($t3_4 + ',');
-        $t12_13 = $t11_12;
-        $block = 7; break;
-        break;
-      }
-      case 7: {
-        $t13_14 = jstr($t8_9);
-        $t14_15 = ($t12_13 + $t13_14);
-        $t3_4 = $t14_15;
-        $t4_5 = $t5_6;
-        $block = 3; break;
-        break;
-      }
-    }
-  }
+export function identityClearKey() {
+  seckey.$set($rt.builtin.cloneValue($rt.builtin.makeSlice(32, 32, 0)));
+  hasKey.$set(false);
+  myPubkey.$set('');
+  return;
+}
+
+export function makeDMRecord(peer, from, content, createdAt, protocol, eventID) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
+  $t0_1 = { $value: { ID: '', Peer: '', From: '', Content: '', CreatedAt: 0, Protocol: '', EventID: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t1_2 = { $get() { return $t0_1.$get().ID; }, $set(v) { const obj = $t0_1.$get(); obj.ID = v; $t0_1.$set(obj); } };
+  $t2_3 = dmDedupID(peer, content, createdAt);
+  $t3_4 = { $get() { return $t0_1.$get().Peer; }, $set(v) { const obj = $t0_1.$get(); obj.Peer = v; $t0_1.$set(obj); } };
+  $t4_5 = { $get() { return $t0_1.$get().From; }, $set(v) { const obj = $t0_1.$get(); obj.From = v; $t0_1.$set(obj); } };
+  $t5_6 = { $get() { return $t0_1.$get().Content; }, $set(v) { const obj = $t0_1.$get(); obj.Content = v; $t0_1.$set(obj); } };
+  $t6_7 = { $get() { return $t0_1.$get().CreatedAt; }, $set(v) { const obj = $t0_1.$get(); obj.CreatedAt = v; $t0_1.$set(obj); } };
+  $t7_8 = { $get() { return $t0_1.$get().Protocol; }, $set(v) { const obj = $t0_1.$get(); obj.Protocol = v; $t0_1.$set(obj); } };
+  $t8_9 = { $get() { return $t0_1.$get().EventID; }, $set(v) { const obj = $t0_1.$get(); obj.EventID = v; $t0_1.$set(obj); } };
+  $t1_2.$set($t2_3);
+  $t3_4.$set(peer);
+  $t4_5.$set(from);
+  $t5_6.$set(content);
+  $t6_7.$set(createdAt);
+  $t7_8.$set(protocol);
+  $t8_9.$set(eventID);
+  return $t0_1;
+}
+
+export function dmDedupID(peer, content, createdAt) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
+  $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t1_2 = $rt.builtin.stringToBytes(content);
+  $t2_3 = common$crypto$sha256.Sum($t1_2);
+  $t0_1.$set($rt.builtin.cloneValue($t2_3));
+  $t3_4 = Math.trunc(createdAt / 300);
+  $t4_5 = common$helpers.Itoa($t3_4);
+  $t5_6 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t6_7 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+  $t7_8 = common$helpers.HexEncode($t6_7);
+  $t8_9 = (peer + $t7_8);
+  $t9_10 = ($t8_9 + $t4_5);
+  $t10_11 = $rt.builtin.stringToBytes($t9_10);
+  $t11_12 = common$crypto$sha256.Sum($t10_11);
+  $t5_6.$set($rt.builtin.cloneValue($t11_12));
+  $t12_13 = $rt.builtin.sliceSlice($t5_6.$get(), undefined, undefined, undefined);
+  $t13_14 = common$helpers.HexEncode($t12_13);
+  return $t13_14;
 }
 
 export function main() {
@@ -1399,7 +1582,7 @@ function onActivate$1$1(done) {
 }
 
 export function onFetch(event) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -1428,7 +1611,7 @@ export function onFetch(event) {
           $block = 4; break;
         }
         else {
-          $block = 9; break;
+          $block = 6; break;
         }
         break;
       }
@@ -1452,15 +1635,15 @@ export function onFetch(event) {
         $t10_11 = $rt.builtin.len($t5_6);
         $t11_12 = ($t10_11 > 4);
         if ($t11_12) {
-          $block = 13; break;
+          $block = 10; break;
         }
         else {
-          $block = 12; break;
+          $block = 9; break;
         }
         break;
       }
       case 6: {
-        $t12_13 = ($t5_6 === '/__bus');
+        $t12_13 = ($t5_6 === '/__version');
         if ($t12_13) {
           $block = 4; break;
         }
@@ -1470,29 +1653,19 @@ export function onFetch(event) {
         break;
       }
       case 7: {
-        $t13_14 = ($t5_6 === '/__sw-error');
-        if ($t13_14) {
-          $block = 4; break;
-        }
-        else {
-          $block = 6; break;
-        }
+        return;
         break;
       }
       case 8: {
-        $t14_15 = ($t5_6 === '/__marmot');
-        if ($t14_15) {
-          $block = 4; break;
-        }
-        else {
-          $block = 7; break;
-        }
+        $t13_14 = common$jsbridge$sw.RespondWithCacheFirst(event);
+        return;
         break;
       }
       case 9: {
-        $t15_16 = ($t5_6 === '/__version');
+        $t14_15 = $rt.builtin.len($t5_6);
+        $t15_16 = ($t14_15 > 6);
         if ($t15_16) {
-          $block = 4; break;
+          $block = 11; break;
         }
         else {
           $block = 8; break;
@@ -1500,44 +1673,24 @@ export function onFetch(event) {
         break;
       }
       case 10: {
-        return;
+        $t16_17 = $rt.builtin.stringSlice($t5_6, undefined, 5);
+        $t17_18 = ($t16_17 === '/$sw/');
+        if ($t17_18) {
+          $block = 7; break;
+        }
+        else {
+          $block = 9; break;
+        }
         break;
       }
       case 11: {
-        $t16_17 = common$jsbridge$sw.RespondWithCacheFirst(event);
-        return;
-        break;
-      }
-      case 12: {
-        $t17_18 = $rt.builtin.len($t5_6);
-        $t18_19 = ($t17_18 > 6);
-        if ($t18_19) {
-          $block = 14; break;
+        $t18_19 = $rt.builtin.stringSlice($t5_6, undefined, 7);
+        $t19_20 = ($t18_19 === '/fonts/');
+        if ($t19_20) {
+          $block = 7; break;
         }
         else {
-          $block = 11; break;
-        }
-        break;
-      }
-      case 13: {
-        $t19_20 = $rt.builtin.stringSlice($t5_6, undefined, 5);
-        $t20_21 = ($t19_20 === '/$sw/');
-        if ($t20_21) {
-          $block = 10; break;
-        }
-        else {
-          $block = 12; break;
-        }
-        break;
-      }
-      case 14: {
-        $t21_22 = $rt.builtin.stringSlice($t5_6, undefined, 7);
-        $t22_23 = ($t21_22 === '/fonts/');
-        if ($t22_23) {
-          $block = 10; break;
-        }
-        else {
-          $block = 11; break;
+          $block = 8; break;
         }
         break;
       }
@@ -1790,22 +1943,38 @@ function refreshFiles$1$1(cache, idx, done) {
   return;
 }
 
-export function identitySetKey(hexKey) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
+export function flushPendingSentDMs() {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = hexTo32(hexKey);
-        seckey.$set($rt.builtin.cloneValue($t0_1));
-        hasKey.$set(true);
-        $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t2_3 = seckey.$get();
-        $t3_4 = common$crypto$secp256k1.PubKeyFromSecKey($t2_3);
-        $t4_5 = $t3_4[0];
-        $t1_2.$set($rt.builtin.cloneValue($t4_5));
-        $t5_6 = $t3_4[1];
-        if ($t5_6) {
+        $t0_1 = myPubkey.$get();
+        $t1_2 = ($t0_1 === '');
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 1: {
+        return;
+        break;
+      }
+      case 2: {
+        $t2_3 = pendingSentDMs.$get();
+        $t3_4 = $rt.builtin.len($t2_3);
+        $t7_8 = -1;
+        $block = 4; break;
+        break;
+      }
+      case 3: {
+        $t4_5 = pendingSentDMs.$get();
+        $t5_6 = $rt.builtin.len($t4_5);
+        $t6_7 = ($t5_6 === 0);
+        if ($t6_7) {
           $block = 1; break;
         }
         else {
@@ -1813,14 +1982,48 @@ export function identitySetKey(hexKey) {
         }
         break;
       }
-      case 1: {
-        $t6_7 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
-        $t7_8 = common$helpers.HexEncode($t6_7);
-        myPubkey.$set($t7_8);
-        $block = 2; break;
+      case 4: {
+        $t8_9 = ($t7_8 + 1);
+        $t9_10 = ($t8_9 < $t3_4);
+        if ($t9_10) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
         break;
       }
-      case 2: {
+      case 5: {
+        $t10_11 = $t2_3.addr($t8_9);
+        $t11_12 = $t10_11.$get();
+        $t12_13 = { $value: { recipient: '', content: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t12_13.$set($rt.builtin.cloneValue($t11_12));
+        $t13_14 = common$jsbridge$sw.NowSeconds();
+        $t14_15 = { $get() { return $t12_13.$get().recipient; }, $set(v) { const obj = $t12_13.$get(); obj.recipient = v; $t12_13.$set(obj); } };
+        $t15_16 = $t14_15.$get();
+        $t16_17 = myPubkey.$get();
+        $t17_18 = { $get() { return $t12_13.$get().content; }, $set(v) { const obj = $t12_13.$get(); obj.content = v; $t12_13.$set(obj); } };
+        $t18_19 = $t17_18.$get();
+        $t19_20 = makeDMRecord($t15_16, $t16_17, $t18_19, $t13_14, 'marmot', '');
+        $t20_21 = { $get() { return $t12_13.$get().recipient; }, $set(v) { const obj = $t12_13.$get(); obj.recipient = v; $t12_13.$set(obj); } };
+        $t21_22 = $t20_21.$get();
+        $t22_23 = { $get() { return $t12_13.$get().recipient; }, $set(v) { const obj = $t12_13.$get(); obj.recipient = v; $t12_13.$set(obj); } };
+        $t23_24 = $t22_23.$get();
+        $t24_25 = $rt.builtin.len($t23_24);
+        $t25_26 = Math.min($t24_25, 12);
+        $t26_27 = $rt.builtin.stringSlice($t21_22, undefined, $t25_26);
+        $t27_28 = ('shell-sw: flushing deferred sent DM peer=' + $t26_27);
+        $t28_29 = common$jsbridge$sw.Log($t27_28);
+        $t29_30 = DMRecord$ToJSON($t19_20);
+        $t30_31 = ('["SAVE_DM_QUIET",' + $t29_30);
+        $t31_32 = ($t30_31 + ']');
+        $t32_33 = busSend('relay', $t31_32);
+        $t7_8 = $t8_9;
+        $block = 4; break;
+        break;
+      }
+      case 6: {
+        pendingSentDMs.$set(null);
         return;
         break;
       }
@@ -1828,20 +2031,8 @@ export function identitySetKey(hexKey) {
   }
 }
 
-export function identitySetPubkey(hex) {
-  myPubkey.$set(hex);
-  return;
-}
-
-export function identityClearKey() {
-  seckey.$set($rt.builtin.cloneValue($rt.builtin.makeSlice(32, 32, 0)));
-  hasKey.$set(false);
-  myPubkey.$set('');
-  return;
-}
-
 export function routeMessage(clientID, w, msgType) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129, $t129_130, $t130_131, $t131_132, $t132_133, $t133_134, $t134_135, $t135_136, $t136_137, $t137_138, $t138_139, $t139_140, $t140_141, $t141_142, $t142_143, $t143_144, $t144_145, $t145_146, $t146_147, $t147_148, $t148_149, $t149_150, $t150_151, $t151_152, $t152_153, $t153_154, $t154_155, $t155_156, $t156_157, $t157_158, $t158_159, $t159_160, $t160_161, $t161_162, $t162_163, $t163_164, $t164_165, $t165_166, $t166_167, $t167_168, $t168_169, $t169_170, $t170_171, $t171_172, $t172_173, $t173_174;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129, $t129_130, $t130_131, $t131_132, $t132_133, $t133_134, $t134_135, $t135_136, $t136_137, $t137_138, $t138_139, $t139_140, $t140_141, $t141_142, $t142_143, $t143_144, $t144_145, $t145_146, $t146_147, $t147_148, $t148_149, $t149_150, $t150_151, $t151_152, $t152_153, $t153_154, $t154_155, $t155_156, $t156_157, $t157_158, $t158_159, $t159_160, $t160_161, $t161_162, $t162_163, $t163_164, $t164_165, $t165_166, $t166_167, $t167_168, $t168_169, $t169_170, $t170_171, $t171_172, $t172_173, $t173_174, $t174_175, $t175_176, $t176_177, $t177_178, $t178_179, $t179_180, $t180_181, $t181_182, $t182_183, $t183_184, $t184_185, $t185_186, $t186_187, $t187_188, $t188_189, $t189_190, $t190_191;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -1868,23 +2059,25 @@ export function routeMessage(clientID, w, msgType) {
         $t6_7 = busSend('marmot', $t5_6);
         $t7_8 = busSend('relay', $t5_6);
         $t8_9 = sendToClient(clientID, '["KEY_SET"]');
+        $t9_10 = flushPendingSentDMs();
         $block = 1; break;
         break;
       }
       case 3: {
-        $t9_10 = mw$str(w);
-        $t10_11 = identitySetPubkey($t9_10);
-        $t11_12 = jstr($t9_10);
-        $t12_13 = ('["SET_PUBKEY",' + $t11_12);
-        $t13_14 = ($t12_13 + ']');
-        $t14_15 = busSend('marmot', $t13_14);
-        $t15_16 = busSend('relay', $t13_14);
+        $t10_11 = mw$str(w);
+        $t11_12 = identitySetPubkey($t10_11);
+        $t12_13 = jstr($t10_11);
+        $t13_14 = ('["SET_PUBKEY",' + $t12_13);
+        $t14_15 = ($t13_14 + ']');
+        $t15_16 = busSend('marmot', $t14_15);
+        $t16_17 = busSend('relay', $t14_15);
+        $t17_18 = flushPendingSentDMs();
         $block = 1; break;
         break;
       }
       case 4: {
-        $t16_17 = (msgType === 'SET_PUBKEY');
-        if ($t16_17) {
+        $t18_19 = (msgType === 'SET_PUBKEY');
+        if ($t18_19) {
           $block = 3; break;
         }
         else {
@@ -1893,15 +2086,15 @@ export function routeMessage(clientID, w, msgType) {
         break;
       }
       case 5: {
-        $t17_18 = identityClearKey();
-        $t18_19 = busSend('marmot', '["CLEAR_KEY"]');
-        $t19_20 = busSend('relay', '["CLEAR_KEY"]');
+        $t19_20 = identityClearKey();
+        $t20_21 = busSend('marmot', '["CLEAR_KEY"]');
+        $t21_22 = busSend('relay', '["CLEAR_KEY"]');
         $block = 1; break;
         break;
       }
       case 6: {
-        $t20_21 = (msgType === 'CLEAR_KEY');
-        if ($t20_21) {
+        $t22_23 = (msgType === 'CLEAR_KEY');
+        if ($t22_23) {
           $block = 5; break;
         }
         else {
@@ -1910,23 +2103,23 @@ export function routeMessage(clientID, w, msgType) {
         break;
       }
       case 7: {
-        $t21_22 = mw$str(w);
-        $t22_23 = mw$raw(w);
-        $t23_24 = jstr(clientID);
-        $t24_25 = ('["REQ",' + $t23_24);
-        $t25_26 = ($t24_25 + ',');
-        $t26_27 = jstr($t21_22);
-        $t27_28 = ($t25_26 + $t26_27);
-        $t28_29 = ($t27_28 + ',');
-        $t29_30 = ($t28_29 + $t22_23);
-        $t30_31 = ($t29_30 + ']');
-        $t31_32 = busSend('relay', $t30_31);
+        $t23_24 = mw$str(w);
+        $t24_25 = mw$raw(w);
+        $t25_26 = jstr(clientID);
+        $t26_27 = ('["REQ",' + $t25_26);
+        $t27_28 = ($t26_27 + ',');
+        $t28_29 = jstr($t23_24);
+        $t29_30 = ($t27_28 + $t28_29);
+        $t30_31 = ($t29_30 + ',');
+        $t31_32 = ($t30_31 + $t24_25);
+        $t32_33 = ($t31_32 + ']');
+        $t33_34 = busSend('relay', $t32_33);
         $block = 1; break;
         break;
       }
       case 8: {
-        $t32_33 = (msgType === 'REQ');
-        if ($t32_33) {
+        $t34_35 = (msgType === 'REQ');
+        if ($t34_35) {
           $block = 7; break;
         }
         else {
@@ -1935,17 +2128,17 @@ export function routeMessage(clientID, w, msgType) {
         break;
       }
       case 9: {
-        $t33_34 = mw$str(w);
-        $t34_35 = jstr($t33_34);
-        $t35_36 = ('["CLOSE",' + $t34_35);
-        $t36_37 = ($t35_36 + ']');
-        $t37_38 = busSend('relay', $t36_37);
+        $t35_36 = mw$str(w);
+        $t36_37 = jstr($t35_36);
+        $t37_38 = ('["CLOSE",' + $t36_37);
+        $t38_39 = ($t37_38 + ']');
+        $t39_40 = busSend('relay', $t38_39);
         $block = 1; break;
         break;
       }
       case 10: {
-        $t38_39 = (msgType === 'CLOSE');
-        if ($t38_39) {
+        $t40_41 = (msgType === 'CLOSE');
+        if ($t40_41) {
           $block = 9; break;
         }
         else {
@@ -1954,19 +2147,19 @@ export function routeMessage(clientID, w, msgType) {
         break;
       }
       case 11: {
-        $t39_40 = mw$raw(w);
-        $t40_41 = jstr(clientID);
-        $t41_42 = ('["EVENT",' + $t40_41);
-        $t42_43 = ($t41_42 + ',');
-        $t43_44 = ($t42_43 + $t39_40);
-        $t44_45 = ($t43_44 + ']');
-        $t45_46 = busSend('relay', $t44_45);
+        $t41_42 = mw$raw(w);
+        $t42_43 = jstr(clientID);
+        $t43_44 = ('["EVENT",' + $t42_43);
+        $t44_45 = ($t43_44 + ',');
+        $t45_46 = ($t44_45 + $t41_42);
+        $t46_47 = ($t45_46 + ']');
+        $t47_48 = busSend('relay', $t46_47);
         $block = 1; break;
         break;
       }
       case 12: {
-        $t46_47 = (msgType === 'EVENT');
-        if ($t46_47) {
+        $t48_49 = (msgType === 'EVENT');
+        if ($t48_49) {
           $block = 11; break;
         }
         else {
@@ -1975,27 +2168,27 @@ export function routeMessage(clientID, w, msgType) {
         break;
       }
       case 13: {
-        $t47_48 = mw$str(w);
-        $t48_49 = mw$raw(w);
-        $t49_50 = mw$strs(w);
-        $t50_51 = jstr(clientID);
-        $t51_52 = ('["PROXY",' + $t50_51);
-        $t52_53 = ($t51_52 + ',');
-        $t53_54 = jstr($t47_48);
-        $t54_55 = ($t52_53 + $t53_54);
-        $t55_56 = ($t54_55 + ',');
-        $t56_57 = ($t55_56 + $t48_49);
+        $t49_50 = mw$str(w);
+        $t50_51 = mw$raw(w);
+        $t51_52 = mw$strs(w);
+        $t52_53 = jstr(clientID);
+        $t53_54 = ('["PROXY",' + $t52_53);
+        $t54_55 = ($t53_54 + ',');
+        $t55_56 = jstr($t49_50);
+        $t56_57 = ($t54_55 + $t55_56);
         $t57_58 = ($t56_57 + ',');
-        $t58_59 = strsJSON($t49_50);
-        $t59_60 = ($t57_58 + $t58_59);
-        $t60_61 = ($t59_60 + ']');
-        $t61_62 = busSend('relay', $t60_61);
+        $t58_59 = ($t57_58 + $t50_51);
+        $t59_60 = ($t58_59 + ',');
+        $t60_61 = strsJSON($t51_52);
+        $t61_62 = ($t59_60 + $t60_61);
+        $t62_63 = ($t61_62 + ']');
+        $t63_64 = busSend('relay', $t62_63);
         $block = 1; break;
         break;
       }
       case 14: {
-        $t62_63 = (msgType === 'PROXY');
-        if ($t62_63) {
+        $t64_65 = (msgType === 'PROXY');
+        if ($t64_65) {
           $block = 13; break;
         }
         else {
@@ -2004,20 +2197,20 @@ export function routeMessage(clientID, w, msgType) {
         break;
       }
       case 15: {
-        $t63_64 = mw$str(w);
-        $t64_65 = jstr(clientID);
-        $t65_66 = ('["RELAY_INFO",' + $t64_65);
-        $t66_67 = ($t65_66 + ',');
-        $t67_68 = jstr($t63_64);
-        $t68_69 = ($t66_67 + $t67_68);
-        $t69_70 = ($t68_69 + ']');
-        $t70_71 = busSend('relay', $t69_70);
+        $t65_66 = mw$str(w);
+        $t66_67 = jstr(clientID);
+        $t67_68 = ('["RELAY_INFO",' + $t66_67);
+        $t68_69 = ($t67_68 + ',');
+        $t69_70 = jstr($t65_66);
+        $t70_71 = ($t68_69 + $t69_70);
+        $t71_72 = ($t70_71 + ']');
+        $t72_73 = busSend('relay', $t71_72);
         $block = 1; break;
         break;
       }
       case 16: {
-        $t71_72 = (msgType === 'RELAY_INFO');
-        if ($t71_72) {
+        $t73_74 = (msgType === 'RELAY_INFO');
+        if ($t73_74) {
           $block = 15; break;
         }
         else {
@@ -2026,17 +2219,17 @@ export function routeMessage(clientID, w, msgType) {
         break;
       }
       case 17: {
-        $t72_73 = mw$strs(w);
-        $t73_74 = strsJSON($t72_73);
-        $t74_75 = ('["SET_WRITE_RELAYS",' + $t73_74);
-        $t75_76 = ($t74_75 + ']');
-        $t76_77 = busSend('relay', $t75_76);
+        $t74_75 = mw$strs(w);
+        $t75_76 = strsJSON($t74_75);
+        $t76_77 = ('["SET_WRITE_RELAYS",' + $t75_76);
+        $t77_78 = ($t76_77 + ']');
+        $t78_79 = busSend('relay', $t77_78);
         $block = 1; break;
         break;
       }
       case 18: {
-        $t77_78 = (msgType === 'SET_WRITE_RELAYS');
-        if ($t77_78) {
+        $t79_80 = (msgType === 'SET_WRITE_RELAYS');
+        if ($t79_80) {
           $block = 17; break;
         }
         else {
@@ -2045,23 +2238,23 @@ export function routeMessage(clientID, w, msgType) {
         break;
       }
       case 19: {
-        $t78_79 = mw$str(w);
-        $t79_80 = mw$raw(w);
-        $t80_81 = jstr(clientID);
-        $t81_82 = ('["SIGN",' + $t80_81);
-        $t82_83 = ($t81_82 + ',');
-        $t83_84 = jstr($t78_79);
-        $t84_85 = ($t82_83 + $t83_84);
-        $t85_86 = ($t84_85 + ',');
-        $t86_87 = ($t85_86 + $t79_80);
-        $t87_88 = ($t86_87 + ']');
-        $t88_89 = busSend('relay', $t87_88);
+        $t80_81 = mw$str(w);
+        $t81_82 = mw$raw(w);
+        $t82_83 = jstr(clientID);
+        $t83_84 = ('["SIGN",' + $t82_83);
+        $t84_85 = ($t83_84 + ',');
+        $t85_86 = jstr($t80_81);
+        $t86_87 = ($t84_85 + $t85_86);
+        $t87_88 = ($t86_87 + ',');
+        $t88_89 = ($t87_88 + $t81_82);
+        $t89_90 = ($t88_89 + ']');
+        $t90_91 = busSend('relay', $t89_90);
         $block = 1; break;
         break;
       }
       case 20: {
-        $t89_90 = (msgType === 'SIGN');
-        if ($t89_90) {
+        $t91_92 = (msgType === 'SIGN');
+        if ($t91_92) {
           $block = 19; break;
         }
         else {
@@ -2070,24 +2263,24 @@ export function routeMessage(clientID, w, msgType) {
         break;
       }
       case 21: {
-        $t90_91 = mw$str(w);
-        $t91_92 = mw$strs(w);
-        $t92_93 = jstr(clientID);
-        $t93_94 = ('["BROADCAST",' + $t92_93);
-        $t94_95 = ($t93_94 + ',');
-        $t95_96 = jstr($t90_91);
-        $t96_97 = ($t94_95 + $t95_96);
-        $t97_98 = ($t96_97 + ',');
-        $t98_99 = strsJSON($t91_92);
-        $t99_100 = ($t97_98 + $t98_99);
-        $t100_101 = ($t99_100 + ']');
-        $t101_102 = busSend('relay', $t100_101);
+        $t92_93 = mw$str(w);
+        $t93_94 = mw$strs(w);
+        $t94_95 = jstr(clientID);
+        $t95_96 = ('["BROADCAST",' + $t94_95);
+        $t96_97 = ($t95_96 + ',');
+        $t97_98 = jstr($t92_93);
+        $t98_99 = ($t96_97 + $t97_98);
+        $t99_100 = ($t98_99 + ',');
+        $t100_101 = strsJSON($t93_94);
+        $t101_102 = ($t99_100 + $t100_101);
+        $t102_103 = ($t101_102 + ']');
+        $t103_104 = busSend('relay', $t102_103);
         $block = 1; break;
         break;
       }
       case 22: {
-        $t102_103 = (msgType === 'BROADCAST');
-        if ($t102_103) {
+        $t104_105 = (msgType === 'BROADCAST');
+        if ($t104_105) {
           $block = 21; break;
         }
         else {
@@ -2096,16 +2289,16 @@ export function routeMessage(clientID, w, msgType) {
         break;
       }
       case 23: {
-        $t103_104 = jstr(clientID);
-        $t104_105 = ('["DM_LIST",' + $t103_104);
-        $t105_106 = ($t104_105 + ']');
-        $t106_107 = busSend('relay', $t105_106);
+        $t105_106 = jstr(clientID);
+        $t106_107 = ('["DM_LIST",' + $t105_106);
+        $t107_108 = ($t106_107 + ']');
+        $t108_109 = busSend('relay', $t107_108);
         $block = 1; break;
         break;
       }
       case 24: {
-        $t107_108 = (msgType === 'DM_LIST');
-        if ($t107_108) {
+        $t109_110 = (msgType === 'DM_LIST');
+        if ($t109_110) {
           $block = 23; break;
         }
         else {
@@ -2114,30 +2307,30 @@ export function routeMessage(clientID, w, msgType) {
         break;
       }
       case 25: {
-        $t108_109 = mw$str(w);
-        $t109_110 = mw$num(w);
-        $t110_111 = $t109_110;
+        $t110_111 = mw$str(w);
         $t111_112 = mw$num(w);
-        $t112_113 = jstr(clientID);
-        $t113_114 = ('["DM_HISTORY",' + $t112_113);
-        $t114_115 = ($t113_114 + ',');
-        $t115_116 = jstr($t108_109);
-        $t116_117 = ($t114_115 + $t115_116);
-        $t117_118 = ($t116_117 + ',');
-        $t118_119 = $t110_111;
-        $t119_120 = common$helpers.Itoa($t118_119);
-        $t120_121 = ($t117_118 + $t119_120);
-        $t121_122 = ($t120_121 + ',');
-        $t122_123 = common$helpers.Itoa($t111_112);
-        $t123_124 = ($t121_122 + $t122_123);
-        $t124_125 = ($t123_124 + ']');
-        $t125_126 = busSend('relay', $t124_125);
+        $t112_113 = $t111_112;
+        $t113_114 = mw$num(w);
+        $t114_115 = jstr(clientID);
+        $t115_116 = ('["DM_HISTORY",' + $t114_115);
+        $t116_117 = ($t115_116 + ',');
+        $t117_118 = jstr($t110_111);
+        $t118_119 = ($t116_117 + $t117_118);
+        $t119_120 = ($t118_119 + ',');
+        $t120_121 = $t112_113;
+        $t121_122 = common$helpers.Itoa($t120_121);
+        $t122_123 = ($t119_120 + $t121_122);
+        $t123_124 = ($t122_123 + ',');
+        $t124_125 = common$helpers.Itoa($t113_114);
+        $t125_126 = ($t123_124 + $t124_125);
+        $t126_127 = ($t125_126 + ']');
+        $t127_128 = busSend('relay', $t126_127);
         $block = 1; break;
         break;
       }
       case 26: {
-        $t126_127 = (msgType === 'DM_HISTORY');
-        if ($t126_127) {
+        $t128_129 = (msgType === 'DM_HISTORY');
+        if ($t128_129) {
           $block = 25; break;
         }
         else {
@@ -2146,17 +2339,17 @@ export function routeMessage(clientID, w, msgType) {
         break;
       }
       case 27: {
-        $t127_128 = mw$strs(w);
-        $t128_129 = strsJSON($t127_128);
-        $t129_130 = ('["MLS_INIT",' + $t128_129);
-        $t130_131 = ($t129_130 + ']');
-        $t131_132 = busSend('marmot', $t130_131);
+        $t129_130 = mw$strs(w);
+        $t130_131 = strsJSON($t129_130);
+        $t131_132 = ('["MLS_INIT",' + $t130_131);
+        $t132_133 = ($t131_132 + ']');
+        $t133_134 = busSend('marmot', $t132_133);
         $block = 1; break;
         break;
       }
       case 28: {
-        $t132_133 = (msgType === 'MLS_INIT');
-        if ($t132_133) {
+        $t134_135 = (msgType === 'MLS_INIT');
+        if ($t134_135) {
           $block = 27; break;
         }
         else {
@@ -2165,28 +2358,28 @@ export function routeMessage(clientID, w, msgType) {
         break;
       }
       case 29: {
-        $t133_134 = mw$str(w);
-        $t134_135 = mw$str(w);
-        $t135_136 = jstr($t133_134);
-        $t136_137 = ('["MLS_SEND",' + $t135_136);
-        $t137_138 = ($t136_137 + ',');
-        $t138_139 = jstr($t134_135);
-        $t139_140 = ($t137_138 + $t138_139);
-        $t140_141 = ($t139_140 + ']');
-        $t141_142 = busSend('marmot', $t140_141);
-        $t142_143 = myPubkey.$get();
-        $t143_144 = ($t142_143 !== '');
-        if ($t143_144) {
+        $t135_136 = mw$str(w);
+        $t136_137 = mw$str(w);
+        $t137_138 = jstr($t135_136);
+        $t138_139 = ('["MLS_SEND",' + $t137_138);
+        $t139_140 = ($t138_139 + ',');
+        $t140_141 = jstr($t136_137);
+        $t141_142 = ($t139_140 + $t140_141);
+        $t142_143 = ($t141_142 + ']');
+        $t143_144 = busSend('marmot', $t142_143);
+        $t144_145 = myPubkey.$get();
+        $t145_146 = ($t144_145 === '');
+        if ($t145_146) {
           $block = 33; break;
         }
         else {
-          $block = 1; break;
+          $block = 34; break;
         }
         break;
       }
       case 30: {
-        $t144_145 = (msgType === 'MLS_SEND');
-        if ($t144_145) {
+        $t146_147 = (msgType === 'MLS_SEND');
+        if ($t146_147) {
           $block = 29; break;
         }
         else {
@@ -2195,86 +2388,99 @@ export function routeMessage(clientID, w, msgType) {
         break;
       }
       case 31: {
-        $t145_146 = busSend('marmot', '["MLS_SUB"]');
+        $t147_148 = busSend('marmot', '["MLS_SUB"]');
         $block = 1; break;
         break;
       }
       case 32: {
-        $t146_147 = (msgType === 'MLS_SUB');
-        if ($t146_147) {
+        $t148_149 = (msgType === 'MLS_SUB');
+        if ($t148_149) {
           $block = 31; break;
         }
         else {
-          $block = 35; break;
+          $block = 36; break;
         }
         break;
       }
       case 33: {
-        $t147_148 = common$jsbridge$sw.NowSeconds();
-        $t148_149 = myPubkey.$get();
-        $t149_150 = makeDMRecord($t133_134, $t148_149, $t134_135, $t147_148, 'marmot', '');
-        $t150_151 = DMRecord$ToJSON($t149_150);
-        $t151_152 = ('["SAVE_DM_QUIET",' + $t150_151);
-        $t152_153 = ($t151_152 + ']');
-        $t153_154 = busSend('relay', $t152_153);
+        $t149_150 = common$jsbridge$sw.Log('shell-sw: MLS_SEND: myPubkey empty, deferring save');
+        $t150_151 = pendingSentDMs.$get();
+        $t151_152 = { $value: { recipient: '', content: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t152_153 = { $get() { return $t151_152.$get().recipient; }, $set(v) { const obj = $t151_152.$get(); obj.recipient = v; $t151_152.$set(obj); } };
+        $t153_154 = { $get() { return $t151_152.$get().content; }, $set(v) { const obj = $t151_152.$get(); obj.content = v; $t151_152.$set(obj); } };
+        $t152_153.$set($t135_136);
+        $t153_154.$set($t136_137);
+        $t154_155 = $t151_152.$get();
+        $t155_156 = { $value: $rt.builtin.makeSlice(1, 1, { recipient: '', content: '' }), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t156_157 = $t155_156.$get().addr(0);
+        $t156_157.$set($rt.builtin.cloneValue($t154_155));
+        $t157_158 = $rt.builtin.sliceSlice($t155_156.$get(), undefined, undefined, undefined);
+        $t158_159 = $rt.builtin.appendSlice($t150_151, $t157_158);
+        pendingSentDMs.$set($t158_159);
         $block = 1; break;
         break;
       }
       case 34: {
-        $t154_155 = mw$strs(w);
-        $t155_156 = strsJSON($t154_155);
-        $t156_157 = ('["MLS_PUBLISH_KP",' + $t155_156);
-        $t157_158 = ($t156_157 + ']');
-        $t158_159 = busSend('marmot', $t157_158);
+        $t159_160 = common$jsbridge$sw.NowSeconds();
+        $t160_161 = myPubkey.$get();
+        $t161_162 = makeDMRecord($t135_136, $t160_161, $t136_137, $t159_160, 'marmot', '');
+        $t162_163 = $rt.builtin.len($t135_136);
+        $t163_164 = Math.min($t162_163, 12);
+        $t164_165 = $rt.builtin.stringSlice($t135_136, undefined, $t163_164);
+        $t165_166 = ('shell-sw: MLS_SEND: saving sent DM peer=' + $t164_165);
+        $t166_167 = common$jsbridge$sw.Log($t165_166);
+        $t167_168 = DMRecord$ToJSON($t161_162);
+        $t168_169 = ('["SAVE_DM_QUIET",' + $t167_168);
+        $t169_170 = ($t168_169 + ']');
+        $t170_171 = busSend('relay', $t169_170);
         $block = 1; break;
         break;
       }
       case 35: {
-        $t159_160 = (msgType === 'MLS_PUBLISH_KP');
-        if ($t159_160) {
-          $block = 34; break;
-        }
-        else {
-          $block = 37; break;
-        }
-        break;
-      }
-      case 36: {
-        $t160_161 = busSend('marmot', '["MLS_LIST_GROUPS"]');
+        $t171_172 = mw$strs(w);
+        $t172_173 = strsJSON($t171_172);
+        $t173_174 = ('["MLS_PUBLISH_KP",' + $t172_173);
+        $t174_175 = ($t173_174 + ']');
+        $t175_176 = busSend('marmot', $t174_175);
         $block = 1; break;
         break;
       }
-      case 37: {
-        $t161_162 = (msgType === 'MLS_LIST_GROUPS');
-        if ($t161_162) {
-          $block = 36; break;
+      case 36: {
+        $t176_177 = (msgType === 'MLS_PUBLISH_KP');
+        if ($t176_177) {
+          $block = 35; break;
         }
         else {
-          $block = 39; break;
+          $block = 38; break;
         }
         break;
       }
+      case 37: {
+        $t177_178 = busSend('marmot', '["MLS_LIST_GROUPS"]');
+        $block = 1; break;
+        break;
+      }
       case 38: {
-        $t162_163 = mw$num(w);
-        $t163_164 = $t162_163;
-        $t164_165 = mw$str(w);
-        $t165_166 = mw$str(w);
-        $t166_167 = cryptoCBs.$get();
-        { const $r = $rt.builtin.mapLookup($t166_167, $t163_164); $t167_168 = [$r.value, $r.ok]; }
-        $t168_169 = $t167_168[0];
-        $t169_170 = $t167_168[1];
-        if ($t169_170) {
-          $block = 40; break;
+        $t178_179 = (msgType === 'MLS_LIST_GROUPS');
+        if ($t178_179) {
+          $block = 37; break;
         }
         else {
-          $block = 1; break;
+          $block = 40; break;
         }
         break;
       }
       case 39: {
-        $t170_171 = (msgType === 'CRYPTO_RESULT');
-        if ($t170_171) {
-          $block = 38; break;
+        $t179_180 = mw$num(w);
+        $t180_181 = $t179_180;
+        $t181_182 = mw$str(w);
+        $t182_183 = mw$str(w);
+        $t183_184 = cryptoCBs.$get();
+        { const $r = $rt.builtin.mapLookup($t183_184, $t180_181); $t184_185 = [$r.value, $r.ok]; }
+        $t185_186 = $t184_185[0];
+        $t186_187 = $t184_185[1];
+        if ($t186_187) {
+          $block = 41; break;
         }
         else {
           $block = 1; break;
@@ -2282,56 +2488,24 @@ export function routeMessage(clientID, w, msgType) {
         break;
       }
       case 40: {
-        $t171_172 = cryptoCBs.$get();
-        $t172_173 = $rt.builtin.mapDelete($t171_172, $t163_164);
-        $t173_174 = $t168_169($t164_165, $t165_166);
+        $t187_188 = (msgType === 'CRYPTO_RESULT');
+        if ($t187_188) {
+          $block = 39; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+      case 41: {
+        $t188_189 = cryptoCBs.$get();
+        $t189_190 = $rt.builtin.mapDelete($t188_189, $t180_181);
+        $t190_191 = $t185_186($t181_182, $t182_183);
         $block = 1; break;
         break;
       }
     }
   }
-}
-
-export function makeDMRecord(peer, from, content, createdAt, protocol, eventID) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
-  $t0_1 = { $value: { ID: '', Peer: '', From: '', Content: '', CreatedAt: 0, Protocol: '', EventID: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2 = { $get() { return $t0_1.$get().ID; }, $set(v) { const obj = $t0_1.$get(); obj.ID = v; $t0_1.$set(obj); } };
-  $t2_3 = dmDedupID(peer, content, createdAt);
-  $t3_4 = { $get() { return $t0_1.$get().Peer; }, $set(v) { const obj = $t0_1.$get(); obj.Peer = v; $t0_1.$set(obj); } };
-  $t4_5 = { $get() { return $t0_1.$get().From; }, $set(v) { const obj = $t0_1.$get(); obj.From = v; $t0_1.$set(obj); } };
-  $t5_6 = { $get() { return $t0_1.$get().Content; }, $set(v) { const obj = $t0_1.$get(); obj.Content = v; $t0_1.$set(obj); } };
-  $t6_7 = { $get() { return $t0_1.$get().CreatedAt; }, $set(v) { const obj = $t0_1.$get(); obj.CreatedAt = v; $t0_1.$set(obj); } };
-  $t7_8 = { $get() { return $t0_1.$get().Protocol; }, $set(v) { const obj = $t0_1.$get(); obj.Protocol = v; $t0_1.$set(obj); } };
-  $t8_9 = { $get() { return $t0_1.$get().EventID; }, $set(v) { const obj = $t0_1.$get(); obj.EventID = v; $t0_1.$set(obj); } };
-  $t1_2.$set($t2_3);
-  $t3_4.$set(peer);
-  $t4_5.$set(from);
-  $t5_6.$set(content);
-  $t6_7.$set(createdAt);
-  $t7_8.$set(protocol);
-  $t8_9.$set(eventID);
-  return $t0_1;
-}
-
-export function dmDedupID(peer, content, createdAt) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
-  $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2 = $rt.builtin.stringToBytes(content);
-  $t2_3 = common$crypto$sha256.Sum($t1_2);
-  $t0_1.$set($rt.builtin.cloneValue($t2_3));
-  $t3_4 = Math.trunc(createdAt / 300);
-  $t4_5 = common$helpers.Itoa($t3_4);
-  $t5_6 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t6_7 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-  $t7_8 = common$helpers.HexEncode($t6_7);
-  $t8_9 = (peer + $t7_8);
-  $t9_10 = ($t8_9 + $t4_5);
-  $t10_11 = $rt.builtin.stringToBytes($t9_10);
-  $t11_12 = common$crypto$sha256.Sum($t10_11);
-  $t5_6.$set($rt.builtin.cloneValue($t11_12));
-  $t12_13 = $rt.builtin.sliceSlice($t5_6.$get(), undefined, undefined, undefined);
-  $t13_14 = common$helpers.HexEncode($t12_13);
-  return $t13_14;
 }
 
 export function mw$num(w) {
@@ -2629,7 +2803,7 @@ export function mw$sep(w) {
 
 $rt.types.getType('sw.mw')?.methods?.set('sep', mw$sep);
 export function mw$str(w) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129, $t129_130, $t130_131, $t131_132, $t132_133;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129, $t129_130, $t130_131, $t131_132, $t132_133, $t133_134, $t134_135, $t135_136, $t136_137, $t137_138, $t138_139, $t139_140, $t140_141, $t141_142, $t142_143, $t143_144, $t144_145, $t145_146, $t146_147, $t147_148, $t148_149, $t149_150, $t150_151, $t151_152, $t152_153, $t153_154, $t154_155, $t155_156, $t156_157, $t157_158, $t158_159, $t159_160, $t160_161, $t161_162, $t162_163, $t163_164, $t164_165, $t165_166, $t166_167, $t167_168, $t168_169, $t169_170, $t170_171, $t171_172, $t172_173, $t173_174, $t174_175, $t175_176, $t176_177, $t177_178, $t178_179, $t179_180, $t180_181, $t181_182, $t182_183, $t183_184, $t184_185, $t185_186, $t186_187, $t187_188, $t188_189, $t189_190, $t190_191, $t191_192, $t192_193, $t193_194, $t194_195, $t195_196, $t196_197, $t197_198, $t198_199, $t199_200, $t200_201, $t201_202, $t202_203, $t203_204, $t204_205, $t205_206, $t206_207, $t207_208, $t208_209, $t209_210, $t210_211, $t211_212, $t212_213, $t213_214;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -2707,10 +2881,10 @@ export function mw$str(w) {
         $t29_30 = $rt.builtin.len($t28_29);
         $t30_31 = ($t26_27 >= $t29_30);
         if ($t30_31) {
-          $block = 22; break;
+          $block = 43; break;
         }
         else {
-          $block = 23; break;
+          $block = 44; break;
         }
         break;
       }
@@ -2909,70 +3083,310 @@ export function mw$str(w) {
           $block = 19; break;
         }
         else {
-          $block = 21; break;
+          $block = 22; break;
         }
         break;
       }
       case 21: {
         $t106_107 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
         $t107_108 = $t106_107.$get();
-        $t108_109 = { $get() { return w.$get().s; }, $set(v) { const obj = w.$get(); obj.s = v; w.$set(obj); } };
-        $t109_110 = $t108_109.$get();
-        $rt.runtime.boundsCheck($t107_108, $rt.builtin.byteLen($t109_110));
-        $t110_111 = $rt.builtin.stringByteAt($t109_110, $t107_108);
-        $t111_112 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t112_113 = $t111_112.$get().addr(0);
-        $t112_113.$set(92);
-        $t113_114 = $t111_112.$get().addr(1);
-        $t113_114.$set($t110_111);
-        $t114_115 = $rt.builtin.sliceSlice($t111_112.$get(), undefined, undefined, undefined);
-        $t115_116 = $rt.builtin.appendSlice($t51_52, $t114_115);
-        $t73_74 = $t115_116;
-        $block = 11; break;
-        break;
-      }
-      case 22: {
-        return '';
-        break;
-      }
-      case 23: {
-        if ($t32_33) {
+        $t108_109 = ($t107_108 + 4);
+        $t109_110 = { $get() { return w.$get().s; }, $set(v) { const obj = w.$get(); obj.s = v; w.$set(obj); } };
+        $t110_111 = $t109_110.$get();
+        $t111_112 = $rt.builtin.len($t110_111);
+        $t112_113 = ($t108_109 < $t111_112);
+        if ($t112_113) {
           $block = 24; break;
         }
         else {
-          $block = 26; break;
+          $block = 25; break;
         }
         break;
       }
-      case 24: {
+      case 22: {
+        $t113_114 = ($t60_61 === 117);
+        if ($t113_114) {
+          $block = 21; break;
+        }
+        else {
+          $block = 23; break;
+        }
+        break;
+      }
+      case 23: {
+        $t114_115 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
+        $t115_116 = $t114_115.$get();
         $t116_117 = { $get() { return w.$get().s; }, $set(v) { const obj = w.$get(); obj.s = v; w.$set(obj); } };
         $t117_118 = $t116_117.$get();
-        $t118_119 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t119_120 = $t118_119.$get();
-        $t120_121 = $rt.builtin.stringSlice($t117_118, $t33_34, $t119_120);
-        $t121_122 = $rt.builtin.appendString($t31_32, $t120_121);
-        $t122_123 = $rt.builtin.bytesToString($t121_122);
-        $t123_124 = $t122_123;
-        $block = 25; break;
+        $rt.runtime.boundsCheck($t115_116, $rt.builtin.byteLen($t117_118));
+        $t118_119 = $rt.builtin.stringByteAt($t117_118, $t115_116);
+        $t119_120 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t120_121 = $t119_120.$get().addr(0);
+        $t120_121.$set(92);
+        $t121_122 = $t119_120.$get().addr(1);
+        $t121_122.$set($t118_119);
+        $t122_123 = $rt.builtin.sliceSlice($t119_120.$get(), undefined, undefined, undefined);
+        $t123_124 = $rt.builtin.appendSlice($t51_52, $t122_123);
+        $t73_74 = $t123_124;
+        $block = 11; break;
+        break;
+      }
+      case 24: {
+        $t129_130 = 0;
+        $t130_131 = 1;
+        $block = 26; break;
         break;
       }
       case 25: {
-        $t124_125 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t125_126 = $t124_125.$get();
-        $t126_127 = ($t125_126 + 1);
-        $t127_128 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t127_128.$set($t126_127);
-        return $t123_124;
+        $t124_125 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t125_126 = $t124_125.$get().addr(0);
+        $t125_126.$set(92);
+        $t126_127 = $t124_125.$get().addr(1);
+        $t126_127.$set(117);
+        $t127_128 = $rt.builtin.sliceSlice($t124_125.$get(), undefined, undefined, undefined);
+        $t128_129 = $rt.builtin.appendSlice($t51_52, $t127_128);
+        $t73_74 = $t128_129;
+        $block = 11; break;
         break;
       }
       case 26: {
-        $t128_129 = { $get() { return w.$get().s; }, $set(v) { const obj = w.$get(); obj.s = v; w.$set(obj); } };
-        $t129_130 = $t128_129.$get();
-        $t130_131 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t131_132 = $t130_131.$get();
-        $t132_133 = $rt.builtin.stringSlice($t129_130, $t33_34, $t131_132);
-        $t123_124 = $t132_133;
-        $block = 25; break;
+        $t131_132 = ($t130_131 <= 4);
+        if ($t131_132) {
+          $block = 27; break;
+        }
+        else {
+          $block = 28; break;
+        }
+        break;
+      }
+      case 27: {
+        $t132_133 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
+        $t133_134 = $t132_133.$get();
+        $t134_135 = ($t133_134 + $t130_131);
+        $t135_136 = { $get() { return w.$get().s; }, $set(v) { const obj = w.$get(); obj.s = v; w.$set(obj); } };
+        $t136_137 = $t135_136.$get();
+        $rt.runtime.boundsCheck($t134_135, $rt.builtin.byteLen($t136_137));
+        $t137_138 = $rt.builtin.stringByteAt($t136_137, $t134_135);
+        $t138_139 = ($t129_130 * (2 ** 4));
+        $t139_140 = ($t137_138 >= 48);
+        if ($t139_140) {
+          $block = 32; break;
+        }
+        else {
+          $block = 31; break;
+        }
+        break;
+      }
+      case 28: {
+        $t140_141 = ($t129_130 < 128);
+        if ($t140_141) {
+          $block = 38; break;
+        }
+        else {
+          $block = 40; break;
+        }
+        break;
+      }
+      case 29: {
+        $t141_142 = (($t137_138 - 48) & 0xFF);
+        $t142_143 = $t141_142;
+        $t143_144 = $rt.builtin.int64or($t138_139, $t142_143);
+        $t144_145 = $t143_144;
+        $block = 30; break;
+        break;
+      }
+      case 30: {
+        $t145_146 = ($t130_131 + 1);
+        $t129_130 = $t144_145;
+        $t130_131 = $t145_146;
+        $block = 26; break;
+        break;
+      }
+      case 31: {
+        $t146_147 = ($t137_138 >= 97);
+        if ($t146_147) {
+          $block = 35; break;
+        }
+        else {
+          $block = 34; break;
+        }
+        break;
+      }
+      case 32: {
+        $t147_148 = ($t137_138 <= 57);
+        if ($t147_148) {
+          $block = 29; break;
+        }
+        else {
+          $block = 31; break;
+        }
+        break;
+      }
+      case 33: {
+        $t148_149 = (($t137_138 - 97) & 0xFF);
+        $t149_150 = $t148_149;
+        $t150_151 = ($t149_150 + 10);
+        $t151_152 = $rt.builtin.int64or($t138_139, $t150_151);
+        $t144_145 = $t151_152;
+        $block = 30; break;
+        break;
+      }
+      case 34: {
+        $t152_153 = ($t137_138 >= 65);
+        if ($t152_153) {
+          $block = 37; break;
+        }
+        else {
+          $t144_145 = $t138_139;
+          $block = 30; break;
+        }
+        break;
+      }
+      case 35: {
+        $t153_154 = ($t137_138 <= 102);
+        if ($t153_154) {
+          $block = 33; break;
+        }
+        else {
+          $block = 34; break;
+        }
+        break;
+      }
+      case 36: {
+        $t154_155 = (($t137_138 - 65) & 0xFF);
+        $t155_156 = $t154_155;
+        $t156_157 = ($t155_156 + 10);
+        $t157_158 = $rt.builtin.int64or($t138_139, $t156_157);
+        $t144_145 = $t157_158;
+        $block = 30; break;
+        break;
+      }
+      case 37: {
+        $t158_159 = ($t137_138 <= 70);
+        if ($t158_159) {
+          $block = 36; break;
+        }
+        else {
+          $t144_145 = $t138_139;
+          $block = 30; break;
+        }
+        break;
+      }
+      case 38: {
+        $t159_160 = ($t129_130 & 0xFF);
+        $t160_161 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t161_162 = $t160_161.$get().addr(0);
+        $t161_162.$set($t159_160);
+        $t162_163 = $rt.builtin.sliceSlice($t160_161.$get(), undefined, undefined, undefined);
+        $t163_164 = $rt.builtin.appendSlice($t51_52, $t162_163);
+        $t164_165 = $t163_164;
+        $block = 39; break;
+        break;
+      }
+      case 39: {
+        $t165_166 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
+        $t166_167 = $t165_166.$get();
+        $t167_168 = ($t166_167 + 4);
+        $t168_169 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
+        $t168_169.$set($t167_168);
+        $t73_74 = $t164_165;
+        $block = 11; break;
+        break;
+      }
+      case 40: {
+        $t169_170 = ($t129_130 < 2048);
+        if ($t169_170) {
+          $block = 41; break;
+        }
+        else {
+          $block = 42; break;
+        }
+        break;
+      }
+      case 41: {
+        $t170_171 = Math.trunc($t129_130 / (2 ** 6));
+        $t171_172 = $rt.builtin.int64or(192, $t170_171);
+        $t172_173 = ($t171_172 & 0xFF);
+        $t173_174 = $rt.builtin.int64and($t129_130, 63);
+        $t174_175 = $rt.builtin.int64or(128, $t173_174);
+        $t175_176 = ($t174_175 & 0xFF);
+        $t176_177 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t177_178 = $t176_177.$get().addr(0);
+        $t177_178.$set($t172_173);
+        $t178_179 = $t176_177.$get().addr(1);
+        $t178_179.$set($t175_176);
+        $t179_180 = $rt.builtin.sliceSlice($t176_177.$get(), undefined, undefined, undefined);
+        $t180_181 = $rt.builtin.appendSlice($t51_52, $t179_180);
+        $t164_165 = $t180_181;
+        $block = 39; break;
+        break;
+      }
+      case 42: {
+        $t181_182 = Math.trunc($t129_130 / (2 ** 12));
+        $t182_183 = $rt.builtin.int64or(224, $t181_182);
+        $t183_184 = ($t182_183 & 0xFF);
+        $t184_185 = Math.trunc($t129_130 / (2 ** 6));
+        $t185_186 = $rt.builtin.int64and($t184_185, 63);
+        $t186_187 = $rt.builtin.int64or(128, $t185_186);
+        $t187_188 = ($t186_187 & 0xFF);
+        $t188_189 = $rt.builtin.int64and($t129_130, 63);
+        $t189_190 = $rt.builtin.int64or(128, $t188_189);
+        $t190_191 = ($t189_190 & 0xFF);
+        $t191_192 = { $value: $rt.builtin.makeSlice(3, 3, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t192_193 = $t191_192.$get().addr(0);
+        $t192_193.$set($t183_184);
+        $t193_194 = $t191_192.$get().addr(1);
+        $t193_194.$set($t187_188);
+        $t194_195 = $t191_192.$get().addr(2);
+        $t194_195.$set($t190_191);
+        $t195_196 = $rt.builtin.sliceSlice($t191_192.$get(), undefined, undefined, undefined);
+        $t196_197 = $rt.builtin.appendSlice($t51_52, $t195_196);
+        $t164_165 = $t196_197;
+        $block = 39; break;
+        break;
+      }
+      case 43: {
+        return '';
+        break;
+      }
+      case 44: {
+        if ($t32_33) {
+          $block = 45; break;
+        }
+        else {
+          $block = 47; break;
+        }
+        break;
+      }
+      case 45: {
+        $t197_198 = { $get() { return w.$get().s; }, $set(v) { const obj = w.$get(); obj.s = v; w.$set(obj); } };
+        $t198_199 = $t197_198.$get();
+        $t199_200 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
+        $t200_201 = $t199_200.$get();
+        $t201_202 = $rt.builtin.stringSlice($t198_199, $t33_34, $t200_201);
+        $t202_203 = $rt.builtin.appendString($t31_32, $t201_202);
+        $t203_204 = $rt.builtin.bytesToString($t202_203);
+        $t204_205 = $t203_204;
+        $block = 46; break;
+        break;
+      }
+      case 46: {
+        $t205_206 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
+        $t206_207 = $t205_206.$get();
+        $t207_208 = ($t206_207 + 1);
+        $t208_209 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
+        $t208_209.$set($t207_208);
+        return $t204_205;
+        break;
+      }
+      case 47: {
+        $t209_210 = { $get() { return w.$get().s; }, $set(v) { const obj = w.$get(); obj.s = v; w.$set(obj); } };
+        $t210_211 = $t209_210.$get();
+        $t211_212 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
+        $t212_213 = $t211_212.$get();
+        $t213_214 = $rt.builtin.stringSlice($t210_211, $t33_34, $t212_213);
+        $t204_205 = $t213_214;
+        $block = 46; break;
         break;
       }
     }
@@ -2981,7 +3395,7 @@ export function mw$str(w) {
 
 $rt.types.getType('sw.mw')?.methods?.set('str', mw$str);
 export function mw$strs(w) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -3097,114 +3511,13 @@ export function mw$strs(w) {
         break;
       }
       case 10: {
-        $t41_42 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t42_43 = $t41_42.$get();
-        $t43_44 = ($t42_43 + 1);
-        $t44_45 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t44_45.$set($t43_44);
-        $t45_46 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t46_47 = $t45_46.$get();
-        $block = 13; break;
-        break;
-      }
-      case 11: {
-        $t47_48 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t48_49 = $t47_48.$get();
-        $t49_50 = { $get() { return w.$get().s; }, $set(v) { const obj = w.$get(); obj.s = v; w.$set(obj); } };
-        $t50_51 = $t49_50.$get();
-        $rt.runtime.boundsCheck($t48_49, $rt.builtin.byteLen($t50_51));
-        $t51_52 = $rt.builtin.stringByteAt($t50_51, $t48_49);
-        $t52_53 = ($t51_52 === 92);
-        if ($t52_53) {
-          $block = 15; break;
-        }
-        else {
-          $block = 16; break;
-        }
-        break;
-      }
-      case 12: {
-        $t53_54 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t54_55 = $t53_54.$get();
-        $t55_56 = { $get() { return w.$get().s; }, $set(v) { const obj = w.$get(); obj.s = v; w.$set(obj); } };
-        $t56_57 = $t55_56.$get();
-        $t57_58 = $rt.builtin.len($t56_57);
-        $t58_59 = ($t54_55 < $t57_58);
-        if ($t58_59) {
-          $block = 17; break;
-        }
-        else {
-          $t17_18 = $t17_18;
-          $block = 4; break;
-        }
-        break;
-      }
-      case 13: {
-        $t59_60 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t60_61 = $t59_60.$get();
-        $t61_62 = { $get() { return w.$get().s; }, $set(v) { const obj = w.$get(); obj.s = v; w.$set(obj); } };
-        $t62_63 = $t61_62.$get();
-        $t63_64 = $rt.builtin.len($t62_63);
-        $t64_65 = ($t60_61 < $t63_64);
-        if ($t64_65) {
-          $block = 14; break;
-        }
-        else {
-          $block = 12; break;
-        }
-        break;
-      }
-      case 14: {
-        $t65_66 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t66_67 = $t65_66.$get();
-        $t67_68 = { $get() { return w.$get().s; }, $set(v) { const obj = w.$get(); obj.s = v; w.$set(obj); } };
-        $t68_69 = $t67_68.$get();
-        $rt.runtime.boundsCheck($t66_67, $rt.builtin.byteLen($t68_69));
-        $t69_70 = $rt.builtin.stringByteAt($t68_69, $t66_67);
-        $t70_71 = ($t69_70 !== 34);
-        if ($t70_71) {
-          $block = 11; break;
-        }
-        else {
-          $block = 12; break;
-        }
-        break;
-      }
-      case 15: {
-        $t71_72 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t72_73 = $t71_72.$get();
-        $t73_74 = ($t72_73 + 1);
-        $t74_75 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t74_75.$set($t73_74);
-        $block = 16; break;
-        break;
-      }
-      case 16: {
-        $t75_76 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t76_77 = $t75_76.$get();
-        $t77_78 = ($t76_77 + 1);
-        $t78_79 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t78_79.$set($t77_78);
-        $block = 13; break;
-        break;
-      }
-      case 17: {
-        $t79_80 = { $get() { return w.$get().s; }, $set(v) { const obj = w.$get(); obj.s = v; w.$set(obj); } };
-        $t80_81 = $t79_80.$get();
-        $t81_82 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t82_83 = $t81_82.$get();
-        $t83_84 = $rt.builtin.stringSlice($t80_81, $t46_47, $t82_83);
-        $t84_85 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t85_86 = $t84_85.$get().addr(0);
-        $t85_86.$set($t83_84);
-        $t86_87 = $rt.builtin.sliceSlice($t84_85.$get(), undefined, undefined, undefined);
-        $t87_88 = $rt.builtin.appendSlice($t17_18, $t86_87);
-        $t88_89 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t89_90 = $t88_89.$get();
-        $t90_91 = ($t89_90 + 1);
-        $t91_92 = { $get() { return w.$get().i; }, $set(v) { const obj = w.$get(); obj.i = v; w.$set(obj); } };
-        $t91_92.$set($t90_91);
-        $t17_18 = $t87_88;
+        $t41_42 = mw$str(w);
+        $t42_43 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t43_44 = $t42_43.$get().addr(0);
+        $t43_44.$set($t41_42);
+        $t44_45 = $rt.builtin.sliceSlice($t42_43.$get(), undefined, undefined, undefined);
+        $t45_46 = $rt.builtin.appendSlice($t17_18, $t44_45);
+        $t17_18 = $t45_46;
         $block = 4; break;
         break;
       }

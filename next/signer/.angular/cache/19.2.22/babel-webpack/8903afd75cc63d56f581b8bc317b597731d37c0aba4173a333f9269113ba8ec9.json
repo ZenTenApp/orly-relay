@@ -1,0 +1,1 @@
+{"ast":null,"code":"export { DomainEvent, AggregateRoot } from './domain-event';\nexport { IdentityCreated, IdentityRenamed, IdentitySelected, IdentitySigned, IdentityDeleted } from './identity-events';","map":null,"metadata":{},"sourceType":"module","externalDependencies":[]}

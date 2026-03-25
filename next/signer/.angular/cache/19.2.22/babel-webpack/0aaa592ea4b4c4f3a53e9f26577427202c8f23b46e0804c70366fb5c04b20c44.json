@@ -1,0 +1,1 @@
+{"ast":null,"code":"export const crypto = typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;\n//# sourceMappingURL=crypto.js.map","map":null,"metadata":{},"sourceType":"module","externalDependencies":[]}

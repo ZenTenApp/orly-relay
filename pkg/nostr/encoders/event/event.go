@@ -186,9 +186,11 @@ func (ev *E) Marshal(dst []byte) (b []byte) {
 	b = append(b, `","`...)
 	b = append(b, jSig...)
 	b = append(b, `":"`...)
-	hexStart = len(b)
-	b = append(b, make([]byte, 2*schnorr.SignatureSize)...)
-	xhex.Encode(b[hexStart:], ev.Sig)
+	if len(ev.Sig) > 0 {
+		hexStart = len(b)
+		b = append(b, make([]byte, 2*schnorr.SignatureSize)...)
+		xhex.Encode(b[hexStart:], ev.Sig)
+	}
 	b = append(b, `"}`...)
 	return
 }

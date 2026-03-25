@@ -145,3 +145,11 @@ func Log(msg string) { panic("jsbridge") }
 
 // Warn writes to console.warn in the SW context.
 func Warn(msg string) { panic("jsbridge") }
+
+// --- Global calls ---
+
+// CallGlobal calls a global JS function with string args. Fire-and-forget.
+func CallGlobal(name string, args ...string) { panic("jsbridge") }
+
+// CallGlobalResult calls a global JS function and returns the string result.
+func CallGlobalResult(name string, args ...string) string { panic("jsbridge") }

@@ -111,6 +111,31 @@ func (w *mw) str() string {
 				buf = append(buf, '\t')
 			case 'r':
 				buf = append(buf, '\r')
+			case 'u':
+				if w.i+4 < len(w.s) {
+					var cp int
+					for k := 1; k <= 4; k++ {
+						c := w.s[w.i+k]
+						cp <<= 4
+						if c >= '0' && c <= '9' {
+							cp |= int(c - '0')
+						} else if c >= 'a' && c <= 'f' {
+							cp |= int(c-'a') + 10
+						} else if c >= 'A' && c <= 'F' {
+							cp |= int(c-'A') + 10
+						}
+					}
+					if cp < 0x80 {
+						buf = append(buf, byte(cp))
+					} else if cp < 0x800 {
+						buf = append(buf, byte(0xC0|(cp>>6)), byte(0x80|(cp&0x3F)))
+					} else {
+						buf = append(buf, byte(0xE0|(cp>>12)), byte(0x80|((cp>>6)&0x3F)), byte(0x80|(cp&0x3F)))
+					}
+					w.i += 4
+				} else {
+					buf = append(buf, '\\', 'u')
+				}
 			default:
 				buf = append(buf, '\\', w.s[w.i])
 			}
@@ -182,18 +207,7 @@ func (w *mw) strs() []string {
 		if w.s[w.i] != '"' {
 			return out
 		}
-		w.i++
-		start := w.i
-		for w.i < len(w.s) && w.s[w.i] != '"' {
-			if w.s[w.i] == '\\' {
-				w.i++
-			}
-			w.i++
-		}
-		if w.i < len(w.s) {
-			out = append(out, w.s[start:w.i])
-			w.i++
-		}
+		out = append(out, w.str())
 	}
 }
 

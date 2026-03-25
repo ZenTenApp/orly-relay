@@ -8,6 +8,28 @@ import (
 // Subscription Router — thin forwarder to relay and marmot SWs via bus.
 // All relay operations, subscriptions, and caching are handled by the relay SW.
 
+// pendingSentDMs holds MLS_SEND saves deferred because myPubkey wasn't set yet.
+// Replayed when SET_KEY or SET_PUBKEY arrives.
+type pendingSentDM struct {
+	recipient string
+	content   string
+}
+
+var pendingSentDMs []pendingSentDM
+
+func flushPendingSentDMs() {
+	if myPubkey == "" || len(pendingSentDMs) == 0 {
+		return
+	}
+	for _, p := range pendingSentDMs {
+		now := sw.NowSeconds()
+		rec := makeDMRecord(p.recipient, myPubkey, p.content, now, "marmot", "")
+		sw.Log("shell-sw: flushing deferred sent DM peer=" + p.recipient[:min(len(p.recipient), 12)])
+		busSend("relay", "[\"SAVE_DM_QUIET\","+rec.ToJSON()+"]")
+	}
+	pendingSentDMs = nil
+}
+
 func routeMessage(clientID string, w *mw, msgType string) {
 	switch msgType {
 	// Identity — handle locally + send to each SW (targeted, not broadcast,
@@ -19,12 +41,14 @@ func routeMessage(clientID string, w *mw, msgType string) {
 		busSend("marmot", msg)
 		busSend("relay", msg)
 		sendToClient(clientID, "[\"KEY_SET\"]")
+		flushPendingSentDMs()
 	case "SET_PUBKEY":
 		pk := w.str()
 		identitySetPubkey(pk)
 		msg := "[\"SET_PUBKEY\"," + jstr(pk) + "]"
 		busSend("marmot", msg)
 		busSend("relay", msg)
+		flushPendingSentDMs()
 	case "CLEAR_KEY":
 		identityClearKey()
 		busSend("marmot", "[\"CLEAR_KEY\"]")
@@ -77,9 +101,13 @@ func routeMessage(clientID string, w *mw, msgType string) {
 		content := w.str()
 		busSend("marmot", "[\"MLS_SEND\","+jstr(recipient)+","+jstr(content)+"]")
 		// Save sent DM to relay's IDB (quiet — no DM_RECEIVED broadcast).
-		if myPubkey != "" {
+		if myPubkey == "" {
+			sw.Log("shell-sw: MLS_SEND: myPubkey empty, deferring save")
+			pendingSentDMs = append(pendingSentDMs, pendingSentDM{recipient, content})
+		} else {
 			now := sw.NowSeconds()
 			rec := makeDMRecord(recipient, myPubkey, content, now, "marmot", "")
+			sw.Log("shell-sw: MLS_SEND: saving sent DM peer=" + recipient[:min(len(recipient), 12)])
 			busSend("relay", "[\"SAVE_DM_QUIET\","+rec.ToJSON()+"]")
 		}
 	case "MLS_SUB":

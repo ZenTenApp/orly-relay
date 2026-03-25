@@ -1,0 +1,54 @@
+{
+  "name": "smesh-signer",
+  "version": "1.1.4",
+  "private": true,
+  "custom": {
+    "firefox": {
+      "version": "1.1.4"
+    }
+  },
+  "scripts": {
+    "build:firefox": "ng build firefox --configuration production",
+    "build:common": "ng build common --configuration production",
+    "watch:firefox": "ng build firefox --configuration development --watch",
+    "xpi": "cd dist/firefox && web-ext build --overwrite-dest -a ../",
+    "package": "npm run build:firefox && npm run xpi"
+  },
+  "dependencies": {
+    "@angular/animations": "^19.0.0",
+    "@angular/common": "^19.0.0",
+    "@angular/compiler": "^19.0.0",
+    "@angular/core": "^19.0.0",
+    "@angular/forms": "^19.0.0",
+    "@angular/platform-browser": "^19.0.0",
+    "@angular/platform-browser-dynamic": "^19.0.0",
+    "@angular/router": "^19.0.0",
+    "@cashu/cashu-ts": "2.0.0",
+    "@noble/curves": "^1.4.0",
+    "@noble/hashes": "^1.4.0",
+    "@scure/base": "^1.1.0",
+    "bootstrap": "^5.3.0",
+    "bootstrap-icons": "^1.13.1",
+    "buffer": "^6.0.3",
+    "hash-wasm": "^4.11.0",
+    "nostr-tools": "2.7.0",
+    "qrcode": "^1.5.0",
+    "rxjs": "^7.8.0",
+    "uuid": "^9.0.0",
+    "webextension-polyfill": "^0.12.0",
+    "zone.js": "~0.15.0"
+  },
+  "devDependencies": {
+    "@angular-builders/custom-webpack": "^19.0.0",
+    "@angular-devkit/build-angular": "^19.0.0",
+    "@angular/cli": "^19.0.0",
+    "@angular/compiler-cli": "^19.0.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/uuid": "^11.0.0",
+    "@types/webextension-polyfill": "^0.12.5",
+    "ng-packagr": "^19.0.0",
+    "typescript": "~5.6.0",
+    "web-ext": "^8.0.0",
+    "webpack": "^5.90.0"
+  }
+}

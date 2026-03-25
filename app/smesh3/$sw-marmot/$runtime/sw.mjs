@@ -272,16 +272,23 @@ export function NowMillis() {
 
 // --- Logging ---
 
-function _rlog(level, msg) {
-  fetch('/__log', {method:'POST', body: level + ' [marmot] ' + msg}).catch(()=>{});
-}
-
 export function Log(msg) {
   console.log('sw:', msg);
-  _rlog('I', msg);
 }
 
 export function Warn(msg) {
   console.warn('sw:', msg);
-  _rlog('W', msg);
+}
+
+// --- Global calls ---
+
+export function CallGlobal(name, ...args) {
+  const fn = self[name];
+  if (typeof fn === 'function') fn(...args);
+}
+
+export function CallGlobalResult(name, ...args) {
+  const fn = self[name];
+  if (typeof fn === 'function') return String(fn(...args));
+  return '';
 }

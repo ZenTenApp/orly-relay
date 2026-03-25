@@ -1,0 +1,1 @@
+{"ast":null,"code":"var _WS;\nif (typeof WebSocket !== 'undefined') {\n  _WS = WebSocket;\n}\nexport function injectWebSocketImpl(ws) {\n  _WS = ws;\n}\nexport function getWebSocketImpl() {\n  return _WS;\n}\n//# sourceMappingURL=ws.js.map","map":null,"metadata":{},"sourceType":"module","externalDependencies":[]}

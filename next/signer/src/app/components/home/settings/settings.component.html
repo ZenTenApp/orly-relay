@@ -1,0 +1,57 @@
+<div class="sam-text-header">
+  <div class="header-buttons">
+    <button class="header-btn" title="Lock" (click)="onClickLock()">
+      <span class="emoji">🔒</span>
+    </button>
+    @if (devMode) {
+      <button class="header-btn" title="Test Permission Prompt" (click)="onTestPrompt()">
+        <span class="emoji">✨</span>
+      </button>
+    }
+  </div>
+  <span> Settings </span>
+</div>
+
+<div class="vault-buttons">
+  <button class="btn btn-primary" (click)="onClickExportVault()">
+    Export Vault
+  </button>
+  <button class="btn btn-primary" (click)="navigate('/vault-import')">
+    Import Vault
+  </button>
+</div>
+
+<lib-nav-item text="💾 Backups" (click)="navigate('/home/backups')"></lib-nav-item>
+<lib-nav-item text="🪵 Logs" (click)="navigate('/home/logs')"></lib-nav-item>
+<lib-nav-item text="💡 Info" (click)="navigate('/home/info')"></lib-nav-item>
+
+<div class="dev-mode-row">
+  <label class="toggle-label">
+    <input type="checkbox" [checked]="devMode" (change)="onToggleDevMode($event)" />
+    <span>Dev Mode</span>
+  </label>
+</div>
+
+<div class="sam-flex-grow"></div>
+
+<div class="sync-info">
+  <span class="sync-label">SYNC: {{ syncFlow }}</span>
+  <p class="sync-note">
+    To change sync mode, export your vault, reset the extension,
+    and re-import with the desired sync setting.
+  </p>
+</div>
+
+<button
+  class="btn btn-danger"
+  (click)="
+    confirm.show(
+      'Do you really want to reset your extension? Every data will be lost.',
+      onResetExtension.bind(this)
+    )
+  "
+>
+  Reset Extension
+</button>
+
+<lib-confirm #confirm> </lib-confirm>

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	version     = "v0.65.36"
+	version     = "v0.65.43"
 	lsKeyPubkey = "sm3sh-pubkey"
 	lsKeyMode   = "sm3sh-mode"
 	lsKeyTheme  = "sm3sh-theme"
@@ -959,6 +959,13 @@ func onSWMessage(raw string) {
 		appendSystemBubble(text)
 	case "CRYPTO_REQ":
 		handleCryptoReq(raw, pos)
+	case "NEED_IDENTITY":
+		hexKey := localstorage.GetItem("sm3sh-key")
+		if hexKey != "" {
+			dom.PostToSW("[\"SET_KEY\"," + jstr(hexKey) + "]")
+		} else if pubhex != "" {
+			dom.PostToSW("[\"SET_PUBKEY\"," + jstr(pubhex) + "]")
+		}
 	}
 }
 

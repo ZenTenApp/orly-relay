@@ -84,7 +84,6 @@ body.dark {
 </head>
 <body>
 <script>{let t=localStorage.getItem('sm3sh-theme');if(t==='dark'||(t===null&&matchMedia('(prefers-color-scheme:dark)').matches))document.body.classList.add('dark')}</script>
-<script>{const _l=console.log,_w=console.warn,_e=console.error;function _r(v,a){try{fetch('/__log',{method:'POST',body:v+' [page] '+Array.from(a).join(' ')})}catch(e){}}console.log=function(){_l.apply(console,arguments);_r('I',arguments)};console.warn=function(){_w.apply(console,arguments);_r('W',arguments)};console.error=function(){_e.apply(console,arguments);_r('E',arguments)}}</script>
 <div id="app-root"></div>
 <div id="update-snackbar">new version available — click to update</div>
 <script>
@@ -121,14 +120,12 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 <script>
-// Satellite SW iframes — register SWs on satellite origins for thread isolation.
+// Satellite SW loaders — same origin, path-scoped.
 {
-  const proto = location.protocol;
-  const h = location.host;
-  ['marmot','relay'].forEach(name => {
+  ['$sw-marmot','$sw-relay'].forEach(dir => {
     const f = document.createElement('iframe');
     f.hidden = true;
-    f.src = proto + '//' + name + '.' + h + '/loader.html';
+    f.src = '/' + dir + '/loader.html';
     document.body.appendChild(f);
   });
 }

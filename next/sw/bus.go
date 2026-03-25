@@ -2,71 +2,45 @@ package main
 
 import (
 	"common/helpers"
+	"common/jsbridge/bc"
 	"common/jsbridge/sw"
-	"common/jsbridge/ws"
 )
 
-// Bus client — connects to /__bus on own origin to route messages
-// between the shell SW and satellite SWs (marmot, relay).
+// Bus — BroadcastChannel connecting shell, marmot, and relay SWs.
+// All client-local, no server involvement.
 
-var (
-	busConn    ws.Conn
-	busReady   bool
-	busPending []busMsgPending
-)
-
-type busMsgPending struct{ to, msg string }
+var bus bc.BC
 
 func connectBus() {
-	wsURL := sw.Origin()
-	if len(wsURL) > 5 && wsURL[:5] == "https" {
-		wsURL = "wss" + wsURL[5:]
-	} else if len(wsURL) > 4 && wsURL[:4] == "http" {
-		wsURL = "ws" + wsURL[4:]
+	bus = bc.Open("smesh-bus", func(msg string) { onBusMessage(msg) })
+	sw.Log("shell-sw: bus connected (BroadcastChannel)")
+	if myPubkey == "" {
+		broadcastToClients("[\"NEED_IDENTITY\"]")
 	}
-	wsURL += "/__bus"
-	sw.Log("shell-sw: connecting to bus")
-
-	busConn = ws.Dial(wsURL,
-		func(connID int, msg string) { onBusMessage(msg) },
-		func(connID int) { onBusOpen() },
-		func(connID int, code int, reason string) {
-			sw.Log("shell-sw: bus closed")
-			busReady = false
-			sw.SetTimeout(2000, func() { connectBus() })
-		},
-		func(connID int) {
-			busReady = false
-			sw.SetTimeout(2000, func() { connectBus() })
-		},
-	)
-}
-
-func onBusOpen() {
-	busReady = true
-	sw.Log("shell-sw: bus connected")
-	ws.Send(busConn, "{\"role\":\"shell\"}")
-	for _, p := range busPending {
-		ws.Send(busConn, "{\"to\":"+jstr(p.to)+",\"msg\":"+p.msg+"}")
-	}
-	busPending = nil
 }
 
 func busSend(to, msg string) {
-	if !busReady {
-		busPending = append(busPending, busMsgPending{to, msg})
-		return
-	}
-	ws.Send(busConn, "{\"to\":"+jstr(to)+",\"msg\":"+msg+"}")
+	bc.Send(bus, "{\"from\":\"shell\",\"to\":"+jstr(to)+",\"msg\":"+msg+"}")
 }
 
-func onBusMessage(msg string) {
+func onBusMessage(raw string) {
+	from := jsonField(raw, "from")
+	if from == "shell" {
+		return
+	}
+	to := jsonField(raw, "to")
+	if to != "shell" && to != "*" {
+		return
+	}
+	msg := jsonFieldRaw(raw, "msg")
+	if msg == "" {
+		return
+	}
 	w := newMW(msg)
 	msgType := w.str()
 
 	switch msgType {
 	case "FWD":
-		// Relay/marmot SW wants to send to a specific browser client.
 		clientID := w.str()
 		innerMsg := w.raw()
 		if clientID == "" {
@@ -75,15 +49,12 @@ func onBusMessage(msg string) {
 			sendToClient(clientID, innerMsg)
 		}
 	case "FWD_ALL":
-		// Relay/marmot SW wants to broadcast to all browser clients.
 		innerMsg := w.raw()
 		broadcastToClients(innerMsg)
 	case "DM_RECEIVED":
-		// Marmot SW forwarded a DM — route to relay for IDB storage.
 		dmJSON := w.raw()
 		busSend("relay", "[\"SAVE_DM\","+dmJSON+"]")
 	case "MLS_GROUPS":
-		// Marmot SW forwarded groups list — broadcast to clients.
 		raw := w.raw()
 		broadcastToClients("[\"MLS_GROUPS\"," + raw + "]")
 	case "DM_SENT":
@@ -93,7 +64,6 @@ func onBusMessage(msg string) {
 		text := w.raw()
 		broadcastToClients("[\"MLS_STATUS\"," + text + "]")
 	case "CRYPTO_REQ":
-		// Satellite SW needs crypto proxy through the main page.
 		from := w.str()
 		id := int(w.num())
 		method := w.str()
@@ -103,6 +73,41 @@ func onBusMessage(msg string) {
 			busSend(from, "[\"CRYPTO_RESULT\","+helpers.Itoa(int64(id))+","+jstr(result)+","+jstr(errMsg)+"]")
 		})
 	}
+}
+
+// jsonField extracts a string value (unquoted) for a key from a JSON object string.
+func jsonField(json, key string) string {
+	v := jsonFieldRaw(json, key)
+	if len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"' {
+		return v[1 : len(v)-1]
+	}
+	return v
+}
+
+// jsonFieldRaw extracts a raw JSON value for a key from a JSON object string.
+func jsonFieldRaw(json, key string) string {
+	needle := "\"" + key + "\":"
+	idx := -1
+	for i := 0; i <= len(json)-len(needle); i++ {
+		if json[i:i+len(needle)] == needle {
+			idx = i + len(needle)
+			break
+		}
+	}
+	if idx < 0 {
+		return ""
+	}
+	for idx < len(json) && (json[idx] == ' ' || json[idx] == '\t') {
+		idx++
+	}
+	if idx >= len(json) {
+		return ""
+	}
+	end := skipval(json, idx)
+	if end < 0 {
+		return ""
+	}
+	return json[idx:end]
 }
 
 // strsJSON serializes a string slice to a JSON array.

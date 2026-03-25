@@ -1,0 +1,91 @@
+<!-- eslint-disable @angular-eslint/template/interactive-supports-focus -->
+<!-- eslint-disable @angular-eslint/template/click-events-have-key-events -->
+<div class="sam-text-header">
+  <div class="header-buttons">
+    <button class="header-btn" title="Lock" (click)="onClickLock()">
+      <span class="emoji">🔒</span>
+    </button>
+    @if (devMode) {
+      <button class="header-btn" title="Test Permission Prompt" (click)="onTestPrompt()">
+        <span class="emoji">✨</span>
+      </button>
+    }
+  </div>
+  <span>You</span>
+  <button class="edit-btn" title="Edit profile" (click)="onClickEditProfile()">
+    <span class="emoji">📝</span>
+  </button>
+</div>
+
+<div class="identity-container">
+  <!-- Banner background -->
+  <div
+    class="banner-background"
+    [style.background-image]="bannerUrl ? 'url(' + bannerUrl + ')' : 'none'"
+  >
+    <div class="banner-overlay"></div>
+
+    <div class="profile-content">
+      <!-- Avatar -->
+      <div class="avatar-frame" [class.has-image]="avatarUrl">
+        <img
+          [src]="avatarUrl || 'person-fill.svg'"
+          alt=""
+          class="avatar-image"
+        />
+      </div>
+
+      <!-- Display name (primary, large) -->
+      <div class="name-badge-container" (click)="onClickShowDetails()">
+        <span class="display-name">
+          {{ displayName || selectedIdentity?.nick || 'Unknown' }}
+        </span>
+        @if(username) {
+        <span class="username">
+          {{ username }}
+        </span>
+        }
+      </div>
+
+      <!-- NIP-05 verification -->
+      @if(profile?.nip05) {
+      <div class="nip05-row">
+        @if(validating) {
+        <i class="bi bi-circle color-activity"></i>
+        } @else { @if(nip05isValidated) {
+        <i class="bi bi-patch-check sam-color-primary"></i>
+        } @else {
+        <i class="bi bi-exclamation-octagon-fill sam-color-danger"></i>
+        } }
+
+        <span class="nip05-badge">{{
+          profile?.nip05 | visualNip05
+        }}</span>
+      </div>
+      }
+
+      <!-- npub display -->
+      <div class="npub-wrapper">
+        <lib-pubkey
+          [value]="selectedIdentityNpub ?? 'na'"
+          [first]="14"
+          [last]="8"
+          (click)="
+            copyToClipboard(selectedIdentityNpub);
+            toast.show('Copied to clipboard')
+          "
+        ></lib-pubkey>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- About section -->
+@if (aboutText) {
+  <div class="about-section">
+    <div class="about-header">About</div>
+    <div class="about-content">{{ aboutText }}</div>
+  </div>
+}
+
+<lib-toast #toast></lib-toast>

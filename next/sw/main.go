@@ -56,6 +56,7 @@ var appFiles = []string{
 	"/$sw/$runtime/subtle.mjs",
 	"/$sw/$runtime/crypto.mjs",
 	"/$sw/$runtime/ws.mjs",
+	"/$sw/$runtime/bc.mjs",
 }
 
 var currentVersion string
@@ -105,7 +106,7 @@ func onFetch(event sw.Event) {
 		return
 	}
 	path := sw.GetRequestPath(event)
-	if path == "/__sse" || path == "/__version" || path == "/__marmot" || path == "/__sw-error" || path == "/__bus" {
+	if path == "/__sse" || path == "/__version" {
 		return
 	}
 	// SW module files and fonts: pass through to network.

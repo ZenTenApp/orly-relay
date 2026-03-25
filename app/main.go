@@ -776,7 +776,7 @@ func Run(
 
 	// Start embedded Smesh3 web client if enabled
 	if cfg.Smesh3Enabled && cfg.Smesh3Port > 0 {
-		l.smesh3Server = NewSmesh3Server(cfg.Smesh3Port, cfg.Smesh3Dir, cfg.DataDir, cfg.Smesh3DeployPub)
+		l.smesh3Server = NewSmesh3Server(cfg.Smesh3Port, cfg.Smesh3Dir, cfg.Smesh3DeployPub)
 		if err := l.smesh3Server.Start(ctx); err != nil {
 			log.E.F("failed to start smesh3 server: %v", err)
 			l.smesh3Server = nil

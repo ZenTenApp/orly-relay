@@ -16,7 +16,7 @@ func main() {
 	}
 
 	deployPub := os.Getenv("ORLY_DEPLOY_PUBKEY")
-	s := app.NewSmesh3Server(8090, dir, "/tmp/sm3sh-data", deployPub)
+	s := app.NewSmesh3Server(8090, dir, deployPub)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()

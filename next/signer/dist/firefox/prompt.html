@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <title>Smesh Signer</title>
+    <link rel="stylesheet" type="text/css" href="styles.css" />
+    <script src="scripts.js"></script>
+    <style>
+      /* Prevent white flash on load */
+      html { background-color: #0a0a0a; }
+      @media (prefers-color-scheme: light) {
+        html { background-color: #ffffff; }
+      }
+
+      body {
+        background: var(--background);
+        height: 100vh;
+        width: 100vw;
+        color: var(--foreground);
+        font-size: 16px;
+      }
+
+      .color-primary {
+        color: var(--primary);
+      }
+
+      .page {
+        height: 100%;
+        display: grid;
+        grid-template-rows: 1fr auto;
+        grid-template-columns: 1fr;
+        overflow-y: hidden;
+      }
+
+      .actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: var(--size);
+        background: var(--background);
+      }
+
+      .action-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .action-label {
+        width: 60px;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--muted-foreground);
+      }
+
+      .action-buttons {
+        display: flex;
+        gap: 8px;
+        flex: 1;
+      }
+
+      .action-buttons button {
+        flex: 1;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+      }
+
+      .btn-reject {
+        background: var(--muted);
+        color: var(--foreground);
+      }
+
+      .btn-reject:hover {
+        background: var(--border);
+      }
+
+      .btn-accept {
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+
+      .btn-accept:hover {
+        opacity: 0.9;
+      }
+
+      .card {
+        padding: var(--size);
+        background: var(--background-light);
+        border-radius: 8px;
+        color: var(--foreground);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .json {
+        white-space: pre;
+        overflow-y: auto;
+        font-size: 12px;
+        color: gray;
+      }
+
+      .text {
+        white-space: normal;
+        overflow-y: auto;
+        font-size: 12px;
+        color: gray;
+      }
+
+      .description {
+        margin: 0;
+        text-align: center;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="sam-flex-column" style="overflow-y: auto">
+        <div class="sam-text-header">
+          <span id="titleSpan" style="font-weight: 400 !important"></span>
+        </div>
+
+        <!-- Card for getPublicKey -->
+        <div id="cardGetPublicKey" class="card sam-mt sam-ml sam-mr">
+          <p class="description">
+            <b class="host-INSERT color-primary"></b> is requesting permission to
+            <b class="color-primary">read your public key</b> for the selected identity
+            <b class="nick-INSERT color-primary"></b>.
+          </p>
+        </div>
+
+        <!-- Card for getRelays -->
+        <div id="cardGetRelays" class="card sam-mt sam-ml sam-mr">
+          <p class="description">
+            <b class="host-INSERT color-primary"></b> is requesting permission to
+            <b class="color-primary">read your relays</b> for the selected identity
+            <b class="nick-INSERT color-primary"></b>.
+          </p>
+        </div>
+
+        <!-- Card for signEvent -->
+        <div id="cardSignEvent" class="card sam-mt sam-ml sam-mr">
+          <p class="description">
+            <b class="host-INSERT color-primary"></b> is requesting permission to
+            <b class="color-primary">sign an event</b> (kind <span id="kindSpan"></span>)
+            for the selected identity <b class="nick-INSERT color-primary"></b>.
+          </p>
+        </div>
+
+        <!-- Card2 for signEvent -->
+        <div id="card2SignEvent" class="card sam-mt sam-ml sam-mr">
+          <div id="card2SignEvent_json" class="json"></div>
+        </div>
+
+        <!-- Card for nip04.encrypt -->
+        <div id="cardNip04Encrypt" class="card sam-mt sam-ml sam-mr">
+          <p class="description">
+            <b class="host-INSERT color-primary"></b> is requesting permission to
+            <b class="color-primary">encrypt a text</b> (NIP04) for the selected identity
+            <b class="nick-INSERT color-primary"></b>.
+          </p>
+        </div>
+
+        <!-- Card2 for nip04.encrypt -->
+        <div id="card2Nip04Encrypt" class="card sam-mt sam-ml sam-mr">
+          <div id="card2Nip04Encrypt_text" class="text"></div>
+        </div>
+
+        <!-- Card for nip44.encrypt -->
+        <div id="cardNip44Encrypt" class="card sam-mt sam-ml sam-mr">
+          <p class="description">
+            <b class="host-INSERT color-primary"></b> is requesting permission to
+            <b class="color-primary">encrypt a text</b> (NIP44) for the selected identity
+            <b class="nick-INSERT color-primary"></b>.
+          </p>
+        </div>
+
+        <!-- Card2 for nip44.encrypt -->
+        <div id="card2Nip44Encrypt" class="card sam-mt sam-ml sam-mr">
+          <div id="card2Nip44Encrypt_text" class="text"></div>
+        </div>
+
+        <!-- Card for nip04.decrypt -->
+        <div id="cardNip04Decrypt" class="card sam-mt sam-ml sam-mr">
+          <p class="description">
+            <b class="host-INSERT color-primary"></b> is requesting permission to
+            <b class="color-primary">decrypt a text</b> (NIP04) for the selected identity
+            <b class="nick-INSERT color-primary"></b>.
+          </p>
+        </div>
+
+        <!-- Card2 for nip04.decrypt -->
+        <div id="card2Nip04Decrypt" class="card sam-mt sam-ml sam-mr">
+          <div id="card2Nip04Decrypt_text" class="text"></div>
+        </div>
+
+        <!-- Card for nip44.decrypt -->
+        <div id="cardNip44Decrypt" class="card sam-mt sam-ml sam-mr">
+          <p class="description">
+            <b class="host-INSERT color-primary"></b> is requesting permission to
+            <b class="color-primary">decrypt a text</b> (NIP44) for the selected identity
+            <b class="nick-INSERT color-primary"></b>.
+          </p>
+        </div>
+
+        <!-- Card2 for nip44.decrypt -->
+        <div id="card2Nip44Decrypt" class="card sam-mt sam-ml sam-mr">
+          <div id="card2Nip44Decrypt_text" class="text"></div>
+        </div>
+
+        <!-- Card for webln.enable -->
+        <div id="cardWeblnEnable" class="card sam-mt sam-ml sam-mr">
+          <p class="description">
+            <b class="host-INSERT color-primary"></b> is requesting permission to
+            <b class="color-primary">connect to your Lightning wallet</b>.
+          </p>
+        </div>
+
+        <!-- Card for webln.getInfo -->
+        <div id="cardWeblnGetInfo" class="card sam-mt sam-ml sam-mr">
+          <p class="description">
+            <b class="host-INSERT color-primary"></b> is requesting permission to
+            <b class="color-primary">read your wallet info</b>.
+          </p>
+        </div>
+
+        <!-- Card for webln.sendPayment -->
+        <div id="cardWeblnSendPayment" class="card sam-mt sam-ml sam-mr">
+          <p class="description">
+            <b class="host-INSERT color-primary"></b> is requesting permission to
+            <b class="color-primary">send a Lightning payment</b> of
+            <b id="paymentAmountSpan" class="color-primary"></b>.
+          </p>
+        </div>
+
+        <!-- Card2 for webln.sendPayment (shows invoice) -->
+        <div id="card2WeblnSendPayment" class="card sam-mt sam-ml sam-mr">
+          <div id="card2WeblnSendPayment_json" class="json"></div>
+        </div>
+
+        <!-- Card for webln.makeInvoice -->
+        <div id="cardWeblnMakeInvoice" class="card sam-mt sam-ml sam-mr">
+          <p class="description">
+            <b class="host-INSERT color-primary"></b> is requesting permission to
+            <b class="color-primary">create a Lightning invoice</b>
+            <span id="invoiceAmountSpan"></span>.
+          </p>
+        </div>
+
+        <!-- Card for webln.keysend -->
+        <div id="cardWeblnKeysend" class="card sam-mt sam-ml sam-mr">
+          <p class="description">
+            <b class="host-INSERT color-primary"></b> is requesting permission to
+            <b class="color-primary">send a keysend payment</b>.
+          </p>
+        </div>
+      </div>
+
+      <!------------->
+      <!-- ACTIONS -->
+      <!------------->
+      <div class="actions">
+        <div class="action-row">
+          <span class="action-label">Reject</span>
+          <div class="action-buttons">
+            <button id="rejectOnceButton" type="button" class="btn-reject">Once</button>
+            <button id="rejectAlwaysButton" type="button" class="btn-reject">Always</button>
+          </div>
+        </div>
+        <div class="action-row">
+          <span class="action-label">Accept</span>
+          <div class="action-buttons">
+            <button id="approveOnceButton" type="button" class="btn-accept">Once</button>
+            <button id="approveAlwaysButton" type="button" class="btn-accept">Always</button>
+          </div>
+        </div>
+        <div class="action-row" id="allQueuedRow">
+          <span class="action-label">All Queued</span>
+          <div class="action-buttons">
+            <button id="rejectAllButton" type="button" class="btn-reject">Reject All</button>
+            <button id="approveAllButton" type="button" class="btn-accept">Approve All</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="prompt.js"></script>
+  </body>
+</html>

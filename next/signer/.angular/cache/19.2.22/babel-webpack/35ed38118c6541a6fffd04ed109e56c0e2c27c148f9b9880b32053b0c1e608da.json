@@ -1,0 +1,1 @@
+{"ast":null,"code":"import { provideZoneChangeDetection } from '@angular/core';\nimport { provideRouter } from '@angular/router';\nimport { routes } from './app.routes';\nexport const appConfig = {\n  providers: [provideZoneChangeDetection({\n    eventCoalescing: true\n  }), provideRouter(routes)]\n};","map":null,"metadata":{},"sourceType":"module","externalDependencies":[]}

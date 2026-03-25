@@ -184,3 +184,13 @@ export function Warn(msg) {
   $rt.sw.Warn(msg);
 }
 
+// jsbridge: sw.CallGlobal
+export function CallGlobal(name, args) {
+  $rt.sw.CallGlobal(name, args);
+}
+
+// jsbridge: sw.CallGlobalResult
+export function CallGlobalResult(name, args) {
+  return $rt.sw.CallGlobalResult(name, args);
+}
+

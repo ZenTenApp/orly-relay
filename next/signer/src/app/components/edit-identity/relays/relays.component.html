@@ -1,0 +1,61 @@
+<!-- RELAY_TEMPLATE -->
+<ng-template #relayTemplate let-relay="relay">
+  <div class="sam-flex-row gap relay">
+    <div class="sam-flex-column sam-flex-grow">
+      <span>{{ relay.url | visualRelay }}</span>
+      <div class="sam-flex-row gap-h">
+        <lib-relay-rw
+          type="read"
+          [model]="relay.read"
+          [readonly]="true"
+        ></lib-relay-rw>
+        <lib-relay-rw
+          type="write"
+          [model]="relay.write"
+          [readonly]="true"
+        ></lib-relay-rw>
+      </div>
+    </div>
+  </div>
+</ng-template>
+
+<div class="header-pane">
+  <lib-icon-button
+    icon="chevron-left"
+    (click)="navigateBack()"
+  ></lib-icon-button>
+  <span class="header-title">Relays</span>
+</div>
+
+<div class="info-banner">
+  <span class="emoji">💡</span>
+  <span>These relays are fetched from your NIP-65 relay list (kind 10002). To update your relay list, use a Nostr client that supports NIP-65.</span>
+</div>
+
+@if(loading) {
+<div class="loading-state">
+  <i class="bi bi-circle color-activity"></i>
+  <span>Fetching relay list...</span>
+</div>
+}
+
+@if(!loading && errorMessage) {
+<div class="error-state">
+  <i class="bi bi-exclamation-triangle sam-color-danger"></i>
+  <span>{{ errorMessage }}</span>
+</div>
+}
+
+@if(!loading && !errorMessage && relays.length === 0) {
+<div class="empty-state">
+  <i class="bi bi-broadcast"></i>
+  <span>No relay list found</span>
+  <span class="hint">Publish a NIP-65 relay list using a Nostr client to see your relays here.</span>
+</div>
+}
+
+@for(relay of relays; track relay.url) {
+<ng-container
+  *ngTemplateOutlet="relayTemplate; context: { relay: relay }"
+></ng-container>
+}

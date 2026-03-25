@@ -1,21 +1,15 @@
 package main
 
 import (
+	"common/helpers"
+	"common/jsbridge/bc"
 	"common/jsbridge/sw"
-	"common/jsbridge/ws"
 )
 
-// Relay SW — runs on relay.* subdomain for thread isolation.
-// Handles relay pool, subscriptions, event storage, DM caching.
-// Communicates with shell SW via /__bus backend WS.
+// Relay SW — relay pool, subscriptions, event storage, DM caching.
+// Communicates with shell/marmot SWs via BroadcastChannel (client-local).
 
-var (
-	busConn    ws.Conn
-	busReady   bool
-	busPending []busMsgPending
-)
-
-type busMsgPending struct{ to, msg string }
+var bus bc.BC
 
 func main() {
 	initSharedState()
@@ -52,49 +46,27 @@ func onMessage(event sw.Event) {
 }
 
 func connectBus() {
-	wsURL := sw.Origin()
-	if len(wsURL) > 5 && wsURL[:5] == "https" {
-		wsURL = "wss" + wsURL[5:]
-	} else if len(wsURL) > 4 && wsURL[:4] == "http" {
-		wsURL = "ws" + wsURL[4:]
-	}
-	wsURL += "/__bus"
-	sw.Log("relay-sw: connecting to bus")
-
-	busConn = ws.Dial(wsURL,
-		func(connID int, msg string) { onBusMessage(msg) },
-		func(connID int) { onBusOpen() },
-		func(connID int, code int, reason string) {
-			sw.Log("relay-sw: bus closed")
-			busReady = false
-			sw.SetTimeout(2000, func() { connectBus() })
-		},
-		func(connID int) {
-			busReady = false
-			sw.SetTimeout(2000, func() { connectBus() })
-		},
-	)
-}
-
-func onBusOpen() {
-	busReady = true
-	sw.Log("relay-sw: bus connected")
-	ws.Send(busConn, "{\"role\":\"relay\"}")
-	for _, p := range busPending {
-		ws.Send(busConn, "{\"to\":"+jstr(p.to)+",\"msg\":"+p.msg+"}")
-	}
-	busPending = nil
+	bus = bc.Open("smesh-bus", func(raw string) { onBusMessage(raw) })
+	sw.Log("relay-sw: bus connected (BroadcastChannel)")
 }
 
 func busSend(to, msg string) {
-	if !busReady {
-		busPending = append(busPending, busMsgPending{to, msg})
-		return
-	}
-	ws.Send(busConn, "{\"to\":"+jstr(to)+",\"msg\":"+msg+"}")
+	bc.Send(bus, "{\"from\":\"relay\",\"to\":"+jstr(to)+",\"msg\":"+msg+"}")
 }
 
-func onBusMessage(msg string) {
+func onBusMessage(raw string) {
+	from := jsonField(raw, "from")
+	if from == "relay" {
+		return
+	}
+	to := jsonField(raw, "to")
+	if to != "relay" && to != "*" {
+		return
+	}
+	msg := jsonFieldRaw(raw, "msg")
+	if msg == "" {
+		return
+	}
 	w := newMW(msg)
 	msgType := w.str()
 
@@ -156,14 +128,19 @@ func onBusMessage(msg string) {
 		routerDMHistory(clientID, peer, limit, until)
 	case "SAVE_DM":
 		dmJSON := w.raw()
+		sw.Log("relay-sw: SAVE_DM len=" + helpers.Itoa(int64(len(dmJSON))))
 		cacheSaveDM(dmJSON, func(result string) {
+			sw.Log("relay-sw: SAVE_DM result=" + result)
 			if result != "duplicate" {
 				fwdAll("[\"DM_RECEIVED\"," + dmJSON + "]")
 			}
 		})
 	case "SAVE_DM_QUIET":
 		dmJSON := w.raw()
-		cacheSaveDM(dmJSON, func(string) {})
+		sw.Log("relay-sw: SAVE_DM_QUIET len=" + helpers.Itoa(int64(len(dmJSON))))
+		cacheSaveDM(dmJSON, func(result string) {
+			sw.Log("relay-sw: SAVE_DM_QUIET result=" + result)
+		})
 
 	// Crypto proxy result from shell.
 	case "CRYPTO_RESULT":

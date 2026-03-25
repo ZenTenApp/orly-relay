@@ -106,12 +106,22 @@ VPS at 69.164.249.71 (Ubuntu), accessed via `ssh orly` (WireGuard tunnel to 10.0
 No Go on VPS. Cross-compile + rsync:
 ```sh
 CGO_ENABLED=1 CC=x86_64-linux-gnu-gcc GOOS=linux GOARCH=amd64 go build -o /tmp/orly-deploy ./cmd/orly
-scp /tmp/orly-deploy orly:/home/mleku/.local/bin/orly.new
+rsync -avz --progress /tmp/orly-deploy orly:/home/mleku/.local/bin/orly.new
 rsync -avz --exclude='*.go' app/smesh3/ orly:/home/mleku/sm3sh/
-ssh orly "mv /home/mleku/.local/bin/orly{,.bak} && mv /home/mleku/.local/bin/orly{.new,} && chmod +x /home/mleku/.local/bin/orly && systemctl restart orly"
+ssh orly "chown mleku:mleku /home/mleku/.local/bin/orly.new && mv /home/mleku/.local/bin/orly{,.bak} && mv /home/mleku/.local/bin/orly{.new,} && chmod +x /home/mleku/.local/bin/orly && systemctl restart orly"
 ```
 
+**IMPORTANT**: SSH to VPS connects as root. The orly service runs as `User=mleku`. All deployed files must be `chown mleku:mleku` before use — root-owned binaries cause systemd 203/EXEC failures. Use `rsync` not `scp` for the binary (scp can truncate large files over slow links).
+
 Asset-only deploy (no binary change): just rsync, fsnotify triggers reload automatically.
+
+## Version Locations
+
+Two files to bump on every release:
+- `pkg/version/version` — canonical version (plain text, embedded into binary)
+- `next/sm3sh/main.go` line 13 — `version = "v0.65.43"` (sm3sh UI display)
+
+Both must stay in sync.
 
 ## tinyjs Build
 
@@ -151,21 +161,45 @@ After build, reload in `about:debugging` → "This Firefox" → "Load Temporary 
 
 Debug logging: `src/smesh-signer-extension.ts` line 248 — `debug()` function. Enable by uncommenting `console.log` inside it. Produces verbose "getPublicKey received", "nip44.decrypt received" etc. on every NIP-07 call.
 
-## SW Mesh Architecture
+## Nostr-First Architecture
 
-Three service workers communicate via a WebSocket bus through the Go backend:
+**THE VPS IS A DUMB NOSTR RELAY. NOTHING MORE.**
+
+The VPS serves exactly two things:
+1. Static files: SW JavaScript, HTML, CSS
+2. Nostr relay protocol: EVENT, REQ, CLOSE over WebSocket
+
+ALL application logic runs in the browser. No exceptions. No "smart backend." No custom WebSocket endpoints. No server-side crypto, MLS, message routing, or session management. If code can't compile to run client-side, the answer is to fix the compilation, not to put it on the server.
+
+This is a Nostr app, not a web app. The server doesn't know anything about the user, their keys, their messages, or their state. The relay sees events — that's it.
+
+### SW Mesh Architecture
+
+Three service workers communicate via BroadcastChannel (client-local, no server):
 
 ```
-Page ↔ Shell SW ($sw/) ↔ Bus (/__bus WS) ↔ Marmot SW ($sw-marmot/)
-                                          ↔ Relay SW ($sw-relay/)
+Page ↔ Shell SW ($sw/) ↔ BroadcastChannel ↔ Marmot SW ($sw-marmot/)
+                                           ↔ Relay SW ($sw-relay/)
 ```
 
 - **Shell SW**: Message hub, SSE version monitor, cache-first fetch. Runs on main origin.
-- **Marmot SW**: MLS DM proxy, crypto proxy chain. Runs on `marmot.*` subdomain.
+- **Marmot SW**: MLS DM engine, all MLS crypto runs here. Runs on `marmot.*` subdomain.
 - **Relay SW**: Relay pool, subscriptions, IDB DM cache. Runs on `relay.*` subdomain.
-- **Backend bus** (`app/bus.go`): Routes `{"to":"role","msg":...}` between peers. Queues messages for disconnected peers.
+- **BroadcastChannel**: Client-local message bus. Fire-and-forget. No server involvement.
 
-All three SWs must queue bus messages when disconnected (`busPending` pattern). `connectBus()` must be called from `main()`, not `onActivate()` — SW threads get evicted and restarted without re-activating.
+Subdomains exist ONLY for browser thread isolation. They serve static SW JS files. They do NOT have custom endpoints.
+
+### SW Logging
+
+SW logs go via BroadcastChannel to the page console. Fire-and-forget — if no page is listening, logs are dropped silently. Never blocking. Never sent to the server.
+
+### What NEVER belongs on the VPS
+
+- `/__bus` or any inter-SW message routing
+- `/__marmot` or any MLS/crypto backend
+- `/__log` or any log collection
+- Crypto proxy, session state, key material, message content
+- Anything that makes the server aware of user activity beyond EVENT/REQ
 
 ## What NOT To Do
 

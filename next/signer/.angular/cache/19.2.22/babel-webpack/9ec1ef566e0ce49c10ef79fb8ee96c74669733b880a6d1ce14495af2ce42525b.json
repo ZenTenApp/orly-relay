@@ -1,0 +1,1 @@
+{"ast":null,"code":"/**\n * per protocol definition since tokenV3 tokens have a prefix and a version number\n */\nvar TOKEN_VERSION = 'A';\nvar TOKEN_PREFIX = 'cashu';\nexport { TOKEN_VERSION, TOKEN_PREFIX };\n//# sourceMappingURL=Constants.js.map","map":null,"metadata":{},"sourceType":"module","externalDependencies":[]}

@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"fmt"
+	"net/mail"
 	"net/url"
 	"strings"
 
@@ -48,7 +49,13 @@ func (ip *InboundProcessor) ProcessInbound(email *bridgesmtp.InboundEmail, recip
 	// Build DM content
 	var dm strings.Builder
 
-	dm.WriteString(fmt.Sprintf("From: %s\n", parsed.From))
+	// Extract clean email address from RFC 5322 format (strip "Name <addr>" → "addr")
+	fromAddr := parsed.From
+	if addr, err := mail.ParseAddress(parsed.From); err == nil {
+		fromAddr = addr.Address
+	}
+
+	dm.WriteString(fmt.Sprintf("From: %s\n", fromAddr))
 	dm.WriteString(fmt.Sprintf("Subject: %s\n", parsed.Subject))
 
 	// Handle attachments: zip non-text parts, encrypt, upload to Blossom
@@ -68,7 +75,7 @@ func (ip *InboundProcessor) ProcessInbound(email *bridgesmtp.InboundEmail, recip
 
 	// Add reply link if compose URL is configured
 	if ip.composeURL != "" {
-		replyLink := GenerateReplyLink(ip.composeURL, parsed.From, parsed.Subject)
+		replyLink := GenerateReplyLink(ip.composeURL, fromAddr, parsed.Subject)
 		dm.WriteString(fmt.Sprintf("Reply: %s\n", replyLink))
 	}
 

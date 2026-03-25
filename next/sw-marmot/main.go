@@ -1,22 +1,14 @@
 package main
 
 import (
-	"common/helpers"
+	"common/jsbridge/bc"
 	"common/jsbridge/sw"
-	"common/jsbridge/ws"
 )
 
-// Marmot SW — runs on marmot.* subdomain for thread isolation.
-// Handles MLS DM proxy via /__marmot backend WS.
-// Communicates with shell SW via /__bus backend WS.
+// Marmot SW — MLS DM proxy, crypto proxy chain.
+// Communicates with shell/relay SWs via BroadcastChannel (client-local).
 
-var (
-	busConn    ws.Conn
-	busReady   bool
-	busPending []busMsgPending
-)
-
-type busMsgPending struct{ to, msg string }
+var bus bc.BC
 
 func main() {
 	initSharedState()
@@ -52,50 +44,27 @@ func onMessage(event sw.Event) {
 }
 
 func connectBus() {
-	wsURL := sw.Origin()
-	if len(wsURL) > 5 && wsURL[:5] == "https" {
-		wsURL = "wss" + wsURL[5:]
-	} else if len(wsURL) > 4 && wsURL[:4] == "http" {
-		wsURL = "ws" + wsURL[4:]
-	}
-	wsURL += "/__bus"
-	sw.Log("marmot-sw: connecting to bus")
-
-	busConn = ws.Dial(wsURL,
-		func(connID int, msg string) { onBusMessage(msg) },
-		func(connID int) { onBusOpen() },
-		func(connID int, code int, reason string) {
-			sw.Log("marmot-sw: bus closed code=" + helpers.Itoa(int64(code)) + " reason=" + reason)
-			busReady = false
-			sw.SetTimeout(2000, func() { connectBus() })
-		},
-		func(connID int) {
-			sw.Log("marmot-sw: bus error")
-			busReady = false
-			sw.SetTimeout(2000, func() { connectBus() })
-		},
-	)
-}
-
-func onBusOpen() {
-	busReady = true
-	sw.Log("marmot-sw: bus connected")
-	ws.Send(busConn, "{\"role\":\"marmot\"}")
-	for _, p := range busPending {
-		ws.Send(busConn, "{\"to\":"+jstr(p.to)+",\"msg\":"+p.msg+"}")
-	}
-	busPending = nil
+	bus = bc.Open("smesh-bus", func(raw string) { onBusMessage(raw) })
+	sw.Log("marmot-sw: bus connected (BroadcastChannel)")
 }
 
 func busSend(to, msg string) {
-	if !busReady {
-		busPending = append(busPending, busMsgPending{to, msg})
-		return
-	}
-	ws.Send(busConn, "{\"to\":"+jstr(to)+",\"msg\":"+msg+"}")
+	bc.Send(bus, "{\"from\":\"marmot\",\"to\":"+jstr(to)+",\"msg\":"+msg+"}")
 }
 
-func onBusMessage(msg string) {
+func onBusMessage(raw string) {
+	from := jsonField(raw, "from")
+	if from == "marmot" {
+		return
+	}
+	to := jsonField(raw, "to")
+	if to != "marmot" && to != "*" {
+		return
+	}
+	msg := jsonFieldRaw(raw, "msg")
+	if msg == "" {
+		return
+	}
 	w := newMW(msg)
 	msgType := w.str()
 
@@ -122,9 +91,7 @@ func onBusMessage(msg string) {
 		id := int(w.num())
 		result := w.str()
 		errMsg := w.str()
-		if fn, ok := cryptoCBs[id]; ok {
-			delete(cryptoCBs, id)
-			fn(result, errMsg)
-		}
+		// Forward to WASM module's crypto resolver
+		handleCryptoResult(id, result, errMsg)
 	}
 }

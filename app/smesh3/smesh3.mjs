@@ -1440,7 +1440,7 @@ export function showApp() {
         $t319_320 = common$jsbridge$dom.RegisterCallback(showApp$11);
         $t320_321 = common$jsbridge$dom.AddEventListener($t318_319, 'click', $t319_320);
         $t321_322 = common$jsbridge$dom.CreateElement('span');
-        $t322_323 = common$jsbridge$dom.SetTextContent($t321_322, 'sm3sh v0.65.36');
+        $t322_323 = common$jsbridge$dom.SetTextContent($t321_322, 'sm3sh v0.65.43');
         $t323_324 = common$jsbridge$dom.SetStyle($t321_322, 'marginLeft', 'auto');
         $t324_325 = common$jsbridge$dom.SetStyle($t321_322, 'color', 'var(--accent)');
         $t325_326 = common$jsbridge$dom.AppendChild($t234_235, $t321_322);
@@ -2184,7 +2184,7 @@ export function jstrArr(ss) {
 }
 
 export function onSWMessage(raw) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -2499,8 +2499,57 @@ export function onSWMessage(raw) {
           $block = 33; break;
         }
         else {
+          $block = 36; break;
+        }
+        break;
+      }
+      case 35: {
+        $t71_72 = common$jsbridge$localstorage.GetItem('sm3sh-key');
+        $t72_73 = ($t71_72 !== '');
+        if ($t72_73) {
+          $block = 37; break;
+        }
+        else {
+          $block = 38; break;
+        }
+        break;
+      }
+      case 36: {
+        $t73_74 = ($t5_6 === 'NEED_IDENTITY');
+        if ($t73_74) {
+          $block = 35; break;
+        }
+        else {
           $block = 6; break;
         }
+        break;
+      }
+      case 37: {
+        $t74_75 = jstr($t71_72);
+        $t75_76 = ('["SET_KEY",' + $t74_75);
+        $t76_77 = ($t75_76 + ']');
+        $t77_78 = common$jsbridge$dom.PostToSW($t76_77);
+        $block = 6; break;
+        break;
+      }
+      case 38: {
+        $t78_79 = pubhex.$get();
+        $t79_80 = ($t78_79 !== '');
+        if ($t79_80) {
+          $block = 39; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 39: {
+        $t80_81 = pubhex.$get();
+        $t81_82 = jstr($t80_81);
+        $t82_83 = ('["SET_PUBKEY",' + $t81_82);
+        $t83_84 = ($t82_83 + ']');
+        $t84_85 = common$jsbridge$dom.PostToSW($t83_84);
+        $block = 6; break;
         break;
       }
     }

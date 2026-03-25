@@ -5,7 +5,6 @@ import (
 	"embed"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"io/fs"
 	"net"
 	"net/http"
@@ -31,11 +30,8 @@ type Smesh3Server struct {
 	watcher  *fsnotify.Watcher
 	port     int
 	dir      string
-	dataDir  string
 
 	deployPub []byte // 32-byte x-only pubkey for /__deploy auth
-
-	bus *busHub // inter-SW message bus
 
 	mu       sync.RWMutex
 	version  int64
@@ -45,14 +41,11 @@ type Smesh3Server struct {
 
 // NewSmesh3Server creates a new sm3sh HTTP server.
 // If dir is non-empty, files are served from disk with hot-reload.
-// dataDir is the storage root for marmot group state.
 // deployPubHex is the hex-encoded pubkey authorized for /__deploy (empty disables).
-func NewSmesh3Server(port int, dir, dataDir, deployPubHex string) *Smesh3Server {
+func NewSmesh3Server(port int, dir, deployPubHex string) *Smesh3Server {
 	s := &Smesh3Server{
 		port:    port,
 		dir:     dir,
-		dataDir: dataDir,
-		bus:     newBusHub(),
 		version: time.Now().UnixMilli(),
 		clients: make(map[chan int64]struct{}),
 	}
@@ -91,40 +84,32 @@ func (s *Smesh3Server) Start(ctx context.Context) error {
 	// Version endpoint (quick poll fallback).
 	mux.HandleFunc("/__version", s.handleVersion)
 
-	// Marmot WebSocket endpoint for MLS-based DMs.
-	mux.HandleFunc("/__marmot", s.handleMarmot)
-
-	// Inter-SW message bus.
-	mux.HandleFunc("/__bus", s.handleBus)
-
-	// SW error reporting — logs errors from service worker to server console.
-	mux.HandleFunc("/__sw-error", func(w http.ResponseWriter, r *http.Request) {
-		msg := r.URL.Query().Get("msg")
-		log.W.F("SW ERROR: %s", msg)
-		w.WriteHeader(200)
-	})
-
-	// Browser log bridge — SWs and page POST log lines here, appended to /tmp/browser-debug.log.
-	mux.HandleFunc("/__log", s.handleLog)
-
 	// Signed bundle deploy endpoint.
 	if len(s.deployPub) == 32 {
 		mux.HandleFunc("/__deploy", s.handleDeploy)
 		log.I.F("sm3sh: /__deploy enabled for pubkey %x", s.deployPub)
 	}
 
+	// Satellite SW loader pages — serve minimal HTML that registers the SW.
+	for _, swDir := range []string{"$sw-marmot", "$sw-relay"} {
+		dir := swDir
+		mux.HandleFunc("/"+dir+"/loader.html", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			fmt.Fprintf(w, `<!DOCTYPE html><html><body>
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/%s/$entry.mjs',{type:'module',scope:'/%s/'})
+    .then(()=>console.log('%s SW registered'))
+    .catch(e=>console.error('%s SW failed:',e));
+}
+</script>
+</body></html>`, dir, dir, dir, dir)
+		})
+	}
+
 	// File serving with MIME fix and SPA fallback.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Satellite subdomain routing — serve loader + SW files for isolated SWs.
-		host := r.Host
-		if idx := strings.IndexByte(host, ':'); idx >= 0 {
-			host = host[:idx]
-		}
-		if swDir := satelliteSWDir(host); swDir != "" {
-			serveSatellite(w, r, swDir, fileHandler)
-			return
-		}
-
 		path := r.URL.Path
 
 		if strings.HasSuffix(path, ".mjs") {
@@ -364,92 +349,3 @@ func (s *Smesh3Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// satelliteSWDir returns the SW output directory for a satellite subdomain,
-// or "" if the host is the main domain.
-// Supports both /etc/hosts patterns (marmot.sm3sh.test) and nip.io
-// patterns (marmot.sm3sh.127.0.0.1.nip.io).
-func satelliteSWDir(host string) string {
-	if strings.HasPrefix(host, "marmot.") {
-		return "$sw-marmot"
-	}
-	if strings.HasPrefix(host, "relay.") {
-		return "$sw-relay"
-	}
-	return ""
-}
-
-// serveSatellite handles requests on satellite subdomains.
-// Serves a minimal loader.html for "/" and delegates SW file serving to fileHandler.
-func serveSatellite(w http.ResponseWriter, r *http.Request, swDir string, fileHandler http.Handler) {
-	path := r.URL.Path
-	if path == "/" || path == "/loader.html" {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-		fmt.Fprintf(w, `<!DOCTYPE html><html><body>
-<script>
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./%s/$entry.mjs',{type:'module',scope:'/'})
-    .then(()=>{
-      console.log('%s SW registered');
-      setInterval(()=>{
-        if(navigator.serviceWorker.controller){
-          navigator.serviceWorker.controller.postMessage('keepalive');
-        }
-      },20000);
-    })
-    .catch(e=>console.error('%s SW failed:',e));
-}
-</script>
-</body></html>`, swDir, swDir, swDir)
-		return
-	}
-	if strings.HasSuffix(path, ".mjs") {
-		w.Header().Set("Content-Type", "application/javascript")
-	}
-	if strings.Contains(path, "$sw") {
-		w.Header().Set("Service-Worker-Allowed", "/")
-	}
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	fileHandler.ServeHTTP(w, r)
-}
-
-const browserLogFile = "/tmp/browser-debug.log"
-
-// writeBrowserLog appends a server-side event to the browser debug log file,
-// so e2e tests can observe both browser and server events in one place.
-func writeBrowserLog(msg string) {
-	f, err := os.OpenFile(browserLogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	f.WriteString(time.Now().Format("15:04:05.000") + " " + msg + "\n")
-}
-
-// handleLog receives POST log lines from browser SWs/page and appends to disk.
-func (s *Smesh3Server) handleLog(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST")
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(200)
-		return
-	}
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 4096))
-	if err != nil || len(body) == 0 {
-		w.WriteHeader(200)
-		return
-	}
-	f, err := os.OpenFile(browserLogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		w.WriteHeader(200)
-		return
-	}
-	defer f.Close()
-	line := time.Now().Format("15:04:05.000") + " " + string(body) + "\n"
-	f.WriteString(line)
-	w.WriteHeader(200)
-}

@@ -62,6 +62,41 @@ func random32() [32]byte {
 	return b
 }
 
+// jsonField extracts a string value (unquoted) for a key from a JSON object string.
+func jsonField(json, key string) string {
+	v := jsonFieldRaw(json, key)
+	if len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"' {
+		return v[1 : len(v)-1]
+	}
+	return v
+}
+
+// jsonFieldRaw extracts a raw JSON value for a key from a JSON object string.
+func jsonFieldRaw(json, key string) string {
+	needle := "\"" + key + "\":"
+	idx := -1
+	for i := 0; i <= len(json)-len(needle); i++ {
+		if json[i:i+len(needle)] == needle {
+			idx = i + len(needle)
+			break
+		}
+	}
+	if idx < 0 {
+		return ""
+	}
+	for idx < len(json) && (json[idx] == ' ' || json[idx] == '\t') {
+		idx++
+	}
+	if idx >= len(json) {
+		return ""
+	}
+	end := skipval(json, idx)
+	if end < 0 {
+		return ""
+	}
+	return json[idx:end]
+}
+
 // mw is a JSON array message walker for parsing bus messages.
 type mw struct {
 	s string
@@ -100,10 +135,8 @@ func (w *mw) str() string {
 	start := w.i
 	for w.i < len(w.s) && w.s[w.i] != '"' {
 		if w.s[w.i] == '\\' && w.i+1 < len(w.s) {
-			if !hasEsc {
-				hasEsc = true
-				buf = append(buf, w.s[start:w.i]...)
-			}
+			hasEsc = true
+			buf = append(buf, w.s[start:w.i]...)
 			w.i++
 			switch w.s[w.i] {
 			case '"', '\\', '/':
@@ -114,6 +147,31 @@ func (w *mw) str() string {
 				buf = append(buf, '\t')
 			case 'r':
 				buf = append(buf, '\r')
+			case 'u':
+				if w.i+4 < len(w.s) {
+					var cp int
+					for k := 1; k <= 4; k++ {
+						c := w.s[w.i+k]
+						cp <<= 4
+						if c >= '0' && c <= '9' {
+							cp |= int(c - '0')
+						} else if c >= 'a' && c <= 'f' {
+							cp |= int(c-'a') + 10
+						} else if c >= 'A' && c <= 'F' {
+							cp |= int(c-'A') + 10
+						}
+					}
+					if cp < 0x80 {
+						buf = append(buf, byte(cp))
+					} else if cp < 0x800 {
+						buf = append(buf, byte(0xC0|(cp>>6)), byte(0x80|(cp&0x3F)))
+					} else {
+						buf = append(buf, byte(0xE0|(cp>>12)), byte(0x80|((cp>>6)&0x3F)), byte(0x80|(cp&0x3F)))
+					}
+					w.i += 4
+				} else {
+					buf = append(buf, '\\', 'u')
+				}
 			default:
 				buf = append(buf, '\\', w.s[w.i])
 			}
@@ -185,18 +243,7 @@ func (w *mw) strs() []string {
 		if w.s[w.i] != '"' {
 			return out
 		}
-		w.i++
-		start := w.i
-		for w.i < len(w.s) && w.s[w.i] != '"' {
-			if w.s[w.i] == '\\' {
-				w.i++
-			}
-			w.i++
-		}
-		if w.i < len(w.s) {
-			out = append(out, w.s[start:w.i])
-			w.i++
-		}
+		out = append(out, w.str())
 	}
 }
 

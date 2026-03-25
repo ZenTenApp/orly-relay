@@ -68,6 +68,23 @@ func NonceFunctionBIP340(nonce32 []byte, msg []byte, key32 []byte, xonlyPk32 []b
 	return nil
 }
 
+// BatchSchnorrItem holds one item for batch verification (stub for WASM).
+type BatchSchnorrItem struct {
+	Signature []byte
+	Message   []byte
+	Pubkey    *XOnlyPubkey
+}
+
+// SchnorrBatchVerify verifies multiple signatures (WASM fallback: individual verification).
+func SchnorrBatchVerify(items []BatchSchnorrItem) bool {
+	for _, item := range items {
+		if !SchnorrVerify(item.Signature, item.Message, item.Pubkey) {
+			return false
+		}
+	}
+	return true
+}
+
 // SchnorrSignature represents a 64-byte Schnorr signature (r || s)
 type SchnorrSignature [64]byte
 

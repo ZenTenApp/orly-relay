@@ -1,0 +1,1 @@
+{"ast":null,"code":"export { Identity } from './identity';\nexport { Permission, PermissionChecker } from './permission';\nexport { Relay, InvalidRelayUrlError, toNip65RelayList } from './relay';","map":null,"metadata":{},"sourceType":"module","externalDependencies":[]}
