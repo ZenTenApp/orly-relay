@@ -2,6 +2,7 @@ package marmot
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"sync"
 	"time"
@@ -250,20 +251,50 @@ func (c *Client) HandleEvent(ctx context.Context, ev *event.E) error {
 }
 
 func (c *Client) handleWelcome(ctx context.Context, ev *event.E) error {
-	unwrapped, err := UnwrapWelcome(ev, c.crypto)
+	uw, err := UnwrapGiftWrap(ev, c.crypto)
 	if err != nil {
-		return fmt.Errorf("unwrap welcome: %w", err)
+		return fmt.Errorf("unwrap gift wrap: %w", err)
 	}
 
-	// SenderPub comes from the seal layer (real identity, not ephemeral).
-	senderPub := unwrapped.SenderPub
+	// Dispatch based on inner event kind.
+	switch uw.Inner.Kind {
+	case KindWelcome:
+		return c.processWelcome(ctx, uw)
+	case 14:
+		// NIP-17 DM (kind 14 rumor inside gift wrap) — deliver as DM.
+		if c.onDM != nil {
+			c.onDM(uw.SenderPub, uw.Inner.Content)
+		}
+		return nil
+	default:
+		// Unknown inner kind — skip silently.
+		return nil
+	}
+}
 
-	gs, err := JoinDMGroup(unwrapped.Welcome, c.kpp, senderPub)
+func (c *Client) processWelcome(ctx context.Context, uw *UnwrappedGiftWrap) error {
+	// Decode content: base64 or raw binary (legacy)
+	content := uw.Inner.Content
+	encodingTag := uw.Inner.Tags.GetFirst([]byte("encoding"))
+	if encodingTag != nil && string(encodingTag.Value()) == "base64" {
+		decoded, err := base64.StdEncoding.DecodeString(string(content))
+		if err != nil {
+			return fmt.Errorf("base64 decode welcome: %w", err)
+		}
+		content = decoded
+	}
+
+	welcome, err := mls.UnmarshalWelcome(content)
+	if err != nil {
+		return fmt.Errorf("unmarshal welcome: %w", err)
+	}
+
+	senderPub := uw.SenderPub
+	gs, err := JoinDMGroup(welcome, c.kpp, senderPub)
 	if err != nil {
 		return fmt.Errorf("join DM group: %w", err)
 	}
 
-	// Ensure the MLS GroupID is set (should match from the Welcome)
 	if len(gs.GroupID) == 0 {
 		gs.GroupID = DMGroupID(c.crypto.Pub(), senderPub)
 	}
@@ -274,7 +305,6 @@ func (c *Client) handleWelcome(ctx context.Context, ev *event.E) error {
 
 	c.persistGroup(gs)
 
-	// Signal that filters need refreshing
 	select {
 	case c.groupsChanged <- struct{}{}:
 	default:

@@ -121,9 +121,16 @@ func WelcomeToGiftWrap(welcome *mls.Welcome, recipientPub []byte, crypto CryptoP
 	return gw, nil
 }
 
-// UnwrapWelcome decrypts a NIP-59 gift-wrapped event and extracts the MLS
-// Welcome message. Returns the Welcome and the sender's real pubkey.
-func UnwrapWelcome(ev *event.E, crypto CryptoProvider) (*UnwrappedWelcome, error) {
+// UnwrappedGiftWrap holds the result of unwrapping any NIP-59 gift-wrapped event.
+// The inner event may be kind 444 (MLS welcome) or kind 14 (NIP-17 DM) etc.
+type UnwrappedGiftWrap struct {
+	Inner     *event.E // the decrypted inner event (rumor)
+	SenderPub []byte   // real sender pubkey from the seal layer
+}
+
+// UnwrapGiftWrap decrypts a NIP-59 gift-wrapped event through both layers
+// (gift wrap → seal → inner) and returns the inner event regardless of its kind.
+func UnwrapGiftWrap(ev *event.E, crypto CryptoProvider) (*UnwrappedGiftWrap, error) {
 	if ev.Kind != KindGiftWrap {
 		return nil, fmt.Errorf("expected kind %d, got %d", KindGiftWrap, ev.Kind)
 	}
@@ -149,18 +156,32 @@ func UnwrapWelcome(ev *event.E, crypto CryptoProvider) (*UnwrappedWelcome, error
 		return nil, fmt.Errorf("seal decrypt: %w", err)
 	}
 
-	// Parse the inner Welcome event (kind 444)
+	// Parse the inner event (kind varies: 444 welcome, 14 NIP-17 DM, etc.)
 	var inner event.E
 	if err := inner.UnmarshalJSON([]byte(innerJSON)); err != nil {
-		return nil, fmt.Errorf("parse inner welcome: %w", err)
+		return nil, fmt.Errorf("parse inner event: %w", err)
 	}
-	if inner.Kind != KindWelcome {
-		return nil, fmt.Errorf("expected welcome kind %d, got %d", KindWelcome, inner.Kind)
+
+	return &UnwrappedGiftWrap{
+		Inner:     &inner,
+		SenderPub: seal.Pubkey,
+	}, nil
+}
+
+// UnwrapWelcome decrypts a NIP-59 gift-wrapped event and extracts the MLS
+// Welcome message. Returns the Welcome and the sender's real pubkey.
+func UnwrapWelcome(ev *event.E, crypto CryptoProvider) (*UnwrappedWelcome, error) {
+	uw, err := UnwrapGiftWrap(ev, crypto)
+	if err != nil {
+		return nil, err
+	}
+	if uw.Inner.Kind != KindWelcome {
+		return nil, fmt.Errorf("expected welcome kind %d, got %d", KindWelcome, uw.Inner.Kind)
 	}
 
 	// Decode content: base64 or raw binary (legacy)
-	content := inner.Content
-	encodingTag := inner.Tags.GetFirst([]byte("encoding"))
+	content := uw.Inner.Content
+	encodingTag := uw.Inner.Tags.GetFirst([]byte("encoding"))
 	if encodingTag != nil && string(encodingTag.Value()) == "base64" {
 		decoded, err := base64.StdEncoding.DecodeString(string(content))
 		if err != nil {
@@ -176,7 +197,7 @@ func UnwrapWelcome(ev *event.E, crypto CryptoProvider) (*UnwrappedWelcome, error
 
 	return &UnwrappedWelcome{
 		Welcome:   welcome,
-		SenderPub: seal.Pubkey,
+		SenderPub: uw.SenderPub,
 	}, nil
 }
 

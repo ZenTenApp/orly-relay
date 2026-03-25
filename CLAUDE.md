@@ -121,6 +121,52 @@ Output: `app/smesh3/*.mjs` — module name maps to filename (`common/helpers` �
 The .mjs files are gitignored — use `git add -f` when committing.
 sw.js `APP_FILES` list must match actual output filenames after any module rename.
 
+### Service Worker tinyjs targets
+
+Each SW compiles to its OWN subdirectory — never to the main app dir. Each subdirectory has its own `$runtime/` with SW-specific APIs (`self.clients`, `Origin()`, etc.) that don't exist in the page runtime.
+
+```sh
+# Shell SW (main hub)
+cd next/sw && tinyjs -o ../../app/smesh3/\$sw .
+
+# Marmot SW (MLS DM proxy) — runs on marmot.* subdomain
+cd next/sw-marmot && tinyjs -o ../../app/smesh3/\$sw-marmot .
+
+# Relay SW (relay pool, IDB cache) — runs on relay.* subdomain
+cd next/sw-relay && tinyjs -o ../../app/smesh3/\$sw-relay .
+```
+
+**CRITICAL**: Compiling a SW to the wrong directory (e.g. `app/smesh3/` instead of `app/smesh3/$sw-marmot/`) causes it to pick up the page runtime, which lacks SW APIs → `self.clients is undefined` errors.
+
+## Signer Extension Build
+
+Source: `next/signer/` — Angular 19 NIP-07 browser extension (provides `window.nostr` for signing).
+
+```sh
+cd next/signer && bun run build:firefox   # compile TS → dist/firefox/
+cd next/signer && bun run xpi             # package → next/signer/dist/smesh_signer-*.zip
+```
+
+After build, reload in `about:debugging` → "This Firefox" → "Load Temporary Add-on" (pick any file in `dist/firefox/`).
+
+Debug logging: `src/smesh-signer-extension.ts` line 248 — `debug()` function. Enable by uncommenting `console.log` inside it. Produces verbose "getPublicKey received", "nip44.decrypt received" etc. on every NIP-07 call.
+
+## SW Mesh Architecture
+
+Three service workers communicate via a WebSocket bus through the Go backend:
+
+```
+Page ↔ Shell SW ($sw/) ↔ Bus (/__bus WS) ↔ Marmot SW ($sw-marmot/)
+                                          ↔ Relay SW ($sw-relay/)
+```
+
+- **Shell SW**: Message hub, SSE version monitor, cache-first fetch. Runs on main origin.
+- **Marmot SW**: MLS DM proxy, crypto proxy chain. Runs on `marmot.*` subdomain.
+- **Relay SW**: Relay pool, subscriptions, IDB DM cache. Runs on `relay.*` subdomain.
+- **Backend bus** (`app/bus.go`): Routes `{"to":"role","msg":...}` between peers. Queues messages for disconnected peers.
+
+All three SWs must queue bus messages when disconnected (`busPending` pattern). `connectBus()` must be called from `main()`, not `onActivate()` — SW threads get evicted and restarted without re-activating.
+
 ## What NOT To Do
 
 - Never suggest sleep, rest, or taking a break

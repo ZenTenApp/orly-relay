@@ -77,7 +77,7 @@ func marmotReconnect() {
 	}
 	wsURL += "/__marmot"
 	sw.Log("marmot-sw: reconnecting to " + wsURL)
-	marmotPending = nil
+	// Don't clear marmotPending — queued messages will drain after auth.
 	marmotConn = ws.Dial(wsURL,
 		func(connID int, msg string) { marmotOnMessage(msg) },
 		func(connID int) { marmotOnOpen() },
@@ -257,10 +257,14 @@ func marmotOnMessage(msg string) {
 	}
 }
 
-var pendingCryptoID string
+var pendingCryptoIDs map[int]string
+
+func initCryptoProxy() {
+	pendingCryptoIDs = make(map[int]string)
+}
 
 func handleCryptoReq(msg string) {
-	pendingCryptoID = jsonField(msg, "id")
+	backendID := jsonField(msg, "id")
 	op := jsonField(msg, "op")
 	peer := jsonField(msg, "peer")
 	data := jsonField(msg, "content")
@@ -270,12 +274,19 @@ func handleCryptoReq(msg string) {
 	} else if op == "nip44Decrypt" {
 		pageMethod = "nip44.decrypt"
 	}
-	cryptoProxy(pageMethod, peer, data, onCryptoReqResult)
-}
-
-func onCryptoReqResult(result, errMsg string) {
-	ws.Send(marmotConn, "{\"method\":\"crypto_resp\",\"id\":"+pendingCryptoID+
-		",\"result\":"+jstr(result)+",\"error\":"+jstr(errMsg)+"}")
+	// Store mapping from local crypto ID → backend ID before issuing request.
+	localID := nextCryptoID
+	pendingCryptoIDs[localID] = backendID
+	cryptoProxy(pageMethod, peer, data, func(result, errMsg string) {
+		bid, ok := pendingCryptoIDs[localID]
+		if ok {
+			delete(pendingCryptoIDs, localID)
+		} else {
+			bid = backendID
+		}
+		ws.Send(marmotConn, "{\"method\":\"crypto_resp\",\"id\":"+bid+
+			",\"result\":"+jstr(result)+",\"error\":"+jstr(errMsg)+"}")
+	})
 }
 
 func jsonField(json, key string) string {

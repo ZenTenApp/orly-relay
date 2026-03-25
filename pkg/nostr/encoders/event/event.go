@@ -323,7 +323,8 @@ InVal:
 		if sig, b, err = text.UnmarshalHex(b); chk.E(err) {
 			return
 		}
-		if len(sig) != schnorr.SignatureSize {
+		// NIP-59 rumor events have empty sig — accept as unsigned.
+		if len(sig) != 0 && len(sig) != schnorr.SignatureSize {
 			err = errorf.E(
 				"invalid sig length, require %d got %d '%s'\n%s",
 				schnorr.SignatureSize, len(sig), b, b,

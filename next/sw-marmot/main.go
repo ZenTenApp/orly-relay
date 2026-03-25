@@ -20,6 +20,7 @@ type busMsgPending struct{ to, msg string }
 
 func main() {
 	initSharedState()
+	initCryptoProxy()
 	sw.OnInstall(onInstall)
 	sw.OnActivate(onActivate)
 	sw.OnFetch(onFetch)
