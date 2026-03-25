@@ -40,7 +40,7 @@ var appFiles = []string{
 	"/$sw/$entry.mjs",
 	"/$sw/sw.mjs",
 	"/$sw/common_jsbridge_sw.mjs",
-	"/$sw/common_jsbridge_ws.mjs",
+	"/$sw/common_jsbridge_bc.mjs",
 	"/$sw/common_jsbridge_subtle.mjs",
 	"/$sw/common_crypto_secp256k1.mjs",
 	"/$sw/common_crypto_sha256.mjs",
@@ -109,8 +109,8 @@ func onFetch(event sw.Event) {
 	if path == "/__sse" || path == "/__version" {
 		return
 	}
-	// SW module files and fonts: pass through to network.
-	if (len(path) > 4 && path[:5] == "/$sw/") || (len(path) > 6 && path[:7] == "/fonts/") {
+	// SW module files, satellite SW dirs, and fonts: pass through to network.
+	if (len(path) > 4 && path[:4] == "/$sw") || (len(path) > 6 && path[:7] == "/fonts/") {
 		return
 	}
 	sw.RespondWithCacheFirst(event)

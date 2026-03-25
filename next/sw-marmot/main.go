@@ -40,12 +40,13 @@ func onFetch(event sw.Event) {
 }
 
 func onMessage(event sw.Event) {
-	// No client messages — all communication via bus.
+	// Keepalive from loader iframe — just receiving the event keeps us alive.
 }
 
 func connectBus() {
 	bus = bc.Open("smesh-bus", func(raw string) { onBusMessage(raw) })
 	sw.Log("marmot-sw: bus connected (BroadcastChannel)")
+	busSend("shell", "[\"READY\"]")
 }
 
 func busSend(to, msg string) {
@@ -69,6 +70,9 @@ func onBusMessage(raw string) {
 	msgType := w.str()
 
 	switch msgType {
+	case "PING":
+		busSend("shell", "[\"READY\"]")
+		return
 	case "SET_KEY":
 		identitySetKey(w.str())
 	case "SET_PUBKEY":

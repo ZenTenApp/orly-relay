@@ -12,11 +12,11 @@ import * as common$jsbridge$sw from './common_jsbridge_sw.mjs';
 import * as common$jsbridge$wasm from './common_jsbridge_wasm.mjs';
 
 // Package-level variables
-export let bus = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let wasmReady = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let seckey = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let hasKey = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let myPubkey = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let bus = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let wasmReady = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let cryptoCBs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let nextCryptoID = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 
@@ -91,6 +91,52 @@ export function dmDedupID(peer, content, createdAt) {
   return $t13_14;
 }
 
+export function identitySetKey(hexKey) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = hexTo32(hexKey);
+        seckey.$set($rt.builtin.cloneValue($t0_1));
+        hasKey.$set(true);
+        $t1_2 = $rt.builtin.sliceSlice(seckey.$get(), undefined, undefined, undefined);
+        $t2_3 = common$jsbridge$crypto.PubKeyFromSecKey($t1_2);
+        $t3_4 = ($t2_3 !== null);
+        if ($t3_4) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t4_5 = common$helpers.HexEncode($t2_3);
+        myPubkey.$set($t4_5);
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        return;
+        break;
+      }
+    }
+  }
+}
+
+export function identitySetPubkey(hex) {
+  myPubkey.$set(hex);
+  return;
+}
+
+export function identityClearKey() {
+  seckey.$set($rt.builtin.cloneValue($rt.builtin.makeSlice(32, 32, 0)));
+  hasKey.$set(false);
+  myPubkey.$set('');
+  return;
+}
+
 export function main() {
   let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
   $t0_1 = initSharedState();
@@ -147,10 +193,11 @@ export function onMessage(event) {
 }
 
 export function connectBus() {
-  let $t0_1, $t1_2;
+  let $t0_1, $t1_2, $t2_3;
   $t0_1 = common$jsbridge$bc.Open('smesh-bus', connectBus$1);
   bus.$set($t0_1);
   $t1_2 = common$jsbridge$sw.Log('marmot-sw: bus connected (BroadcastChannel)');
+  $t2_3 = busSend('shell', '["READY"]');
   return;
 }
 
@@ -173,7 +220,7 @@ export function busSend(to, msg) {
 }
 
 export function onBusMessage(raw) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -237,7 +284,7 @@ export function onBusMessage(raw) {
         $t8_9 = newMW($t4_5);
         $t7_8.$set($rt.builtin.cloneValue($t8_9));
         $t9_10 = mw$str($t7_8);
-        $t10_11 = ($t9_10 === 'SET_KEY');
+        $t10_11 = ($t9_10 === 'PING');
         if ($t10_11) {
           $block = 9; break;
         }
@@ -251,20 +298,19 @@ export function onBusMessage(raw) {
         break;
       }
       case 9: {
-        $t11_12 = mw$str($t7_8);
-        $t12_13 = identitySetKey($t11_12);
-        $block = 8; break;
+        $t11_12 = busSend('shell', '["READY"]');
+        return;
         break;
       }
       case 10: {
-        $t13_14 = mw$str($t7_8);
-        $t14_15 = identitySetPubkey($t13_14);
+        $t12_13 = mw$str($t7_8);
+        $t13_14 = identitySetKey($t12_13);
         $block = 8; break;
         break;
       }
       case 11: {
-        $t15_16 = ($t9_10 === 'SET_PUBKEY');
-        if ($t15_16) {
+        $t14_15 = ($t9_10 === 'SET_KEY');
+        if ($t14_15) {
           $block = 10; break;
         }
         else {
@@ -273,12 +319,13 @@ export function onBusMessage(raw) {
         break;
       }
       case 12: {
-        $t16_17 = identityClearKey();
+        $t15_16 = mw$str($t7_8);
+        $t16_17 = identitySetPubkey($t15_16);
         $block = 8; break;
         break;
       }
       case 13: {
-        $t17_18 = ($t9_10 === 'CLEAR_KEY');
+        $t17_18 = ($t9_10 === 'SET_PUBKEY');
         if ($t17_18) {
           $block = 12; break;
         }
@@ -288,14 +335,13 @@ export function onBusMessage(raw) {
         break;
       }
       case 14: {
-        $t18_19 = mw$strs($t7_8);
-        $t19_20 = marmotInit($t18_19);
+        $t18_19 = identityClearKey();
         $block = 8; break;
         break;
       }
       case 15: {
-        $t20_21 = ($t9_10 === 'MLS_INIT');
-        if ($t20_21) {
+        $t19_20 = ($t9_10 === 'CLEAR_KEY');
+        if ($t19_20) {
           $block = 14; break;
         }
         else {
@@ -304,15 +350,14 @@ export function onBusMessage(raw) {
         break;
       }
       case 16: {
-        $t21_22 = mw$str($t7_8);
-        $t22_23 = mw$str($t7_8);
-        $t23_24 = marmotSend($t21_22, $t22_23);
+        $t20_21 = mw$strs($t7_8);
+        $t21_22 = marmotInit($t20_21);
         $block = 8; break;
         break;
       }
       case 17: {
-        $t24_25 = ($t9_10 === 'MLS_SEND');
-        if ($t24_25) {
+        $t22_23 = ($t9_10 === 'MLS_INIT');
+        if ($t22_23) {
           $block = 16; break;
         }
         else {
@@ -321,12 +366,14 @@ export function onBusMessage(raw) {
         break;
       }
       case 18: {
-        $t25_26 = marmotSubscribe();
+        $t23_24 = mw$str($t7_8);
+        $t24_25 = mw$str($t7_8);
+        $t25_26 = marmotSend($t23_24, $t24_25);
         $block = 8; break;
         break;
       }
       case 19: {
-        $t26_27 = ($t9_10 === 'MLS_SUB');
+        $t26_27 = ($t9_10 === 'MLS_SEND');
         if ($t26_27) {
           $block = 18; break;
         }
@@ -336,14 +383,13 @@ export function onBusMessage(raw) {
         break;
       }
       case 20: {
-        $t27_28 = mw$strs($t7_8);
-        $t28_29 = marmotPublishKP($t27_28);
+        $t27_28 = marmotSubscribe();
         $block = 8; break;
         break;
       }
       case 21: {
-        $t29_30 = ($t9_10 === 'MLS_PUBLISH_KP');
-        if ($t29_30) {
+        $t28_29 = ($t9_10 === 'MLS_SUB');
+        if ($t28_29) {
           $block = 20; break;
         }
         else {
@@ -352,12 +398,13 @@ export function onBusMessage(raw) {
         break;
       }
       case 22: {
-        $t30_31 = marmotListGroups();
+        $t29_30 = mw$strs($t7_8);
+        $t30_31 = marmotPublishKP($t29_30);
         $block = 8; break;
         break;
       }
       case 23: {
-        $t31_32 = ($t9_10 === 'MLS_LIST_GROUPS');
+        $t31_32 = ($t9_10 === 'MLS_PUBLISH_KP');
         if ($t31_32) {
           $block = 22; break;
         }
@@ -367,18 +414,33 @@ export function onBusMessage(raw) {
         break;
       }
       case 24: {
-        $t32_33 = mw$num($t7_8);
-        $t33_34 = $t32_33;
-        $t34_35 = mw$str($t7_8);
-        $t35_36 = mw$str($t7_8);
-        $t36_37 = handleCryptoResult($t33_34, $t34_35, $t35_36);
+        $t32_33 = marmotListGroups();
         $block = 8; break;
         break;
       }
       case 25: {
-        $t37_38 = ($t9_10 === 'CRYPTO_RESULT');
-        if ($t37_38) {
+        $t33_34 = ($t9_10 === 'MLS_LIST_GROUPS');
+        if ($t33_34) {
           $block = 24; break;
+        }
+        else {
+          $block = 27; break;
+        }
+        break;
+      }
+      case 26: {
+        $t34_35 = mw$num($t7_8);
+        $t35_36 = $t34_35;
+        $t36_37 = mw$str($t7_8);
+        $t37_38 = mw$str($t7_8);
+        $t38_39 = handleCryptoResult($t35_36, $t36_37, $t37_38);
+        $block = 8; break;
+        break;
+      }
+      case 27: {
+        $t39_40 = ($t9_10 === 'CRYPTO_RESULT');
+        if ($t39_40) {
+          $block = 26; break;
         }
         else {
           $block = 8; break;
@@ -852,52 +914,6 @@ export function jsonField(json, key) {
       }
     }
   }
-}
-
-export function identitySetKey(hexKey) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = hexTo32(hexKey);
-        seckey.$set($rt.builtin.cloneValue($t0_1));
-        hasKey.$set(true);
-        $t1_2 = $rt.builtin.sliceSlice(seckey.$get(), undefined, undefined, undefined);
-        $t2_3 = common$jsbridge$crypto.PubKeyFromSecKey($t1_2);
-        $t3_4 = ($t2_3 !== null);
-        if ($t3_4) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t4_5 = common$helpers.HexEncode($t2_3);
-        myPubkey.$set($t4_5);
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function identitySetPubkey(hex) {
-  myPubkey.$set(hex);
-  return;
-}
-
-export function identityClearKey() {
-  seckey.$set($rt.builtin.cloneValue($rt.builtin.makeSlice(32, 32, 0)));
-  hasKey.$set(false);
-  myPubkey.$set('');
-  return;
 }
 
 export function initSharedState() {

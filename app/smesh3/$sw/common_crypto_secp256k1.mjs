@@ -98,6 +98,519 @@ export function init() {
   return;
 }
 
+export function VerifySchnorr(pubkey, msg, sig) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set($rt.builtin.cloneValue(pubkey));
+        $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2.$set($rt.builtin.cloneValue(msg));
+        $t2_3 = { $value: $rt.builtin.makeSlice(64, 64, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t2_3.$set($rt.builtin.cloneValue(sig));
+        $t3_4 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+        $t4_5 = feFromBytes($t3_4);
+        $t5_6 = LiftX($t4_5);
+        $t6_7 = $t5_6[0];
+        $t7_8 = $t5_6[1];
+        if ($t7_8) {
+          $block = 2; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+      case 1: {
+        return false;
+        break;
+      }
+      case 2: {
+        $t8_9 = $rt.builtin.sliceSlice($t2_3.$get(), undefined, 32, undefined);
+        $t9_10 = feFromBytes($t8_9);
+        $t10_11 = $rt.builtin.sliceSlice($t2_3.$get(), 32, undefined, undefined);
+        $t11_12 = scalarFromBytes($t10_11);
+        $t12_13 = $rt.builtin.sliceSlice($t2_3.$get(), undefined, 32, undefined);
+        $t13_14 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+        $t14_15 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
+        $t15_16 = computeChallenge($t12_13, $t13_14, $t14_15);
+        $t16_17 = ScalarBaseMult($t11_12);
+        $t17_18 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t18_19 = pointFromAffine($t6_7);
+        $t19_20 = ScalarMult($t18_19, $t15_16);
+        $t20_21 = Point$toAffine($t19_20);
+        $t17_18.$set($rt.builtin.cloneValue($t20_21));
+        $t21_22 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t22_23 = { $get() { return $t21_22.$get().X; }, $set(v) { const obj = $t21_22.$get(); obj.X = v; $t21_22.$set(obj); } };
+        $t23_24 = { $get() { return $t17_18.$get().X; }, $set(v) { const obj = $t17_18.$get(); obj.X = v; $t17_18.$set(obj); } };
+        $t24_25 = $t23_24.$get();
+        $t25_26 = { $get() { return $t21_22.$get().Y; }, $set(v) { const obj = $t21_22.$get(); obj.Y = v; $t21_22.$set(obj); } };
+        $t26_27 = { $get() { return $t17_18.$get().Y; }, $set(v) { const obj = $t17_18.$get(); obj.Y = v; $t17_18.$set(obj); } };
+        $t27_28 = $t26_27.$get();
+        $t28_29 = feNeg($t27_28);
+        $t22_23.$set($rt.builtin.cloneValue($t24_25));
+        $t25_26.$set($rt.builtin.cloneValue($t28_29));
+        $t29_30 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t30_31 = pointFromAffine($t16_17);
+        $t31_32 = $t21_22.$get();
+        $t32_33 = pointFromAffine($t31_32);
+        $t33_34 = pointAdd($t30_31, $t32_33);
+        $t34_35 = Point$toAffine($t33_34);
+        $t29_30.$set($rt.builtin.cloneValue($t34_35));
+        $t35_36 = { $get() { return $t29_30.$get().X; }, $set(v) { const obj = $t29_30.$get(); obj.X = v; $t29_30.$set(obj); } };
+        $t36_37 = $t35_36.$get();
+        $t37_38 = feIsZero($t36_37);
+        if ($t37_38) {
+          $block = 5; break;
+        }
+        else {
+          $block = 4; break;
+        }
+        break;
+      }
+      case 3: {
+        return false;
+        break;
+      }
+      case 4: {
+        $t38_39 = { $get() { return $t29_30.$get().X; }, $set(v) { const obj = $t29_30.$get(); obj.X = v; $t29_30.$set(obj); } };
+        $t39_40 = $t38_39.$get();
+        $t40_41 = ($t39_40 !== $t9_10);
+        if ($t40_41) {
+          $block = 6; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 5: {
+        $t41_42 = { $get() { return $t29_30.$get().Y; }, $set(v) { const obj = $t29_30.$get(); obj.Y = v; $t29_30.$set(obj); } };
+        $t42_43 = $t41_42.$get();
+        $t43_44 = feIsZero($t42_43);
+        if ($t43_44) {
+          $block = 3; break;
+        }
+        else {
+          $block = 4; break;
+        }
+        break;
+      }
+      case 6: {
+        return false;
+        break;
+      }
+      case 7: {
+        $t44_45 = { $get() { return $t29_30.$get().Y; }, $set(v) { const obj = $t29_30.$get(); obj.Y = v; $t29_30.$set(obj); } };
+        $t45_46 = $t44_45.$get();
+        $t46_47 = feIsEven($t45_46);
+        if ($t46_47) {
+          $block = 9; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 8: {
+        return false;
+        break;
+      }
+      case 9: {
+        return true;
+        break;
+      }
+    }
+  }
+}
+
+export function SignSchnorr(seckey, msg, auxRand) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set($rt.builtin.cloneValue(seckey));
+        $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2.$set($rt.builtin.cloneValue(msg));
+        $t2_3 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t2_3.$set($rt.builtin.cloneValue(auxRand));
+        $t3_4 = { $value: $rt.builtin.makeSlice(64, 64, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t4_5 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+        $t5_6 = scalarFromBytes($t4_5);
+        $t6_7 = scalarIsZero($t5_6);
+        if ($t6_7) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t7_8 = $t3_4.$get();
+        $t3_4.$set($rt.builtin.cloneValue($t7_8));
+        $t8_9 = $t3_4.$get();
+        return [$t8_9, false];
+        break;
+      }
+      case 2: {
+        $t9_10 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t10_11 = ScalarBaseMult($t5_6);
+        $t9_10.$set($rt.builtin.cloneValue($t10_11));
+        $t11_12 = { $get() { return $t9_10.$get().Y; }, $set(v) { const obj = $t9_10.$get(); obj.Y = v; $t9_10.$set(obj); } };
+        $t12_13 = $t11_12.$get();
+        $t13_14 = feIsEven($t12_13);
+        if ($t13_14) {
+          $t15_16 = $t5_6;
+          $block = 4; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 3: {
+        $t14_15 = scalarNeg($t5_6);
+        $t15_16 = $t14_15;
+        $block = 4; break;
+        break;
+      }
+      case 4: {
+        $t16_17 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t17_18 = { $get() { return $t9_10.$get().X; }, $set(v) { const obj = $t9_10.$get(); obj.X = v; $t9_10.$set(obj); } };
+        $t18_19 = $t17_18.$get();
+        $t19_20 = feToBytes($t18_19);
+        $t16_17.$set($rt.builtin.cloneValue($t19_20));
+        $t20_21 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t21_22 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t22_23 = $rt.builtin.sliceSlice($t2_3.$get(), undefined, undefined, undefined);
+        $t23_24 = taggedHash('BIP0340/aux', $t22_23);
+        $t21_22.$set($rt.builtin.cloneValue($t23_24));
+        $t24_25 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t25_26 = feToBytes($t15_16);
+        $t24_25.$set($rt.builtin.cloneValue($t25_26));
+        $t26_27 = 0;
+        $block = 5; break;
+        break;
+      }
+      case 5: {
+        $t27_28 = ($t26_27 < 32);
+        if ($t27_28) {
+          $block = 6; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 6: {
+        $t28_29 = $t24_25.$get().addr($t26_27);
+        $t29_30 = $t28_29.$get();
+        $t30_31 = $t21_22.$get().addr($t26_27);
+        $t31_32 = $t30_31.$get();
+        $t32_33 = ($t29_30 ^ $t31_32);
+        $t33_34 = $t20_21.$get().addr($t26_27);
+        $t33_34.$set($t32_33);
+        $t34_35 = ($t26_27 + 1);
+        $t26_27 = $t34_35;
+        $block = 5; break;
+        break;
+      }
+      case 7: {
+        $t35_36 = { $value: $rt.builtin.makeSlice(96, 96, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t36_37 = $rt.builtin.sliceSlice($t35_36.$get(), undefined, 32, undefined);
+        $t37_38 = $rt.builtin.sliceSlice($t20_21.$get(), undefined, undefined, undefined);
+        $t38_39 = $rt.builtin.copy($t36_37, $t37_38);
+        $t39_40 = $rt.builtin.sliceSlice($t35_36.$get(), 32, 64, undefined);
+        $t40_41 = $rt.builtin.sliceSlice($t16_17.$get(), undefined, undefined, undefined);
+        $t41_42 = $rt.builtin.copy($t39_40, $t40_41);
+        $t42_43 = $rt.builtin.sliceSlice($t35_36.$get(), 64, 96, undefined);
+        $t43_44 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
+        $t44_45 = $rt.builtin.copy($t42_43, $t43_44);
+        $t45_46 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t46_47 = $rt.builtin.sliceSlice($t35_36.$get(), undefined, undefined, undefined);
+        $t47_48 = taggedHash('BIP0340/nonce', $t46_47);
+        $t45_46.$set($rt.builtin.cloneValue($t47_48));
+        $t48_49 = $rt.builtin.sliceSlice($t45_46.$get(), undefined, undefined, undefined);
+        $t49_50 = scalarFromBytes($t48_49);
+        $t50_51 = curveN.$get();
+        $t51_52 = feCmp($t49_50, $t50_51);
+        $t52_53 = ($t51_52 >= 0);
+        if ($t52_53) {
+          $block = 8; break;
+        }
+        else {
+          $t55_56 = $t49_50;
+          $block = 9; break;
+        }
+        break;
+      }
+      case 8: {
+        $t53_54 = curveN.$get();
+        $t54_55 = scalarSub($t49_50, $t53_54);
+        $t55_56 = $t54_55;
+        $block = 9; break;
+        break;
+      }
+      case 9: {
+        $t56_57 = scalarIsZero($t55_56);
+        if ($t56_57) {
+          $block = 10; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 10: {
+        $t57_58 = $t3_4.$get();
+        $t3_4.$set($rt.builtin.cloneValue($t57_58));
+        $t58_59 = $t3_4.$get();
+        return [$t58_59, false];
+        break;
+      }
+      case 11: {
+        $t59_60 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t60_61 = ScalarBaseMult($t55_56);
+        $t59_60.$set($rt.builtin.cloneValue($t60_61));
+        $t61_62 = { $get() { return $t59_60.$get().Y; }, $set(v) { const obj = $t59_60.$get(); obj.Y = v; $t59_60.$set(obj); } };
+        $t62_63 = $t61_62.$get();
+        $t63_64 = feIsEven($t62_63);
+        if ($t63_64) {
+          $t65_66 = $t55_56;
+          $block = 13; break;
+        }
+        else {
+          $block = 12; break;
+        }
+        break;
+      }
+      case 12: {
+        $t64_65 = scalarNeg($t55_56);
+        $t65_66 = $t64_65;
+        $block = 13; break;
+        break;
+      }
+      case 13: {
+        $t66_67 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t67_68 = { $get() { return $t59_60.$get().X; }, $set(v) { const obj = $t59_60.$get(); obj.X = v; $t59_60.$set(obj); } };
+        $t68_69 = $t67_68.$get();
+        $t69_70 = feToBytes($t68_69);
+        $t66_67.$set($rt.builtin.cloneValue($t69_70));
+        $t70_71 = $rt.builtin.sliceSlice($t66_67.$get(), undefined, undefined, undefined);
+        $t71_72 = $rt.builtin.sliceSlice($t16_17.$get(), undefined, undefined, undefined);
+        $t72_73 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
+        $t73_74 = computeChallenge($t70_71, $t71_72, $t72_73);
+        $t74_75 = scalarMul($t73_74, $t15_16);
+        $t75_76 = scalarAdd($t65_66, $t74_75);
+        $t76_77 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t77_78 = feToBytes($t75_76);
+        $t76_77.$set($rt.builtin.cloneValue($t77_78));
+        $t78_79 = $rt.builtin.sliceSlice($t3_4.$get(), undefined, 32, undefined);
+        $t79_80 = $rt.builtin.sliceSlice($t66_67.$get(), undefined, undefined, undefined);
+        $t80_81 = $rt.builtin.copy($t78_79, $t79_80);
+        $t81_82 = $rt.builtin.sliceSlice($t3_4.$get(), 32, undefined, undefined);
+        $t82_83 = $rt.builtin.sliceSlice($t76_77.$get(), undefined, undefined, undefined);
+        $t83_84 = $rt.builtin.copy($t81_82, $t82_83);
+        $t84_85 = $t3_4.$get();
+        $t3_4.$set($rt.builtin.cloneValue($t84_85));
+        $t85_86 = $t3_4.$get();
+        return [$t85_86, true];
+        break;
+      }
+    }
+  }
+}
+
+export function PubKeyFromSecKey(seckey) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set($rt.builtin.cloneValue(seckey));
+        $t1_2 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+        $t2_3 = scalarFromBytes($t1_2);
+        $t3_4 = scalarIsZero($t2_3);
+        if ($t3_4) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return [$rt.builtin.makeSlice(32, 32, 0), false];
+        break;
+      }
+      case 2: {
+        $t4_5 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t5_6 = ScalarBaseMult($t2_3);
+        $t4_5.$set($rt.builtin.cloneValue($t5_6));
+        $t6_7 = { $get() { return $t4_5.$get().X; }, $set(v) { const obj = $t4_5.$get(); obj.X = v; $t4_5.$set(obj); } };
+        $t7_8 = $t6_7.$get();
+        $t8_9 = feToBytes($t7_8);
+        return [$t8_9, true];
+        break;
+      }
+    }
+  }
+}
+
+export function ECDH(seckey, pubkey) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set($rt.builtin.cloneValue(seckey));
+        $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2.$set($rt.builtin.cloneValue(pubkey));
+        $t2_3 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+        $t3_4 = scalarFromBytes($t2_3);
+        $t4_5 = scalarIsZero($t3_4);
+        if ($t4_5) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return [$rt.builtin.makeSlice(32, 32, 0), false];
+        break;
+      }
+      case 2: {
+        $t5_6 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
+        $t6_7 = feFromBytes($t5_6);
+        $t7_8 = LiftX($t6_7);
+        $t8_9 = $t7_8[0];
+        $t9_10 = $t7_8[1];
+        if ($t9_10) {
+          $block = 4; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 3: {
+        return [$rt.builtin.makeSlice(32, 32, 0), false];
+        break;
+      }
+      case 4: {
+        $t10_11 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t11_12 = pointFromAffine($t8_9);
+        $t12_13 = ScalarMult($t11_12, $t3_4);
+        $t13_14 = Point$toAffine($t12_13);
+        $t10_11.$set($rt.builtin.cloneValue($t13_14));
+        $t14_15 = { $get() { return $t10_11.$get().X; }, $set(v) { const obj = $t10_11.$get(); obj.X = v; $t10_11.$set(obj); } };
+        $t15_16 = $t14_15.$get();
+        $t16_17 = feIsZero($t15_16);
+        if ($t16_17) {
+          $block = 7; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 5: {
+        return [$rt.builtin.makeSlice(32, 32, 0), false];
+        break;
+      }
+      case 6: {
+        $t17_18 = { $get() { return $t10_11.$get().X; }, $set(v) { const obj = $t10_11.$get(); obj.X = v; $t10_11.$set(obj); } };
+        $t18_19 = $t17_18.$get();
+        $t19_20 = feToBytes($t18_19);
+        return [$t19_20, true];
+        break;
+      }
+      case 7: {
+        $t20_21 = { $get() { return $t10_11.$get().Y; }, $set(v) { const obj = $t10_11.$get(); obj.Y = v; $t10_11.$set(obj); } };
+        $t21_22 = $t20_21.$get();
+        $t22_23 = feIsZero($t21_22);
+        if ($t22_23) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function taggedHash(tag, msg) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12;
+  $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t1_2 = $rt.builtin.stringToBytes(tag);
+  $t2_3 = common$crypto$sha256.Sum($t1_2);
+  $t0_1.$set($rt.builtin.cloneValue($t2_3));
+  $t3_4 = $rt.builtin.len(msg);
+  $t4_5 = (64 + $t3_4);
+  $t5_6 = $rt.builtin.makeSlice(0, $t4_5, 0);
+  $t6_7 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+  $t7_8 = $rt.builtin.appendSlice($t5_6, $t6_7);
+  $t8_9 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+  $t9_10 = $rt.builtin.appendSlice($t7_8, $t8_9);
+  $t10_11 = $rt.builtin.appendSlice($t9_10, msg);
+  $t11_12 = common$crypto$sha256.Sum($t10_11);
+  return $t11_12;
+}
+
+export function computeChallenge(rx, px, msg) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(96, 96, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, 0, undefined);
+        $t2_3 = $rt.builtin.appendSlice($t1_2, rx);
+        $t3_4 = $rt.builtin.appendSlice($t2_3, px);
+        $t4_5 = $rt.builtin.appendSlice($t3_4, msg);
+        $t5_6 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t6_7 = taggedHash('BIP0340/challenge', $t4_5);
+        $t5_6.$set($rt.builtin.cloneValue($t6_7));
+        $t7_8 = $rt.builtin.sliceSlice($t5_6.$get(), undefined, undefined, undefined);
+        $t8_9 = scalarFromBytes($t7_8);
+        $t9_10 = curveN.$get();
+        $t10_11 = feCmp($t8_9, $t9_10);
+        $t11_12 = ($t10_11 >= 0);
+        if ($t11_12) {
+          $block = 1; break;
+        }
+        else {
+          $t14_15 = $t8_9;
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t12_13 = curveN.$get();
+        $t13_14 = scalarSub($t8_9, $t12_13);
+        $t14_15 = $t13_14;
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        return $t14_15;
+        break;
+      }
+    }
+  }
+}
+
 export function feAdd(a, b) {
   let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37;
   $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
@@ -1551,519 +2064,6 @@ export function LiftX(x) {
         $t17_18.$set($rt.builtin.cloneValue($t14_15));
         $t18_19 = $t15_16.$get();
         return [$t18_19, true];
-        break;
-      }
-    }
-  }
-}
-
-export function VerifySchnorr(pubkey, msg, sig) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set($rt.builtin.cloneValue(pubkey));
-        $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2.$set($rt.builtin.cloneValue(msg));
-        $t2_3 = { $value: $rt.builtin.makeSlice(64, 64, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t2_3.$set($rt.builtin.cloneValue(sig));
-        $t3_4 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-        $t4_5 = feFromBytes($t3_4);
-        $t5_6 = LiftX($t4_5);
-        $t6_7 = $t5_6[0];
-        $t7_8 = $t5_6[1];
-        if ($t7_8) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        return false;
-        break;
-      }
-      case 2: {
-        $t8_9 = $rt.builtin.sliceSlice($t2_3.$get(), undefined, 32, undefined);
-        $t9_10 = feFromBytes($t8_9);
-        $t10_11 = $rt.builtin.sliceSlice($t2_3.$get(), 32, undefined, undefined);
-        $t11_12 = scalarFromBytes($t10_11);
-        $t12_13 = $rt.builtin.sliceSlice($t2_3.$get(), undefined, 32, undefined);
-        $t13_14 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-        $t14_15 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
-        $t15_16 = computeChallenge($t12_13, $t13_14, $t14_15);
-        $t16_17 = ScalarBaseMult($t11_12);
-        $t17_18 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t18_19 = pointFromAffine($t6_7);
-        $t19_20 = ScalarMult($t18_19, $t15_16);
-        $t20_21 = Point$toAffine($t19_20);
-        $t17_18.$set($rt.builtin.cloneValue($t20_21));
-        $t21_22 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t22_23 = { $get() { return $t21_22.$get().X; }, $set(v) { const obj = $t21_22.$get(); obj.X = v; $t21_22.$set(obj); } };
-        $t23_24 = { $get() { return $t17_18.$get().X; }, $set(v) { const obj = $t17_18.$get(); obj.X = v; $t17_18.$set(obj); } };
-        $t24_25 = $t23_24.$get();
-        $t25_26 = { $get() { return $t21_22.$get().Y; }, $set(v) { const obj = $t21_22.$get(); obj.Y = v; $t21_22.$set(obj); } };
-        $t26_27 = { $get() { return $t17_18.$get().Y; }, $set(v) { const obj = $t17_18.$get(); obj.Y = v; $t17_18.$set(obj); } };
-        $t27_28 = $t26_27.$get();
-        $t28_29 = feNeg($t27_28);
-        $t22_23.$set($rt.builtin.cloneValue($t24_25));
-        $t25_26.$set($rt.builtin.cloneValue($t28_29));
-        $t29_30 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t30_31 = pointFromAffine($t16_17);
-        $t31_32 = $t21_22.$get();
-        $t32_33 = pointFromAffine($t31_32);
-        $t33_34 = pointAdd($t30_31, $t32_33);
-        $t34_35 = Point$toAffine($t33_34);
-        $t29_30.$set($rt.builtin.cloneValue($t34_35));
-        $t35_36 = { $get() { return $t29_30.$get().X; }, $set(v) { const obj = $t29_30.$get(); obj.X = v; $t29_30.$set(obj); } };
-        $t36_37 = $t35_36.$get();
-        $t37_38 = feIsZero($t36_37);
-        if ($t37_38) {
-          $block = 5; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 3: {
-        return false;
-        break;
-      }
-      case 4: {
-        $t38_39 = { $get() { return $t29_30.$get().X; }, $set(v) { const obj = $t29_30.$get(); obj.X = v; $t29_30.$set(obj); } };
-        $t39_40 = $t38_39.$get();
-        $t40_41 = ($t39_40 !== $t9_10);
-        if ($t40_41) {
-          $block = 6; break;
-        }
-        else {
-          $block = 7; break;
-        }
-        break;
-      }
-      case 5: {
-        $t41_42 = { $get() { return $t29_30.$get().Y; }, $set(v) { const obj = $t29_30.$get(); obj.Y = v; $t29_30.$set(obj); } };
-        $t42_43 = $t41_42.$get();
-        $t43_44 = feIsZero($t42_43);
-        if ($t43_44) {
-          $block = 3; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 6: {
-        return false;
-        break;
-      }
-      case 7: {
-        $t44_45 = { $get() { return $t29_30.$get().Y; }, $set(v) { const obj = $t29_30.$get(); obj.Y = v; $t29_30.$set(obj); } };
-        $t45_46 = $t44_45.$get();
-        $t46_47 = feIsEven($t45_46);
-        if ($t46_47) {
-          $block = 9; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 8: {
-        return false;
-        break;
-      }
-      case 9: {
-        return true;
-        break;
-      }
-    }
-  }
-}
-
-export function SignSchnorr(seckey, msg, auxRand) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set($rt.builtin.cloneValue(seckey));
-        $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2.$set($rt.builtin.cloneValue(msg));
-        $t2_3 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t2_3.$set($rt.builtin.cloneValue(auxRand));
-        $t3_4 = { $value: $rt.builtin.makeSlice(64, 64, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t4_5 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-        $t5_6 = scalarFromBytes($t4_5);
-        $t6_7 = scalarIsZero($t5_6);
-        if ($t6_7) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t7_8 = $t3_4.$get();
-        $t3_4.$set($rt.builtin.cloneValue($t7_8));
-        $t8_9 = $t3_4.$get();
-        return [$t8_9, false];
-        break;
-      }
-      case 2: {
-        $t9_10 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t10_11 = ScalarBaseMult($t5_6);
-        $t9_10.$set($rt.builtin.cloneValue($t10_11));
-        $t11_12 = { $get() { return $t9_10.$get().Y; }, $set(v) { const obj = $t9_10.$get(); obj.Y = v; $t9_10.$set(obj); } };
-        $t12_13 = $t11_12.$get();
-        $t13_14 = feIsEven($t12_13);
-        if ($t13_14) {
-          $t15_16 = $t5_6;
-          $block = 4; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 3: {
-        $t14_15 = scalarNeg($t5_6);
-        $t15_16 = $t14_15;
-        $block = 4; break;
-        break;
-      }
-      case 4: {
-        $t16_17 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t17_18 = { $get() { return $t9_10.$get().X; }, $set(v) { const obj = $t9_10.$get(); obj.X = v; $t9_10.$set(obj); } };
-        $t18_19 = $t17_18.$get();
-        $t19_20 = feToBytes($t18_19);
-        $t16_17.$set($rt.builtin.cloneValue($t19_20));
-        $t20_21 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t21_22 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t22_23 = $rt.builtin.sliceSlice($t2_3.$get(), undefined, undefined, undefined);
-        $t23_24 = taggedHash('BIP0340/aux', $t22_23);
-        $t21_22.$set($rt.builtin.cloneValue($t23_24));
-        $t24_25 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t25_26 = feToBytes($t15_16);
-        $t24_25.$set($rt.builtin.cloneValue($t25_26));
-        $t26_27 = 0;
-        $block = 5; break;
-        break;
-      }
-      case 5: {
-        $t27_28 = ($t26_27 < 32);
-        if ($t27_28) {
-          $block = 6; break;
-        }
-        else {
-          $block = 7; break;
-        }
-        break;
-      }
-      case 6: {
-        $t28_29 = $t24_25.$get().addr($t26_27);
-        $t29_30 = $t28_29.$get();
-        $t30_31 = $t21_22.$get().addr($t26_27);
-        $t31_32 = $t30_31.$get();
-        $t32_33 = ($t29_30 ^ $t31_32);
-        $t33_34 = $t20_21.$get().addr($t26_27);
-        $t33_34.$set($t32_33);
-        $t34_35 = ($t26_27 + 1);
-        $t26_27 = $t34_35;
-        $block = 5; break;
-        break;
-      }
-      case 7: {
-        $t35_36 = { $value: $rt.builtin.makeSlice(96, 96, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t36_37 = $rt.builtin.sliceSlice($t35_36.$get(), undefined, 32, undefined);
-        $t37_38 = $rt.builtin.sliceSlice($t20_21.$get(), undefined, undefined, undefined);
-        $t38_39 = $rt.builtin.copy($t36_37, $t37_38);
-        $t39_40 = $rt.builtin.sliceSlice($t35_36.$get(), 32, 64, undefined);
-        $t40_41 = $rt.builtin.sliceSlice($t16_17.$get(), undefined, undefined, undefined);
-        $t41_42 = $rt.builtin.copy($t39_40, $t40_41);
-        $t42_43 = $rt.builtin.sliceSlice($t35_36.$get(), 64, 96, undefined);
-        $t43_44 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
-        $t44_45 = $rt.builtin.copy($t42_43, $t43_44);
-        $t45_46 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t46_47 = $rt.builtin.sliceSlice($t35_36.$get(), undefined, undefined, undefined);
-        $t47_48 = taggedHash('BIP0340/nonce', $t46_47);
-        $t45_46.$set($rt.builtin.cloneValue($t47_48));
-        $t48_49 = $rt.builtin.sliceSlice($t45_46.$get(), undefined, undefined, undefined);
-        $t49_50 = scalarFromBytes($t48_49);
-        $t50_51 = curveN.$get();
-        $t51_52 = feCmp($t49_50, $t50_51);
-        $t52_53 = ($t51_52 >= 0);
-        if ($t52_53) {
-          $block = 8; break;
-        }
-        else {
-          $t55_56 = $t49_50;
-          $block = 9; break;
-        }
-        break;
-      }
-      case 8: {
-        $t53_54 = curveN.$get();
-        $t54_55 = scalarSub($t49_50, $t53_54);
-        $t55_56 = $t54_55;
-        $block = 9; break;
-        break;
-      }
-      case 9: {
-        $t56_57 = scalarIsZero($t55_56);
-        if ($t56_57) {
-          $block = 10; break;
-        }
-        else {
-          $block = 11; break;
-        }
-        break;
-      }
-      case 10: {
-        $t57_58 = $t3_4.$get();
-        $t3_4.$set($rt.builtin.cloneValue($t57_58));
-        $t58_59 = $t3_4.$get();
-        return [$t58_59, false];
-        break;
-      }
-      case 11: {
-        $t59_60 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t60_61 = ScalarBaseMult($t55_56);
-        $t59_60.$set($rt.builtin.cloneValue($t60_61));
-        $t61_62 = { $get() { return $t59_60.$get().Y; }, $set(v) { const obj = $t59_60.$get(); obj.Y = v; $t59_60.$set(obj); } };
-        $t62_63 = $t61_62.$get();
-        $t63_64 = feIsEven($t62_63);
-        if ($t63_64) {
-          $t65_66 = $t55_56;
-          $block = 13; break;
-        }
-        else {
-          $block = 12; break;
-        }
-        break;
-      }
-      case 12: {
-        $t64_65 = scalarNeg($t55_56);
-        $t65_66 = $t64_65;
-        $block = 13; break;
-        break;
-      }
-      case 13: {
-        $t66_67 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t67_68 = { $get() { return $t59_60.$get().X; }, $set(v) { const obj = $t59_60.$get(); obj.X = v; $t59_60.$set(obj); } };
-        $t68_69 = $t67_68.$get();
-        $t69_70 = feToBytes($t68_69);
-        $t66_67.$set($rt.builtin.cloneValue($t69_70));
-        $t70_71 = $rt.builtin.sliceSlice($t66_67.$get(), undefined, undefined, undefined);
-        $t71_72 = $rt.builtin.sliceSlice($t16_17.$get(), undefined, undefined, undefined);
-        $t72_73 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
-        $t73_74 = computeChallenge($t70_71, $t71_72, $t72_73);
-        $t74_75 = scalarMul($t73_74, $t15_16);
-        $t75_76 = scalarAdd($t65_66, $t74_75);
-        $t76_77 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t77_78 = feToBytes($t75_76);
-        $t76_77.$set($rt.builtin.cloneValue($t77_78));
-        $t78_79 = $rt.builtin.sliceSlice($t3_4.$get(), undefined, 32, undefined);
-        $t79_80 = $rt.builtin.sliceSlice($t66_67.$get(), undefined, undefined, undefined);
-        $t80_81 = $rt.builtin.copy($t78_79, $t79_80);
-        $t81_82 = $rt.builtin.sliceSlice($t3_4.$get(), 32, undefined, undefined);
-        $t82_83 = $rt.builtin.sliceSlice($t76_77.$get(), undefined, undefined, undefined);
-        $t83_84 = $rt.builtin.copy($t81_82, $t82_83);
-        $t84_85 = $t3_4.$get();
-        $t3_4.$set($rt.builtin.cloneValue($t84_85));
-        $t85_86 = $t3_4.$get();
-        return [$t85_86, true];
-        break;
-      }
-    }
-  }
-}
-
-export function PubKeyFromSecKey(seckey) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set($rt.builtin.cloneValue(seckey));
-        $t1_2 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-        $t2_3 = scalarFromBytes($t1_2);
-        $t3_4 = scalarIsZero($t2_3);
-        if ($t3_4) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return [$rt.builtin.makeSlice(32, 32, 0), false];
-        break;
-      }
-      case 2: {
-        $t4_5 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t5_6 = ScalarBaseMult($t2_3);
-        $t4_5.$set($rt.builtin.cloneValue($t5_6));
-        $t6_7 = { $get() { return $t4_5.$get().X; }, $set(v) { const obj = $t4_5.$get(); obj.X = v; $t4_5.$set(obj); } };
-        $t7_8 = $t6_7.$get();
-        $t8_9 = feToBytes($t7_8);
-        return [$t8_9, true];
-        break;
-      }
-    }
-  }
-}
-
-export function ECDH(seckey, pubkey) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set($rt.builtin.cloneValue(seckey));
-        $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2.$set($rt.builtin.cloneValue(pubkey));
-        $t2_3 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-        $t3_4 = scalarFromBytes($t2_3);
-        $t4_5 = scalarIsZero($t3_4);
-        if ($t4_5) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return [$rt.builtin.makeSlice(32, 32, 0), false];
-        break;
-      }
-      case 2: {
-        $t5_6 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
-        $t6_7 = feFromBytes($t5_6);
-        $t7_8 = LiftX($t6_7);
-        $t8_9 = $t7_8[0];
-        $t9_10 = $t7_8[1];
-        if ($t9_10) {
-          $block = 4; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 3: {
-        return [$rt.builtin.makeSlice(32, 32, 0), false];
-        break;
-      }
-      case 4: {
-        $t10_11 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t11_12 = pointFromAffine($t8_9);
-        $t12_13 = ScalarMult($t11_12, $t3_4);
-        $t13_14 = Point$toAffine($t12_13);
-        $t10_11.$set($rt.builtin.cloneValue($t13_14));
-        $t14_15 = { $get() { return $t10_11.$get().X; }, $set(v) { const obj = $t10_11.$get(); obj.X = v; $t10_11.$set(obj); } };
-        $t15_16 = $t14_15.$get();
-        $t16_17 = feIsZero($t15_16);
-        if ($t16_17) {
-          $block = 7; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 5: {
-        return [$rt.builtin.makeSlice(32, 32, 0), false];
-        break;
-      }
-      case 6: {
-        $t17_18 = { $get() { return $t10_11.$get().X; }, $set(v) { const obj = $t10_11.$get(); obj.X = v; $t10_11.$set(obj); } };
-        $t18_19 = $t17_18.$get();
-        $t19_20 = feToBytes($t18_19);
-        return [$t19_20, true];
-        break;
-      }
-      case 7: {
-        $t20_21 = { $get() { return $t10_11.$get().Y; }, $set(v) { const obj = $t10_11.$get(); obj.Y = v; $t10_11.$set(obj); } };
-        $t21_22 = $t20_21.$get();
-        $t22_23 = feIsZero($t21_22);
-        if ($t22_23) {
-          $block = 5; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-export function taggedHash(tag, msg) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12;
-  $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2 = $rt.builtin.stringToBytes(tag);
-  $t2_3 = common$crypto$sha256.Sum($t1_2);
-  $t0_1.$set($rt.builtin.cloneValue($t2_3));
-  $t3_4 = $rt.builtin.len(msg);
-  $t4_5 = (64 + $t3_4);
-  $t5_6 = $rt.builtin.makeSlice(0, $t4_5, 0);
-  $t6_7 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-  $t7_8 = $rt.builtin.appendSlice($t5_6, $t6_7);
-  $t8_9 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-  $t9_10 = $rt.builtin.appendSlice($t7_8, $t8_9);
-  $t10_11 = $rt.builtin.appendSlice($t9_10, msg);
-  $t11_12 = common$crypto$sha256.Sum($t10_11);
-  return $t11_12;
-}
-
-export function computeChallenge(rx, px, msg) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(96, 96, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, 0, undefined);
-        $t2_3 = $rt.builtin.appendSlice($t1_2, rx);
-        $t3_4 = $rt.builtin.appendSlice($t2_3, px);
-        $t4_5 = $rt.builtin.appendSlice($t3_4, msg);
-        $t5_6 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t6_7 = taggedHash('BIP0340/challenge', $t4_5);
-        $t5_6.$set($rt.builtin.cloneValue($t6_7));
-        $t7_8 = $rt.builtin.sliceSlice($t5_6.$get(), undefined, undefined, undefined);
-        $t8_9 = scalarFromBytes($t7_8);
-        $t9_10 = curveN.$get();
-        $t10_11 = feCmp($t8_9, $t9_10);
-        $t11_12 = ($t10_11 >= 0);
-        if ($t11_12) {
-          $block = 1; break;
-        }
-        else {
-          $t14_15 = $t8_9;
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t12_13 = curveN.$get();
-        $t13_14 = scalarSub($t8_9, $t12_13);
-        $t14_15 = $t13_14;
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        return $t14_15;
         break;
       }
     }

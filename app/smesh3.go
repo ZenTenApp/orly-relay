@@ -90,7 +90,9 @@ func (s *Smesh3Server) Start(ctx context.Context) error {
 		log.I.F("sm3sh: /__deploy enabled for pubkey %x", s.deployPub)
 	}
 
-	// Satellite SW loader pages — serve minimal HTML that registers the SW.
+	// Satellite SW loader pages — serve minimal HTML that registers the SW
+	// and periodically posts a keepalive message to prevent browser from
+	// terminating the SW. Without this, BroadcastChannel messages are lost.
 	for _, swDir := range []string{"$sw-marmot", "$sw-relay"} {
 		dir := swDir
 		mux.HandleFunc("/"+dir+"/loader.html", func(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +104,9 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.register('/%s/$entry.mjs',{type:'module',scope:'/%s/'})
     .then(()=>console.log('%s SW registered'))
     .catch(e=>console.error('%s SW failed:',e));
+  setInterval(()=>{
+    if(navigator.serviceWorker.controller)navigator.serviceWorker.controller.postMessage('keepalive');
+  },20000);
 }
 </script>
 </body></html>`, dir, dir, dir, dir)
