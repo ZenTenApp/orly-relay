@@ -107,7 +107,7 @@ jobs:
           export PATH=/usr/local/go/bin:$PATH
           cd ${GITHUB_WORKSPACE}
           echo "Building all packages..."
-          CGO_ENABLED=0 go build -v ./...
+          CGO_ENABLED=0 go build -v $(go list ./... | grep -v '/cmd/marmot-wasm')
 
       - name: Test
         run: |
