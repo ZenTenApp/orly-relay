@@ -1,3 +1,7 @@
 [submodule "lib/responsive-variants"]
 	path = lib/responsive-variants
 	url = https://git.nostrdev.com/mleku/responsive-variants.git
+[submodule "next/tinygo"]
+	path = next/tinygo
+	url = git@mleku.dev:tinygo.git
+	branch = release

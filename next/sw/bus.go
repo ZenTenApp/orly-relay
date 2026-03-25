@@ -53,6 +53,7 @@ func busSend(to, msg string) {
 func flushQueue(to string) {
 	switch to {
 	case "relay":
+		wasReady := relayReady
 		relayReady = true
 		n := len(relayQueue)
 		for _, msg := range relayQueue {
@@ -60,7 +61,12 @@ func flushQueue(to string) {
 		}
 		relayQueue = nil
 		sw.Log("shell-sw: relay ready, flushed " + helpers.Itoa(int64(n)) + " queued messages")
+		if wasReady {
+			sw.Log("shell-sw: relay SW restarted, requesting resub")
+			broadcastToClients("[\"RESUB\"]")
+		}
 	case "marmot":
+		wasReady := marmotReady
 		marmotReady = true
 		n := len(marmotQueue)
 		for _, msg := range marmotQueue {
@@ -68,6 +74,10 @@ func flushQueue(to string) {
 		}
 		marmotQueue = nil
 		sw.Log("shell-sw: marmot ready, flushed " + helpers.Itoa(int64(n)) + " queued messages")
+		if wasReady {
+			sw.Log("shell-sw: marmot SW restarted, requesting resub")
+			broadcastToClients("[\"RESUB\"]")
+		}
 	}
 }
 

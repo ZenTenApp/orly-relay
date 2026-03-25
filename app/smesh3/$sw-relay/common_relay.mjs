@@ -8,14 +8,19 @@ import * as common$nostr from './common_nostr.mjs';
 
 // Package-level variables
 
-$rt.types.registerType('common/relay.Pool', {
-  id: 'common/relay.Pool',
+$rt.types.registerType('common/relay.Sub', {
+  id: 'common/relay.Sub',
   kind: 'struct',
   methods: new Map(),
   fields: [
-    { name: 'conns', type: 'map[string]*common/relay.Conn', tag: '', embedded: false },
+    { name: 'ID', type: 'string', tag: '', embedded: false },
+    { name: 'Filters', type: '[]*common/nostr.Filter', tag: '', embedded: false },
+    { name: 'OnEvent', type: 'func', tag: '', embedded: false },
+    { name: 'OnEOSE', type: 'func', tag: '', embedded: false },
+    { name: 'conn', type: '*common/relay.Conn', tag: '', embedded: false },
+    { name: 'gotEOSE', type: 'bool', tag: '', embedded: false },
   ],
-  zero: () => ({ conns: null }),
+  zero: () => ({ ID: '', Filters: null, OnEvent: null, OnEOSE: null, conn: null, gotEOSE: false }),
 });
 $rt.types.registerType('common/relay.Conn', {
   id: 'common/relay.Conn',
@@ -31,187 +36,36 @@ $rt.types.registerType('common/relay.Conn', {
     { name: 'onEOSE', type: 'func', tag: '', embedded: false },
     { name: 'onOK', type: 'func', tag: '', embedded: false },
     { name: 'onAuth', type: 'func', tag: '', embedded: false },
+    { name: 'closing', type: 'bool', tag: '', embedded: false },
+    { name: 'ScheduleReconnect', type: 'func', tag: '', embedded: false },
   ],
-  zero: () => ({ URL: '', wsConn: 0, state: 0, subs: null, onReady: null, onEvent: null, onEOSE: null, onOK: null, onAuth: null }),
+  zero: () => ({ URL: '', wsConn: 0, state: 0, subs: null, onReady: null, onEvent: null, onEOSE: null, onOK: null, onAuth: null, closing: false, ScheduleReconnect: null }),
 });
-$rt.types.registerType('common/relay.Sub', {
-  id: 'common/relay.Sub',
+$rt.types.registerType('common/relay.Pool', {
+  id: 'common/relay.Pool',
   kind: 'struct',
   methods: new Map(),
   fields: [
-    { name: 'ID', type: 'string', tag: '', embedded: false },
-    { name: 'Filters', type: '[]*common/nostr.Filter', tag: '', embedded: false },
-    { name: 'OnEvent', type: 'func', tag: '', embedded: false },
-    { name: 'OnEOSE', type: 'func', tag: '', embedded: false },
-    { name: 'conn', type: '*common/relay.Conn', tag: '', embedded: false },
-    { name: 'gotEOSE', type: 'bool', tag: '', embedded: false },
+    { name: 'conns', type: 'map[string]*common/relay.Conn', tag: '', embedded: false },
   ],
-  zero: () => ({ ID: '', Filters: null, OnEvent: null, OnEOSE: null, conn: null, gotEOSE: false }),
+  zero: () => ({ conns: null }),
 });
 export function init() {
   return;
 }
 
-export function NewPool() {
-  let $t0_1, $t1_2, $t2_3;
-  $t0_1 = { $value: { conns: null }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2 = { $get() { return $t0_1.$get().conns; }, $set(v) { const obj = $t0_1.$get(); obj.conns = v; $t0_1.$set(obj); } };
-  $t2_3 = $rt.builtin.makeMap('string');
-  $t1_2.$set($t2_3);
-  return $t0_1;
-}
-
 export function Dial(url) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
-  $t0_1 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2 = { $value: { URL: '', wsConn: 0, state: 0, subs: null, onReady: null, onEvent: null, onEOSE: null, onOK: null, onAuth: null }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t2_3 = { $get() { return $t1_2.$get().URL; }, $set(v) { const obj = $t1_2.$get(); obj.URL = v; $t1_2.$set(obj); } };
-  $t3_4 = { $get() { return $t1_2.$get().state; }, $set(v) { const obj = $t1_2.$get(); obj.state = v; $t1_2.$set(obj); } };
-  $t4_5 = { $get() { return $t1_2.$get().subs; }, $set(v) { const obj = $t1_2.$get(); obj.subs = v; $t1_2.$set(obj); } };
-  $t5_6 = $rt.builtin.makeMap('string');
-  $t2_3.$set(url);
-  $t3_4.$set(0);
-  $t4_5.$set($t5_6);
-  $t0_1.$set($t1_2);
-  $t6_7 = $t0_1.$get();
-  $t7_8 = Dial$1.bind(null, $t0_1);
-  $t8_9 = Dial$2.bind(null, $t0_1);
-  $t9_10 = Dial$3.bind(null, $t0_1);
-  $t10_11 = Dial$4.bind(null, $t0_1);
-  $t11_12 = common$jsbridge$ws.Dial(url, $t7_8, $t8_9, $t9_10, $t10_11);
-  $t12_13 = { $get() { return $t6_7.$get().wsConn; }, $set(v) { const obj = $t6_7.$get(); obj.wsConn = v; $t6_7.$set(obj); } };
-  $t12_13.$set($t11_12);
-  $t13_14 = $t0_1.$get();
-  return $t13_14;
-}
-
-function Dial$1(c, connID, data) {
-  let $t0_1, $t1_2;
-  $t0_1 = c.$get();
-  $t1_2 = Conn$handleMessage($t0_1, data);
-  return;
-}
-
-function Dial$2(c, connID) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = c.$get();
-        $t1_2 = { $get() { return $t0_1.$get().state; }, $set(v) { const obj = $t0_1.$get(); obj.state = v; $t0_1.$set(obj); } };
-        $t1_2.$set(1);
-        $t2_3 = c.$get();
-        $t3_4 = { $get() { return $t2_3.$get().onReady; }, $set(v) { const obj = $t2_3.$get(); obj.onReady = v; $t2_3.$set(obj); } };
-        $t4_5 = $t3_4.$get();
-        $t5_6 = ($t4_5 !== null);
-        if ($t5_6) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t6_7 = c.$get();
-        $t7_8 = { $get() { return $t6_7.$get().onReady; }, $set(v) { const obj = $t6_7.$get(); obj.onReady = v; $t6_7.$set(obj); } };
-        $t8_9 = $t7_8.$get();
-        $t9_10 = $t8_9(true);
-        $t10_11 = c.$get();
-        $t11_12 = { $get() { return $t10_11.$get().onReady; }, $set(v) { const obj = $t10_11.$get(); obj.onReady = v; $t10_11.$set(obj); } };
-        $t11_12.$set(null);
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        $t12_13 = c.$get();
-        $t13_14 = Conn$flushSubs($t12_13);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-function Dial$3(c, connID, code, reason) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = c.$get();
-        $t1_2 = { $get() { return $t0_1.$get().state; }, $set(v) { const obj = $t0_1.$get(); obj.state = v; $t0_1.$set(obj); } };
-        $t1_2.$set(2);
-        $t2_3 = c.$get();
-        $t3_4 = { $get() { return $t2_3.$get().onReady; }, $set(v) { const obj = $t2_3.$get(); obj.onReady = v; $t2_3.$set(obj); } };
-        $t4_5 = $t3_4.$get();
-        $t5_6 = ($t4_5 !== null);
-        if ($t5_6) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t6_7 = c.$get();
-        $t7_8 = { $get() { return $t6_7.$get().onReady; }, $set(v) { const obj = $t6_7.$get(); obj.onReady = v; $t6_7.$set(obj); } };
-        $t8_9 = $t7_8.$get();
-        $t9_10 = $t8_9(false);
-        $t10_11 = c.$get();
-        $t11_12 = { $get() { return $t10_11.$get().onReady; }, $set(v) { const obj = $t10_11.$get(); obj.onReady = v; $t10_11.$set(obj); } };
-        $t11_12.$set(null);
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        return;
-        break;
-      }
-    }
-  }
-}
-
-function Dial$4(c, connID) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = c.$get();
-        $t1_2 = { $get() { return $t0_1.$get().state; }, $set(v) { const obj = $t0_1.$get(); obj.state = v; $t0_1.$set(obj); } };
-        $t1_2.$set(2);
-        $t2_3 = c.$get();
-        $t3_4 = { $get() { return $t2_3.$get().onReady; }, $set(v) { const obj = $t2_3.$get(); obj.onReady = v; $t2_3.$set(obj); } };
-        $t4_5 = $t3_4.$get();
-        $t5_6 = ($t4_5 !== null);
-        if ($t5_6) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t6_7 = c.$get();
-        $t7_8 = { $get() { return $t6_7.$get().onReady; }, $set(v) { const obj = $t6_7.$get(); obj.onReady = v; $t6_7.$set(obj); } };
-        $t8_9 = $t7_8.$get();
-        $t9_10 = $t8_9(false);
-        $t10_11 = c.$get();
-        $t11_12 = { $get() { return $t10_11.$get().onReady; }, $set(v) { const obj = $t10_11.$get(); obj.onReady = v; $t10_11.$set(obj); } };
-        $t11_12.$set(null);
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        return;
-        break;
-      }
-    }
-  }
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6;
+  $t0_1 = { $value: { URL: '', wsConn: 0, state: 0, subs: null, onReady: null, onEvent: null, onEOSE: null, onOK: null, onAuth: null, closing: false, ScheduleReconnect: null }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t1_2 = { $get() { return $t0_1.$get().URL; }, $set(v) { const obj = $t0_1.$get(); obj.URL = v; $t0_1.$set(obj); } };
+  $t2_3 = { $get() { return $t0_1.$get().state; }, $set(v) { const obj = $t0_1.$get(); obj.state = v; $t0_1.$set(obj); } };
+  $t3_4 = { $get() { return $t0_1.$get().subs; }, $set(v) { const obj = $t0_1.$get(); obj.subs = v; $t0_1.$set(obj); } };
+  $t4_5 = $rt.builtin.makeMap('string');
+  $t1_2.$set(url);
+  $t2_3.$set(0);
+  $t3_4.$set($t4_5);
+  $t5_6 = Conn$dial($t0_1);
+  return $t0_1;
 }
 
 export function eventJSON(ev) {
@@ -709,109 +563,25 @@ export function indexOf(s, c) {
   }
 }
 
-export function Pool$CloseAll(p) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
-        $t1_2 = $t0_1.$get();
-        $t2_3 = { $entries: [...$t1_2.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t3_4 = $t2_3.next();
-        $t4_5 = $t3_4[0];
-        if ($t4_5) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t5_6 = $t3_4[1];
-        $t6_7 = $t3_4[2];
-        $t7_8 = Conn$Close($t6_7);
-        $t8_9 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
-        $t9_10 = $t8_9.$get();
-        $t10_11 = $rt.builtin.mapDelete($t9_10, $t5_6);
-        $block = 1; break;
-        break;
-      }
-      case 3: {
-        return;
-        break;
-      }
-    }
-  }
+export function NewPool() {
+  let $t0_1, $t1_2, $t2_3;
+  $t0_1 = { $value: { conns: null }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t1_2 = { $get() { return $t0_1.$get().conns; }, $set(v) { const obj = $t0_1.$get(); obj.conns = v; $t0_1.$set(obj); } };
+  $t2_3 = $rt.builtin.makeMap('string');
+  $t1_2.$set($t2_3);
+  return $t0_1;
 }
 
-$rt.types.getType('common/relay.Pool')?.methods?.set('CloseAll', Pool$CloseAll);
-export function Pool$Connect(p, url) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12;
+export function Sub$Close(s) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
+        $t0_1 = { $get() { return s.$get().conn; }, $set(v) { const obj = s.$get(); obj.conn = v; s.$set(obj); } };
         $t1_2 = $t0_1.$get();
-        { const $r = $rt.builtin.mapLookup($t1_2, url); $t2_3 = [$r.value, $r.ok]; }
-        $t3_4 = $t2_3[0];
-        $t4_5 = $t2_3[1];
-        if ($t4_5) {
-          $block = 3; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return $t3_4;
-        break;
-      }
-      case 2: {
-        $t5_6 = Pool$evictClosed(p);
-        $t6_7 = Dial(url);
-        $t7_8 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
-        $t8_9 = $t7_8.$get();
-        $rt.builtin.mapUpdate($t8_9, url, $t6_7);
-        return $t6_7;
-        break;
-      }
-      case 3: {
-        $t9_10 = { $get() { return $t3_4.$get().state; }, $set(v) { const obj = $t3_4.$get(); obj.state = v; $t3_4.$set(obj); } };
-        $t10_11 = $t9_10.$get();
-        $t11_12 = ($t10_11 !== 2);
-        if ($t11_12) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-$rt.types.getType('common/relay.Pool')?.methods?.set('Connect', Pool$Connect);
-export function Pool$Disconnect(p, url) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
-        $t1_2 = $t0_1.$get();
-        { const $r = $rt.builtin.mapLookup($t1_2, url); $t2_3 = [$r.value, $r.ok]; }
-        $t3_4 = $t2_3[0];
-        $t4_5 = $t2_3[1];
-        if ($t4_5) {
+        $t2_3 = ($t1_2 !== null);
+        if ($t2_3) {
           $block = 1; break;
         }
         else {
@@ -820,10 +590,11 @@ export function Pool$Disconnect(p, url) {
         break;
       }
       case 1: {
-        $t5_6 = Conn$Close($t3_4);
-        $t6_7 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
-        $t7_8 = $t6_7.$get();
-        $t8_9 = $rt.builtin.mapDelete($t7_8, url);
+        $t3_4 = { $get() { return s.$get().conn; }, $set(v) { const obj = s.$get(); obj.conn = v; s.$set(obj); } };
+        $t4_5 = $t3_4.$get();
+        $t5_6 = { $get() { return s.$get().ID; }, $set(v) { const obj = s.$get(); obj.ID = v; s.$set(obj); } };
+        $t6_7 = $t5_6.$get();
+        $t7_8 = Conn$CloseSubscription($t4_5, $t6_7);
         $block = 2; break;
         break;
       }
@@ -835,165 +606,24 @@ export function Pool$Disconnect(p, url) {
   }
 }
 
-$rt.types.getType('common/relay.Pool')?.methods?.set('Disconnect', Pool$Disconnect);
-export function Pool$Get(p, url) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
-        $t1_2 = $t0_1.$get();
-        { const $r = $rt.builtin.mapLookup($t1_2, url); $t2_3 = [$r.value, $r.ok]; }
-        $t3_4 = $t2_3[0];
-        $t4_5 = $t2_3[1];
-        if ($t4_5) {
-          $block = 3; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        return null;
-        break;
-      }
-      case 2: {
-        return $t3_4;
-        break;
-      }
-      case 3: {
-        $t5_6 = Conn$IsOpen($t3_4);
-        if ($t5_6) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-    }
-  }
+$rt.types.getType('common/relay.Sub')?.methods?.set('Close', Sub$Close);
+export function Sub$GotEOSE(s) {
+  let $t0_1, $t1_2;
+  $t0_1 = { $get() { return s.$get().gotEOSE; }, $set(v) { const obj = s.$get(); obj.gotEOSE = v; s.$set(obj); } };
+  $t1_2 = $t0_1.$get();
+  return $t1_2;
 }
 
-$rt.types.getType('common/relay.Pool')?.methods?.set('Get', Pool$Get);
-export function Pool$URLs(p) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
-        $t1_2 = $t0_1.$get();
-        $t2_3 = { $entries: [...$t1_2.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
-        $t3_4 = null;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t4_5 = $t2_3.next();
-        $t5_6 = $t4_5[0];
-        if ($t5_6) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t6_7 = $t4_5[1];
-        $t7_8 = $t4_5[2];
-        $t8_9 = Conn$IsOpen($t7_8);
-        if ($t8_9) {
-          $block = 4; break;
-        }
-        else {
-          $t3_4 = $t3_4;
-          $block = 1; break;
-        }
-        break;
-      }
-      case 3: {
-        return $t3_4;
-        break;
-      }
-      case 4: {
-        $t9_10 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t10_11 = $t9_10.$get().addr(0);
-        $t10_11.$set($t6_7);
-        $t11_12 = $rt.builtin.sliceSlice($t9_10.$get(), undefined, undefined, undefined);
-        $t12_13 = $rt.builtin.appendSlice($t3_4, $t11_12);
-        $t3_4 = $t12_13;
-        $block = 1; break;
-        break;
-      }
-    }
-  }
-}
-
-$rt.types.getType('common/relay.Pool')?.methods?.set('URLs', Pool$URLs);
-export function Pool$evictClosed(p) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
-        $t1_2 = $t0_1.$get();
-        $t2_3 = { $entries: [...$t1_2.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t3_4 = $t2_3.next();
-        $t4_5 = $t3_4[0];
-        if ($t4_5) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t5_6 = $t3_4[1];
-        $t6_7 = $t3_4[2];
-        $t7_8 = { $get() { return $t6_7.$get().state; }, $set(v) { const obj = $t6_7.$get(); obj.state = v; $t6_7.$set(obj); } };
-        $t8_9 = $t7_8.$get();
-        $t9_10 = ($t8_9 === 2);
-        if ($t9_10) {
-          $block = 4; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 3: {
-        return;
-        break;
-      }
-      case 4: {
-        $t10_11 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
-        $t11_12 = $t10_11.$get();
-        $t12_13 = $rt.builtin.mapDelete($t11_12, $t5_6);
-        $block = 1; break;
-        break;
-      }
-    }
-  }
-}
-
-$rt.types.getType('common/relay.Pool')?.methods?.set('evictClosed', Pool$evictClosed);
+$rt.types.getType('common/relay.Sub')?.methods?.set('GotEOSE', Sub$GotEOSE);
 export function Conn$Close(c) {
-  let $t0_1, $t1_2, $t2_3, $t3_4;
-  $t0_1 = { $get() { return c.$get().state; }, $set(v) { const obj = c.$get(); obj.state = v; c.$set(obj); } };
-  $t0_1.$set(2);
-  $t1_2 = { $get() { return c.$get().wsConn; }, $set(v) { const obj = c.$get(); obj.wsConn = v; c.$set(obj); } };
-  $t2_3 = $t1_2.$get();
-  $t3_4 = common$jsbridge$ws.Close($t2_3);
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
+  $t0_1 = { $get() { return c.$get().closing; }, $set(v) { const obj = c.$get(); obj.closing = v; c.$set(obj); } };
+  $t0_1.$set(true);
+  $t1_2 = { $get() { return c.$get().state; }, $set(v) { const obj = c.$get(); obj.state = v; c.$set(obj); } };
+  $t1_2.$set(2);
+  $t2_3 = { $get() { return c.$get().wsConn; }, $set(v) { const obj = c.$get(); obj.wsConn = v; c.$set(obj); } };
+  $t3_4 = $t2_3.$get();
+  $t4_5 = common$jsbridge$ws.Close($t3_4);
   return;
 }
 
@@ -1183,6 +813,158 @@ export function Conn$Subscribe(c, id, filters) {
 }
 
 $rt.types.getType('common/relay.Conn')?.methods?.set('Subscribe', Conn$Subscribe);
+export function Conn$dial(c) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11;
+  $t0_1 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t0_1.$set(c);
+  $t1_2 = $t0_1.$get();
+  $t2_3 = $t0_1.$get();
+  $t3_4 = { $get() { return $t2_3.$get().URL; }, $set(v) { const obj = $t2_3.$get(); obj.URL = v; $t2_3.$set(obj); } };
+  $t4_5 = $t3_4.$get();
+  $t5_6 = dial$1.bind(null, $t0_1);
+  $t6_7 = dial$2.bind(null, $t0_1);
+  $t7_8 = dial$3.bind(null, $t0_1);
+  $t8_9 = dial$4.bind(null, $t0_1);
+  $t9_10 = common$jsbridge$ws.Dial($t4_5, $t5_6, $t6_7, $t7_8, $t8_9);
+  $t10_11 = { $get() { return $t1_2.$get().wsConn; }, $set(v) { const obj = $t1_2.$get(); obj.wsConn = v; $t1_2.$set(obj); } };
+  $t10_11.$set($t9_10);
+  return;
+}
+
+function dial$1(c, connID, data) {
+  let $t0_1, $t1_2;
+  $t0_1 = c.$get();
+  $t1_2 = Conn$handleMessage($t0_1, data);
+  return;
+}
+
+function dial$2(c, connID) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = c.$get();
+        $t1_2 = { $get() { return $t0_1.$get().state; }, $set(v) { const obj = $t0_1.$get(); obj.state = v; $t0_1.$set(obj); } };
+        $t1_2.$set(1);
+        $t2_3 = c.$get();
+        $t3_4 = { $get() { return $t2_3.$get().onReady; }, $set(v) { const obj = $t2_3.$get(); obj.onReady = v; $t2_3.$set(obj); } };
+        $t4_5 = $t3_4.$get();
+        $t5_6 = ($t4_5 !== null);
+        if ($t5_6) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t6_7 = c.$get();
+        $t7_8 = { $get() { return $t6_7.$get().onReady; }, $set(v) { const obj = $t6_7.$get(); obj.onReady = v; $t6_7.$set(obj); } };
+        $t8_9 = $t7_8.$get();
+        $t9_10 = $t8_9(true);
+        $t10_11 = c.$get();
+        $t11_12 = { $get() { return $t10_11.$get().onReady; }, $set(v) { const obj = $t10_11.$get(); obj.onReady = v; $t10_11.$set(obj); } };
+        $t11_12.$set(null);
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        $t12_13 = c.$get();
+        $t13_14 = Conn$flushSubs($t12_13);
+        return;
+        break;
+      }
+    }
+  }
+}
+
+function dial$3(c, connID, code, reason) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = c.$get();
+        $t1_2 = { $get() { return $t0_1.$get().state; }, $set(v) { const obj = $t0_1.$get(); obj.state = v; $t0_1.$set(obj); } };
+        $t1_2.$set(2);
+        $t2_3 = c.$get();
+        $t3_4 = { $get() { return $t2_3.$get().onReady; }, $set(v) { const obj = $t2_3.$get(); obj.onReady = v; $t2_3.$set(obj); } };
+        $t4_5 = $t3_4.$get();
+        $t5_6 = ($t4_5 !== null);
+        if ($t5_6) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t6_7 = c.$get();
+        $t7_8 = { $get() { return $t6_7.$get().onReady; }, $set(v) { const obj = $t6_7.$get(); obj.onReady = v; $t6_7.$set(obj); } };
+        $t8_9 = $t7_8.$get();
+        $t9_10 = $t8_9(false);
+        $t10_11 = c.$get();
+        $t11_12 = { $get() { return $t10_11.$get().onReady; }, $set(v) { const obj = $t10_11.$get(); obj.onReady = v; $t10_11.$set(obj); } };
+        $t11_12.$set(null);
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        $t12_13 = c.$get();
+        $t13_14 = Conn$maybeReconnect($t12_13);
+        return;
+        break;
+      }
+    }
+  }
+}
+
+function dial$4(c, connID) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = c.$get();
+        $t1_2 = { $get() { return $t0_1.$get().state; }, $set(v) { const obj = $t0_1.$get(); obj.state = v; $t0_1.$set(obj); } };
+        $t1_2.$set(2);
+        $t2_3 = c.$get();
+        $t3_4 = { $get() { return $t2_3.$get().onReady; }, $set(v) { const obj = $t2_3.$get(); obj.onReady = v; $t2_3.$set(obj); } };
+        $t4_5 = $t3_4.$get();
+        $t5_6 = ($t4_5 !== null);
+        if ($t5_6) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t6_7 = c.$get();
+        $t7_8 = { $get() { return $t6_7.$get().onReady; }, $set(v) { const obj = $t6_7.$get(); obj.onReady = v; $t6_7.$set(obj); } };
+        $t8_9 = $t7_8.$get();
+        $t9_10 = $t8_9(false);
+        $t10_11 = c.$get();
+        $t11_12 = { $get() { return $t10_11.$get().onReady; }, $set(v) { const obj = $t10_11.$get(); obj.onReady = v; $t10_11.$set(obj); } };
+        $t11_12.$set(null);
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        $t12_13 = c.$get();
+        $t13_14 = Conn$maybeReconnect($t12_13);
+        return;
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/relay.Conn')?.methods?.set('dial', Conn$dial);
 export function Conn$flushSubs(c) {
   let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26;
   let $block = 0;
@@ -1542,15 +1324,81 @@ export function Conn$handleMessage(c, msg) {
 }
 
 $rt.types.getType('common/relay.Conn')?.methods?.set('handleMessage', Conn$handleMessage);
-export function Sub$Close(s) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
+export function Conn$maybeReconnect(c) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = { $get() { return s.$get().conn; }, $set(v) { const obj = s.$get(); obj.conn = v; s.$set(obj); } };
+        $t0_1 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set(c);
         $t1_2 = $t0_1.$get();
-        $t2_3 = ($t1_2 !== null);
+        $t2_3 = { $get() { return $t1_2.$get().closing; }, $set(v) { const obj = $t1_2.$get(); obj.closing = v; $t1_2.$set(obj); } };
+        $t3_4 = $t2_3.$get();
+        if ($t3_4) {
+          $block = 1; break;
+        }
+        else {
+          $block = 4; break;
+        }
+        break;
+      }
+      case 1: {
+        return;
+        break;
+      }
+      case 2: {
+        $t4_5 = $t0_1.$get();
+        $t5_6 = { $get() { return $t4_5.$get().state; }, $set(v) { const obj = $t4_5.$get(); obj.state = v; $t4_5.$set(obj); } };
+        $t5_6.$set(0);
+        $t6_7 = $t0_1.$get();
+        $t7_8 = { $get() { return $t6_7.$get().ScheduleReconnect; }, $set(v) { const obj = $t6_7.$get(); obj.ScheduleReconnect = v; $t6_7.$set(obj); } };
+        $t8_9 = $t7_8.$get();
+        $t9_10 = maybeReconnect$1.bind(null, $t0_1);
+        $t10_11 = $t8_9($t9_10);
+        return;
+        break;
+      }
+      case 3: {
+        $t11_12 = $t0_1.$get();
+        $t12_13 = { $get() { return $t11_12.$get().ScheduleReconnect; }, $set(v) { const obj = $t11_12.$get(); obj.ScheduleReconnect = v; $t11_12.$set(obj); } };
+        $t13_14 = $t12_13.$get();
+        $t14_15 = ($t13_14 === null);
+        if ($t14_15) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 4: {
+        $t15_16 = $t0_1.$get();
+        $t16_17 = { $get() { return $t15_16.$get().subs; }, $set(v) { const obj = $t15_16.$get(); obj.subs = v; $t15_16.$set(obj); } };
+        $t17_18 = $t16_17.$get();
+        $t18_19 = $rt.builtin.len($t17_18);
+        $t19_20 = ($t18_19 === 0);
+        if ($t19_20) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+function maybeReconnect$1(c) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = c.$get();
+        $t1_2 = { $get() { return $t0_1.$get().closing; }, $set(v) { const obj = $t0_1.$get(); obj.closing = v; $t0_1.$set(obj); } };
+        $t2_3 = $t1_2.$get();
         if ($t2_3) {
           $block = 1; break;
         }
@@ -1560,11 +1408,135 @@ export function Sub$Close(s) {
         break;
       }
       case 1: {
-        $t3_4 = { $get() { return s.$get().conn; }, $set(v) { const obj = s.$get(); obj.conn = v; s.$set(obj); } };
-        $t4_5 = $t3_4.$get();
-        $t5_6 = { $get() { return s.$get().ID; }, $set(v) { const obj = s.$get(); obj.ID = v; s.$set(obj); } };
-        $t6_7 = $t5_6.$get();
-        $t7_8 = Conn$CloseSubscription($t4_5, $t6_7);
+        return;
+        break;
+      }
+      case 2: {
+        $t3_4 = c.$get();
+        $t4_5 = Conn$dial($t3_4);
+        return;
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/relay.Conn')?.methods?.set('maybeReconnect', Conn$maybeReconnect);
+export function Pool$CloseAll(p) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
+        $t1_2 = $t0_1.$get();
+        $t2_3 = { $entries: [...$t1_2.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t3_4 = $t2_3.next();
+        $t4_5 = $t3_4[0];
+        if ($t4_5) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t5_6 = $t3_4[1];
+        $t6_7 = $t3_4[2];
+        $t7_8 = Conn$Close($t6_7);
+        $t8_9 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
+        $t9_10 = $t8_9.$get();
+        $t10_11 = $rt.builtin.mapDelete($t9_10, $t5_6);
+        $block = 1; break;
+        break;
+      }
+      case 3: {
+        return;
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/relay.Pool')?.methods?.set('CloseAll', Pool$CloseAll);
+export function Pool$Connect(p, url) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
+        $t1_2 = $t0_1.$get();
+        { const $r = $rt.builtin.mapLookup($t1_2, url); $t2_3 = [$r.value, $r.ok]; }
+        $t3_4 = $t2_3[0];
+        $t4_5 = $t2_3[1];
+        if ($t4_5) {
+          $block = 3; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return $t3_4;
+        break;
+      }
+      case 2: {
+        $t5_6 = Pool$evictClosed(p);
+        $t6_7 = Dial(url);
+        $t7_8 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
+        $t8_9 = $t7_8.$get();
+        $rt.builtin.mapUpdate($t8_9, url, $t6_7);
+        return $t6_7;
+        break;
+      }
+      case 3: {
+        $t9_10 = { $get() { return $t3_4.$get().state; }, $set(v) { const obj = $t3_4.$get(); obj.state = v; $t3_4.$set(obj); } };
+        $t10_11 = $t9_10.$get();
+        $t11_12 = ($t10_11 !== 2);
+        if ($t11_12) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/relay.Pool')?.methods?.set('Connect', Pool$Connect);
+export function Pool$Disconnect(p, url) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
+        $t1_2 = $t0_1.$get();
+        { const $r = $rt.builtin.mapLookup($t1_2, url); $t2_3 = [$r.value, $r.ok]; }
+        $t3_4 = $t2_3[0];
+        $t4_5 = $t2_3[1];
+        if ($t4_5) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t5_6 = Conn$Close($t3_4);
+        $t6_7 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
+        $t7_8 = $t6_7.$get();
+        $t8_9 = $rt.builtin.mapDelete($t7_8, url);
         $block = 2; break;
         break;
       }
@@ -1576,12 +1548,155 @@ export function Sub$Close(s) {
   }
 }
 
-$rt.types.getType('common/relay.Sub')?.methods?.set('Close', Sub$Close);
-export function Sub$GotEOSE(s) {
-  let $t0_1, $t1_2;
-  $t0_1 = { $get() { return s.$get().gotEOSE; }, $set(v) { const obj = s.$get(); obj.gotEOSE = v; s.$set(obj); } };
-  $t1_2 = $t0_1.$get();
-  return $t1_2;
+$rt.types.getType('common/relay.Pool')?.methods?.set('Disconnect', Pool$Disconnect);
+export function Pool$Get(p, url) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
+        $t1_2 = $t0_1.$get();
+        { const $r = $rt.builtin.mapLookup($t1_2, url); $t2_3 = [$r.value, $r.ok]; }
+        $t3_4 = $t2_3[0];
+        $t4_5 = $t2_3[1];
+        if ($t4_5) {
+          $block = 3; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+      case 1: {
+        return null;
+        break;
+      }
+      case 2: {
+        return $t3_4;
+        break;
+      }
+      case 3: {
+        $t5_6 = Conn$IsOpen($t3_4);
+        if ($t5_6) {
+          $block = 2; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+    }
+  }
 }
 
-$rt.types.getType('common/relay.Sub')?.methods?.set('GotEOSE', Sub$GotEOSE);
+$rt.types.getType('common/relay.Pool')?.methods?.set('Get', Pool$Get);
+export function Pool$URLs(p) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
+        $t1_2 = $t0_1.$get();
+        $t2_3 = { $entries: [...$t1_2.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
+        $t3_4 = null;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t4_5 = $t2_3.next();
+        $t5_6 = $t4_5[0];
+        if ($t5_6) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t6_7 = $t4_5[1];
+        $t7_8 = $t4_5[2];
+        $t8_9 = Conn$IsOpen($t7_8);
+        if ($t8_9) {
+          $block = 4; break;
+        }
+        else {
+          $t3_4 = $t3_4;
+          $block = 1; break;
+        }
+        break;
+      }
+      case 3: {
+        return $t3_4;
+        break;
+      }
+      case 4: {
+        $t9_10 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t10_11 = $t9_10.$get().addr(0);
+        $t10_11.$set($t6_7);
+        $t11_12 = $rt.builtin.sliceSlice($t9_10.$get(), undefined, undefined, undefined);
+        $t12_13 = $rt.builtin.appendSlice($t3_4, $t11_12);
+        $t3_4 = $t12_13;
+        $block = 1; break;
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/relay.Pool')?.methods?.set('URLs', Pool$URLs);
+export function Pool$evictClosed(p) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
+        $t1_2 = $t0_1.$get();
+        $t2_3 = { $entries: [...$t1_2.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t3_4 = $t2_3.next();
+        $t4_5 = $t3_4[0];
+        if ($t4_5) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t5_6 = $t3_4[1];
+        $t6_7 = $t3_4[2];
+        $t7_8 = { $get() { return $t6_7.$get().state; }, $set(v) { const obj = $t6_7.$get(); obj.state = v; $t6_7.$set(obj); } };
+        $t8_9 = $t7_8.$get();
+        $t9_10 = ($t8_9 === 2);
+        if ($t9_10) {
+          $block = 4; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+      case 3: {
+        return;
+        break;
+      }
+      case 4: {
+        $t10_11 = { $get() { return p.$get().conns; }, $set(v) { const obj = p.$get(); obj.conns = v; p.$set(obj); } };
+        $t11_12 = $t10_11.$get();
+        $t12_13 = $rt.builtin.mapDelete($t11_12, $t5_6);
+        $block = 1; break;
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/relay.Pool')?.methods?.set('evictClosed', Pool$evictClosed);

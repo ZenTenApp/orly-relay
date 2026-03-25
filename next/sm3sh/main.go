@@ -10,10 +10,10 @@ import (
 )
 
 const (
-	version     = "v0.65.44"
-	lsKeyPubkey = "sm3sh-pubkey"
-	lsKeyMode   = "sm3sh-mode"
-	lsKeyTheme  = "sm3sh-theme"
+	version     = "v0.65.45"
+	lsKeyPubkey = "smesh-pubkey"
+	lsKeyMode   = "smesh-mode"
+	lsKeyTheme  = "smesh-theme"
 )
 
 var (
@@ -174,11 +174,17 @@ func showLogin() {
 
 	// Title.
 	h1 := dom.CreateElement("h1")
-	dom.SetTextContent(h1, "sm3sh")
+	dom.SetTextContent(h1, "smesh")
 	dom.SetStyle(h1, "color", "var(--accent)")
 	dom.SetStyle(h1, "fontSize", "48px")
 	dom.SetStyle(h1, "marginBottom", "4px")
 	dom.AppendChild(wrap, h1)
+
+	verTag := dom.CreateElement("span")
+	dom.SetTextContent(verTag, version)
+	dom.SetStyle(verTag, "color", "var(--muted)")
+	dom.SetStyle(verTag, "fontSize", "12px")
+	dom.AppendChild(wrap, verTag)
 
 	sub := dom.CreateElement("p")
 	dom.SetTextContent(sub, "nostr client \u2014 tinygo \u2192 javascript")
@@ -291,7 +297,7 @@ func showLogin() {
 		pubkey = pk[:]
 		localstorage.SetItem(lsKeyPubkey, pubhex)
 		localstorage.SetItem(lsKeyMode, "nsec")
-		localstorage.SetItem("sm3sh-key", helpers.HexEncode(sk[:]))
+		localstorage.SetItem("smesh-key", helpers.HexEncode(sk[:]))
 		clearChildren(root)
 		showApp()
 	})
@@ -469,7 +475,7 @@ func showApp() {
 
 	// Set up SW communication.
 	dom.OnSWMessage(onSWMessage)
-	hexKey := localstorage.GetItem("sm3sh-key")
+	hexKey := localstorage.GetItem("smesh-key")
 	if hexKey != "" {
 		dom.PostToSW("[\"SET_KEY\"," + jstr(hexKey) + "]")
 	} else {
@@ -766,7 +772,7 @@ func showApp() {
 	}))
 
 	ver := dom.CreateElement("span")
-	dom.SetTextContent(ver, "sm3sh "+version)
+	dom.SetTextContent(ver, "smesh "+version)
 	dom.SetStyle(ver, "marginLeft", "auto")
 	dom.SetStyle(ver, "color", "var(--accent)")
 	dom.AppendChild(bottomBar, ver)
@@ -960,12 +966,24 @@ func onSWMessage(raw string) {
 	case "CRYPTO_REQ":
 		handleCryptoReq(raw, pos)
 	case "NEED_IDENTITY":
-		hexKey := localstorage.GetItem("sm3sh-key")
+		hexKey := localstorage.GetItem("smesh-key")
 		if hexKey != "" {
 			dom.PostToSW("[\"SET_KEY\"," + jstr(hexKey) + "]")
 		} else if pubhex != "" {
 			dom.PostToSW("[\"SET_PUBKEY\"," + jstr(pubhex) + "]")
 		}
+		resubscribe()
+	case "RESUB":
+		resubscribe()
+	}
+}
+
+func resubscribe() {
+	sendWriteRelays()
+	subscribeProfile()
+	subscribeFeed()
+	if activePage == "messaging" {
+		initMessaging()
 	}
 }
 
@@ -3106,7 +3124,7 @@ func doLogout() {
 
 	localstorage.RemoveItem(lsKeyPubkey)
 	localstorage.RemoveItem(lsKeyMode)
-	localstorage.RemoveItem("sm3sh-key")
+	localstorage.RemoveItem("smesh-key")
 
 	clearChildren(root)
 	showLogin()

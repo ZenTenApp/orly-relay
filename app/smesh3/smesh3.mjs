@@ -106,7 +106,7 @@ export function main() {
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = common$jsbridge$localstorage.GetItem('sm3sh-theme');
+        $t0_1 = common$jsbridge$localstorage.GetItem('smesh-theme');
         $t1_2 = ($t0_1 !== '');
         if ($t1_2) {
           $block = 1; break;
@@ -147,7 +147,7 @@ export function main() {
       case 5: {
         $t7_8 = common$jsbridge$dom.GetElementById('app-root');
         root.$set($t7_8);
-        $t8_9 = common$jsbridge$localstorage.GetItem('sm3sh-pubkey');
+        $t8_9 = common$jsbridge$localstorage.GetItem('smesh-pubkey');
         $t9_10 = ($t8_9 !== '');
         if ($t9_10) {
           $block = 6; break;
@@ -199,7 +199,7 @@ export function toggleTheme() {
       }
       case 1: {
         $t4_5 = common$jsbridge$dom.AddClass($t0_1, 'dark');
-        $t5_6 = common$jsbridge$localstorage.SetItem('sm3sh-theme', 'dark');
+        $t5_6 = common$jsbridge$localstorage.SetItem('smesh-theme', 'dark');
         $block = 2; break;
         break;
       }
@@ -210,7 +210,7 @@ export function toggleTheme() {
       }
       case 3: {
         $t7_8 = common$jsbridge$dom.RemoveClass($t0_1, 'dark');
-        $t8_9 = common$jsbridge$localstorage.SetItem('sm3sh-theme', 'light');
+        $t8_9 = common$jsbridge$localstorage.SetItem('smesh-theme', 'light');
         $block = 2; break;
         break;
       }
@@ -254,7 +254,7 @@ export function updateThemeIcon() {
 }
 
 export function showLogin() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129, $t129_130, $t130_131;
   $t0_1 = root.$get();
   $t1_2 = clearChildren($t0_1);
   $t2_3 = common$jsbridge$dom.CreateElement('div');
@@ -277,114 +277,119 @@ export function showLogin() {
   $t18_19 = $t8_9.$get();
   $t19_20 = common$jsbridge$dom.AppendChild($t2_3, $t18_19);
   $t20_21 = common$jsbridge$dom.CreateElement('h1');
-  $t21_22 = common$jsbridge$dom.SetTextContent($t20_21, 'sm3sh');
+  $t21_22 = common$jsbridge$dom.SetTextContent($t20_21, 'smesh');
   $t22_23 = common$jsbridge$dom.SetStyle($t20_21, 'color', 'var(--accent)');
   $t23_24 = common$jsbridge$dom.SetStyle($t20_21, 'fontSize', '48px');
   $t24_25 = common$jsbridge$dom.SetStyle($t20_21, 'marginBottom', '4px');
   $t25_26 = common$jsbridge$dom.AppendChild($t2_3, $t20_21);
-  $t26_27 = common$jsbridge$dom.CreateElement('p');
-  $t27_28 = common$jsbridge$dom.SetTextContent($t26_27, 'nostr client — tinygo → javascript');
+  $t26_27 = common$jsbridge$dom.CreateElement('span');
+  $t27_28 = common$jsbridge$dom.SetTextContent($t26_27, 'v0.65.45');
   $t28_29 = common$jsbridge$dom.SetStyle($t26_27, 'color', 'var(--muted)');
-  $t29_30 = common$jsbridge$dom.SetStyle($t26_27, 'marginBottom', '32px');
+  $t29_30 = common$jsbridge$dom.SetStyle($t26_27, 'fontSize', '12px');
   $t30_31 = common$jsbridge$dom.AppendChild($t2_3, $t26_27);
-  $t31_32 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t32_33 = common$jsbridge$dom.CreateElement('div');
-  $t31_32.$set($t32_33);
-  $t33_34 = $t31_32.$get();
-  $t34_35 = common$jsbridge$dom.SetStyle($t33_34, 'color', '#e55');
-  $t35_36 = $t31_32.$get();
-  $t36_37 = common$jsbridge$dom.SetStyle($t35_36, 'fontSize', '13px');
-  $t37_38 = $t31_32.$get();
-  $t38_39 = common$jsbridge$dom.SetStyle($t37_38, 'marginBottom', '12px');
-  $t39_40 = $t31_32.$get();
-  $t40_41 = common$jsbridge$dom.SetStyle($t39_40, 'minHeight', '18px');
-  $t41_42 = $t31_32.$get();
-  $t42_43 = common$jsbridge$dom.AppendChild($t2_3, $t41_42);
-  $t43_44 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t44_45 = common$jsbridge$dom.CreateElement('button');
-  $t43_44.$set($t44_45);
-  $t45_46 = $t43_44.$get();
-  $t46_47 = common$jsbridge$dom.SetTextContent($t45_46, 'login with extension');
-  $t47_48 = $t43_44.$get();
-  $t48_49 = common$jsbridge$dom.SetAttribute($t47_48, 'type', 'button');
-  $t49_50 = $t43_44.$get();
-  $t50_51 = common$jsbridge$dom.SetStyle($t49_50, 'padding', '10px 32px');
-  $t51_52 = $t43_44.$get();
-  $t52_53 = common$jsbridge$dom.SetStyle($t51_52, 'fontFamily', '\'Fira Code\', monospace');
-  $t53_54 = $t43_44.$get();
-  $t54_55 = common$jsbridge$dom.SetStyle($t53_54, 'fontSize', '14px');
-  $t55_56 = $t43_44.$get();
-  $t56_57 = common$jsbridge$dom.SetStyle($t55_56, 'background', 'var(--accent)');
-  $t57_58 = $t43_44.$get();
-  $t58_59 = common$jsbridge$dom.SetStyle($t57_58, 'color', '#000');
-  $t59_60 = $t43_44.$get();
-  $t60_61 = common$jsbridge$dom.SetStyle($t59_60, 'border', 'none');
-  $t61_62 = $t43_44.$get();
-  $t62_63 = common$jsbridge$dom.SetStyle($t61_62, 'borderRadius', '4px');
-  $t63_64 = $t43_44.$get();
-  $t64_65 = common$jsbridge$dom.SetStyle($t63_64, 'cursor', 'pointer');
-  $t65_66 = $t43_44.$get();
-  $t66_67 = common$jsbridge$dom.AppendChild($t2_3, $t65_66);
-  $t67_68 = root.$get();
-  $t68_69 = common$jsbridge$dom.AppendChild($t67_68, $t2_3);
-  $t69_70 = showLogin$2.bind(null, $t31_32, $t43_44);
-  $t70_71 = common$jsbridge$dom.RegisterCallback($t69_70);
-  $t71_72 = $t43_44.$get();
-  $t72_73 = common$jsbridge$dom.AddEventListener($t71_72, 'click', $t70_71);
-  $t73_74 = common$jsbridge$dom.CreateElement('div');
-  $t74_75 = common$jsbridge$dom.SetStyle($t73_74, 'marginTop', '24px');
-  $t75_76 = common$jsbridge$dom.SetStyle($t73_74, 'color', 'var(--muted)');
-  $t76_77 = common$jsbridge$dom.SetStyle($t73_74, 'fontSize', '12px');
-  $t77_78 = common$jsbridge$dom.SetTextContent($t73_74, 'or paste nsec');
-  $t78_79 = common$jsbridge$dom.AppendChild($t2_3, $t73_74);
-  $t79_80 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t80_81 = common$jsbridge$dom.CreateElement('input');
-  $t79_80.$set($t80_81);
-  $t81_82 = $t79_80.$get();
-  $t82_83 = common$jsbridge$dom.SetAttribute($t81_82, 'type', 'password');
-  $t83_84 = $t79_80.$get();
-  $t84_85 = common$jsbridge$dom.SetAttribute($t83_84, 'placeholder', 'nsec1...');
-  $t85_86 = $t79_80.$get();
-  $t86_87 = common$jsbridge$dom.SetStyle($t85_86, 'marginTop', '8px');
-  $t87_88 = $t79_80.$get();
-  $t88_89 = common$jsbridge$dom.SetStyle($t87_88, 'padding', '8px 12px');
-  $t89_90 = $t79_80.$get();
-  $t90_91 = common$jsbridge$dom.SetStyle($t89_90, 'width', '320px');
-  $t91_92 = $t79_80.$get();
-  $t92_93 = common$jsbridge$dom.SetStyle($t91_92, 'maxWidth', '90vw');
-  $t93_94 = $t79_80.$get();
-  $t94_95 = common$jsbridge$dom.SetStyle($t93_94, 'fontFamily', '\'Fira Code\', monospace');
-  $t95_96 = $t79_80.$get();
-  $t96_97 = common$jsbridge$dom.SetStyle($t95_96, 'fontSize', '12px');
-  $t97_98 = $t79_80.$get();
-  $t98_99 = common$jsbridge$dom.SetStyle($t97_98, 'background', 'var(--bg)');
-  $t99_100 = $t79_80.$get();
-  $t100_101 = common$jsbridge$dom.SetStyle($t99_100, 'border', '1px solid var(--border)');
-  $t101_102 = $t79_80.$get();
-  $t102_103 = common$jsbridge$dom.SetStyle($t101_102, 'borderRadius', '4px');
-  $t103_104 = $t79_80.$get();
-  $t104_105 = common$jsbridge$dom.SetStyle($t103_104, 'color', 'var(--fg)');
-  $t105_106 = $t79_80.$get();
-  $t106_107 = common$jsbridge$dom.SetStyle($t105_106, 'textAlign', 'center');
-  $t107_108 = $t79_80.$get();
-  $t108_109 = common$jsbridge$dom.AppendChild($t2_3, $t107_108);
-  $t109_110 = common$jsbridge$dom.CreateElement('button');
-  $t110_111 = common$jsbridge$dom.SetTextContent($t109_110, 'login with nsec');
-  $t111_112 = common$jsbridge$dom.SetStyle($t109_110, 'marginTop', '8px');
-  $t112_113 = common$jsbridge$dom.SetStyle($t109_110, 'padding', '10px 32px');
-  $t113_114 = common$jsbridge$dom.SetStyle($t109_110, 'fontFamily', '\'Fira Code\', monospace');
-  $t114_115 = common$jsbridge$dom.SetStyle($t109_110, 'fontSize', '14px');
-  $t115_116 = common$jsbridge$dom.SetStyle($t109_110, 'background', 'var(--bg2)');
-  $t116_117 = common$jsbridge$dom.SetStyle($t109_110, 'color', 'var(--fg)');
-  $t117_118 = common$jsbridge$dom.SetStyle($t109_110, 'border', '1px solid var(--border)');
-  $t118_119 = common$jsbridge$dom.SetStyle($t109_110, 'borderRadius', '4px');
-  $t119_120 = common$jsbridge$dom.SetStyle($t109_110, 'cursor', 'pointer');
-  $t120_121 = common$jsbridge$dom.AppendChild($t2_3, $t109_110);
-  $t121_122 = showLogin$3.bind(null, $t79_80, $t31_32);
-  $t122_123 = common$jsbridge$dom.RegisterCallback($t121_122);
-  $t123_124 = common$jsbridge$dom.AddEventListener($t109_110, 'click', $t122_123);
-  $t124_125 = $t79_80.$get();
-  $t125_126 = common$jsbridge$dom.SetAttribute($t124_125, 'onkeydown', 'if(event.key===\'Enter\'){event.preventDefault();this.nextElementSibling.click()}');
+  $t31_32 = common$jsbridge$dom.CreateElement('p');
+  $t32_33 = common$jsbridge$dom.SetTextContent($t31_32, 'nostr client — tinygo → javascript');
+  $t33_34 = common$jsbridge$dom.SetStyle($t31_32, 'color', 'var(--muted)');
+  $t34_35 = common$jsbridge$dom.SetStyle($t31_32, 'marginBottom', '32px');
+  $t35_36 = common$jsbridge$dom.AppendChild($t2_3, $t31_32);
+  $t36_37 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t37_38 = common$jsbridge$dom.CreateElement('div');
+  $t36_37.$set($t37_38);
+  $t38_39 = $t36_37.$get();
+  $t39_40 = common$jsbridge$dom.SetStyle($t38_39, 'color', '#e55');
+  $t40_41 = $t36_37.$get();
+  $t41_42 = common$jsbridge$dom.SetStyle($t40_41, 'fontSize', '13px');
+  $t42_43 = $t36_37.$get();
+  $t43_44 = common$jsbridge$dom.SetStyle($t42_43, 'marginBottom', '12px');
+  $t44_45 = $t36_37.$get();
+  $t45_46 = common$jsbridge$dom.SetStyle($t44_45, 'minHeight', '18px');
+  $t46_47 = $t36_37.$get();
+  $t47_48 = common$jsbridge$dom.AppendChild($t2_3, $t46_47);
+  $t48_49 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t49_50 = common$jsbridge$dom.CreateElement('button');
+  $t48_49.$set($t49_50);
+  $t50_51 = $t48_49.$get();
+  $t51_52 = common$jsbridge$dom.SetTextContent($t50_51, 'login with extension');
+  $t52_53 = $t48_49.$get();
+  $t53_54 = common$jsbridge$dom.SetAttribute($t52_53, 'type', 'button');
+  $t54_55 = $t48_49.$get();
+  $t55_56 = common$jsbridge$dom.SetStyle($t54_55, 'padding', '10px 32px');
+  $t56_57 = $t48_49.$get();
+  $t57_58 = common$jsbridge$dom.SetStyle($t56_57, 'fontFamily', '\'Fira Code\', monospace');
+  $t58_59 = $t48_49.$get();
+  $t59_60 = common$jsbridge$dom.SetStyle($t58_59, 'fontSize', '14px');
+  $t60_61 = $t48_49.$get();
+  $t61_62 = common$jsbridge$dom.SetStyle($t60_61, 'background', 'var(--accent)');
+  $t62_63 = $t48_49.$get();
+  $t63_64 = common$jsbridge$dom.SetStyle($t62_63, 'color', '#000');
+  $t64_65 = $t48_49.$get();
+  $t65_66 = common$jsbridge$dom.SetStyle($t64_65, 'border', 'none');
+  $t66_67 = $t48_49.$get();
+  $t67_68 = common$jsbridge$dom.SetStyle($t66_67, 'borderRadius', '4px');
+  $t68_69 = $t48_49.$get();
+  $t69_70 = common$jsbridge$dom.SetStyle($t68_69, 'cursor', 'pointer');
+  $t70_71 = $t48_49.$get();
+  $t71_72 = common$jsbridge$dom.AppendChild($t2_3, $t70_71);
+  $t72_73 = root.$get();
+  $t73_74 = common$jsbridge$dom.AppendChild($t72_73, $t2_3);
+  $t74_75 = showLogin$2.bind(null, $t36_37, $t48_49);
+  $t75_76 = common$jsbridge$dom.RegisterCallback($t74_75);
+  $t76_77 = $t48_49.$get();
+  $t77_78 = common$jsbridge$dom.AddEventListener($t76_77, 'click', $t75_76);
+  $t78_79 = common$jsbridge$dom.CreateElement('div');
+  $t79_80 = common$jsbridge$dom.SetStyle($t78_79, 'marginTop', '24px');
+  $t80_81 = common$jsbridge$dom.SetStyle($t78_79, 'color', 'var(--muted)');
+  $t81_82 = common$jsbridge$dom.SetStyle($t78_79, 'fontSize', '12px');
+  $t82_83 = common$jsbridge$dom.SetTextContent($t78_79, 'or paste nsec');
+  $t83_84 = common$jsbridge$dom.AppendChild($t2_3, $t78_79);
+  $t84_85 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t85_86 = common$jsbridge$dom.CreateElement('input');
+  $t84_85.$set($t85_86);
+  $t86_87 = $t84_85.$get();
+  $t87_88 = common$jsbridge$dom.SetAttribute($t86_87, 'type', 'password');
+  $t88_89 = $t84_85.$get();
+  $t89_90 = common$jsbridge$dom.SetAttribute($t88_89, 'placeholder', 'nsec1...');
+  $t90_91 = $t84_85.$get();
+  $t91_92 = common$jsbridge$dom.SetStyle($t90_91, 'marginTop', '8px');
+  $t92_93 = $t84_85.$get();
+  $t93_94 = common$jsbridge$dom.SetStyle($t92_93, 'padding', '8px 12px');
+  $t94_95 = $t84_85.$get();
+  $t95_96 = common$jsbridge$dom.SetStyle($t94_95, 'width', '320px');
+  $t96_97 = $t84_85.$get();
+  $t97_98 = common$jsbridge$dom.SetStyle($t96_97, 'maxWidth', '90vw');
+  $t98_99 = $t84_85.$get();
+  $t99_100 = common$jsbridge$dom.SetStyle($t98_99, 'fontFamily', '\'Fira Code\', monospace');
+  $t100_101 = $t84_85.$get();
+  $t101_102 = common$jsbridge$dom.SetStyle($t100_101, 'fontSize', '12px');
+  $t102_103 = $t84_85.$get();
+  $t103_104 = common$jsbridge$dom.SetStyle($t102_103, 'background', 'var(--bg)');
+  $t104_105 = $t84_85.$get();
+  $t105_106 = common$jsbridge$dom.SetStyle($t104_105, 'border', '1px solid var(--border)');
+  $t106_107 = $t84_85.$get();
+  $t107_108 = common$jsbridge$dom.SetStyle($t106_107, 'borderRadius', '4px');
+  $t108_109 = $t84_85.$get();
+  $t109_110 = common$jsbridge$dom.SetStyle($t108_109, 'color', 'var(--fg)');
+  $t110_111 = $t84_85.$get();
+  $t111_112 = common$jsbridge$dom.SetStyle($t110_111, 'textAlign', 'center');
+  $t112_113 = $t84_85.$get();
+  $t113_114 = common$jsbridge$dom.AppendChild($t2_3, $t112_113);
+  $t114_115 = common$jsbridge$dom.CreateElement('button');
+  $t115_116 = common$jsbridge$dom.SetTextContent($t114_115, 'login with nsec');
+  $t116_117 = common$jsbridge$dom.SetStyle($t114_115, 'marginTop', '8px');
+  $t117_118 = common$jsbridge$dom.SetStyle($t114_115, 'padding', '10px 32px');
+  $t118_119 = common$jsbridge$dom.SetStyle($t114_115, 'fontFamily', '\'Fira Code\', monospace');
+  $t119_120 = common$jsbridge$dom.SetStyle($t114_115, 'fontSize', '14px');
+  $t120_121 = common$jsbridge$dom.SetStyle($t114_115, 'background', 'var(--bg2)');
+  $t121_122 = common$jsbridge$dom.SetStyle($t114_115, 'color', 'var(--fg)');
+  $t122_123 = common$jsbridge$dom.SetStyle($t114_115, 'border', '1px solid var(--border)');
+  $t123_124 = common$jsbridge$dom.SetStyle($t114_115, 'borderRadius', '4px');
+  $t124_125 = common$jsbridge$dom.SetStyle($t114_115, 'cursor', 'pointer');
+  $t125_126 = common$jsbridge$dom.AppendChild($t2_3, $t114_115);
+  $t126_127 = showLogin$3.bind(null, $t84_85, $t36_37);
+  $t127_128 = common$jsbridge$dom.RegisterCallback($t126_127);
+  $t128_129 = common$jsbridge$dom.AddEventListener($t114_115, 'click', $t127_128);
+  $t129_130 = $t84_85.$get();
+  $t130_131 = common$jsbridge$dom.SetAttribute($t129_130, 'onkeydown', 'if(event.key===\'Enter\'){event.preventDefault();this.nextElementSibling.click()}');
   return;
 }
 
@@ -456,8 +461,8 @@ function showLogin$2$1(errEl, btn, hex) {
         $t5_6 = common$helpers.HexDecode(hex);
         pubkey.$set($t5_6);
         $t6_7 = pubhex.$get();
-        $t7_8 = common$jsbridge$localstorage.SetItem('sm3sh-pubkey', $t6_7);
-        $t8_9 = common$jsbridge$localstorage.SetItem('sm3sh-mode', 'extension');
+        $t7_8 = common$jsbridge$localstorage.SetItem('smesh-pubkey', $t6_7);
+        $t8_9 = common$jsbridge$localstorage.SetItem('smesh-mode', 'extension');
         $t9_10 = root.$get();
         $t10_11 = clearChildren($t9_10);
         $t11_12 = showApp();
@@ -539,11 +544,11 @@ function showLogin$3(nsecInp, errEl) {
         $t21_22 = $rt.builtin.sliceSlice($t12_13.$get(), undefined, undefined, undefined);
         pubkey.$set($t21_22);
         $t22_23 = pubhex.$get();
-        $t23_24 = common$jsbridge$localstorage.SetItem('sm3sh-pubkey', $t22_23);
-        $t24_25 = common$jsbridge$localstorage.SetItem('sm3sh-mode', 'nsec');
+        $t23_24 = common$jsbridge$localstorage.SetItem('smesh-pubkey', $t22_23);
+        $t24_25 = common$jsbridge$localstorage.SetItem('smesh-mode', 'nsec');
         $t25_26 = $rt.builtin.sliceSlice($t9_10.$get(), undefined, undefined, undefined);
         $t26_27 = common$helpers.HexEncode($t25_26);
-        $t27_28 = common$jsbridge$localstorage.SetItem('sm3sh-key', $t26_27);
+        $t27_28 = common$jsbridge$localstorage.SetItem('smesh-key', $t26_27);
         $t28_29 = root.$get();
         $t29_30 = clearChildren($t28_29);
         $t30_31 = showApp();
@@ -1086,7 +1091,7 @@ export function showApp() {
         $t14_15 = $rt.builtin.makeMap('string');
         profileTabBtns.$set($t14_15);
         $t15_16 = common$jsbridge$dom.OnSWMessage(onSWMessage);
-        $t16_17 = common$jsbridge$localstorage.GetItem('sm3sh-key');
+        $t16_17 = common$jsbridge$localstorage.GetItem('smesh-key');
         $t17_18 = ($t16_17 !== '');
         if ($t17_18) {
           $block = 1; break;
@@ -1440,7 +1445,7 @@ export function showApp() {
         $t319_320 = common$jsbridge$dom.RegisterCallback(showApp$11);
         $t320_321 = common$jsbridge$dom.AddEventListener($t318_319, 'click', $t319_320);
         $t321_322 = common$jsbridge$dom.CreateElement('span');
-        $t322_323 = common$jsbridge$dom.SetTextContent($t321_322, 'sm3sh v0.65.44');
+        $t322_323 = common$jsbridge$dom.SetTextContent($t321_322, 'smesh v0.65.45');
         $t323_324 = common$jsbridge$dom.SetStyle($t321_322, 'marginLeft', 'auto');
         $t324_325 = common$jsbridge$dom.SetStyle($t321_322, 'color', 'var(--accent)');
         $t325_326 = common$jsbridge$dom.AppendChild($t234_235, $t321_322);
@@ -2184,7 +2189,7 @@ export function jstrArr(ss) {
 }
 
 export function onSWMessage(raw) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -2504,13 +2509,13 @@ export function onSWMessage(raw) {
         break;
       }
       case 35: {
-        $t71_72 = common$jsbridge$localstorage.GetItem('sm3sh-key');
+        $t71_72 = common$jsbridge$localstorage.GetItem('smesh-key');
         $t72_73 = ($t71_72 !== '');
         if ($t72_73) {
-          $block = 37; break;
+          $block = 39; break;
         }
         else {
-          $block = 38; break;
+          $block = 41; break;
         }
         break;
       }
@@ -2520,23 +2525,19 @@ export function onSWMessage(raw) {
           $block = 35; break;
         }
         else {
-          $block = 6; break;
+          $block = 38; break;
         }
         break;
       }
       case 37: {
-        $t74_75 = jstr($t71_72);
-        $t75_76 = ('["SET_KEY",' + $t74_75);
-        $t76_77 = ($t75_76 + ']');
-        $t77_78 = common$jsbridge$dom.PostToSW($t76_77);
+        $t74_75 = resubscribe();
         $block = 6; break;
         break;
       }
       case 38: {
-        $t78_79 = pubhex.$get();
-        $t79_80 = ($t78_79 !== '');
-        if ($t79_80) {
-          $block = 39; break;
+        $t75_76 = ($t5_6 === 'RESUB');
+        if ($t75_76) {
+          $block = 37; break;
         }
         else {
           $block = 6; break;
@@ -2544,12 +2545,68 @@ export function onSWMessage(raw) {
         break;
       }
       case 39: {
-        $t80_81 = pubhex.$get();
-        $t81_82 = jstr($t80_81);
-        $t82_83 = ('["SET_PUBKEY",' + $t81_82);
-        $t83_84 = ($t82_83 + ']');
-        $t84_85 = common$jsbridge$dom.PostToSW($t83_84);
+        $t76_77 = jstr($t71_72);
+        $t77_78 = ('["SET_KEY",' + $t76_77);
+        $t78_79 = ($t77_78 + ']');
+        $t79_80 = common$jsbridge$dom.PostToSW($t78_79);
+        $block = 40; break;
+        break;
+      }
+      case 40: {
+        $t80_81 = resubscribe();
         $block = 6; break;
+        break;
+      }
+      case 41: {
+        $t81_82 = pubhex.$get();
+        $t82_83 = ($t81_82 !== '');
+        if ($t82_83) {
+          $block = 42; break;
+        }
+        else {
+          $block = 40; break;
+        }
+        break;
+      }
+      case 42: {
+        $t83_84 = pubhex.$get();
+        $t84_85 = jstr($t83_84);
+        $t85_86 = ('["SET_PUBKEY",' + $t84_85);
+        $t86_87 = ($t85_86 + ']');
+        $t87_88 = common$jsbridge$dom.PostToSW($t86_87);
+        $block = 40; break;
+        break;
+      }
+    }
+  }
+}
+
+export function resubscribe() {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = sendWriteRelays();
+        $t1_2 = subscribeProfile();
+        $t2_3 = subscribeFeed();
+        $t3_4 = activePage.$get();
+        $t4_5 = ($t3_4 === 'messaging');
+        if ($t4_5) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t5_6 = initMessaging();
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        return;
         break;
       }
     }
@@ -10311,9 +10368,9 @@ export function doLogout() {
   relayDots.$set(null);
   relayLabels.$set(null);
   relayUserPick.$set(null);
-  $t3_4 = common$jsbridge$localstorage.RemoveItem('sm3sh-pubkey');
-  $t4_5 = common$jsbridge$localstorage.RemoveItem('sm3sh-mode');
-  $t5_6 = common$jsbridge$localstorage.RemoveItem('sm3sh-key');
+  $t3_4 = common$jsbridge$localstorage.RemoveItem('smesh-pubkey');
+  $t4_5 = common$jsbridge$localstorage.RemoveItem('smesh-mode');
+  $t5_6 = common$jsbridge$localstorage.RemoveItem('smesh-key');
   $t6_7 = root.$get();
   $t7_8 = clearChildren($t6_7);
   $t8_9 = showLogin();

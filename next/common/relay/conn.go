@@ -26,6 +26,13 @@ type Conn struct {
 	onEOSE  func(string)
 	onOK    func(string, bool, string)
 	onAuth  func(string)
+
+	closing bool // true when Close() was called intentionally
+
+	// ScheduleReconnect is set by the consumer to provide a delayed callback.
+	// When a connection drops with active subscriptions, this is called with
+	// the reconnect function. The consumer wraps it in a timer (e.g. 5s delay).
+	ScheduleReconnect func(fn func())
 }
 
 // Dial opens a connection to a relay.
@@ -37,8 +44,13 @@ func Dial(url string) *Conn {
 		subs:  make(map[string]*Sub),
 	}
 
+	c.dial()
+	return c
+}
+
+func (c *Conn) dial() {
 	c.wsConn = ws.Dial(
-		url,
+		c.URL,
 		func(connID int, data string) {
 			c.handleMessage(data)
 		},
@@ -56,6 +68,7 @@ func Dial(url string) *Conn {
 				c.onReady(false)
 				c.onReady = nil
 			}
+			c.maybeReconnect()
 		},
 		func(connID int) {
 			c.state = StateClosed
@@ -63,10 +76,22 @@ func Dial(url string) *Conn {
 				c.onReady(false)
 				c.onReady = nil
 			}
+			c.maybeReconnect()
 		},
 	)
+}
 
-	return c
+func (c *Conn) maybeReconnect() {
+	if c.closing || len(c.subs) == 0 || c.ScheduleReconnect == nil {
+		return
+	}
+	c.state = StateConnecting // prevent pool from creating a duplicate
+	c.ScheduleReconnect(func() {
+		if c.closing {
+			return
+		}
+		c.dial()
+	})
 }
 
 // OnReady sets a callback that fires once when the connection opens (true) or fails (false).
@@ -174,8 +199,9 @@ func (c *Conn) Send(msg string) {
 	ws.Send(c.wsConn, msg)
 }
 
-// Close closes the connection.
+// Close closes the connection intentionally (no reconnect).
 func (c *Conn) Close() {
+	c.closing = true
 	c.state = StateClosed
 	ws.Close(c.wsConn)
 }

@@ -41,6 +41,10 @@ func wireConn(c *relay.Conn, url string) {
 	c.SetOnAuth(func(challenge string) {
 		onRelayAuth(url, challenge)
 	})
+	c.ScheduleReconnect = func(fn func()) {
+		sw.Log("relay-sw: scheduling reconnect to " + url)
+		sw.SetTimeout(5000, fn)
+	}
 }
 
 func onRelayAuth(relayURL, challenge string) {
