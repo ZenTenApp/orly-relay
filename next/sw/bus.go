@@ -70,7 +70,11 @@ func onBusMessage(msg string) {
 		// Relay/marmot SW wants to send to a specific browser client.
 		clientID := w.str()
 		innerMsg := w.raw()
-		sendToClient(clientID, innerMsg)
+		if clientID == "" {
+			broadcastToClients(innerMsg)
+		} else {
+			sendToClient(clientID, innerMsg)
+		}
 	case "FWD_ALL":
 		// Relay/marmot SW wants to broadcast to all browser clients.
 		innerMsg := w.raw()

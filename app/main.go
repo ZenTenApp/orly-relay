@@ -1015,6 +1015,7 @@ func Run(
 			log.I.F("smesh3 server stopped")
 		}
 
+
 		// Stop NRC bridge if running
 		if l.nrcBridge != nil {
 			l.nrcBridge.Stop()

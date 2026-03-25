@@ -47,6 +47,9 @@ type Supervisor struct {
 	// Email bridge process
 	bridgeProc *Process
 
+	// Bridge bot process
+	bridgeBotProc *Process
+
 	wg     sync.WaitGroup
 	mu     sync.Mutex
 	closed bool
@@ -181,6 +184,16 @@ func (s *Supervisor) Start() error {
 		}
 	}
 
+	// 6b. Start bridge bot if enabled
+	if s.cfg.BridgeBotEnabled && s.cfg.BridgeBotRelay != "" {
+		time.Sleep(2 * time.Second)
+		if err := s.startBridgeBot(); err != nil {
+			log.W.F("failed to start bridge bot: %v", err)
+		} else {
+			log.I.F("bridge bot started")
+		}
+	}
+
 	// 7. Start certificate service if enabled
 	if s.cfg.CertsEnabled {
 		if err := s.startCerts(); err != nil {
@@ -214,6 +227,9 @@ func (s *Supervisor) Start() error {
 	if s.cfg.BridgeEnabled {
 		monitorCount++
 	}
+	if s.cfg.BridgeBotEnabled && s.bridgeBotProc != nil {
+		monitorCount++
+	}
 
 	s.wg.Add(monitorCount)
 	go s.monitorProcess(s.dbProc, "db", s.startDB)
@@ -238,6 +254,9 @@ func (s *Supervisor) Start() error {
 	if s.cfg.BridgeEnabled {
 		go s.monitorProcess(s.bridgeProc, "bridge", s.startBridge)
 	}
+	if s.cfg.BridgeBotEnabled && s.bridgeBotProc != nil {
+		go s.monitorProcess(s.bridgeBotProc, "bridgebot", s.startBridgeBot)
+	}
 	go s.monitorProcess(s.relayProc, "relay", s.startRelay)
 
 	return nil
@@ -253,7 +272,13 @@ func (s *Supervisor) Stop() error {
 	s.closed = true
 	s.mu.Unlock()
 
-	// Stop bridge first (it connects to relay, must stop before relay)
+	// Stop bridge bot first (it connects to relay, must stop before relay)
+	if s.bridgeBotProc != nil {
+		log.I.F("stopping bridge bot...")
+		s.stopProcess(s.bridgeBotProc, 5*time.Second)
+	}
+
+	// Stop bridge (it connects to relay, must stop before relay)
 	if s.cfg.BridgeEnabled && s.bridgeProc != nil {
 		log.I.F("stopping bridge...")
 		s.stopProcess(s.bridgeProc, 5*time.Second)
@@ -1131,6 +1156,43 @@ func (s *Supervisor) startBridge() error {
 	}()
 
 	log.I.F("started bridge (pid %d) via self-exec: %s bridge",
+		cmd.Process.Pid, s.selfPath)
+	return nil
+}
+
+func (s *Supervisor) startBridgeBot() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("ORLY_LOG_LEVEL=%s", s.cfg.LogLevel))
+	env = append(env, fmt.Sprintf("ORLY_BRIDGE_BOT_RELAY=%s", s.cfg.BridgeBotRelay))
+	if s.cfg.BridgeBotFree {
+		env = append(env, "ORLY_BRIDGE_BOT_FREE=true")
+	}
+
+	cmd := exec.CommandContext(s.ctx, s.selfPath, "bridgebot")
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); chk.E(err) {
+		return err
+	}
+
+	exited := make(chan struct{})
+	s.bridgeBotProc = &Process{
+		name:   "orly-bridgebot",
+		cmd:    cmd,
+		exited: exited,
+	}
+
+	go func() {
+		cmd.Wait()
+		close(exited)
+	}()
+
+	log.I.F("started bridge bot (pid %d) via self-exec: %s bridgebot",
 		cmd.Process.Pid, s.selfPath)
 	return nil
 }

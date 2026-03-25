@@ -1440,7 +1440,7 @@ export function showApp() {
         $t319_320 = common$jsbridge$dom.RegisterCallback(showApp$11);
         $t320_321 = common$jsbridge$dom.AddEventListener($t318_319, 'click', $t319_320);
         $t321_322 = common$jsbridge$dom.CreateElement('span');
-        $t322_323 = common$jsbridge$dom.SetTextContent($t321_322, 'sm3sh v0.65.35');
+        $t322_323 = common$jsbridge$dom.SetTextContent($t321_322, 'sm3sh v0.65.36');
         $t323_324 = common$jsbridge$dom.SetStyle($t321_322, 'marginLeft', 'auto');
         $t324_325 = common$jsbridge$dom.SetStyle($t321_322, 'color', 'var(--accent)');
         $t325_326 = common$jsbridge$dom.AppendChild($t234_235, $t321_322);

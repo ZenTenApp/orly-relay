@@ -107,60 +107,57 @@ func (sh *SubscriptionHandler) HandleSubscribe(ctx context.Context, pubkeyHex, a
 		}
 	}
 
-	// Create invoice
-	if sh.payments == nil {
-		log.E.F("subscription handler has no payment processor configured")
-		sh.sendReply(pubkeyHex, "Subscriptions are not available — payment processor not configured.")
-		return
-	}
-
-	invoice, err := sh.payments.CreateInvoice(ctx, price)
-	if err != nil {
-		log.E.F("failed to create subscription invoice for %s: %v", pubkeyHex, err)
-		sh.sendReply(pubkeyHex, "Failed to create invoice. Please try again later.")
-		return
-	}
-
-	// Send invoice to user
-	desc := fmt.Sprintf("Marmot Email Bridge subscription: %d sats/month", price)
-	if alias != "" {
-		desc = fmt.Sprintf("Marmot Email Bridge subscription with alias %q: %d sats/month", alias, price)
-	}
-	sh.sendReply(pubkeyHex, fmt.Sprintf(
-		"%s\n\nPay this Lightning invoice to activate:\n\n%s\n\n"+
-			"The invoice expires in 10 minutes. "+
-			"You'll receive a confirmation DM when payment is received.",
-		desc,
-		invoice.Bolt11,
-	))
-
-	// Wait for payment in background (10 minute timeout)
-	payCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-	defer cancel()
-
-	status, err := sh.payments.WaitForPayment(payCtx, invoice.PaymentHash, 5*time.Second)
-	if err != nil {
-		log.D.F("subscription payment wait ended for %s: %v", pubkeyHex, err)
-		return
-	}
-
-	// Payment received — activate subscription
+	// Activate subscription — free or paid
 	expiresAt := time.Now().Add(30 * 24 * time.Hour)
+	var paymentHash string
 
-	if sh.aclClient != nil {
-		// ACL-backed activation
-		if err := sh.aclClient.SubscribePubkey(pubkeyHex, expiresAt, status.PaymentHash, alias); err != nil {
-			log.E.F("failed to activate ACL subscription for %s: %v", pubkeyHex, err)
-			sh.sendReply(pubkeyHex, "Payment received but failed to activate subscription. Contact the relay operator.")
+	if sh.payments == nil {
+		// Free mode — activate immediately without payment
+		log.I.F("free subscription activated for %s (alias=%q)", pubkeyHex, alias)
+	} else {
+		// Paid mode — create invoice and wait for payment
+		invoice, err := sh.payments.CreateInvoice(ctx, price)
+		if err != nil {
+			log.E.F("failed to create subscription invoice for %s: %v", pubkeyHex, err)
+			sh.sendReply(pubkeyHex, "Failed to create invoice. Please try again later.")
 			return
 		}
-		// Claim alias if requested
+
+		desc := fmt.Sprintf("Marmot Email Bridge subscription: %d sats/month", price)
+		if alias != "" {
+			desc = fmt.Sprintf("Marmot Email Bridge subscription with alias %q: %d sats/month", alias, price)
+		}
+		sh.sendReply(pubkeyHex, fmt.Sprintf(
+			"%s\n\nPay this Lightning invoice to activate:\n\n%s\n\n"+
+				"The invoice expires in 10 minutes. "+
+				"You'll receive a confirmation DM when payment is received.",
+			desc,
+			invoice.Bolt11,
+		))
+
+		payCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+		defer cancel()
+
+		status, err := sh.payments.WaitForPayment(payCtx, invoice.PaymentHash, 5*time.Second)
+		if err != nil {
+			log.D.F("subscription payment wait ended for %s: %v", pubkeyHex, err)
+			return
+		}
+		paymentHash = status.PaymentHash
+	}
+
+	// Activate subscription
+	if sh.aclClient != nil {
+		if err := sh.aclClient.SubscribePubkey(pubkeyHex, expiresAt, paymentHash, alias); err != nil {
+			log.E.F("failed to activate ACL subscription for %s: %v", pubkeyHex, err)
+			sh.sendReply(pubkeyHex, "Failed to activate subscription. Contact the relay operator.")
+			return
+		}
 		if alias != "" {
 			if err := sh.aclClient.ClaimAlias(alias, pubkeyHex); err != nil {
 				log.W.F("alias claim failed for %s → %s: %v", alias, pubkeyHex, err)
-				// Subscription is active, just alias failed
 				sh.sendReply(pubkeyHex, fmt.Sprintf(
-					"Payment received! Subscription active (expires %s).\n\n"+
+					"Subscription active (expires %s).\n\n"+
 						"However, alias %q could not be claimed: %v\n"+
 						"You can still send email using your npub address.",
 					expiresAt.Format("2006-01-02"), alias, err,
@@ -169,16 +166,15 @@ func (sh *SubscriptionHandler) HandleSubscribe(ctx context.Context, pubkeyHex, a
 			}
 		}
 	} else {
-		// File-store fallback
 		sub := &Subscription{
 			PubkeyHex:   pubkeyHex,
 			ExpiresAt:   expiresAt,
 			CreatedAt:   time.Now(),
-			InvoiceHash: status.PaymentHash,
+			InvoiceHash: paymentHash,
 		}
 		if err := sh.store.Save(sub); err != nil {
 			log.E.F("failed to save subscription for %s: %v", pubkeyHex, err)
-			sh.sendReply(pubkeyHex, "Payment received but failed to activate subscription. Contact the relay operator.")
+			sh.sendReply(pubkeyHex, "Failed to activate subscription. Contact the relay operator.")
 			return
 		}
 	}

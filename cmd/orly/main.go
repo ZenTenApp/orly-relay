@@ -36,6 +36,7 @@ import (
 
 	"next.orly.dev/cmd/orly/acl"
 	"next.orly.dev/cmd/orly/bridge"
+	"next.orly.dev/cmd/orly/bridgebot"
 	"next.orly.dev/cmd/orly/db"
 	"next.orly.dev/cmd/orly/launcher"
 	"next.orly.dev/cmd/orly/relay"
@@ -60,6 +61,8 @@ func main() {
 	switch os.Args[1] {
 	case "bridge":
 		bridge.Run(os.Args[2:])
+	case "bridgebot":
+		bridgebot.Run(os.Args[2:])
 	case "db":
 		db.Run(os.Args[2:])
 	case "acl":

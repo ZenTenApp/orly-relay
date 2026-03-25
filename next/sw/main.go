@@ -105,10 +105,8 @@ func onFetch(event sw.Event) {
 	if path == "/__sse" || path == "/__version" || path == "/__marmot" || path == "/__sw-error" || path == "/__bus" {
 		return
 	}
-	// SW module files: always fetch from network to avoid serving
-	// stale cached versions during SW update (new SW's imports are
-	// intercepted by old SW's onFetch).
-	if len(path) > 4 && path[:5] == "/$sw/" {
+	// SW module files and fonts: pass through to network.
+	if (len(path) > 4 && path[:5] == "/$sw/") || (len(path) > 6 && path[:7] == "/fonts/") {
 		return
 	}
 	sw.RespondWithCacheFirst(event)

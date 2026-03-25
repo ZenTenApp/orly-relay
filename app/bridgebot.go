@@ -26,7 +26,8 @@ type BridgeBot struct {
 }
 
 // NewBridgeBot creates a bridge bot that connects to the given relay.
-func NewBridgeBot(ctx context.Context, relayURL string) (*BridgeBot, error) {
+// If freeMode is true, subscriptions activate without payment.
+func NewBridgeBot(ctx context.Context, relayURL string, freeMode bool) (*BridgeBot, error) {
 	sign, err := p8k.New()
 	if err != nil {
 		return nil, err
@@ -48,7 +49,10 @@ func NewBridgeBot(ctx context.Context, relayURL string) (*BridgeBot, error) {
 	}
 
 	subStore := bridge.NewMemorySubscriptionStore()
-	payments := bridge.NewPaymentProcessorWithClient(newAutoPayNWC(), 1000)
+	var payments *bridge.PaymentProcessor
+	if !freeMode {
+		payments = bridge.NewPaymentProcessorWithClient(newAutoPayNWC(), 1000)
+	}
 
 	bot := &BridgeBot{
 		client:  client,

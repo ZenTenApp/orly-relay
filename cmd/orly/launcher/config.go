@@ -141,6 +141,11 @@ type Config struct {
 	BridgeEnabled bool
 	BridgeDomain  string
 
+	// Bridge bot configuration
+	BridgeBotEnabled bool
+	BridgeBotRelay   string
+	BridgeBotFree    bool
+
 	// ServicesEnabled controls whether to start the DB, relay, and other services
 	// When false, only the admin UI runs (useful for initial setup/updates)
 	ServicesEnabled bool
@@ -205,6 +210,11 @@ func loadConfig() (*Config, error) {
 		// Bridge configuration
 		BridgeEnabled: getEnvOrDefault("ORLY_BRIDGE_ENABLED", "false") == "true",
 		BridgeDomain:  getEnvOrDefault("ORLY_BRIDGE_DOMAIN", ""),
+
+		// Bridge bot configuration
+		BridgeBotEnabled: getEnvOrDefault("ORLY_BRIDGE_BOT_ENABLED", "false") == "true",
+		BridgeBotRelay:   getEnvOrDefault("ORLY_BRIDGE_BOT_RELAY", ""),
+		BridgeBotFree:    getEnvOrDefault("ORLY_BRIDGE_BOT_FREE", "false") == "true",
 
 		// Services enabled (default true for backwards compatibility)
 		ServicesEnabled: getEnvOrDefault("ORLY_LAUNCHER_SERVICES_ENABLED", "true") == "true",

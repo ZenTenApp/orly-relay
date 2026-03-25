@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	version     = "v0.65.35"
+	version     = "v0.65.36"
 	lsKeyPubkey = "sm3sh-pubkey"
 	lsKeyMode   = "sm3sh-mode"
 	lsKeyTheme  = "sm3sh-theme"
