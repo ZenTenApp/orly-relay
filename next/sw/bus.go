@@ -10,9 +10,12 @@ import (
 // between the shell SW and satellite SWs (marmot, relay).
 
 var (
-	busConn  ws.Conn
-	busReady bool
+	busConn    ws.Conn
+	busReady   bool
+	busPending []busMsgPending
 )
+
+type busMsgPending struct{ to, msg string }
 
 func connectBus() {
 	wsURL := sw.Origin()
@@ -43,10 +46,15 @@ func onBusOpen() {
 	busReady = true
 	sw.Log("shell-sw: bus connected")
 	ws.Send(busConn, "{\"role\":\"shell\"}")
+	for _, p := range busPending {
+		ws.Send(busConn, "{\"to\":"+jstr(p.to)+",\"msg\":"+p.msg+"}")
+	}
+	busPending = nil
 }
 
 func busSend(to, msg string) {
 	if !busReady {
+		busPending = append(busPending, busMsgPending{to, msg})
 		return
 	}
 	ws.Send(busConn, "{\"to\":"+jstr(to)+",\"msg\":"+msg+"}")
@@ -75,6 +83,12 @@ func onBusMessage(msg string) {
 		// Marmot SW forwarded groups list — broadcast to clients.
 		raw := w.raw()
 		broadcastToClients("[\"MLS_GROUPS\"," + raw + "]")
+	case "DM_SENT":
+		tsStr := w.raw()
+		broadcastToClients("[\"DM_SENT\"," + tsStr + "]")
+	case "MLS_STATUS":
+		text := w.raw()
+		broadcastToClients("[\"MLS_STATUS\"," + text + "]")
 	case "CRYPTO_REQ":
 		// Satellite SW needs crypto proxy through the main page.
 		from := w.str()

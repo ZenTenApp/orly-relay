@@ -135,20 +135,15 @@ if ('serviceWorker' in navigator) {
 </script>
 <script>
 // Satellite SW iframes — register SWs on satellite origins for thread isolation.
-// Skipped on localhost/127.0.0.1 where subdomains aren't available.
 {
-  const hn = location.hostname;
-  if (hn !== 'localhost' && hn !== '127.0.0.1') {
-    const proto = location.protocol;
-    // host includes port when non-default — needed for local testing on :8090.
-    const h = location.host;
-    ['marmot','relay'].forEach(name => {
-      const f = document.createElement('iframe');
-      f.hidden = true;
-      f.src = proto + '//' + name + '.' + h + '/loader.html';
-      document.body.appendChild(f);
-    });
-  }
+  const proto = location.protocol;
+  const h = location.host;
+  ['marmot','relay'].forEach(name => {
+    const f = document.createElement('iframe');
+    f.hidden = true;
+    f.src = proto + '//' + name + '.' + h + '/loader.html';
+    document.body.appendChild(f);
+  });
 }
 </script>
 <script type="module" src="./$entry.mjs"></script>

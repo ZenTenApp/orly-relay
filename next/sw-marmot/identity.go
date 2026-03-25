@@ -1,8 +1,8 @@
 package main
 
 import (
-	"common/crypto/secp256k1"
 	"common/helpers"
+	"common/jsbridge/crypto"
 )
 
 // Identity — local copy of key, received via bus broadcast.
@@ -16,9 +16,9 @@ var (
 func identitySetKey(hexKey string) {
 	seckey = hexTo32(hexKey)
 	hasKey = true
-	pk, ok := secp256k1.PubKeyFromSecKey(seckey)
-	if ok {
-		myPubkey = helpers.HexEncode(pk[:])
+	pk := crypto.PubKeyFromSecKey(seckey[:])
+	if pk != nil {
+		myPubkey = helpers.HexEncode(pk)
 	}
 }
 

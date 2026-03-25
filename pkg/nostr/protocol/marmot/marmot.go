@@ -45,6 +45,10 @@ type Client struct {
 	groups map[string]*GroupState
 	mu     sync.RWMutex
 
+	// seenIDs tracks event IDs we published or processed, to skip duplicates
+	// when they come back via the subscription.
+	seenIDs map[string]struct{}
+
 	// groupsChanged is signalled when a new group is added so callers
 	// can refresh subscription filters.
 	groupsChanged chan struct{}
@@ -66,6 +70,7 @@ func NewClient(sign signer.I, store GroupStore, relay RelayConnection, relays ..
 		relays:        relays,
 		kpp:           kpp,
 		groups:        make(map[string]*GroupState),
+		seenIDs:       make(map[string]struct{}),
 		groupsChanged: make(chan struct{}, 1),
 	}
 
@@ -148,6 +153,11 @@ func (c *Client) SendDM(ctx context.Context, recipientPub []byte, plaintext []by
 		return err
 	}
 
+	// Track this event ID so we skip it when it comes back via subscription.
+	c.mu.Lock()
+	c.seenIDs[string(ev.ID)] = struct{}{}
+	c.mu.Unlock()
+
 	return c.relay.Publish(ctx, ev)
 }
 
@@ -205,11 +215,31 @@ func (c *Client) establishGroup(ctx context.Context, peerPub []byte) (*GroupStat
 
 	c.persistGroup(gs)
 
+	// Signal that filters need refreshing (so subscription includes kind 445 for this group).
+	select {
+	case c.groupsChanged <- struct{}{}:
+	default:
+	}
+
 	return gs, nil
 }
 
 // HandleEvent processes an incoming event. Call this from the subscription loop.
 func (c *Client) HandleEvent(ctx context.Context, ev *event.E) error {
+	// Skip events we already processed or published.
+	evKey := string(ev.ID)
+	c.mu.RLock()
+	_, seen := c.seenIDs[evKey]
+	c.mu.RUnlock()
+	if seen {
+		return nil
+	}
+
+	// Mark as seen before processing.
+	c.mu.Lock()
+	c.seenIDs[evKey] = struct{}{}
+	c.mu.Unlock()
+
 	switch ev.Kind {
 	case KindGiftWrap:
 		return c.handleWelcome(ctx, ev)
@@ -228,6 +258,7 @@ func (c *Client) handleWelcome(ctx context.Context, ev *event.E) error {
 
 	// SenderPub comes from the seal layer (real identity, not ephemeral).
 	senderPub := unwrapped.SenderPub
+
 	gs, err := JoinDMGroup(unwrapped.Welcome, c.kpp, senderPub)
 	if err != nil {
 		return fmt.Errorf("join DM group: %w", err)

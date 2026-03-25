@@ -1,9 +1,9 @@
 package main
 
 import (
-	"common/crypto/secp256k1"
 	"common/crypto/sha256"
 	"common/helpers"
+	"common/jsbridge/crypto"
 	"common/jsbridge/sw"
 	"common/jsbridge/ws"
 )
@@ -43,22 +43,59 @@ func marmotInit(relayURLs []string) {
 }
 
 func marmotOnOpen() {
-	marmotReady = true
-	sw.Log("marmot-sw: marmot connected")
+	// marmotReady stays false until auth succeeds — queues sends in marmotPending.
+	sw.Log("marmot-sw: marmot connected, pubkey=" + myPubkey[:min(len(myPubkey), 16)] + " hasKey=" + boolStr(hasKey))
 	if myPubkey != "" {
 		marmotAuth()
+	} else {
+		sw.Log("marmot-sw: no pubkey, skipping auth")
 	}
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
 }
 
 func marmotOnClose() {
 	marmotReady = false
+	sw.Log("marmot-sw: marmot ws closed, reconnecting in 2s")
+	sw.SetTimeout(2000, func() { marmotReconnect() })
+}
+
+func marmotReconnect() {
+	if marmotReady {
+		return
+	}
+	wsURL := sw.Origin()
+	if len(wsURL) > 5 && wsURL[:5] == "https" {
+		wsURL = "wss" + wsURL[5:]
+	} else if len(wsURL) > 4 && wsURL[:4] == "http" {
+		wsURL = "ws" + wsURL[4:]
+	}
+	wsURL += "/__marmot"
+	sw.Log("marmot-sw: reconnecting to " + wsURL)
+	marmotPending = nil
+	marmotConn = ws.Dial(wsURL,
+		func(connID int, msg string) { marmotOnMessage(msg) },
+		func(connID int) { marmotOnOpen() },
+		func(connID int, code int, reason string) {
+			sw.Log("marmot-sw: marmot ws closed code=" + helpers.Itoa(int64(code)))
+			marmotOnClose()
+		},
+		func(connID int) { marmotOnClose() },
+	)
 }
 
 func marmotAuth() {
 	if myPubkey == "" {
+		sw.Log("marmot-sw: auth: pubkey empty")
 		return
 	}
 	if !hasKey {
+		sw.Log("marmot-sw: auth: NIP-07 mode")
 		// NIP-07 extension mode: proxy signing through shell SW via bus.
 		now := sw.NowSeconds()
 		evJSON := "{\"kind\":22242,\"content\":\"marmot-auth\",\"tags\":[]," +
@@ -68,23 +105,26 @@ func marmotAuth() {
 				sw.Log("marmot-sw: extension sign failed: " + errMsg)
 				return
 			}
-			marmotSendJSON("{\"method\":\"auth\",\"event\":" + signedJSON + "}")
+			sw.Log("marmot-sw: auth: sending NIP-07 signed auth")
+			ws.Send(marmotConn, "{\"method\":\"auth\",\"event\":"+signedJSON+"}")
 		})
 		return
 	}
 	// Direct Schnorr auth.
 	pubBytes := helpers.HexDecode(myPubkey)
 	if pubBytes == nil {
+		sw.Log("marmot-sw: auth: pubkey decode failed")
 		return
 	}
 	msgHash := sha256.Sum(pubBytes)
 	aux := random32()
-	sig, ok := secp256k1.SignSchnorr(seckey, msgHash, aux)
-	if !ok {
+	sig := crypto.SignSchnorr(seckey[:], msgHash[:], aux[:])
+	if sig == nil {
 		sw.Log("marmot-sw: auth sign failed")
 		return
 	}
-	marmotSendJSON("{\"method\":\"auth\",\"pubkey\":" + jstr(myPubkey) + ",\"sig\":" + jstr(helpers.HexEncode(sig[:])) + "}")
+	authMsg := "{\"method\":\"auth\",\"pubkey\":" + jstr(myPubkey) + ",\"sig\":" + jstr(helpers.HexEncode(sig)) + "}"
+	ws.Send(marmotConn, authMsg)
 }
 
 func marmotSend(recipient, content string) {
@@ -115,6 +155,7 @@ func marmotListGroups() {
 	marmotSendJSON("{\"method\":\"list_groups\"}")
 }
 
+
 func marmotSendJSON(msg string) {
 	if !marmotReady {
 		marmotPending = append(marmotPending, msg)
@@ -124,6 +165,7 @@ func marmotSendJSON(msg string) {
 }
 
 func marmotOnMessage(msg string) {
+	sw.Log("marmot-sw: recv: " + msg[:min(len(msg), 120)])
 	method := jsonField(msg, "method")
 	switch method {
 	case "auth":
@@ -132,6 +174,7 @@ func marmotOnMessage(msg string) {
 			sw.Log("marmot-sw: auth failed: " + errMsg)
 		} else {
 			sw.Log("marmot-sw: authenticated")
+			marmotReady = true
 			for _, p := range marmotPending {
 				ws.Send(marmotConn, p)
 			}
@@ -153,14 +196,17 @@ func marmotOnMessage(msg string) {
 		errMsg := jsonField(msg, "error")
 		if errMsg != "" {
 			sw.Log("marmot-sw: send_dm error: " + errMsg)
+		} else {
+			tsStr := jsonField(msg, "ts")
+			busSend("shell", "[\"DM_SENT\","+tsStr+"]")
 		}
 
 	case "subscribe":
 		errMsg := jsonField(msg, "error")
 		if errMsg != "" {
-			sw.Log("marmot-sw: subscribe error: " + errMsg)
+			busSend("shell", "[\"MLS_STATUS\","+jstr("subscribe error: "+errMsg)+"]")
 		} else {
-			sw.Log("marmot-sw: subscribed")
+			busSend("shell", "[\"MLS_STATUS\","+jstr("subscribed")+"]")
 		}
 
 	case "publish_kp":
@@ -171,6 +217,35 @@ func marmotOnMessage(msg string) {
 
 	case "list_groups":
 		busSend("shell", "[\"MLS_GROUPS\","+msg+"]")
+
+	case "status":
+		errMsg := jsonField(msg, "error")
+		if errMsg != "" {
+			busSend("shell", "[\"MLS_STATUS\","+jstr("error: "+errMsg)+"]")
+		} else {
+			info := "pubkey: " + jsonField(msg, "pubkey") +
+				"\nrelay: " + jsonField(msg, "relay") +
+				"\nsubscribed: " + jsonField(msg, "subscribed") +
+				"\ngroups: " + jsonField(msg, "num_groups")
+			busSend("shell", "[\"MLS_STATUS\","+jstr(info)+"]")
+		}
+
+	case "reset":
+		errMsg := jsonField(msg, "error")
+		if errMsg != "" {
+			busSend("shell", "[\"MLS_STATUS\","+jstr("reset error: "+errMsg)+"]")
+		} else {
+			busSend("shell", "[\"MLS_STATUS\","+jstr("reset OK")+"]")
+		}
+
+	case "resolve_alias":
+		errMsg := jsonField(msg, "error")
+		if errMsg != "" {
+			busSend("shell", "[\"MLS_STATUS\","+jstr("alias error: "+errMsg)+"]")
+		} else {
+			pk := jsonField(msg, "pubkey")
+			busSend("shell", "[\"MLS_STATUS\","+jstr("alias → "+pk)+"]")
+		}
 
 	case "error":
 		errMsg := jsonField(msg, "error")

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	version     = "v0.65.34"
+	version     = "v0.65.35"
 	lsKeyPubkey = "sm3sh-pubkey"
 	lsKeyMode   = "sm3sh-mode"
 	lsKeyTheme  = "sm3sh-theme"
@@ -54,6 +54,7 @@ var (
 	msgCurrentPeer     string      // hex pubkey of open thread, "" when on list
 	msgView            string      // "list" or "thread"
 	marmotInited       bool
+	pendingTsEls       []dom.Element // timestamp divs awaiting relay confirmation
 
 	// Relay tracking — parallel slices, grown dynamically.
 	relayURLs     []string
@@ -940,9 +941,22 @@ func onSWMessage(raw string) {
 		dmJSON := extractValue(raw, pos)
 		handleDMReceived(dmJSON)
 	case "DM_SENT":
-		// Confirmation — optimistic render already done.
+		tsStr := nextNum(raw, pos)
+		var ts int64
+		for i := 0; i < len(tsStr); i++ {
+			if tsStr[i] >= '0' && tsStr[i] <= '9' {
+				ts = ts*10 + int64(tsStr[i]-'0')
+			}
+		}
+		if ts > 0 && len(pendingTsEls) > 0 {
+			dom.SetTextContent(pendingTsEls[0], formatTime(ts))
+			pendingTsEls = pendingTsEls[1:]
+		}
 	case "MLS_GROUPS":
 		// Store for future use.
+	case "MLS_STATUS":
+		text, _ := nextStr(raw, pos)
+		appendSystemBubble(text)
 	case "CRYPTO_REQ":
 		handleCryptoReq(raw, pos)
 	}
@@ -2967,12 +2981,58 @@ func appendBubble(from, content string, ts int64) {
 		dom.SetStyle(tsEl, "textAlign", "right")
 	}
 	dom.SetTextContent(tsEl, formatTime(ts))
+	if isSent && ts == 0 {
+		pendingTsEls = append(pendingTsEls, tsEl)
+	}
 
 	outer := dom.CreateElement("div")
 	dom.AppendChild(outer, bubble)
 	dom.AppendChild(outer, tsEl)
+
+	// Email quote-reply button for received messages with email headers.
+	if !isSent {
+		emailFrom, emailSubject, emailBody, isEmail := parseEmailHeaders(content)
+		if isEmail {
+			replyBtn := dom.CreateElement("div")
+			dom.SetStyle(replyBtn, "fontSize", "11px")
+			dom.SetStyle(replyBtn, "color", "var(--accent)")
+			dom.SetStyle(replyBtn, "cursor", "pointer")
+			dom.SetStyle(replyBtn, "marginTop", "2px")
+			dom.SetTextContent(replyBtn, "\u21a9 Reply")
+			dom.AddEventListener(replyBtn, "click", dom.RegisterCallback(func() {
+				quoted := quoteReply(emailFrom, emailSubject, emailBody)
+				dom.SetProperty(msgComposeInput, "value", quoted)
+			}))
+			dom.AppendChild(outer, replyBtn)
+		}
+	}
+
 	dom.AppendChild(wrap, outer)
 	dom.AppendChild(msgThreadMessages, wrap)
+}
+
+func appendSystemBubble(text string) {
+	wrap := dom.CreateElement("div")
+	dom.SetStyle(wrap, "display", "flex")
+	dom.SetStyle(wrap, "justifyContent", "center")
+	dom.SetStyle(wrap, "marginBottom", "6px")
+
+	bubble := dom.CreateElement("div")
+	dom.SetStyle(bubble, "maxWidth", "85%")
+	dom.SetStyle(bubble, "padding", "8px 12px")
+	dom.SetStyle(bubble, "borderRadius", "8px")
+	dom.SetStyle(bubble, "fontSize", "12px")
+	dom.SetStyle(bubble, "fontFamily", "monospace")
+	dom.SetStyle(bubble, "lineHeight", "1.5")
+	dom.SetStyle(bubble, "whiteSpace", "pre-wrap")
+	dom.SetStyle(bubble, "background", "var(--bg2)")
+	dom.SetStyle(bubble, "color", "var(--muted)")
+	dom.SetStyle(bubble, "border", "1px solid var(--muted)")
+	dom.SetTextContent(bubble, text)
+
+	dom.AppendChild(wrap, bubble)
+	dom.AppendChild(msgThreadMessages, wrap)
+	scrollToBottom()
 }
 
 func scrollToBottom() {
@@ -3045,6 +3105,83 @@ func doLogout() {
 
 	clearChildren(root)
 	showLogin()
+}
+
+// --- Email header parsing for quote-reply ---
+
+// parseEmailHeaders checks if content looks like a forwarded email and extracts
+// From, Subject, and body. Returns isEmail=true if at least From: or Subject: found.
+func parseEmailHeaders(content string) (from, subject, body string, isEmail bool) {
+	lines := splitLines(content)
+	headerEnd := -1
+	for i, line := range lines {
+		if line == "" {
+			headerEnd = i
+			break
+		}
+		if hasPrefix(line, "From: ") {
+			from = line[6:]
+		} else if hasPrefix(line, "Subject: ") {
+			subject = line[9:]
+		} else if hasPrefix(line, "To: ") || hasPrefix(line, "Date: ") || hasPrefix(line, "Cc: ") {
+			// Known header, continue
+		} else if i == 0 {
+			return "", "", "", false
+		}
+	}
+	if from == "" && subject == "" {
+		return "", "", "", false
+	}
+	if headerEnd >= 0 && headerEnd+1 < len(lines) {
+		body = joinLines(lines[headerEnd+1:])
+	}
+	return from, subject, body, true
+}
+
+func quoteReply(from, subject, body string) string {
+	out := "To: " + from + "\n"
+	if subject != "" {
+		if !hasPrefix(subject, "Re: ") {
+			subject = "Re: " + subject
+		}
+		out += "Subject: " + subject + "\n"
+	}
+	out += "\n\n"
+	if body != "" {
+		lines := splitLines(body)
+		for _, line := range lines {
+			out += "> " + line + "\n"
+		}
+	}
+	return out
+}
+
+func splitLines(s string) []string {
+	var lines []string
+	for {
+		idx := strIndex(s, "\n")
+		if idx < 0 {
+			lines = append(lines, s)
+			return lines
+		}
+		lines = append(lines, s[:idx])
+		s = s[idx+1:]
+	}
+}
+
+func joinLines(lines []string) string {
+	out := ""
+	for i, line := range lines {
+		if i > 0 {
+			out += "\n"
+		}
+		out += line
+	}
+	return out
+}
+
+func hasPrefix(s, prefix string) bool {
+	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }
 
 // --- Markdown rendering ---

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"common/helpers"
 	"common/jsbridge/sw"
 	"common/jsbridge/ws"
 )
@@ -60,11 +61,12 @@ func connectBus() {
 		func(connID int, msg string) { onBusMessage(msg) },
 		func(connID int) { onBusOpen() },
 		func(connID int, code int, reason string) {
-			sw.Log("marmot-sw: bus closed")
+			sw.Log("marmot-sw: bus closed code=" + helpers.Itoa(int64(code)) + " reason=" + reason)
 			busReady = false
 			sw.SetTimeout(2000, func() { connectBus() })
 		},
 		func(connID int) {
+			sw.Log("marmot-sw: bus error")
 			busReady = false
 			sw.SetTimeout(2000, func() { connectBus() })
 		},
@@ -99,7 +101,9 @@ func onBusMessage(msg string) {
 	case "MLS_INIT":
 		marmotInit(w.strs())
 	case "MLS_SEND":
-		marmotSend(w.str(), w.str())
+		recipient := w.str()
+		content := w.str()
+		marmotSend(recipient, content)
 	case "MLS_SUB":
 		marmotSubscribe()
 	case "MLS_PUBLISH_KP":

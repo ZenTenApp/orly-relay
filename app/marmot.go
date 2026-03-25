@@ -370,7 +370,7 @@ func (sess *marmotSession) handleSendDM(ctx context.Context, req marmotReq) {
 		return
 	}
 
-	sess.writeResp(marmotResp{Method: "send_dm", OK: true})
+	sess.writeResp(marmotResp{Method: "send_dm", OK: true, Ts: time.Now().Unix()})
 }
 
 func (sess *marmotSession) handleSubscribe(ctx context.Context) {

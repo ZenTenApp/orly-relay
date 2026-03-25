@@ -36,4 +36,4 @@ type wsEventStream struct {
 }
 
 func (s *wsEventStream) Events() <-chan *event.E { return s.sub.Events }
-func (s *wsEventStream) Close()                  { s.sub.Close() }
+func (s *wsEventStream) Close()                  { s.sub.Unsub() }

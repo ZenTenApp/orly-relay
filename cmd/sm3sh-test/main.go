@@ -26,6 +26,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	bot, err := app.NewBridgeBot(ctx, "wss://relay.orly.dev")
+	if err != nil {
+		log.E.F("bridge bot init failed: %v", err)
+	} else {
+		if err := bot.Start(ctx); err != nil {
+			log.E.F("bridge bot start failed: %v", err)
+		} else {
+			log.I.F("bridge bot pubkey: %s", bot.PubkeyHex())
+			defer bot.Stop()
+		}
+	}
+
 	<-ctx.Done()
 	s.Stop()
 }

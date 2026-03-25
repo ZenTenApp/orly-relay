@@ -40,6 +40,7 @@ export let msgComposeInput = { $value: 0, $get() { return this.$value; }, $set(v
 export let msgCurrentPeer = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let msgView = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let marmotInited = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let pendingTsEls = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let relayURLs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let relayDots = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let relayLabels = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
@@ -1439,7 +1440,7 @@ export function showApp() {
         $t319_320 = common$jsbridge$dom.RegisterCallback(showApp$11);
         $t320_321 = common$jsbridge$dom.AddEventListener($t318_319, 'click', $t319_320);
         $t321_322 = common$jsbridge$dom.CreateElement('span');
-        $t322_323 = common$jsbridge$dom.SetTextContent($t321_322, 'sm3sh v0.65.33');
+        $t322_323 = common$jsbridge$dom.SetTextContent($t321_322, 'sm3sh v0.65.35');
         $t323_324 = common$jsbridge$dom.SetStyle($t321_322, 'marginLeft', 'auto');
         $t324_325 = common$jsbridge$dom.SetStyle($t321_322, 'color', 'var(--accent)');
         $t325_326 = common$jsbridge$dom.AppendChild($t234_235, $t321_322);
@@ -2183,7 +2184,7 @@ export function jstrArr(ss) {
 }
 
 export function onSWMessage(raw) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -2349,39 +2350,153 @@ export function onSWMessage(raw) {
           $block = 18; break;
         }
         else {
-          $block = 20; break;
-        }
-        break;
-      }
-      case 20: {
-        $t35_36 = ($t5_6 === 'DM_SENT');
-        if ($t35_36) {
-          $block = 6; break;
-        }
-        else {
           $block = 21; break;
         }
         break;
       }
+      case 20: {
+        $t35_36 = nextNum(raw, $t6_7);
+        $t38_39 = 0;
+        $t39_40 = 0;
+        $block = 23; break;
+        break;
+      }
       case 21: {
-        $t36_37 = ($t5_6 === 'MLS_GROUPS');
+        $t36_37 = ($t5_6 === 'DM_SENT');
         if ($t36_37) {
-          $block = 6; break;
+          $block = 20; break;
         }
         else {
-          $block = 23; break;
+          $block = 22; break;
         }
         break;
       }
       case 22: {
-        $t37_38 = handleCryptoReq(raw, $t6_7);
-        $block = 6; break;
+        $t37_38 = ($t5_6 === 'MLS_GROUPS');
+        if ($t37_38) {
+          $block = 6; break;
+        }
+        else {
+          $block = 32; break;
+        }
         break;
       }
       case 23: {
-        $t38_39 = ($t5_6 === 'CRYPTO_REQ');
-        if ($t38_39) {
-          $block = 22; break;
+        $t40_41 = $rt.builtin.len($t35_36);
+        $t41_42 = ($t39_40 < $t40_41);
+        if ($t41_42) {
+          $block = 24; break;
+        }
+        else {
+          $block = 25; break;
+        }
+        break;
+      }
+      case 24: {
+        $rt.runtime.boundsCheck($t39_40, $rt.builtin.byteLen($t35_36));
+        $t42_43 = $rt.builtin.stringByteAt($t35_36, $t39_40);
+        $t43_44 = ($t42_43 >= 48);
+        if ($t43_44) {
+          $block = 28; break;
+        }
+        else {
+          $t50_51 = $t38_39;
+          $block = 27; break;
+        }
+        break;
+      }
+      case 25: {
+        $t44_45 = ($t38_39 > 0);
+        if ($t44_45) {
+          $block = 30; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 26: {
+        $t45_46 = ($t38_39 * 10);
+        $rt.runtime.boundsCheck($t39_40, $rt.builtin.byteLen($t35_36));
+        $t46_47 = $rt.builtin.stringByteAt($t35_36, $t39_40);
+        $t47_48 = (($t46_47 - 48) & 0xFF);
+        $t48_49 = $t47_48;
+        $t49_50 = ($t45_46 + $t48_49);
+        $t50_51 = $t49_50;
+        $block = 27; break;
+        break;
+      }
+      case 27: {
+        $t51_52 = ($t39_40 + 1);
+        $t38_39 = $t50_51;
+        $t39_40 = $t51_52;
+        $block = 23; break;
+        break;
+      }
+      case 28: {
+        $rt.runtime.boundsCheck($t39_40, $rt.builtin.byteLen($t35_36));
+        $t52_53 = $rt.builtin.stringByteAt($t35_36, $t39_40);
+        $t53_54 = ($t52_53 <= 57);
+        if ($t53_54) {
+          $block = 26; break;
+        }
+        else {
+          $t50_51 = $t38_39;
+          $block = 27; break;
+        }
+        break;
+      }
+      case 29: {
+        $t54_55 = pendingTsEls.$get();
+        $t55_56 = $t54_55.addr(0);
+        $t56_57 = $t55_56.$get();
+        $t57_58 = formatTime($t38_39);
+        $t58_59 = common$jsbridge$dom.SetTextContent($t56_57, $t57_58);
+        $t59_60 = pendingTsEls.$get();
+        $t60_61 = $rt.builtin.sliceSlice($t59_60, 1, undefined, undefined);
+        pendingTsEls.$set($t60_61);
+        $block = 6; break;
+        break;
+      }
+      case 30: {
+        $t61_62 = pendingTsEls.$get();
+        $t62_63 = $rt.builtin.len($t61_62);
+        $t63_64 = ($t62_63 > 0);
+        if ($t63_64) {
+          $block = 29; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 31: {
+        $t64_65 = nextStr(raw, $t6_7);
+        $t65_66 = $t64_65[0];
+        $t66_67 = $t64_65[1];
+        $t67_68 = appendSystemBubble($t65_66);
+        $block = 6; break;
+        break;
+      }
+      case 32: {
+        $t68_69 = ($t5_6 === 'MLS_STATUS');
+        if ($t68_69) {
+          $block = 31; break;
+        }
+        else {
+          $block = 34; break;
+        }
+        break;
+      }
+      case 33: {
+        $t69_70 = handleCryptoReq(raw, $t6_7);
+        $block = 6; break;
+        break;
+      }
+      case 34: {
+        $t70_71 = ($t5_6 === 'CRYPTO_REQ');
+        if ($t70_71) {
+          $block = 33; break;
         }
         else {
           $block = 6; break;
@@ -9833,7 +9948,7 @@ export function renderThreadMessages(peer, msgsJSON) {
 }
 
 export function appendBubble(from, content, ts) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -9908,17 +10023,126 @@ export function appendBubble(from, content, ts) {
       case 7: {
         $t25_26 = formatTime(ts);
         $t26_27 = common$jsbridge$dom.SetTextContent($t18_19, $t25_26);
-        $t27_28 = common$jsbridge$dom.CreateElement('div');
-        $t28_29 = common$jsbridge$dom.AppendChild($t27_28, $t6_7);
-        $t29_30 = common$jsbridge$dom.AppendChild($t27_28, $t18_19);
-        $t30_31 = common$jsbridge$dom.AppendChild($t2_3, $t27_28);
-        $t31_32 = msgThreadMessages.$get();
-        $t32_33 = common$jsbridge$dom.AppendChild($t31_32, $t2_3);
+        if ($t1_2) {
+          $block = 10; break;
+        }
+        else {
+          $block = 9; break;
+        }
+        break;
+      }
+      case 8: {
+        $t27_28 = pendingTsEls.$get();
+        $t28_29 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t29_30 = $t28_29.$get().addr(0);
+        $t29_30.$set($t18_19);
+        $t30_31 = $rt.builtin.sliceSlice($t28_29.$get(), undefined, undefined, undefined);
+        $t31_32 = $rt.builtin.appendSlice($t27_28, $t30_31);
+        pendingTsEls.$set($t31_32);
+        $block = 9; break;
+        break;
+      }
+      case 9: {
+        $t32_33 = common$jsbridge$dom.CreateElement('div');
+        $t33_34 = common$jsbridge$dom.AppendChild($t32_33, $t6_7);
+        $t34_35 = common$jsbridge$dom.AppendChild($t32_33, $t18_19);
+        if ($t1_2) {
+          $block = 12; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 10: {
+        $t35_36 = (ts === 0);
+        if ($t35_36) {
+          $block = 8; break;
+        }
+        else {
+          $block = 9; break;
+        }
+        break;
+      }
+      case 11: {
+        $t36_37 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t37_38 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t38_39 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t39_40 = parseEmailHeaders(content);
+        $t40_41 = $t39_40[0];
+        $t36_37.$set($t40_41);
+        $t41_42 = $t39_40[1];
+        $t37_38.$set($t41_42);
+        $t42_43 = $t39_40[2];
+        $t38_39.$set($t42_43);
+        $t43_44 = $t39_40[3];
+        if ($t43_44) {
+          $block = 13; break;
+        }
+        else {
+          $block = 12; break;
+        }
+        break;
+      }
+      case 12: {
+        $t44_45 = common$jsbridge$dom.AppendChild($t2_3, $t32_33);
+        $t45_46 = msgThreadMessages.$get();
+        $t46_47 = common$jsbridge$dom.AppendChild($t45_46, $t2_3);
         return;
+        break;
+      }
+      case 13: {
+        $t47_48 = common$jsbridge$dom.CreateElement('div');
+        $t48_49 = common$jsbridge$dom.SetStyle($t47_48, 'fontSize', '11px');
+        $t49_50 = common$jsbridge$dom.SetStyle($t47_48, 'color', 'var(--accent)');
+        $t50_51 = common$jsbridge$dom.SetStyle($t47_48, 'cursor', 'pointer');
+        $t51_52 = common$jsbridge$dom.SetStyle($t47_48, 'marginTop', '2px');
+        $t52_53 = common$jsbridge$dom.SetTextContent($t47_48, '↩ Reply');
+        $t53_54 = appendBubble$1.bind(null, $t36_37, $t37_38, $t38_39);
+        $t54_55 = common$jsbridge$dom.RegisterCallback($t53_54);
+        $t55_56 = common$jsbridge$dom.AddEventListener($t47_48, 'click', $t54_55);
+        $t56_57 = common$jsbridge$dom.AppendChild($t32_33, $t47_48);
+        $block = 12; break;
         break;
       }
     }
   }
+}
+
+function appendBubble$1(emailFrom, emailSubject, emailBody) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6;
+  $t0_1 = emailFrom.$get();
+  $t1_2 = emailSubject.$get();
+  $t2_3 = emailBody.$get();
+  $t3_4 = quoteReply($t0_1, $t1_2, $t2_3);
+  $t4_5 = msgComposeInput.$get();
+  $t5_6 = common$jsbridge$dom.SetProperty($t4_5, 'value', $t3_4);
+  return;
+}
+
+export function appendSystemBubble(text) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
+  $t0_1 = common$jsbridge$dom.CreateElement('div');
+  $t1_2 = common$jsbridge$dom.SetStyle($t0_1, 'display', 'flex');
+  $t2_3 = common$jsbridge$dom.SetStyle($t0_1, 'justifyContent', 'center');
+  $t3_4 = common$jsbridge$dom.SetStyle($t0_1, 'marginBottom', '6px');
+  $t4_5 = common$jsbridge$dom.CreateElement('div');
+  $t5_6 = common$jsbridge$dom.SetStyle($t4_5, 'maxWidth', '85%');
+  $t6_7 = common$jsbridge$dom.SetStyle($t4_5, 'padding', '8px 12px');
+  $t7_8 = common$jsbridge$dom.SetStyle($t4_5, 'borderRadius', '8px');
+  $t8_9 = common$jsbridge$dom.SetStyle($t4_5, 'fontSize', '12px');
+  $t9_10 = common$jsbridge$dom.SetStyle($t4_5, 'fontFamily', 'monospace');
+  $t10_11 = common$jsbridge$dom.SetStyle($t4_5, 'lineHeight', '1.5');
+  $t11_12 = common$jsbridge$dom.SetStyle($t4_5, 'whiteSpace', 'pre-wrap');
+  $t12_13 = common$jsbridge$dom.SetStyle($t4_5, 'background', 'var(--bg2)');
+  $t13_14 = common$jsbridge$dom.SetStyle($t4_5, 'color', 'var(--muted)');
+  $t14_15 = common$jsbridge$dom.SetStyle($t4_5, 'border', '1px solid var(--muted)');
+  $t15_16 = common$jsbridge$dom.SetTextContent($t4_5, text);
+  $t16_17 = common$jsbridge$dom.AppendChild($t0_1, $t4_5);
+  $t17_18 = msgThreadMessages.$get();
+  $t18_19 = common$jsbridge$dom.AppendChild($t17_18, $t0_1);
+  $t19_20 = scrollToBottom();
+  return;
 }
 
 export function scrollToBottom() {
@@ -10083,6 +10307,457 @@ export function doLogout() {
   $t7_8 = clearChildren($t6_7);
   $t8_9 = showLogin();
   return;
+}
+
+export function parseEmailHeaders(content) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = splitLines(content);
+        $t1_2 = $rt.builtin.len($t0_1);
+        $t2_3 = '';
+        $t3_4 = '';
+        $t4_5 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t5_6 = ($t4_5 + 1);
+        $t6_7 = ($t5_6 < $t1_2);
+        if ($t6_7) {
+          $block = 2; break;
+        }
+        else {
+          $t10_11 = -1;
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t7_8 = $t0_1.addr($t5_6);
+        $t8_9 = $t7_8.$get();
+        $t9_10 = ($t8_9 === '');
+        if ($t9_10) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 3: {
+        $t11_12 = ($t2_3 === '');
+        if ($t11_12) {
+          $block = 16; break;
+        }
+        else {
+          $block = 15; break;
+        }
+        break;
+      }
+      case 4: {
+        $t10_11 = $t5_6;
+        $block = 3; break;
+        break;
+      }
+      case 5: {
+        $t12_13 = hasPrefix($t8_9, 'From: ');
+        if ($t12_13) {
+          $block = 6; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 6: {
+        $t13_14 = $rt.builtin.stringSlice($t8_9, 6, undefined);
+        let $phi0 = $t13_14;
+        let $phi1 = $t3_4;
+        let $phi2 = $t5_6;
+        $t2_3 = $phi0;
+        $t3_4 = $phi1;
+        $t4_5 = $phi2;
+        $block = 1; break;
+        break;
+      }
+      case 7: {
+        $t14_15 = hasPrefix($t8_9, 'Subject: ');
+        if ($t14_15) {
+          $block = 8; break;
+        }
+        else {
+          $block = 9; break;
+        }
+        break;
+      }
+      case 8: {
+        $t15_16 = $rt.builtin.stringSlice($t8_9, 9, undefined);
+        let $phi0 = $t2_3;
+        let $phi1 = $t15_16;
+        let $phi2 = $t5_6;
+        $t2_3 = $phi0;
+        $t3_4 = $phi1;
+        $t4_5 = $phi2;
+        $block = 1; break;
+        break;
+      }
+      case 9: {
+        $t16_17 = hasPrefix($t8_9, 'To: ');
+        if ($t16_17) {
+          let $phi0 = $t2_3;
+          let $phi1 = $t3_4;
+          let $phi2 = $t5_6;
+          $t2_3 = $phi0;
+          $t3_4 = $phi1;
+          $t4_5 = $phi2;
+          $block = 1; break;
+        }
+        else {
+          $block = 12; break;
+        }
+        break;
+      }
+      case 10: {
+        $t17_18 = ($t5_6 === 0);
+        if ($t17_18) {
+          $block = 13; break;
+        }
+        else {
+          let $phi0 = $t2_3;
+          let $phi1 = $t3_4;
+          let $phi2 = $t5_6;
+          $t2_3 = $phi0;
+          $t3_4 = $phi1;
+          $t4_5 = $phi2;
+          $block = 1; break;
+        }
+        break;
+      }
+      case 11: {
+        $t18_19 = hasPrefix($t8_9, 'Cc: ');
+        if ($t18_19) {
+          let $phi0 = $t2_3;
+          let $phi1 = $t3_4;
+          let $phi2 = $t5_6;
+          $t2_3 = $phi0;
+          $t3_4 = $phi1;
+          $t4_5 = $phi2;
+          $block = 1; break;
+        }
+        else {
+          $block = 10; break;
+        }
+        break;
+      }
+      case 12: {
+        $t19_20 = hasPrefix($t8_9, 'Date: ');
+        if ($t19_20) {
+          let $phi0 = $t2_3;
+          let $phi1 = $t3_4;
+          let $phi2 = $t5_6;
+          $t2_3 = $phi0;
+          $t3_4 = $phi1;
+          $t4_5 = $phi2;
+          $block = 1; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 13: {
+        return ['', '', '', false];
+        break;
+      }
+      case 14: {
+        return ['', '', '', false];
+        break;
+      }
+      case 15: {
+        $t20_21 = ($t10_11 >= 0);
+        if ($t20_21) {
+          $block = 19; break;
+        }
+        else {
+          $t25_26 = '';
+          $block = 18; break;
+        }
+        break;
+      }
+      case 16: {
+        $t21_22 = ($t3_4 === '');
+        if ($t21_22) {
+          $block = 14; break;
+        }
+        else {
+          $block = 15; break;
+        }
+        break;
+      }
+      case 17: {
+        $t22_23 = ($t10_11 + 1);
+        $t23_24 = $rt.builtin.sliceSlice($t0_1, $t22_23, undefined, undefined);
+        $t24_25 = joinLines($t23_24);
+        $t25_26 = $t24_25;
+        $block = 18; break;
+        break;
+      }
+      case 18: {
+        return [$t2_3, $t3_4, $t25_26, true];
+        break;
+      }
+      case 19: {
+        $t26_27 = ($t10_11 + 1);
+        $t27_28 = $rt.builtin.len($t0_1);
+        $t28_29 = ($t26_27 < $t27_28);
+        if ($t28_29) {
+          $block = 17; break;
+        }
+        else {
+          $t25_26 = '';
+          $block = 18; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function quoteReply(from, subject, body) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = ('To: ' + from);
+        $t1_2 = ($t0_1 + '\n');
+        $t2_3 = (subject !== '');
+        if ($t2_3) {
+          $block = 1; break;
+        }
+        else {
+          $t4_5 = $t1_2;
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t3_4 = hasPrefix(subject, 'Re: ');
+        if ($t3_4) {
+          $t8_9 = subject;
+          $block = 4; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t5_6 = ($t4_5 + '\n\n');
+        $t6_7 = (body !== '');
+        if ($t6_7) {
+          $block = 5; break;
+        }
+        else {
+          $t14_15 = $t5_6;
+          $block = 6; break;
+        }
+        break;
+      }
+      case 3: {
+        $t7_8 = ('Re: ' + subject);
+        $t8_9 = $t7_8;
+        $block = 4; break;
+        break;
+      }
+      case 4: {
+        $t9_10 = ('Subject: ' + $t8_9);
+        $t10_11 = ($t9_10 + '\n');
+        $t11_12 = ($t1_2 + $t10_11);
+        $t4_5 = $t11_12;
+        $block = 2; break;
+        break;
+      }
+      case 5: {
+        $t12_13 = splitLines(body);
+        $t13_14 = $rt.builtin.len($t12_13);
+        $t15_16 = $t5_6;
+        $t16_17 = -1;
+        $block = 7; break;
+        break;
+      }
+      case 6: {
+        return $t14_15;
+        break;
+      }
+      case 7: {
+        $t17_18 = ($t16_17 + 1);
+        $t18_19 = ($t17_18 < $t13_14);
+        if ($t18_19) {
+          $block = 8; break;
+        }
+        else {
+          $t14_15 = $t15_16;
+          $block = 6; break;
+        }
+        break;
+      }
+      case 8: {
+        $t19_20 = $t12_13.addr($t17_18);
+        $t20_21 = $t19_20.$get();
+        $t21_22 = ('> ' + $t20_21);
+        $t22_23 = ($t21_22 + '\n');
+        $t23_24 = ($t15_16 + $t22_23);
+        $t15_16 = $t23_24;
+        $t16_17 = $t17_18;
+        $block = 7; break;
+        break;
+      }
+    }
+  }
+}
+
+export function splitLines(s) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = s;
+        $t1_2 = null;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t2_3 = strIndex($t0_1, '\n');
+        $t3_4 = ($t2_3 < 0);
+        if ($t3_4) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t4_5 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t5_6 = $t4_5.$get().addr(0);
+        $t5_6.$set($t0_1);
+        $t6_7 = $rt.builtin.sliceSlice($t4_5.$get(), undefined, undefined, undefined);
+        $t7_8 = $rt.builtin.appendSlice($t1_2, $t6_7);
+        return $t7_8;
+        break;
+      }
+      case 3: {
+        $t8_9 = $rt.builtin.stringSlice($t0_1, undefined, $t2_3);
+        $t9_10 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t10_11 = $t9_10.$get().addr(0);
+        $t10_11.$set($t8_9);
+        $t11_12 = $rt.builtin.sliceSlice($t9_10.$get(), undefined, undefined, undefined);
+        $t12_13 = $rt.builtin.appendSlice($t1_2, $t11_12);
+        $t13_14 = ($t2_3 + 1);
+        $t14_15 = $rt.builtin.stringSlice($t0_1, $t13_14, undefined);
+        $t0_1 = $t14_15;
+        $t1_2 = $t12_13;
+        $block = 1; break;
+        break;
+      }
+    }
+  }
+}
+
+export function joinLines(lines) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(lines);
+        $t1_2 = '';
+        $t2_3 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t3_4 = ($t2_3 + 1);
+        $t4_5 = ($t3_4 < $t0_1);
+        if ($t4_5) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t5_6 = lines.addr($t3_4);
+        $t6_7 = $t5_6.$get();
+        $t7_8 = ($t3_4 > 0);
+        if ($t7_8) {
+          $block = 4; break;
+        }
+        else {
+          $t9_10 = $t1_2;
+          $block = 5; break;
+        }
+        break;
+      }
+      case 3: {
+        return $t1_2;
+        break;
+      }
+      case 4: {
+        $t8_9 = ($t1_2 + '\n');
+        $t9_10 = $t8_9;
+        $block = 5; break;
+        break;
+      }
+      case 5: {
+        $t10_11 = ($t9_10 + $t6_7);
+        $t1_2 = $t10_11;
+        $t2_3 = $t3_4;
+        $block = 1; break;
+        break;
+      }
+    }
+  }
+}
+
+export function hasPrefix(s, prefix) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(s);
+        $t1_2 = $rt.builtin.len(prefix);
+        $t2_3 = ($t0_1 >= $t1_2);
+        if ($t2_3) {
+          $block = 1; break;
+        }
+        else {
+          $t6_7 = false;
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t3_4 = $rt.builtin.len(prefix);
+        $t4_5 = $rt.builtin.stringSlice(s, undefined, $t3_4);
+        $t5_6 = ($t4_5 === prefix);
+        $t6_7 = $t5_6;
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        return $t6_7;
+        break;
+      }
+    }
+  }
 }
 
 export function renderMarkdown(s) {

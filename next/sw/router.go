@@ -10,19 +10,25 @@ import (
 
 func routeMessage(clientID string, w *mw, msgType string) {
 	switch msgType {
-	// Identity — handle locally + broadcast to all SWs.
+	// Identity — handle locally + send to each SW (targeted, not broadcast,
+	// so the bus queues them if a SW hasn't connected yet).
 	case "SET_KEY":
 		hexKey := w.str()
 		identitySetKey(hexKey)
-		busSend("*", "[\"SET_KEY\","+jstr(hexKey)+"]")
+		msg := "[\"SET_KEY\"," + jstr(hexKey) + "]"
+		busSend("marmot", msg)
+		busSend("relay", msg)
 		sendToClient(clientID, "[\"KEY_SET\"]")
 	case "SET_PUBKEY":
 		pk := w.str()
 		identitySetPubkey(pk)
-		busSend("*", "[\"SET_PUBKEY\","+jstr(pk)+"]")
+		msg := "[\"SET_PUBKEY\"," + jstr(pk) + "]"
+		busSend("marmot", msg)
+		busSend("relay", msg)
 	case "CLEAR_KEY":
 		identityClearKey()
-		busSend("*", "[\"CLEAR_KEY\"]")
+		busSend("marmot", "[\"CLEAR_KEY\"]")
+		busSend("relay", "[\"CLEAR_KEY\"]")
 
 	// Relay operations — forward to relay SW.
 	case "REQ":
@@ -70,11 +76,11 @@ func routeMessage(clientID string, w *mw, msgType string) {
 		recipient := w.str()
 		content := w.str()
 		busSend("marmot", "[\"MLS_SEND\","+jstr(recipient)+","+jstr(content)+"]")
-		// Save sent DM to relay's IDB.
+		// Save sent DM to relay's IDB (quiet — no DM_RECEIVED broadcast).
 		if myPubkey != "" {
 			now := sw.NowSeconds()
 			rec := makeDMRecord(recipient, myPubkey, content, now, "marmot", "")
-			busSend("relay", "[\"SAVE_DM\","+rec.ToJSON()+"]")
+			busSend("relay", "[\"SAVE_DM_QUIET\","+rec.ToJSON()+"]")
 		}
 	case "MLS_SUB":
 		busSend("marmot", "[\"MLS_SUB\"]")

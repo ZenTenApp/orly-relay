@@ -24,12 +24,16 @@ type busMsg struct {
 
 // busHub routes messages between SW peers identified by role.
 type busHub struct {
-	mu    sync.RWMutex
-	peers map[string]*websocket.Conn
+	mu      sync.RWMutex
+	peers   map[string]*websocket.Conn
+	pending map[string][][]byte // queued messages for peers not yet connected
 }
 
 func newBusHub() *busHub {
-	return &busHub{peers: make(map[string]*websocket.Conn)}
+	return &busHub{
+		peers:   make(map[string]*websocket.Conn),
+		pending: make(map[string][][]byte),
+	}
 }
 
 func (h *busHub) register(role string, conn *websocket.Conn) {
@@ -38,8 +42,13 @@ func (h *busHub) register(role string, conn *websocket.Conn) {
 		old.Close()
 	}
 	h.peers[role] = conn
+	queued := h.pending[role]
+	delete(h.pending, role)
 	h.mu.Unlock()
-	log.I.F("bus: %s connected", role)
+	log.I.F("bus: %s connected (%d queued)", role, len(queued))
+	for _, msg := range queued {
+		conn.WriteMessage(websocket.TextMessage, msg)
+	}
 }
 
 func (h *busHub) unregister(role string, conn *websocket.Conn) {
@@ -52,8 +61,8 @@ func (h *busHub) unregister(role string, conn *websocket.Conn) {
 }
 
 func (h *busHub) route(to string, raw json.RawMessage, from string) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if to == "*" {
 		for role, conn := range h.peers {
 			if role != from {
@@ -64,6 +73,8 @@ func (h *busHub) route(to string, raw json.RawMessage, from string) {
 	}
 	if conn, ok := h.peers[to]; ok {
 		conn.WriteMessage(websocket.TextMessage, raw)
+	} else {
+		h.pending[to] = append(h.pending[to], raw)
 	}
 }
 

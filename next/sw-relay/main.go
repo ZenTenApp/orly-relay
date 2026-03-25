@@ -154,6 +154,9 @@ func onBusMessage(msg string) {
 				fwdAll("[\"DM_RECEIVED\"," + dmJSON + "]")
 			}
 		})
+	case "SAVE_DM_QUIET":
+		dmJSON := w.raw()
+		cacheSaveDM(dmJSON, func(string) {})
 
 	// Crypto proxy result from shell.
 	case "CRYPTO_RESULT":
