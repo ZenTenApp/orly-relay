@@ -31,11 +31,12 @@ func Run(args []string) {
 	}
 
 	freeMode := os.Getenv("ORLY_BRIDGE_BOT_FREE") == "true"
+	dataDir := os.Getenv("ORLY_BRIDGE_BOT_DATA_DIR")
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	bot, err := app.NewBridgeBot(ctx, relayURL, freeMode)
+	bot, err := app.NewBridgeBot(ctx, relayURL, freeMode, dataDir)
 	if err != nil {
 		log.E.F("bridge bot init failed: %v", err)
 		os.Exit(1)
@@ -68,6 +69,8 @@ commands (status, subscribe, subscribe <alias>).
 Environment Variables:
   ORLY_BRIDGE_BOT_RELAY    Relay WebSocket URL (required, e.g. ws://localhost:3334)
   ORLY_BRIDGE_BOT_FREE     Set to "true" to activate subscriptions without payment (default: false)
+  ORLY_BRIDGE_BOT_DATA_DIR Directory to persist bot keypair (default: empty = ephemeral)
+  ORLY_BRIDGE_BOT_NSEC     Hex secret key override (highest priority)
 
 Examples:
   ORLY_BRIDGE_BOT_RELAY=ws://localhost:3334 orly bridgebot

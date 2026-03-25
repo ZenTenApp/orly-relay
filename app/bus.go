@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -46,6 +47,7 @@ func (h *busHub) register(role string, conn *websocket.Conn) {
 	delete(h.pending, role)
 	h.mu.Unlock()
 	log.I.F("bus: %s connected (%d queued)", role, len(queued))
+	writeBrowserLog(fmt.Sprintf("[%s] bus connected (%d queued)", role, len(queued)))
 	for _, msg := range queued {
 		conn.WriteMessage(websocket.TextMessage, msg)
 	}

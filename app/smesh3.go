@@ -366,6 +366,8 @@ func (s *Smesh3Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 // satelliteSWDir returns the SW output directory for a satellite subdomain,
 // or "" if the host is the main domain.
+// Supports both /etc/hosts patterns (marmot.sm3sh.test) and nip.io
+// patterns (marmot.sm3sh.127.0.0.1.nip.io).
 func satelliteSWDir(host string) string {
 	if strings.HasPrefix(host, "marmot.") {
 		return "$sw-marmot"
@@ -412,6 +414,17 @@ if('serviceWorker' in navigator){
 }
 
 const browserLogFile = "/tmp/browser-debug.log"
+
+// writeBrowserLog appends a server-side event to the browser debug log file,
+// so e2e tests can observe both browser and server events in one place.
+func writeBrowserLog(msg string) {
+	f, err := os.OpenFile(browserLogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	f.WriteString(time.Now().Format("15:04:05.000") + " " + msg + "\n")
+}
 
 // handleLog receives POST log lines from browser SWs/page and appends to disk.
 func (s *Smesh3Server) handleLog(w http.ResponseWriter, r *http.Request) {

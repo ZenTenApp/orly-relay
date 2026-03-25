@@ -9,14 +9,13 @@ import (
 	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/interfaces/signer"
 )
 
 // GenerateKeyPackage creates a new MLS key pair package using the Nostr
 // pubkey as the MLS credential identity. The key package advertises support
 // for LastResort (0x000a) and NostrGroupData (0xf2ee) extensions per MIP-00.
-func GenerateKeyPackage(sign signer.I) (*mls.KeyPairPackage, error) {
-	cred := mls.NewBasicCredential(sign.Pub())
+func GenerateKeyPackage(crypto CryptoProvider) (*mls.KeyPairPackage, error) {
+	cred := mls.NewBasicCredential(crypto.Pub())
 	kpp, err := mls.GenerateKeyPairPackageWithOptions(cipherSuite, cred, &mls.KeyPackageOptions{
 		CapabilityExtensions: []mls.ExtensionType{
 			mls.ExtensionTypeLastResort,
@@ -35,7 +34,7 @@ func GenerateKeyPackage(sign signer.I) (*mls.KeyPairPackage, error) {
 // KeyPackageToEvent creates a kind 443 Nostr event per MIP-00.
 // Content is base64(TLS-serialized KeyPackage).
 // Tags: mls_protocol_version, mls_ciphersuite, mls_extensions, encoding, i, relays.
-func KeyPackageToEvent(kpp *mls.KeyPairPackage, sign signer.I, relays []string) (*event.E, error) {
+func KeyPackageToEvent(kpp *mls.KeyPairPackage, crypto CryptoProvider, relays []string) (*event.E, error) {
 	kpBytes := kpp.Public.RawBytes()
 	content := base64.StdEncoding.EncodeToString(kpBytes)
 
@@ -67,7 +66,7 @@ func KeyPackageToEvent(kpp *mls.KeyPairPackage, sign signer.I, relays []string) 
 	ev.Kind = KindKeyPackage
 	ev.Content = []byte(content)
 	ev.Tags = tag.NewS(tags...)
-	if err := ev.Sign(sign); err != nil {
+	if err := crypto.SignEvent(ev); err != nil {
 		return nil, fmt.Errorf("sign key package event: %w", err)
 	}
 	return ev, nil

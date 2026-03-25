@@ -146,11 +146,11 @@ func TestInterop_KeyPackageFormat(t *testing.T) {
 	}
 
 	// Go generates key package event
-	kpp, err := GenerateKeyPackage(goSign)
+	kpp, err := GenerateKeyPackage(&LocalCrypto{Sign: goSign})
 	if err != nil {
 		t.Fatalf("go GenerateKeyPackage: %v", err)
 	}
-	ev, err := KeyPackageToEvent(kpp, goSign, []string{"wss://relay.example.com"})
+	ev, err := KeyPackageToEvent(kpp, &LocalCrypto{Sign: goSign}, []string{"wss://relay.example.com"})
 	if err != nil {
 		t.Fatalf("go KeyPackageToEvent: %v", err)
 	}
@@ -222,11 +222,11 @@ func TestInterop_WelcomeAndMessage(t *testing.T) {
 	}
 
 	// Go generates key package
-	goKPP, err := GenerateKeyPackage(goSign)
+	goKPP, err := GenerateKeyPackage(&LocalCrypto{Sign: goSign})
 	if err != nil {
 		t.Fatalf("go GenerateKeyPackage: %v", err)
 	}
-	goKPEv, err := KeyPackageToEvent(goKPP, goSign, []string{"wss://relay.example.com"})
+	goKPEv, err := KeyPackageToEvent(goKPP, &LocalCrypto{Sign: goSign}, []string{"wss://relay.example.com"})
 	if err != nil {
 		t.Fatalf("go KeyPackageToEvent: %v", err)
 	}

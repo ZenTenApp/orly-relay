@@ -375,7 +375,7 @@ func TestE2E_MLSKeyPackageEvent(t *testing.T) {
 	}
 
 	// We need a mock relay adapter but KeyPackageEvent doesn't use it.
-	client, err := marmot.NewClient(bridgeSign, store, &nullRelay{})
+	client, err := marmot.NewClient(&marmot.LocalCrypto{Sign: bridgeSign}, store, &nullRelay{})
 	if err != nil {
 		t.Fatalf("create client: %v", err)
 	}
@@ -421,11 +421,11 @@ func TestE2E_MLSWelcomeRoundTrip(t *testing.T) {
 	alice := newTestSigner(t)
 	bob := newTestSigner(t)
 
-	aliceKPP, err := marmot.GenerateKeyPackage(alice)
+	aliceKPP, err := marmot.GenerateKeyPackage(&marmot.LocalCrypto{Sign: alice})
 	if err != nil {
 		t.Fatalf("alice key package: %v", err)
 	}
-	bobKPP, err := marmot.GenerateKeyPackage(bob)
+	bobKPP, err := marmot.GenerateKeyPackage(&marmot.LocalCrypto{Sign: bob})
 	if err != nil {
 		t.Fatalf("bob key package: %v", err)
 	}
@@ -437,7 +437,7 @@ func TestE2E_MLSWelcomeRoundTrip(t *testing.T) {
 	}
 
 	// Alice wraps the welcome for Bob using NIP-59 three-layer gift wrap
-	wrapEv, err := marmot.WelcomeToGiftWrap(welcome, bob.Pub(), alice, nil, nil)
+	wrapEv, err := marmot.WelcomeToGiftWrap(welcome, bob.Pub(), &marmot.LocalCrypto{Sign: alice}, nil, nil)
 	if err != nil {
 		t.Fatalf("WelcomeToGiftWrap: %v", err)
 	}
@@ -452,7 +452,7 @@ func TestE2E_MLSWelcomeRoundTrip(t *testing.T) {
 	}
 
 	// Bob unwraps the welcome
-	unwrapped, err := marmot.UnwrapWelcome(wrapEv, bob)
+	unwrapped, err := marmot.UnwrapWelcome(wrapEv, &marmot.LocalCrypto{Sign: bob})
 	if err != nil {
 		t.Fatalf("UnwrapWelcome: %v", err)
 	}
@@ -497,11 +497,11 @@ func TestE2E_Kind1059Disambiguation(t *testing.T) {
 	}
 
 	// Create an MLS Welcome wrapped as kind 1059
-	aliceKPP, err := marmot.GenerateKeyPackage(alice)
+	aliceKPP, err := marmot.GenerateKeyPackage(&marmot.LocalCrypto{Sign: alice})
 	if err != nil {
 		t.Fatalf("alice key package: %v", err)
 	}
-	bridgeKPP, err := marmot.GenerateKeyPackage(bridgeSign)
+	bridgeKPP, err := marmot.GenerateKeyPackage(&marmot.LocalCrypto{Sign: bridgeSign})
 	if err != nil {
 		t.Fatalf("bridge key package: %v", err)
 	}
@@ -511,7 +511,7 @@ func TestE2E_Kind1059Disambiguation(t *testing.T) {
 		t.Fatalf("create DM group: %v", err)
 	}
 
-	mlsWrap, err := marmot.WelcomeToGiftWrap(welcome, bridgeSign.Pub(), alice, nil, nil)
+	mlsWrap, err := marmot.WelcomeToGiftWrap(welcome, bridgeSign.Pub(), &marmot.LocalCrypto{Sign: alice}, nil, nil)
 	if err != nil {
 		t.Fatalf("MLS wrap: %v", err)
 	}
@@ -523,7 +523,7 @@ func TestE2E_Kind1059Disambiguation(t *testing.T) {
 	}
 
 	// MLS unwrap should succeed (this is the fallback path)
-	unwrapped, err := marmot.UnwrapWelcome(mlsWrap, bridgeSign)
+	unwrapped, err := marmot.UnwrapWelcome(mlsWrap, &marmot.LocalCrypto{Sign: bridgeSign})
 	if err != nil {
 		t.Fatalf("MLS unwrap: %v", err)
 	}
@@ -580,11 +580,11 @@ func TestE2E_MLSGroupMessageRoundTrip(t *testing.T) {
 	alice := newTestSigner(t)
 	bob := newTestSigner(t)
 
-	aliceKPP, err := marmot.GenerateKeyPackage(alice)
+	aliceKPP, err := marmot.GenerateKeyPackage(&marmot.LocalCrypto{Sign: alice})
 	if err != nil {
 		t.Fatalf("alice KPP: %v", err)
 	}
-	bobKPP, err := marmot.GenerateKeyPackage(bob)
+	bobKPP, err := marmot.GenerateKeyPackage(&marmot.LocalCrypto{Sign: bob})
 	if err != nil {
 		t.Fatalf("bob KPP: %v", err)
 	}

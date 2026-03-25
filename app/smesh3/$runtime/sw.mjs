@@ -144,6 +144,11 @@ export function PostMessage(clientId, msg) {
   if (c) c.postMessage(msg);
 }
 
+export function PostMessageJSON(clientId, json) {
+  const c = _clients.get(clientId);
+  if (c) c.postMessage(json);
+}
+
 export function Navigate(clientId, url) {
   const c = _clients.get(clientId);
   if (c) c.navigate(url || c.url);

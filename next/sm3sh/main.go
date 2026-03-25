@@ -1146,10 +1146,8 @@ func nextStr(s string, pos int) (string, int) {
 	start := pos
 	for pos < len(s) {
 		if s[pos] == '\\' && pos+1 < len(s) {
-			if !hasEsc {
-				hasEsc = true
-				buf = append(buf, s[start:pos]...)
-			}
+			hasEsc = true
+			buf = append(buf, s[start:pos]...)
 			pos++
 			switch s[pos] {
 			case '"', '\\', '/':

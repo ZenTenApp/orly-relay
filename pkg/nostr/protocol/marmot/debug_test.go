@@ -20,7 +20,7 @@ func TestDebug_CompareWireFormat(t *testing.T) {
 	if err := sign.Generate(); err != nil {
 		t.Fatal(err)
 	}
-	kpp, err := GenerateKeyPackage(sign)
+	kpp, err := GenerateKeyPackage(&LocalCrypto{Sign: sign})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -247,10 +247,35 @@ func marmotOnMessage(msg string) {
 			busSend("shell", "[\"MLS_STATUS\","+jstr("alias → "+pk)+"]")
 		}
 
+	case "crypto_req":
+		// Backend needs crypto op proxied through the browser extension.
+		handleCryptoReq(msg)
+
 	case "error":
 		errMsg := jsonField(msg, "error")
 		sw.Log("marmot-sw: server error: " + errMsg)
 	}
+}
+
+var pendingCryptoID string
+
+func handleCryptoReq(msg string) {
+	pendingCryptoID = jsonField(msg, "id")
+	op := jsonField(msg, "op")
+	peer := jsonField(msg, "peer")
+	data := jsonField(msg, "content")
+	pageMethod := op
+	if op == "nip44Encrypt" {
+		pageMethod = "nip44.encrypt"
+	} else if op == "nip44Decrypt" {
+		pageMethod = "nip44.decrypt"
+	}
+	cryptoProxy(pageMethod, peer, data, onCryptoReqResult)
+}
+
+func onCryptoReqResult(result, errMsg string) {
+	ws.Send(marmotConn, "{\"method\":\"crypto_resp\",\"id\":"+pendingCryptoID+
+		",\"result\":"+jstr(result)+",\"error\":"+jstr(errMsg)+"}")
 }
 
 func jsonField(json, key string) string {

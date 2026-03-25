@@ -23,6 +23,13 @@ func cryptoProxy(method, peerPubkey, data string, cb func(string, string)) {
 	nextCryptoID++
 	cryptoCBs[id] = cb
 	broadcastToClients("[\"CRYPTO_REQ\"," + helpers.Itoa(int64(id)) + "," + jstr(method) + "," + jstr(peerPubkey) + "," + jstr(data) + "]")
+	capturedID := id
+	sw.SetTimeout(15000, func() {
+		if fn, ok := cryptoCBs[capturedID]; ok {
+			delete(cryptoCBs, capturedID)
+			fn("", "crypto proxy timeout")
+		}
+	})
 }
 
 // --- Shared utilities ---
@@ -92,10 +99,8 @@ func (w *mw) str() string {
 	start := w.i
 	for w.i < len(w.s) && w.s[w.i] != '"' {
 		if w.s[w.i] == '\\' && w.i+1 < len(w.s) {
-			if !hasEsc {
-				hasEsc = true
-				buf = append(buf, w.s[start:w.i]...)
-			}
+			hasEsc = true
+			buf = append(buf, w.s[start:w.i]...)
 			w.i++
 			switch w.s[w.i] {
 			case '"', '\\', '/':

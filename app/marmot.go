@@ -28,17 +28,19 @@ var marmotUpgrader = websocket.Upgrader{
 
 // marmotSession holds state for one authenticated Marmot WebSocket client.
 type marmotSession struct {
-	client    *marmot.Client
-	adapter   *marmot.WSRelayAdapter
-	sign      signer
-	conn      *websocket.Conn
-	mu        sync.Mutex
-	cancel    context.CancelFunc
-	relays    []*ws.Client
-	pubkeyHex string
-	relayURL  string
-	subscribed bool
-	subCancel  context.CancelFunc // cancels the subscription goroutine
+	client      *marmot.Client
+	adapter     *marmot.WSRelayAdapter
+	sign        signer
+	proxyCrypto *marmot.ProxyCrypto
+	conn        *websocket.Conn
+	mu          sync.Mutex
+	mlsMu       sync.Mutex // serializes MLS operations that may block on proxy
+	cancel      context.CancelFunc
+	relays      []*ws.Client
+	pubkeyHex   string
+	relayURL    string
+	subscribed  bool
+	subCancel   context.CancelFunc
 }
 
 // signer wraps p8k.Signer to keep the import local.
@@ -49,12 +51,15 @@ type marmotReq struct {
 	Method    string          `json:"method"`
 	Pubkey    string          `json:"pubkey,omitempty"`
 	Sig       string          `json:"sig,omitempty"`
-	Nsec      string          `json:"nsec,omitempty"` // hex secret key — self-hosted / trusted backend auth
+	Nsec      string          `json:"nsec,omitempty"`
 	Event     json.RawMessage `json:"event,omitempty"`
 	Recipient string          `json:"recipient,omitempty"`
 	Content   string          `json:"content,omitempty"`
 	Relays    []string        `json:"relays,omitempty"`
-	Alias     string          `json:"alias,omitempty"` // NIP-05 address (user@domain)
+	Alias     string          `json:"alias,omitempty"`
+	ID        int             `json:"id,omitempty"`     // for crypto_resp
+	Result    string          `json:"result,omitempty"` // for crypto_resp
+	Error     string          `json:"error,omitempty"`  // for crypto_resp
 }
 
 // marmotResp is the JSON-RPC response to the client.
@@ -66,10 +71,12 @@ type marmotResp struct {
 	Content    string   `json:"content,omitempty"`
 	Ts         int64    `json:"ts,omitempty"`
 	Groups     []string `json:"groups,omitempty"`
-	Pubkey     string   `json:"pubkey,omitempty"`     // for resolve_alias
-	Subscribed bool     `json:"subscribed,omitempty"` // for status
-	Relay      string   `json:"relay,omitempty"`      // for status
-	NumGroups  int      `json:"num_groups,omitempty"` // for status
+	Pubkey     string   `json:"pubkey,omitempty"`
+	Subscribed bool     `json:"subscribed,omitempty"`
+	Relay      string   `json:"relay,omitempty"`
+	NumGroups  int      `json:"num_groups,omitempty"`
+	CryptoID   int      `json:"id,omitempty"`         // for crypto_req
+	CryptoOp   string   `json:"op,omitempty"`         // for crypto_req
 }
 
 func (s *Smesh3Server) handleMarmot(w http.ResponseWriter, r *http.Request) {
@@ -112,11 +119,20 @@ func (s *Smesh3Server) handleMarmot(w http.ResponseWriter, r *http.Request) {
 			sess.handleAuth(ctx, s.dataDir, req)
 		case "send_dm":
 			log.I.F("marmot: send_dm to=%s content=%q", req.Recipient, req.Content)
-			sess.handleSendDM(ctx, req)
+			// Run in goroutine: MLS ops may block on crypto proxy.
+			go func(r marmotReq) {
+				sess.mlsMu.Lock()
+				defer sess.mlsMu.Unlock()
+				sess.handleSendDM(ctx, r)
+			}(req)
+		case "publish_kp":
+			go func(r marmotReq) {
+				sess.mlsMu.Lock()
+				defer sess.mlsMu.Unlock()
+				sess.handlePublishKP(ctx, r)
+			}(req)
 		case "subscribe":
 			sess.handleSubscribe(ctx)
-		case "publish_kp":
-			sess.handlePublishKP(ctx, req)
 		case "list_groups":
 			sess.handleListGroups()
 		case "status":
@@ -125,6 +141,10 @@ func (s *Smesh3Server) handleMarmot(w http.ResponseWriter, r *http.Request) {
 			sess.handleReset(ctx, s.dataDir)
 		case "resolve_alias":
 			sess.handleResolveAlias(req)
+		case "crypto_resp":
+			if sess.proxyCrypto != nil {
+				sess.proxyCrypto.Resolve(req.ID, req.Result, req.Error)
+			}
 		default:
 			sess.writeResp(marmotResp{Method: "error", Error: "unknown method: " + req.Method})
 		}
@@ -194,22 +214,24 @@ func (sess *marmotSession) handleAuth(ctx context.Context, dataDir string, req m
 		return
 	}
 
-	// If signer not set yet (pubkey+sig or event auth), create one.
-	// For these modes, the user's actual secret key is unavailable, so
-	// MLS uses an ephemeral key. KP discovery won't work until crypto
-	// proxying is wired through the SW bus.
-	sign := sess.sign
-	if sign == nil {
-		var err error
-		sign, err = p8k.New()
-		if err != nil {
-			sess.writeResp(marmotResp{Method: "auth", Error: "signer creation failed"})
-			return
-		}
-		if err := sign.Generate(); err != nil {
-			sess.writeResp(marmotResp{Method: "auth", Error: "key generation failed"})
-			return
-		}
+	// Build CryptoProvider: LocalCrypto if we have the key, ProxyCrypto otherwise.
+	var crypto marmot.CryptoProvider
+	if sess.sign != nil {
+		crypto = &marmot.LocalCrypto{Sign: sess.sign}
+	} else {
+		// NIP-07 or pubkey+sig mode: proxy crypto ops to the browser.
+		pub, _ := hex.Dec(pubkeyHex)
+		proxy := marmot.NewProxyCrypto(pub, func(op, peerHex, data string, id int) {
+			sess.writeResp(marmotResp{
+				Method: "crypto_req",
+				CryptoID: id,
+				CryptoOp: op,
+				Peer:     peerHex,
+				Content:  data,
+			})
+		})
+		sess.proxyCrypto = proxy
+		crypto = proxy
 	}
 
 	// Create group store.
@@ -230,7 +252,7 @@ func (sess *marmotSession) handleAuth(ctx context.Context, dataDir string, req m
 	sess.relays = append(sess.relays, relay)
 
 	sess.adapter = marmot.NewWSRelayAdapter(relay)
-	client, err := marmot.NewClient(sign, store, sess.adapter, relayURL)
+	client, err := marmot.NewClient(crypto, store, sess.adapter, relayURL)
 	if err != nil {
 		sess.writeResp(marmotResp{Method: "auth", Error: "marmot client creation failed: " + err.Error()})
 		return
@@ -247,7 +269,6 @@ func (sess *marmotSession) handleAuth(ctx context.Context, dataDir string, req m
 	})
 
 	sess.client = client
-	sess.sign = sign
 	sess.pubkeyHex = pubkeyHex
 	sess.relayURL = relayURL
 	sess.writeResp(marmotResp{Method: "auth", OK: true})
@@ -498,6 +519,10 @@ func (sess *marmotSession) handleReset(ctx context.Context, dataDir string) {
 	sess.relays = nil
 	sess.adapter = nil
 	sess.client = nil
+	if sess.proxyCrypto != nil {
+		sess.proxyCrypto.Close()
+		sess.proxyCrypto = nil
+	}
 
 	// Re-establish if we have a signer (nsec auth persists across reset).
 	if sess.sign != nil && sess.pubkeyHex != "" {
@@ -519,7 +544,7 @@ func (sess *marmotSession) handleReset(ctx context.Context, dataDir string) {
 		sess.adapter = marmot.NewWSRelayAdapter(relay)
 		sess.relayURL = relayURL
 
-		client, err := marmot.NewClient(sess.sign, store, sess.adapter, relayURL)
+		client, err := marmot.NewClient(&marmot.LocalCrypto{Sign: sess.sign}, store, sess.adapter, relayURL)
 		if err != nil {
 			sess.writeResp(marmotResp{Method: "reset", Error: "client: " + err.Error()})
 			return
@@ -621,6 +646,9 @@ func (sess *marmotSession) writeResp(resp marmotResp) {
 }
 
 func (sess *marmotSession) cleanup() {
+	if sess.proxyCrypto != nil {
+		sess.proxyCrypto.Close()
+	}
 	for _, r := range sess.relays {
 		r.Close()
 	}

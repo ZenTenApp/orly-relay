@@ -26,7 +26,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	bot, err := app.NewBridgeBot(ctx, "wss://relay.orly.dev", true)
+	bot, err := app.NewBridgeBot(ctx, "wss://relay.orly.dev", true, "")
 	if err != nil {
 		log.E.F("bridge bot init failed: %v", err)
 	} else {

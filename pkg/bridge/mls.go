@@ -44,7 +44,7 @@ func (b *Bridge) initMLS() error {
 	}
 
 	adapter := &relayAdapter{relay: b.relay}
-	client, err := marmot.NewClient(b.sign, store, adapter, relayURL)
+	client, err := marmot.NewClient(&marmot.LocalCrypto{Sign: b.sign}, store, adapter, relayURL)
 	if err != nil {
 		return fmt.Errorf("create MLS client: %w", err)
 	}

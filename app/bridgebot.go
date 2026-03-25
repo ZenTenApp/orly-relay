@@ -2,6 +2,9 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -27,12 +30,13 @@ type BridgeBot struct {
 
 // NewBridgeBot creates a bridge bot that connects to the given relay.
 // If freeMode is true, subscriptions activate without payment.
-func NewBridgeBot(ctx context.Context, relayURL string, freeMode bool) (*BridgeBot, error) {
+// dataDir is used to persist the bot's keypair across restarts.
+func NewBridgeBot(ctx context.Context, relayURL string, freeMode bool, dataDir string) (*BridgeBot, error) {
 	sign, err := p8k.New()
 	if err != nil {
 		return nil, err
 	}
-	if err := sign.Generate(); err != nil {
+	if err := loadOrGenerateKey(sign, dataDir); err != nil {
 		return nil, err
 	}
 
@@ -42,7 +46,7 @@ func NewBridgeBot(ctx context.Context, relayURL string, freeMode bool) (*BridgeB
 	}
 
 	adapter := marmot.NewWSRelayAdapter(relay)
-	client, err := marmot.NewClient(sign, marmot.NewMemoryGroupStore(), adapter, relayURL)
+	client, err := marmot.NewClient(&marmot.LocalCrypto{Sign: sign}, marmot.NewMemoryGroupStore(), adapter, relayURL)
 	if err != nil {
 		relay.Close()
 		return nil, err
@@ -156,4 +160,45 @@ func (b *BridgeBot) Stop() {
 // PubkeyHex returns the bot's public key in hex.
 func (b *BridgeBot) PubkeyHex() string {
 	return hex.Enc(b.sign.Pub())
+}
+
+// loadOrGenerateKey loads a persisted keypair from dataDir/bridgebot.nsec,
+// or generates a new one and saves it. Supports ORLY_BRIDGE_BOT_NSEC env override.
+func loadOrGenerateKey(sign *p8k.Signer, dataDir string) error {
+	// Env var override — highest priority.
+	if nsecHex := os.Getenv("ORLY_BRIDGE_BOT_NSEC"); nsecHex != "" {
+		sec, err := hex.Dec(nsecHex)
+		if err != nil || len(sec) != 32 {
+			return fmt.Errorf("invalid ORLY_BRIDGE_BOT_NSEC")
+		}
+		return sign.InitSec(sec)
+	}
+
+	// Try loading from file.
+	if dataDir != "" {
+		nsecPath := filepath.Join(dataDir, "bridgebot.nsec")
+		if data, err := os.ReadFile(nsecPath); err == nil {
+			sec, err := hex.Dec(strings.TrimSpace(string(data)))
+			if err == nil && len(sec) == 32 {
+				log.I.F("bridge-bot: loaded key from %s", nsecPath)
+				return sign.InitSec(sec)
+			}
+			log.W.F("bridge-bot: corrupt nsec file %s, generating new key", nsecPath)
+		}
+	}
+
+	// Generate new key and persist.
+	if err := sign.Generate(); err != nil {
+		return err
+	}
+	if dataDir != "" {
+		nsecPath := filepath.Join(dataDir, "bridgebot.nsec")
+		os.MkdirAll(dataDir, 0700)
+		if err := os.WriteFile(nsecPath, []byte(hex.Enc(sign.Sec())), 0600); err != nil {
+			log.W.F("bridge-bot: failed to save key: %v", err)
+		} else {
+			log.I.F("bridge-bot: saved new key to %s", nsecPath)
+		}
+	}
+	return nil
 }

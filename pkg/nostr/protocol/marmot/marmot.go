@@ -13,7 +13,6 @@ import (
 	"next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/nostr/encoders/kind"
 	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/interfaces/signer"
 )
 
 // RelayConnection abstracts the relay interface so the Marmot client can be
@@ -36,7 +35,7 @@ type DMHandler func(senderPub []byte, plaintext []byte)
 // active 1:1 conversations and handles the lifecycle of key packages,
 // welcomes, and encrypted messages.
 type Client struct {
-	sign   signer.I
+	crypto CryptoProvider
 	store  GroupStore
 	relay  RelayConnection
 	relays []string // relay URLs for key package discovery
@@ -54,17 +53,17 @@ type Client struct {
 	groupsChanged chan struct{}
 }
 
-// NewClient creates a Marmot client. The signer provides identity and
-// signing. The store persists group state. The relay handles event transport.
-// Relays are the WebSocket URLs advertised in key package events.
-func NewClient(sign signer.I, store GroupStore, relay RelayConnection, relays ...string) (*Client, error) {
-	kpp, err := GenerateKeyPackage(sign)
+// NewClient creates a Marmot client. The crypto provider handles identity,
+// signing, and NIP-44 encryption. The store persists group state.
+// The relay handles event transport.
+func NewClient(crypto CryptoProvider, store GroupStore, relay RelayConnection, relays ...string) (*Client, error) {
+	kpp, err := GenerateKeyPackage(crypto)
 	if err != nil {
 		return nil, fmt.Errorf("generate key package: %w", err)
 	}
 
 	c := &Client{
-		sign:          sign,
+		crypto:        crypto,
 		store:         store,
 		relay:         relay,
 		relays:        relays,
@@ -112,7 +111,7 @@ func (c *Client) OnDM(handler DMHandler) {
 // PublishKeyPackage publishes our MLS key package as a kind 443 event so
 // peers can create DM groups with us.
 func (c *Client) PublishKeyPackage(ctx context.Context) error {
-	ev, err := KeyPackageToEvent(c.kpp, c.sign, c.relays)
+	ev, err := KeyPackageToEvent(c.kpp, c.crypto, c.relays)
 	if err != nil {
 		return err
 	}
@@ -123,7 +122,7 @@ func (c *Client) PublishKeyPackage(ctx context.Context) error {
 // it fetches the recipient's key package, creates a group, and sends a
 // welcome. Then it encrypts and publishes the message.
 func (c *Client) SendDM(ctx context.Context, recipientPub []byte, plaintext []byte) error {
-	groupID := DMGroupID(c.sign.Pub(), recipientPub)
+	groupID := DMGroupID(c.crypto.Pub(), recipientPub)
 
 	c.mu.RLock()
 	gs, ok := c.groups[string(groupID)]
@@ -194,13 +193,13 @@ func (c *Client) establishGroup(ctx context.Context, peerPub []byte) (*GroupStat
 		return nil, fmt.Errorf("parse peer key package: %w", err)
 	}
 
-	gs, welcome, _, err := CreateDMGroup(c.kpp, peerKP, c.sign.Pub(), peerPub, c.relays)
+	gs, welcome, _, err := CreateDMGroup(c.kpp, peerKP, c.crypto.Pub(), peerPub, c.relays)
 	if err != nil {
 		return nil, fmt.Errorf("create DM group: %w", err)
 	}
 
 	// Send the welcome as a gift-wrapped event with key package event ID
-	wrapEv, err := WelcomeToGiftWrap(welcome, peerPub, c.sign, peerKPEvent, c.relays)
+	wrapEv, err := WelcomeToGiftWrap(welcome, peerPub, c.crypto, peerKPEvent, c.relays)
 	if err != nil {
 		return nil, fmt.Errorf("gift wrap welcome: %w", err)
 	}
@@ -251,7 +250,7 @@ func (c *Client) HandleEvent(ctx context.Context, ev *event.E) error {
 }
 
 func (c *Client) handleWelcome(ctx context.Context, ev *event.E) error {
-	unwrapped, err := UnwrapWelcome(ev, c.sign)
+	unwrapped, err := UnwrapWelcome(ev, c.crypto)
 	if err != nil {
 		return fmt.Errorf("unwrap welcome: %w", err)
 	}
@@ -266,7 +265,7 @@ func (c *Client) handleWelcome(ctx context.Context, ev *event.E) error {
 
 	// Ensure the MLS GroupID is set (should match from the Welcome)
 	if len(gs.GroupID) == 0 {
-		gs.GroupID = DMGroupID(c.sign.Pub(), senderPub)
+		gs.GroupID = DMGroupID(c.crypto.Pub(), senderPub)
 	}
 
 	c.mu.Lock()
@@ -351,7 +350,7 @@ func (c *Client) WelcomeFilter() *filter.F {
 	f := filter.New()
 	f.Kinds = kind.NewS(kind.New(KindGiftWrap))
 	f.Tags = tag.NewS(
-		tag.NewFromAny("p", hex.Enc(c.sign.Pub())),
+		tag.NewFromAny("p", hex.Enc(c.crypto.Pub())),
 	)
 	return f
 }
@@ -417,7 +416,7 @@ func (c *Client) ActiveGroupIDs() []string {
 // KeyPackageEvent returns a signed kind 443 event containing our MLS key
 // package, suitable for broadcasting to external relays.
 func (c *Client) KeyPackageEvent() (*event.E, error) {
-	return KeyPackageToEvent(c.kpp, c.sign, c.relays)
+	return KeyPackageToEvent(c.kpp, c.crypto, c.relays)
 }
 
 // KeyPackageRelaysEvent returns a signed kind 10051 event listing relay URLs
@@ -432,7 +431,7 @@ func (c *Client) KeyPackageRelaysEvent(relayURLs []string) (*event.E, error) {
 	ev.CreatedAt = time.Now().Unix()
 	ev.Kind = KindKeyPackageRelays
 	ev.Tags = tag.NewS(tags...)
-	if err := ev.Sign(c.sign); err != nil {
+	if err := c.crypto.SignEvent(ev); err != nil {
 		return nil, fmt.Errorf("sign key package relays: %w", err)
 	}
 	return ev, nil
@@ -450,7 +449,7 @@ func (c *Client) PublishKeyPackageRelays(ctx context.Context, relayURLs []string
 	ev.CreatedAt = time.Now().Unix()
 	ev.Kind = KindKeyPackageRelays
 	ev.Tags = tag.NewS(tags...)
-	if err := ev.Sign(c.sign); err != nil {
+	if err := c.crypto.SignEvent(ev); err != nil {
 		return fmt.Errorf("sign key package relays: %w", err)
 	}
 	return c.relay.Publish(ctx, ev)

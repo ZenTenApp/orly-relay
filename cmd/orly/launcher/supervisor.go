@@ -1167,6 +1167,7 @@ func (s *Supervisor) startBridgeBot() error {
 	env := os.Environ()
 	env = append(env, fmt.Sprintf("ORLY_LOG_LEVEL=%s", s.cfg.LogLevel))
 	env = append(env, fmt.Sprintf("ORLY_BRIDGE_BOT_RELAY=%s", s.cfg.BridgeBotRelay))
+	env = append(env, fmt.Sprintf("ORLY_BRIDGE_BOT_DATA_DIR=%s", s.cfg.DataDir))
 	if s.cfg.BridgeBotFree {
 		env = append(env, "ORLY_BRIDGE_BOT_FREE=true")
 	}

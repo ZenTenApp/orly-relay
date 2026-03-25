@@ -8,12 +8,10 @@ import (
 	"time"
 
 	"github.com/emersion/go-mls"
-	"next.orly.dev/pkg/nostr/crypto/encryption"
 	"next.orly.dev/pkg/nostr/crypto/keys"
 	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/interfaces/signer"
 )
 
 const (
@@ -34,7 +32,7 @@ type UnwrappedWelcome struct {
 // The kind 444 inner event is unsigned (no sig field), with base64-encoded
 // Welcome content and tags: ["e", keypackage_event_id], ["relays", ...],
 // ["encoding", "base64"].
-func WelcomeToGiftWrap(welcome *mls.Welcome, recipientPub []byte, sign signer.I, kpEvent *event.E, relays []string) (*event.E, error) {
+func WelcomeToGiftWrap(welcome *mls.Welcome, recipientPub []byte, crypto CryptoProvider, kpEvent *event.E, relays []string) (*event.E, error) {
 	welcomeBytes := welcome.Bytes()
 	recipientPubHex := hex.Enc(recipientPub)
 	now := time.Now().Unix()
@@ -44,12 +42,10 @@ func WelcomeToGiftWrap(welcome *mls.Welcome, recipientPub []byte, sign signer.I,
 		tag.NewFromAny("encoding", "base64"),
 	}
 
-	// Add key package event reference
 	if kpEvent != nil {
 		innerTags = append(innerTags, tag.NewFromAny("e", hex.Enc(kpEvent.ID)))
 	}
 
-	// Add relays tag
 	if len(relays) > 0 {
 		relayArgs := make([]any, 0, len(relays)+1)
 		relayArgs = append(relayArgs, "relays")
@@ -64,10 +60,8 @@ func WelcomeToGiftWrap(welcome *mls.Welcome, recipientPub []byte, sign signer.I,
 		CreatedAt: now,
 		Kind:      KindWelcome,
 		Tags:      tag.NewS(innerTags...),
-		Pubkey:    sign.Pub(),
+		Pubkey:    crypto.Pub(),
 	}
-	// Kind 444 is unsigned per MIP-02 (no sig field)
-	// Compute event ID from canonical form
 	inner.ID = inner.GetIDBytes()
 
 	innerJSON, err := inner.MarshalJSON()
@@ -75,12 +69,8 @@ func WelcomeToGiftWrap(welcome *mls.Welcome, recipientPub []byte, sign signer.I,
 		return nil, fmt.Errorf("marshal welcome event: %w", err)
 	}
 
-	// Layer 2: Kind 13 seal encrypted with (sender_secret, recipient_pubkey)
-	sealConvKey, err := encryption.GenerateConversationKey(sign.Sec(), recipientPub)
-	if err != nil {
-		return nil, fmt.Errorf("seal ECDH: %w", err)
-	}
-	sealCiphertext, err := encryption.Encrypt(sealConvKey, innerJSON, nil)
+	// Layer 2: Kind 13 seal — NIP-44 encrypt with sender identity
+	sealCiphertext, err := crypto.Nip44Encrypt(recipientPub, innerJSON)
 	if err != nil {
 		return nil, fmt.Errorf("seal encrypt: %w", err)
 	}
@@ -91,7 +81,7 @@ func WelcomeToGiftWrap(welcome *mls.Welcome, recipientPub []byte, sign signer.I,
 		Kind:      kindSeal,
 		Tags:      tag.NewS(),
 	}
-	if err := seal.Sign(sign); err != nil {
+	if err := crypto.SignEvent(seal); err != nil {
 		return nil, fmt.Errorf("sign seal: %w", err)
 	}
 
@@ -100,7 +90,7 @@ func WelcomeToGiftWrap(welcome *mls.Welcome, recipientPub []byte, sign signer.I,
 		return nil, fmt.Errorf("marshal seal: %w", err)
 	}
 
-	// Layer 3: Kind 1059 gift wrap with ephemeral key
+	// Layer 3: Kind 1059 gift wrap — ephemeral key (always local)
 	ephSecret, err := keys.GenerateSecretKey()
 	if err != nil {
 		return nil, fmt.Errorf("generate ephemeral key: %w", err)
@@ -111,11 +101,8 @@ func WelcomeToGiftWrap(welcome *mls.Welcome, recipientPub []byte, sign signer.I,
 	}
 	defer ephSigner.Zero()
 
-	wrapConvKey, err := encryption.GenerateConversationKey(ephSecret, recipientPub)
-	if err != nil {
-		return nil, fmt.Errorf("gift wrap ECDH: %w", err)
-	}
-	wrapCiphertext, err := encryption.Encrypt(wrapConvKey, sealJSON, nil)
+	ephCrypto := &LocalCrypto{Sign: ephSigner}
+	wrapCiphertext, err := ephCrypto.Nip44Encrypt(recipientPub, sealJSON)
 	if err != nil {
 		return nil, fmt.Errorf("gift wrap encrypt: %w", err)
 	}
@@ -136,17 +123,13 @@ func WelcomeToGiftWrap(welcome *mls.Welcome, recipientPub []byte, sign signer.I,
 
 // UnwrapWelcome decrypts a NIP-59 gift-wrapped event and extracts the MLS
 // Welcome message. Returns the Welcome and the sender's real pubkey.
-func UnwrapWelcome(ev *event.E, sign signer.I) (*UnwrappedWelcome, error) {
+func UnwrapWelcome(ev *event.E, crypto CryptoProvider) (*UnwrappedWelcome, error) {
 	if ev.Kind != KindGiftWrap {
 		return nil, fmt.Errorf("expected kind %d, got %d", KindGiftWrap, ev.Kind)
 	}
 
-	// Layer 3 -> 2: Decrypt gift wrap
-	convKey, err := encryption.GenerateConversationKey(sign.Sec(), ev.Pubkey)
-	if err != nil {
-		return nil, fmt.Errorf("gift wrap ECDH: %w", err)
-	}
-	sealJSON, err := encryption.Decrypt(convKey, string(ev.Content))
+	// Layer 3 -> 2: Decrypt gift wrap via NIP-44
+	sealJSON, err := crypto.Nip44Decrypt(ev.Pubkey, string(ev.Content))
 	if err != nil {
 		return nil, fmt.Errorf("gift wrap decrypt: %w", err)
 	}
@@ -160,12 +143,8 @@ func UnwrapWelcome(ev *event.E, sign signer.I) (*UnwrappedWelcome, error) {
 		return nil, fmt.Errorf("expected seal kind %d, got %d", kindSeal, seal.Kind)
 	}
 
-	// Layer 2 -> 1: Decrypt seal
-	sealConvKey, err := encryption.GenerateConversationKey(sign.Sec(), seal.Pubkey)
-	if err != nil {
-		return nil, fmt.Errorf("seal ECDH: %w", err)
-	}
-	innerJSON, err := encryption.Decrypt(sealConvKey, string(seal.Content))
+	// Layer 2 -> 1: Decrypt seal via NIP-44
+	innerJSON, err := crypto.Nip44Decrypt(seal.Pubkey, string(seal.Content))
 	if err != nil {
 		return nil, fmt.Errorf("seal decrypt: %w", err)
 	}

@@ -91,11 +91,11 @@ func TestDMGroupID(t *testing.T) {
 func TestKeyPackageRoundTrip(t *testing.T) {
 	sign := generateSigner(t)
 
-	kpp, err := GenerateKeyPackage(sign)
+	kpp, err := GenerateKeyPackage(&LocalCrypto{Sign: sign})
 	require.NoError(t, err)
 	require.NotNil(t, kpp)
 
-	ev, err := KeyPackageToEvent(kpp, sign, []string{"wss://relay.example.com"})
+	ev, err := KeyPackageToEvent(kpp, &LocalCrypto{Sign: sign}, []string{"wss://relay.example.com"})
 	require.NoError(t, err)
 	assert.Equal(t, KindKeyPackage, ev.Kind)
 
@@ -110,9 +110,9 @@ func TestGroupCreateJoinEncryptDecrypt(t *testing.T) {
 	alice := generateSigner(t)
 	bob := generateSigner(t)
 
-	aliceKPP, err := GenerateKeyPackage(alice)
+	aliceKPP, err := GenerateKeyPackage(&LocalCrypto{Sign: alice})
 	require.NoError(t, err)
-	bobKPP, err := GenerateKeyPackage(bob)
+	bobKPP, err := GenerateKeyPackage(&LocalCrypto{Sign: bob})
 	require.NoError(t, err)
 
 	gs, welcome, _, err := CreateDMGroup(aliceKPP, &bobKPP.Public, alice.Pub(), bob.Pub(), nil)
@@ -148,16 +148,16 @@ func TestNIPEE_WelcomeKind444RoundTrip(t *testing.T) {
 	alice := generateSigner(t)
 	bob := generateSigner(t)
 
-	aliceKPP, err := GenerateKeyPackage(alice)
+	aliceKPP, err := GenerateKeyPackage(&LocalCrypto{Sign: alice})
 	require.NoError(t, err)
-	bobKPP, err := GenerateKeyPackage(bob)
+	bobKPP, err := GenerateKeyPackage(&LocalCrypto{Sign: bob})
 	require.NoError(t, err)
 
 	_, welcome, _, err := CreateDMGroup(aliceKPP, &bobKPP.Public, alice.Pub(), bob.Pub(), nil)
 	require.NoError(t, err)
 
 	// Alice wraps the welcome for Bob
-	wrapEv, err := WelcomeToGiftWrap(welcome, bob.Pub(), alice, nil, nil)
+	wrapEv, err := WelcomeToGiftWrap(welcome, bob.Pub(), &LocalCrypto{Sign: alice}, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, KindGiftWrap, wrapEv.Kind)
 
@@ -166,7 +166,7 @@ func TestNIPEE_WelcomeKind444RoundTrip(t *testing.T) {
 		"gift wrap pubkey must be ephemeral, not sender's real key")
 
 	// Bob unwraps and gets both the Welcome and Alice's real pubkey
-	unwrapped, err := UnwrapWelcome(wrapEv, bob)
+	unwrapped, err := UnwrapWelcome(wrapEv, &LocalCrypto{Sign: bob})
 	require.NoError(t, err)
 	require.NotNil(t, unwrapped)
 	require.NotNil(t, unwrapped.Welcome)
@@ -186,9 +186,9 @@ func TestNIPEE_HTagRoundTrip(t *testing.T) {
 	alice := generateSigner(t)
 	bob := generateSigner(t)
 
-	aliceKPP, err := GenerateKeyPackage(alice)
+	aliceKPP, err := GenerateKeyPackage(&LocalCrypto{Sign: alice})
 	require.NoError(t, err)
-	bobKPP, err := GenerateKeyPackage(bob)
+	bobKPP, err := GenerateKeyPackage(&LocalCrypto{Sign: bob})
 	require.NoError(t, err)
 
 	gs, _, _, err := CreateDMGroup(aliceKPP, &bobKPP.Public, alice.Pub(), bob.Pub(), nil)
@@ -223,9 +223,9 @@ func TestNIPEE_EphemeralSigning(t *testing.T) {
 	alice := generateSigner(t)
 	bob := generateSigner(t)
 
-	aliceKPP, err := GenerateKeyPackage(alice)
+	aliceKPP, err := GenerateKeyPackage(&LocalCrypto{Sign: alice})
 	require.NoError(t, err)
-	bobKPP, err := GenerateKeyPackage(bob)
+	bobKPP, err := GenerateKeyPackage(&LocalCrypto{Sign: bob})
 	require.NoError(t, err)
 
 	gs, _, _, err := CreateDMGroup(aliceKPP, &bobKPP.Public, alice.Pub(), bob.Pub(), nil)
@@ -260,9 +260,9 @@ func TestNIPEE_NIP44EncryptionWithExporter(t *testing.T) {
 	alice := generateSigner(t)
 	bob := generateSigner(t)
 
-	aliceKPP, err := GenerateKeyPackage(alice)
+	aliceKPP, err := GenerateKeyPackage(&LocalCrypto{Sign: alice})
 	require.NoError(t, err)
-	bobKPP, err := GenerateKeyPackage(bob)
+	bobKPP, err := GenerateKeyPackage(&LocalCrypto{Sign: bob})
 	require.NoError(t, err)
 
 	gs, welcome, _, err := CreateDMGroup(aliceKPP, &bobKPP.Public, alice.Pub(), bob.Pub(), nil)
@@ -350,9 +350,9 @@ func TestNIPEE_ClientE2E(t *testing.T) {
 	alice := generateSigner(t)
 	bob := generateSigner(t)
 
-	aliceClient, err := NewClient(alice, NewMemoryGroupStore(), relay)
+	aliceClient, err := NewClient(&LocalCrypto{Sign: alice}, NewMemoryGroupStore(), relay)
 	require.NoError(t, err)
-	bobClient, err := NewClient(bob, NewMemoryGroupStore(), relay)
+	bobClient, err := NewClient(&LocalCrypto{Sign: bob}, NewMemoryGroupStore(), relay)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -413,7 +413,7 @@ func TestSubscriptionFilters(t *testing.T) {
 	relay := newMockRelay()
 	alice := generateSigner(t)
 
-	client, err := NewClient(alice, NewMemoryGroupStore(), relay)
+	client, err := NewClient(&LocalCrypto{Sign: alice}, NewMemoryGroupStore(), relay)
 	require.NoError(t, err)
 
 	// With no groups, should return one filter (welcome only)
