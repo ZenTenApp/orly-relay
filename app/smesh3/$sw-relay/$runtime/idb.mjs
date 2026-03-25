@@ -165,34 +165,38 @@ export function GetConversationList(fn) {
   getDB().then(db => {
     const tx = db.transaction('dms', 'readonly');
     const store = tx.objectStore('dms');
-    const idx = store.index('peer');
-    const conversations = new Map();
+    const idx = store.index('peer_ts');
+    const list = [];
+    const seen = new Set();
 
+    // Reverse cursor on [peer, created_at] — for each peer, the last
+    // entry in sort order is the newest message. After grabbing it,
+    // advance past the rest of that peer's messages.
     const req = idx.openCursor(null, 'prev');
     req.onsuccess = (e) => {
       const cursor = e.target.result;
       if (!cursor) {
-        const list = [...conversations.values()].sort((a, b) => b.lastTs - a.lastTs);
+        list.sort((a, b) => b.lastTs - a.lastTs);
         fn(JSON.stringify(list));
         return;
       }
       const dm = cursor.value;
-      if (!conversations.has(dm.peer)) {
-        conversations.set(dm.peer, {
+      if (!seen.has(dm.peer)) {
+        seen.add(dm.peer);
+        list.push({
           peer: dm.peer,
           lastMessage: dm.content.slice(0, 80),
           lastTs: dm.created_at,
           from: dm.from,
         });
+        // Skip to the previous peer — advance cursor past all entries
+        // for this peer by setting upper bound to [peer, 0].
+        cursor.continue([dm.peer, 0]);
       } else {
-        const existing = conversations.get(dm.peer);
-        if (dm.created_at > existing.lastTs) {
-          existing.lastMessage = dm.content.slice(0, 80);
-          existing.lastTs = dm.created_at;
-          existing.from = dm.from;
-        }
+        // Still in same peer range (shouldn't happen with continue skip,
+        // but handle gracefully).
+        cursor.continue();
       }
-      cursor.continue();
     };
     req.onerror = () => { console.warn('GetConversationList error:', req.error); fn('[]'); };
   });

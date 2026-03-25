@@ -1503,8 +1503,8 @@ func fetchAuthorProfile(pk string) {
 
 	proxyRelays := buildProxy(pk)
 	dom.PostToSW(buildProxyMsg(subID,
-		"{\"authors\":["+jstr(pk)+"],\"kinds\":[0,3,10002,10000],\"_proxy\":"+jstrArr(proxyRelays)+",\"limit\":6}",
-		[]string{orlyRelay}))
+		"{\"authors\":["+jstr(pk)+"],\"kinds\":[0,3,10002,10000],\"limit\":6}",
+		proxyRelays))
 }
 
 // queueProfileFetch adds a pubkey to the batch fetch queue with a debounce.
@@ -1567,8 +1567,8 @@ func flushFetchQueue() {
 		profileSubCounter++
 		subID := "ap-batch-q-" + itoa(profileSubCounter)
 		dom.PostToSW(buildProxyMsg(subID,
-			"{\"authors\":"+authors+",\"kinds\":[0],\"_proxy\":"+jstrArr(proxy)+",\"limit\":"+itoa(len(chunk))+"}",
-			[]string{orlyRelay}))
+			"{\"authors\":"+authors+",\"kinds\":[0],\"limit\":"+itoa(len(chunk))+"}",
+			proxy))
 		// Also query feed relays directly — they have the kind 1 notes
 		// so they almost certainly have kind 0 for the same authors.
 		// Uses the SW's existing WebSocket connections, bypasses server proxy.
@@ -1630,8 +1630,8 @@ func retryMissingProfiles() {
 		subID := "ap-batch-" + itoa(retryRound) + "-" + itoa(batchNum)
 		batchNum++
 		dom.PostToSW(buildProxyMsg(subID,
-			"{\"authors\":"+authors+",\"kinds\":[0,10002],\"_proxy\":"+jstrArr(proxy)+",\"limit\":"+itoa(len(chunk)*2)+"}",
-			[]string{orlyRelay}))
+			"{\"authors\":"+authors+",\"kinds\":[0,10002],\"limit\":"+itoa(len(chunk)*2)+"}",
+			proxy))
 		// Direct query to feed relays.
 		profileSubCounter++
 		dom.PostToSW(buildProxyMsg("ap-d-"+itoa(profileSubCounter),
@@ -2622,9 +2622,9 @@ func renderConversationRow(peer, lastMsg string, lastTs int64) {
 		openThread(rowPeer)
 	}))
 
-	// Lazy profile fetch.
+	// Lazy profile fetch — batched to avoid 50+ simultaneous subscriptions.
 	if _, cached := authorNames[peer]; !cached && !fetchedK0[peer] {
-		fetchAuthorProfile(peer)
+		queueProfileFetch(peer)
 	}
 
 	dom.AppendChild(msgListContainer, row)

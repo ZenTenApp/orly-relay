@@ -309,14 +309,41 @@ func jsonField(json, key string) string {
 	}
 	if json[idx] == '"' {
 		idx++
-		end := idx
-		for end < len(json) && json[end] != '"' {
-			if json[end] == '\\' {
-				end++
+		var buf []byte
+		hasEsc := false
+		start := idx
+		for idx < len(json) && json[idx] != '"' {
+			if json[idx] == '\\' && idx+1 < len(json) {
+				if !hasEsc {
+					hasEsc = true
+					buf = append(buf, json[start:idx]...)
+				} else {
+					buf = append(buf, json[start:idx]...)
+				}
+				idx++
+				switch json[idx] {
+				case '"', '\\', '/':
+					buf = append(buf, json[idx])
+				case 'n':
+					buf = append(buf, '\n')
+				case 't':
+					buf = append(buf, '\t')
+				case 'r':
+					buf = append(buf, '\r')
+				default:
+					buf = append(buf, '\\', json[idx])
+				}
+				idx++
+				start = idx
+				continue
 			}
-			end++
+			idx++
 		}
-		return json[idx:end]
+		if hasEsc {
+			buf = append(buf, json[start:idx]...)
+			return string(buf)
+		}
+		return json[start:idx]
 	}
 	end := idx
 	for end < len(json) && json[end] != ',' && json[end] != '}' && json[end] != ' ' {

@@ -5288,7 +5288,7 @@ export function appendUnique(list, val) {
 }
 
 export function fetchAuthorProfile(pk) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -5321,16 +5321,9 @@ export function fetchAuthorProfile(pk) {
         $t9_10 = buildProxy(pk);
         $t10_11 = jstr(pk);
         $t11_12 = ('{"authors":[' + $t10_11);
-        $t12_13 = ($t11_12 + '],"kinds":[0,3,10002,10000],"_proxy":');
-        $t13_14 = jstrArr($t9_10);
-        $t14_15 = ($t12_13 + $t13_14);
-        $t15_16 = ($t14_15 + ',"limit":6}');
-        $t16_17 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t17_18 = $t16_17.$get().addr(0);
-        $t17_18.$set('wss://relay.orly.dev');
-        $t18_19 = $rt.builtin.sliceSlice($t16_17.$get(), undefined, undefined, undefined);
-        $t19_20 = buildProxyMsg($t7_8, $t15_16, $t18_19);
-        $t20_21 = common$jsbridge$dom.PostToSW($t19_20);
+        $t12_13 = ($t11_12 + '],"kinds":[0,3,10002,10000],"limit":6}');
+        $t13_14 = buildProxyMsg($t7_8, $t12_13, $t9_10);
+        $t14_15 = common$jsbridge$dom.PostToSW($t13_14);
         return;
         break;
       }
@@ -5402,7 +5395,7 @@ function queueProfileFetch$1() {
 }
 
 export function flushFetchQueue() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -5617,7 +5610,7 @@ export function flushFetchQueue() {
           $block = 23; break;
         }
         else {
-          $t99_100 = $t56_57;
+          $t93_94 = $t56_57;
           $block = 24; break;
         }
         break;
@@ -5631,50 +5624,43 @@ export function flushFetchQueue() {
         $t67_68 = itoa($t66_67);
         $t68_69 = ('ap-batch-q-' + $t67_68);
         $t69_70 = ('{"authors":' + $t63_64);
-        $t70_71 = ($t69_70 + ',"kinds":[0],"_proxy":');
-        $t71_72 = jstrArr($t39_40);
-        $t72_73 = ($t70_71 + $t71_72);
-        $t73_74 = ($t72_73 + ',"limit":');
-        $t74_75 = $rt.builtin.len($t54_55);
-        $t75_76 = itoa($t74_75);
-        $t76_77 = ($t73_74 + $t75_76);
-        $t77_78 = ($t76_77 + '}');
-        $t78_79 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t79_80 = $t78_79.$get().addr(0);
-        $t79_80.$set('wss://relay.orly.dev');
-        $t80_81 = $rt.builtin.sliceSlice($t78_79.$get(), undefined, undefined, undefined);
-        $t81_82 = buildProxyMsg($t68_69, $t77_78, $t80_81);
-        $t82_83 = common$jsbridge$dom.PostToSW($t81_82);
-        $t83_84 = profileSubCounter.$get();
-        $t84_85 = ($t83_84 + 1);
-        profileSubCounter.$set($t84_85);
-        $t85_86 = profileSubCounter.$get();
-        $t86_87 = itoa($t85_86);
-        $t87_88 = ('ap-d-' + $t86_87);
-        $t88_89 = ('{"authors":' + $t63_64);
-        $t89_90 = ($t88_89 + ',"kinds":[0],"limit":');
-        $t90_91 = $rt.builtin.len($t54_55);
-        $t91_92 = itoa($t90_91);
-        $t92_93 = ($t89_90 + $t91_92);
-        $t93_94 = ($t92_93 + '}');
-        $t94_95 = relayURLs.$get();
-        $t95_96 = buildProxyMsg($t87_88, $t93_94, $t94_95);
-        $t96_97 = common$jsbridge$dom.PostToSW($t95_96);
-        $t97_98 = ($t46_47 + 10);
-        $t46_47 = $t97_98;
+        $t70_71 = ($t69_70 + ',"kinds":[0],"limit":');
+        $t71_72 = $rt.builtin.len($t54_55);
+        $t72_73 = itoa($t71_72);
+        $t73_74 = ($t70_71 + $t72_73);
+        $t74_75 = ($t73_74 + '}');
+        $t75_76 = buildProxyMsg($t68_69, $t74_75, $t39_40);
+        $t76_77 = common$jsbridge$dom.PostToSW($t75_76);
+        $t77_78 = profileSubCounter.$get();
+        $t78_79 = ($t77_78 + 1);
+        profileSubCounter.$set($t78_79);
+        $t79_80 = profileSubCounter.$get();
+        $t80_81 = itoa($t79_80);
+        $t81_82 = ('ap-d-' + $t80_81);
+        $t82_83 = ('{"authors":' + $t63_64);
+        $t83_84 = ($t82_83 + ',"kinds":[0],"limit":');
+        $t84_85 = $rt.builtin.len($t54_55);
+        $t85_86 = itoa($t84_85);
+        $t86_87 = ($t83_84 + $t85_86);
+        $t87_88 = ($t86_87 + '}');
+        $t88_89 = relayURLs.$get();
+        $t89_90 = buildProxyMsg($t81_82, $t87_88, $t88_89);
+        $t90_91 = common$jsbridge$dom.PostToSW($t89_90);
+        $t91_92 = ($t46_47 + 10);
+        $t46_47 = $t91_92;
         $block = 15; break;
         break;
       }
       case 23: {
-        $t98_99 = ($t56_57 + ',');
-        $t99_100 = $t98_99;
+        $t92_93 = ($t56_57 + ',');
+        $t93_94 = $t92_93;
         $block = 24; break;
         break;
       }
       case 24: {
-        $t100_101 = jstr($t61_62);
-        $t101_102 = ($t99_100 + $t100_101);
-        $t56_57 = $t101_102;
+        $t94_95 = jstr($t61_62);
+        $t95_96 = ($t93_94 + $t94_95);
+        $t56_57 = $t95_96;
         $t57_58 = $t58_59;
         $block = 20; break;
         break;
@@ -5684,7 +5670,7 @@ export function flushFetchQueue() {
 }
 
 export function retryMissingProfiles() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -5903,7 +5889,7 @@ export function retryMissingProfiles() {
           $block = 24; break;
         }
         else {
-          $t105_106 = $t59_60;
+          $t99_100 = $t59_60;
           $block = 25; break;
         }
         break;
@@ -5918,52 +5904,45 @@ export function retryMissingProfiles() {
         $t72_73 = ($t70_71 + $t71_72);
         $t73_74 = ($t46_47 + 1);
         $t74_75 = ('{"authors":' + $t66_67);
-        $t75_76 = ($t74_75 + ',"kinds":[0,10002],"_proxy":');
-        $t76_77 = jstrArr($t39_40);
-        $t77_78 = ($t75_76 + $t76_77);
-        $t78_79 = ($t77_78 + ',"limit":');
-        $t79_80 = $rt.builtin.len($t57_58);
-        $t80_81 = ($t79_80 * 2);
-        $t81_82 = itoa($t80_81);
-        $t82_83 = ($t78_79 + $t81_82);
-        $t83_84 = ($t82_83 + '}');
-        $t84_85 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t85_86 = $t84_85.$get().addr(0);
-        $t85_86.$set('wss://relay.orly.dev');
-        $t86_87 = $rt.builtin.sliceSlice($t84_85.$get(), undefined, undefined, undefined);
-        $t87_88 = buildProxyMsg($t72_73, $t83_84, $t86_87);
-        $t88_89 = common$jsbridge$dom.PostToSW($t87_88);
-        $t89_90 = profileSubCounter.$get();
-        $t90_91 = ($t89_90 + 1);
-        profileSubCounter.$set($t90_91);
-        $t91_92 = profileSubCounter.$get();
-        $t92_93 = itoa($t91_92);
-        $t93_94 = ('ap-d-' + $t92_93);
-        $t94_95 = ('{"authors":' + $t66_67);
-        $t95_96 = ($t94_95 + ',"kinds":[0],"limit":');
-        $t96_97 = $rt.builtin.len($t57_58);
-        $t97_98 = itoa($t96_97);
-        $t98_99 = ($t95_96 + $t97_98);
-        $t99_100 = ($t98_99 + '}');
-        $t100_101 = relayURLs.$get();
-        $t101_102 = buildProxyMsg($t93_94, $t99_100, $t100_101);
-        $t102_103 = common$jsbridge$dom.PostToSW($t101_102);
-        $t103_104 = ($t47_48 + 10);
+        $t75_76 = ($t74_75 + ',"kinds":[0,10002],"limit":');
+        $t76_77 = $rt.builtin.len($t57_58);
+        $t77_78 = ($t76_77 * 2);
+        $t78_79 = itoa($t77_78);
+        $t79_80 = ($t75_76 + $t78_79);
+        $t80_81 = ($t79_80 + '}');
+        $t81_82 = buildProxyMsg($t72_73, $t80_81, $t39_40);
+        $t82_83 = common$jsbridge$dom.PostToSW($t81_82);
+        $t83_84 = profileSubCounter.$get();
+        $t84_85 = ($t83_84 + 1);
+        profileSubCounter.$set($t84_85);
+        $t85_86 = profileSubCounter.$get();
+        $t86_87 = itoa($t85_86);
+        $t87_88 = ('ap-d-' + $t86_87);
+        $t88_89 = ('{"authors":' + $t66_67);
+        $t89_90 = ($t88_89 + ',"kinds":[0],"limit":');
+        $t90_91 = $rt.builtin.len($t57_58);
+        $t91_92 = itoa($t90_91);
+        $t92_93 = ($t89_90 + $t91_92);
+        $t93_94 = ($t92_93 + '}');
+        $t94_95 = relayURLs.$get();
+        $t95_96 = buildProxyMsg($t87_88, $t93_94, $t94_95);
+        $t96_97 = common$jsbridge$dom.PostToSW($t95_96);
+        $t97_98 = ($t47_48 + 10);
         $t46_47 = $t73_74;
-        $t47_48 = $t103_104;
+        $t47_48 = $t97_98;
         $block = 16; break;
         break;
       }
       case 24: {
-        $t104_105 = ($t59_60 + ',');
-        $t105_106 = $t104_105;
+        $t98_99 = ($t59_60 + ',');
+        $t99_100 = $t98_99;
         $block = 25; break;
         break;
       }
       case 25: {
-        $t106_107 = jstr($t64_65);
-        $t107_108 = ($t105_106 + $t106_107);
-        $t59_60 = $t107_108;
+        $t100_101 = jstr($t64_65);
+        $t101_102 = ($t99_100 + $t100_101);
+        $t59_60 = $t101_102;
         $t60_61 = $t61_62;
         $block = 21; break;
         break;
@@ -8943,7 +8922,7 @@ export function renderConversationRow(peer, lastMsg, lastTs) {
         break;
       }
       case 15: {
-        $t81_82 = fetchAuthorProfile(peer);
+        $t81_82 = queueProfileFetch(peer);
         $block = 16; break;
         break;
       }
