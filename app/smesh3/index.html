@@ -87,19 +87,6 @@ body.dark {
 <script>{const _l=console.log,_w=console.warn,_e=console.error;function _r(v,a){try{fetch('/__log',{method:'POST',body:v+' [page] '+Array.from(a).join(' ')})}catch(e){}}console.log=function(){_l.apply(console,arguments);_r('I',arguments)};console.warn=function(){_w.apply(console,arguments);_r('W',arguments)};console.error=function(){_e.apply(console,arguments);_r('E',arguments)}}</script>
 <div id="app-root"></div>
 <div id="update-snackbar">new version available — click to update</div>
-<script type="module">
-// Diagnostic: import and RUN SW modules in page context to surface the error.
-try {
-  const $rt = await import('./$sw/$runtime/index.mjs');
-  console.log('sw-diag: runtime OK');
-  const $main = await import('./$sw/sw.mjs');
-  console.log('sw-diag: sw.mjs OK');
-  if ($main.init) { $main.init(); console.log('sw-diag: init() OK'); }
-  if ($main.main) { $main.main(); console.log('sw-diag: main() OK'); }
-} catch(e) {
-  console.error('sw-diag: FAILED:', e);
-}
-</script>
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./$sw/$entry.mjs', { type: 'module', scope: '/' }).then(reg => {

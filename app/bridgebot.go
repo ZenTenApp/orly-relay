@@ -7,10 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"next.orly.dev/pkg/bridge"
 	"next.orly.dev/pkg/lol/log"
+	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/tag"
 	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
 	"next.orly.dev/pkg/nostr/protocol/marmot"
 	"next.orly.dev/pkg/nostr/ws"
@@ -85,6 +88,19 @@ func (b *BridgeBot) Start(ctx context.Context) error {
 		return err
 	}
 	log.I.F("bridge-bot: key package published, pubkey=%s", b.PubkeyHex())
+
+	// Publish kind-0 metadata so the frontend can display the bot's name.
+	metaEv := &event.E{
+		CreatedAt: time.Now().Unix(),
+		Kind:      0,
+		Tags:      tag.NewS(),
+		Content:   []byte(`{"name":"sm3sh bridge","about":"MLS DM bridge bot"}`),
+	}
+	if err := metaEv.Sign(b.sign); err != nil {
+		log.W.F("bridge-bot: failed to sign kind-0: %v", err)
+	} else if err := b.relay.Publish(ctx, metaEv); err != nil {
+		log.W.F("bridge-bot: failed to publish kind-0: %v", err)
+	}
 
 	b.client.OnDM(func(senderPub []byte, plaintext []byte) {
 		senderHex := hex.Enc(senderPub)

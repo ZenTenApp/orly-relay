@@ -10,9 +10,12 @@ import (
 // Communicates with shell SW via /__bus backend WS.
 
 var (
-	busConn  ws.Conn
-	busReady bool
+	busConn    ws.Conn
+	busReady   bool
+	busPending []busMsgPending
 )
+
+type busMsgPending struct{ to, msg string }
 
 func main() {
 	initSharedState()
@@ -22,6 +25,7 @@ func main() {
 	sw.OnActivate(onActivate)
 	sw.OnFetch(onFetch)
 	sw.OnMessage(onMessage)
+	connectBus()
 }
 
 func onInstall(event sw.Event) {
@@ -34,7 +38,6 @@ func onInstall(event sw.Event) {
 func onActivate(event sw.Event) {
 	sw.WaitUntil(event, func(done func()) {
 		sw.ClaimClients(func() {
-			connectBus()
 			done()
 		})
 	})
@@ -77,17 +80,21 @@ func onBusOpen() {
 	busReady = true
 	sw.Log("relay-sw: bus connected")
 	ws.Send(busConn, "{\"role\":\"relay\"}")
+	for _, p := range busPending {
+		ws.Send(busConn, "{\"to\":"+jstr(p.to)+",\"msg\":"+p.msg+"}")
+	}
+	busPending = nil
 }
 
 func busSend(to, msg string) {
 	if !busReady {
+		busPending = append(busPending, busMsgPending{to, msg})
 		return
 	}
 	ws.Send(busConn, "{\"to\":"+jstr(to)+",\"msg\":"+msg+"}")
 }
 
 func onBusMessage(msg string) {
-	sw.Log("relay-sw: bus: " + msg[:min(len(msg), 80)])
 	w := newMW(msg)
 	msgType := w.str()
 
