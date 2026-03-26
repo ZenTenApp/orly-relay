@@ -24,7 +24,6 @@ func flushPendingSentDMs() {
 	for _, p := range pendingSentDMs {
 		now := sw.NowSeconds()
 		rec := makeDMRecord(p.recipient, myPubkey, p.content, now, "marmot", "")
-		sw.Log("shell-sw: flushing deferred sent DM peer=" + p.recipient[:min(len(p.recipient), 12)])
 		busSend("relay", "[\"SAVE_DM_QUIET\","+rec.ToJSON()+"]")
 	}
 	pendingSentDMs = nil
@@ -102,12 +101,10 @@ func routeMessage(clientID string, w *mw, msgType string) {
 		busSend("marmot", "[\"MLS_SEND\","+jstr(recipient)+","+jstr(content)+"]")
 		// Save sent DM to relay's IDB (quiet — no DM_RECEIVED broadcast).
 		if myPubkey == "" {
-			sw.Log("shell-sw: MLS_SEND: myPubkey empty, deferring save")
 			pendingSentDMs = append(pendingSentDMs, pendingSentDM{recipient, content})
 		} else {
 			now := sw.NowSeconds()
 			rec := makeDMRecord(recipient, myPubkey, content, now, "marmot", "")
-			sw.Log("shell-sw: MLS_SEND: saving sent DM peer=" + recipient[:min(len(recipient), 12)])
 			busSend("relay", "[\"SAVE_DM_QUIET\","+rec.ToJSON()+"]")
 		}
 	case "MLS_SUB":

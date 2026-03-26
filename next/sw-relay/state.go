@@ -51,6 +51,13 @@ func strsJSON(ss []string) string {
 
 func jstr(s string) string { return helpers.JsonString(s) }
 
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
 func hexTo32(s string) [32]byte {
 	out, _ := helpers.HexDecode32(s)
 	return out

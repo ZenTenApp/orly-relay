@@ -12,6 +12,7 @@ import * as _crypto from './crypto.mjs';
 import * as _subtle from './subtle.mjs';
 import * as _sw from './sw.mjs';
 import * as _idb from './idb.mjs';
+import * as _bc from './bc.mjs';
 
 export {
   _runtime as runtime,
@@ -25,4 +26,5 @@ export {
   _subtle as subtle,
   _sw as sw,
   _idb as idb,
+  _bc as bc,
 };

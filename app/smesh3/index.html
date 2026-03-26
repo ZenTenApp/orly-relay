@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <base href="/">
-<title>sm3sh</title>
+<title>smesh</title>
 <link rel="icon" type="image/svg+xml" href="./favicon.svg">
 <style>
 @font-face {
@@ -83,15 +83,15 @@ body.dark {
 </style>
 </head>
 <body>
-<script>{let t=localStorage.getItem('sm3sh-theme');if(t==='dark'||(t===null&&matchMedia('(prefers-color-scheme:dark)').matches))document.body.classList.add('dark')}</script>
+<script>{let t=localStorage.getItem('smesh-theme');if(t==='dark'||(t===null&&matchMedia('(prefers-color-scheme:dark)').matches))document.body.classList.add('dark')}</script>
 <div id="app-root"></div>
 <div id="update-snackbar">new version available — click to update</div>
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./$sw/$entry.mjs', { type: 'module', scope: '/' }).then(reg => {
-    console.log('sm3sh: sw registered');
+    console.log('smesh: sw registered');
   }).catch(err => {
-    console.error('sm3sh: sw registration failed:', err);
+    console.error('smesh: sw registration failed:', err);
   });
 
   navigator.serviceWorker.addEventListener('message', (event) => {
@@ -101,7 +101,7 @@ if ('serviceWorker' in navigator) {
       return;
     }
     if (typeof d === 'string' && d === 'sw-started') {
-      console.log('sm3sh: SW main() OK');
+      console.log('smesh: SW main() OK');
       return;
     }
     if (d === 'update-available') {
@@ -120,14 +120,43 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 <script>
-// Satellite SW loaders — same origin, path-scoped.
+// Satellite SWs — register from page, connect via MessagePort.
 {
-  ['$sw-marmot','$sw-relay'].forEach(dir => {
-    const f = document.createElement('iframe');
-    f.hidden = true;
-    f.src = '/' + dir + '/loader.html';
-    document.body.appendChild(f);
-  });
+  window._busPorts = {};
+  async function regSW(dir) {
+    try {
+      var reg = await navigator.serviceWorker.register('/'+dir+'/$entry.mjs',{type:'module',scope:'/'+dir+'/',updateViaCache:'none'});
+      // Force update check — browser may be holding stale SW.
+      reg.update().catch(function(){});
+      console.log(dir+' SW registered, active='+!!(reg.active)+' installing='+!!(reg.installing));
+      function sendPort(w) {
+        var ch = new MessageChannel();
+        w.postMessage({type:'bus-port'},[ch.port2]);
+        window._busPorts[dir] = ch.port1;
+        ch.port1.onmessage = function(ev) {
+          var d = ev.data;
+          if(typeof d==='string'&&d.length>0&&d[0]==='{'&&navigator.serviceWorker.controller)
+            navigator.serviceWorker.controller.postMessage(d);
+        };
+        console.log(dir+' SW port sent');
+      }
+      // Always send port to active SW. Also watch for new version activating.
+      var sw = reg.active;
+      if(sw) sendPort(sw);
+      reg.addEventListener('updatefound',function(){
+        var nw = reg.installing;
+        if(nw) nw.addEventListener('statechange',function(){
+          if(nw.state==='activated'){ console.log(dir+' SW updated, resending port'); sendPort(nw); }
+        });
+      });
+      if(!sw){
+        sw = reg.installing||reg.waiting;
+        if(sw) sw.addEventListener('statechange',function(){if(sw.state==='activated')sendPort(sw);});
+      }
+    } catch(e) { console.error(dir+' SW failed:',e); }
+  }
+  // regSW('$sw-marmot'); // disabled — causes browser lockup during WASM init
+  regSW('$sw-relay');
 }
 </script>
 <script type="module" src="./$entry.mjs"></script>

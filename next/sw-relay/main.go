@@ -1,7 +1,6 @@
 package main
 
 import (
-	"common/helpers"
 	"common/jsbridge/bc"
 	"common/jsbridge/sw"
 )
@@ -20,6 +19,9 @@ func main() {
 	sw.OnFetch(onFetch)
 	sw.OnMessage(onMessage)
 	connectBus()
+	// Send READY on every start — not just onActivate, which doesn't re-fire
+	// when the browser stops and restarts the SW thread.
+	busSend("shell", "[\"READY\"]")
 }
 
 func onInstall(event sw.Event) {
@@ -32,6 +34,8 @@ func onInstall(event sw.Event) {
 func onActivate(event sw.Event) {
 	sw.WaitUntil(event, func(done func()) {
 		sw.ClaimClients(func() {
+			sw.Log("relay-sw: starting")
+			busSend("shell", "[\"READY\"]")
 			done()
 		})
 	})
@@ -47,8 +51,6 @@ func onMessage(event sw.Event) {
 
 func connectBus() {
 	bus = bc.Open("smesh-bus", func(raw string) { onBusMessage(raw) })
-	sw.Log("relay-sw: bus connected (BroadcastChannel)")
-	busSend("shell", "[\"READY\"]")
 }
 
 func busSend(to, msg string) {
@@ -78,7 +80,8 @@ func onBusMessage(raw string) {
 
 	// Identity propagation.
 	case "SET_KEY":
-		identitySetKey(w.str())
+		k := w.str()
+		identitySetKey(k)
 	case "SET_PUBKEY":
 		identitySetPubkey(w.str())
 	case "CLEAR_KEY":
@@ -133,19 +136,14 @@ func onBusMessage(raw string) {
 		routerDMHistory(clientID, peer, limit, until)
 	case "SAVE_DM":
 		dmJSON := w.raw()
-		sw.Log("relay-sw: SAVE_DM len=" + helpers.Itoa(int64(len(dmJSON))))
 		cacheSaveDM(dmJSON, func(result string) {
-			sw.Log("relay-sw: SAVE_DM result=" + result)
 			if result != "duplicate" {
 				fwdAll("[\"DM_RECEIVED\"," + dmJSON + "]")
 			}
 		})
 	case "SAVE_DM_QUIET":
 		dmJSON := w.raw()
-		sw.Log("relay-sw: SAVE_DM_QUIET len=" + helpers.Itoa(int64(len(dmJSON))))
-		cacheSaveDM(dmJSON, func(result string) {
-			sw.Log("relay-sw: SAVE_DM_QUIET result=" + result)
-		})
+		cacheSaveDM(dmJSON, func(result string) {})
 
 	// Crypto proxy result from shell.
 	case "CRYPTO_RESULT":

@@ -101,14 +101,15 @@ export function init() {
 }
 
 export function main() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = common$jsbridge$localstorage.GetItem('smesh-theme');
-        $t1_2 = ($t0_1 !== '');
-        if ($t1_2) {
+        $t0_1 = common$jsbridge$dom.ConsoleLog('starting smesh v0.65.46');
+        $t1_2 = common$jsbridge$localstorage.GetItem('smesh-theme');
+        $t2_3 = ($t1_2 !== '');
+        if ($t2_3) {
           $block = 1; break;
         }
         else {
@@ -117,14 +118,14 @@ export function main() {
         break;
       }
       case 1: {
-        $t2_3 = ($t0_1 === 'dark');
-        isDark.$set($t2_3);
+        $t3_4 = ($t1_2 === 'dark');
+        isDark.$set($t3_4);
         $block = 2; break;
         break;
       }
       case 2: {
-        $t3_4 = isDark.$get();
-        if ($t3_4) {
+        $t4_5 = isDark.$get();
+        if ($t4_5) {
           $block = 4; break;
         }
         else {
@@ -133,23 +134,23 @@ export function main() {
         break;
       }
       case 3: {
-        $t4_5 = common$jsbridge$dom.PrefersDark();
-        isDark.$set($t4_5);
+        $t5_6 = common$jsbridge$dom.PrefersDark();
+        isDark.$set($t5_6);
         $block = 2; break;
         break;
       }
       case 4: {
-        $t5_6 = common$jsbridge$dom.Body();
-        $t6_7 = common$jsbridge$dom.AddClass($t5_6, 'dark');
+        $t6_7 = common$jsbridge$dom.Body();
+        $t7_8 = common$jsbridge$dom.AddClass($t6_7, 'dark');
         $block = 5; break;
         break;
       }
       case 5: {
-        $t7_8 = common$jsbridge$dom.GetElementById('app-root');
-        root.$set($t7_8);
-        $t8_9 = common$jsbridge$localstorage.GetItem('smesh-pubkey');
-        $t9_10 = ($t8_9 !== '');
-        if ($t9_10) {
+        $t8_9 = common$jsbridge$dom.GetElementById('app-root');
+        root.$set($t8_9);
+        $t9_10 = common$jsbridge$localstorage.GetItem('smesh-pubkey');
+        $t10_11 = ($t9_10 !== '');
+        if ($t10_11) {
           $block = 6; break;
         }
         else {
@@ -158,10 +159,10 @@ export function main() {
         break;
       }
       case 6: {
-        pubhex.$set($t8_9);
-        $t10_11 = common$helpers.HexDecode($t8_9);
-        pubkey.$set($t10_11);
-        $t11_12 = showApp();
+        pubhex.$set($t9_10);
+        $t11_12 = common$helpers.HexDecode($t9_10);
+        pubkey.$set($t11_12);
+        $t12_13 = showApp();
         $block = 7; break;
         break;
       }
@@ -170,7 +171,7 @@ export function main() {
         break;
       }
       case 8: {
-        $t12_13 = showLogin();
+        $t13_14 = showLogin();
         $block = 7; break;
         break;
       }
@@ -283,7 +284,7 @@ export function showLogin() {
   $t24_25 = common$jsbridge$dom.SetStyle($t20_21, 'marginBottom', '4px');
   $t25_26 = common$jsbridge$dom.AppendChild($t2_3, $t20_21);
   $t26_27 = common$jsbridge$dom.CreateElement('span');
-  $t27_28 = common$jsbridge$dom.SetTextContent($t26_27, 'v0.65.45');
+  $t27_28 = common$jsbridge$dom.SetTextContent($t26_27, 'v0.65.46');
   $t28_29 = common$jsbridge$dom.SetStyle($t26_27, 'color', 'var(--muted)');
   $t29_30 = common$jsbridge$dom.SetStyle($t26_27, 'fontSize', '12px');
   $t30_31 = common$jsbridge$dom.AppendChild($t2_3, $t26_27);
@@ -1445,7 +1446,7 @@ export function showApp() {
         $t319_320 = common$jsbridge$dom.RegisterCallback(showApp$11);
         $t320_321 = common$jsbridge$dom.AddEventListener($t318_319, 'click', $t319_320);
         $t321_322 = common$jsbridge$dom.CreateElement('span');
-        $t322_323 = common$jsbridge$dom.SetTextContent($t321_322, 'smesh v0.65.45');
+        $t322_323 = common$jsbridge$dom.SetTextContent($t321_322, 'smesh v0.65.46');
         $t323_324 = common$jsbridge$dom.SetStyle($t321_322, 'marginLeft', 'auto');
         $t324_325 = common$jsbridge$dom.SetStyle($t321_322, 'color', 'var(--accent)');
         $t325_326 = common$jsbridge$dom.AppendChild($t234_235, $t321_322);
@@ -2189,7 +2190,7 @@ export function jstrArr(ss) {
 }
 
 export function onSWMessage(raw) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -2494,13 +2495,22 @@ export function onSWMessage(raw) {
         break;
       }
       case 33: {
-        $t69_70 = handleCryptoReq(raw, $t6_7);
-        $block = 6; break;
+        $t69_70 = nextStr(raw, $t6_7);
+        $t70_71 = $t69_70[0];
+        $t71_72 = $t69_70[1];
+        $t72_73 = nextStr(raw, $t71_72);
+        $t73_74 = $t72_73[0];
+        $t74_75 = $t72_73[1];
+        $t75_76 = ('[' + $t70_71);
+        $t76_77 = ($t75_76 + '] ');
+        $t77_78 = ($t76_77 + $t73_74);
+        $t78_79 = common$jsbridge$dom.ConsoleLog($t77_78);
+        return;
         break;
       }
       case 34: {
-        $t70_71 = ($t5_6 === 'CRYPTO_REQ');
-        if ($t70_71) {
+        $t79_80 = ($t5_6 === 'SW_LOG');
+        if ($t79_80) {
           $block = 33; break;
         }
         else {
@@ -2509,19 +2519,13 @@ export function onSWMessage(raw) {
         break;
       }
       case 35: {
-        $t71_72 = common$jsbridge$localstorage.GetItem('smesh-key');
-        $t72_73 = ($t71_72 !== '');
-        if ($t72_73) {
-          $block = 39; break;
-        }
-        else {
-          $block = 41; break;
-        }
+        $t80_81 = handleCryptoReq(raw, $t6_7);
+        $block = 6; break;
         break;
       }
       case 36: {
-        $t73_74 = ($t5_6 === 'NEED_IDENTITY');
-        if ($t73_74) {
+        $t81_82 = ($t5_6 === 'CRYPTO_REQ');
+        if ($t81_82) {
           $block = 35; break;
         }
         else {
@@ -2530,51 +2534,72 @@ export function onSWMessage(raw) {
         break;
       }
       case 37: {
-        $t74_75 = resubscribe();
-        $block = 6; break;
+        $t82_83 = common$jsbridge$localstorage.GetItem('smesh-key');
+        $t83_84 = ($t82_83 !== '');
+        if ($t83_84) {
+          $block = 41; break;
+        }
+        else {
+          $block = 43; break;
+        }
         break;
       }
       case 38: {
-        $t75_76 = ($t5_6 === 'RESUB');
-        if ($t75_76) {
+        $t84_85 = ($t5_6 === 'NEED_IDENTITY');
+        if ($t84_85) {
           $block = 37; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 39: {
-        $t76_77 = jstr($t71_72);
-        $t77_78 = ('["SET_KEY",' + $t76_77);
-        $t78_79 = ($t77_78 + ']');
-        $t79_80 = common$jsbridge$dom.PostToSW($t78_79);
-        $block = 40; break;
-        break;
-      }
-      case 40: {
-        $t80_81 = resubscribe();
-        $block = 6; break;
-        break;
-      }
-      case 41: {
-        $t81_82 = pubhex.$get();
-        $t82_83 = ($t81_82 !== '');
-        if ($t82_83) {
-          $block = 42; break;
         }
         else {
           $block = 40; break;
         }
         break;
       }
+      case 39: {
+        $t85_86 = resubscribe();
+        $block = 6; break;
+        break;
+      }
+      case 40: {
+        $t86_87 = ($t5_6 === 'RESUB');
+        if ($t86_87) {
+          $block = 39; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 41: {
+        $t87_88 = jstr($t82_83);
+        $t88_89 = ('["SET_KEY",' + $t87_88);
+        $t89_90 = ($t88_89 + ']');
+        $t90_91 = common$jsbridge$dom.PostToSW($t89_90);
+        $block = 42; break;
+        break;
+      }
       case 42: {
-        $t83_84 = pubhex.$get();
-        $t84_85 = jstr($t83_84);
-        $t85_86 = ('["SET_PUBKEY",' + $t84_85);
-        $t86_87 = ($t85_86 + ']');
-        $t87_88 = common$jsbridge$dom.PostToSW($t86_87);
-        $block = 40; break;
+        $t91_92 = resubscribe();
+        $block = 6; break;
+        break;
+      }
+      case 43: {
+        $t92_93 = pubhex.$get();
+        $t93_94 = ($t92_93 !== '');
+        if ($t93_94) {
+          $block = 44; break;
+        }
+        else {
+          $block = 42; break;
+        }
+        break;
+      }
+      case 44: {
+        $t94_95 = pubhex.$get();
+        $t95_96 = jstr($t94_95);
+        $t96_97 = ('["SET_PUBKEY",' + $t95_96);
+        $t97_98 = ($t96_97 + ']');
+        $t98_99 = common$jsbridge$dom.PostToSW($t97_98);
+        $block = 42; break;
         break;
       }
     }

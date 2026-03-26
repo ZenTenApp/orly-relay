@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	version     = "v0.65.45"
+	version     = "v0.65.46"
 	lsKeyPubkey = "smesh-pubkey"
 	lsKeyMode   = "smesh-mode"
 	lsKeyTheme  = "smesh-theme"
@@ -107,6 +107,7 @@ var defaultRelays = []string{
 }
 
 func main() {
+	dom.ConsoleLog("starting smesh " + version)
 	themePref := localstorage.GetItem(lsKeyTheme)
 	if themePref != "" {
 		isDark = themePref == "dark"
@@ -963,6 +964,11 @@ func onSWMessage(raw string) {
 	case "MLS_STATUS":
 		text, _ := nextStr(raw, pos)
 		appendSystemBubble(text)
+	case "SW_LOG":
+		origin, pos2 := nextStr(raw, pos)
+		logMsg, _ := nextStr(raw, pos2)
+		dom.ConsoleLog("[" + origin + "] " + logMsg)
+		return
 	case "CRYPTO_REQ":
 		handleCryptoReq(raw, pos)
 	case "NEED_IDENTITY":

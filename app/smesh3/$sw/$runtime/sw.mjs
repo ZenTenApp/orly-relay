@@ -189,7 +189,11 @@ export function CacheAddAll(cacheId, urls, done) {
   if (!cache) { if (done) done(); return; }
   // Convert Go slice to native JS array for Cache API.
   const arr = urls.$array.slice(urls.$offset, urls.$offset + urls.$length);
-  cache.addAll(arr).then(() => { if (done) done(); });
+  cache.addAll(arr).then(() => { if (done) done(); }).catch((e) => {
+    console.error('CacheAddAll failed:', e, 'urls:', arr);
+    // Don't block install — proceed without full cache.
+    if (done) done();
+  });
 }
 
 export function CachePut(cacheId, url, respId, done) {
@@ -274,15 +278,28 @@ export function NowMillis() {
 
 export function Log(msg) {
   console.log('sw:', msg);
-  // Forward via bus port (SW → page → shell SW → page console).
-  if (self._busPort) {
-    self._busPort.postMessage('{"from":"relay","to":"shell","msg":["LOG","relay",' + JSON.stringify(msg) + ']}');
-  }
+  // Forward to page console.
+  self.clients.matchAll({ type: 'window' }).then(all => {
+    for (const c of all) c.postMessage(['SW_LOG', 'shell', msg]);
+  });
 }
 
 export function Warn(msg) {
   console.warn('sw:', msg);
-  if (self._busPort) {
-    self._busPort.postMessage('{"from":"relay","to":"shell","msg":["LOG","relay",' + JSON.stringify(msg) + ']}');
-  }
+  self.clients.matchAll({ type: 'window' }).then(all => {
+    for (const c of all) c.postMessage(['SW_LOG', 'shell', msg]);
+  });
+}
+
+// --- Global calls ---
+
+export function CallGlobal(name, ...args) {
+  const fn = self[name];
+  if (typeof fn === 'function') fn(...args);
+}
+
+export function CallGlobalResult(name, ...args) {
+  const fn = self[name];
+  if (typeof fn === 'function') return String(fn(...args));
+  return '';
 }

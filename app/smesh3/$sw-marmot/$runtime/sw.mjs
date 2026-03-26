@@ -274,10 +274,17 @@ export function NowMillis() {
 
 export function Log(msg) {
   console.log('sw:', msg);
+  // Forward via bus port (SW → page → shell SW → page console).
+  if (self._busPort) {
+    self._busPort.postMessage('{"from":"marmot","to":"shell","msg":["LOG","marmot",' + JSON.stringify(msg) + ']}');
+  }
 }
 
 export function Warn(msg) {
   console.warn('sw:', msg);
+  if (self._busPort) {
+    self._busPort.postMessage('{"from":"marmot","to":"shell","msg":["LOG","marmot",' + JSON.stringify(msg) + ']}');
+  }
 }
 
 // --- Global calls ---

@@ -18,6 +18,7 @@ func main() {
 	sw.OnFetch(onFetch)
 	sw.OnMessage(onMessage)
 	connectBus()
+	busSend("shell", "[\"READY\"]")
 }
 
 func onInstall(event sw.Event) {
@@ -30,6 +31,8 @@ func onInstall(event sw.Event) {
 func onActivate(event sw.Event) {
 	sw.WaitUntil(event, func(done func()) {
 		sw.ClaimClients(func() {
+			sw.Log("marmot-sw: starting")
+			busSend("shell", "[\"READY\"]")
 			done()
 		})
 	})
@@ -45,8 +48,6 @@ func onMessage(event sw.Event) {
 
 func connectBus() {
 	bus = bc.Open("smesh-bus", func(raw string) { onBusMessage(raw) })
-	sw.Log("marmot-sw: bus connected (BroadcastChannel)")
-	busSend("shell", "[\"READY\"]")
 }
 
 func busSend(to, msg string) {

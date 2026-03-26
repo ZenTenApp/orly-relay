@@ -10,6 +10,8 @@ import * as _sync from './sync.mjs';
 import * as _crypto from './crypto.mjs';
 import * as _subtle from './subtle.mjs';
 import * as _sw from './sw.mjs';
+import * as _bc from './bc.mjs';
+import * as _wasm from './wasm.mjs';
 
 export {
   _runtime as runtime,
@@ -21,4 +23,6 @@ export {
   _crypto as crypto,
   _subtle as subtle,
   _sw as sw,
+  _bc as bc,
+  _wasm as wasm,
 };

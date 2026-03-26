@@ -38,6 +38,7 @@ func initRouter() {
 func routerReq(clientID, subID, filterRaw string) {
 	f := nostr.ParseFilter(filterRaw)
 	if f == nil {
+		sw.Log("relay-sw: REQ parse filter FAILED")
 		return
 	}
 	clientSubs[subID] = &clientSub{filter: f, filterRaw: filterRaw, clientID: clientID}
@@ -79,6 +80,7 @@ func routerProxy(clientID, subID, filterRaw string, relayURLs []string) {
 
 	f := nostr.ParseFilter(filterRaw)
 	if f == nil {
+		sw.Log("relay-sw: PROXY parse filter FAILED")
 		return
 	}
 	clientSubs[subID] = &clientSub{filter: f, filterRaw: filterRaw, clientID: clientID}
@@ -141,8 +143,6 @@ func routerCleanupProxy(proxyID string) {
 func routerOnRelayEvent(relayURL string, ev *nostr.Event) {
 	evJSON := ev.ToJSON()
 
-	sw.Log("relay event kind=" + helpers.Itoa(int64(ev.Kind)) + " from=" + relayURL)
-
 	pushToMatchingSubs(ev)
 
 	cacheStore(evJSON, func(saved bool) {
@@ -174,8 +174,10 @@ func routerOnRelayEOSE(subID string) {
 }
 
 func pushToMatchingSubs(ev *nostr.Event) {
+	matched := 0
 	for subID, cs := range clientSubs {
 		if cs.filter.Matches(ev) {
+			matched++
 			fwd(cs.clientID, "[\"EVENT\","+jstr(subID)+","+ev.ToJSON()+"]")
 		}
 	}

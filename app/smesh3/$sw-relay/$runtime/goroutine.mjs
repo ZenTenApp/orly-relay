@@ -83,9 +83,11 @@ export async function runMain(mainFn) {
     const result = mainFn();
     if (result instanceof Promise) await result;
   } catch (e) {
+    console.error('relay-sw runMain error:', e);
     if (e && e.name === 'GoPanic') {
       console.error(`panic: ${e.message}`);
       console.error(e.stack);
+      try { if(self._busPort)self._busPort.postMessage('{"from":"relay","to":"shell","msg":["LOG","relay","PANIC: '+String(e.message).replace(/"/g,'\\"')+'"]}'); } catch(_){}
       if (typeof process !== 'undefined' && process.exit) process.exit(2);
     }
     throw e;

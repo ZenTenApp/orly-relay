@@ -111,6 +111,11 @@ func onBusMessage(raw string) {
 	}
 
 	switch msgType {
+	case "LOG":
+		origin := w.str()
+		logMsg := w.str()
+		broadcastToClients("[\"SW_LOG\"," + jstr(origin) + "," + jstr(logMsg) + "]")
+		return
 	case "FWD":
 		clientID := w.str()
 		innerMsg := w.raw()

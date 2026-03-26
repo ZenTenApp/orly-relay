@@ -7,7 +7,7 @@ import (
 // App Shell domain — Service Worker lifecycle, static asset caching, SSE version monitoring.
 // Thin outer shell: delegates all app-level messages to the Subscription Router.
 
-const cacheName = "sm3sh"
+const cacheName = "smesh"
 
 var appFiles = []string{
 	// Main app — absolute paths so cache.addAll resolves correctly from SW location.
@@ -76,24 +76,20 @@ func main() {
 
 func onInstall(event sw.Event) {
 	sw.WaitUntil(event, func(done func()) {
-		sw.Fetch("/__version", func(resp sw.Response, ok bool) {
-			if ok {
-				// TODO: read response body
-			}
-			sw.CacheOpen(cacheName, func(cache sw.Cache) {
-				sw.CacheAddAll(cache, appFiles, func() {
-					sw.SkipWaiting()
-					done()
-				})
-			})
-		})
+		// Skip pre-caching — refreshAndReload() populates cache on SSE version check.
+		sw.SkipWaiting()
+		done()
 	})
 }
 
 func onActivate(event sw.Event) {
 	sw.WaitUntil(event, func(done func()) {
-		sw.ClaimClients(func() {
-			done()
+		// Delete old caches left from previous cache names.
+		// caches.match() searches ALL caches — stale entries poison fetches.
+		sw.CacheDelete("sm3sh", func() {
+			sw.ClaimClients(func() {
+				done()
+			})
 		})
 	})
 }
@@ -143,7 +139,7 @@ func connectSSE() {
 		v := data
 		if currentVersion == "" {
 			currentVersion = v
-			return
+			return // First version after start — just store it.
 		}
 		if v != currentVersion {
 			currentVersion = v
