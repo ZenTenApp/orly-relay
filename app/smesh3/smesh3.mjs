@@ -3,7 +3,6 @@
 
 import * as $rt from './$runtime/index.mjs';
 
-import * as common$crypto$secp256k1 from './common_crypto_secp256k1.mjs';
 import * as common$helpers from './common_helpers.mjs';
 import * as common$jsbridge$dom from './common_jsbridge_dom.mjs';
 import * as common$jsbridge$localstorage from './common_jsbridge_localstorage.mjs';
@@ -100,33 +99,88 @@ export function init() {
   return;
 }
 
-export function main() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
+export function isLocalDev() {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = common$jsbridge$dom.ConsoleLog('starting smesh v0.65.46');
-        $t1_2 = common$jsbridge$localstorage.GetItem('smesh-theme');
-        $t2_3 = ($t1_2 !== '');
-        if ($t2_3) {
-          $block = 1; break;
+        $t0_1 = common$jsbridge$dom.Hostname();
+        $t1_2 = ($t0_1 === 'localhost');
+        if ($t1_2) {
+          $t4_5 = true;
+          $block = 2; break;
         }
         else {
-          $block = 3; break;
+          $block = 1; break;
         }
         break;
       }
       case 1: {
-        $t3_4 = ($t1_2 === 'dark');
-        isDark.$set($t3_4);
+        $t2_3 = $rt.builtin.len($t0_1);
+        $t3_4 = ($t2_3 > 4);
+        if ($t3_4) {
+          $block = 3; break;
+        }
+        else {
+          $t7_8 = false;
+          $block = 4; break;
+        }
+        break;
+      }
+      case 2: {
+        return $t4_5;
+        break;
+      }
+      case 3: {
+        $t5_6 = $rt.builtin.stringSlice($t0_1, undefined, 4);
+        $t6_7 = ($t5_6 === '127.');
+        $t7_8 = $t6_7;
+        $block = 4; break;
+        break;
+      }
+      case 4: {
+        $t4_5 = $t7_8;
+        $block = 2; break;
+        break;
+      }
+    }
+  }
+}
+
+export function main() {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = common$jsbridge$dom.ConsoleLog('starting smesh v0.65.48');
+        $t1_2 = isLocalDev();
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t2_3 = defaultRelays.$get();
+        $t3_4 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t4_5 = $t3_4.$get().addr(0);
+        $t4_5.$set('ws://localhost:3334');
+        $t5_6 = $rt.builtin.sliceSlice($t3_4.$get(), undefined, undefined, undefined);
+        $t6_7 = $rt.builtin.appendSlice($t2_3, $t5_6);
+        defaultRelays.$set($t6_7);
+        $t7_8 = common$jsbridge$dom.ConsoleLog('dev mode: added local relay ws://localhost:3334');
         $block = 2; break;
         break;
       }
       case 2: {
-        $t4_5 = isDark.$get();
-        if ($t4_5) {
-          $block = 4; break;
+        $t8_9 = common$jsbridge$localstorage.GetItem('smesh-theme');
+        $t9_10 = ($t8_9 !== '');
+        if ($t9_10) {
+          $block = 3; break;
         }
         else {
           $block = 5; break;
@@ -134,45 +188,61 @@ export function main() {
         break;
       }
       case 3: {
-        $t5_6 = common$jsbridge$dom.PrefersDark();
-        isDark.$set($t5_6);
-        $block = 2; break;
+        $t10_11 = ($t8_9 === 'dark');
+        isDark.$set($t10_11);
+        $block = 4; break;
         break;
       }
       case 4: {
-        $t6_7 = common$jsbridge$dom.Body();
-        $t7_8 = common$jsbridge$dom.AddClass($t6_7, 'dark');
-        $block = 5; break;
-        break;
-      }
-      case 5: {
-        $t8_9 = common$jsbridge$dom.GetElementById('app-root');
-        root.$set($t8_9);
-        $t9_10 = common$jsbridge$localstorage.GetItem('smesh-pubkey');
-        $t10_11 = ($t9_10 !== '');
-        if ($t10_11) {
+        $t11_12 = isDark.$get();
+        if ($t11_12) {
           $block = 6; break;
         }
         else {
-          $block = 8; break;
+          $block = 7; break;
         }
         break;
       }
+      case 5: {
+        $t12_13 = common$jsbridge$dom.PrefersDark();
+        isDark.$set($t12_13);
+        $block = 4; break;
+        break;
+      }
       case 6: {
-        pubhex.$set($t9_10);
-        $t11_12 = common$helpers.HexDecode($t9_10);
-        pubkey.$set($t11_12);
-        $t12_13 = showApp();
+        $t13_14 = common$jsbridge$dom.Body();
+        $t14_15 = common$jsbridge$dom.AddClass($t13_14, 'dark');
         $block = 7; break;
         break;
       }
       case 7: {
-        return;
+        $t15_16 = common$jsbridge$dom.GetElementById('app-root');
+        root.$set($t15_16);
+        $t16_17 = common$jsbridge$localstorage.GetItem('smesh-pubkey');
+        $t17_18 = ($t16_17 !== '');
+        if ($t17_18) {
+          $block = 8; break;
+        }
+        else {
+          $block = 10; break;
+        }
         break;
       }
       case 8: {
-        $t13_14 = showLogin();
-        $block = 7; break;
+        pubhex.$set($t16_17);
+        $t18_19 = common$helpers.HexDecode($t16_17);
+        pubkey.$set($t18_19);
+        $t19_20 = showApp();
+        $block = 9; break;
+        break;
+      }
+      case 9: {
+        return;
+        break;
+      }
+      case 10: {
+        $t20_21 = showLogin();
+        $block = 9; break;
         break;
       }
     }
@@ -255,7 +325,7 @@ export function updateThemeIcon() {
 }
 
 export function showLogin() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129, $t129_130, $t130_131;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78;
   $t0_1 = root.$get();
   $t1_2 = clearChildren($t0_1);
   $t2_3 = common$jsbridge$dom.CreateElement('div');
@@ -284,7 +354,7 @@ export function showLogin() {
   $t24_25 = common$jsbridge$dom.SetStyle($t20_21, 'marginBottom', '4px');
   $t25_26 = common$jsbridge$dom.AppendChild($t2_3, $t20_21);
   $t26_27 = common$jsbridge$dom.CreateElement('span');
-  $t27_28 = common$jsbridge$dom.SetTextContent($t26_27, 'v0.65.46');
+  $t27_28 = common$jsbridge$dom.SetTextContent($t26_27, 'v0.65.48');
   $t28_29 = common$jsbridge$dom.SetStyle($t26_27, 'color', 'var(--muted)');
   $t29_30 = common$jsbridge$dom.SetStyle($t26_27, 'fontSize', '12px');
   $t30_31 = common$jsbridge$dom.AppendChild($t2_3, $t26_27);
@@ -337,60 +407,6 @@ export function showLogin() {
   $t75_76 = common$jsbridge$dom.RegisterCallback($t74_75);
   $t76_77 = $t48_49.$get();
   $t77_78 = common$jsbridge$dom.AddEventListener($t76_77, 'click', $t75_76);
-  $t78_79 = common$jsbridge$dom.CreateElement('div');
-  $t79_80 = common$jsbridge$dom.SetStyle($t78_79, 'marginTop', '24px');
-  $t80_81 = common$jsbridge$dom.SetStyle($t78_79, 'color', 'var(--muted)');
-  $t81_82 = common$jsbridge$dom.SetStyle($t78_79, 'fontSize', '12px');
-  $t82_83 = common$jsbridge$dom.SetTextContent($t78_79, 'or paste nsec');
-  $t83_84 = common$jsbridge$dom.AppendChild($t2_3, $t78_79);
-  $t84_85 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t85_86 = common$jsbridge$dom.CreateElement('input');
-  $t84_85.$set($t85_86);
-  $t86_87 = $t84_85.$get();
-  $t87_88 = common$jsbridge$dom.SetAttribute($t86_87, 'type', 'password');
-  $t88_89 = $t84_85.$get();
-  $t89_90 = common$jsbridge$dom.SetAttribute($t88_89, 'placeholder', 'nsec1...');
-  $t90_91 = $t84_85.$get();
-  $t91_92 = common$jsbridge$dom.SetStyle($t90_91, 'marginTop', '8px');
-  $t92_93 = $t84_85.$get();
-  $t93_94 = common$jsbridge$dom.SetStyle($t92_93, 'padding', '8px 12px');
-  $t94_95 = $t84_85.$get();
-  $t95_96 = common$jsbridge$dom.SetStyle($t94_95, 'width', '320px');
-  $t96_97 = $t84_85.$get();
-  $t97_98 = common$jsbridge$dom.SetStyle($t96_97, 'maxWidth', '90vw');
-  $t98_99 = $t84_85.$get();
-  $t99_100 = common$jsbridge$dom.SetStyle($t98_99, 'fontFamily', '\'Fira Code\', monospace');
-  $t100_101 = $t84_85.$get();
-  $t101_102 = common$jsbridge$dom.SetStyle($t100_101, 'fontSize', '12px');
-  $t102_103 = $t84_85.$get();
-  $t103_104 = common$jsbridge$dom.SetStyle($t102_103, 'background', 'var(--bg)');
-  $t104_105 = $t84_85.$get();
-  $t105_106 = common$jsbridge$dom.SetStyle($t104_105, 'border', '1px solid var(--border)');
-  $t106_107 = $t84_85.$get();
-  $t107_108 = common$jsbridge$dom.SetStyle($t106_107, 'borderRadius', '4px');
-  $t108_109 = $t84_85.$get();
-  $t109_110 = common$jsbridge$dom.SetStyle($t108_109, 'color', 'var(--fg)');
-  $t110_111 = $t84_85.$get();
-  $t111_112 = common$jsbridge$dom.SetStyle($t110_111, 'textAlign', 'center');
-  $t112_113 = $t84_85.$get();
-  $t113_114 = common$jsbridge$dom.AppendChild($t2_3, $t112_113);
-  $t114_115 = common$jsbridge$dom.CreateElement('button');
-  $t115_116 = common$jsbridge$dom.SetTextContent($t114_115, 'login with nsec');
-  $t116_117 = common$jsbridge$dom.SetStyle($t114_115, 'marginTop', '8px');
-  $t117_118 = common$jsbridge$dom.SetStyle($t114_115, 'padding', '10px 32px');
-  $t118_119 = common$jsbridge$dom.SetStyle($t114_115, 'fontFamily', '\'Fira Code\', monospace');
-  $t119_120 = common$jsbridge$dom.SetStyle($t114_115, 'fontSize', '14px');
-  $t120_121 = common$jsbridge$dom.SetStyle($t114_115, 'background', 'var(--bg2)');
-  $t121_122 = common$jsbridge$dom.SetStyle($t114_115, 'color', 'var(--fg)');
-  $t122_123 = common$jsbridge$dom.SetStyle($t114_115, 'border', '1px solid var(--border)');
-  $t123_124 = common$jsbridge$dom.SetStyle($t114_115, 'borderRadius', '4px');
-  $t124_125 = common$jsbridge$dom.SetStyle($t114_115, 'cursor', 'pointer');
-  $t125_126 = common$jsbridge$dom.AppendChild($t2_3, $t114_115);
-  $t126_127 = showLogin$3.bind(null, $t84_85, $t36_37);
-  $t127_128 = common$jsbridge$dom.RegisterCallback($t126_127);
-  $t128_129 = common$jsbridge$dom.AddEventListener($t114_115, 'click', $t127_128);
-  $t129_130 = $t84_85.$get();
-  $t130_131 = common$jsbridge$dom.SetAttribute($t129_130, 'onkeydown', 'if(event.key===\'Enter\'){event.preventDefault();this.nextElementSibling.click()}');
   return;
 }
 
@@ -435,7 +451,7 @@ function showLogin$2(errEl, btn) {
 }
 
 function showLogin$2$1(errEl, btn, hex) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -463,96 +479,9 @@ function showLogin$2$1(errEl, btn, hex) {
         pubkey.$set($t5_6);
         $t6_7 = pubhex.$get();
         $t7_8 = common$jsbridge$localstorage.SetItem('smesh-pubkey', $t6_7);
-        $t8_9 = common$jsbridge$localstorage.SetItem('smesh-mode', 'extension');
-        $t9_10 = root.$get();
-        $t10_11 = clearChildren($t9_10);
-        $t11_12 = showApp();
-        return;
-        break;
-      }
-    }
-  }
-}
-
-function showLogin$3(nsecInp, errEl) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = nsecInp.$get();
-        $t1_2 = common$jsbridge$dom.GetProperty($t0_1, 'value');
-        $t2_3 = ($t1_2 === '');
-        if ($t2_3) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t3_4 = errEl.$get();
-        $t4_5 = common$jsbridge$dom.SetTextContent($t3_4, 'paste your nsec key');
-        return;
-        break;
-      }
-      case 2: {
-        $t5_6 = common$helpers.DecodeNsec($t1_2);
-        $t6_7 = ($t5_6 === null);
-        if ($t6_7) {
-          $block = 3; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 3: {
-        $t7_8 = errEl.$get();
-        $t8_9 = common$jsbridge$dom.SetTextContent($t7_8, 'invalid nsec');
-        return;
-        break;
-      }
-      case 4: {
-        $t9_10 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t10_11 = $rt.builtin.sliceSlice($t9_10.$get(), undefined, undefined, undefined);
-        $t11_12 = $rt.builtin.copy($t10_11, $t5_6);
-        $t12_13 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t13_14 = $t9_10.$get();
-        $t14_15 = common$crypto$secp256k1.PubKeyFromSecKey($t13_14);
-        $t15_16 = $t14_15[0];
-        $t12_13.$set($rt.builtin.cloneValue($t15_16));
-        $t16_17 = $t14_15[1];
-        if ($t16_17) {
-          $block = 6; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 5: {
-        $t17_18 = errEl.$get();
-        $t18_19 = common$jsbridge$dom.SetTextContent($t17_18, 'invalid secret key');
-        return;
-        break;
-      }
-      case 6: {
-        $t19_20 = $rt.builtin.sliceSlice($t12_13.$get(), undefined, undefined, undefined);
-        $t20_21 = common$helpers.HexEncode($t19_20);
-        pubhex.$set($t20_21);
-        $t21_22 = $rt.builtin.sliceSlice($t12_13.$get(), undefined, undefined, undefined);
-        pubkey.$set($t21_22);
-        $t22_23 = pubhex.$get();
-        $t23_24 = common$jsbridge$localstorage.SetItem('smesh-pubkey', $t22_23);
-        $t24_25 = common$jsbridge$localstorage.SetItem('smesh-mode', 'nsec');
-        $t25_26 = $rt.builtin.sliceSlice($t9_10.$get(), undefined, undefined, undefined);
-        $t26_27 = common$helpers.HexEncode($t25_26);
-        $t27_28 = common$jsbridge$localstorage.SetItem('smesh-key', $t26_27);
-        $t28_29 = root.$get();
-        $t29_30 = clearChildren($t28_29);
-        $t30_31 = showApp();
+        $t8_9 = root.$get();
+        $t9_10 = clearChildren($t8_9);
+        $t10_11 = showApp();
         return;
         break;
       }
@@ -1056,7 +985,7 @@ export function makeProtoBtn(label) {
 }
 
 export function showApp() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129, $t129_130, $t130_131, $t131_132, $t132_133, $t133_134, $t134_135, $t135_136, $t136_137, $t137_138, $t138_139, $t139_140, $t140_141, $t141_142, $t142_143, $t143_144, $t144_145, $t145_146, $t146_147, $t147_148, $t148_149, $t149_150, $t150_151, $t151_152, $t152_153, $t153_154, $t154_155, $t155_156, $t156_157, $t157_158, $t158_159, $t159_160, $t160_161, $t161_162, $t162_163, $t163_164, $t164_165, $t165_166, $t166_167, $t167_168, $t168_169, $t169_170, $t170_171, $t171_172, $t172_173, $t173_174, $t174_175, $t175_176, $t176_177, $t177_178, $t178_179, $t179_180, $t180_181, $t181_182, $t182_183, $t183_184, $t184_185, $t185_186, $t186_187, $t187_188, $t188_189, $t189_190, $t190_191, $t191_192, $t192_193, $t193_194, $t194_195, $t195_196, $t196_197, $t197_198, $t198_199, $t199_200, $t200_201, $t201_202, $t202_203, $t203_204, $t204_205, $t205_206, $t206_207, $t207_208, $t208_209, $t209_210, $t210_211, $t211_212, $t212_213, $t213_214, $t214_215, $t215_216, $t216_217, $t217_218, $t218_219, $t219_220, $t220_221, $t221_222, $t222_223, $t223_224, $t224_225, $t225_226, $t226_227, $t227_228, $t228_229, $t229_230, $t230_231, $t231_232, $t232_233, $t233_234, $t234_235, $t235_236, $t236_237, $t237_238, $t238_239, $t239_240, $t240_241, $t241_242, $t242_243, $t243_244, $t244_245, $t245_246, $t246_247, $t247_248, $t248_249, $t249_250, $t250_251, $t251_252, $t252_253, $t253_254, $t254_255, $t255_256, $t256_257, $t257_258, $t258_259, $t259_260, $t260_261, $t261_262, $t262_263, $t263_264, $t264_265, $t265_266, $t266_267, $t267_268, $t268_269, $t269_270, $t270_271, $t271_272, $t272_273, $t273_274, $t274_275, $t275_276, $t276_277, $t277_278, $t278_279, $t279_280, $t280_281, $t281_282, $t282_283, $t283_284, $t284_285, $t285_286, $t286_287, $t287_288, $t288_289, $t289_290, $t290_291, $t291_292, $t292_293, $t293_294, $t294_295, $t295_296, $t296_297, $t297_298, $t298_299, $t299_300, $t300_301, $t301_302, $t302_303, $t303_304, $t304_305, $t305_306, $t306_307, $t307_308, $t308_309, $t309_310, $t310_311, $t311_312, $t312_313, $t313_314, $t314_315, $t315_316, $t316_317, $t317_318, $t318_319, $t319_320, $t320_321, $t321_322, $t322_323, $t323_324, $t324_325, $t325_326, $t326_327, $t327_328, $t328_329, $t329_330, $t330_331, $t331_332, $t332_333, $t333_334, $t334_335, $t335_336, $t336_337, $t337_338, $t338_339, $t339_340, $t340_341, $t341_342, $t342_343, $t343_344, $t344_345, $t345_346, $t346_347, $t347_348, $t348_349, $t349_350, $t350_351, $t351_352, $t352_353, $t353_354, $t354_355, $t355_356, $t356_357, $t357_358, $t358_359, $t359_360, $t360_361, $t361_362, $t362_363, $t363_364;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129, $t129_130, $t130_131, $t131_132, $t132_133, $t133_134, $t134_135, $t135_136, $t136_137, $t137_138, $t138_139, $t139_140, $t140_141, $t141_142, $t142_143, $t143_144, $t144_145, $t145_146, $t146_147, $t147_148, $t148_149, $t149_150, $t150_151, $t151_152, $t152_153, $t153_154, $t154_155, $t155_156, $t156_157, $t157_158, $t158_159, $t159_160, $t160_161, $t161_162, $t162_163, $t163_164, $t164_165, $t165_166, $t166_167, $t167_168, $t168_169, $t169_170, $t170_171, $t171_172, $t172_173, $t173_174, $t174_175, $t175_176, $t176_177, $t177_178, $t178_179, $t179_180, $t180_181, $t181_182, $t182_183, $t183_184, $t184_185, $t185_186, $t186_187, $t187_188, $t188_189, $t189_190, $t190_191, $t191_192, $t192_193, $t193_194, $t194_195, $t195_196, $t196_197, $t197_198, $t198_199, $t199_200, $t200_201, $t201_202, $t202_203, $t203_204, $t204_205, $t205_206, $t206_207, $t207_208, $t208_209, $t209_210, $t210_211, $t211_212, $t212_213, $t213_214, $t214_215, $t215_216, $t216_217, $t217_218, $t218_219, $t219_220, $t220_221, $t221_222, $t222_223, $t223_224, $t224_225, $t225_226, $t226_227, $t227_228, $t228_229, $t229_230, $t230_231, $t231_232, $t232_233, $t233_234, $t234_235, $t235_236, $t236_237, $t237_238, $t238_239, $t239_240, $t240_241, $t241_242, $t242_243, $t243_244, $t244_245, $t245_246, $t246_247, $t247_248, $t248_249, $t249_250, $t250_251, $t251_252, $t252_253, $t253_254, $t254_255, $t255_256, $t256_257, $t257_258, $t258_259, $t259_260, $t260_261, $t261_262, $t262_263, $t263_264, $t264_265, $t265_266, $t266_267, $t267_268, $t268_269, $t269_270, $t270_271, $t271_272, $t272_273, $t273_274, $t274_275, $t275_276, $t276_277, $t277_278, $t278_279, $t279_280, $t280_281, $t281_282, $t282_283, $t283_284, $t284_285, $t285_286, $t286_287, $t287_288, $t288_289, $t289_290, $t290_291, $t291_292, $t292_293, $t293_294, $t294_295, $t295_296, $t296_297, $t297_298, $t298_299, $t299_300, $t300_301, $t301_302, $t302_303, $t303_304, $t304_305, $t305_306, $t306_307, $t307_308, $t308_309, $t309_310, $t310_311, $t311_312, $t312_313, $t313_314, $t314_315, $t315_316, $t316_317, $t317_318, $t318_319, $t319_320, $t320_321, $t321_322, $t322_323, $t323_324, $t324_325, $t325_326, $t326_327, $t327_328, $t328_329, $t329_330, $t330_331, $t331_332, $t332_333, $t333_334, $t334_335, $t335_336, $t336_337, $t337_338, $t338_339, $t339_340, $t340_341, $t341_342, $t342_343, $t343_344, $t344_345, $t345_346, $t346_347, $t347_348, $t348_349, $t349_350, $t350_351, $t351_352, $t352_353, $t353_354, $t354_355, $t355_356, $t356_357, $t357_358;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -1092,303 +1021,378 @@ export function showApp() {
         $t14_15 = $rt.builtin.makeMap('string');
         profileTabBtns.$set($t14_15);
         $t15_16 = common$jsbridge$dom.OnSWMessage(onSWMessage);
-        $t16_17 = common$jsbridge$localstorage.GetItem('smesh-key');
-        $t17_18 = ($t16_17 !== '');
-        if ($t17_18) {
+        $t16_17 = pubhex.$get();
+        $t17_18 = jstr($t16_17);
+        $t18_19 = ('["SET_PUBKEY",' + $t17_18);
+        $t19_20 = ($t18_19 + ']');
+        $t20_21 = common$jsbridge$dom.PostToSW($t19_20);
+        $t21_22 = common$jsbridge$dom.IDBGetAll('profiles', showApp$1, showApp$2);
+        $t22_23 = common$jsbridge$dom.CreateElement('div');
+        $t23_24 = common$jsbridge$dom.SetStyle($t22_23, 'display', 'flex');
+        $t24_25 = common$jsbridge$dom.SetStyle($t22_23, 'alignItems', 'center');
+        $t25_26 = common$jsbridge$dom.SetStyle($t22_23, 'padding', '8px 16px');
+        $t26_27 = common$jsbridge$dom.SetStyle($t22_23, 'height', '48px');
+        $t27_28 = common$jsbridge$dom.SetStyle($t22_23, 'boxSizing', 'border-box');
+        $t28_29 = common$jsbridge$dom.SetStyle($t22_23, 'background', 'var(--bg2)');
+        $t29_30 = common$jsbridge$dom.SetStyle($t22_23, 'position', 'fixed');
+        $t30_31 = common$jsbridge$dom.SetStyle($t22_23, 'top', '0');
+        $t31_32 = common$jsbridge$dom.SetStyle($t22_23, 'left', '0');
+        $t32_33 = common$jsbridge$dom.SetStyle($t22_23, 'right', '0');
+        $t33_34 = common$jsbridge$dom.SetStyle($t22_23, 'zIndex', '100');
+        $t34_35 = common$jsbridge$dom.CreateElement('div');
+        $t35_36 = common$jsbridge$dom.SetStyle($t34_35, 'display', 'flex');
+        $t36_37 = common$jsbridge$dom.SetStyle($t34_35, 'alignItems', 'center');
+        $t37_38 = common$jsbridge$dom.SetStyle($t34_35, 'flex', '1');
+        $t38_39 = common$jsbridge$dom.SetStyle($t34_35, 'minWidth', '0');
+        $t39_40 = common$jsbridge$dom.CreateElement('span');
+        pageTitleEl.$set($t39_40);
+        $t40_41 = pageTitleEl.$get();
+        $t41_42 = common$jsbridge$dom.SetStyle($t40_41, 'fontSize', '18px');
+        $t42_43 = pageTitleEl.$get();
+        $t43_44 = common$jsbridge$dom.SetStyle($t42_43, 'fontWeight', 'bold');
+        $t44_45 = pageTitleEl.$get();
+        $t45_46 = common$jsbridge$dom.SetTextContent($t44_45, 'feed');
+        $t46_47 = pageTitleEl.$get();
+        $t47_48 = common$jsbridge$dom.AppendChild($t34_35, $t46_47);
+        $t48_49 = common$jsbridge$dom.AppendChild($t22_23, $t34_35);
+        $t49_50 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t50_51 = common$jsbridge$dom.CreateElement('div');
+        $t49_50.$set($t50_51);
+        $t51_52 = $t49_50.$get();
+        $t52_53 = common$jsbridge$dom.SetStyle($t51_52, 'width', '32px');
+        $t53_54 = $t49_50.$get();
+        $t54_55 = common$jsbridge$dom.SetStyle($t53_54, 'height', '32px');
+        $t55_56 = $t49_50.$get();
+        $t56_57 = common$jsbridge$dom.SetStyle($t55_56, 'flexShrink', '0');
+        $t57_58 = showApp$3.bind(null, $t49_50);
+        $t58_59 = common$jsbridge$dom.FetchText('./smesh-loader.svg', $t57_58);
+        $t59_60 = $t49_50.$get();
+        $t60_61 = common$jsbridge$dom.AppendChild($t22_23, $t59_60);
+        $t61_62 = common$jsbridge$dom.CreateElement('div');
+        $t62_63 = common$jsbridge$dom.SetStyle($t61_62, 'display', 'flex');
+        $t63_64 = common$jsbridge$dom.SetStyle($t61_62, 'alignItems', 'center');
+        $t64_65 = common$jsbridge$dom.SetStyle($t61_62, 'gap', '8px');
+        $t65_66 = common$jsbridge$dom.SetStyle($t61_62, 'flex', '1');
+        $t66_67 = common$jsbridge$dom.SetStyle($t61_62, 'justifyContent', 'flex-end');
+        $t67_68 = common$jsbridge$dom.CreateElement('button');
+        themeBtn.$set($t67_68);
+        $t68_69 = themeBtn.$get();
+        $t69_70 = common$jsbridge$dom.SetStyle($t68_69, 'background', 'color-mix(in srgb, var(--fg) 40%, transparent)');
+        $t70_71 = themeBtn.$get();
+        $t71_72 = common$jsbridge$dom.SetStyle($t70_71, 'border', 'none');
+        $t72_73 = themeBtn.$get();
+        $t73_74 = common$jsbridge$dom.SetStyle($t72_73, 'borderRadius', '50%');
+        $t74_75 = themeBtn.$get();
+        $t75_76 = common$jsbridge$dom.SetStyle($t74_75, 'width', '32px');
+        $t76_77 = themeBtn.$get();
+        $t77_78 = common$jsbridge$dom.SetStyle($t76_77, 'height', '32px');
+        $t78_79 = themeBtn.$get();
+        $t79_80 = common$jsbridge$dom.SetStyle($t78_79, 'fontSize', '16px');
+        $t80_81 = themeBtn.$get();
+        $t81_82 = common$jsbridge$dom.SetStyle($t80_81, 'cursor', 'pointer');
+        $t82_83 = themeBtn.$get();
+        $t83_84 = common$jsbridge$dom.SetStyle($t82_83, 'padding', '0');
+        $t84_85 = themeBtn.$get();
+        $t85_86 = common$jsbridge$dom.SetStyle($t84_85, 'display', 'flex');
+        $t86_87 = themeBtn.$get();
+        $t87_88 = common$jsbridge$dom.SetStyle($t86_87, 'alignItems', 'center');
+        $t88_89 = themeBtn.$get();
+        $t89_90 = common$jsbridge$dom.SetStyle($t88_89, 'justifyContent', 'center');
+        $t90_91 = themeBtn.$get();
+        $t91_92 = common$jsbridge$dom.SetStyle($t90_91, 'lineHeight', '1');
+        $t92_93 = updateThemeIcon();
+        $t93_94 = themeBtn.$get();
+        $t94_95 = common$jsbridge$dom.RegisterCallback(showApp$4);
+        $t95_96 = common$jsbridge$dom.AddEventListener($t93_94, 'click', $t94_95);
+        $t96_97 = themeBtn.$get();
+        $t97_98 = common$jsbridge$dom.AppendChild($t61_62, $t96_97);
+        $t98_99 = common$jsbridge$dom.CreateElement('button');
+        $t99_100 = common$jsbridge$dom.SetTextContent($t98_99, 'logout');
+        $t100_101 = common$jsbridge$dom.SetStyle($t98_99, 'fontFamily', '\'Fira Code\', monospace');
+        $t101_102 = common$jsbridge$dom.SetStyle($t98_99, 'fontSize', '12px');
+        $t102_103 = common$jsbridge$dom.SetStyle($t98_99, 'background', 'color-mix(in srgb, var(--fg) 40%, transparent)');
+        $t103_104 = common$jsbridge$dom.SetStyle($t98_99, 'border', 'none');
+        $t104_105 = common$jsbridge$dom.SetStyle($t98_99, 'color', 'var(--fg)');
+        $t105_106 = common$jsbridge$dom.SetStyle($t98_99, 'borderRadius', '4px');
+        $t106_107 = common$jsbridge$dom.SetStyle($t98_99, 'height', '32px');
+        $t107_108 = common$jsbridge$dom.SetStyle($t98_99, 'padding', '0 16px');
+        $t108_109 = common$jsbridge$dom.SetStyle($t98_99, 'cursor', 'pointer');
+        $t109_110 = common$jsbridge$dom.RegisterCallback(showApp$5);
+        $t110_111 = common$jsbridge$dom.AddEventListener($t98_99, 'click', $t109_110);
+        $t111_112 = common$jsbridge$dom.AppendChild($t61_62, $t98_99);
+        $t112_113 = common$jsbridge$dom.AppendChild($t22_23, $t61_62);
+        $t113_114 = root.$get();
+        $t114_115 = common$jsbridge$dom.AppendChild($t113_114, $t22_23);
+        $t115_116 = common$jsbridge$dom.CreateElement('div');
+        $t116_117 = common$jsbridge$dom.SetStyle($t115_116, 'position', 'fixed');
+        $t117_118 = common$jsbridge$dom.SetStyle($t115_116, 'top', '48px');
+        $t118_119 = common$jsbridge$dom.SetStyle($t115_116, 'bottom', '36px');
+        $t119_120 = common$jsbridge$dom.SetStyle($t115_116, 'left', '0');
+        $t120_121 = common$jsbridge$dom.SetStyle($t115_116, 'right', '0');
+        $t121_122 = common$jsbridge$dom.SetStyle($t115_116, 'display', 'flex');
+        $t122_123 = common$jsbridge$dom.CreateElement('div');
+        $t123_124 = common$jsbridge$dom.SetStyle($t122_123, 'width', '44px');
+        $t124_125 = common$jsbridge$dom.SetStyle($t122_123, 'flexShrink', '0');
+        $t125_126 = common$jsbridge$dom.SetStyle($t122_123, 'background', 'var(--bg2)');
+        $t126_127 = common$jsbridge$dom.SetStyle($t122_123, 'display', 'flex');
+        $t127_128 = common$jsbridge$dom.SetStyle($t122_123, 'flexDirection', 'column');
+        $t128_129 = common$jsbridge$dom.SetStyle($t122_123, 'alignItems', 'center');
+        $t129_130 = common$jsbridge$dom.SetStyle($t122_123, 'paddingTop', '8px');
+        $t130_131 = common$jsbridge$dom.SetStyle($t122_123, 'gap', '4px');
+        $t131_132 = makeSidebarIcon('<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3h12M6 7h9M6 11h9M3 15h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>', true);
+        sidebarFeed.$set($t131_132);
+        $t132_133 = sidebarFeed.$get();
+        $t133_134 = common$jsbridge$dom.RegisterCallback(showApp$6);
+        $t134_135 = common$jsbridge$dom.AddEventListener($t132_133, 'click', $t133_134);
+        $t135_136 = sidebarFeed.$get();
+        $t136_137 = common$jsbridge$dom.AppendChild($t122_123, $t135_136);
+        $t137_138 = makeSidebarIcon('<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 3h14v9H10l-2 3-2-3H2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>', false);
+        sidebarMsg.$set($t137_138);
+        $t138_139 = sidebarMsg.$get();
+        $t139_140 = common$jsbridge$dom.RegisterCallback(showApp$7);
+        $t140_141 = common$jsbridge$dom.AddEventListener($t138_139, 'click', $t139_140);
+        $t141_142 = sidebarMsg.$get();
+        $t142_143 = common$jsbridge$dom.AppendChild($t122_123, $t141_142);
+        $t143_144 = common$jsbridge$dom.AppendChild($t115_116, $t122_123);
+        $t144_145 = common$jsbridge$dom.CreateElement('div');
+        $t145_146 = common$jsbridge$dom.SetStyle($t144_145, 'flex', '1');
+        $t146_147 = common$jsbridge$dom.SetStyle($t144_145, 'overflowY', 'auto');
+        $t147_148 = common$jsbridge$dom.CreateElement('div');
+        feedPage.$set($t147_148);
+        $t148_149 = feedPage.$get();
+        $t149_150 = common$jsbridge$dom.SetStyle($t148_149, 'padding', '16px');
+        $t150_151 = common$jsbridge$dom.CreateElement('div');
+        feedLoader.$set($t150_151);
+        $t151_152 = feedLoader.$get();
+        $t152_153 = common$jsbridge$dom.SetStyle($t151_152, 'display', 'flex');
+        $t153_154 = feedLoader.$get();
+        $t154_155 = common$jsbridge$dom.SetStyle($t153_154, 'flexDirection', 'column');
+        $t155_156 = feedLoader.$get();
+        $t156_157 = common$jsbridge$dom.SetStyle($t155_156, 'alignItems', 'center');
+        $t157_158 = feedLoader.$get();
+        $t158_159 = common$jsbridge$dom.SetStyle($t157_158, 'justifyContent', 'center');
+        $t159_160 = feedLoader.$get();
+        $t160_161 = common$jsbridge$dom.SetStyle($t159_160, 'padding', '64px 0');
+        $t161_162 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t162_163 = common$jsbridge$dom.CreateElement('div');
+        $t161_162.$set($t162_163);
+        $t163_164 = $t161_162.$get();
+        $t164_165 = common$jsbridge$dom.SetStyle($t163_164, 'width', '120px');
+        $t165_166 = $t161_162.$get();
+        $t166_167 = common$jsbridge$dom.SetStyle($t165_166, 'height', '120px');
+        $t167_168 = showApp$8.bind(null, $t161_162);
+        $t168_169 = common$jsbridge$dom.FetchText('./smesh-loader.svg', $t167_168);
+        $t169_170 = feedLoader.$get();
+        $t170_171 = $t161_162.$get();
+        $t171_172 = common$jsbridge$dom.AppendChild($t169_170, $t170_171);
+        $t172_173 = common$jsbridge$dom.CreateElement('div');
+        $t173_174 = common$jsbridge$dom.SetTextContent($t172_173, 'connecting...');
+        $t174_175 = common$jsbridge$dom.SetStyle($t172_173, 'marginTop', '16px');
+        $t175_176 = common$jsbridge$dom.SetStyle($t172_173, 'color', 'var(--muted)');
+        $t176_177 = common$jsbridge$dom.SetStyle($t172_173, 'fontSize', '14px');
+        $t177_178 = feedLoader.$get();
+        $t178_179 = common$jsbridge$dom.AppendChild($t177_178, $t172_173);
+        $t179_180 = feedPage.$get();
+        $t180_181 = feedLoader.$get();
+        $t181_182 = common$jsbridge$dom.AppendChild($t179_180, $t180_181);
+        $t182_183 = common$jsbridge$dom.CreateElement('div');
+        feedContainer.$set($t182_183);
+        $t183_184 = feedPage.$get();
+        $t184_185 = feedContainer.$get();
+        $t185_186 = common$jsbridge$dom.AppendChild($t183_184, $t184_185);
+        $t186_187 = feedPage.$get();
+        $t187_188 = common$jsbridge$dom.AppendChild($t144_145, $t186_187);
+        $t188_189 = common$jsbridge$dom.CreateElement('div');
+        msgPage.$set($t188_189);
+        $t189_190 = msgPage.$get();
+        $t190_191 = common$jsbridge$dom.SetStyle($t189_190, 'padding', '16px');
+        $t191_192 = msgPage.$get();
+        $t192_193 = common$jsbridge$dom.SetStyle($t191_192, 'display', 'none');
+        $t193_194 = msgPage.$get();
+        $t194_195 = common$jsbridge$dom.SetStyle($t193_194, 'position', 'relative');
+        $t195_196 = msgPage.$get();
+        $t196_197 = common$jsbridge$dom.SetStyle($t195_196, 'height', '100%');
+        $t197_198 = msgPage.$get();
+        $t198_199 = common$jsbridge$dom.SetStyle($t197_198, 'boxSizing', 'border-box');
+        $t199_200 = common$jsbridge$dom.CreateElement('div');
+        msgListContainer.$set($t199_200);
+        $t200_201 = msgPage.$get();
+        $t201_202 = msgListContainer.$get();
+        $t202_203 = common$jsbridge$dom.AppendChild($t200_201, $t201_202);
+        $t203_204 = common$jsbridge$dom.CreateElement('div');
+        msgThreadContainer.$set($t203_204);
+        $t204_205 = msgThreadContainer.$get();
+        $t205_206 = common$jsbridge$dom.SetStyle($t204_205, 'display', 'none');
+        $t206_207 = msgThreadContainer.$get();
+        $t207_208 = common$jsbridge$dom.SetStyle($t206_207, 'flexDirection', 'column');
+        $t208_209 = msgThreadContainer.$get();
+        $t209_210 = common$jsbridge$dom.SetStyle($t208_209, 'position', 'absolute');
+        $t210_211 = msgThreadContainer.$get();
+        $t211_212 = common$jsbridge$dom.SetStyle($t210_211, 'top', '0');
+        $t212_213 = msgThreadContainer.$get();
+        $t213_214 = common$jsbridge$dom.SetStyle($t212_213, 'left', '0');
+        $t214_215 = msgThreadContainer.$get();
+        $t215_216 = common$jsbridge$dom.SetStyle($t214_215, 'right', '0');
+        $t216_217 = msgThreadContainer.$get();
+        $t217_218 = common$jsbridge$dom.SetStyle($t216_217, 'bottom', '0');
+        $t218_219 = msgThreadContainer.$get();
+        $t219_220 = common$jsbridge$dom.SetStyle($t218_219, 'background', 'var(--bg)');
+        $t220_221 = msgPage.$get();
+        $t221_222 = msgThreadContainer.$get();
+        $t222_223 = common$jsbridge$dom.AppendChild($t220_221, $t221_222);
+        msgView.$set('list');
+        $t223_224 = msgPage.$get();
+        $t224_225 = common$jsbridge$dom.AppendChild($t144_145, $t223_224);
+        $t225_226 = common$jsbridge$dom.CreateElement('div');
+        profilePage.$set($t225_226);
+        $t226_227 = profilePage.$get();
+        $t227_228 = common$jsbridge$dom.SetStyle($t226_227, 'display', 'none');
+        $t228_229 = profilePage.$get();
+        $t229_230 = common$jsbridge$dom.AppendChild($t144_145, $t228_229);
+        $t230_231 = common$jsbridge$dom.AppendChild($t115_116, $t144_145);
+        $t231_232 = root.$get();
+        $t232_233 = common$jsbridge$dom.AppendChild($t231_232, $t115_116);
+        activePage.$set('feed');
+        $t233_234 = common$jsbridge$dom.CreateElement('div');
+        $t234_235 = common$jsbridge$dom.SetStyle($t233_234, 'position', 'fixed');
+        $t235_236 = common$jsbridge$dom.SetStyle($t233_234, 'bottom', '0');
+        $t236_237 = common$jsbridge$dom.SetStyle($t233_234, 'left', '0');
+        $t237_238 = common$jsbridge$dom.SetStyle($t233_234, 'right', '0');
+        $t238_239 = common$jsbridge$dom.SetStyle($t233_234, 'height', '36px');
+        $t239_240 = common$jsbridge$dom.SetStyle($t233_234, 'display', 'flex');
+        $t240_241 = common$jsbridge$dom.SetStyle($t233_234, 'alignItems', 'center');
+        $t241_242 = common$jsbridge$dom.SetStyle($t233_234, 'padding', '0 12px');
+        $t242_243 = common$jsbridge$dom.SetStyle($t233_234, 'gap', '8px');
+        $t243_244 = common$jsbridge$dom.SetStyle($t233_234, 'background', 'var(--bg2)');
+        $t244_245 = common$jsbridge$dom.SetStyle($t233_234, 'fontSize', '12px');
+        $t245_246 = common$jsbridge$dom.SetStyle($t233_234, 'color', 'var(--fg)');
+        $t246_247 = common$jsbridge$dom.SetStyle($t233_234, 'zIndex', '100');
+        $t247_248 = common$jsbridge$dom.CreateElement('img');
+        avatarEl.$set($t247_248);
+        $t248_249 = avatarEl.$get();
+        $t249_250 = common$jsbridge$dom.SetAttribute($t248_249, 'width', '20');
+        $t250_251 = avatarEl.$get();
+        $t251_252 = common$jsbridge$dom.SetAttribute($t250_251, 'height', '20');
+        $t252_253 = avatarEl.$get();
+        $t253_254 = common$jsbridge$dom.SetStyle($t252_253, 'borderRadius', '50%');
+        $t254_255 = avatarEl.$get();
+        $t255_256 = common$jsbridge$dom.SetStyle($t254_255, 'objectFit', 'cover');
+        $t256_257 = avatarEl.$get();
+        $t257_258 = common$jsbridge$dom.SetStyle($t256_257, 'display', 'none');
+        $t258_259 = avatarEl.$get();
+        $t259_260 = common$jsbridge$dom.SetAttribute($t258_259, 'onerror', 'this.style.display=\'none\'');
+        $t260_261 = avatarEl.$get();
+        $t261_262 = common$jsbridge$dom.AppendChild($t233_234, $t260_261);
+        $t262_263 = common$jsbridge$dom.CreateElement('span');
+        nameEl.$set($t262_263);
+        $t263_264 = nameEl.$get();
+        $t264_265 = common$jsbridge$dom.SetStyle($t263_264, 'fontSize', '12px');
+        $t265_266 = nameEl.$get();
+        $t266_267 = common$jsbridge$dom.SetStyle($t265_266, 'fontFamily', 'system-ui, sans-serif, \'Noto Color Emoji\'');
+        $t267_268 = nameEl.$get();
+        $t268_269 = common$jsbridge$dom.SetStyle($t267_268, 'fontWeight', 'bold');
+        $t269_270 = nameEl.$get();
+        $t270_271 = common$jsbridge$dom.SetStyle($t269_270, 'overflow', 'hidden');
+        $t271_272 = nameEl.$get();
+        $t272_273 = common$jsbridge$dom.SetStyle($t271_272, 'textOverflow', 'ellipsis');
+        $t273_274 = nameEl.$get();
+        $t274_275 = common$jsbridge$dom.SetStyle($t273_274, 'whiteSpace', 'nowrap');
+        $t275_276 = nameEl.$get();
+        $t276_277 = common$jsbridge$dom.SetStyle($t275_276, 'maxWidth', '120px');
+        $t277_278 = pubkey.$get();
+        $t278_279 = common$helpers.EncodeNpub($t277_278);
+        $t279_280 = $rt.builtin.len($t278_279);
+        $t280_281 = ($t279_280 > 20);
+        if ($t280_281) {
           $block = 1; break;
         }
         else {
-          $block = 3; break;
+          $block = 2; break;
         }
         break;
       }
       case 1: {
-        $t18_19 = jstr($t16_17);
-        $t19_20 = ('["SET_KEY",' + $t18_19);
-        $t20_21 = ($t19_20 + ']');
-        $t21_22 = common$jsbridge$dom.PostToSW($t20_21);
+        $t281_282 = nameEl.$get();
+        $t282_283 = $rt.builtin.stringSlice($t278_279, undefined, 12);
+        $t283_284 = ($t282_283 + '...');
+        $t284_285 = $rt.builtin.len($t278_279);
+        $t285_286 = ($t284_285 - 4);
+        $t286_287 = $rt.builtin.stringSlice($t278_279, $t285_286, undefined);
+        $t287_288 = ($t283_284 + $t286_287);
+        $t288_289 = common$jsbridge$dom.SetTextContent($t281_282, $t287_288);
         $block = 2; break;
         break;
       }
       case 2: {
-        $t22_23 = common$jsbridge$dom.IDBGetAll('profiles', showApp$1, showApp$2);
-        $t23_24 = common$jsbridge$dom.CreateElement('div');
-        $t24_25 = common$jsbridge$dom.SetStyle($t23_24, 'display', 'flex');
-        $t25_26 = common$jsbridge$dom.SetStyle($t23_24, 'alignItems', 'center');
-        $t26_27 = common$jsbridge$dom.SetStyle($t23_24, 'padding', '8px 16px');
-        $t27_28 = common$jsbridge$dom.SetStyle($t23_24, 'height', '48px');
-        $t28_29 = common$jsbridge$dom.SetStyle($t23_24, 'boxSizing', 'border-box');
-        $t29_30 = common$jsbridge$dom.SetStyle($t23_24, 'background', 'var(--bg2)');
-        $t30_31 = common$jsbridge$dom.SetStyle($t23_24, 'position', 'fixed');
-        $t31_32 = common$jsbridge$dom.SetStyle($t23_24, 'top', '0');
-        $t32_33 = common$jsbridge$dom.SetStyle($t23_24, 'left', '0');
-        $t33_34 = common$jsbridge$dom.SetStyle($t23_24, 'right', '0');
-        $t34_35 = common$jsbridge$dom.SetStyle($t23_24, 'zIndex', '100');
-        $t35_36 = common$jsbridge$dom.CreateElement('div');
-        $t36_37 = common$jsbridge$dom.SetStyle($t35_36, 'display', 'flex');
-        $t37_38 = common$jsbridge$dom.SetStyle($t35_36, 'alignItems', 'center');
-        $t38_39 = common$jsbridge$dom.SetStyle($t35_36, 'flex', '1');
-        $t39_40 = common$jsbridge$dom.SetStyle($t35_36, 'minWidth', '0');
-        $t40_41 = common$jsbridge$dom.CreateElement('span');
-        pageTitleEl.$set($t40_41);
-        $t41_42 = pageTitleEl.$get();
-        $t42_43 = common$jsbridge$dom.SetStyle($t41_42, 'fontSize', '18px');
-        $t43_44 = pageTitleEl.$get();
-        $t44_45 = common$jsbridge$dom.SetStyle($t43_44, 'fontWeight', 'bold');
-        $t45_46 = pageTitleEl.$get();
-        $t46_47 = common$jsbridge$dom.SetTextContent($t45_46, 'feed');
-        $t47_48 = pageTitleEl.$get();
-        $t48_49 = common$jsbridge$dom.AppendChild($t35_36, $t47_48);
-        $t49_50 = common$jsbridge$dom.AppendChild($t23_24, $t35_36);
-        $t50_51 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t51_52 = common$jsbridge$dom.CreateElement('div');
-        $t50_51.$set($t51_52);
-        $t52_53 = $t50_51.$get();
-        $t53_54 = common$jsbridge$dom.SetStyle($t52_53, 'width', '32px');
-        $t54_55 = $t50_51.$get();
-        $t55_56 = common$jsbridge$dom.SetStyle($t54_55, 'height', '32px');
-        $t56_57 = $t50_51.$get();
-        $t57_58 = common$jsbridge$dom.SetStyle($t56_57, 'flexShrink', '0');
-        $t58_59 = showApp$3.bind(null, $t50_51);
-        $t59_60 = common$jsbridge$dom.FetchText('./smesh-loader.svg', $t58_59);
-        $t60_61 = $t50_51.$get();
-        $t61_62 = common$jsbridge$dom.AppendChild($t23_24, $t60_61);
-        $t62_63 = common$jsbridge$dom.CreateElement('div');
-        $t63_64 = common$jsbridge$dom.SetStyle($t62_63, 'display', 'flex');
-        $t64_65 = common$jsbridge$dom.SetStyle($t62_63, 'alignItems', 'center');
-        $t65_66 = common$jsbridge$dom.SetStyle($t62_63, 'gap', '8px');
-        $t66_67 = common$jsbridge$dom.SetStyle($t62_63, 'flex', '1');
-        $t67_68 = common$jsbridge$dom.SetStyle($t62_63, 'justifyContent', 'flex-end');
-        $t68_69 = common$jsbridge$dom.CreateElement('button');
-        themeBtn.$set($t68_69);
-        $t69_70 = themeBtn.$get();
-        $t70_71 = common$jsbridge$dom.SetStyle($t69_70, 'background', 'color-mix(in srgb, var(--fg) 40%, transparent)');
-        $t71_72 = themeBtn.$get();
-        $t72_73 = common$jsbridge$dom.SetStyle($t71_72, 'border', 'none');
-        $t73_74 = themeBtn.$get();
-        $t74_75 = common$jsbridge$dom.SetStyle($t73_74, 'borderRadius', '50%');
-        $t75_76 = themeBtn.$get();
-        $t76_77 = common$jsbridge$dom.SetStyle($t75_76, 'width', '32px');
-        $t77_78 = themeBtn.$get();
-        $t78_79 = common$jsbridge$dom.SetStyle($t77_78, 'height', '32px');
-        $t79_80 = themeBtn.$get();
-        $t80_81 = common$jsbridge$dom.SetStyle($t79_80, 'fontSize', '16px');
-        $t81_82 = themeBtn.$get();
-        $t82_83 = common$jsbridge$dom.SetStyle($t81_82, 'cursor', 'pointer');
-        $t83_84 = themeBtn.$get();
-        $t84_85 = common$jsbridge$dom.SetStyle($t83_84, 'padding', '0');
-        $t85_86 = themeBtn.$get();
-        $t86_87 = common$jsbridge$dom.SetStyle($t85_86, 'display', 'flex');
-        $t87_88 = themeBtn.$get();
-        $t88_89 = common$jsbridge$dom.SetStyle($t87_88, 'alignItems', 'center');
-        $t89_90 = themeBtn.$get();
-        $t90_91 = common$jsbridge$dom.SetStyle($t89_90, 'justifyContent', 'center');
-        $t91_92 = themeBtn.$get();
-        $t92_93 = common$jsbridge$dom.SetStyle($t91_92, 'lineHeight', '1');
-        $t93_94 = updateThemeIcon();
-        $t94_95 = themeBtn.$get();
-        $t95_96 = common$jsbridge$dom.RegisterCallback(showApp$4);
-        $t96_97 = common$jsbridge$dom.AddEventListener($t94_95, 'click', $t95_96);
-        $t97_98 = themeBtn.$get();
-        $t98_99 = common$jsbridge$dom.AppendChild($t62_63, $t97_98);
-        $t99_100 = common$jsbridge$dom.CreateElement('button');
-        $t100_101 = common$jsbridge$dom.SetTextContent($t99_100, 'logout');
-        $t101_102 = common$jsbridge$dom.SetStyle($t99_100, 'fontFamily', '\'Fira Code\', monospace');
-        $t102_103 = common$jsbridge$dom.SetStyle($t99_100, 'fontSize', '12px');
-        $t103_104 = common$jsbridge$dom.SetStyle($t99_100, 'background', 'color-mix(in srgb, var(--fg) 40%, transparent)');
-        $t104_105 = common$jsbridge$dom.SetStyle($t99_100, 'border', 'none');
-        $t105_106 = common$jsbridge$dom.SetStyle($t99_100, 'color', 'var(--fg)');
-        $t106_107 = common$jsbridge$dom.SetStyle($t99_100, 'borderRadius', '4px');
-        $t107_108 = common$jsbridge$dom.SetStyle($t99_100, 'height', '32px');
-        $t108_109 = common$jsbridge$dom.SetStyle($t99_100, 'padding', '0 16px');
-        $t109_110 = common$jsbridge$dom.SetStyle($t99_100, 'cursor', 'pointer');
-        $t110_111 = common$jsbridge$dom.RegisterCallback(showApp$5);
-        $t111_112 = common$jsbridge$dom.AddEventListener($t99_100, 'click', $t110_111);
-        $t112_113 = common$jsbridge$dom.AppendChild($t62_63, $t99_100);
-        $t113_114 = common$jsbridge$dom.AppendChild($t23_24, $t62_63);
-        $t114_115 = root.$get();
-        $t115_116 = common$jsbridge$dom.AppendChild($t114_115, $t23_24);
-        $t116_117 = common$jsbridge$dom.CreateElement('div');
-        $t117_118 = common$jsbridge$dom.SetStyle($t116_117, 'position', 'fixed');
-        $t118_119 = common$jsbridge$dom.SetStyle($t116_117, 'top', '48px');
-        $t119_120 = common$jsbridge$dom.SetStyle($t116_117, 'bottom', '36px');
-        $t120_121 = common$jsbridge$dom.SetStyle($t116_117, 'left', '0');
-        $t121_122 = common$jsbridge$dom.SetStyle($t116_117, 'right', '0');
-        $t122_123 = common$jsbridge$dom.SetStyle($t116_117, 'display', 'flex');
-        $t123_124 = common$jsbridge$dom.CreateElement('div');
-        $t124_125 = common$jsbridge$dom.SetStyle($t123_124, 'width', '44px');
-        $t125_126 = common$jsbridge$dom.SetStyle($t123_124, 'flexShrink', '0');
-        $t126_127 = common$jsbridge$dom.SetStyle($t123_124, 'background', 'var(--bg2)');
-        $t127_128 = common$jsbridge$dom.SetStyle($t123_124, 'display', 'flex');
-        $t128_129 = common$jsbridge$dom.SetStyle($t123_124, 'flexDirection', 'column');
-        $t129_130 = common$jsbridge$dom.SetStyle($t123_124, 'alignItems', 'center');
-        $t130_131 = common$jsbridge$dom.SetStyle($t123_124, 'paddingTop', '8px');
-        $t131_132 = common$jsbridge$dom.SetStyle($t123_124, 'gap', '4px');
-        $t132_133 = makeSidebarIcon('<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3h12M6 7h9M6 11h9M3 15h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>', true);
-        sidebarFeed.$set($t132_133);
-        $t133_134 = sidebarFeed.$get();
-        $t134_135 = common$jsbridge$dom.RegisterCallback(showApp$6);
-        $t135_136 = common$jsbridge$dom.AddEventListener($t133_134, 'click', $t134_135);
-        $t136_137 = sidebarFeed.$get();
-        $t137_138 = common$jsbridge$dom.AppendChild($t123_124, $t136_137);
-        $t138_139 = makeSidebarIcon('<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 3h14v9H10l-2 3-2-3H2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>', false);
-        sidebarMsg.$set($t138_139);
-        $t139_140 = sidebarMsg.$get();
-        $t140_141 = common$jsbridge$dom.RegisterCallback(showApp$7);
-        $t141_142 = common$jsbridge$dom.AddEventListener($t139_140, 'click', $t140_141);
-        $t142_143 = sidebarMsg.$get();
-        $t143_144 = common$jsbridge$dom.AppendChild($t123_124, $t142_143);
-        $t144_145 = common$jsbridge$dom.AppendChild($t116_117, $t123_124);
-        $t145_146 = common$jsbridge$dom.CreateElement('div');
-        $t146_147 = common$jsbridge$dom.SetStyle($t145_146, 'flex', '1');
-        $t147_148 = common$jsbridge$dom.SetStyle($t145_146, 'overflowY', 'auto');
-        $t148_149 = common$jsbridge$dom.CreateElement('div');
-        feedPage.$set($t148_149);
-        $t149_150 = feedPage.$get();
-        $t150_151 = common$jsbridge$dom.SetStyle($t149_150, 'padding', '16px');
-        $t151_152 = common$jsbridge$dom.CreateElement('div');
-        feedLoader.$set($t151_152);
-        $t152_153 = feedLoader.$get();
-        $t153_154 = common$jsbridge$dom.SetStyle($t152_153, 'display', 'flex');
-        $t154_155 = feedLoader.$get();
-        $t155_156 = common$jsbridge$dom.SetStyle($t154_155, 'flexDirection', 'column');
-        $t156_157 = feedLoader.$get();
-        $t157_158 = common$jsbridge$dom.SetStyle($t156_157, 'alignItems', 'center');
-        $t158_159 = feedLoader.$get();
-        $t159_160 = common$jsbridge$dom.SetStyle($t158_159, 'justifyContent', 'center');
-        $t160_161 = feedLoader.$get();
-        $t161_162 = common$jsbridge$dom.SetStyle($t160_161, 'padding', '64px 0');
-        $t162_163 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t163_164 = common$jsbridge$dom.CreateElement('div');
-        $t162_163.$set($t163_164);
-        $t164_165 = $t162_163.$get();
-        $t165_166 = common$jsbridge$dom.SetStyle($t164_165, 'width', '120px');
-        $t166_167 = $t162_163.$get();
-        $t167_168 = common$jsbridge$dom.SetStyle($t166_167, 'height', '120px');
-        $t168_169 = showApp$8.bind(null, $t162_163);
-        $t169_170 = common$jsbridge$dom.FetchText('./smesh-loader.svg', $t168_169);
-        $t170_171 = feedLoader.$get();
-        $t171_172 = $t162_163.$get();
-        $t172_173 = common$jsbridge$dom.AppendChild($t170_171, $t171_172);
-        $t173_174 = common$jsbridge$dom.CreateElement('div');
-        $t174_175 = common$jsbridge$dom.SetTextContent($t173_174, 'connecting...');
-        $t175_176 = common$jsbridge$dom.SetStyle($t173_174, 'marginTop', '16px');
-        $t176_177 = common$jsbridge$dom.SetStyle($t173_174, 'color', 'var(--muted)');
-        $t177_178 = common$jsbridge$dom.SetStyle($t173_174, 'fontSize', '14px');
-        $t178_179 = feedLoader.$get();
-        $t179_180 = common$jsbridge$dom.AppendChild($t178_179, $t173_174);
-        $t180_181 = feedPage.$get();
-        $t181_182 = feedLoader.$get();
-        $t182_183 = common$jsbridge$dom.AppendChild($t180_181, $t181_182);
-        $t183_184 = common$jsbridge$dom.CreateElement('div');
-        feedContainer.$set($t183_184);
-        $t184_185 = feedPage.$get();
-        $t185_186 = feedContainer.$get();
-        $t186_187 = common$jsbridge$dom.AppendChild($t184_185, $t185_186);
-        $t187_188 = feedPage.$get();
-        $t188_189 = common$jsbridge$dom.AppendChild($t145_146, $t187_188);
-        $t189_190 = common$jsbridge$dom.CreateElement('div');
-        msgPage.$set($t189_190);
-        $t190_191 = msgPage.$get();
-        $t191_192 = common$jsbridge$dom.SetStyle($t190_191, 'padding', '16px');
-        $t192_193 = msgPage.$get();
-        $t193_194 = common$jsbridge$dom.SetStyle($t192_193, 'display', 'none');
-        $t194_195 = msgPage.$get();
-        $t195_196 = common$jsbridge$dom.SetStyle($t194_195, 'position', 'relative');
-        $t196_197 = msgPage.$get();
-        $t197_198 = common$jsbridge$dom.SetStyle($t196_197, 'height', '100%');
-        $t198_199 = msgPage.$get();
-        $t199_200 = common$jsbridge$dom.SetStyle($t198_199, 'boxSizing', 'border-box');
-        $t200_201 = common$jsbridge$dom.CreateElement('div');
-        msgListContainer.$set($t200_201);
-        $t201_202 = msgPage.$get();
-        $t202_203 = msgListContainer.$get();
-        $t203_204 = common$jsbridge$dom.AppendChild($t201_202, $t202_203);
-        $t204_205 = common$jsbridge$dom.CreateElement('div');
-        msgThreadContainer.$set($t204_205);
-        $t205_206 = msgThreadContainer.$get();
-        $t206_207 = common$jsbridge$dom.SetStyle($t205_206, 'display', 'none');
-        $t207_208 = msgThreadContainer.$get();
-        $t208_209 = common$jsbridge$dom.SetStyle($t207_208, 'flexDirection', 'column');
-        $t209_210 = msgThreadContainer.$get();
-        $t210_211 = common$jsbridge$dom.SetStyle($t209_210, 'position', 'absolute');
-        $t211_212 = msgThreadContainer.$get();
-        $t212_213 = common$jsbridge$dom.SetStyle($t211_212, 'top', '0');
-        $t213_214 = msgThreadContainer.$get();
-        $t214_215 = common$jsbridge$dom.SetStyle($t213_214, 'left', '0');
-        $t215_216 = msgThreadContainer.$get();
-        $t216_217 = common$jsbridge$dom.SetStyle($t215_216, 'right', '0');
-        $t217_218 = msgThreadContainer.$get();
-        $t218_219 = common$jsbridge$dom.SetStyle($t217_218, 'bottom', '0');
-        $t219_220 = msgThreadContainer.$get();
-        $t220_221 = common$jsbridge$dom.SetStyle($t219_220, 'background', 'var(--bg)');
-        $t221_222 = msgPage.$get();
-        $t222_223 = msgThreadContainer.$get();
-        $t223_224 = common$jsbridge$dom.AppendChild($t221_222, $t222_223);
-        msgView.$set('list');
-        $t224_225 = msgPage.$get();
-        $t225_226 = common$jsbridge$dom.AppendChild($t145_146, $t224_225);
-        $t226_227 = common$jsbridge$dom.CreateElement('div');
-        profilePage.$set($t226_227);
-        $t227_228 = profilePage.$get();
-        $t228_229 = common$jsbridge$dom.SetStyle($t227_228, 'display', 'none');
-        $t229_230 = profilePage.$get();
-        $t230_231 = common$jsbridge$dom.AppendChild($t145_146, $t229_230);
-        $t231_232 = common$jsbridge$dom.AppendChild($t116_117, $t145_146);
-        $t232_233 = root.$get();
-        $t233_234 = common$jsbridge$dom.AppendChild($t232_233, $t116_117);
-        activePage.$set('feed');
-        $t234_235 = common$jsbridge$dom.CreateElement('div');
-        $t235_236 = common$jsbridge$dom.SetStyle($t234_235, 'position', 'fixed');
-        $t236_237 = common$jsbridge$dom.SetStyle($t234_235, 'bottom', '0');
-        $t237_238 = common$jsbridge$dom.SetStyle($t234_235, 'left', '0');
-        $t238_239 = common$jsbridge$dom.SetStyle($t234_235, 'right', '0');
-        $t239_240 = common$jsbridge$dom.SetStyle($t234_235, 'height', '36px');
-        $t240_241 = common$jsbridge$dom.SetStyle($t234_235, 'display', 'flex');
-        $t241_242 = common$jsbridge$dom.SetStyle($t234_235, 'alignItems', 'center');
-        $t242_243 = common$jsbridge$dom.SetStyle($t234_235, 'padding', '0 12px');
-        $t243_244 = common$jsbridge$dom.SetStyle($t234_235, 'gap', '8px');
-        $t244_245 = common$jsbridge$dom.SetStyle($t234_235, 'background', 'var(--bg2)');
-        $t245_246 = common$jsbridge$dom.SetStyle($t234_235, 'fontSize', '12px');
-        $t246_247 = common$jsbridge$dom.SetStyle($t234_235, 'color', 'var(--fg)');
-        $t247_248 = common$jsbridge$dom.SetStyle($t234_235, 'zIndex', '100');
-        $t248_249 = common$jsbridge$dom.CreateElement('img');
-        avatarEl.$set($t248_249);
-        $t249_250 = avatarEl.$get();
-        $t250_251 = common$jsbridge$dom.SetAttribute($t249_250, 'width', '20');
-        $t251_252 = avatarEl.$get();
-        $t252_253 = common$jsbridge$dom.SetAttribute($t251_252, 'height', '20');
-        $t253_254 = avatarEl.$get();
-        $t254_255 = common$jsbridge$dom.SetStyle($t253_254, 'borderRadius', '50%');
-        $t255_256 = avatarEl.$get();
-        $t256_257 = common$jsbridge$dom.SetStyle($t255_256, 'objectFit', 'cover');
-        $t257_258 = avatarEl.$get();
-        $t258_259 = common$jsbridge$dom.SetStyle($t257_258, 'display', 'none');
-        $t259_260 = avatarEl.$get();
-        $t260_261 = common$jsbridge$dom.SetAttribute($t259_260, 'onerror', 'this.style.display=\'none\'');
-        $t261_262 = avatarEl.$get();
-        $t262_263 = common$jsbridge$dom.AppendChild($t234_235, $t261_262);
-        $t263_264 = common$jsbridge$dom.CreateElement('span');
-        nameEl.$set($t263_264);
-        $t264_265 = nameEl.$get();
-        $t265_266 = common$jsbridge$dom.SetStyle($t264_265, 'fontSize', '12px');
-        $t266_267 = nameEl.$get();
-        $t267_268 = common$jsbridge$dom.SetStyle($t266_267, 'fontFamily', 'system-ui, sans-serif, \'Noto Color Emoji\'');
-        $t268_269 = nameEl.$get();
-        $t269_270 = common$jsbridge$dom.SetStyle($t268_269, 'fontWeight', 'bold');
-        $t270_271 = nameEl.$get();
-        $t271_272 = common$jsbridge$dom.SetStyle($t270_271, 'overflow', 'hidden');
-        $t272_273 = nameEl.$get();
-        $t273_274 = common$jsbridge$dom.SetStyle($t272_273, 'textOverflow', 'ellipsis');
-        $t274_275 = nameEl.$get();
-        $t275_276 = common$jsbridge$dom.SetStyle($t274_275, 'whiteSpace', 'nowrap');
-        $t276_277 = nameEl.$get();
-        $t277_278 = common$jsbridge$dom.SetStyle($t276_277, 'maxWidth', '120px');
-        $t278_279 = pubkey.$get();
-        $t279_280 = common$helpers.EncodeNpub($t278_279);
-        $t280_281 = $rt.builtin.len($t279_280);
-        $t281_282 = ($t280_281 > 20);
-        if ($t281_282) {
+        $t289_290 = nameEl.$get();
+        $t290_291 = common$jsbridge$dom.AppendChild($t233_234, $t289_290);
+        $t291_292 = avatarEl.$get();
+        $t292_293 = common$jsbridge$dom.SetStyle($t291_292, 'cursor', 'pointer');
+        $t293_294 = nameEl.$get();
+        $t294_295 = common$jsbridge$dom.SetStyle($t293_294, 'cursor', 'pointer');
+        $t295_296 = avatarEl.$get();
+        $t296_297 = common$jsbridge$dom.RegisterCallback(showApp$9);
+        $t297_298 = common$jsbridge$dom.AddEventListener($t295_296, 'click', $t296_297);
+        $t298_299 = nameEl.$get();
+        $t299_300 = common$jsbridge$dom.RegisterCallback(showApp$10);
+        $t300_301 = common$jsbridge$dom.AddEventListener($t298_299, 'click', $t299_300);
+        $t301_302 = common$jsbridge$dom.CreateElement('span');
+        $t302_303 = common$jsbridge$dom.SetTextContent($t301_302, '|');
+        $t303_304 = common$jsbridge$dom.SetStyle($t301_302, 'color', 'var(--muted)');
+        $t304_305 = common$jsbridge$dom.AppendChild($t233_234, $t301_302);
+        $t305_306 = common$jsbridge$dom.CreateElement('span');
+        statusEl.$set($t305_306);
+        $t306_307 = statusEl.$get();
+        $t307_308 = common$jsbridge$dom.SetTextContent($t306_307, 'connecting...');
+        $t308_309 = statusEl.$get();
+        $t309_310 = common$jsbridge$dom.SetStyle($t308_309, 'cursor', 'pointer');
+        $t310_311 = statusEl.$get();
+        $t311_312 = common$jsbridge$dom.AppendChild($t233_234, $t310_311);
+        $t312_313 = statusEl.$get();
+        $t313_314 = common$jsbridge$dom.RegisterCallback(showApp$11);
+        $t314_315 = common$jsbridge$dom.AddEventListener($t312_313, 'click', $t313_314);
+        $t315_316 = common$jsbridge$dom.CreateElement('span');
+        $t316_317 = common$jsbridge$dom.SetTextContent($t315_316, 'smesh v0.65.48');
+        $t317_318 = common$jsbridge$dom.SetStyle($t315_316, 'marginLeft', 'auto');
+        $t318_319 = common$jsbridge$dom.SetStyle($t315_316, 'color', 'var(--accent)');
+        $t319_320 = common$jsbridge$dom.AppendChild($t233_234, $t315_316);
+        $t320_321 = root.$get();
+        $t321_322 = common$jsbridge$dom.AppendChild($t320_321, $t233_234);
+        $t322_323 = common$jsbridge$dom.CreateElement('div');
+        popoverEl.$set($t322_323);
+        $t323_324 = popoverEl.$get();
+        $t324_325 = common$jsbridge$dom.SetStyle($t323_324, 'position', 'fixed');
+        $t325_326 = popoverEl.$get();
+        $t326_327 = common$jsbridge$dom.SetStyle($t325_326, 'bottom', '37px');
+        $t327_328 = popoverEl.$get();
+        $t328_329 = common$jsbridge$dom.SetStyle($t327_328, 'left', '44px');
+        $t329_330 = popoverEl.$get();
+        $t330_331 = common$jsbridge$dom.SetStyle($t329_330, 'right', '0');
+        $t331_332 = popoverEl.$get();
+        $t332_333 = common$jsbridge$dom.SetStyle($t331_332, 'background', 'var(--bg2)');
+        $t333_334 = popoverEl.$get();
+        $t334_335 = common$jsbridge$dom.SetStyle($t333_334, 'borderTop', '1px solid var(--border)');
+        $t335_336 = popoverEl.$get();
+        $t336_337 = common$jsbridge$dom.SetStyle($t335_336, 'padding', '12px 16px');
+        $t337_338 = popoverEl.$get();
+        $t338_339 = common$jsbridge$dom.SetStyle($t337_338, 'fontSize', '12px');
+        $t339_340 = popoverEl.$get();
+        $t340_341 = common$jsbridge$dom.SetStyle($t339_340, 'display', 'none');
+        $t341_342 = popoverEl.$get();
+        $t342_343 = common$jsbridge$dom.SetStyle($t341_342, 'zIndex', '99');
+        $t343_344 = root.$get();
+        $t344_345 = popoverEl.$get();
+        $t345_346 = common$jsbridge$dom.AppendChild($t343_344, $t344_345);
+        $t346_347 = defaultRelays.$get();
+        $t347_348 = $rt.builtin.len($t346_347);
+        $t348_349 = -1;
+        $block = 3; break;
+        break;
+      }
+      case 3: {
+        $t349_350 = ($t348_349 + 1);
+        $t350_351 = ($t349_350 < $t347_348);
+        if ($t350_351) {
           $block = 4; break;
         }
         else {
@@ -1396,117 +1400,19 @@ export function showApp() {
         }
         break;
       }
-      case 3: {
-        $t282_283 = pubhex.$get();
-        $t283_284 = jstr($t282_283);
-        $t284_285 = ('["SET_PUBKEY",' + $t283_284);
-        $t285_286 = ($t284_285 + ']');
-        $t286_287 = common$jsbridge$dom.PostToSW($t285_286);
-        $block = 2; break;
-        break;
-      }
       case 4: {
-        $t287_288 = nameEl.$get();
-        $t288_289 = $rt.builtin.stringSlice($t279_280, undefined, 12);
-        $t289_290 = ($t288_289 + '...');
-        $t290_291 = $rt.builtin.len($t279_280);
-        $t291_292 = ($t290_291 - 4);
-        $t292_293 = $rt.builtin.stringSlice($t279_280, $t291_292, undefined);
-        $t293_294 = ($t289_290 + $t292_293);
-        $t294_295 = common$jsbridge$dom.SetTextContent($t287_288, $t293_294);
-        $block = 5; break;
+        $t351_352 = $t346_347.addr($t349_350);
+        $t352_353 = $t351_352.$get();
+        $t353_354 = addRelay($t352_353, false);
+        $t348_349 = $t349_350;
+        $block = 3; break;
         break;
       }
       case 5: {
-        $t295_296 = nameEl.$get();
-        $t296_297 = common$jsbridge$dom.AppendChild($t234_235, $t295_296);
-        $t297_298 = avatarEl.$get();
-        $t298_299 = common$jsbridge$dom.SetStyle($t297_298, 'cursor', 'pointer');
-        $t299_300 = nameEl.$get();
-        $t300_301 = common$jsbridge$dom.SetStyle($t299_300, 'cursor', 'pointer');
-        $t301_302 = avatarEl.$get();
-        $t302_303 = common$jsbridge$dom.RegisterCallback(showApp$9);
-        $t303_304 = common$jsbridge$dom.AddEventListener($t301_302, 'click', $t302_303);
-        $t304_305 = nameEl.$get();
-        $t305_306 = common$jsbridge$dom.RegisterCallback(showApp$10);
-        $t306_307 = common$jsbridge$dom.AddEventListener($t304_305, 'click', $t305_306);
-        $t307_308 = common$jsbridge$dom.CreateElement('span');
-        $t308_309 = common$jsbridge$dom.SetTextContent($t307_308, '|');
-        $t309_310 = common$jsbridge$dom.SetStyle($t307_308, 'color', 'var(--muted)');
-        $t310_311 = common$jsbridge$dom.AppendChild($t234_235, $t307_308);
-        $t311_312 = common$jsbridge$dom.CreateElement('span');
-        statusEl.$set($t311_312);
-        $t312_313 = statusEl.$get();
-        $t313_314 = common$jsbridge$dom.SetTextContent($t312_313, 'connecting...');
-        $t314_315 = statusEl.$get();
-        $t315_316 = common$jsbridge$dom.SetStyle($t314_315, 'cursor', 'pointer');
-        $t316_317 = statusEl.$get();
-        $t317_318 = common$jsbridge$dom.AppendChild($t234_235, $t316_317);
-        $t318_319 = statusEl.$get();
-        $t319_320 = common$jsbridge$dom.RegisterCallback(showApp$11);
-        $t320_321 = common$jsbridge$dom.AddEventListener($t318_319, 'click', $t319_320);
-        $t321_322 = common$jsbridge$dom.CreateElement('span');
-        $t322_323 = common$jsbridge$dom.SetTextContent($t321_322, 'smesh v0.65.46');
-        $t323_324 = common$jsbridge$dom.SetStyle($t321_322, 'marginLeft', 'auto');
-        $t324_325 = common$jsbridge$dom.SetStyle($t321_322, 'color', 'var(--accent)');
-        $t325_326 = common$jsbridge$dom.AppendChild($t234_235, $t321_322);
-        $t326_327 = root.$get();
-        $t327_328 = common$jsbridge$dom.AppendChild($t326_327, $t234_235);
-        $t328_329 = common$jsbridge$dom.CreateElement('div');
-        popoverEl.$set($t328_329);
-        $t329_330 = popoverEl.$get();
-        $t330_331 = common$jsbridge$dom.SetStyle($t329_330, 'position', 'fixed');
-        $t331_332 = popoverEl.$get();
-        $t332_333 = common$jsbridge$dom.SetStyle($t331_332, 'bottom', '37px');
-        $t333_334 = popoverEl.$get();
-        $t334_335 = common$jsbridge$dom.SetStyle($t333_334, 'left', '44px');
-        $t335_336 = popoverEl.$get();
-        $t336_337 = common$jsbridge$dom.SetStyle($t335_336, 'right', '0');
-        $t337_338 = popoverEl.$get();
-        $t338_339 = common$jsbridge$dom.SetStyle($t337_338, 'background', 'var(--bg2)');
-        $t339_340 = popoverEl.$get();
-        $t340_341 = common$jsbridge$dom.SetStyle($t339_340, 'borderTop', '1px solid var(--border)');
-        $t341_342 = popoverEl.$get();
-        $t342_343 = common$jsbridge$dom.SetStyle($t341_342, 'padding', '12px 16px');
-        $t343_344 = popoverEl.$get();
-        $t344_345 = common$jsbridge$dom.SetStyle($t343_344, 'fontSize', '12px');
-        $t345_346 = popoverEl.$get();
-        $t346_347 = common$jsbridge$dom.SetStyle($t345_346, 'display', 'none');
-        $t347_348 = popoverEl.$get();
-        $t348_349 = common$jsbridge$dom.SetStyle($t347_348, 'zIndex', '99');
-        $t349_350 = root.$get();
-        $t350_351 = popoverEl.$get();
-        $t351_352 = common$jsbridge$dom.AppendChild($t349_350, $t350_351);
-        $t352_353 = defaultRelays.$get();
-        $t353_354 = $rt.builtin.len($t352_353);
-        $t354_355 = -1;
-        $block = 6; break;
-        break;
-      }
-      case 6: {
-        $t355_356 = ($t354_355 + 1);
-        $t356_357 = ($t355_356 < $t353_354);
-        if ($t356_357) {
-          $block = 7; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 7: {
-        $t357_358 = $t352_353.addr($t355_356);
-        $t358_359 = $t357_358.$get();
-        $t359_360 = addRelay($t358_359, false);
-        $t354_355 = $t355_356;
-        $block = 6; break;
-        break;
-      }
-      case 8: {
-        $t360_361 = sendWriteRelays();
-        $t361_362 = subscribeProfile();
-        $t362_363 = subscribeFeed();
-        $t363_364 = initRouter();
+        $t354_355 = sendWriteRelays();
+        $t355_356 = subscribeProfile();
+        $t356_357 = subscribeFeed();
+        $t357_358 = initRouter();
         return;
         break;
       }
@@ -1926,7 +1832,7 @@ export function togglePopover() {
 }
 
 export function subscribeProfile() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -1972,16 +1878,9 @@ export function subscribeProfile() {
         $t19_20 = pubhex.$get();
         $t20_21 = jstr($t19_20);
         $t21_22 = ('{"authors":[' + $t20_21);
-        $t22_23 = ($t21_22 + '],"kinds":[0,3,10002,10000,10050],"_proxy":');
-        $t23_24 = jstrArr($t12_13);
-        $t24_25 = ($t22_23 + $t23_24);
-        $t25_26 = ($t24_25 + ',"limit":8}');
-        $t26_27 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t27_28 = $t26_27.$get().addr(0);
-        $t27_28.$set('wss://relay.orly.dev');
-        $t28_29 = $rt.builtin.sliceSlice($t26_27.$get(), undefined, undefined, undefined);
-        $t29_30 = buildProxyMsg('prof', $t25_26, $t28_29);
-        $t30_31 = common$jsbridge$dom.PostToSW($t29_30);
+        $t22_23 = ($t21_22 + '],"kinds":[0,3,10002,10000,10050],"limit":8}');
+        $t23_24 = buildProxyMsg('prof', $t22_23, $t12_13);
+        $t24_25 = common$jsbridge$dom.PostToSW($t23_24);
         return;
         break;
       }
@@ -2130,21 +2029,27 @@ export function jstr(s) {
   return $t2_3;
 }
 
-export function jstrArr(ss) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13;
+export function scheduleTabRetry() {
+  let $t0_1;
+  $t0_1 = common$jsbridge$dom.SetTimeout(scheduleTabRetry$1, 5000);
+  return;
+}
+
+function scheduleTabRetry$1() {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = $rt.builtin.len(ss);
-        $t1_2 = '[';
-        $t2_3 = -1;
+        $t0_1 = pendingNotes.$get();
+        $t1_2 = { $entries: [...$t0_1.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
+        $t2_3 = null;
         $block = 1; break;
         break;
       }
       case 1: {
-        $t3_4 = ($t2_3 + 1);
-        $t4_5 = ($t3_4 < $t0_1);
+        $t3_4 = $t1_2.next();
+        $t4_5 = $t3_4[0];
         if ($t4_5) {
           $block = 2; break;
         }
@@ -2154,35 +2059,98 @@ export function jstrArr(ss) {
         break;
       }
       case 2: {
-        $t5_6 = ss.addr($t3_4);
-        $t6_7 = $t5_6.$get();
-        $t7_8 = ($t3_4 > 0);
-        if ($t7_8) {
-          $block = 4; break;
+        $t5_6 = $t3_4[1];
+        $t6_7 = authorNames.$get();
+        { const $r = $rt.builtin.mapLookup($t6_7, $t5_6); $t7_8 = [$r.value, $r.ok]; }
+        $t8_9 = $t7_8[0];
+        $t9_10 = $t7_8[1];
+        if ($t9_10) {
+          $t2_3 = $t2_3;
+          $block = 1; break;
         }
         else {
-          $t10_11 = $t1_2;
-          $block = 5; break;
+          $block = 4; break;
         }
         break;
       }
       case 3: {
-        $t8_9 = ($t1_2 + ']');
-        return $t8_9;
+        $t10_11 = $rt.builtin.len($t2_3);
+        $t11_12 = ($t10_11 === 0);
+        if ($t11_12) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
         break;
       }
       case 4: {
-        $t9_10 = ($t1_2 + ',');
-        $t10_11 = $t9_10;
-        $block = 5; break;
+        $t12_13 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t13_14 = $t12_13.$get().addr(0);
+        $t13_14.$set($t5_6);
+        $t14_15 = $rt.builtin.sliceSlice($t12_13.$get(), undefined, undefined, undefined);
+        $t15_16 = $rt.builtin.appendSlice($t2_3, $t14_15);
+        $t2_3 = $t15_16;
+        $block = 1; break;
         break;
       }
       case 5: {
-        $t11_12 = jstr($t6_7);
-        $t12_13 = ($t10_11 + $t11_12);
-        $t1_2 = $t12_13;
-        $t2_3 = $t3_4;
-        $block = 1; break;
+        return;
+        break;
+      }
+      case 6: {
+        $t16_17 = $rt.builtin.len($t2_3);
+        $t17_18 = -1;
+        $block = 7; break;
+        break;
+      }
+      case 7: {
+        $t18_19 = ($t17_18 + 1);
+        $t19_20 = ($t18_19 < $t16_17);
+        if ($t19_20) {
+          $block = 8; break;
+        }
+        else {
+          $block = 9; break;
+        }
+        break;
+      }
+      case 8: {
+        $t20_21 = $t2_3.addr($t18_19);
+        $t21_22 = $t20_21.$get();
+        $t22_23 = fetchedK0.$get();
+        $rt.builtin.mapUpdate($t22_23, $t21_22, false);
+        $t17_18 = $t18_19;
+        $block = 7; break;
+        break;
+      }
+      case 9: {
+        $t23_24 = $rt.builtin.len($t2_3);
+        $t24_25 = -1;
+        $block = 10; break;
+        break;
+      }
+      case 10: {
+        $t25_26 = ($t24_25 + 1);
+        $t26_27 = ($t25_26 < $t23_24);
+        if ($t26_27) {
+          $block = 11; break;
+        }
+        else {
+          $block = 12; break;
+        }
+        break;
+      }
+      case 11: {
+        $t27_28 = $t2_3.addr($t25_26);
+        $t28_29 = $t27_28.$get();
+        $t29_30 = queueProfileFetch($t28_29);
+        $t24_25 = $t25_26;
+        $block = 10; break;
+        break;
+      }
+      case 12: {
+        return;
         break;
       }
     }
@@ -2190,7 +2158,7 @@ export function jstrArr(ss) {
 }
 
 export function onSWMessage(raw) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -2534,13 +2502,13 @@ export function onSWMessage(raw) {
         break;
       }
       case 37: {
-        $t82_83 = common$jsbridge$localstorage.GetItem('smesh-key');
+        $t82_83 = pubhex.$get();
         $t83_84 = ($t82_83 !== '');
         if ($t83_84) {
           $block = 41; break;
         }
         else {
-          $block = 43; break;
+          $block = 42; break;
         }
         break;
       }
@@ -2570,36 +2538,17 @@ export function onSWMessage(raw) {
         break;
       }
       case 41: {
-        $t87_88 = jstr($t82_83);
-        $t88_89 = ('["SET_KEY",' + $t87_88);
-        $t89_90 = ($t88_89 + ']');
-        $t90_91 = common$jsbridge$dom.PostToSW($t89_90);
+        $t87_88 = pubhex.$get();
+        $t88_89 = jstr($t87_88);
+        $t89_90 = ('["SET_PUBKEY",' + $t88_89);
+        $t90_91 = ($t89_90 + ']');
+        $t91_92 = common$jsbridge$dom.PostToSW($t90_91);
         $block = 42; break;
         break;
       }
       case 42: {
-        $t91_92 = resubscribe();
+        $t92_93 = resubscribe();
         $block = 6; break;
-        break;
-      }
-      case 43: {
-        $t92_93 = pubhex.$get();
-        $t93_94 = ($t92_93 !== '');
-        if ($t93_94) {
-          $block = 44; break;
-        }
-        else {
-          $block = 42; break;
-        }
-        break;
-      }
-      case 44: {
-        $t94_95 = pubhex.$get();
-        $t95_96 = jstr($t94_95);
-        $t96_97 = ('["SET_PUBKEY",' + $t95_96);
-        $t97_98 = ($t96_97 + ']');
-        $t98_99 = common$jsbridge$dom.PostToSW($t97_98);
-        $block = 42; break;
         break;
       }
     }
@@ -3212,7 +3161,7 @@ function dispatchEOSE$3(closeID) {
 }
 
 export function handleCryptoReq(raw, pos) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -3220,32 +3169,41 @@ export function handleCryptoReq(raw, pos) {
         $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t1_2 = nextNum(raw, pos);
         $t0_1.$set($t1_2);
-        $t16_17 = pos;
+        $t24_25 = pos;
         $block = 3; break;
         break;
       }
       case 1: {
-        $t2_3 = ($t16_17 + 1);
-        $t16_17 = $t2_3;
+        $t2_3 = ($t24_25 + 1);
+        $t24_25 = $t2_3;
         $block = 3; break;
         break;
       }
       case 2: {
-        $t3_4 = ($t16_17 + 1);
-        $t4_5 = nextStr(raw, $t3_4);
-        $t5_6 = $t4_5[0];
-        $t6_7 = $t4_5[1];
-        $t7_8 = nextStr(raw, $t6_7);
-        $t8_9 = $t7_8[0];
-        $t9_10 = $t7_8[1];
-        $t10_11 = nextStr(raw, $t9_10);
-        $t11_12 = $t10_11[0];
-        $t12_13 = $t10_11[1];
-        $t13_14 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t14_15 = handleCryptoReq$1.bind(null, $t0_1);
-        $t13_14.$set($t14_15);
-        $t15_16 = ($t5_6 === 'signEvent');
-        if ($t15_16) {
+        $t3_4 = ($t24_25 + 1);
+        $t4_5 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t5_6 = nextStr(raw, $t3_4);
+        $t6_7 = $t5_6[0];
+        $t4_5.$set($t6_7);
+        $t7_8 = $t5_6[1];
+        $t8_9 = nextStr(raw, $t7_8);
+        $t9_10 = $t8_9[0];
+        $t10_11 = $t8_9[1];
+        $t11_12 = nextStr(raw, $t10_11);
+        $t12_13 = $t11_12[0];
+        $t13_14 = $t11_12[1];
+        $t14_15 = $t4_5.$get();
+        $t15_16 = ('crypto: ' + $t14_15);
+        $t16_17 = ($t15_16 + ' #');
+        $t17_18 = $t0_1.$get();
+        $t18_19 = ($t16_17 + $t17_18);
+        $t19_20 = common$jsbridge$dom.ConsoleLog($t18_19);
+        $t20_21 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t21_22 = handleCryptoReq$1.bind(null, $t4_5, $t0_1);
+        $t20_21.$set($t21_22);
+        $t22_23 = $t4_5.$get();
+        $t23_24 = ($t22_23 === 'signEvent');
+        if ($t23_24) {
           $block = 6; break;
         }
         else {
@@ -3254,9 +3212,9 @@ export function handleCryptoReq(raw, pos) {
         break;
       }
       case 3: {
-        $t17_18 = $rt.builtin.len(raw);
-        $t18_19 = ($t16_17 < $t17_18);
-        if ($t18_19) {
+        $t25_26 = $rt.builtin.len(raw);
+        $t26_27 = ($t24_25 < $t25_26);
+        if ($t26_27) {
           $block = 4; break;
         }
         else {
@@ -3265,10 +3223,10 @@ export function handleCryptoReq(raw, pos) {
         break;
       }
       case 4: {
-        $rt.runtime.boundsCheck($t16_17, $rt.builtin.byteLen(raw));
-        $t19_20 = $rt.builtin.stringByteAt(raw, $t16_17);
-        $t20_21 = ($t19_20 !== 44);
-        if ($t20_21) {
+        $rt.runtime.boundsCheck($t24_25, $rt.builtin.byteLen(raw));
+        $t27_28 = $rt.builtin.stringByteAt(raw, $t24_25);
+        $t28_29 = ($t27_28 !== 44);
+        if ($t28_29) {
           $block = 1; break;
         }
         else {
@@ -3281,20 +3239,20 @@ export function handleCryptoReq(raw, pos) {
         break;
       }
       case 6: {
-        $t21_22 = handleCryptoReq$2.bind(null, $t13_14);
-        $t22_23 = common$jsbridge$signer.SignEvent($t11_12, $t21_22);
+        $t29_30 = handleCryptoReq$2.bind(null, $t20_21);
+        $t30_31 = common$jsbridge$signer.SignEvent($t12_13, $t29_30);
         $block = 5; break;
         break;
       }
       case 7: {
-        $t23_24 = handleCryptoReq$3.bind(null, $t13_14);
-        $t24_25 = common$jsbridge$signer.Nip04Decrypt($t8_9, $t11_12, $t23_24);
+        $t31_32 = handleCryptoReq$3.bind(null, $t20_21);
+        $t32_33 = common$jsbridge$signer.Nip04Decrypt($t9_10, $t12_13, $t31_32);
         $block = 5; break;
         break;
       }
       case 8: {
-        $t25_26 = ($t5_6 === 'nip04.decrypt');
-        if ($t25_26) {
+        $t33_34 = ($t22_23 === 'nip04.decrypt');
+        if ($t33_34) {
           $block = 7; break;
         }
         else {
@@ -3303,14 +3261,14 @@ export function handleCryptoReq(raw, pos) {
         break;
       }
       case 9: {
-        $t26_27 = handleCryptoReq$4.bind(null, $t13_14);
-        $t27_28 = common$jsbridge$signer.Nip04Encrypt($t8_9, $t11_12, $t26_27);
+        $t34_35 = handleCryptoReq$4.bind(null, $t20_21);
+        $t35_36 = common$jsbridge$signer.Nip04Encrypt($t9_10, $t12_13, $t34_35);
         $block = 5; break;
         break;
       }
       case 10: {
-        $t28_29 = ($t5_6 === 'nip04.encrypt');
-        if ($t28_29) {
+        $t36_37 = ($t22_23 === 'nip04.encrypt');
+        if ($t36_37) {
           $block = 9; break;
         }
         else {
@@ -3319,14 +3277,14 @@ export function handleCryptoReq(raw, pos) {
         break;
       }
       case 11: {
-        $t29_30 = handleCryptoReq$5.bind(null, $t13_14);
-        $t30_31 = common$jsbridge$signer.Nip44Decrypt($t8_9, $t11_12, $t29_30);
+        $t37_38 = handleCryptoReq$5.bind(null, $t20_21);
+        $t38_39 = common$jsbridge$signer.Nip44Decrypt($t9_10, $t12_13, $t37_38);
         $block = 5; break;
         break;
       }
       case 12: {
-        $t31_32 = ($t5_6 === 'nip44.decrypt');
-        if ($t31_32) {
+        $t39_40 = ($t22_23 === 'nip44.decrypt');
+        if ($t39_40) {
           $block = 11; break;
         }
         else {
@@ -3335,14 +3293,14 @@ export function handleCryptoReq(raw, pos) {
         break;
       }
       case 13: {
-        $t32_33 = handleCryptoReq$6.bind(null, $t13_14);
-        $t33_34 = common$jsbridge$signer.Nip44Encrypt($t8_9, $t11_12, $t32_33);
+        $t40_41 = handleCryptoReq$6.bind(null, $t20_21);
+        $t41_42 = common$jsbridge$signer.Nip44Encrypt($t9_10, $t12_13, $t40_41);
         $block = 5; break;
         break;
       }
       case 14: {
-        $t34_35 = ($t5_6 === 'nip44.encrypt');
-        if ($t34_35) {
+        $t42_43 = ($t22_23 === 'nip44.encrypt');
+        if ($t42_43) {
           $block = 13; break;
         }
         else {
@@ -3351,9 +3309,10 @@ export function handleCryptoReq(raw, pos) {
         break;
       }
       case 15: {
-        $t35_36 = $t13_14.$get();
-        $t36_37 = ('unknown method: ' + $t5_6);
-        $t37_38 = $t35_36('', $t36_37);
+        $t43_44 = $t20_21.$get();
+        $t44_45 = $t4_5.$get();
+        $t45_46 = ('unknown method: ' + $t44_45);
+        $t46_47 = $t43_44('', $t45_46);
         $block = 5; break;
         break;
       }
@@ -3361,19 +3320,60 @@ export function handleCryptoReq(raw, pos) {
   }
 }
 
-function handleCryptoReq$1(idStr, result, errMsg) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
-  $t0_1 = idStr.$get();
-  $t1_2 = ('["CRYPTO_RESULT",' + $t0_1);
-  $t2_3 = ($t1_2 + ',');
-  $t3_4 = jstr(result);
-  $t4_5 = ($t2_3 + $t3_4);
-  $t5_6 = ($t4_5 + ',');
-  $t6_7 = jstr(errMsg);
-  $t7_8 = ($t5_6 + $t6_7);
-  $t8_9 = ($t7_8 + ']');
-  $t9_10 = common$jsbridge$dom.PostToSW($t8_9);
-  return;
+function handleCryptoReq$1(method, idStr, result, errMsg) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = (errMsg !== '');
+        if ($t0_1) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 1: {
+        $t1_2 = method.$get();
+        $t2_3 = ('crypto: ' + $t1_2);
+        $t3_4 = ($t2_3 + ' #');
+        $t4_5 = idStr.$get();
+        $t5_6 = ($t3_4 + $t4_5);
+        $t6_7 = ($t5_6 + ' ERR=');
+        $t7_8 = ($t6_7 + errMsg);
+        $t8_9 = common$jsbridge$dom.ConsoleLog($t7_8);
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        $t9_10 = idStr.$get();
+        $t10_11 = ('["CRYPTO_RESULT",' + $t9_10);
+        $t11_12 = ($t10_11 + ',');
+        $t12_13 = jstr(result);
+        $t13_14 = ($t11_12 + $t12_13);
+        $t14_15 = ($t13_14 + ',');
+        $t15_16 = jstr(errMsg);
+        $t16_17 = ($t14_15 + $t15_16);
+        $t17_18 = ($t16_17 + ']');
+        $t18_19 = common$jsbridge$dom.PostToSW($t17_18);
+        return;
+        break;
+      }
+      case 3: {
+        $t19_20 = method.$get();
+        $t20_21 = ('crypto: ' + $t19_20);
+        $t21_22 = ($t20_21 + ' #');
+        $t22_23 = idStr.$get();
+        $t23_24 = ($t21_22 + $t22_23);
+        $t24_25 = ($t23_24 + ' OK');
+        $t25_26 = common$jsbridge$dom.ConsoleLog($t24_25);
+        $block = 2; break;
+        break;
+      }
+    }
+  }
 }
 
 function handleCryptoReq$2(sendResult, signed) {
@@ -7582,7 +7582,7 @@ function renderProfileNote$1(expanded, content, fullContent, more) {
 }
 
 export function renderProfileFollows(pk) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -7659,6 +7659,7 @@ export function renderProfileFollows(pk) {
         break;
       }
       case 6: {
+        $t32_33 = scheduleTabRetry();
         return;
         break;
       }
@@ -7762,7 +7763,7 @@ function renderProfileRelays$1(clickURL) {
 }
 
 export function renderProfileMutes(pk) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -7839,6 +7840,7 @@ export function renderProfileMutes(pk) {
         break;
       }
       case 6: {
+        $t32_33 = scheduleTabRetry();
         return;
         break;
       }
@@ -8467,14 +8469,13 @@ export function formatTime(ts) {
 }
 
 export function initMessaging() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = common$jsbridge$dom.PostToSW('["DM_LIST"]');
-        $t1_2 = marmotInited.$get();
-        if ($t1_2) {
+        $t0_1 = common$jsbridge$signer.HasMLS();
+        if ($t0_1) {
           $block = 2; break;
         }
         else {
@@ -8483,19 +8484,41 @@ export function initMessaging() {
         break;
       }
       case 1: {
-        marmotInited.$set(true);
-        $t2_3 = relayURLsJSON();
-        $t3_4 = ('["MLS_INIT",' + $t2_3);
-        $t4_5 = ($t3_4 + ']');
-        $t5_6 = common$jsbridge$dom.PostToSW($t4_5);
-        $t6_7 = relayURLsJSON();
-        $t7_8 = ('["MLS_PUBLISH_KP",' + $t6_7);
-        $t8_9 = ($t7_8 + ']');
-        $t9_10 = common$jsbridge$dom.PostToSW($t8_9);
-        $block = 2; break;
+        $t1_2 = msgListContainer.$get();
+        $t2_3 = clearChildren($t1_2);
+        $t3_4 = common$jsbridge$dom.CreateElement('div');
+        $t4_5 = common$jsbridge$dom.SetStyle($t3_4, 'padding', '24px');
+        $t5_6 = common$jsbridge$dom.SetStyle($t3_4, 'textAlign', 'center');
+        $t6_7 = common$jsbridge$dom.SetStyle($t3_4, 'color', 'var(--muted)');
+        $t7_8 = common$jsbridge$dom.SetStyle($t3_4, 'fontSize', '13px');
+        $t8_9 = common$jsbridge$dom.SetStyle($t3_4, 'lineHeight', '1.6');
+        $t9_10 = common$jsbridge$dom.SetInnerHTML($t3_4, 'encrypted DMs require the <b>Smesh Signer</b> extension<br><br><i>coming soon</i>');
+        $t10_11 = msgListContainer.$get();
+        $t11_12 = common$jsbridge$dom.AppendChild($t10_11, $t3_4);
+        return;
         break;
       }
       case 2: {
+        $t12_13 = common$jsbridge$dom.PostToSW('["DM_LIST"]');
+        $t13_14 = marmotInited.$get();
+        if ($t13_14) {
+          $block = 4; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 3: {
+        marmotInited.$set(true);
+        $t14_15 = relayURLsJSON();
+        $t15_16 = ('["MLS_INIT",' + $t14_15);
+        $t16_17 = ($t15_16 + ']');
+        $t17_18 = common$jsbridge$dom.PostToSW($t16_17);
+        $block = 4; break;
+        break;
+      }
+      case 4: {
         return;
         break;
       }
@@ -10375,7 +10398,7 @@ export function handleDMReceived(dmJSON) {
 }
 
 export function doLogout() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
   $t0_1 = common$jsbridge$dom.PostToSW('["CLOSE","prof"]');
   $t1_2 = common$jsbridge$dom.PostToSW('["CLOSE","feed"]');
   $t2_3 = common$jsbridge$dom.PostToSW('["CLEAR_KEY"]');
@@ -10394,11 +10417,9 @@ export function doLogout() {
   relayLabels.$set(null);
   relayUserPick.$set(null);
   $t3_4 = common$jsbridge$localstorage.RemoveItem('smesh-pubkey');
-  $t4_5 = common$jsbridge$localstorage.RemoveItem('smesh-mode');
-  $t5_6 = common$jsbridge$localstorage.RemoveItem('smesh-key');
-  $t6_7 = root.$get();
-  $t7_8 = clearChildren($t6_7);
-  $t8_9 = showLogin();
+  $t4_5 = root.$get();
+  $t5_6 = clearChildren($t4_5);
+  $t6_7 = showLogin();
   return;
 }
 

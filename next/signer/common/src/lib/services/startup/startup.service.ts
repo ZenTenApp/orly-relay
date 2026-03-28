@@ -5,6 +5,7 @@ import {
   StorageService,
   StorageServiceConfig,
 } from '../storage/storage.service';
+import { SyncFlow } from '../storage/types';
 
 @Injectable({
   providedIn: 'root',
@@ -25,8 +26,9 @@ export class StartupService {
     // Step 1: Load the user settings
     const signerMetaData = await this.#storage.loadSignerMetaData();
     if (typeof signerMetaData?.syncFlow === 'undefined') {
-      // Very first run. The user has not set up Smesh Signer yet.
-      this.#router.navigateByUrl('/welcome');
+      // First run — force local-only storage (no sync to Mozilla servers).
+      await this.#storage.enableBrowserSyncFlow(SyncFlow.NO_SYNC);
+      this.#router.navigateByUrl('/vault-create/home');
       return;
     }
     this.#storage.enableBrowserSyncFlow(signerMetaData.syncFlow);

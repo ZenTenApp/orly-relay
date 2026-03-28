@@ -15,7 +15,7 @@ var (
 )
 
 type clientSub struct {
-	filter    *nostr.Filter
+	filters   []*nostr.Filter
 	filterRaw string
 	clientID  string
 }
@@ -41,7 +41,7 @@ func routerReq(clientID, subID, filterRaw string) {
 		sw.Log("relay-sw: REQ parse filter FAILED")
 		return
 	}
-	clientSubs[subID] = &clientSub{filter: f, filterRaw: filterRaw, clientID: clientID}
+	clientSubs[subID] = &clientSub{filters: []*nostr.Filter{f}, filterRaw: filterRaw, clientID: clientID}
 
 	cacheQuery(filterRaw, func(eventsJSON string) {
 		events := nostr.ParseEventsJSON(eventsJSON)
@@ -73,17 +73,36 @@ func routerPublish(clientID, eventRaw string) {
 	fwd(clientID, "[\"OK\","+jstr(ev.ID)+",true,\"\"]")
 }
 
+func routerPublishToRelays(eventRaw string, relayURLs []string) {
+	ev := nostr.ParseEvent(eventRaw)
+	if ev == nil {
+		sw.Log("relay: publishToRelays PARSE FAILED len=" + helpers.Itoa(int64(len(eventRaw))))
+		return
+	}
+	sw.Log("relay: publishToRelays kind=" + helpers.Itoa(int64(ev.Kind)) + " id=" + ev.ID[:16] + " relays=" + helpers.Itoa(int64(len(relayURLs))))
+	cacheStore(eventRaw, func(saved bool) {
+		if saved {
+			pushToMatchingSubs(ev)
+		}
+	})
+	for _, url := range relayURLs {
+		c := getConn(url)
+		sw.Log("relay: publish to " + url + " open=" + boolStr(c.IsOpen()))
+		c.Publish(ev)
+	}
+}
+
 // --- PROXY subscriptions ---
 
 func routerProxy(clientID, subID, filterRaw string, relayURLs []string) {
 	routerCleanupProxy(subID)
 
-	f := nostr.ParseFilter(filterRaw)
-	if f == nil {
+	filters := parseFilters(filterRaw)
+	if len(filters) == 0 {
 		sw.Log("relay-sw: PROXY parse filter FAILED")
 		return
 	}
-	clientSubs[subID] = &clientSub{filter: f, filterRaw: filterRaw, clientID: clientID}
+	clientSubs[subID] = &clientSub{filters: filters, filterRaw: filterRaw, clientID: clientID}
 
 	remoteIDs := make(map[string]bool)
 	base := "p_" + subID + "_"
@@ -98,7 +117,7 @@ func routerProxy(clientID, subID, filterRaw string, relayURLs []string) {
 		rSubID := base + suffix
 		remoteIDs[rSubID] = true
 		c := getConn(url)
-		c.Subscribe(rSubID, []*nostr.Filter{f})
+		c.Subscribe(rSubID, filters)
 	}
 
 	proxyID := subID
@@ -176,17 +195,82 @@ func routerOnRelayEOSE(subID string) {
 func pushToMatchingSubs(ev *nostr.Event) {
 	matched := 0
 	for subID, cs := range clientSubs {
-		if cs.filter.Matches(ev) {
-			matched++
-			fwd(cs.clientID, "[\"EVENT\","+jstr(subID)+","+ev.ToJSON()+"]")
+		for _, f := range cs.filters {
+			if f.Matches(ev) {
+				matched++
+				fwd(cs.clientID, "[\"EVENT\","+jstr(subID)+","+ev.ToJSON()+"]")
+				break // one match per sub is enough
+			}
 		}
 	}
+	_ = matched
+}
+
+// parseFilters parses a JSON filter string that may be a single object
+// or an array of objects. Returns a slice of parsed filters.
+func parseFilters(raw string) []*nostr.Filter {
+	// Trim whitespace
+	s := raw
+	for len(s) > 0 && (s[0] == ' ' || s[0] == '\t' || s[0] == '\n') {
+		s = s[1:]
+	}
+	if len(s) == 0 {
+		return nil
+	}
+	// Single filter object
+	if s[0] == '{' {
+		f := nostr.ParseFilter(s)
+		if f == nil {
+			return nil
+		}
+		return []*nostr.Filter{f}
+	}
+	// Array of filter objects
+	if s[0] != '[' {
+		return nil
+	}
+	s = s[1:] // skip '['
+	var filters []*nostr.Filter
+	for {
+		for len(s) > 0 && (s[0] == ' ' || s[0] == ',' || s[0] == '\t' || s[0] == '\n') {
+			s = s[1:]
+		}
+		if len(s) == 0 || s[0] == ']' {
+			break
+		}
+		if s[0] != '{' {
+			break
+		}
+		// Find matching '}'
+		depth := 0
+		end := 0
+		for i := 0; i < len(s); i++ {
+			if s[i] == '{' {
+				depth++
+			} else if s[i] == '}' {
+				depth--
+				if depth == 0 {
+					end = i + 1
+					break
+				}
+			}
+		}
+		if end == 0 {
+			break
+		}
+		f := nostr.ParseFilter(s[:end])
+		if f != nil {
+			filters = append(filters, f)
+		}
+		s = s[end:]
+	}
+	return filters
 }
 
 // --- Signing ---
 
 func routerSign(clientID, requestID, eventRaw string) {
-	if !hasKey {
+	if myPubkey == "" {
 		fwd(clientID, "[\"SIGN_ERROR\","+jstr(requestID)+",\"no key\"]")
 		return
 	}
@@ -195,11 +279,14 @@ func routerSign(clientID, requestID, eventRaw string) {
 		fwd(clientID, "[\"SIGN_ERROR\","+jstr(requestID)+",\"parse error\"]")
 		return
 	}
-	if identitySignEvent(ev) {
-		fwd(clientID, "[\"SIGNED\","+jstr(requestID)+","+ev.ToJSON()+"]")
-	} else {
-		fwd(clientID, "[\"SIGN_ERROR\","+jstr(requestID)+",\"sign failed\"]")
-	}
+	// Proxy signing through crypto SW -> signer extension.
+	cryptoProxy("signEvent", "", eventRaw, func(signedJSON, errMsg string) {
+		if errMsg != "" || signedJSON == "" {
+			fwd(clientID, "[\"SIGN_ERROR\","+jstr(requestID)+","+jstr(errMsg)+"]")
+			return
+		}
+		fwd(clientID, "[\"SIGNED\","+jstr(requestID)+","+signedJSON+"]")
+	})
 }
 
 // --- DM routing ---
@@ -252,19 +339,25 @@ func routerBroadcast(clientID, pubkey string, relayURLs []string) {
 			userRelays = writeRelays
 		}
 
-		if _, ok := byKind[10050]; !ok && hasKey && len(userRelays) > 0 {
-			ev := createRelayListEvent(10050, pubkey, userRelays)
-			if ev != nil {
-				cacheStore(ev.ToJSON(), func(_ bool) {})
-				byKind[10050] = ev
-			}
+		if _, ok := byKind[10050]; !ok && myPubkey != "" && len(userRelays) > 0 {
+			createRelayListEventAsync(10050, userRelays, func(ev *nostr.Event) {
+				if ev != nil {
+					cacheStore(ev.ToJSON(), func(_ bool) {})
+					for _, url := range relayURLs {
+						getConn(url).Publish(ev)
+					}
+				}
+			})
 		}
-		if _, ok := byKind[10051]; !ok && hasKey && len(userRelays) > 0 {
-			ev := createRelayListEvent(10051, pubkey, userRelays)
-			if ev != nil {
-				cacheStore(ev.ToJSON(), func(_ bool) {})
-				byKind[10051] = ev
-			}
+		if _, ok := byKind[10051]; !ok && myPubkey != "" && len(userRelays) > 0 {
+			createRelayListEventAsync(10051, userRelays, func(ev *nostr.Event) {
+				if ev != nil {
+					cacheStore(ev.ToJSON(), func(_ bool) {})
+					for _, url := range relayURLs {
+						getConn(url).Publish(ev)
+					}
+				}
+			})
 		}
 
 		count := 0
@@ -278,7 +371,7 @@ func routerBroadcast(clientID, pubkey string, relayURLs []string) {
 	})
 }
 
-func createRelayListEvent(kind int, _ string, relays []string) *nostr.Event {
+func createRelayListEventAsync(kind int, relays []string, cb func(ev *nostr.Event)) {
 	tagKey := "relay"
 	var tags nostr.Tags
 	for _, r := range relays {
@@ -286,12 +379,17 @@ func createRelayListEvent(kind int, _ string, relays []string) *nostr.Event {
 	}
 	ev := &nostr.Event{
 		Kind:      kind,
+		PubKey:    myPubkey,
 		Content:   "",
 		Tags:      tags,
 		CreatedAt: sw.NowSeconds(),
 	}
-	if !identitySignEvent(ev) {
-		return nil
-	}
-	return ev
+	cryptoProxy("signEvent", "", ev.ToJSON(), func(signedJSON, errMsg string) {
+		if errMsg != "" || signedJSON == "" {
+			cb(nil)
+			return
+		}
+		signed := nostr.ParseEvent(signedJSON)
+		cb(signed)
+	})
 }

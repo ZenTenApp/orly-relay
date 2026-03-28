@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Playwright smoke test for sm3sh multi-SW bus connectivity."""
+"""Playwright smoke test for smesh multi-SW bus connectivity."""
 
 import sys
 import time
@@ -7,7 +7,7 @@ from playwright.sync_api import sync_playwright
 
 TEST_SK = "328615b6c92aa6527fc175a67670222daabc69fa2b84c2ded5f6907f78f2b0f8"
 TEST_PK = "5dbeb1d7e84d0a4fb3fac47868438dc9135b35f25e27ae933e306e3584bf69a8"
-BASE = "http://sm3sh.test:8090"
+BASE = "http://smesh.test:8090"
 LOG_FILE = "/tmp/browser-debug.log"
 
 
@@ -18,8 +18,8 @@ def main():
             args=[
                 f"--unsafely-treat-insecure-origin-as-secure="
                 f"{BASE},"
-                f"http://marmot.sm3sh.test:8090,"
-                f"http://relay.sm3sh.test:8090",
+                f"http://marmot.smesh.test:8090,"
+                f"http://relay.smesh.test:8090",
             ],
         )
         ctx = browser.new_context()
@@ -30,9 +30,9 @@ def main():
 
         # Inject key into localStorage before page JS runs.
         page.add_init_script(f"""
-        localStorage.setItem('sm3sh-key', '{TEST_SK}');
-        localStorage.setItem('sm3sh-pubkey', '{TEST_PK}');
-        localStorage.setItem('sm3sh-mode', 'nsec');
+        localStorage.setItem('smesh-key', '{TEST_SK}');
+        localStorage.setItem('smesh-pubkey', '{TEST_PK}');
+        localStorage.setItem('smesh-mode', 'nsec');
         """)
 
         page.goto(BASE, wait_until="networkidle", timeout=30000)

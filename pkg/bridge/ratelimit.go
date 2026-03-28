@@ -43,6 +43,26 @@ func NewRateLimiter(cfg RateLimitConfig) *RateLimiter {
 	}
 }
 
+// FreeInterval is the minimum time between sends for unsubscribed users.
+const FreeInterval = 5 * time.Minute
+
+// CheckFree applies the free-tier rate limit: 1 email per 5 minutes.
+func (rl *RateLimiter) CheckFree(pubkeyHex string) error {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	uw := rl.getUser(pubkeyHex)
+	if !uw.lastSend.IsZero() {
+		elapsed := now.Sub(uw.lastSend)
+		if elapsed < FreeInterval {
+			wait := FreeInterval - elapsed
+			return fmt.Errorf("wait %v (free tier: 1 email per 5 minutes)", wait.Round(time.Second))
+		}
+	}
+	return nil
+}
+
 // Check returns nil if the user is allowed to send, or an error describing
 // when they can retry.
 func (rl *RateLimiter) Check(pubkeyHex string) error {

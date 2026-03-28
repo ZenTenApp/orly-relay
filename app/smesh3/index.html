@@ -88,9 +88,7 @@ body.dark {
 <div id="update-snackbar">new version available — click to update</div>
 <script>
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./$sw/$entry.mjs', { type: 'module', scope: '/' }).then(reg => {
-    console.log('smesh: sw registered');
-  }).catch(err => {
+  navigator.serviceWorker.register('./$sw/$entry.mjs', { type: 'module', scope: '/' }).then(reg => {}).catch(err => {
     console.error('smesh: sw registration failed:', err);
   });
 
@@ -100,10 +98,7 @@ if ('serviceWorker' in navigator) {
       console.error('SW RUNTIME ERROR:', d.slice(9));
       return;
     }
-    if (typeof d === 'string' && d === 'sw-started') {
-      console.log('smesh: SW main() OK');
-      return;
-    }
+    if (typeof d === 'string' && d === 'sw-started') return;
     if (d === 'update-available') {
       document.getElementById('update-snackbar').classList.add('visible');
     }
@@ -120,15 +115,18 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 <script>
-// Satellite SWs — register from page, connect via MessagePort.
+// Satellite SWs — two modes:
+// Production (HTTPS): same-origin path-based registration via MessagePort.
+// Dev (localhost): cross-origin iframe at 127.0.0.3 using loader.html.
 {
   window._busPorts = {};
+  var isLocalDev = location.hostname === 'localhost' || /^127\.0\.0\.\d+$/.test(location.hostname);
+
+  // Same-origin path-based registration (production).
   async function regSW(dir) {
     try {
       var reg = await navigator.serviceWorker.register('/'+dir+'/$entry.mjs',{type:'module',scope:'/'+dir+'/',updateViaCache:'none'});
-      // Force update check — browser may be holding stale SW.
       reg.update().catch(function(){});
-      console.log(dir+' SW registered, active='+!!(reg.active)+' installing='+!!(reg.installing));
       function sendPort(w) {
         var ch = new MessageChannel();
         w.postMessage({type:'bus-port'},[ch.port2]);
@@ -138,15 +136,13 @@ if ('serviceWorker' in navigator) {
           if(typeof d==='string'&&d.length>0&&d[0]==='{'&&navigator.serviceWorker.controller)
             navigator.serviceWorker.controller.postMessage(d);
         };
-        console.log(dir+' SW port sent');
       }
-      // Always send port to active SW. Also watch for new version activating.
       var sw = reg.active;
       if(sw) sendPort(sw);
       reg.addEventListener('updatefound',function(){
         var nw = reg.installing;
         if(nw) nw.addEventListener('statechange',function(){
-          if(nw.state==='activated'){ console.log(dir+' SW updated, resending port'); sendPort(nw); }
+          if(nw.state==='activated') sendPort(nw);
         });
       });
       if(!sw){
@@ -155,10 +151,35 @@ if ('serviceWorker' in navigator) {
       }
     } catch(e) { console.error(dir+' SW failed:',e); }
   }
-  // regSW('$sw-marmot'); // disabled — causes browser lockup during WASM init
-  regSW('$sw-relay');
+
+  // Cross-origin iframe registration (dev mode).
+  // Relay SW runs on 127.0.0.3 for thread isolation.
+  function regSWIframe(dir, ip) {
+    var origin = 'http://'+ip+':'+location.port;
+    var iframe = document.createElement('iframe');
+    iframe.src = origin+'/'+dir+'/loader.html';
+    iframe.style.display = 'none';
+    iframe.id = 'sw-iframe-'+dir;
+    document.body.appendChild(iframe);
+    // Relay bus messages between iframe (satellite SW) and shell SW.
+    window.addEventListener('message', function(ev) {
+      if(ev.origin !== origin) return;
+      var d = ev.data;
+      if(typeof d==='string'&&d.length>0&&d[0]==='{'&&navigator.serviceWorker.controller)
+        navigator.serviceWorker.controller.postMessage(d);
+    });
+    // Forward shell→satellite messages via iframe.
+    window._busPorts[dir] = {postMessage: function(msg) { iframe.contentWindow.postMessage(msg, origin); }};
+  }
+
+  if (isLocalDev) {
+    regSWIframe('$sw-relay', '127.0.0.3');
+  } else {
+    regSW('$sw-relay');
+  }
 }
 </script>
+<script type="module" src="./mls-bridge.mjs"></script>
 <script type="module" src="./$entry.mjs"></script>
 </body>
 </html>

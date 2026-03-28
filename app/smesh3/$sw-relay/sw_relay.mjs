@@ -3,7 +3,6 @@
 
 import * as $rt from './$runtime/index.mjs';
 
-import * as common$crypto$secp256k1 from './common_crypto_secp256k1.mjs';
 import * as common$crypto$sha256 from './common_crypto_sha256.mjs';
 import * as common$helpers from './common_helpers.mjs';
 import * as common$jsbridge$bc from './common_jsbridge_bc.mjs';
@@ -16,14 +15,14 @@ import * as common$relay from './common_relay.mjs';
 // Package-level variables
 export let cryptoCBs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let nextCryptoID = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let seckey = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let hasKey = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let myPubkey = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let bus = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let clientSubs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let proxySubs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let fwdBuf = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let fwdTimer = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let rpool = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let writeRelays = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let bus = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let myPubkey = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let clientSubs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let proxySubs = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 
 $rt.types.registerType('sw-relay.mw', {
   id: 'sw-relay.mw',
@@ -34,30 +33,6 @@ $rt.types.registerType('sw-relay.mw', {
     { name: 'i', type: 'int', tag: '', embedded: false },
   ],
   zero: () => ({ s: '', i: 0 }),
-});
-$rt.types.registerType('sw-relay.clientSub', {
-  id: 'sw-relay.clientSub',
-  kind: 'struct',
-  methods: new Map(),
-  fields: [
-    { name: 'filter', type: '*common/nostr.Filter', tag: '', embedded: false },
-    { name: 'filterRaw', type: 'string', tag: '', embedded: false },
-    { name: 'clientID', type: 'string', tag: '', embedded: false },
-  ],
-  zero: () => ({ filter: null, filterRaw: '', clientID: '' }),
-});
-$rt.types.registerType('sw-relay.proxySub', {
-  id: 'sw-relay.proxySub',
-  kind: 'struct',
-  methods: new Map(),
-  fields: [
-    { name: 'remoteIDs', type: 'map[string]bool', tag: '', embedded: false },
-    { name: 'relayCount', type: 'int', tag: '', embedded: false },
-    { name: 'eoseCount', type: 'int', tag: '', embedded: false },
-    { name: 'timer', type: 'common/jsbridge/sw.Timer', tag: '', embedded: false },
-    { name: 'done', type: 'bool', tag: '', embedded: false },
-  ],
-  zero: () => ({ remoteIDs: null, relayCount: 0, eoseCount: 0, timer: 0, done: false }),
 });
 $rt.types.registerType('sw-relay.DMRecord', {
   id: 'sw-relay.DMRecord',
@@ -74,37 +49,31 @@ $rt.types.registerType('sw-relay.DMRecord', {
   ],
   zero: () => ({ ID: '', Peer: '', From: '', Content: '', CreatedAt: 0, Protocol: '', EventID: '' }),
 });
+$rt.types.registerType('sw-relay.clientSub', {
+  id: 'sw-relay.clientSub',
+  kind: 'struct',
+  methods: new Map(),
+  fields: [
+    { name: 'filters', type: '[]*common/nostr.Filter', tag: '', embedded: false },
+    { name: 'filterRaw', type: 'string', tag: '', embedded: false },
+    { name: 'clientID', type: 'string', tag: '', embedded: false },
+  ],
+  zero: () => ({ filters: null, filterRaw: '', clientID: '' }),
+});
+$rt.types.registerType('sw-relay.proxySub', {
+  id: 'sw-relay.proxySub',
+  kind: 'struct',
+  methods: new Map(),
+  fields: [
+    { name: 'remoteIDs', type: 'map[string]bool', tag: '', embedded: false },
+    { name: 'relayCount', type: 'int', tag: '', embedded: false },
+    { name: 'eoseCount', type: 'int', tag: '', embedded: false },
+    { name: 'timer', type: 'common/jsbridge/sw.Timer', tag: '', embedded: false },
+    { name: 'done', type: 'bool', tag: '', embedded: false },
+  ],
+  zero: () => ({ remoteIDs: null, relayCount: 0, eoseCount: 0, timer: 0, done: false }),
+});
 export function init() {
-  return;
-}
-
-export function cacheQuery(filterRaw, cb) {
-  let $t0_1;
-  $t0_1 = common$jsbridge$idb.QueryEvents(filterRaw, cb);
-  return;
-}
-
-export function cacheStore(evJSON, cb) {
-  let $t0_1;
-  $t0_1 = common$jsbridge$idb.SaveEvent(evJSON, cb);
-  return;
-}
-
-export function cacheSaveDM(dmJSON, cb) {
-  let $t0_1;
-  $t0_1 = common$jsbridge$idb.SaveDM(dmJSON, cb);
-  return;
-}
-
-export function cacheGetConversationList(cb) {
-  let $t0_1;
-  $t0_1 = common$jsbridge$idb.GetConversationList(cb);
-  return;
-}
-
-export function cacheQueryDMs(peer, limit, until, cb) {
-  let $t0_1;
-  $t0_1 = common$jsbridge$idb.QueryDMs(peer, limit, until, cb);
   return;
 }
 
@@ -144,22 +113,144 @@ export function cryptoProxy(method, peerPubkey, data, cb) {
 }
 
 export function fwd(clientID, msg) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6;
-  $t0_1 = jstr(clientID);
-  $t1_2 = ('["FWD",' + $t0_1);
-  $t2_3 = ($t1_2 + ',');
-  $t3_4 = ($t2_3 + msg);
-  $t4_5 = ($t3_4 + ']');
-  $t5_6 = busSend('shell', $t4_5);
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11;
+  $t0_1 = fwdBuf.$get();
+  $t1_2 = jstr(clientID);
+  $t2_3 = ('["FWD",' + $t1_2);
+  $t3_4 = ($t2_3 + ',');
+  $t4_5 = ($t3_4 + msg);
+  $t5_6 = ($t4_5 + ']');
+  $t6_7 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t7_8 = $t6_7.$get().addr(0);
+  $t7_8.$set($t5_6);
+  $t8_9 = $rt.builtin.sliceSlice($t6_7.$get(), undefined, undefined, undefined);
+  $t9_10 = $rt.builtin.appendSlice($t0_1, $t8_9);
+  fwdBuf.$set($t9_10);
+  $t10_11 = scheduleFwdFlush();
   return;
 }
 
 export function fwdAll(msg) {
-  let $t0_1, $t1_2, $t2_3;
-  $t0_1 = ('["FWD_ALL",' + msg);
-  $t1_2 = ($t0_1 + ']');
-  $t2_3 = busSend('shell', $t1_2);
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
+  $t0_1 = fwdBuf.$get();
+  $t1_2 = ('["FWD_ALL",' + msg);
+  $t2_3 = ($t1_2 + ']');
+  $t3_4 = { $value: $rt.builtin.makeSlice(1, 1, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t4_5 = $t3_4.$get().addr(0);
+  $t4_5.$set($t2_3);
+  $t5_6 = $rt.builtin.sliceSlice($t3_4.$get(), undefined, undefined, undefined);
+  $t6_7 = $rt.builtin.appendSlice($t0_1, $t5_6);
+  fwdBuf.$set($t6_7);
+  $t7_8 = scheduleFwdFlush();
   return;
+}
+
+export function scheduleFwdFlush() {
+  let $t0_1, $t1_2, $t2_3;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = fwdTimer.$get();
+        $t1_2 = ($t0_1 !== 0);
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return;
+        break;
+      }
+      case 2: {
+        $t2_3 = common$jsbridge$sw.SetTimeout(50, flushFwd);
+        fwdTimer.$set($t2_3);
+        return;
+        break;
+      }
+    }
+  }
+}
+
+export function flushFwd() {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        fwdTimer.$set(0);
+        $t0_1 = fwdBuf.$get();
+        $t1_2 = $rt.builtin.len($t0_1);
+        $t2_3 = ($t1_2 === 0);
+        if ($t2_3) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return;
+        break;
+      }
+      case 2: {
+        $t3_4 = fwdBuf.$get();
+        $t4_5 = $rt.builtin.len($t3_4);
+        $t5_6 = '["FWD_BATCH",[';
+        $t6_7 = -1;
+        $block = 3; break;
+        break;
+      }
+      case 3: {
+        $t7_8 = ($t6_7 + 1);
+        $t8_9 = ($t7_8 < $t4_5);
+        if ($t8_9) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 4: {
+        $t9_10 = $t3_4.addr($t7_8);
+        $t10_11 = $t9_10.$get();
+        $t11_12 = ($t7_8 > 0);
+        if ($t11_12) {
+          $block = 6; break;
+        }
+        else {
+          $t15_16 = $t5_6;
+          $block = 7; break;
+        }
+        break;
+      }
+      case 5: {
+        $t12_13 = ($t5_6 + ']]');
+        fwdBuf.$set(null);
+        $t13_14 = busSend('shell', $t12_13);
+        return;
+        break;
+      }
+      case 6: {
+        $t14_15 = ($t5_6 + ',');
+        $t15_16 = $t14_15;
+        $block = 7; break;
+        break;
+      }
+      case 7: {
+        $t16_17 = ($t15_16 + $t10_11);
+        $t5_6 = $t16_17;
+        $t6_7 = $t7_8;
+        $block = 3; break;
+        break;
+      }
+    }
+  }
 }
 
 export function strsJSON(ss) {
@@ -1044,21 +1135,198 @@ export function skipBrack(s, i, open, close) {
   }
 }
 
-export function identitySetKey(hexKey) {
+export function initRelayProxy() {
+  let $t0_1;
+  $t0_1 = common$relay.NewPool();
+  rpool.$set($t0_1);
+  return;
+}
+
+export function getConn(url) {
+  let $t0_1, $t1_2, $t2_3;
+  $t0_1 = rpool.$get();
+  $t1_2 = common$relay.Pool$Connect($t0_1, url);
+  $t2_3 = wireConn($t1_2, url);
+  return $t1_2;
+}
+
+export function wireConn(c, url) {
   let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
+  $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t0_1.$set(url);
+  $t1_2 = wireConn$1.bind(null, $t0_1);
+  $t2_3 = common$relay.Conn$SetOnEvent(c, $t1_2);
+  $t3_4 = common$relay.Conn$SetOnEOSE(c, wireConn$2);
+  $t4_5 = common$relay.Conn$SetOnOK(c, wireConn$3);
+  $t5_6 = wireConn$4.bind(null, $t0_1);
+  $t6_7 = common$relay.Conn$SetOnAuth(c, $t5_6);
+  $t7_8 = { $get() { return c.$get().ScheduleReconnect; }, $set(v) { const obj = c.$get(); obj.ScheduleReconnect = v; c.$set(obj); } };
+  $t7_8.$set(wireConn$5);
+  return;
+}
+
+function wireConn$1(url, _, ev) {
+  let $t0_1, $t1_2;
+  $t0_1 = url.$get();
+  $t1_2 = routerOnRelayEvent($t0_1, ev);
+  return;
+}
+
+function wireConn$2(subID) {
+  let $t0_1;
+  $t0_1 = routerOnRelayEOSE(subID);
+  return;
+}
+
+function wireConn$3(eventID, ok, msg) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = hexTo32(hexKey);
-        seckey.$set($rt.builtin.cloneValue($t0_1));
-        hasKey.$set(true);
-        $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t2_3 = seckey.$get();
-        $t3_4 = common$crypto$secp256k1.PubKeyFromSecKey($t2_3);
-        $t4_5 = $t3_4[0];
-        $t1_2.$set($rt.builtin.cloneValue($t4_5));
-        $t5_6 = $t3_4[1];
+        if (ok) {
+          $t0_1 = 'true';
+          $block = 2; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+      case 1: {
+        $t0_1 = 'false';
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        $t1_2 = jstr(eventID);
+        $t2_3 = ('["OK",' + $t1_2);
+        $t3_4 = ($t2_3 + ',');
+        $t4_5 = ($t3_4 + $t0_1);
+        $t5_6 = ($t4_5 + ',');
+        $t6_7 = jstr(msg);
+        $t7_8 = ($t5_6 + $t6_7);
+        $t8_9 = ($t7_8 + ']');
+        $t9_10 = fwdAll($t8_9);
+        return;
+        break;
+      }
+    }
+  }
+}
+
+function wireConn$4(url, challenge) {
+  let $t0_1, $t1_2;
+  $t0_1 = url.$get();
+  $t1_2 = onRelayAuth($t0_1, challenge);
+  return;
+}
+
+function wireConn$5(fn) {
+  let $t0_1;
+  $t0_1 = common$jsbridge$sw.SetTimeout(5000, fn);
+  return;
+}
+
+export function onRelayAuth(relayURL, challenge) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set(relayURL);
+        $t1_2 = myPubkey.$get();
+        $t2_3 = ($t1_2 === '');
+        if ($t2_3) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return;
+        break;
+      }
+      case 2: {
+        $t3_4 = { $value: { ID: '', PubKey: '', CreatedAt: 0, Kind: 0, Tags: null, Content: '', Sig: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t4_5 = { $get() { return $t3_4.$get().Kind; }, $set(v) { const obj = $t3_4.$get(); obj.Kind = v; $t3_4.$set(obj); } };
+        $t5_6 = { $get() { return $t3_4.$get().PubKey; }, $set(v) { const obj = $t3_4.$get(); obj.PubKey = v; $t3_4.$set(obj); } };
+        $t6_7 = myPubkey.$get();
+        $t7_8 = { $get() { return $t3_4.$get().Content; }, $set(v) { const obj = $t3_4.$get(); obj.Content = v; $t3_4.$set(obj); } };
+        $t8_9 = { $get() { return $t3_4.$get().Tags; }, $set(v) { const obj = $t3_4.$get(); obj.Tags = v; $t3_4.$set(obj); } };
+        $t9_10 = { $value: $rt.builtin.makeSlice(2, 2, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t10_11 = $t9_10.$get().addr(0);
+        $t11_12 = { $value: $rt.builtin.makeSlice(2, 2, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t12_13 = $t11_12.$get().addr(0);
+        $t12_13.$set('relay');
+        $t13_14 = $t11_12.$get().addr(1);
+        $t14_15 = $t0_1.$get();
+        $t13_14.$set($t14_15);
+        $t15_16 = $rt.builtin.sliceSlice($t11_12.$get(), undefined, undefined, undefined);
+        $t10_11.$set($t15_16);
+        $t16_17 = $t9_10.$get().addr(1);
+        $t17_18 = { $value: $rt.builtin.makeSlice(2, 2, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t18_19 = $t17_18.$get().addr(0);
+        $t18_19.$set('challenge');
+        $t19_20 = $t17_18.$get().addr(1);
+        $t19_20.$set(challenge);
+        $t20_21 = $rt.builtin.sliceSlice($t17_18.$get(), undefined, undefined, undefined);
+        $t16_17.$set($t20_21);
+        $t21_22 = $rt.builtin.sliceSlice($t9_10.$get(), undefined, undefined, undefined);
+        $t22_23 = { $get() { return $t3_4.$get().CreatedAt; }, $set(v) { const obj = $t3_4.$get(); obj.CreatedAt = v; $t3_4.$set(obj); } };
+        $t23_24 = common$jsbridge$sw.NowSeconds();
+        $t4_5.$set(22242);
+        $t5_6.$set($t6_7);
+        $t7_8.$set('');
+        $t8_9.$set($t21_22);
+        $t22_23.$set($t23_24);
+        $t24_25 = common$nostr.Event$ToJSON($t3_4);
+        $t25_26 = onRelayAuth$1.bind(null, $t0_1);
+        $t26_27 = cryptoProxy('signEvent', '', $t24_25, $t25_26);
+        return;
+        break;
+      }
+    }
+  }
+}
+
+function onRelayAuth$1(relayURL, signedJSON, errMsg) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = (errMsg !== '');
+        if ($t0_1) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 1: {
+        return;
+        break;
+      }
+      case 2: {
+        $t1_2 = rpool.$get();
+        $t2_3 = relayURL.$get();
+        $t3_4 = common$relay.Pool$Get($t1_2, $t2_3);
+        $t4_5 = ($t3_4 !== null);
+        if ($t4_5) {
+          $block = 6; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 3: {
+        $t5_6 = (signedJSON === '');
         if ($t5_6) {
           $block = 1; break;
         }
@@ -1067,14 +1335,64 @@ export function identitySetKey(hexKey) {
         }
         break;
       }
+      case 4: {
+        $t6_7 = ('["AUTH",' + signedJSON);
+        $t7_8 = ($t6_7 + ']');
+        $t8_9 = common$relay.Conn$Send($t3_4, $t7_8);
+        $block = 5; break;
+        break;
+      }
+      case 5: {
+        return;
+        break;
+      }
+      case 6: {
+        $t9_10 = common$relay.Conn$IsOpen($t3_4);
+        if ($t9_10) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function relayPublish(ev) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = writeRelays.$get();
+        $t1_2 = $rt.builtin.len($t0_1);
+        $t2_3 = -1;
+        $block = 1; break;
+        break;
+      }
       case 1: {
-        $t6_7 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
-        $t7_8 = common$helpers.HexEncode($t6_7);
-        myPubkey.$set($t7_8);
-        $block = 2; break;
+        $t3_4 = ($t2_3 + 1);
+        $t4_5 = ($t3_4 < $t1_2);
+        if ($t4_5) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
         break;
       }
       case 2: {
+        $t5_6 = $t0_1.addr($t3_4);
+        $t6_7 = $t5_6.$get();
+        $t7_8 = getConn($t6_7);
+        $t8_9 = common$relay.Conn$Publish($t7_8, ev);
+        $t2_3 = $t3_4;
+        $block = 1; break;
+        break;
+      }
+      case 3: {
         return;
         break;
       }
@@ -1082,46 +1400,191 @@ export function identitySetKey(hexKey) {
   }
 }
 
-export function identitySetPubkey(hex) {
-  myPubkey.$set(hex);
-  return;
-}
-
-export function identityClearKey() {
-  seckey.$set($rt.builtin.cloneValue($rt.builtin.makeSlice(32, 32, 0)));
-  hasKey.$set(false);
-  myPubkey.$set('');
-  return;
-}
-
-export function identitySignEvent(ev) {
-  let $t0_1, $t1_2, $t2_3, $t3_4;
+export function relayPublishExcept(ev, exceptURL) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = hasKey.$get();
-        if ($t0_1) {
+        $t0_1 = writeRelays.$get();
+        $t1_2 = $rt.builtin.len($t0_1);
+        $t2_3 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t3_4 = ($t2_3 + 1);
+        $t4_5 = ($t3_4 < $t1_2);
+        if ($t4_5) {
           $block = 2; break;
         }
         else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t5_6 = $t0_1.addr($t3_4);
+        $t6_7 = $t5_6.$get();
+        $t7_8 = ($t6_7 !== exceptURL);
+        if ($t7_8) {
+          $block = 4; break;
+        }
+        else {
+          $t2_3 = $t3_4;
           $block = 1; break;
         }
         break;
       }
-      case 1: {
-        return false;
+      case 3: {
+        return;
         break;
       }
-      case 2: {
-        $t1_2 = random32();
-        $t2_3 = seckey.$get();
-        $t3_4 = common$nostr.Event$Sign(ev, $t2_3, $t1_2);
-        return $t3_4;
+      case 4: {
+        $t8_9 = getConn($t6_7);
+        $t9_10 = common$relay.Conn$Publish($t8_9, ev);
+        $t2_3 = $t3_4;
+        $block = 1; break;
         break;
       }
     }
   }
+}
+
+export function urlSuffix(url) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(url);
+        $t1_2 = Math.min($t0_1, 8);
+        $t2_3 = $rt.builtin.makeSlice(0, $t1_2, 0);
+        $t3_4 = $rt.builtin.len(url);
+        $t4_5 = ($t3_4 - $t1_2);
+        $t5_6 = $t2_3;
+        $t6_7 = $t4_5;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t7_8 = $rt.builtin.len(url);
+        $t8_9 = ($t6_7 < $t7_8);
+        if ($t8_9) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $rt.runtime.boundsCheck($t6_7, $rt.builtin.byteLen(url));
+        $t9_10 = $rt.builtin.stringByteAt(url, $t6_7);
+        $t10_11 = ($t9_10 >= 97);
+        if ($t10_11) {
+          $block = 7; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 3: {
+        $t11_12 = $rt.builtin.bytesToString($t5_6);
+        return $t11_12;
+        break;
+      }
+      case 4: {
+        $t12_13 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t13_14 = $t12_13.$get().addr(0);
+        $t13_14.$set($t9_10);
+        $t14_15 = $rt.builtin.sliceSlice($t12_13.$get(), undefined, undefined, undefined);
+        $t15_16 = $rt.builtin.appendSlice($t5_6, $t14_15);
+        $t16_17 = $t15_16;
+        $block = 5; break;
+        break;
+      }
+      case 5: {
+        $t17_18 = ($t6_7 + 1);
+        $t5_6 = $t16_17;
+        $t6_7 = $t17_18;
+        $block = 1; break;
+        break;
+      }
+      case 6: {
+        $t18_19 = ($t9_10 >= 48);
+        if ($t18_19) {
+          $block = 8; break;
+        }
+        else {
+          $t16_17 = $t5_6;
+          $block = 5; break;
+        }
+        break;
+      }
+      case 7: {
+        $t19_20 = ($t9_10 <= 122);
+        if ($t19_20) {
+          $block = 4; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 8: {
+        $t20_21 = ($t9_10 <= 57);
+        if ($t20_21) {
+          $block = 4; break;
+        }
+        else {
+          $t16_17 = $t5_6;
+          $block = 5; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function handleRelayInfo(clientID, relayURL) {
+  let $t0_1, $t1_2, $t2_3, $t3_4;
+  $t0_1 = jstr(relayURL);
+  $t1_2 = ('["RELAY_INFO",' + $t0_1);
+  $t2_3 = ($t1_2 + ',null]');
+  $t3_4 = fwd(clientID, $t2_3);
+  return;
+}
+
+export function cacheQuery(filterRaw, cb) {
+  let $t0_1;
+  $t0_1 = common$jsbridge$idb.QueryEvents(filterRaw, cb);
+  return;
+}
+
+export function cacheStore(evJSON, cb) {
+  let $t0_1;
+  $t0_1 = common$jsbridge$idb.SaveEvent(evJSON, cb);
+  return;
+}
+
+export function cacheSaveDM(dmJSON, cb) {
+  let $t0_1;
+  $t0_1 = common$jsbridge$idb.SaveDM(dmJSON, cb);
+  return;
+}
+
+export function cacheGetConversationList(cb) {
+  let $t0_1;
+  $t0_1 = common$jsbridge$idb.GetConversationList(cb);
+  return;
+}
+
+export function cacheQueryDMs(peer, limit, until, cb) {
+  let $t0_1;
+  $t0_1 = common$jsbridge$idb.QueryDMs(peer, limit, until, cb);
+  return;
 }
 
 export function main() {
@@ -1167,11 +1630,10 @@ function onActivate$1(done) {
 }
 
 function onActivate$1$1(done) {
-  let $t0_1, $t1_2, $t2_3, $t3_4;
-  $t0_1 = common$jsbridge$sw.Log('relay-sw: starting');
-  $t1_2 = busSend('shell', '["READY"]');
-  $t2_3 = done.$get();
-  $t3_4 = $t2_3();
+  let $t0_1, $t1_2, $t2_3;
+  $t0_1 = busSend('shell', '["READY"]');
+  $t1_2 = done.$get();
+  $t2_3 = $t1_2();
   return;
 }
 
@@ -1209,7 +1671,7 @@ export function busSend(to, msg) {
 }
 
 export function onBusMessage(raw) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -1273,64 +1735,68 @@ export function onBusMessage(raw) {
         $t8_9 = newMW($t4_5);
         $t7_8.$set($rt.builtin.cloneValue($t8_9));
         $t9_10 = mw$str($t7_8);
-        $t10_11 = ($t9_10 === 'PING');
+        $t10_11 = ($t9_10 !== 'PING');
         if ($t10_11) {
-          $block = 9; break;
+          $block = 11; break;
         }
         else {
-          $block = 11; break;
+          $block = 9; break;
         }
         break;
       }
       case 8: {
-        return;
+        $t11_12 = ('relay: bus→' + $t9_10);
+        $t12_13 = common$jsbridge$sw.Log($t11_12);
+        $block = 9; break;
         break;
       }
       case 9: {
-        $t11_12 = busSend('shell', '["READY"]');
-        return;
-        break;
-      }
-      case 10: {
-        $t12_13 = mw$str($t7_8);
-        $t13_14 = identitySetKey($t12_13);
-        $block = 8; break;
-        break;
-      }
-      case 11: {
-        $t14_15 = ($t9_10 === 'SET_KEY');
-        if ($t14_15) {
-          $block = 10; break;
-        }
-        else {
+        $t13_14 = ($t9_10 === 'PING');
+        if ($t13_14) {
           $block = 13; break;
-        }
-        break;
-      }
-      case 12: {
-        $t15_16 = mw$str($t7_8);
-        $t16_17 = identitySetPubkey($t15_16);
-        $block = 8; break;
-        break;
-      }
-      case 13: {
-        $t17_18 = ($t9_10 === 'SET_PUBKEY');
-        if ($t17_18) {
-          $block = 12; break;
         }
         else {
           $block = 15; break;
         }
         break;
       }
+      case 10: {
+        $t14_15 = ($t9_10 !== 'SAVE_DM');
+        if ($t14_15) {
+          $block = 8; break;
+        }
+        else {
+          $block = 9; break;
+        }
+        break;
+      }
+      case 11: {
+        $t15_16 = ($t9_10 !== 'SAVE_DM_QUIET');
+        if ($t15_16) {
+          $block = 10; break;
+        }
+        else {
+          $block = 9; break;
+        }
+        break;
+      }
+      case 12: {
+        return;
+        break;
+      }
+      case 13: {
+        $t16_17 = busSend('shell', '["READY"]');
+        return;
+        break;
+      }
       case 14: {
-        $t18_19 = identityClearKey();
-        writeRelays.$set(null);
-        $block = 8; break;
+        $t17_18 = mw$str($t7_8);
+        $t18_19 = identitySetPubkey($t17_18);
+        $block = 12; break;
         break;
       }
       case 15: {
-        $t19_20 = ($t9_10 === 'CLEAR_KEY');
+        $t19_20 = ($t9_10 === 'SET_PUBKEY');
         if ($t19_20) {
           $block = 14; break;
         }
@@ -1340,13 +1806,13 @@ export function onBusMessage(raw) {
         break;
       }
       case 16: {
-        $t20_21 = mw$strs($t7_8);
-        writeRelays.$set($t20_21);
-        $block = 8; break;
+        $t20_21 = identityClearKey();
+        writeRelays.$set(null);
+        $block = 12; break;
         break;
       }
       case 17: {
-        $t21_22 = ($t9_10 === 'SET_WRITE_RELAYS');
+        $t21_22 = ($t9_10 === 'CLEAR_KEY');
         if ($t21_22) {
           $block = 16; break;
         }
@@ -1356,16 +1822,14 @@ export function onBusMessage(raw) {
         break;
       }
       case 18: {
-        $t22_23 = mw$str($t7_8);
-        $t23_24 = mw$str($t7_8);
-        $t24_25 = mw$raw($t7_8);
-        $t25_26 = routerReq($t22_23, $t23_24, $t24_25);
-        $block = 8; break;
+        $t22_23 = mw$strs($t7_8);
+        writeRelays.$set($t22_23);
+        $block = 12; break;
         break;
       }
       case 19: {
-        $t26_27 = ($t9_10 === 'REQ');
-        if ($t26_27) {
+        $t23_24 = ($t9_10 === 'SET_WRITE_RELAYS');
+        if ($t23_24) {
           $block = 18; break;
         }
         else {
@@ -1374,14 +1838,16 @@ export function onBusMessage(raw) {
         break;
       }
       case 20: {
-        $t27_28 = mw$str($t7_8);
-        $t28_29 = routerClose($t27_28);
-        $block = 8; break;
+        $t24_25 = mw$str($t7_8);
+        $t25_26 = mw$str($t7_8);
+        $t26_27 = mw$raw($t7_8);
+        $t27_28 = routerReq($t24_25, $t25_26, $t26_27);
+        $block = 12; break;
         break;
       }
       case 21: {
-        $t29_30 = ($t9_10 === 'CLOSE');
-        if ($t29_30) {
+        $t28_29 = ($t9_10 === 'REQ');
+        if ($t28_29) {
           $block = 20; break;
         }
         else {
@@ -1390,15 +1856,14 @@ export function onBusMessage(raw) {
         break;
       }
       case 22: {
-        $t30_31 = mw$str($t7_8);
-        $t31_32 = mw$raw($t7_8);
-        $t32_33 = routerPublish($t30_31, $t31_32);
-        $block = 8; break;
+        $t29_30 = mw$str($t7_8);
+        $t30_31 = routerClose($t29_30);
+        $block = 12; break;
         break;
       }
       case 23: {
-        $t33_34 = ($t9_10 === 'EVENT');
-        if ($t33_34) {
+        $t31_32 = ($t9_10 === 'CLOSE');
+        if ($t31_32) {
           $block = 22; break;
         }
         else {
@@ -1407,17 +1872,15 @@ export function onBusMessage(raw) {
         break;
       }
       case 24: {
-        $t34_35 = mw$str($t7_8);
-        $t35_36 = mw$str($t7_8);
-        $t36_37 = mw$raw($t7_8);
-        $t37_38 = mw$strs($t7_8);
-        $t38_39 = routerProxy($t34_35, $t35_36, $t36_37, $t37_38);
-        $block = 8; break;
+        $t32_33 = mw$str($t7_8);
+        $t33_34 = mw$raw($t7_8);
+        $t34_35 = routerPublish($t32_33, $t33_34);
+        $block = 12; break;
         break;
       }
       case 25: {
-        $t39_40 = ($t9_10 === 'PROXY');
-        if ($t39_40) {
+        $t35_36 = ($t9_10 === 'EVENT');
+        if ($t35_36) {
           $block = 24; break;
         }
         else {
@@ -1426,15 +1889,15 @@ export function onBusMessage(raw) {
         break;
       }
       case 26: {
-        $t40_41 = mw$str($t7_8);
-        $t41_42 = mw$str($t7_8);
-        $t42_43 = handleRelayInfo($t40_41, $t41_42);
-        $block = 8; break;
+        $t36_37 = mw$raw($t7_8);
+        $t37_38 = mw$strs($t7_8);
+        $t38_39 = routerPublishToRelays($t36_37, $t37_38);
+        $block = 12; break;
         break;
       }
       case 27: {
-        $t43_44 = ($t9_10 === 'RELAY_INFO');
-        if ($t43_44) {
+        $t39_40 = ($t9_10 === 'MLS_RELAY_PUBLISH');
+        if ($t39_40) {
           $block = 26; break;
         }
         else {
@@ -1443,16 +1906,17 @@ export function onBusMessage(raw) {
         break;
       }
       case 28: {
-        $t44_45 = mw$str($t7_8);
-        $t45_46 = mw$str($t7_8);
-        $t46_47 = mw$raw($t7_8);
-        $t47_48 = routerSign($t44_45, $t45_46, $t46_47);
-        $block = 8; break;
+        $t40_41 = mw$str($t7_8);
+        $t41_42 = mw$str($t7_8);
+        $t42_43 = mw$raw($t7_8);
+        $t43_44 = mw$strs($t7_8);
+        $t44_45 = routerProxy($t40_41, $t41_42, $t42_43, $t43_44);
+        $block = 12; break;
         break;
       }
       case 29: {
-        $t48_49 = ($t9_10 === 'SIGN');
-        if ($t48_49) {
+        $t45_46 = ($t9_10 === 'PROXY');
+        if ($t45_46) {
           $block = 28; break;
         }
         else {
@@ -1461,16 +1925,15 @@ export function onBusMessage(raw) {
         break;
       }
       case 30: {
-        $t49_50 = mw$str($t7_8);
-        $t50_51 = mw$str($t7_8);
-        $t51_52 = mw$strs($t7_8);
-        $t52_53 = routerBroadcast($t49_50, $t50_51, $t51_52);
-        $block = 8; break;
+        $t46_47 = mw$str($t7_8);
+        $t47_48 = mw$str($t7_8);
+        $t48_49 = handleRelayInfo($t46_47, $t47_48);
+        $block = 12; break;
         break;
       }
       case 31: {
-        $t53_54 = ($t9_10 === 'BROADCAST');
-        if ($t53_54) {
+        $t49_50 = ($t9_10 === 'RELAY_INFO');
+        if ($t49_50) {
           $block = 30; break;
         }
         else {
@@ -1479,14 +1942,16 @@ export function onBusMessage(raw) {
         break;
       }
       case 32: {
-        $t54_55 = mw$str($t7_8);
-        $t55_56 = routerDMList($t54_55);
-        $block = 8; break;
+        $t50_51 = mw$str($t7_8);
+        $t51_52 = mw$str($t7_8);
+        $t52_53 = mw$raw($t7_8);
+        $t53_54 = routerSign($t50_51, $t51_52, $t52_53);
+        $block = 12; break;
         break;
       }
       case 33: {
-        $t56_57 = ($t9_10 === 'DM_LIST');
-        if ($t56_57) {
+        $t54_55 = ($t9_10 === 'SIGN');
+        if ($t54_55) {
           $block = 32; break;
         }
         else {
@@ -1495,18 +1960,16 @@ export function onBusMessage(raw) {
         break;
       }
       case 34: {
-        $t57_58 = mw$str($t7_8);
-        $t58_59 = mw$str($t7_8);
-        $t59_60 = mw$num($t7_8);
-        $t60_61 = $t59_60;
-        $t61_62 = mw$num($t7_8);
-        $t62_63 = routerDMHistory($t57_58, $t58_59, $t60_61, $t61_62);
-        $block = 8; break;
+        $t55_56 = mw$str($t7_8);
+        $t56_57 = mw$str($t7_8);
+        $t57_58 = mw$strs($t7_8);
+        $t58_59 = routerBroadcast($t55_56, $t56_57, $t57_58);
+        $block = 12; break;
         break;
       }
       case 35: {
-        $t63_64 = ($t9_10 === 'DM_HISTORY');
-        if ($t63_64) {
+        $t59_60 = ($t9_10 === 'BROADCAST');
+        if ($t59_60) {
           $block = 34; break;
         }
         else {
@@ -1515,18 +1978,14 @@ export function onBusMessage(raw) {
         break;
       }
       case 36: {
-        $t64_65 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t65_66 = mw$raw($t7_8);
-        $t64_65.$set($t65_66);
-        $t66_67 = $t64_65.$get();
-        $t67_68 = onBusMessage$1.bind(null, $t64_65);
-        $t68_69 = cacheSaveDM($t66_67, $t67_68);
-        $block = 8; break;
+        $t60_61 = mw$str($t7_8);
+        $t61_62 = routerDMList($t60_61);
+        $block = 12; break;
         break;
       }
       case 37: {
-        $t69_70 = ($t9_10 === 'SAVE_DM');
-        if ($t69_70) {
+        $t62_63 = ($t9_10 === 'DM_LIST');
+        if ($t62_63) {
           $block = 36; break;
         }
         else {
@@ -1535,14 +1994,18 @@ export function onBusMessage(raw) {
         break;
       }
       case 38: {
-        $t70_71 = mw$raw($t7_8);
-        $t71_72 = cacheSaveDM($t70_71, onBusMessage$2);
-        $block = 8; break;
+        $t63_64 = mw$str($t7_8);
+        $t64_65 = mw$str($t7_8);
+        $t65_66 = mw$num($t7_8);
+        $t66_67 = $t65_66;
+        $t67_68 = mw$num($t7_8);
+        $t68_69 = routerDMHistory($t63_64, $t64_65, $t66_67, $t67_68);
+        $block = 12; break;
         break;
       }
       case 39: {
-        $t72_73 = ($t9_10 === 'SAVE_DM_QUIET');
-        if ($t72_73) {
+        $t69_70 = ($t9_10 === 'DM_HISTORY');
+        if ($t69_70) {
           $block = 38; break;
         }
         else {
@@ -1551,37 +2014,73 @@ export function onBusMessage(raw) {
         break;
       }
       case 40: {
-        $t73_74 = mw$num($t7_8);
-        $t74_75 = $t73_74;
-        $t75_76 = mw$str($t7_8);
-        $t76_77 = mw$str($t7_8);
-        $t77_78 = cryptoCBs.$get();
-        { const $r = $rt.builtin.mapLookup($t77_78, $t74_75); $t78_79 = [$r.value, $r.ok]; }
-        $t79_80 = $t78_79[0];
-        $t80_81 = $t78_79[1];
-        if ($t80_81) {
-          $block = 42; break;
-        }
-        else {
-          $block = 8; break;
-        }
+        $t70_71 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t71_72 = mw$raw($t7_8);
+        $t70_71.$set($t71_72);
+        $t72_73 = $t70_71.$get();
+        $t73_74 = onBusMessage$1.bind(null, $t70_71);
+        $t74_75 = cacheSaveDM($t72_73, $t73_74);
+        $block = 12; break;
         break;
       }
       case 41: {
-        $t81_82 = ($t9_10 === 'CRYPTO_RESULT');
-        if ($t81_82) {
+        $t75_76 = ($t9_10 === 'SAVE_DM');
+        if ($t75_76) {
           $block = 40; break;
         }
         else {
-          $block = 8; break;
+          $block = 43; break;
         }
         break;
       }
       case 42: {
-        $t82_83 = cryptoCBs.$get();
-        $t83_84 = $rt.builtin.mapDelete($t82_83, $t74_75);
-        $t84_85 = $t79_80($t75_76, $t76_77);
-        $block = 8; break;
+        $t76_77 = mw$raw($t7_8);
+        $t77_78 = cacheSaveDM($t76_77, onBusMessage$2);
+        $block = 12; break;
+        break;
+      }
+      case 43: {
+        $t78_79 = ($t9_10 === 'SAVE_DM_QUIET');
+        if ($t78_79) {
+          $block = 42; break;
+        }
+        else {
+          $block = 45; break;
+        }
+        break;
+      }
+      case 44: {
+        $t79_80 = mw$num($t7_8);
+        $t80_81 = $t79_80;
+        $t81_82 = mw$str($t7_8);
+        $t82_83 = mw$str($t7_8);
+        $t83_84 = cryptoCBs.$get();
+        { const $r = $rt.builtin.mapLookup($t83_84, $t80_81); $t84_85 = [$r.value, $r.ok]; }
+        $t85_86 = $t84_85[0];
+        $t86_87 = $t84_85[1];
+        if ($t86_87) {
+          $block = 46; break;
+        }
+        else {
+          $block = 12; break;
+        }
+        break;
+      }
+      case 45: {
+        $t87_88 = ($t9_10 === 'CRYPTO_RESULT');
+        if ($t87_88) {
+          $block = 44; break;
+        }
+        else {
+          $block = 12; break;
+        }
+        break;
+      }
+      case 46: {
+        $t88_89 = cryptoCBs.$get();
+        $t89_90 = $rt.builtin.mapDelete($t88_89, $t80_81);
+        $t90_91 = $t85_86($t81_82, $t82_83);
+        $block = 12; break;
         break;
       }
     }
@@ -1623,6 +2122,58 @@ function onBusMessage$2(result) {
   return;
 }
 
+export function identitySetPubkey(hex) {
+  myPubkey.$set(hex);
+  return;
+}
+
+export function identityClearKey() {
+  myPubkey.$set('');
+  return;
+}
+
+export function makeDMRecord(peer, from, content, createdAt, protocol, eventID) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
+  $t0_1 = { $value: { ID: '', Peer: '', From: '', Content: '', CreatedAt: 0, Protocol: '', EventID: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t1_2 = { $get() { return $t0_1.$get().ID; }, $set(v) { const obj = $t0_1.$get(); obj.ID = v; $t0_1.$set(obj); } };
+  $t2_3 = dmDedupID(peer, content, createdAt);
+  $t3_4 = { $get() { return $t0_1.$get().Peer; }, $set(v) { const obj = $t0_1.$get(); obj.Peer = v; $t0_1.$set(obj); } };
+  $t4_5 = { $get() { return $t0_1.$get().From; }, $set(v) { const obj = $t0_1.$get(); obj.From = v; $t0_1.$set(obj); } };
+  $t5_6 = { $get() { return $t0_1.$get().Content; }, $set(v) { const obj = $t0_1.$get(); obj.Content = v; $t0_1.$set(obj); } };
+  $t6_7 = { $get() { return $t0_1.$get().CreatedAt; }, $set(v) { const obj = $t0_1.$get(); obj.CreatedAt = v; $t0_1.$set(obj); } };
+  $t7_8 = { $get() { return $t0_1.$get().Protocol; }, $set(v) { const obj = $t0_1.$get(); obj.Protocol = v; $t0_1.$set(obj); } };
+  $t8_9 = { $get() { return $t0_1.$get().EventID; }, $set(v) { const obj = $t0_1.$get(); obj.EventID = v; $t0_1.$set(obj); } };
+  $t1_2.$set($t2_3);
+  $t3_4.$set(peer);
+  $t4_5.$set(from);
+  $t5_6.$set(content);
+  $t6_7.$set(createdAt);
+  $t7_8.$set(protocol);
+  $t8_9.$set(eventID);
+  return $t0_1;
+}
+
+export function dmDedupID(peer, content, createdAt) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
+  $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t1_2 = $rt.builtin.stringToBytes(content);
+  $t2_3 = common$crypto$sha256.Sum($t1_2);
+  $t0_1.$set($rt.builtin.cloneValue($t2_3));
+  $t3_4 = Math.trunc(createdAt / 300);
+  $t4_5 = common$helpers.Itoa($t3_4);
+  $t5_6 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t6_7 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+  $t7_8 = common$helpers.HexEncode($t6_7);
+  $t8_9 = (peer + $t7_8);
+  $t9_10 = ($t8_9 + $t4_5);
+  $t10_11 = $rt.builtin.stringToBytes($t9_10);
+  $t11_12 = common$crypto$sha256.Sum($t10_11);
+  $t5_6.$set($rt.builtin.cloneValue($t11_12));
+  $t12_13 = $rt.builtin.sliceSlice($t5_6.$get(), undefined, undefined, undefined);
+  $t13_14 = common$helpers.HexEncode($t12_13);
+  return $t13_14;
+}
+
 export function initRouter() {
   let $t0_1, $t1_2;
   $t0_1 = $rt.builtin.makeMap('string');
@@ -1633,7 +2184,7 @@ export function initRouter() {
 }
 
 export function routerReq(clientID, subID, filterRaw) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -1660,17 +2211,21 @@ export function routerReq(clientID, subID, filterRaw) {
       case 2: {
         $t5_6 = clientSubs.$get();
         $t6_7 = $t1_2.$get();
-        $t7_8 = { $value: { filter: null, filterRaw: '', clientID: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t8_9 = { $get() { return $t7_8.$get().filter; }, $set(v) { const obj = $t7_8.$get(); obj.filter = v; $t7_8.$set(obj); } };
-        $t9_10 = { $get() { return $t7_8.$get().filterRaw; }, $set(v) { const obj = $t7_8.$get(); obj.filterRaw = v; $t7_8.$set(obj); } };
-        $t10_11 = { $get() { return $t7_8.$get().clientID; }, $set(v) { const obj = $t7_8.$get(); obj.clientID = v; $t7_8.$set(obj); } };
-        $t11_12 = $t0_1.$get();
-        $t8_9.$set($t2_3);
-        $t9_10.$set(filterRaw);
-        $t10_11.$set($t11_12);
+        $t7_8 = { $value: { filters: null, filterRaw: '', clientID: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t8_9 = { $get() { return $t7_8.$get().filters; }, $set(v) { const obj = $t7_8.$get(); obj.filters = v; $t7_8.$set(obj); } };
+        $t9_10 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t10_11 = $t9_10.$get().addr(0);
+        $t10_11.$set($t2_3);
+        $t11_12 = $rt.builtin.sliceSlice($t9_10.$get(), undefined, undefined, undefined);
+        $t12_13 = { $get() { return $t7_8.$get().filterRaw; }, $set(v) { const obj = $t7_8.$get(); obj.filterRaw = v; $t7_8.$set(obj); } };
+        $t13_14 = { $get() { return $t7_8.$get().clientID; }, $set(v) { const obj = $t7_8.$get(); obj.clientID = v; $t7_8.$set(obj); } };
+        $t14_15 = $t0_1.$get();
+        $t8_9.$set($t11_12);
+        $t12_13.$set(filterRaw);
+        $t13_14.$set($t14_15);
         $rt.builtin.mapUpdate($t5_6, $t6_7, $t7_8);
-        $t12_13 = routerReq$1.bind(null, $t0_1, $t1_2);
-        $t13_14 = cacheQuery(filterRaw, $t12_13);
+        $t15_16 = routerReq$1.bind(null, $t0_1, $t1_2);
+        $t16_17 = cacheQuery(filterRaw, $t15_16);
         return;
         break;
       }
@@ -1809,16 +2364,18 @@ function routerPublish$1(ev, saved) {
   }
 }
 
-export function routerProxy(clientID, subID, filterRaw, relayURLs) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36;
+export function routerPublishToRelays(eventRaw, relayURLs) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = routerCleanupProxy(subID);
-        $t1_2 = common$nostr.ParseFilter(filterRaw);
-        $t2_3 = ($t1_2 === null);
-        if ($t2_3) {
+        $t0_1 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2 = common$nostr.ParseEvent(eventRaw);
+        $t0_1.$set($t1_2);
+        $t2_3 = $t0_1.$get();
+        $t3_4 = ($t2_3 === null);
+        if ($t3_4) {
           $block = 1; break;
         }
         else {
@@ -1827,40 +2384,44 @@ export function routerProxy(clientID, subID, filterRaw, relayURLs) {
         break;
       }
       case 1: {
-        $t3_4 = common$jsbridge$sw.Log('relay-sw: PROXY parse filter FAILED');
+        $t4_5 = $rt.builtin.len(eventRaw);
+        $t5_6 = $t4_5;
+        $t6_7 = common$helpers.Itoa($t5_6);
+        $t7_8 = ('relay: publishToRelays PARSE FAILED len=' + $t6_7);
+        $t8_9 = common$jsbridge$sw.Log($t7_8);
         return;
         break;
       }
       case 2: {
-        $t4_5 = clientSubs.$get();
-        $t5_6 = { $value: { filter: null, filterRaw: '', clientID: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t6_7 = { $get() { return $t5_6.$get().filter; }, $set(v) { const obj = $t5_6.$get(); obj.filter = v; $t5_6.$set(obj); } };
-        $t7_8 = { $get() { return $t5_6.$get().filterRaw; }, $set(v) { const obj = $t5_6.$get(); obj.filterRaw = v; $t5_6.$set(obj); } };
-        $t8_9 = { $get() { return $t5_6.$get().clientID; }, $set(v) { const obj = $t5_6.$get(); obj.clientID = v; $t5_6.$set(obj); } };
-        $t6_7.$set($t1_2);
-        $t7_8.$set(filterRaw);
-        $t8_9.$set(clientID);
-        $rt.builtin.mapUpdate($t4_5, subID, $t5_6);
-        $t9_10 = $rt.builtin.makeMap('string');
-        $t10_11 = ('p_' + subID);
-        $t11_12 = ($t10_11 + '_');
-        $t12_13 = proxySubs.$get();
-        $t13_14 = { $value: { remoteIDs: null, relayCount: 0, eoseCount: 0, timer: 0, done: false }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t14_15 = { $get() { return $t13_14.$get().remoteIDs; }, $set(v) { const obj = $t13_14.$get(); obj.remoteIDs = v; $t13_14.$set(obj); } };
-        $t15_16 = { $get() { return $t13_14.$get().relayCount; }, $set(v) { const obj = $t13_14.$get(); obj.relayCount = v; $t13_14.$set(obj); } };
-        $t16_17 = $rt.builtin.len(relayURLs);
-        $t14_15.$set($t9_10);
-        $t15_16.$set($t16_17);
-        $rt.builtin.mapUpdate($t12_13, subID, $t13_14);
-        $t17_18 = $rt.builtin.len(relayURLs);
-        $t18_19 = -1;
+        $t9_10 = $t0_1.$get();
+        $t10_11 = { $get() { return $t9_10.$get().Kind; }, $set(v) { const obj = $t9_10.$get(); obj.Kind = v; $t9_10.$set(obj); } };
+        $t11_12 = $t10_11.$get();
+        $t12_13 = $t11_12;
+        $t13_14 = common$helpers.Itoa($t12_13);
+        $t14_15 = ('relay: publishToRelays kind=' + $t13_14);
+        $t15_16 = ($t14_15 + ' id=');
+        $t16_17 = $t0_1.$get();
+        $t17_18 = { $get() { return $t16_17.$get().ID; }, $set(v) { const obj = $t16_17.$get(); obj.ID = v; $t16_17.$set(obj); } };
+        $t18_19 = $t17_18.$get();
+        $t19_20 = $rt.builtin.stringSlice($t18_19, undefined, 16);
+        $t20_21 = ($t15_16 + $t19_20);
+        $t21_22 = ($t20_21 + ' relays=');
+        $t22_23 = $rt.builtin.len(relayURLs);
+        $t23_24 = $t22_23;
+        $t24_25 = common$helpers.Itoa($t23_24);
+        $t25_26 = ($t21_22 + $t24_25);
+        $t26_27 = common$jsbridge$sw.Log($t25_26);
+        $t27_28 = routerPublishToRelays$1.bind(null, $t0_1);
+        $t28_29 = cacheStore(eventRaw, $t27_28);
+        $t29_30 = $rt.builtin.len(relayURLs);
+        $t30_31 = -1;
         $block = 3; break;
         break;
       }
       case 3: {
-        $t19_20 = ($t18_19 + 1);
-        $t20_21 = ($t19_20 < $t17_18);
-        if ($t20_21) {
+        $t31_32 = ($t30_31 + 1);
+        $t32_33 = ($t31_32 < $t29_30);
+        if ($t32_33) {
           $block = 4; break;
         }
         else {
@@ -1869,30 +2430,138 @@ export function routerProxy(clientID, subID, filterRaw, relayURLs) {
         break;
       }
       case 4: {
-        $t21_22 = relayURLs.addr($t19_20);
-        $t22_23 = $t21_22.$get();
-        $t23_24 = urlSuffix($t22_23);
-        $t24_25 = ($t11_12 + $t23_24);
-        $rt.builtin.mapUpdate($t9_10, $t24_25, true);
-        $t25_26 = getConn($t22_23);
-        $t26_27 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t27_28 = $t26_27.$get().addr(0);
-        $t27_28.$set($t1_2);
-        $t28_29 = $rt.builtin.sliceSlice($t26_27.$get(), undefined, undefined, undefined);
-        $t29_30 = common$relay.Conn$Subscribe($t25_26, $t24_25, $t28_29);
-        $t18_19 = $t19_20;
+        $t33_34 = relayURLs.addr($t31_32);
+        $t34_35 = $t33_34.$get();
+        $t35_36 = getConn($t34_35);
+        $t36_37 = ('relay: publish to ' + $t34_35);
+        $t37_38 = ($t36_37 + ' open=');
+        $t38_39 = common$relay.Conn$IsOpen($t35_36);
+        $t39_40 = boolStr($t38_39);
+        $t40_41 = ($t37_38 + $t39_40);
+        $t41_42 = common$jsbridge$sw.Log($t40_41);
+        $t42_43 = $t0_1.$get();
+        $t43_44 = common$relay.Conn$Publish($t35_36, $t42_43);
+        $t30_31 = $t31_32;
         $block = 3; break;
         break;
       }
       case 5: {
-        $t30_31 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t30_31.$set(subID);
-        $t31_32 = proxySubs.$get();
-        $t32_33 = $rt.builtin.mapLookup($t31_32, subID).value;
-        $t33_34 = routerProxy$1.bind(null, $t30_31);
-        $t34_35 = common$jsbridge$sw.SetTimeout(20000, $t33_34);
-        $t35_36 = { $get() { return $t32_33.$get().timer; }, $set(v) { const obj = $t32_33.$get(); obj.timer = v; $t32_33.$set(obj); } };
-        $t35_36.$set($t34_35);
+        return;
+        break;
+      }
+    }
+  }
+}
+
+function routerPublishToRelays$1(ev, saved) {
+  let $t0_1, $t1_2;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        if (saved) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t0_1 = ev.$get();
+        $t1_2 = pushToMatchingSubs($t0_1);
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        return;
+        break;
+      }
+    }
+  }
+}
+
+export function routerProxy(clientID, subID, filterRaw, relayURLs) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = routerCleanupProxy(subID);
+        $t1_2 = parseFilters(filterRaw);
+        $t2_3 = $rt.builtin.len($t1_2);
+        $t3_4 = ($t2_3 === 0);
+        if ($t3_4) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t4_5 = common$jsbridge$sw.Log('relay-sw: PROXY parse filter FAILED');
+        return;
+        break;
+      }
+      case 2: {
+        $t5_6 = clientSubs.$get();
+        $t6_7 = { $value: { filters: null, filterRaw: '', clientID: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t7_8 = { $get() { return $t6_7.$get().filters; }, $set(v) { const obj = $t6_7.$get(); obj.filters = v; $t6_7.$set(obj); } };
+        $t8_9 = { $get() { return $t6_7.$get().filterRaw; }, $set(v) { const obj = $t6_7.$get(); obj.filterRaw = v; $t6_7.$set(obj); } };
+        $t9_10 = { $get() { return $t6_7.$get().clientID; }, $set(v) { const obj = $t6_7.$get(); obj.clientID = v; $t6_7.$set(obj); } };
+        $t7_8.$set($t1_2);
+        $t8_9.$set(filterRaw);
+        $t9_10.$set(clientID);
+        $rt.builtin.mapUpdate($t5_6, subID, $t6_7);
+        $t10_11 = $rt.builtin.makeMap('string');
+        $t11_12 = ('p_' + subID);
+        $t12_13 = ($t11_12 + '_');
+        $t13_14 = proxySubs.$get();
+        $t14_15 = { $value: { remoteIDs: null, relayCount: 0, eoseCount: 0, timer: 0, done: false }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t15_16 = { $get() { return $t14_15.$get().remoteIDs; }, $set(v) { const obj = $t14_15.$get(); obj.remoteIDs = v; $t14_15.$set(obj); } };
+        $t16_17 = { $get() { return $t14_15.$get().relayCount; }, $set(v) { const obj = $t14_15.$get(); obj.relayCount = v; $t14_15.$set(obj); } };
+        $t17_18 = $rt.builtin.len(relayURLs);
+        $t15_16.$set($t10_11);
+        $t16_17.$set($t17_18);
+        $rt.builtin.mapUpdate($t13_14, subID, $t14_15);
+        $t18_19 = $rt.builtin.len(relayURLs);
+        $t19_20 = -1;
+        $block = 3; break;
+        break;
+      }
+      case 3: {
+        $t20_21 = ($t19_20 + 1);
+        $t21_22 = ($t20_21 < $t18_19);
+        if ($t21_22) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 4: {
+        $t22_23 = relayURLs.addr($t20_21);
+        $t23_24 = $t22_23.$get();
+        $t24_25 = urlSuffix($t23_24);
+        $t25_26 = ($t12_13 + $t24_25);
+        $rt.builtin.mapUpdate($t10_11, $t25_26, true);
+        $t26_27 = getConn($t23_24);
+        $t27_28 = common$relay.Conn$Subscribe($t26_27, $t25_26, $t1_2);
+        $t19_20 = $t20_21;
+        $block = 3; break;
+        break;
+      }
+      case 5: {
+        $t28_29 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t28_29.$set(subID);
+        $t29_30 = proxySubs.$get();
+        $t30_31 = $rt.builtin.mapLookup($t29_30, subID).value;
+        $t31_32 = routerProxy$1.bind(null, $t28_29);
+        $t32_33 = common$jsbridge$sw.SetTimeout(20000, $t31_32);
+        $t33_34 = { $get() { return $t30_31.$get().timer; }, $set(v) { const obj = $t30_31.$get(); obj.timer = v; $t30_31.$set(obj); } };
+        $t33_34.$set($t32_33);
         return;
         break;
       }
@@ -2289,7 +2958,7 @@ function routerOnRelayEOSE$1(pid) {
 }
 
 export function pushToMatchingSubs(ev) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -2314,16 +2983,11 @@ export function pushToMatchingSubs(ev) {
       case 2: {
         $t5_6 = $t3_4[1];
         $t6_7 = $t3_4[2];
-        $t7_8 = { $get() { return $t6_7.$get().filter; }, $set(v) { const obj = $t6_7.$get(); obj.filter = v; $t6_7.$set(obj); } };
+        $t7_8 = { $get() { return $t6_7.$get().filters; }, $set(v) { const obj = $t6_7.$get(); obj.filters = v; $t6_7.$set(obj); } };
         $t8_9 = $t7_8.$get();
-        $t9_10 = common$nostr.Filter$Matches($t8_9, ev);
-        if ($t9_10) {
-          $block = 4; break;
-        }
-        else {
-          $t2_3 = $t2_3;
-          $block = 1; break;
-        }
+        $t9_10 = $rt.builtin.len($t8_9);
+        $t10_11 = -1;
+        $block = 4; break;
         break;
       }
       case 3: {
@@ -2331,17 +2995,42 @@ export function pushToMatchingSubs(ev) {
         break;
       }
       case 4: {
-        $t10_11 = ($t2_3 + 1);
-        $t11_12 = { $get() { return $t6_7.$get().clientID; }, $set(v) { const obj = $t6_7.$get(); obj.clientID = v; $t6_7.$set(obj); } };
-        $t12_13 = $t11_12.$get();
-        $t13_14 = jstr($t5_6);
-        $t14_15 = ('["EVENT",' + $t13_14);
-        $t15_16 = ($t14_15 + ',');
-        $t16_17 = common$nostr.Event$ToJSON(ev);
-        $t17_18 = ($t15_16 + $t16_17);
-        $t18_19 = ($t17_18 + ']');
-        $t19_20 = fwd($t12_13, $t18_19);
-        $t2_3 = $t10_11;
+        $t11_12 = ($t10_11 + 1);
+        $t12_13 = ($t11_12 < $t9_10);
+        if ($t12_13) {
+          $block = 5; break;
+        }
+        else {
+          $t2_3 = $t2_3;
+          $block = 1; break;
+        }
+        break;
+      }
+      case 5: {
+        $t13_14 = $t8_9.addr($t11_12);
+        $t14_15 = $t13_14.$get();
+        $t15_16 = common$nostr.Filter$Matches($t14_15, ev);
+        if ($t15_16) {
+          $block = 6; break;
+        }
+        else {
+          $t10_11 = $t11_12;
+          $block = 4; break;
+        }
+        break;
+      }
+      case 6: {
+        $t16_17 = ($t2_3 + 1);
+        $t17_18 = { $get() { return $t6_7.$get().clientID; }, $set(v) { const obj = $t6_7.$get(); obj.clientID = v; $t6_7.$set(obj); } };
+        $t18_19 = $t17_18.$get();
+        $t19_20 = jstr($t5_6);
+        $t20_21 = ('["EVENT",' + $t19_20);
+        $t21_22 = ($t20_21 + ',');
+        $t22_23 = common$nostr.Event$ToJSON(ev);
+        $t23_24 = ($t21_22 + $t22_23);
+        $t24_25 = ($t23_24 + ']');
+        $t25_26 = fwd($t18_19, $t24_25);
+        $t2_3 = $t16_17;
         $block = 1; break;
         break;
       }
@@ -2349,33 +3038,401 @@ export function pushToMatchingSubs(ev) {
   }
 }
 
-export function routerSign(clientID, requestID, eventRaw) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23;
+export function parseFilters(raw) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = hasKey.$get();
-        if ($t0_1) {
-          $block = 2; break;
+        $t3_4 = raw;
+        $block = 3; break;
+        break;
+      }
+      case 1: {
+        $t0_1 = $rt.builtin.stringSlice($t3_4, 1, undefined);
+        $t3_4 = $t0_1;
+        $block = 3; break;
+        break;
+      }
+      case 2: {
+        $t1_2 = $rt.builtin.len($t3_4);
+        $t2_3 = ($t1_2 === 0);
+        if ($t2_3) {
+          $block = 7; break;
         }
         else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 3: {
+        $t4_5 = $rt.builtin.len($t3_4);
+        $t5_6 = ($t4_5 > 0);
+        if ($t5_6) {
+          $block = 4; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 4: {
+        $rt.runtime.boundsCheck(0, $rt.builtin.byteLen($t3_4));
+        $t6_7 = $rt.builtin.stringByteAt($t3_4, 0);
+        $t7_8 = ($t6_7 === 32);
+        if ($t7_8) {
           $block = 1; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 5: {
+        $rt.runtime.boundsCheck(0, $rt.builtin.byteLen($t3_4));
+        $t8_9 = $rt.builtin.stringByteAt($t3_4, 0);
+        $t9_10 = ($t8_9 === 10);
+        if ($t9_10) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 6: {
+        $rt.runtime.boundsCheck(0, $rt.builtin.byteLen($t3_4));
+        $t10_11 = $rt.builtin.stringByteAt($t3_4, 0);
+        $t11_12 = ($t10_11 === 9);
+        if ($t11_12) {
+          $block = 1; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 7: {
+        return null;
+        break;
+      }
+      case 8: {
+        $rt.runtime.boundsCheck(0, $rt.builtin.byteLen($t3_4));
+        $t12_13 = $rt.builtin.stringByteAt($t3_4, 0);
+        $t13_14 = ($t12_13 === 123);
+        if ($t13_14) {
+          $block = 9; break;
+        }
+        else {
+          $block = 10; break;
+        }
+        break;
+      }
+      case 9: {
+        $t14_15 = common$nostr.ParseFilter($t3_4);
+        $t15_16 = ($t14_15 === null);
+        if ($t15_16) {
+          $block = 11; break;
+        }
+        else {
+          $block = 12; break;
+        }
+        break;
+      }
+      case 10: {
+        $rt.runtime.boundsCheck(0, $rt.builtin.byteLen($t3_4));
+        $t16_17 = $rt.builtin.stringByteAt($t3_4, 0);
+        $t17_18 = ($t16_17 !== 91);
+        if ($t17_18) {
+          $block = 13; break;
+        }
+        else {
+          $block = 14; break;
+        }
+        break;
+      }
+      case 11: {
+        return null;
+        break;
+      }
+      case 12: {
+        $t18_19 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t19_20 = $t18_19.$get().addr(0);
+        $t19_20.$set($t14_15);
+        $t20_21 = $rt.builtin.sliceSlice($t18_19.$get(), undefined, undefined, undefined);
+        return $t20_21;
+        break;
+      }
+      case 13: {
+        return null;
+        break;
+      }
+      case 14: {
+        $t21_22 = $rt.builtin.stringSlice($t3_4, 1, undefined);
+        $t25_26 = $t21_22;
+        $t26_27 = null;
+        $block = 18; break;
+        break;
+      }
+      case 15: {
+        return $t26_27;
+        break;
+      }
+      case 16: {
+        $t22_23 = $rt.builtin.stringSlice($t25_26, 1, undefined);
+        let $phi0 = $t22_23;
+        let $phi1 = $t26_27;
+        $t25_26 = $phi0;
+        $t26_27 = $phi1;
+        $block = 18; break;
+        break;
+      }
+      case 17: {
+        $t23_24 = $rt.builtin.len($t25_26);
+        $t24_25 = ($t23_24 === 0);
+        if ($t24_25) {
+          $block = 15; break;
+        }
+        else {
+          $block = 24; break;
+        }
+        break;
+      }
+      case 18: {
+        $t27_28 = $rt.builtin.len($t25_26);
+        $t28_29 = ($t27_28 > 0);
+        if ($t28_29) {
+          $block = 19; break;
+        }
+        else {
+          $block = 17; break;
+        }
+        break;
+      }
+      case 19: {
+        $rt.runtime.boundsCheck(0, $rt.builtin.byteLen($t25_26));
+        $t29_30 = $rt.builtin.stringByteAt($t25_26, 0);
+        $t30_31 = ($t29_30 === 32);
+        if ($t30_31) {
+          $block = 16; break;
+        }
+        else {
+          $block = 22; break;
+        }
+        break;
+      }
+      case 20: {
+        $rt.runtime.boundsCheck(0, $rt.builtin.byteLen($t25_26));
+        $t31_32 = $rt.builtin.stringByteAt($t25_26, 0);
+        $t32_33 = ($t31_32 === 10);
+        if ($t32_33) {
+          $block = 16; break;
+        }
+        else {
+          $block = 17; break;
+        }
+        break;
+      }
+      case 21: {
+        $rt.runtime.boundsCheck(0, $rt.builtin.byteLen($t25_26));
+        $t33_34 = $rt.builtin.stringByteAt($t25_26, 0);
+        $t34_35 = ($t33_34 === 9);
+        if ($t34_35) {
+          $block = 16; break;
+        }
+        else {
+          $block = 20; break;
+        }
+        break;
+      }
+      case 22: {
+        $rt.runtime.boundsCheck(0, $rt.builtin.byteLen($t25_26));
+        $t35_36 = $rt.builtin.stringByteAt($t25_26, 0);
+        $t36_37 = ($t35_36 === 44);
+        if ($t36_37) {
+          $block = 16; break;
+        }
+        else {
+          $block = 21; break;
+        }
+        break;
+      }
+      case 23: {
+        $rt.runtime.boundsCheck(0, $rt.builtin.byteLen($t25_26));
+        $t37_38 = $rt.builtin.stringByteAt($t25_26, 0);
+        $t38_39 = ($t37_38 !== 123);
+        if ($t38_39) {
+          $block = 15; break;
+        }
+        else {
+          $block = 25; break;
+        }
+        break;
+      }
+      case 24: {
+        $rt.runtime.boundsCheck(0, $rt.builtin.byteLen($t25_26));
+        $t39_40 = $rt.builtin.stringByteAt($t25_26, 0);
+        $t40_41 = ($t39_40 === 93);
+        if ($t40_41) {
+          $block = 15; break;
+        }
+        else {
+          $block = 23; break;
+        }
+        break;
+      }
+      case 25: {
+        $t41_42 = 0;
+        $t42_43 = 0;
+        $block = 26; break;
+        break;
+      }
+      case 26: {
+        $t43_44 = $rt.builtin.len($t25_26);
+        $t44_45 = ($t42_43 < $t43_44);
+        if ($t44_45) {
+          $block = 27; break;
+        }
+        else {
+          $t47_48 = 0;
+          $block = 28; break;
+        }
+        break;
+      }
+      case 27: {
+        $rt.runtime.boundsCheck($t42_43, $rt.builtin.byteLen($t25_26));
+        $t45_46 = $rt.builtin.stringByteAt($t25_26, $t42_43);
+        $t46_47 = ($t45_46 === 123);
+        if ($t46_47) {
+          $block = 29; break;
+        }
+        else {
+          $block = 31; break;
+        }
+        break;
+      }
+      case 28: {
+        $t48_49 = ($t47_48 === 0);
+        if ($t48_49) {
+          $block = 15; break;
+        }
+        else {
+          $block = 34; break;
+        }
+        break;
+      }
+      case 29: {
+        $t49_50 = ($t41_42 + 1);
+        $t50_51 = $t49_50;
+        $block = 30; break;
+        break;
+      }
+      case 30: {
+        $t51_52 = ($t42_43 + 1);
+        $t41_42 = $t50_51;
+        $t42_43 = $t51_52;
+        $block = 26; break;
+        break;
+      }
+      case 31: {
+        $rt.runtime.boundsCheck($t42_43, $rt.builtin.byteLen($t25_26));
+        $t52_53 = $rt.builtin.stringByteAt($t25_26, $t42_43);
+        $t53_54 = ($t52_53 === 125);
+        if ($t53_54) {
+          $block = 32; break;
+        }
+        else {
+          $t50_51 = $t41_42;
+          $block = 30; break;
+        }
+        break;
+      }
+      case 32: {
+        $t54_55 = ($t41_42 - 1);
+        $t55_56 = ($t54_55 === 0);
+        if ($t55_56) {
+          $block = 33; break;
+        }
+        else {
+          $t50_51 = $t54_55;
+          $block = 30; break;
+        }
+        break;
+      }
+      case 33: {
+        $t56_57 = ($t42_43 + 1);
+        $t47_48 = $t56_57;
+        $block = 28; break;
+        break;
+      }
+      case 34: {
+        $t57_58 = $rt.builtin.stringSlice($t25_26, undefined, $t47_48);
+        $t58_59 = common$nostr.ParseFilter($t57_58);
+        $t59_60 = ($t58_59 !== null);
+        if ($t59_60) {
+          $block = 35; break;
+        }
+        else {
+          $t64_65 = $t26_27;
+          $block = 36; break;
+        }
+        break;
+      }
+      case 35: {
+        $t60_61 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t61_62 = $t60_61.$get().addr(0);
+        $t61_62.$set($t58_59);
+        $t62_63 = $rt.builtin.sliceSlice($t60_61.$get(), undefined, undefined, undefined);
+        $t63_64 = $rt.builtin.appendSlice($t26_27, $t62_63);
+        $t64_65 = $t63_64;
+        $block = 36; break;
+        break;
+      }
+      case 36: {
+        $t65_66 = $rt.builtin.stringSlice($t25_26, $t47_48, undefined);
+        $t25_26 = $t65_66;
+        $t26_27 = $t64_65;
+        $block = 18; break;
+        break;
+      }
+    }
+  }
+}
+
+export function routerSign(clientID, requestID, eventRaw) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set(clientID);
+        $t1_2 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2.$set(requestID);
+        $t2_3 = myPubkey.$get();
+        $t3_4 = ($t2_3 === '');
+        if ($t3_4) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
         }
         break;
       }
       case 1: {
-        $t1_2 = jstr(requestID);
-        $t2_3 = ('["SIGN_ERROR",' + $t1_2);
-        $t3_4 = ($t2_3 + ',"no key"]');
-        $t4_5 = fwd(clientID, $t3_4);
+        $t4_5 = $t0_1.$get();
+        $t5_6 = $t1_2.$get();
+        $t6_7 = jstr($t5_6);
+        $t7_8 = ('["SIGN_ERROR",' + $t6_7);
+        $t8_9 = ($t7_8 + ',"no key"]');
+        $t9_10 = fwd($t4_5, $t8_9);
         return;
         break;
       }
       case 2: {
-        $t5_6 = common$nostr.ParseEvent(eventRaw);
-        $t6_7 = ($t5_6 === null);
-        if ($t6_7) {
+        $t10_11 = common$nostr.ParseEvent(eventRaw);
+        $t11_12 = ($t10_11 === null);
+        if ($t11_12) {
           $block = 3; break;
         }
         else {
@@ -2384,44 +3441,73 @@ export function routerSign(clientID, requestID, eventRaw) {
         break;
       }
       case 3: {
-        $t7_8 = jstr(requestID);
-        $t8_9 = ('["SIGN_ERROR",' + $t7_8);
-        $t9_10 = ($t8_9 + ',"parse error"]');
-        $t10_11 = fwd(clientID, $t9_10);
+        $t12_13 = $t0_1.$get();
+        $t13_14 = $t1_2.$get();
+        $t14_15 = jstr($t13_14);
+        $t15_16 = ('["SIGN_ERROR",' + $t14_15);
+        $t16_17 = ($t15_16 + ',"parse error"]');
+        $t17_18 = fwd($t12_13, $t16_17);
         return;
         break;
       }
       case 4: {
-        $t11_12 = identitySignEvent($t5_6);
-        if ($t11_12) {
-          $block = 5; break;
-        }
-        else {
-          $block = 7; break;
-        }
-        break;
-      }
-      case 5: {
-        $t12_13 = jstr(requestID);
-        $t13_14 = ('["SIGNED",' + $t12_13);
-        $t14_15 = ($t13_14 + ',');
-        $t15_16 = common$nostr.Event$ToJSON($t5_6);
-        $t16_17 = ($t14_15 + $t15_16);
-        $t17_18 = ($t16_17 + ']');
-        $t18_19 = fwd(clientID, $t17_18);
-        $block = 6; break;
-        break;
-      }
-      case 6: {
+        $t18_19 = routerSign$1.bind(null, $t0_1, $t1_2);
+        $t19_20 = cryptoProxy('signEvent', '', eventRaw, $t18_19);
         return;
         break;
       }
-      case 7: {
-        $t19_20 = jstr(requestID);
-        $t20_21 = ('["SIGN_ERROR",' + $t19_20);
-        $t21_22 = ($t20_21 + ',"sign failed"]');
-        $t22_23 = fwd(clientID, $t21_22);
-        $block = 6; break;
+    }
+  }
+}
+
+function routerSign$1(clientID, requestID, signedJSON, errMsg) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = (errMsg !== '');
+        if ($t0_1) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 1: {
+        $t1_2 = clientID.$get();
+        $t2_3 = requestID.$get();
+        $t3_4 = jstr($t2_3);
+        $t4_5 = ('["SIGN_ERROR",' + $t3_4);
+        $t5_6 = ($t4_5 + ',');
+        $t6_7 = jstr(errMsg);
+        $t7_8 = ($t5_6 + $t6_7);
+        $t8_9 = ($t7_8 + ']');
+        $t9_10 = fwd($t1_2, $t8_9);
+        return;
+        break;
+      }
+      case 2: {
+        $t10_11 = clientID.$get();
+        $t11_12 = requestID.$get();
+        $t12_13 = jstr($t11_12);
+        $t13_14 = ('["SIGNED",' + $t12_13);
+        $t14_15 = ($t13_14 + ',');
+        $t15_16 = ($t14_15 + signedJSON);
+        $t16_17 = ($t15_16 + ']');
+        $t17_18 = fwd($t10_11, $t16_17);
+        return;
+        break;
+      }
+      case 3: {
+        $t18_19 = (signedJSON === '');
+        if ($t18_19) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
         break;
       }
     }
@@ -2538,24 +3624,21 @@ function routerDMHistory$1(clientID, peer, msgsJSON) {
 }
 
 export function routerBroadcast(clientID, pubkey, relayURLs) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
   $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
   $t0_1.$set(clientID);
-  $t1_2 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2.$set(pubkey);
-  $t2_3 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t2_3.$set(relayURLs);
-  $t3_4 = $t1_2.$get();
-  $t4_5 = jstr($t3_4);
-  $t5_6 = ('{"authors":[' + $t4_5);
-  $t6_7 = ($t5_6 + '],"kinds":[0,3,10002,10050,10051]}');
-  $t7_8 = routerBroadcast$1.bind(null, $t2_3, $t1_2, $t0_1);
-  $t8_9 = cacheQuery($t6_7, $t7_8);
+  $t1_2 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t1_2.$set(relayURLs);
+  $t2_3 = jstr(pubkey);
+  $t3_4 = ('{"authors":[' + $t2_3);
+  $t4_5 = ($t3_4 + '],"kinds":[0,3,10002,10050,10051]}');
+  $t5_6 = routerBroadcast$1.bind(null, $t1_2, $t0_1);
+  $t6_7 = cacheQuery($t4_5, $t5_6);
   return;
 }
 
-function routerBroadcast$1(relayURLs, pubkey, clientID, eventsJSON) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93;
+function routerBroadcast$1(relayURLs, clientID, eventsJSON) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -2698,33 +3781,27 @@ function routerBroadcast$1(relayURLs, pubkey, clientID, eventsJSON) {
         break;
       }
       case 12: {
-        $t47_48 = pubkey.$get();
-        $t48_49 = createRelayListEvent(10050, $t47_48, $t43_44);
-        $t49_50 = ($t48_49 !== null);
-        if ($t49_50) {
-          $block = 16; break;
-        }
-        else {
-          $block = 13; break;
-        }
+        $t47_48 = routerBroadcast$1$1.bind(null, relayURLs);
+        $t48_49 = createRelayListEventAsync(10050, $t43_44, $t47_48);
+        $block = 13; break;
         break;
       }
       case 13: {
-        { const $r = $rt.builtin.mapLookup($t1_2, 10051); $t50_51 = [$r.value, $r.ok]; }
-        $t51_52 = $t50_51[0];
-        $t52_53 = $t50_51[1];
-        if ($t52_53) {
-          $block = 18; break;
+        { const $r = $rt.builtin.mapLookup($t1_2, 10051); $t49_50 = [$r.value, $r.ok]; }
+        $t50_51 = $t49_50[0];
+        $t51_52 = $t49_50[1];
+        if ($t51_52) {
+          $block = 17; break;
         }
         else {
-          $block = 20; break;
+          $block = 19; break;
         }
         break;
       }
       case 14: {
-        $t53_54 = $rt.builtin.len($t43_44);
-        $t54_55 = ($t53_54 > 0);
-        if ($t54_55) {
+        $t52_53 = $rt.builtin.len($t43_44);
+        $t53_54 = ($t52_53 > 0);
+        if ($t53_54) {
           $block = 12; break;
         }
         else {
@@ -2733,7 +3810,8 @@ function routerBroadcast$1(relayURLs, pubkey, clientID, eventsJSON) {
         break;
       }
       case 15: {
-        $t55_56 = hasKey.$get();
+        $t54_55 = myPubkey.$get();
+        $t55_56 = ($t54_55 !== '');
         if ($t55_56) {
           $block = 14; break;
         }
@@ -2743,363 +3821,112 @@ function routerBroadcast$1(relayURLs, pubkey, clientID, eventsJSON) {
         break;
       }
       case 16: {
-        $t56_57 = common$nostr.Event$ToJSON($t48_49);
-        $t57_58 = cacheStore($t56_57, routerBroadcast$1$1);
-        $rt.builtin.mapUpdate($t1_2, 10050, $t48_49);
-        $block = 13; break;
+        $t56_57 = routerBroadcast$1$2.bind(null, relayURLs);
+        $t57_58 = createRelayListEventAsync(10051, $t43_44, $t56_57);
+        $block = 17; break;
         break;
       }
       case 17: {
-        $t58_59 = pubkey.$get();
-        $t59_60 = createRelayListEvent(10051, $t58_59, $t43_44);
-        $t60_61 = ($t59_60 !== null);
-        if ($t60_61) {
-          $block = 21; break;
-        }
-        else {
-          $block = 18; break;
-        }
+        $t58_59 = { $entries: [...$t1_2.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
+        $t63_64 = 0;
+        $block = 20; break;
         break;
       }
       case 18: {
-        $t61_62 = { $entries: [...$t1_2.entries()], $pos: 0, next() { if (this.$pos >= this.$entries.length) return [false, null, null]; const [k, v] = this.$entries[this.$pos++]; return [true, k, v]; } };
-        $t67_68 = 0;
-        $block = 22; break;
+        $t59_60 = $rt.builtin.len($t43_44);
+        $t60_61 = ($t59_60 > 0);
+        if ($t60_61) {
+          $block = 16; break;
+        }
+        else {
+          $block = 17; break;
+        }
         break;
       }
       case 19: {
-        $t62_63 = $rt.builtin.len($t43_44);
-        $t63_64 = ($t62_63 > 0);
-        if ($t63_64) {
-          $block = 17; break;
+        $t61_62 = myPubkey.$get();
+        $t62_63 = ($t61_62 !== '');
+        if ($t62_63) {
+          $block = 18; break;
         }
         else {
-          $block = 18; break;
+          $block = 17; break;
         }
         break;
       }
       case 20: {
-        $t64_65 = hasKey.$get();
-        if ($t64_65) {
-          $block = 19; break;
+        $t64_65 = $t58_59.next();
+        $t65_66 = $t64_65[0];
+        if ($t65_66) {
+          $block = 21; break;
         }
         else {
-          $block = 18; break;
+          $block = 22; break;
         }
         break;
       }
       case 21: {
-        $t65_66 = common$nostr.Event$ToJSON($t59_60);
-        $t66_67 = cacheStore($t65_66, routerBroadcast$1$2);
-        $rt.builtin.mapUpdate($t1_2, 10051, $t59_60);
-        $block = 18; break;
+        $t66_67 = $t64_65[2];
+        $t67_68 = relayURLs.$get();
+        $t68_69 = $rt.builtin.len($t67_68);
+        $t81_82 = -1;
+        $block = 23; break;
         break;
       }
       case 22: {
-        $t68_69 = $t61_62.next();
-        $t69_70 = $t68_69[0];
-        if ($t69_70) {
-          $block = 23; break;
-        }
-        else {
-          $block = 24; break;
-        }
+        $t69_70 = clientID.$get();
+        $t70_71 = $t63_64;
+        $t71_72 = common$helpers.Itoa($t70_71);
+        $t72_73 = ('["BROADCAST_DONE",' + $t71_72);
+        $t73_74 = ($t72_73 + ',');
+        $t74_75 = relayURLs.$get();
+        $t75_76 = $rt.builtin.len($t74_75);
+        $t76_77 = $t75_76;
+        $t77_78 = common$helpers.Itoa($t76_77);
+        $t78_79 = ($t73_74 + $t77_78);
+        $t79_80 = ($t78_79 + ']');
+        $t80_81 = fwd($t69_70, $t79_80);
+        return;
         break;
       }
       case 23: {
-        $t70_71 = $t68_69[2];
-        $t71_72 = relayURLs.$get();
-        $t72_73 = $rt.builtin.len($t71_72);
-        $t85_86 = -1;
-        $block = 25; break;
+        $t82_83 = ($t81_82 + 1);
+        $t83_84 = ($t82_83 < $t68_69);
+        if ($t83_84) {
+          $block = 24; break;
+        }
+        else {
+          $block = 25; break;
+        }
         break;
       }
       case 24: {
-        $t73_74 = clientID.$get();
-        $t74_75 = $t67_68;
-        $t75_76 = common$helpers.Itoa($t74_75);
-        $t76_77 = ('["BROADCAST_DONE",' + $t75_76);
-        $t77_78 = ($t76_77 + ',');
-        $t78_79 = relayURLs.$get();
-        $t79_80 = $rt.builtin.len($t78_79);
-        $t80_81 = $t79_80;
-        $t81_82 = common$helpers.Itoa($t80_81);
-        $t82_83 = ($t77_78 + $t81_82);
-        $t83_84 = ($t82_83 + ']');
-        $t84_85 = fwd($t73_74, $t83_84);
-        return;
+        $t84_85 = $t67_68.addr($t82_83);
+        $t85_86 = $t84_85.$get();
+        $t86_87 = getConn($t85_86);
+        $t87_88 = common$relay.Conn$Publish($t86_87, $t66_67);
+        $t81_82 = $t82_83;
+        $block = 23; break;
         break;
       }
       case 25: {
-        $t86_87 = ($t85_86 + 1);
-        $t87_88 = ($t86_87 < $t72_73);
-        if ($t87_88) {
-          $block = 26; break;
-        }
-        else {
-          $block = 27; break;
-        }
-        break;
-      }
-      case 26: {
-        $t88_89 = $t71_72.addr($t86_87);
-        $t89_90 = $t88_89.$get();
-        $t90_91 = getConn($t89_90);
-        $t91_92 = common$relay.Conn$Publish($t90_91, $t70_71);
-        $t85_86 = $t86_87;
-        $block = 25; break;
-        break;
-      }
-      case 27: {
-        $t92_93 = ($t67_68 + 1);
-        $t67_68 = $t92_93;
-        $block = 22; break;
+        $t88_89 = ($t63_64 + 1);
+        $t63_64 = $t88_89;
+        $block = 20; break;
         break;
       }
     }
   }
 }
 
-function routerBroadcast$1$1(_) {
-  return;
-}
-
-function routerBroadcast$1$2(_) {
-  return;
-}
-
-export function createRelayListEvent(kind, _, relays) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
+function routerBroadcast$1$1(relayURLs, ev) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = $rt.builtin.len(relays);
-        $t1_2 = null;
-        $t2_3 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t3_4 = ($t2_3 + 1);
-        $t4_5 = ($t3_4 < $t0_1);
-        if ($t4_5) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t5_6 = relays.addr($t3_4);
-        $t6_7 = $t5_6.$get();
-        $t7_8 = { $value: $rt.builtin.makeSlice(2, 2, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t8_9 = $t7_8.$get().addr(0);
-        $t8_9.$set('relay');
-        $t9_10 = $t7_8.$get().addr(1);
-        $t9_10.$set($t6_7);
-        $t10_11 = $rt.builtin.sliceSlice($t7_8.$get(), undefined, undefined, undefined);
-        $t11_12 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t12_13 = $t11_12.$get().addr(0);
-        $t12_13.$set($t10_11);
-        $t13_14 = $rt.builtin.sliceSlice($t11_12.$get(), undefined, undefined, undefined);
-        $t14_15 = $rt.builtin.appendSlice($t1_2, $t13_14);
-        $t1_2 = $t14_15;
-        $t2_3 = $t3_4;
-        $block = 1; break;
-        break;
-      }
-      case 3: {
-        $t15_16 = { $value: { ID: '', PubKey: '', CreatedAt: 0, Kind: 0, Tags: null, Content: '', Sig: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t16_17 = { $get() { return $t15_16.$get().Kind; }, $set(v) { const obj = $t15_16.$get(); obj.Kind = v; $t15_16.$set(obj); } };
-        $t17_18 = { $get() { return $t15_16.$get().Content; }, $set(v) { const obj = $t15_16.$get(); obj.Content = v; $t15_16.$set(obj); } };
-        $t18_19 = { $get() { return $t15_16.$get().Tags; }, $set(v) { const obj = $t15_16.$get(); obj.Tags = v; $t15_16.$set(obj); } };
-        $t19_20 = { $get() { return $t15_16.$get().CreatedAt; }, $set(v) { const obj = $t15_16.$get(); obj.CreatedAt = v; $t15_16.$set(obj); } };
-        $t20_21 = common$jsbridge$sw.NowSeconds();
-        $t16_17.$set(kind);
-        $t17_18.$set('');
-        $t18_19.$set($t1_2);
-        $t19_20.$set($t20_21);
-        $t21_22 = identitySignEvent($t15_16);
-        if ($t21_22) {
-          $block = 5; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 4: {
-        return null;
-        break;
-      }
-      case 5: {
-        return $t15_16;
-        break;
-      }
-    }
-  }
-}
-
-export function initRelayProxy() {
-  let $t0_1;
-  $t0_1 = common$relay.NewPool();
-  rpool.$set($t0_1);
-  return;
-}
-
-export function getConn(url) {
-  let $t0_1, $t1_2, $t2_3;
-  $t0_1 = rpool.$get();
-  $t1_2 = common$relay.Pool$Connect($t0_1, url);
-  $t2_3 = wireConn($t1_2, url);
-  return $t1_2;
-}
-
-export function wireConn(c, url) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
-  $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t0_1.$set(url);
-  $t1_2 = wireConn$1.bind(null, $t0_1);
-  $t2_3 = common$relay.Conn$SetOnEvent(c, $t1_2);
-  $t3_4 = common$relay.Conn$SetOnEOSE(c, wireConn$2);
-  $t4_5 = common$relay.Conn$SetOnOK(c, wireConn$3);
-  $t5_6 = wireConn$4.bind(null, $t0_1);
-  $t6_7 = common$relay.Conn$SetOnAuth(c, $t5_6);
-  $t7_8 = wireConn$5.bind(null, $t0_1);
-  $t8_9 = { $get() { return c.$get().ScheduleReconnect; }, $set(v) { const obj = c.$get(); obj.ScheduleReconnect = v; c.$set(obj); } };
-  $t8_9.$set($t7_8);
-  return;
-}
-
-function wireConn$1(url, _, ev) {
-  let $t0_1, $t1_2;
-  $t0_1 = url.$get();
-  $t1_2 = routerOnRelayEvent($t0_1, ev);
-  return;
-}
-
-function wireConn$2(subID) {
-  let $t0_1;
-  $t0_1 = routerOnRelayEOSE(subID);
-  return;
-}
-
-function wireConn$3(eventID, ok, msg) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        if (ok) {
-          $t0_1 = 'true';
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        $t0_1 = 'false';
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        $t1_2 = jstr(eventID);
-        $t2_3 = ('["OK",' + $t1_2);
-        $t3_4 = ($t2_3 + ',');
-        $t4_5 = ($t3_4 + $t0_1);
-        $t5_6 = ($t4_5 + ',');
-        $t6_7 = jstr(msg);
-        $t7_8 = ($t5_6 + $t6_7);
-        $t8_9 = ($t7_8 + ']');
-        $t9_10 = fwdAll($t8_9);
-        return;
-        break;
-      }
-    }
-  }
-}
-
-function wireConn$4(url, challenge) {
-  let $t0_1, $t1_2;
-  $t0_1 = url.$get();
-  $t1_2 = onRelayAuth($t0_1, challenge);
-  return;
-}
-
-function wireConn$5(url, fn) {
-  let $t0_1, $t1_2, $t2_3, $t3_4;
-  $t0_1 = url.$get();
-  $t1_2 = ('relay-sw: scheduling reconnect to ' + $t0_1);
-  $t2_3 = common$jsbridge$sw.Log($t1_2);
-  $t3_4 = common$jsbridge$sw.SetTimeout(5000, fn);
-  return;
-}
-
-export function onRelayAuth(relayURL, challenge) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = hasKey.$get();
+        $t0_1 = (ev !== null);
         if ($t0_1) {
-          $block = 3; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        return;
-        break;
-      }
-      case 2: {
-        $t1_2 = { $value: { ID: '', PubKey: '', CreatedAt: 0, Kind: 0, Tags: null, Content: '', Sig: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t2_3 = { $get() { return $t1_2.$get().Kind; }, $set(v) { const obj = $t1_2.$get(); obj.Kind = v; $t1_2.$set(obj); } };
-        $t3_4 = { $get() { return $t1_2.$get().Content; }, $set(v) { const obj = $t1_2.$get(); obj.Content = v; $t1_2.$set(obj); } };
-        $t4_5 = { $get() { return $t1_2.$get().Tags; }, $set(v) { const obj = $t1_2.$get(); obj.Tags = v; $t1_2.$set(obj); } };
-        $t5_6 = { $value: $rt.builtin.makeSlice(2, 2, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t6_7 = $t5_6.$get().addr(0);
-        $t7_8 = { $value: $rt.builtin.makeSlice(2, 2, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t8_9 = $t7_8.$get().addr(0);
-        $t8_9.$set('relay');
-        $t9_10 = $t7_8.$get().addr(1);
-        $t9_10.$set(relayURL);
-        $t10_11 = $rt.builtin.sliceSlice($t7_8.$get(), undefined, undefined, undefined);
-        $t6_7.$set($t10_11);
-        $t11_12 = $t5_6.$get().addr(1);
-        $t12_13 = { $value: $rt.builtin.makeSlice(2, 2, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t13_14 = $t12_13.$get().addr(0);
-        $t13_14.$set('challenge');
-        $t14_15 = $t12_13.$get().addr(1);
-        $t14_15.$set(challenge);
-        $t15_16 = $rt.builtin.sliceSlice($t12_13.$get(), undefined, undefined, undefined);
-        $t11_12.$set($t15_16);
-        $t16_17 = $rt.builtin.sliceSlice($t5_6.$get(), undefined, undefined, undefined);
-        $t17_18 = { $get() { return $t1_2.$get().CreatedAt; }, $set(v) { const obj = $t1_2.$get(); obj.CreatedAt = v; $t1_2.$set(obj); } };
-        $t18_19 = common$jsbridge$sw.NowSeconds();
-        $t2_3.$set(22242);
-        $t3_4.$set('');
-        $t4_5.$set($t16_17);
-        $t17_18.$set($t18_19);
-        $t19_20 = identitySignEvent($t1_2);
-        if ($t19_20) {
-          $block = 5; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 3: {
-        $t20_21 = myPubkey.$get();
-        $t21_22 = ($t20_21 === '');
-        if ($t21_22) {
           $block = 1; break;
         }
         else {
@@ -3107,159 +3934,121 @@ export function onRelayAuth(relayURL, challenge) {
         }
         break;
       }
-      case 4: {
-        return;
-        break;
-      }
-      case 5: {
-        $t22_23 = rpool.$get();
-        $t23_24 = common$relay.Pool$Get($t22_23, relayURL);
-        $t24_25 = ($t23_24 !== null);
-        if ($t24_25) {
-          $block = 8; break;
-        }
-        else {
-          $block = 7; break;
-        }
-        break;
-      }
-      case 6: {
-        $t25_26 = common$nostr.Event$ToJSON($t1_2);
-        $t26_27 = ('["AUTH",' + $t25_26);
-        $t27_28 = ($t26_27 + ']');
-        $t28_29 = common$relay.Conn$Send($t23_24, $t27_28);
-        $block = 7; break;
-        break;
-      }
-      case 7: {
-        return;
-        break;
-      }
-      case 8: {
-        $t29_30 = common$relay.Conn$IsOpen($t23_24);
-        if ($t29_30) {
-          $block = 6; break;
-        }
-        else {
-          $block = 7; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-export function relayPublish(ev) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = writeRelays.$get();
-        $t1_2 = $rt.builtin.len($t0_1);
-        $t2_3 = -1;
-        $block = 1; break;
-        break;
-      }
       case 1: {
-        $t3_4 = ($t2_3 + 1);
-        $t4_5 = ($t3_4 < $t1_2);
-        if ($t4_5) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
+        $t1_2 = common$nostr.Event$ToJSON(ev);
+        $t2_3 = cacheStore($t1_2, routerBroadcast$1$1$1);
+        $t3_4 = relayURLs.$get();
+        $t4_5 = $rt.builtin.len($t3_4);
+        $t5_6 = -1;
+        $block = 3; break;
         break;
       }
       case 2: {
-        $t5_6 = $t0_1.addr($t3_4);
-        $t6_7 = $t5_6.$get();
-        $t7_8 = getConn($t6_7);
-        $t8_9 = common$relay.Conn$Publish($t7_8, ev);
-        $t2_3 = $t3_4;
-        $block = 1; break;
+        return;
         break;
       }
       case 3: {
-        return;
-        break;
-      }
-    }
-  }
-}
-
-export function relayPublishExcept(ev, exceptURL) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = writeRelays.$get();
-        $t1_2 = $rt.builtin.len($t0_1);
-        $t2_3 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t3_4 = ($t2_3 + 1);
-        $t4_5 = ($t3_4 < $t1_2);
-        if ($t4_5) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t5_6 = $t0_1.addr($t3_4);
-        $t6_7 = $t5_6.$get();
-        $t7_8 = ($t6_7 !== exceptURL);
+        $t6_7 = ($t5_6 + 1);
+        $t7_8 = ($t6_7 < $t4_5);
         if ($t7_8) {
           $block = 4; break;
         }
         else {
-          $t2_3 = $t3_4;
-          $block = 1; break;
+          $block = 2; break;
         }
         break;
       }
-      case 3: {
-        return;
-        break;
-      }
       case 4: {
-        $t8_9 = getConn($t6_7);
-        $t9_10 = common$relay.Conn$Publish($t8_9, ev);
-        $t2_3 = $t3_4;
-        $block = 1; break;
+        $t8_9 = $t3_4.addr($t6_7);
+        $t9_10 = $t8_9.$get();
+        $t10_11 = getConn($t9_10);
+        $t11_12 = common$relay.Conn$Publish($t10_11, ev);
+        $t5_6 = $t6_7;
+        $block = 3; break;
         break;
       }
     }
   }
 }
 
-export function urlSuffix(url) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21;
+function routerBroadcast$1$1$1(_) {
+  return;
+}
+
+function routerBroadcast$1$2(relayURLs, ev) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = $rt.builtin.len(url);
-        $t1_2 = Math.min($t0_1, 8);
-        $t2_3 = $rt.builtin.makeSlice(0, $t1_2, 0);
-        $t3_4 = $rt.builtin.len(url);
-        $t4_5 = ($t3_4 - $t1_2);
-        $t5_6 = $t2_3;
-        $t6_7 = $t4_5;
+        $t0_1 = (ev !== null);
+        if ($t0_1) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t1_2 = common$nostr.Event$ToJSON(ev);
+        $t2_3 = cacheStore($t1_2, routerBroadcast$1$2$1);
+        $t3_4 = relayURLs.$get();
+        $t4_5 = $rt.builtin.len($t3_4);
+        $t5_6 = -1;
+        $block = 3; break;
+        break;
+      }
+      case 2: {
+        return;
+        break;
+      }
+      case 3: {
+        $t6_7 = ($t5_6 + 1);
+        $t7_8 = ($t6_7 < $t4_5);
+        if ($t7_8) {
+          $block = 4; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 4: {
+        $t8_9 = $t3_4.addr($t6_7);
+        $t9_10 = $t8_9.$get();
+        $t10_11 = getConn($t9_10);
+        $t11_12 = common$relay.Conn$Publish($t10_11, ev);
+        $t5_6 = $t6_7;
+        $block = 3; break;
+        break;
+      }
+    }
+  }
+}
+
+function routerBroadcast$1$2$1(_) {
+  return;
+}
+
+export function createRelayListEventAsync(kind, relays, cb) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set(cb);
+        $t1_2 = $rt.builtin.len(relays);
+        $t2_3 = null;
+        $t3_4 = -1;
         $block = 1; break;
         break;
       }
       case 1: {
-        $t7_8 = $rt.builtin.len(url);
-        $t8_9 = ($t6_7 < $t7_8);
-        if ($t8_9) {
+        $t4_5 = ($t3_4 + 1);
+        $t5_6 = ($t4_5 < $t1_2);
+        if ($t5_6) {
           $block = 2; break;
         }
         else {
@@ -3268,124 +4057,88 @@ export function urlSuffix(url) {
         break;
       }
       case 2: {
-        $rt.runtime.boundsCheck($t6_7, $rt.builtin.byteLen(url));
-        $t9_10 = $rt.builtin.stringByteAt(url, $t6_7);
-        $t10_11 = ($t9_10 >= 97);
-        if ($t10_11) {
-          $block = 7; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 3: {
-        $t11_12 = $rt.builtin.bytesToString($t5_6);
-        return $t11_12;
-        break;
-      }
-      case 4: {
-        $t12_13 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t6_7 = relays.addr($t4_5);
+        $t7_8 = $t6_7.$get();
+        $t8_9 = { $value: $rt.builtin.makeSlice(2, 2, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t9_10 = $t8_9.$get().addr(0);
+        $t9_10.$set('relay');
+        $t10_11 = $t8_9.$get().addr(1);
+        $t10_11.$set($t7_8);
+        $t11_12 = $rt.builtin.sliceSlice($t8_9.$get(), undefined, undefined, undefined);
+        $t12_13 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
         $t13_14 = $t12_13.$get().addr(0);
-        $t13_14.$set($t9_10);
+        $t13_14.$set($t11_12);
         $t14_15 = $rt.builtin.sliceSlice($t12_13.$get(), undefined, undefined, undefined);
-        $t15_16 = $rt.builtin.appendSlice($t5_6, $t14_15);
-        $t16_17 = $t15_16;
-        $block = 5; break;
-        break;
-      }
-      case 5: {
-        $t17_18 = ($t6_7 + 1);
-        $t5_6 = $t16_17;
-        $t6_7 = $t17_18;
+        $t15_16 = $rt.builtin.appendSlice($t2_3, $t14_15);
+        $t2_3 = $t15_16;
+        $t3_4 = $t4_5;
         $block = 1; break;
         break;
       }
-      case 6: {
-        $t18_19 = ($t9_10 >= 48);
-        if ($t18_19) {
-          $block = 8; break;
-        }
-        else {
-          $t16_17 = $t5_6;
-          $block = 5; break;
-        }
-        break;
-      }
-      case 7: {
-        $t19_20 = ($t9_10 <= 122);
-        if ($t19_20) {
-          $block = 4; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 8: {
-        $t20_21 = ($t9_10 <= 57);
-        if ($t20_21) {
-          $block = 4; break;
-        }
-        else {
-          $t16_17 = $t5_6;
-          $block = 5; break;
-        }
+      case 3: {
+        $t16_17 = { $value: { ID: '', PubKey: '', CreatedAt: 0, Kind: 0, Tags: null, Content: '', Sig: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t17_18 = { $get() { return $t16_17.$get().Kind; }, $set(v) { const obj = $t16_17.$get(); obj.Kind = v; $t16_17.$set(obj); } };
+        $t18_19 = { $get() { return $t16_17.$get().PubKey; }, $set(v) { const obj = $t16_17.$get(); obj.PubKey = v; $t16_17.$set(obj); } };
+        $t19_20 = myPubkey.$get();
+        $t20_21 = { $get() { return $t16_17.$get().Content; }, $set(v) { const obj = $t16_17.$get(); obj.Content = v; $t16_17.$set(obj); } };
+        $t21_22 = { $get() { return $t16_17.$get().Tags; }, $set(v) { const obj = $t16_17.$get(); obj.Tags = v; $t16_17.$set(obj); } };
+        $t22_23 = { $get() { return $t16_17.$get().CreatedAt; }, $set(v) { const obj = $t16_17.$get(); obj.CreatedAt = v; $t16_17.$set(obj); } };
+        $t23_24 = common$jsbridge$sw.NowSeconds();
+        $t17_18.$set(kind);
+        $t18_19.$set($t19_20);
+        $t20_21.$set('');
+        $t21_22.$set($t2_3);
+        $t22_23.$set($t23_24);
+        $t24_25 = common$nostr.Event$ToJSON($t16_17);
+        $t25_26 = createRelayListEventAsync$1.bind(null, $t0_1);
+        $t26_27 = cryptoProxy('signEvent', '', $t24_25, $t25_26);
+        return;
         break;
       }
     }
   }
 }
 
-export function handleRelayInfo(clientID, relayURL) {
-  let $t0_1, $t1_2, $t2_3, $t3_4;
-  $t0_1 = jstr(relayURL);
-  $t1_2 = ('["RELAY_INFO",' + $t0_1);
-  $t2_3 = ($t1_2 + ',null]');
-  $t3_4 = fwd(clientID, $t2_3);
-  return;
-}
-
-export function makeDMRecord(peer, from, content, createdAt, protocol, eventID) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
-  $t0_1 = { $value: { ID: '', Peer: '', From: '', Content: '', CreatedAt: 0, Protocol: '', EventID: '' }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2 = { $get() { return $t0_1.$get().ID; }, $set(v) { const obj = $t0_1.$get(); obj.ID = v; $t0_1.$set(obj); } };
-  $t2_3 = dmDedupID(peer, content, createdAt);
-  $t3_4 = { $get() { return $t0_1.$get().Peer; }, $set(v) { const obj = $t0_1.$get(); obj.Peer = v; $t0_1.$set(obj); } };
-  $t4_5 = { $get() { return $t0_1.$get().From; }, $set(v) { const obj = $t0_1.$get(); obj.From = v; $t0_1.$set(obj); } };
-  $t5_6 = { $get() { return $t0_1.$get().Content; }, $set(v) { const obj = $t0_1.$get(); obj.Content = v; $t0_1.$set(obj); } };
-  $t6_7 = { $get() { return $t0_1.$get().CreatedAt; }, $set(v) { const obj = $t0_1.$get(); obj.CreatedAt = v; $t0_1.$set(obj); } };
-  $t7_8 = { $get() { return $t0_1.$get().Protocol; }, $set(v) { const obj = $t0_1.$get(); obj.Protocol = v; $t0_1.$set(obj); } };
-  $t8_9 = { $get() { return $t0_1.$get().EventID; }, $set(v) { const obj = $t0_1.$get(); obj.EventID = v; $t0_1.$set(obj); } };
-  $t1_2.$set($t2_3);
-  $t3_4.$set(peer);
-  $t4_5.$set(from);
-  $t5_6.$set(content);
-  $t6_7.$set(createdAt);
-  $t7_8.$set(protocol);
-  $t8_9.$set(eventID);
-  return $t0_1;
-}
-
-export function dmDedupID(peer, content, createdAt) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
-  $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2 = $rt.builtin.stringToBytes(content);
-  $t2_3 = common$crypto$sha256.Sum($t1_2);
-  $t0_1.$set($rt.builtin.cloneValue($t2_3));
-  $t3_4 = Math.trunc(createdAt / 300);
-  $t4_5 = common$helpers.Itoa($t3_4);
-  $t5_6 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t6_7 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-  $t7_8 = common$helpers.HexEncode($t6_7);
-  $t8_9 = (peer + $t7_8);
-  $t9_10 = ($t8_9 + $t4_5);
-  $t10_11 = $rt.builtin.stringToBytes($t9_10);
-  $t11_12 = common$crypto$sha256.Sum($t10_11);
-  $t5_6.$set($rt.builtin.cloneValue($t11_12));
-  $t12_13 = $rt.builtin.sliceSlice($t5_6.$get(), undefined, undefined, undefined);
-  $t13_14 = common$helpers.HexEncode($t12_13);
-  return $t13_14;
+function createRelayListEventAsync$1(cb, signedJSON, errMsg) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = (errMsg !== '');
+        if ($t0_1) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 1: {
+        $t1_2 = cb.$get();
+        $t2_3 = $t1_2(null);
+        return;
+        break;
+      }
+      case 2: {
+        $t3_4 = common$nostr.ParseEvent(signedJSON);
+        $t4_5 = cb.$get();
+        $t5_6 = $t4_5($t3_4);
+        return;
+        break;
+      }
+      case 3: {
+        $t6_7 = (signedJSON === '');
+        if ($t6_7) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+    }
+  }
 }
 
 export function mw$num(w) {

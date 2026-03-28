@@ -1,10 +1,10 @@
 {
   "name": "smesh-signer",
-  "version": "1.1.4",
+  "version": "1.2.0",
   "private": true,
   "custom": {
     "firefox": {
-      "version": "1.1.4"
+      "version": "1.2.0"
     }
   },
   "scripts": {

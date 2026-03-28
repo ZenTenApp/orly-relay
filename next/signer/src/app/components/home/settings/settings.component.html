@@ -12,6 +12,27 @@
   <span> Settings </span>
 </div>
 
+<div class="password-row">
+  <div class="input-group">
+    <input
+      #newPasswordInput
+      type="password"
+      class="form-control"
+      placeholder="new password"
+      [(ngModel)]="newPassword"
+    />
+    <button
+      class="btn"
+      [class.btn-primary]="!passwordChanged"
+      [class.btn-success]="passwordChanged"
+      [disabled]="!newPassword || changingPassword"
+      (click)="onChangePassword()"
+    >
+      {{ changingPassword ? '...' : (passwordChanged ? 'Changed' : 'Change') }}
+    </button>
+  </div>
+</div>
+
 <div class="vault-buttons">
   <button class="btn btn-primary" (click)="onClickExportVault()">
     Export Vault
@@ -33,14 +54,6 @@
 </div>
 
 <div class="sam-flex-grow"></div>
-
-<div class="sync-info">
-  <span class="sync-label">SYNC: {{ syncFlow }}</span>
-  <p class="sync-note">
-    To change sync mode, export your vault, reset the extension,
-    and re-import with the desired sync setting.
-  </p>
-</div>
 
 <button
   class="btn btn-danger"

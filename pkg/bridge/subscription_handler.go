@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"next.orly.dev/pkg/lol/log"
+	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
 
 	"next.orly.dev/pkg/acl"
 	aclgrpc "next.orly.dev/pkg/acl/grpc"
@@ -20,6 +21,7 @@ type SubscriptionHandler struct {
 	priceSats      int64
 	aclClient      *aclgrpc.Client
 	aliasPriceSats int64
+	domain         string
 }
 
 // NewSubscriptionHandler creates a handler for subscription DM commands.
@@ -31,6 +33,7 @@ func NewSubscriptionHandler(
 	priceSats int64,
 	aclClient *aclgrpc.Client,
 	aliasPriceSats int64,
+	domain string,
 ) *SubscriptionHandler {
 	return &SubscriptionHandler{
 		store:          store,
@@ -39,6 +42,7 @@ func NewSubscriptionHandler(
 		priceSats:      priceSats,
 		aclClient:      aclClient,
 		aliasPriceSats: aliasPriceSats,
+		domain:         domain,
 	}
 }
 
@@ -79,42 +83,55 @@ func (sh *SubscriptionHandler) HandleSubscribe(ctx context.Context, pubkeyHex, a
 		}
 	}
 
-	// Check for existing active subscription (via ACL client or file store)
+	month := 30 * 24 * time.Hour
+	now := time.Now()
+
+	// Look up existing subscription expiry.
+	var currentExpiry time.Time
 	if sh.aclClient != nil {
-		subscribed, err := sh.aclClient.IsSubscribedPaid(pubkeyHex)
-		if err == nil && subscribed {
-			sub, _ := sh.aclClient.GetSubscription(pubkeyHex)
-			if sub != nil {
-				remaining := time.Until(sub.ExpiresAt).Round(time.Hour)
+		sub, err := sh.aclClient.GetSubscription(pubkeyHex)
+		if err == nil {
+			currentExpiry = sub.ExpiresAt
+		}
+	} else {
+		existing, err := sh.store.Get(pubkeyHex)
+		if err == nil {
+			currentExpiry = existing.ExpiresAt
+		}
+	}
+
+	var expiresAt time.Time
+	var paymentHash string
+
+	if sh.payments == nil {
+		// Free tier: max 2 months from now, can't re-subscribe until halfway through.
+		if !currentExpiry.IsZero() && currentExpiry.After(now) {
+			remaining := currentExpiry.Sub(now)
+			if remaining > month/2 {
 				sh.sendReply(pubkeyHex, fmt.Sprintf(
-					"You already have an active subscription (%v remaining). "+
-						"Send \"subscribe\" again after it expires to renew.",
-					remaining,
+					"You can renew after %s (halfway through your current period).",
+					now.Add(remaining-month/2).Format("2006-01-02"),
 				))
 				return
 			}
 		}
-	} else {
-		existing, err := sh.store.Get(pubkeyHex)
-		if err == nil && existing.IsActive() {
-			remaining := time.Until(existing.ExpiresAt).Round(time.Hour)
-			sh.sendReply(pubkeyHex, fmt.Sprintf(
-				"You already have an active subscription (%v remaining). "+
-					"Send \"subscribe\" again after it expires to renew.",
-				remaining,
-			))
-			return
+		expiresAt = now.Add(month)
+		if !currentExpiry.IsZero() && currentExpiry.After(now) {
+			expiresAt = currentExpiry.Add(month)
+			// Cap at 2 months from now.
+			cap := now.Add(2 * month)
+			if expiresAt.After(cap) {
+				expiresAt = cap
+			}
 		}
-	}
-
-	// Activate subscription — free or paid
-	expiresAt := time.Now().Add(30 * 24 * time.Hour)
-	var paymentHash string
-
-	if sh.payments == nil {
-		// Free mode — activate immediately without payment
 		log.I.F("free subscription activated for %s (alias=%q)", pubkeyHex, alias)
 	} else {
+		// Paid tier: extend from current expiry (stacks).
+		baseTime := now
+		if !currentExpiry.IsZero() && currentExpiry.After(now) {
+			baseTime = currentExpiry
+		}
+		expiresAt = baseTime.Add(month)
 		// Paid mode — create invoice and wait for payment
 		invoice, err := sh.payments.CreateInvoice(ctx, price)
 		if err != nil {
@@ -181,13 +198,15 @@ func (sh *SubscriptionHandler) HandleSubscribe(ctx context.Context, pubkeyHex, a
 
 	log.I.F("subscription activated for %s (alias=%q, expires %s)", pubkeyHex, alias, expiresAt.Format(time.RFC3339))
 
+	email := sh.userEmail(pubkeyHex)
 	confirmMsg := fmt.Sprintf(
 		"Payment received! Your subscription is now active.\n\n"+
+			"Your email address: %s\n"+
 			"Expires: %s\n",
-		expiresAt.Format("2006-01-02"),
+		email, expiresAt.Format("2006-01-02"),
 	)
 	if alias != "" {
-		confirmMsg += fmt.Sprintf("Alias: %s\n", alias)
+		confirmMsg += fmt.Sprintf("Alias: %s@%s\n", alias, sh.domain)
 	}
 	confirmMsg += "\nYou can now send emails by DMing this bridge with email headers:\n\n" +
 		"To: recipient@example.com\n" +
@@ -199,15 +218,17 @@ func (sh *SubscriptionHandler) HandleSubscribe(ctx context.Context, pubkeyHex, a
 
 // HandleStatus replies with the user's subscription info.
 func (sh *SubscriptionHandler) HandleStatus(pubkeyHex string) {
+	email := sh.userEmail(pubkeyHex)
+
 	if sh.aclClient != nil {
 		sub, err := sh.aclClient.GetSubscription(pubkeyHex)
 		if err != nil {
 			sh.sendReply(pubkeyHex, "No active subscription found.")
 			return
 		}
-		msg := fmt.Sprintf("Subscription status:\n\nExpires: %s\n", sub.ExpiresAt.Format("2006-01-02"))
+		msg := fmt.Sprintf("Subscription status:\n\nYour email: %s\nExpires: %s\n", email, sub.ExpiresAt.Format("2006-01-02"))
 		if sub.HasAlias {
-			msg += fmt.Sprintf("Alias: %s\n", sub.Alias)
+			msg += fmt.Sprintf("Alias: %s@%s\n", sub.Alias, sh.domain)
 		}
 		remaining := time.Until(sub.ExpiresAt).Round(time.Hour)
 		if remaining > 0 {
@@ -231,9 +252,18 @@ func (sh *SubscriptionHandler) HandleStatus(pubkeyHex string) {
 		status = "EXPIRED"
 	}
 	sh.sendReply(pubkeyHex, fmt.Sprintf(
-		"Subscription status: %s\nExpires: %s\nTime remaining: %v",
-		status, sub.ExpiresAt.Format("2006-01-02"), remaining,
+		"Subscription status: %s\nYour email: %s\nExpires: %s\nTime remaining: %v",
+		status, email, sub.ExpiresAt.Format("2006-01-02"), remaining,
 	))
+}
+
+// userEmail returns "npub1...@domain" for the given hex pubkey.
+func (sh *SubscriptionHandler) userEmail(pubkeyHex string) string {
+	npub, err := bech32encoding.HexToNpub([]byte(pubkeyHex))
+	if err != nil {
+		return pubkeyHex + "@" + sh.domain
+	}
+	return string(npub) + "@" + sh.domain
 }
 
 func (sh *SubscriptionHandler) sendReply(pubkeyHex, content string) {

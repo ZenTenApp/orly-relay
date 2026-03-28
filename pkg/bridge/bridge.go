@@ -4,35 +4,18 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"next.orly.dev/pkg/nostr/crypto/encryption"
 	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/filter"
 	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/encoders/timestamp"
 	"next.orly.dev/pkg/nostr/interfaces/signer"
-	"next.orly.dev/pkg/lol/chk"
 	"next.orly.dev/pkg/lol/log"
 
 	aclgrpc "next.orly.dev/pkg/acl/grpc"
 	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
 	"next.orly.dev/pkg/nostr/protocol/marmot"
-)
-
-// dmFormat tracks which DM protocol a sender last used.
-type dmFormat int
-
-const (
-	dmFormatKind4    dmFormat = iota // NIP-04 style (kind 4)
-	dmFormatGiftWrap                 // NIP-17 gift wrap (kind 1059)
-	dmFormatMLS                      // MLS/NIP-EE (kind 443/444/445)
 )
 
 // Bridge is the Nostr-Email bridge. It manages identity, relay connection,
@@ -49,11 +32,6 @@ type Bridge struct {
 	aclClient *aclgrpc.Client
 	mlsClient *marmot.Client
 
-	// senderFormats tracks the DM format last used by each sender so the
-	// bridge replies in the same format. Protected by senderFmtMu.
-	senderFormats map[string]dmFormat
-	senderFmtMu   sync.RWMutex
-
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -67,9 +45,8 @@ type Bridge struct {
 // mode (the bridge will fall back to file-based identity).
 func New(cfg *Config, dbGetter func() ([]byte, error)) *Bridge {
 	return &Bridge{
-		cfg:           cfg,
-		dbGetter:      dbGetter,
-		senderFormats: make(map[string]dmFormat),
+		cfg:      cfg,
+		dbGetter: dbGetter,
 	}
 }
 
@@ -135,10 +112,6 @@ func (b *Bridge) Start(ctx context.Context) error {
 			return fmt.Errorf("relay connection: %w", err)
 		}
 
-		// Start subscription loop in background
-		b.wg.Add(1)
-		go b.relayWatchLoop()
-
 		// Publish kind 0 profile if template exists
 		if err := b.publishProfile(); err != nil {
 			log.W.F("publish bridge profile: %v", err)
@@ -152,14 +125,11 @@ func (b *Bridge) Start(ctx context.Context) error {
 		// Broadcast identity to popular relays in background
 		go b.broadcastIdentity()
 
-		// Initialize MLS if enabled
-		if b.cfg.MLSEnabled {
-			if err := b.initMLS(); err != nil {
-				log.W.F("MLS init failed (continuing without MLS): %v", err)
-			} else {
-				log.I.F("MLS (NIP-EE) enabled")
-			}
+		// Initialize MLS (mandatory — the only DM protocol)
+		if err := b.initMLS(); err != nil {
+			return fmt.Errorf("MLS init: %w", err)
 		}
+		log.I.F("MLS (marmot) enabled")
 	}
 
 	log.I.F("bridge started")
@@ -176,6 +146,7 @@ func (b *Bridge) initComponents(sendDM func(string, string) error) error {
 		RelayPort:     b.cfg.SMTPRelayPort,
 		RelayUsername: b.cfg.SMTPRelayUsername,
 		RelayPassword: b.cfg.SMTPRelayPassword,
+		MXPort:        b.cfg.SMTPMXPort,
 	}
 
 	// Load DKIM signer if configured
@@ -212,7 +183,7 @@ func (b *Bridge) initComponents(sendDM func(string, string) error) error {
 		aliasPriceSats = b.cfg.MonthlyPriceSats * 2
 	}
 
-	subHandler := NewSubscriptionHandler(subStore, payments, sendDM, b.cfg.MonthlyPriceSats, b.aclClient, aliasPriceSats)
+	subHandler := NewSubscriptionHandler(subStore, payments, sendDM, b.cfg.MonthlyPriceSats, b.aclClient, aliasPriceSats, b.cfg.Domain)
 	outbound := NewOutboundProcessor(smtpClient, rateLimiter, subHandler, b.cfg.Domain, sendDM, b.aclClient)
 	b.router = NewRouter(subHandler, outbound, sendDM)
 
@@ -281,262 +252,19 @@ func (b *Bridge) IdentitySource() IdentitySource {
 	return b.source
 }
 
-// relayWatchLoop subscribes to kind 4 DMs addressed to the bridge and routes
-// them through the router. It reconnects and resubscribes on disconnection.
-func (b *Bridge) relayWatchLoop() {
-	defer b.wg.Done()
-
-	if b.relay == nil || b.sign == nil {
-		<-b.ctx.Done()
-		return
-	}
-
-	for {
-		if err := b.subscribeAndProcess(); err != nil {
-			if b.ctx.Err() != nil {
-				return // context cancelled, clean exit
-			}
-			log.W.F("subscription loop error: %v, reconnecting...", err)
-			if err := b.relay.Reconnect(); err != nil {
-				if b.ctx.Err() != nil {
-					return
-				}
-				log.E.F("reconnect failed: %v", err)
-			}
-		}
-	}
-}
-
-// subscribeAndProcess creates a subscription for DMs to the bridge and
-// processes events until the channel closes or context is cancelled.
-// Subscribes to both kind 4 (NIP-04) and kind 1059 (NIP-17 gift wrap).
-func (b *Bridge) subscribeAndProcess() error {
-	bridgePubHex := hex.Enc(b.sign.Pub())
-
-	// Since = now - 3 days: gift-wrap timestamps are randomized up to
-	// -2 days (NIP-59), so we need a lookback window to catch them.
-	since := time.Now().Add(-3 * 24 * time.Hour).Unix()
-	ff := filter.NewS(
-		&filter.F{
-			Kinds: kind.NewS(kind.New(4), kind.New(1059)),
-			Tags: tag.NewS(
-				tag.NewFromAny("p", bridgePubHex),
-			),
-			Since: &timestamp.T{V: since},
-		},
-	)
-
-	sub, err := b.relay.Subscribe(b.ctx, ff)
-	if err != nil {
-		return fmt.Errorf("subscribe: %w", err)
-	}
-	defer sub.Close()
-
-	log.I.F("subscribed to DMs (kind 4 + 1059) for bridge pubkey %s", bridgePubHex)
-
-	for {
-		select {
-		case <-b.ctx.Done():
-			return nil
-		case ev, ok := <-sub.Events():
-			if !ok {
-				return fmt.Errorf("event channel closed")
-			}
-			switch ev.Kind {
-			case 1059:
-				b.handleGiftWrapEvent(ev)
-			default:
-				b.handleDMEvent(ev)
-			}
-		}
-	}
-}
-
-// handleDMEvent decrypts a kind 4 DM event and routes it.
-// Tries NIP-44 decryption first, falls back to NIP-04.
-func (b *Bridge) handleDMEvent(ev *event.E) {
-	senderPubHex := hex.Enc(ev.Pubkey[:])
-
-	// Skip our own outbound DMs to prevent feedback loop
-	bridgePubHex := hex.Enc(b.sign.Pub())
-	if senderPubHex == bridgePubHex {
-		return
-	}
-
-	// Try NIP-44 first
-	conversationKey, err := encryption.GenerateConversationKey(
-		b.sign.Sec(), ev.Pubkey[:],
-	)
-	if err != nil {
-		log.E.F("ECDH failed for sender %s: %v", senderPubHex, err)
-		return
-	}
-
-	decrypted, err := encryption.Decrypt(conversationKey, string(ev.Content))
-	if err != nil {
-		log.I.F("NIP-44 decrypt failed for sender %s, trying NIP-04: %v", senderPubHex, err)
-		// Fall back to NIP-04 decryption
-		nip4Key, keyErr := encryption.GenerateNip4Key(b.sign.Sec(), ev.Pubkey[:])
-		if keyErr != nil {
-			log.E.F("NIP-04 key generation failed for sender %s: %v", senderPubHex, keyErr)
-			return
-		}
-		nip4Decrypted, nip4Err := encryption.DecryptNip4(ev.Content, nip4Key)
-		if nip4Err != nil {
-			log.I.F("DM decryption failed from %s (tried NIP-44 and NIP-04): %v", senderPubHex, nip4Err)
-			return
-		}
-		decrypted = string(nip4Decrypted)
-		log.I.F("NIP-04 fallback succeeded for sender %s", senderPubHex)
-	}
-
-	log.I.F("received kind 4 DM from %s: %d bytes", senderPubHex, len(decrypted))
-
-	b.recordSenderFormat(senderPubHex, dmFormatKind4)
-
-	if b.router != nil {
-		b.router.RouteDM(b.ctx, senderPubHex, decrypted)
-	}
-}
-
-// handleGiftWrapEvent unwraps a kind 1059 event. Both NIP-17 DMs and MLS
-// Welcomes arrive as kind 1059. Strategy: try NIP-17 first (expects inner
-// kind 13 seal -> kind 14 DM). If that fails and MLS is enabled, pass to
-// the MLS client (expects inner kind 13 seal -> kind 444 Welcome).
-func (b *Bridge) handleGiftWrapEvent(ev *event.E) {
-	dm, err := unwrapGiftWrap(ev, b.sign)
-	if err != nil {
-		// NIP-17 unwrap failed. Try MLS Welcome if enabled.
-		if b.mlsClient != nil {
-			if mlsErr := b.mlsClient.HandleEvent(b.ctx, ev); mlsErr != nil {
-				log.D.F("kind 1059 unwrap failed (NIP-17: %v, MLS: %v)", err, mlsErr)
-			}
-		} else {
-			log.I.F("gift wrap unwrap failed: %v", err)
-		}
-		return
-	}
-
-	// Skip our own outbound DMs to prevent feedback loop
-	bridgePubHex := hex.Enc(b.sign.Pub())
-	if dm.SenderPubHex == bridgePubHex {
-		log.I.F("skipping own gift wrap DM")
-		return
-	}
-
-	log.I.F("received NIP-17 DM from %s: %d bytes", dm.SenderPubHex, len(dm.Content))
-
-	b.recordSenderFormat(dm.SenderPubHex, dmFormatGiftWrap)
-
-	if b.router != nil {
-		b.router.RouteDM(b.ctx, dm.SenderPubHex, dm.Content)
-	}
-}
-
-// recordSenderFormat tracks the DM format a sender used.
-func (b *Bridge) recordSenderFormat(pubkeyHex string, format dmFormat) {
-	b.senderFmtMu.Lock()
-	b.senderFormats[pubkeyHex] = format
-	b.senderFmtMu.Unlock()
-}
-
-// getSenderFormat returns the last DM format used by a sender.
-// Returns dmFormatKind4 as default for unknown senders (backward compatible).
-func (b *Bridge) getSenderFormat(pubkeyHex string) dmFormat {
-	b.senderFmtMu.RLock()
-	defer b.senderFmtMu.RUnlock()
-	f, ok := b.senderFormats[pubkeyHex]
-	if !ok {
-		return dmFormatKind4
-	}
-	return f
-}
-
-// makeSendDM returns a callback that encrypts and publishes DMs to the given
-// pubkey via the relay. Replies in the same format the sender used: kind 4
-// for NIP-04 senders, kind 1059 gift wrap for NIP-17 senders. For unknown
-// senders (inbound email), sends kind 4 as the default.
+// makeSendDM returns a callback that sends MLS-encrypted DMs via marmot.
 func (b *Bridge) makeSendDM() func(pubkeyHex string, content string) error {
 	return func(pubkeyHex string, content string) error {
 		if b.relay == nil {
 			return fmt.Errorf("no relay connection")
 		}
-
-		format := b.getSenderFormat(pubkeyHex)
-
-		log.I.F("sending DM reply to %s (format=%d, %d bytes)", pubkeyHex, format, len(content))
-
-		switch format {
-		case dmFormatMLS:
-			if err := b.sendMLSDM(pubkeyHex, content); err != nil {
-				return fmt.Errorf("MLS DM: %w", err)
-			}
-			log.I.F("sent MLS DM to %s (%d bytes)", pubkeyHex, len(content))
-		case dmFormatGiftWrap:
-			if err := b.sendGiftWrapDM(pubkeyHex, content); err != nil {
-				return fmt.Errorf("gift wrap DM: %w", err)
-			}
-			log.I.F("sent NIP-17 DM to %s (%d bytes)", pubkeyHex, len(content))
-		default:
-			if err := b.sendKind4DM(pubkeyHex, content); err != nil {
-				return fmt.Errorf("kind 4 DM: %w", err)
-			}
-			log.I.F("sent kind 4 DM to %s (%d bytes)", pubkeyHex, len(content))
+		log.I.F("sending MLS DM to %s (%d bytes)", pubkeyHex, len(content))
+		if err := b.sendMLSDM(pubkeyHex, content); err != nil {
+			return fmt.Errorf("MLS DM: %w", err)
 		}
-
+		log.I.F("sent MLS DM to %s (%d bytes)", pubkeyHex, len(content))
 		return nil
 	}
-}
-
-// sendKind4DM sends a kind 4 encrypted DM using NIP-04.
-func (b *Bridge) sendKind4DM(pubkeyHex, content string) error {
-	recipientPub, err := hex.Dec(pubkeyHex)
-	if err != nil {
-		return fmt.Errorf("decode recipient pubkey: %w", err)
-	}
-
-	sharedKey, err := encryption.GenerateNip4Key(b.sign.Sec(), recipientPub)
-	if err != nil {
-		return fmt.Errorf("NIP-04 shared key: %w", err)
-	}
-
-	encrypted, err := encryption.EncryptNip4([]byte(content), sharedKey)
-	if err != nil {
-		return fmt.Errorf("NIP-04 encrypt: %w", err)
-	}
-
-	now := time.Now().Unix()
-	expiration := strconv.FormatInt(now+defaultDMExpirationSeconds, 10)
-	ev := &event.E{
-		Content:   encrypted,
-		CreatedAt: now,
-		Kind:      4,
-		Tags: tag.NewS(
-			tag.NewFromAny("p", pubkeyHex),
-			tag.NewFromAny("expiration", expiration),
-		),
-	}
-	if err := ev.Sign(b.sign); chk.E(err) {
-		return fmt.Errorf("sign: %w", err)
-	}
-	return b.relay.Publish(b.ctx, ev)
-}
-
-// sendGiftWrapDM sends a NIP-17 gift-wrapped DM (kind 1059).
-// Publishes both a recipient copy and a self-addressed copy per NIP-17.
-func (b *Bridge) sendGiftWrapDM(pubkeyHex, content string) error {
-	recipientWrap, selfWrap, err := wrapGiftWrap(pubkeyHex, content, b.sign)
-	if err != nil {
-		return fmt.Errorf("wrap: %w", err)
-	}
-	if err := b.relay.Publish(b.ctx, recipientWrap); err != nil {
-		return fmt.Errorf("publish recipient wrap: %w", err)
-	}
-	// Self-copy — best-effort, don't fail the send
-	if err := b.relay.Publish(b.ctx, selfWrap); err != nil {
-		log.W.F("failed to publish self-copy gift wrap: %v", err)
-	}
-	return nil
 }
 
 // resolveRecipientPubkey extracts the Nostr pubkey hex from an email address

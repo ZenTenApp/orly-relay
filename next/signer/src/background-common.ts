@@ -41,9 +41,8 @@ export interface UnlockResponseMessage {
   error?: string;
 }
 
-export const debug = function (message: any) {
-  const dateString = new Date().toISOString();
-  console.log(`[Smesh Signer - ${dateString}]: ${JSON.stringify(message)}`);
+export const debug = function (_message: any) {
+  // Enable for debugging: console.log(`[Smesh Signer]: ${JSON.stringify(_message)}`);
 };
 
 export type PromptResponse =
@@ -69,7 +68,14 @@ export const getBrowserSessionData = async function (): Promise<
   BrowserSessionData | undefined
 > {
   const browserSessionData = await browser.storage.session.get(null);
-  if (Object.keys(browserSessionData).length === 0) {
+  // Check for required vault session keys, not just any key existing.
+  // Stray keys in session storage (e.g. profile cache) must not cause
+  // the vault to appear unlocked.
+  if (
+    !browserSessionData ||
+    !browserSessionData['iv'] ||
+    !browserSessionData['identities']
+  ) {
     return undefined;
   }
 
@@ -151,6 +157,17 @@ export const checkPermissions = function (
   method: Nip07Method,
   params: any
 ): boolean | undefined {
+  // MLS methods — check for 'mls.*' wildcard permission first.
+  // Must be before the generic filter which would match on the exact method
+  // name (e.g. 'mls.sendDM') and return undefined since perms are stored as 'mls.*'.
+  if ((method as string).startsWith('mls.')) {
+    const mlsPerms = browserSessionData.permissions.filter(
+      (x) => x.identityId === identity.id && x.host === host && x.method === ('mls.*' as Nip07Method)
+    );
+    if (mlsPerms.length === 0) return undefined;
+    return mlsPerms.every((x) => x.methodPolicy === 'allow');
+  }
+
   const permissions = browserSessionData.permissions.filter(
     (x) =>
       x.identityId === identity.id && x.host === host && x.method === method
@@ -161,17 +178,14 @@ export const checkPermissions = function (
   }
 
   if (method === 'getPublicKey') {
-    // No evaluation of params required.
     return permissions.every((x) => x.methodPolicy === 'allow');
   }
 
   if (method === 'getRelays') {
-    // No evaluation of params required.
     return permissions.every((x) => x.methodPolicy === 'allow');
   }
 
   if (method === 'signEvent') {
-    // Evaluate params.
     const eventTemplate = params as EventTemplate;
     if (
       permissions.find(
@@ -201,22 +215,18 @@ export const checkPermissions = function (
   }
 
   if (method === 'nip04.encrypt') {
-    // No evaluation of params required.
     return permissions.every((x) => x.methodPolicy === 'allow');
   }
 
   if (method === 'nip44.encrypt') {
-    // No evaluation of params required.
     return permissions.every((x) => x.methodPolicy === 'allow');
   }
 
   if (method === 'nip04.decrypt') {
-    // No evaluation of params required.
     return permissions.every((x) => x.methodPolicy === 'allow');
   }
 
   if (method === 'nip44.decrypt') {
-    // No evaluation of params required.
     return permissions.every((x) => x.methodPolicy === 'allow');
   }
 
@@ -271,6 +281,13 @@ export const storePermission = async function (
   methodPolicy: Nip07MethodPolicy,
   kind?: number
 ) {
+  // Re-read current session and sync data to avoid race conditions.
+  // Multiple concurrent processNip07Request calls may store permissions
+  // simultaneously — using the stale browserSessionData from request start
+  // would overwrite permissions stored by other concurrent requests.
+  const freshSession = await getBrowserSessionData();
+  const freshPermissions = freshSession?.permissions ?? browserSessionData.permissions;
+
   const browserSyncData = await getBrowserSyncData();
   if (!browserSyncData) {
     throw new Error(`Could not retrieve sync data`);
@@ -288,9 +305,9 @@ export const storePermission = async function (
     kind,
   };
 
-  // Store session data
+  // Store session data (using fresh permissions to avoid overwriting concurrent writes)
   await browser.storage.session.set({
-    permissions: [...browserSessionData.permissions, permission],
+    permissions: [...freshPermissions, permission],
   });
 
   // Encrypt permission to store in sync storage (depending on sync flow).
@@ -771,7 +788,7 @@ export async function handleUnlockRequest(
 /**
  * Open the unlock popup window
  */
-export async function openUnlockPopup(host?: string): Promise<void> {
+export async function openUnlockPopup(host?: string): Promise<number | undefined> {
   const width = 375;
   const height = 500;
   const { top, left } = await getPosition(width, height);
@@ -782,7 +799,7 @@ export async function openUnlockPopup(host?: string): Promise<void> {
     url += `&host=${encodeURIComponent(host)}`;
   }
 
-  await browser.windows.create({
+  const win = await browser.windows.create({
     type: 'popup',
     url,
     height,
@@ -790,4 +807,5 @@ export async function openUnlockPopup(host?: string): Promise<void> {
     top,
     left,
   });
+  return win.id;
 }

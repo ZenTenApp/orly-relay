@@ -8,7 +8,7 @@ Usage:
     python3 test/e2e_marmot.py [--headed] [--nip-io]
 
 Requires:
-    - Local server running on :8090 (sm3sh.test or nip.io)
+    - Local server running on :8090 (smesh.test or nip.io)
     - /etc/hosts entry OR --nip-io flag for nip.io DNS
     - pip install playwright && playwright install chromium
 """
@@ -31,17 +31,17 @@ LOG_FILE = "/tmp/browser-debug.log"
 
 def make_urls(mode):
     if mode == "nip-io":
-        base = "http://sm3sh.127.0.0.1.nip.io:8090"
-        marmot = "http://marmot.sm3sh.127.0.0.1.nip.io:8090"
-        relay = "http://relay.sm3sh.127.0.0.1.nip.io:8090"
+        base = "http://smesh.127.0.0.1.nip.io:8090"
+        marmot = "http://marmot.smesh.127.0.0.1.nip.io:8090"
+        relay = "http://relay.smesh.127.0.0.1.nip.io:8090"
     elif mode == "localhost":
-        base = "http://sm3sh.localhost:8090"
-        marmot = "http://marmot.sm3sh.localhost:8090"
-        relay = "http://relay.sm3sh.localhost:8090"
+        base = "http://smesh.localhost:8090"
+        marmot = "http://marmot.smesh.localhost:8090"
+        relay = "http://relay.smesh.localhost:8090"
     else:
-        base = "http://sm3sh.test:8090"
-        marmot = "http://marmot.sm3sh.test:8090"
-        relay = "http://relay.sm3sh.test:8090"
+        base = "http://smesh.test:8090"
+        marmot = "http://marmot.smesh.test:8090"
+        relay = "http://relay.smesh.test:8090"
     return base, marmot, relay
 
 
@@ -96,9 +96,9 @@ def test_nsec_bus_connectivity(p, base, marmot_url, relay_url):
     page.on("console", lambda m: logs.append(f"{m.type}: {m.text}"))
 
     page.add_init_script(f"""
-    localStorage.setItem('sm3sh-key', '{TEST_SK}');
-    localStorage.setItem('sm3sh-pubkey', '{TEST_PK}');
-    localStorage.setItem('sm3sh-mode', 'nsec');
+    localStorage.setItem('smesh-key', '{TEST_SK}');
+    localStorage.setItem('smesh-pubkey', '{TEST_PK}');
+    localStorage.setItem('smesh-mode', 'nsec');
     """)
 
     clear_log()
@@ -156,9 +156,9 @@ def test_nip07_auth(p, base, marmot_url, relay_url):
 
     # Don't inject nsec — let the app use NIP-07 mode.
     page.add_init_script(f"""
-    localStorage.setItem('sm3sh-mode', 'extension');
-    localStorage.setItem('sm3sh-pubkey', '{TEST_PK}');
-    localStorage.removeItem('sm3sh-key');
+    localStorage.setItem('smesh-mode', 'extension');
+    localStorage.setItem('smesh-pubkey', '{TEST_PK}');
+    localStorage.removeItem('smesh-key');
     """)
 
     clear_log()
@@ -320,9 +320,9 @@ def test_crypto_req_signEvent(p, base, marmot_url, relay_url):
     page.on("console", lambda m: logs.append(f"{m.type}: {m.text}"))
 
     page.add_init_script(f"""
-    localStorage.setItem('sm3sh-mode', 'extension');
-    localStorage.setItem('sm3sh-pubkey', '{TEST_PK}');
-    localStorage.removeItem('sm3sh-key');
+    localStorage.setItem('smesh-mode', 'extension');
+    localStorage.setItem('smesh-pubkey', '{TEST_PK}');
+    localStorage.removeItem('smesh-key');
     """)
 
     clear_log()
@@ -380,7 +380,7 @@ def main():
     parser.add_argument("--nip-io", action="store_true",
                        help="Use nip.io DNS instead of localhost")
     parser.add_argument("--hosts", action="store_true",
-                       help="Use /etc/hosts (sm3sh.test) instead of localhost")
+                       help="Use /etc/hosts (smesh.test) instead of localhost")
     parser.add_argument("--test", type=str, default="all",
                        help="Run specific test (nsec,nip07,ws,crypto,all)")
     args = parser.parse_args()

@@ -30,6 +30,10 @@ type ClientConfig struct {
 	RelayUsername string
 	// RelayPassword is the SMTP AUTH password.
 	RelayPassword string
+
+	// MXPort overrides the port used for direct MX delivery.
+	// If zero (default), tries 2525 then falls back to 25.
+	MXPort int
 }
 
 // MXResolver looks up MX records for a domain. The default is net.LookupMX.
@@ -160,17 +164,26 @@ func (c *Client) deliverToMX(domain, from string, to []string, msg []byte) error
 		mxRecords = []*net.MX{{Host: domain, Pref: 0}}
 	}
 
+	// Determine port order: explicit config, or try 2525 then 25.
+	var ports []string
+	if c.cfg.MXPort != 0 {
+		ports = []string{fmt.Sprintf("%d", c.cfg.MXPort)}
+	} else {
+		ports = []string{"2525", "25"}
+	}
+
 	var lastErr error
 	for _, mx := range mxRecords {
 		host := strings.TrimSuffix(mx.Host, ".")
-		addr := net.JoinHostPort(host, "25")
-
-		if err := c.deliverDirect(addr, from, to, msg); err != nil {
-			lastErr = err
-			log.D.F("MX %s failed: %v, trying next", host, err)
-			continue
+		for _, port := range ports {
+			addr := net.JoinHostPort(host, port)
+			if err := c.deliverDirect(addr, from, to, msg); err != nil {
+				lastErr = err
+				log.D.F("MX %s:%s failed: %v", host, port, err)
+				continue
+			}
+			return nil
 		}
-		return nil // success
 	}
 
 	return fmt.Errorf("all MX servers failed for %s: %w", domain, lastErr)
@@ -222,6 +235,11 @@ func (c *Client) deliverViaRelay(from string, to []string, msg []byte) error {
 		port = 587
 	}
 	addr := net.JoinHostPort(c.cfg.RelayHost, fmt.Sprintf("%d", port))
+
+	// Loopback: plain TCP, no TLS, no AUTH — same path as direct MX delivery.
+	if c.cfg.RelayHost == "127.0.0.1" || c.cfg.RelayHost == "localhost" || c.cfg.RelayHost == "::1" {
+		return c.deliverDirect(addr, from, to, msg)
+	}
 
 	cl, err := gosmtp.DialStartTLS(addr, &tls.Config{ServerName: c.cfg.RelayHost})
 	if err != nil {

@@ -20,7 +20,7 @@ import {
   switchIdentity,
 } from './related/identity';
 import { deletePermission } from './related/permission';
-import { createNewVault, deleteVault, unlockVault } from './related/vault';
+import { changePassword, createNewVault, deleteVault, unlockVault } from './related/vault';
 import { addRelay, deleteRelay, updateRelay } from './related/relay';
 import {
   addNwcConnection,
@@ -91,8 +91,9 @@ export class StorageService {
     this.assureIsInitialized();
 
     const data = await this.#browserSessionHandler.loadFullData();
-    if (Object.keys(data).length === 0) {
-      // No data available yet (e.g. because the vault was not unlocked).
+    // Session storage may contain non-vault data (logs, profile cache, relay cache).
+    // Only treat as unlocked vault if the required keys are present.
+    if (!data['iv'] || !data['identities']) {
       return undefined;
     }
 
@@ -165,6 +166,10 @@ export class StorageService {
 
   async createNewVault(password: string): Promise<void> {
     await createNewVault.call(this, password);
+  }
+
+  async changePassword(newPassword: string): Promise<void> {
+    await changePassword.call(this, newPassword);
   }
 
   async addIdentity(data: {

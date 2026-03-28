@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"next.orly.dev/pkg/lol/log"
+	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
 
 	aclgrpc "next.orly.dev/pkg/acl/grpc"
 	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
@@ -42,17 +43,20 @@ func NewOutboundProcessor(
 // ProcessOutbound parses a DM as an outbound email and sends it.
 // senderPubkeyHex is the Nostr pubkey of the DM author.
 func (op *OutboundProcessor) ProcessOutbound(senderPubkeyHex, content string) error {
-	// Check subscription
-	if op.subHandler != nil && !op.subHandler.IsSubscribed(senderPubkeyHex) {
-		op.reply(senderPubkeyHex, "You need an active subscription to send emails. Send \"subscribe\" to get started.")
-		return nil
-	}
-
-	// Check rate limit
+	// Check rate limit — subscribers get the normal rate limit,
+	// unsubscribed users get 1 email per 5 minutes.
+	subscribed := op.subHandler == nil || op.subHandler.IsSubscribed(senderPubkeyHex)
 	if op.rateLimiter != nil {
-		if err := op.rateLimiter.Check(senderPubkeyHex); err != nil {
-			op.reply(senderPubkeyHex, fmt.Sprintf("Rate limit: %v", err))
-			return nil
+		if subscribed {
+			if err := op.rateLimiter.Check(senderPubkeyHex); err != nil {
+				op.reply(senderPubkeyHex, fmt.Sprintf("Rate limit: %v", err))
+				return nil
+			}
+		} else {
+			if err := op.rateLimiter.CheckFree(senderPubkeyHex); err != nil {
+				op.reply(senderPubkeyHex, fmt.Sprintf("Rate limit (free tier): %v\nSend \"subscribe\" for higher limits.", err))
+				return nil
+			}
 		}
 	}
 
@@ -68,15 +72,17 @@ func (op *OutboundProcessor) ProcessOutbound(senderPubkeyHex, content string) er
 		return nil
 	}
 
-	// Build the from address: alias@domain or truncated-pubkey@domain
+	// Build the from address: alias@domain or npub@domain.
 	fromLocal := senderPubkeyHex
 	if op.aclClient != nil {
 		if alias, err := op.aclClient.GetAliasByPubkey(senderPubkeyHex); err == nil && alias != "" {
 			fromLocal = alias
 		}
 	}
-	if fromLocal == senderPubkeyHex && len(fromLocal) > 16 {
-		fromLocal = fromLocal[:16]
+	if fromLocal == senderPubkeyHex {
+		if npub, err := bech32encoding.HexToNpub(senderPubkeyHex); err == nil {
+			fromLocal = string(npub)
+		}
 	}
 	fromAddr := fromLocal + "@" + op.domain
 

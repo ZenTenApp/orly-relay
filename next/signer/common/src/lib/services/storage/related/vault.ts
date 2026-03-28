@@ -63,7 +63,7 @@ export const unlockVault = async function (
   password: string
 ): Promise<void> {
   this.assureIsInitialized();
-  console.log('[vault] Starting unlock...');
+  // console.log('[vault] Starting unlock...');
 
   let browserSessionData = this.getBrowserSessionHandler().browserSessionData;
   if (browserSessionData) {
@@ -79,16 +79,16 @@ export const unlockVault = async function (
     );
   }
 
-  console.log('[vault] Checking password hash...');
+  // console.log('[vault] Checking password hash...');
   const passwordHash = await CryptoHelper.hash(password);
   if (passwordHash !== browserSyncData.vaultHash) {
     throw new Error('Invalid password.');
   }
-  console.log('[vault] Password hash verified');
+  // console.log('[vault] Password hash verified');
 
   // Detect vault version
   const isV2 = !!browserSyncData.salt;
-  console.log('[vault] Vault version:', isV2 ? 'v2' : 'v1');
+  // console.log('[vault] Vault version:', isV2 ? 'v2' : 'v1');
 
   let withLockedVault: LockedVaultContext;
   let vaultKey: string | undefined;
@@ -96,10 +96,10 @@ export const unlockVault = async function (
 
   if (isV2) {
     // v2: Derive key with Argon2id (~3 seconds)
-    console.log('[vault] Deriving key with Argon2id...');
+    // console.log('[vault] Deriving key with Argon2id...');
     const saltBytes = Buffer.from(browserSyncData.salt!, 'base64');
     const keyBytes = await deriveKeyArgon2(password, saltBytes);
-    console.log('[vault] Key derived, length:', keyBytes.length);
+    // console.log('[vault] Key derived, length:', keyBytes.length);
     vaultKey = Buffer.from(keyBytes).toString('base64');
     withLockedVault = {
       iv: browserSyncData.iv,
@@ -115,47 +115,47 @@ export const unlockVault = async function (
   }
 
   // Decrypt the data
-  console.log('[vault] Decrypting identities...');
+  // console.log('[vault] Decrypting identities...');
   const decryptedIdentities = await decryptIdentities.call(
     this,
     browserSyncData.identities,
     withLockedVault
   );
-  console.log('[vault] Decrypted', decryptedIdentities.length, 'identities');
+  // console.log('[vault] Decrypted', decryptedIdentities.length, 'identities');
 
-  console.log('[vault] Decrypting permissions...');
+  // console.log('[vault] Decrypting permissions...');
   const decryptedPermissions = await decryptPermissions.call(
     this,
     browserSyncData.permissions,
     withLockedVault
   );
-  console.log('[vault] Decrypted', decryptedPermissions.length, 'permissions');
+  // console.log('[vault] Decrypted', decryptedPermissions.length, 'permissions');
 
-  console.log('[vault] Decrypting relays...');
+  // console.log('[vault] Decrypting relays...');
   const decryptedRelays = await decryptRelays.call(
     this,
     browserSyncData.relays,
     withLockedVault
   );
-  console.log('[vault] Decrypted', decryptedRelays.length, 'relays');
+  // console.log('[vault] Decrypted', decryptedRelays.length, 'relays');
 
-  console.log('[vault] Decrypting NWC connections...');
+  // console.log('[vault] Decrypting NWC connections...');
   const decryptedNwcConnections = await decryptNwcConnections.call(
     this,
     browserSyncData.nwcConnections ?? [],
     withLockedVault
   );
-  console.log('[vault] Decrypted', decryptedNwcConnections.length, 'NWC connections');
+  // console.log('[vault] Decrypted', decryptedNwcConnections.length, 'NWC connections');
 
-  console.log('[vault] Decrypting Cashu mints...');
+  // console.log('[vault] Decrypting Cashu mints...');
   const decryptedCashuMints = await decryptCashuMints.call(
     this,
     browserSyncData.cashuMints ?? [],
     withLockedVault
   );
-  console.log('[vault] Decrypted', decryptedCashuMints.length, 'Cashu mints');
+  // console.log('[vault] Decrypted', decryptedCashuMints.length, 'Cashu mints');
 
-  console.log('[vault] Decrypting selectedIdentityId...');
+  // console.log('[vault] Decrypting selectedIdentityId...');
   let decryptedSelectedIdentityId: string | null = null;
   if (browserSyncData.selectedIdentityId !== null) {
     if (isV2) {
@@ -174,7 +174,7 @@ export const unlockVault = async function (
       );
     }
   }
-  console.log('[vault] selectedIdentityId:', decryptedSelectedIdentityId);
+  // console.log('[vault] selectedIdentityId:', decryptedSelectedIdentityId);
 
   browserSessionData = {
     vaultPassword: isV2 ? undefined : vaultPassword,
@@ -189,19 +189,19 @@ export const unlockVault = async function (
     cashuMints: decryptedCashuMints,
   };
 
-  console.log('[vault] Saving session data...');
+  // console.log('[vault] Saving session data...');
   await this.getBrowserSessionHandler().saveFullData(browserSessionData);
   this.getBrowserSessionHandler().setFullData(browserSessionData);
-  console.log('[vault] Session data saved');
+  // console.log('[vault] Session data saved');
 
   // Auto-migrate v1 to v2 after successful unlock
   if (!isV2) {
-    console.log('[vault] Migrating v1 to v2...');
+    // console.log('[vault] Migrating v1 to v2...');
     await migrateVaultV1ToV2.call(this, password);
-    console.log('[vault] Migration complete');
+    // console.log('[vault] Migration complete');
   }
 
-  console.log('[vault] Unlock complete!');
+  // console.log('[vault] Unlock complete!');
 };
 
 /**
@@ -296,6 +296,85 @@ async function migrateVaultV1ToV2(
 
   console.log('Vault migrated from v1 (PBKDF2) to v2 (Argon2id)');
 }
+
+export const changePassword = async function (
+  this: StorageService,
+  newPassword: string
+): Promise<void> {
+  this.assureIsInitialized();
+
+  const browserSyncData = this.getBrowserSyncHandler().browserSyncData;
+  const browserSessionData = this.getBrowserSessionHandler().browserSessionData;
+  if (!browserSyncData || !browserSessionData) {
+    throw new Error('Vault must be unlocked to change password');
+  }
+
+  const newVaultHash = await CryptoHelper.hash(newPassword);
+  const newSalt = generateSalt();
+  const newIv = generateIV();
+  const saltBytes = Buffer.from(newSalt, 'base64');
+  const keyBytes = await deriveKeyArgon2(newPassword, saltBytes);
+  const vaultKey = Buffer.from(keyBytes).toString('base64');
+
+  // Update session with new credentials so encrypt() uses them
+  browserSessionData.salt = newSalt;
+  browserSessionData.iv = newIv;
+  browserSessionData.vaultKey = vaultKey;
+  browserSessionData.vaultPassword = undefined;
+
+  // Re-encrypt everything with the new key
+  const encryptedIdentities = [];
+  for (const identity of browserSessionData.identities) {
+    encryptedIdentities.push(await encryptIdentity.call(this, identity));
+  }
+
+  const encryptedRelays = [];
+  for (const relay of browserSessionData.relays) {
+    encryptedRelays.push(await encryptRelay.call(this, relay));
+  }
+
+  const encryptedPermissions = [];
+  for (const permission of browserSessionData.permissions) {
+    encryptedPermissions.push({
+      id: await this.encrypt(permission.id),
+      identityId: await this.encrypt(permission.identityId),
+      host: await this.encrypt(permission.host),
+      method: await this.encrypt(permission.method),
+      methodPolicy: await this.encrypt(permission.methodPolicy),
+      kind: permission.kind !== undefined ? await this.encrypt(permission.kind.toString()) : undefined,
+    });
+  }
+
+  const encryptedNwcConnections = [];
+  for (const nwc of browserSessionData.nwcConnections ?? []) {
+    encryptedNwcConnections.push(await encryptNwcConnection.call(this, nwc));
+  }
+
+  const encryptedCashuMints = [];
+  for (const cashuMint of browserSessionData.cashuMints ?? []) {
+    encryptedCashuMints.push(await encryptCashuMint.call(this, cashuMint));
+  }
+
+  const encryptedSelectedIdentityId = browserSessionData.selectedIdentityId
+    ? await this.encrypt(browserSessionData.selectedIdentityId)
+    : null;
+
+  const newSyncData: BrowserSyncData = {
+    version: this.latestVersion,
+    salt: newSalt,
+    iv: newIv,
+    vaultHash: newVaultHash,
+    identities: encryptedIdentities,
+    permissions: encryptedPermissions,
+    relays: encryptedRelays,
+    nwcConnections: encryptedNwcConnections,
+    cashuMints: encryptedCashuMints,
+    selectedIdentityId: encryptedSelectedIdentityId,
+  };
+
+  await this.getBrowserSyncHandler().saveAndSetFullData(newSyncData);
+  await this.getBrowserSessionHandler().saveFullData(browserSessionData);
+};
 
 export const deleteVault = async function (
   this: StorageService,

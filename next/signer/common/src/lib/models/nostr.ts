@@ -5,7 +5,14 @@ export type Nip07Method =
   | 'nip04.encrypt'
   | 'nip04.decrypt'
   | 'nip44.encrypt'
-  | 'nip44.decrypt';
+  | 'nip44.decrypt'
+  | 'mls.init'
+  | 'mls.sendDM'
+  | 'mls.subscribe'
+  | 'mls.publishKP'
+  | 'mls.listGroups'
+  | 'mls.deliverEvent'
+  | 'mls.*';
 
 export type Nip07MethodPolicy = 'allow' | 'deny';
 

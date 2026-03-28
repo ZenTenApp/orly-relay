@@ -647,47 +647,58 @@ func (f *FieldElement) mul(a, b *FieldElement) {
 	d18 := uint32(c & 0x3FFFFFF)
 	d19 := uint32(c >> 26)
 
-	// Reduce modulo p using p = 2^256 - 2^32 - 977
-	// We add 977*d10 + 64*d11 to d0, etc.
-	d = uint64(d0) + uint64(d10)*977
-	f.n[0] = uint32(d & 0x3FFFFFF)
+	// Reduce modulo p using p = 2^256 - 2^32 - 977 = 2^256 - 4294968273.
+	// Upper terms (d10+) start at bit 260 (10*26), which is 4 bits above 256.
+	// So the reduction constant 4294968273 must be scaled by 2^4 = 16:
+	//   977 * 16 = 15632, 64 * 16 = 1024
+	// The final term d19 uses the full constant 4294968273 * 16 = 68719492368.
+	d = uint64(d0) + uint64(d10)*15632
+	t0 := uint32(d & 0x3FFFFFF)
 	d >>= 26
-	d += uint64(d1) + uint64(d10)*64 + uint64(d11)*977
-	f.n[1] = uint32(d & 0x3FFFFFF)
+	d += uint64(d1) + uint64(d10)*1024 + uint64(d11)*15632
+	t1 := uint32(d & 0x3FFFFFF)
 	d >>= 26
-	d += uint64(d2) + uint64(d11)*64 + uint64(d12)*977
-	f.n[2] = uint32(d & 0x3FFFFFF)
+	d += uint64(d2) + uint64(d11)*1024 + uint64(d12)*15632
+	t2 := uint32(d & 0x3FFFFFF)
 	d >>= 26
-	d += uint64(d3) + uint64(d12)*64 + uint64(d13)*977
-	f.n[3] = uint32(d & 0x3FFFFFF)
+	d += uint64(d3) + uint64(d12)*1024 + uint64(d13)*15632
+	t3 := uint32(d & 0x3FFFFFF)
 	d >>= 26
-	d += uint64(d4) + uint64(d13)*64 + uint64(d14)*977
-	f.n[4] = uint32(d & 0x3FFFFFF)
+	d += uint64(d4) + uint64(d13)*1024 + uint64(d14)*15632
+	t4 := uint32(d & 0x3FFFFFF)
 	d >>= 26
-	d += uint64(d5) + uint64(d14)*64 + uint64(d15)*977
-	f.n[5] = uint32(d & 0x3FFFFFF)
+	d += uint64(d5) + uint64(d14)*1024 + uint64(d15)*15632
+	t5 := uint32(d & 0x3FFFFFF)
 	d >>= 26
-	d += uint64(d6) + uint64(d15)*64 + uint64(d16)*977
-	f.n[6] = uint32(d & 0x3FFFFFF)
+	d += uint64(d6) + uint64(d15)*1024 + uint64(d16)*15632
+	t6 := uint32(d & 0x3FFFFFF)
 	d >>= 26
-	d += uint64(d7) + uint64(d16)*64 + uint64(d17)*977
-	f.n[7] = uint32(d & 0x3FFFFFF)
+	d += uint64(d7) + uint64(d16)*1024 + uint64(d17)*15632
+	t7 := uint32(d & 0x3FFFFFF)
 	d >>= 26
-	d += uint64(d8) + uint64(d17)*64 + uint64(d18)*977
-	f.n[8] = uint32(d & 0x3FFFFFF)
+	d += uint64(d8) + uint64(d17)*1024 + uint64(d18)*15632
+	t8 := uint32(d & 0x3FFFFFF)
 	d >>= 26
-	d += uint64(d9) + uint64(d18)*64 + uint64(d19)*977
-	f.n[9] = uint32(d & 0x3FFFFF)
+	d += uint64(d9) + uint64(d18)*1024 + uint64(d19)*68719492368
+	t9 := uint32(d & 0x3FFFFF)
 	d >>= 22
 
-	// Handle any overflow from the final reduction
-	d = uint64(f.n[0]) + d*977
+	// Final reduction: d is the overflow magnitude (number of times
+	// the value exceeds 2^256). At this stage it's at bit 256, so
+	// we use the unscaled prime complement (977, 64).
+	m := d
+	d = uint64(t0) + m*977
 	f.n[0] = uint32(d & 0x3FFFFFF)
-	d >>= 26
-	d += uint64(f.n[1]) + (d >> 26) * 64
+	d = (d >> 26) + uint64(t1) + m*64
 	f.n[1] = uint32(d & 0x3FFFFFF)
-	d >>= 26
-	f.n[2] += uint32(d)
+	f.n[2] = uint32((d >> 26) + uint64(t2))
+	f.n[3] = t3
+	f.n[4] = t4
+	f.n[5] = t5
+	f.n[6] = t6
+	f.n[7] = t7
+	f.n[8] = t8
+	f.n[9] = t9
 
 	f.magnitude = 1
 	f.normalized = false
@@ -699,170 +710,165 @@ func (f *FieldElement) sqr(a *FieldElement) {
 	f.mul(a, a)
 }
 
-// inv computes the modular inverse using Fermat's little theorem
+// inv computes the modular inverse using Fermat's little theorem.
+// a^(-1) = a^(p-2) mod p, where p-2 = 2^256 - 4294968275.
+// Uses the Decred/btcec addition chain: 258 squarings, 33 multiplications.
 func (f *FieldElement) inv(a *FieldElement) {
-	// a^(-1) = a^(p-2) mod p
-	// p-2 = 2^256 - 2^32 - 979
-	var x2, x3, x6, x9, x11, x22, x44, x88, x176, x220, x223, t1 FieldElement
+	var a2, a3, a4, a10, a11, a21, a42, a45, a63, a1019, a1023 FieldElement
+	a2.sqr(a)
+	a3.mul(&a2, a)
+	a4.sqr(&a2)
+	a10.sqr(&a4)
+	a10.mul(&a10, &a2)
+	a11.mul(&a10, a)
+	a21.mul(&a10, &a11)
+	a42.sqr(&a21)
+	a45.mul(&a42, &a3)
+	a63.mul(&a42, &a21)
+	a1019.sqr(&a63)
+	a1019.sqr(&a1019)
+	a1019.sqr(&a1019)
+	a1019.sqr(&a1019)
+	a1019.mul(&a1019, &a11)
+	a1023.mul(&a1019, &a4)
 
-	x2.sqr(a)
-	x2.mul(&x2, a)
+	// Build a^(2^16 - 1) through a^(2^226 - 5) using 10-bit windows
+	*f = a63
+	for i := 0; i < 5; i++ { f.sqr(f) } // 2^11 - 32
+	for i := 0; i < 5; i++ { f.sqr(f) } // 2^16 - 1024
+	f.mul(f, &a1023)                      // 2^16 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^26 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^36 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^46 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^56 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^66 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^76 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^86 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^96 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^106 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^116 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^126 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^136 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^146 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^156 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^166 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^176 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^186 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^196 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^206 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^216 - 1
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1019)                      // 2^226 - 5
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^236 - 4097
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a1023)                      // 2^246 - 4194305
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.mul(f, &a45)                        // 2^256 - 4294968275 = p-2
 
-	x3.sqr(&x2)
-	x3.mul(&x3, a)
-
-	x6.sqr(&x3)
-	x6.sqr(&x6)
-	x6.sqr(&x6)
-	x6.mul(&x6, &x3)
-
-	x9.sqr(&x6)
-	x9.sqr(&x9)
-	x9.sqr(&x9)
-	x9.mul(&x9, &x3)
-
-	x11.sqr(&x9)
-	x11.sqr(&x11)
-	x11.mul(&x11, &x2)
-
-	x22.sqr(&x11)
-	for i := 0; i < 10; i++ {
-		x22.sqr(&x22)
-	}
-	x22.mul(&x22, &x11)
-
-	x44.sqr(&x22)
-	for i := 0; i < 21; i++ {
-		x44.sqr(&x44)
-	}
-	x44.mul(&x44, &x22)
-
-	x88.sqr(&x44)
-	for i := 0; i < 43; i++ {
-		x88.sqr(&x88)
-	}
-	x88.mul(&x88, &x44)
-
-	x176.sqr(&x88)
-	for i := 0; i < 87; i++ {
-		x176.sqr(&x176)
-	}
-	x176.mul(&x176, &x88)
-
-	x220.sqr(&x176)
-	for i := 0; i < 43; i++ {
-		x220.sqr(&x220)
-	}
-	x220.mul(&x220, &x44)
-
-	x223.sqr(&x220)
-	x223.sqr(&x223)
-	x223.sqr(&x223)
-	x223.mul(&x223, &x3)
-
-	t1.sqr(&x223)
-	for i := 0; i < 22; i++ {
-		t1.sqr(&t1)
-	}
-	t1.mul(&t1, &x22)
-
-	t1.sqr(&t1)
-	t1.sqr(&t1)
-	t1.sqr(&t1)
-	t1.sqr(&t1)
-	t1.sqr(&t1)
-	t1.mul(&t1, a)
-
-	t1.sqr(&t1)
-	t1.sqr(&t1)
-	t1.sqr(&t1)
-	t1.mul(&t1, &x2)
-
-	*f = t1
 	f.magnitude = 1
 	f.normalized = false
 }
 
-// sqrt computes the modular square root if it exists
+// sqrt computes the modular square root if it exists.
+// sqrt(a) = a^((p+1)/4) = a^(2^254 - 2^30 - 244) for secp256k1.
+// Uses the Decred/btcec addition chain: 254 squarings, 13 multiplications.
 func (f *FieldElement) sqrt(a *FieldElement) bool {
-	// sqrt(a) = a^((p+1)/4) if it exists
-	// (p+1)/4 = (2^256 - 2^32 - 977 + 1) / 4 = 2^254 - 2^30 - 244
-	var x2, x3, x6, x9, x11, x22, x44, x88, x176, x220, x223, t1 FieldElement
+	var aa, a2, a3, a6, a9, a11, a22, a44, a88, a176, a220, a223 FieldElement
+	aa = *a
+	a2.sqr(&aa)
+	a2.mul(&a2, &aa)       // a^(2^2 - 1)
+	a3.sqr(&a2)
+	a3.mul(&a3, &aa)       // a^(2^3 - 1)
+	a6.sqr(&a3)
+	a6.sqr(&a6)
+	a6.sqr(&a6)
+	a6.mul(&a6, &a3)       // a^(2^6 - 1)
+	a9.sqr(&a6)
+	a9.sqr(&a9)
+	a9.sqr(&a9)
+	a9.mul(&a9, &a3)       // a^(2^9 - 1)
+	a11.sqr(&a9)
+	a11.sqr(&a11)
+	a11.mul(&a11, &a2)     // a^(2^11 - 1)
+	a22.sqr(&a11)
+	for i := 0; i < 10; i++ { a22.sqr(&a22) }
+	a22.mul(&a22, &a11)    // a^(2^22 - 1)
+	a44.sqr(&a22)
+	for i := 0; i < 21; i++ { a44.sqr(&a44) }
+	a44.mul(&a44, &a22)    // a^(2^44 - 1)
+	a88.sqr(&a44)
+	for i := 0; i < 43; i++ { a88.sqr(&a88) }
+	a88.mul(&a88, &a44)    // a^(2^88 - 1)
+	a176.sqr(&a88)
+	for i := 0; i < 87; i++ { a176.sqr(&a176) }
+	a176.mul(&a176, &a88)  // a^(2^176 - 1)
+	a220.sqr(&a176)
+	for i := 0; i < 43; i++ { a220.sqr(&a220) }
+	a220.mul(&a220, &a44)  // a^(2^220 - 1)
+	a223.sqr(&a220)
+	a223.sqr(&a223)
+	a223.sqr(&a223)
+	a223.mul(&a223, &a3)   // a^(2^223 - 1)
 
-	x2.sqr(a)
-	x2.mul(&x2, a)
-
-	x3.sqr(&x2)
-	x3.mul(&x3, a)
-
-	x6.sqr(&x3)
-	x6.sqr(&x6)
-	x6.sqr(&x6)
-	x6.mul(&x6, &x3)
-
-	x9.sqr(&x6)
-	x9.sqr(&x9)
-	x9.sqr(&x9)
-	x9.mul(&x9, &x3)
-
-	x11.sqr(&x9)
-	x11.sqr(&x11)
-	x11.mul(&x11, &x2)
-
-	x22.sqr(&x11)
-	for i := 0; i < 10; i++ {
-		x22.sqr(&x22)
-	}
-	x22.mul(&x22, &x11)
-
-	x44.sqr(&x22)
-	for i := 0; i < 21; i++ {
-		x44.sqr(&x44)
-	}
-	x44.mul(&x44, &x22)
-
-	x88.sqr(&x44)
-	for i := 0; i < 43; i++ {
-		x88.sqr(&x88)
-	}
-	x88.mul(&x88, &x44)
-
-	x176.sqr(&x88)
-	for i := 0; i < 87; i++ {
-		x176.sqr(&x176)
-	}
-	x176.mul(&x176, &x88)
-
-	x220.sqr(&x176)
-	for i := 0; i < 43; i++ {
-		x220.sqr(&x220)
-	}
-	x220.mul(&x220, &x44)
-
-	x223.sqr(&x220)
-	x223.sqr(&x223)
-	x223.sqr(&x223)
-	x223.mul(&x223, &x3)
-
-	// Compute a^((p+1)/4) = a^(2^254 - 2^30 - 244)
-	t1.sqr(&x223)
-	for i := 0; i < 22; i++ {
-		t1.sqr(&t1)
-	}
-	t1.mul(&t1, &x22)
-
-	t1.sqr(&t1)
-	t1.sqr(&t1)
-	t1.sqr(&t1)
-	t1.sqr(&t1)
-	t1.sqr(&t1)
-	t1.sqr(&t1)
-	t1.mul(&t1, &x2)
-
-	*f = t1
+	// Final exponent: (p+1)/4 = 2^254 - 2^30 - 244
+	*f = a223
+	for i := 0; i < 23; i++ { f.sqr(f) } // a^(2^246 - 2^23)
+	f.mul(f, &a22)          // a^(2^246 - 2^22 - 1)
+	for i := 0; i < 5; i++ { f.sqr(f) }
+	f.sqr(f)                // a^(2^252 - 2^28 - 2^6)
+	f.mul(f, &a2)           // a^(2^252 - 2^28 - 2^6 + 2^2 - 1)
+	f.sqr(f)
+	f.sqr(f)                // a^(2^254 - 2^30 - 2^8 + 2^4 - 4)
+	//                      //   = a^(2^254 - 2^30 - 244)
+	//                      //   = a^((p+1)/4)
 	f.normalize()
 
-	// Verify: r^2 == a
+	// Verify: f^2 == a
 	var check FieldElement
 	check.sqr(f)
 	check.normalize()

@@ -1,10 +1,12 @@
 package marmot
 
 import (
+	"crypto/sha256"
 	"errors"
 	"sync"
 	"time"
 
+	"golang.org/x/crypto/hkdf"
 	"next.orly.dev/pkg/nostr/crypto/encryption"
 	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/nostr/encoders/hex"
@@ -29,8 +31,16 @@ func (c *LocalCrypto) Pub() []byte { return c.Sign.Pub() }
 
 func (c *LocalCrypto) SignEvent(ev *event.E) error { return ev.Sign(c.Sign) }
 
+func (c *LocalCrypto) convKey(peerPub []byte) ([]byte, error) {
+	shared, err := c.Sign.ECDHRaw(peerPub)
+	if err != nil {
+		return nil, err
+	}
+	return hkdf.Extract(sha256.New, shared, []byte("nip44-v2")), nil
+}
+
 func (c *LocalCrypto) Nip44Encrypt(peerPub []byte, plaintext []byte) (string, error) {
-	convKey, err := encryption.GenerateConversationKey(c.Sign.Sec(), peerPub)
+	convKey, err := c.convKey(peerPub)
 	if err != nil {
 		return "", err
 	}
@@ -38,7 +48,7 @@ func (c *LocalCrypto) Nip44Encrypt(peerPub []byte, plaintext []byte) (string, er
 }
 
 func (c *LocalCrypto) Nip44Decrypt(peerPub []byte, ciphertext string) (string, error) {
-	convKey, err := encryption.GenerateConversationKey(c.Sign.Sec(), peerPub)
+	convKey, err := c.convKey(peerPub)
 	if err != nil {
 		return "", err
 	}

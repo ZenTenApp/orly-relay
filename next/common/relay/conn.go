@@ -27,7 +27,8 @@ type Conn struct {
 	onOK    func(string, bool, string)
 	onAuth  func(string)
 
-	closing bool // true when Close() was called intentionally
+	closing        bool     // true when Close() was called intentionally
+	pendingPublish []string // EVENT messages queued while connecting
 
 	// ScheduleReconnect is set by the consumer to provide a delayed callback.
 	// When a connection drops with active subscriptions, this is called with
@@ -61,6 +62,7 @@ func (c *Conn) dial() {
 				c.onReady = nil
 			}
 			c.flushSubs()
+			c.flushPublish()
 		},
 		func(connID int, code int, reason string) {
 			c.state = StateClosed
@@ -181,9 +183,13 @@ func (c *Conn) Subscribe(id string, filters []*nostr.Filter) *Sub {
 	return sub
 }
 
-// Publish sends an EVENT message.
+// Publish sends an EVENT message. Queues if the connection is still opening.
 func (c *Conn) Publish(ev *nostr.Event) {
 	msg := "[\"EVENT\"," + eventJSON(ev) + "]"
+	if c.state != StateOpen {
+		c.pendingPublish = append(c.pendingPublish, msg)
+		return
+	}
 	ws.Send(c.wsConn, msg)
 }
 
@@ -224,6 +230,14 @@ func (c *Conn) SetOnOK(fn func(string, bool, string)) {
 // SetOnAuth sets a handler for AUTH challenges.
 func (c *Conn) SetOnAuth(fn func(string)) {
 	c.onAuth = fn
+}
+
+// flushPublish sends queued EVENT messages that arrived while connecting.
+func (c *Conn) flushPublish() {
+	for _, msg := range c.pendingPublish {
+		ws.Send(c.wsConn, msg)
+	}
+	c.pendingPublish = nil
 }
 
 // flushSubs re-sends REQ for all stored subscriptions (used after WS opens).

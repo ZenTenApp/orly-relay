@@ -155,6 +155,35 @@ const nostr = {
       return plaintext;
     },
   },
+
+  mls: {
+    async init(relayURLs: string[], lastEventTS?: number): Promise<string> {
+      debug('mls.init received');
+      const r = await nostr.messenger.request('mls.init' as any, { relayURLs, lastEventTS: lastEventTS || 0 });
+      debug('mls.init result: ' + r);
+      return r;
+    },
+    async sendDM(recipient: string, content: string): Promise<string> {
+      debug('mls.sendDM received: ' + recipient.slice(0, 8) + '...');
+      const r = await nostr.messenger.request('mls.sendDM' as any, { recipient, content });
+      debug('mls.sendDM result: ' + r);
+      return r;
+    },
+    async subscribe(): Promise<string> {
+      debug('mls.subscribe received');
+      return await nostr.messenger.request('mls.subscribe' as any, {});
+    },
+    async publishKP(): Promise<string> {
+      debug('mls.publishKP received');
+      return await nostr.messenger.request('mls.publishKP' as any, {});
+    },
+    async listGroups(): Promise<string[]> {
+      return await nostr.messenger.request('mls.listGroups' as any, {});
+    },
+    async deliverEvent(subId: number, eventJSON: string): Promise<string> {
+      return await nostr.messenger.request('mls.deliverEvent' as any, { subId, eventJSON });
+    },
+  },
 };
 
 window.nostr = nostr as any;
@@ -245,6 +274,14 @@ window.webln = webln as any;
 // This is dispatched on document as per the WebLN standard
 document.dispatchEvent(new Event('webln:ready'));
 
-const debug = function (_value: any) {
-  // Disabled — enable for NIP-07 debugging: console.log(JSON.stringify(_value));
+// Listen for MLS push messages from the extension background.
+// These arrive via content script relay and are dispatched as custom events
+// so the page app can handle them (publish events, display DMs, etc.).
+window.addEventListener('message', (event: MessageEvent) => {
+  if (event.data?.ext !== 'smesh-signer' || event.data?.type !== 'mls-push') return;
+  window.dispatchEvent(new CustomEvent('nostr-mls', { detail: event.data.data }));
+});
+
+const debug = function (value: any) {
+  console.log('[signer]', typeof value === 'string' ? value : JSON.stringify(value));
 };

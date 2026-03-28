@@ -1,7 +1,6 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
-  BrowserSyncFlow,
   SignerMetaData_VaultSnapshot,
   IconButtonComponent,
   NavComponent,
@@ -20,7 +19,6 @@ import { getNewStorageServiceConfig } from '../../common/data/get-new-storage-se
 export class VaultImportComponent extends NavComponent implements OnInit {
   snapshots: SignerMetaData_VaultSnapshot[] = [];
   selectedSnapshot: SignerMetaData_VaultSnapshot | undefined;
-  syncText: string | undefined;
 
   readonly #storage = inject(StorageService);
   readonly #startup = inject(StartupService);
@@ -53,19 +51,5 @@ export class VaultImportComponent extends NavComponent implements OnInit {
     this.snapshots = (
       this.#storage.getSignerMetaHandler().signerMetaData?.vaultSnapshots ?? []
     ).sortBy((x) => x.fileName, 'desc');
-
-    const syncFlow =
-      this.#storage.getSignerMetaHandler().signerMetaData?.syncFlow;
-
-    switch (syncFlow) {
-      case BrowserSyncFlow.BROWSER_SYNC:
-        this.syncText = 'MOZILLA FIREFOX';
-        break;
-
-      default:
-      case BrowserSyncFlow.NO_SYNC:
-        this.syncText = 'OFF';
-        break;
-    }
   }
 }

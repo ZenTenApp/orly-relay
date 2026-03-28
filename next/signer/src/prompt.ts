@@ -78,6 +78,10 @@ switch (method) {
     title = 'Keysend Payment';
     break;
 
+  case 'mls.*':
+    title = 'Use Encrypted Messaging (MLS)';
+    break;
+
   default:
     break;
 }
@@ -262,6 +266,18 @@ const cardWeblnKeysendElement = document.getElementById('cardWeblnKeysend');
 if (cardWeblnKeysendElement) {
   if (method !== 'webln.keysend') {
     cardWeblnKeysendElement.style.display = 'none';
+  }
+}
+
+const cardMlsElement = document.getElementById('cardMls');
+if (cardMlsElement) {
+  if (method === 'mls.*') {
+    const titleSpanMls = document.getElementById('titleSpanMls');
+    if (titleSpanMls) {
+      titleSpanMls.innerText = title.toLowerCase();
+    }
+  } else {
+    cardMlsElement.style.display = 'none';
   }
 }
 

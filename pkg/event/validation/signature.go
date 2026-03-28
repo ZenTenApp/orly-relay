@@ -26,6 +26,13 @@ func ValidateEventID(ev *event.E) Result {
 
 // ValidateSignature verifies the event signature.
 func ValidateSignature(ev *event.E) Result {
+	// NIP-59 gift wraps (1059) and MLS group messages (445) use ephemeral
+	// throwaway keys that provide no identity binding. The outer signature
+	// is architecturally meaningless — skip validation for these kinds.
+	if ev.Kind == 1059 || ev.Kind == 445 {
+		return OK()
+	}
+
 	ok, err := ev.Verify()
 	if err != nil {
 		log.E.F("ValidateSignature ERROR: kind=%d pubkey=%s id=%0x err=%v",

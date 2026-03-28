@@ -22,7 +22,6 @@ export class FirefoxMetaHandler extends SignerMetaHandler {
 
   async saveFullData(data: ExtensionSettings): Promise<void> {
     await browser.storage.local.set(data as Record<string, any>);
-    console.log(data);
   }
 
   async clearData(keep: string[]): Promise<void> {

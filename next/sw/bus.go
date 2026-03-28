@@ -6,10 +6,10 @@ import (
 	"common/jsbridge/sw"
 )
 
-// Bus — BroadcastChannel connecting shell, marmot, and relay SWs.
+// Bus — BroadcastChannel connecting shell and relay SWs.
 // All client-local, no server involvement.
 //
-// Satellite SWs (relay, marmot) may be terminated by the browser at any time.
+// Satellite SWs may be terminated by the browser at any time.
 // BroadcastChannel messages don't wake terminated SWs. We queue messages for
 // each destination until it sends a READY announcement, then flush the queue.
 
@@ -19,13 +19,10 @@ var bus bc.BC
 var (
 	relayReady bool
 	relayQueue []string
-	marmotReady bool
-	marmotQueue []string
 )
 
 func connectBus() {
 	bus = bc.Open("smesh-bus", func(msg string) { onBusMessage(msg) })
-	sw.Log("shell-sw: bus connected (BroadcastChannel)")
 	// Ask satellite SWs to re-announce readiness (shell may have restarted).
 	bc.Send(bus, "{\"from\":\"shell\",\"to\":\"*\",\"msg\":[\"PING\"]}")
 	if myPubkey == "" {
@@ -35,49 +32,25 @@ func connectBus() {
 
 func busSend(to, msg string) {
 	envelope := "{\"from\":\"shell\",\"to\":" + jstr(to) + ",\"msg\":" + msg + "}"
-	switch to {
-	case "relay":
-		if !relayReady {
-			relayQueue = append(relayQueue, envelope)
-			return
-		}
-	case "marmot":
-		if !marmotReady {
-			marmotQueue = append(marmotQueue, envelope)
-			return
-		}
+	if to == "relay" && !relayReady {
+		relayQueue = append(relayQueue, envelope)
+		return
 	}
 	bc.Send(bus, envelope)
 }
 
 func flushQueue(to string) {
-	switch to {
-	case "relay":
-		wasReady := relayReady
-		relayReady = true
-		n := len(relayQueue)
-		for _, msg := range relayQueue {
-			bc.Send(bus, msg)
-		}
-		relayQueue = nil
-		sw.Log("shell-sw: relay ready, flushed " + helpers.Itoa(int64(n)) + " queued messages")
-		if wasReady {
-			sw.Log("shell-sw: relay SW restarted, requesting resub")
-			broadcastToClients("[\"RESUB\"]")
-		}
-	case "marmot":
-		wasReady := marmotReady
-		marmotReady = true
-		n := len(marmotQueue)
-		for _, msg := range marmotQueue {
-			bc.Send(bus, msg)
-		}
-		marmotQueue = nil
-		sw.Log("shell-sw: marmot ready, flushed " + helpers.Itoa(int64(n)) + " queued messages")
-		if wasReady {
-			sw.Log("shell-sw: marmot SW restarted, requesting resub")
-			broadcastToClients("[\"RESUB\"]")
-		}
+	if to != "relay" {
+		return
+	}
+	wasReady := relayReady
+	relayReady = true
+	for _, msg := range relayQueue {
+		bc.Send(bus, msg)
+	}
+	relayQueue = nil
+	if wasReady {
+		broadcastToClients("[\"RESUB\"]")
 	}
 }
 
@@ -103,11 +76,13 @@ func onBusMessage(raw string) {
 		return
 	}
 
-	// Any message from a satellite SW also confirms it's alive.
+	// Any message from relay SW also confirms it's alive.
 	if from == "relay" && !relayReady {
 		flushQueue("relay")
-	} else if from == "marmot" && !marmotReady {
-		flushQueue("marmot")
+	}
+
+	if msgType != "LOG" && msgType != "FWD" && msgType != "FWD_ALL" && msgType != "FWD_BATCH" {
+		sw.Log("shell: bus " + from + "→" + msgType)
 	}
 
 	switch msgType {
@@ -117,28 +92,11 @@ func onBusMessage(raw string) {
 		broadcastToClients("[\"SW_LOG\"," + jstr(origin) + "," + jstr(logMsg) + "]")
 		return
 	case "FWD":
-		clientID := w.str()
-		innerMsg := w.raw()
-		if clientID == "" {
-			broadcastToClients(innerMsg)
-		} else {
-			sendToClient(clientID, innerMsg)
-		}
+		dispatchFwd(w.str(), w.raw())
 	case "FWD_ALL":
-		innerMsg := w.raw()
-		broadcastToClients(innerMsg)
-	case "DM_RECEIVED":
-		dmJSON := w.raw()
-		busSend("relay", "[\"SAVE_DM\","+dmJSON+"]")
-	case "MLS_GROUPS":
-		raw := w.raw()
-		broadcastToClients("[\"MLS_GROUPS\"," + raw + "]")
-	case "DM_SENT":
-		tsStr := w.raw()
-		broadcastToClients("[\"DM_SENT\"," + tsStr + "]")
-	case "MLS_STATUS":
-		text := w.raw()
-		broadcastToClients("[\"MLS_STATUS\"," + text + "]")
+		broadcastToClients(w.raw())
+	case "FWD_BATCH":
+		dispatchFwdBatch(msg)
 	case "CRYPTO_REQ":
 		from := w.str()
 		id := int(w.num())
@@ -151,13 +109,121 @@ func onBusMessage(raw string) {
 	}
 }
 
+func dispatchFwd(clientID, innerMsg string) {
+	if clientID == "" {
+		if hasMarmotSub(innerMsg) {
+			deliverMarmotEvent(innerMsg)
+		} else {
+			broadcastToClients(innerMsg)
+		}
+	} else {
+		sendToClient(clientID, innerMsg)
+	}
+}
+
+// dispatchFwdBatch unpacks a FWD_BATCH message and dispatches each item.
+// Format: ["FWD_BATCH", [ ["FWD",clientID,msg], ["FWD_ALL",msg], ... ] ]
+func dispatchFwdBatch(raw string) {
+	// Find the outer array (second element of the batch message).
+	bw := newMW(raw)
+	_ = bw.str() // "FWD_BATCH"
+	// Now we're at the inner array. Walk it as raw values.
+	bw.sep()
+	if bw.i >= len(bw.s) || bw.s[bw.i] != '[' {
+		return
+	}
+	bw.i++ // skip '['
+	for {
+		bw.sep()
+		if bw.i >= len(bw.s) || bw.s[bw.i] == ']' {
+			break
+		}
+		// Each item is a full message array like ["FWD","cid",...] or ["FWD_ALL",...]
+		itemStart := bw.i
+		bw.i = skipval(bw.s, bw.i)
+		if bw.i < 0 {
+			break
+		}
+		item := bw.s[itemStart:bw.i]
+		iw := newMW(item)
+		t := iw.str()
+		switch t {
+		case "FWD":
+			dispatchFwd(iw.str(), iw.raw())
+		case "FWD_ALL":
+			broadcastToClients(iw.raw())
+		}
+	}
+}
+
+// hasMarmotSub checks if a FWD inner message is a marmot MLS subscription event.
+func hasMarmotSub(msg string) bool {
+	const prefix = "[\"EVENT\",\"marmot-sub-"
+	return len(msg) > len(prefix) && msg[:len(prefix)] == prefix
+}
+
+// deliverMarmotEvent converts a relay EVENT for a marmot subscription
+// into an MLS_PROXY deliverEvent message for the page.
+func deliverMarmotEvent(msg string) {
+	iw := newMW(msg)
+	_ = iw.str()            // "EVENT"
+	fullSubID := iw.str()   // "marmot-sub-<n>"
+	eventJSON := iw.raw()   // the event object
+	subID := fullSubID[11:] // strip "marmot-sub-" (11 chars)
+	// Event must be a JSON string (not raw object) — Go WASM calls args[1].String().
+	broadcastToClients("[\"MLS_PROXY\",\"deliverEvent\"," + subID + "," + jstr(eventJSON) + "]")
+}
+
 // jsonField extracts a string value (unquoted) for a key from a JSON object string.
 func jsonField(json, key string) string {
 	v := jsonFieldRaw(json, key)
 	if len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"' {
-		return v[1 : len(v)-1]
+		return jsonUnescape(v[1 : len(v)-1])
 	}
 	return v
+}
+
+// jsonUnescape handles JSON string escape sequences: \n \t \\ \" \/ \r
+func jsonUnescape(s string) string {
+	if len(s) == 0 {
+		return s
+	}
+	// Fast path: no escapes.
+	hasEscape := false
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' {
+			hasEscape = true
+			break
+		}
+	}
+	if !hasEscape {
+		return s
+	}
+	out := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			switch s[i+1] {
+			case 'n':
+				out = append(out, '\n')
+			case 't':
+				out = append(out, '\t')
+			case 'r':
+				out = append(out, '\r')
+			case '\\':
+				out = append(out, '\\')
+			case '"':
+				out = append(out, '"')
+			case '/':
+				out = append(out, '/')
+			default:
+				out = append(out, s[i], s[i+1])
+			}
+			i++
+		} else {
+			out = append(out, s[i])
+		}
+	}
+	return string(out)
 }
 
 // jsonFieldRaw extracts a raw JSON value for a key from a JSON object string.
@@ -184,6 +250,17 @@ func jsonFieldRaw(json, key string) string {
 		return ""
 	}
 	return json[idx:end]
+}
+
+// parseTS parses a numeric string (from JSON) to int64.
+func parseTS(s string) int64 {
+	var n int64
+	for i := 0; i < len(s); i++ {
+		if s[i] >= '0' && s[i] <= '9' {
+			n = n*10 + int64(s[i]-'0')
+		}
+	}
+	return n
 }
 
 // strsJSON serializes a string slice to a JSON array.

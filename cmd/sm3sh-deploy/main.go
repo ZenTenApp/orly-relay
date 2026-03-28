@@ -22,7 +22,7 @@ import (
 const chunkSize = 512 * 1024 // 512 KB
 
 func main() {
-	url := flag.String("url", "", "sm3sh base URL (e.g. https://sm3sh.orly.dev)")
+	url := flag.String("url", "", "smesh base URL (e.g. https://smesh.lol)")
 	nsec := flag.String("nsec", "", "deploy nsec (or set DEPLOY_NSEC env)")
 	dir := flag.String("dir", "app/smesh3", "directory to bundle")
 	flag.Parse()

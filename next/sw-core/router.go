@@ -267,8 +267,6 @@ func routerCleanupProxy(proxyID string) {
 func routerOnRelayEvent(relayURL string, ev *nostr.Event) {
 	evJSON := ev.ToJSON()
 
-	sw.Log("relay event kind=" + helpers.Itoa(int64(ev.Kind)) + " from=" + relayURL)
-
 	pushToMatchingSubs(ev)
 
 	cacheStore(evJSON, func(saved bool) {

@@ -64,6 +64,7 @@ Key architectural principles:
 - Relay communication: WebSocket (primary), SSE (secondary/implemented previously)
 - NIPs compliance: check existing implementation before assuming NIP requirements
 - DO NOT use nostr-tools. The crypto is implemented natively in TinyGo.
+- **DMs are MLS (marmot) only.** The smesh UI has NO NIP-04 (kind 4) and NO NIP-17 (kind 1059 gift wrap) support. All DMs go through MLS_SEND → marmot WASM → signer extension. The email bridge must accept MLS DMs from the browser — there is no fallback protocol.
 
 ## Developer Context
 
@@ -95,13 +96,39 @@ Wu Xing cycles (generating/overcoming) and I Ching hexagrams are operational too
 
 **Imaginary Parameters**: i=temporal inversion in every fundamental law. Teleology (final causation) encoded as imaginary sector of physics. T=imaginary time. Absolute zero=infinite backward evolution. Hadamard rotation connects real/imaginary sectors. SVP hardness=third law. Links to hamadryad cryptosystem and Dendrite.
 
-## Deployment
+## Local Testing (default for dev)
+
+Build and test locally before deploying to VPS. This is the default workflow.
+
+```sh
+# Build orly for local arch
+go build -o /tmp/orly-local ./cmd/orly
+
+# Compile all tinyjs targets
+./build.sh
+
+# Run with disk mode (fsnotify hot-reload + SSE)
+ORLY_SMESH3_DIR=$PWD/app/smesh3 ORLY_SMESH3_PORT=8090 /tmp/orly-local
+```
+
+Access at `http://127.0.0.1:8090`. In dev mode the server binds `0.0.0.0` so satellite SWs run on separate origins for thread isolation:
+- `127.0.0.1:8090` — main app + shell SW
+- `127.0.0.2:8090` — marmot SW (via cross-origin iframe)
+- `127.0.0.3:8090` — relay SW (via cross-origin iframe)
+
+All 127.0.0.x are secure contexts (loopback), so SWs register without HTTPS.
+
+After `./build.sh`: fsnotify detects changes → SSE pushes version → browser reloads. No rsync, no VPS.
+
+## VPS Deployment (production)
 
 VPS at 69.164.249.71 (Ubuntu), accessed via `ssh orly` (WireGuard tunnel to 10.0.0.1).
 
-**Stack**: Caddy → orly binary (relay on :3334, smesh2 on :8089, sm3sh on :8090)
+**Stack**: Caddy → orly binary (relay on :3334, smesh2 on :8089, smesh on :8090)
+**Domains**: `smesh.lol` (primary), `sm3sh.mleku.dev` (legacy) — both point to :8090
+**Subdomains**: `marmot.smesh.lol`, `relay.smesh.lol` for SW thread isolation
 **Service**: systemd `orly.service`, binary at `/home/mleku/.local/bin/orly`
-**sm3sh assets**: `/home/mleku/sm3sh/` — served in disk mode, fsnotify watches for changes, SSE pushes version to service worker which reloads all clients.
+**smesh assets**: `/home/mleku/sm3sh/` — served in disk mode, fsnotify watches for changes, SSE pushes version to service worker which reloads all clients.
 
 No Go on VPS. Cross-compile + rsync:
 ```sh
@@ -119,7 +146,7 @@ Asset-only deploy (no binary change): just rsync, fsnotify triggers reload autom
 
 Two files to bump on every release:
 - `pkg/version/version` — canonical version (plain text, embedded into binary)
-- `next/sm3sh/main.go` line 13 — `version = "v0.65.43"` (sm3sh UI display)
+- `next/sm3sh/main.go` line 13 — `version = "v0.65.44"` (smesh UI display)
 
 Both must stay in sync.
 
@@ -160,6 +187,12 @@ cd next/signer && bun run xpi             # package → next/signer/dist/smesh_s
 After build, reload in `about:debugging` → "This Firefox" → "Load Temporary Add-on" (pick any file in `dist/firefox/`).
 
 Debug logging: `src/smesh-signer-extension.ts` line 248 — `debug()` function. Enable by uncommenting `console.log` inside it. Produces verbose "getPublicKey received", "nip44.decrypt received" etc. on every NIP-07 call.
+
+## Client Tag
+
+Published events (kind 1, 1111, etc.) should include a `client` tag: `["client","smesh.lol"]`. This is the domain where the app is served, so Nostr clients that display the client name show the actual URL.
+
+Configurable via `ORLY_CLIENT_TAG` env var (default: `smesh.lol`). Server exposes it at `/__client-tag` so the frontend can read it at runtime without recompilation. Self-hosters set their own domain.
 
 ## Nostr-First Architecture
 

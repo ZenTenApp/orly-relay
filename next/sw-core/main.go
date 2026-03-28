@@ -8,7 +8,7 @@ import (
 
 // App Shell domain — Service Worker lifecycle, static asset caching, SSE version monitoring.
 
-const cacheName = "sm3sh"
+const cacheName = "smesh"
 
 var appFiles = []string{
 	// Main app.
@@ -115,9 +115,7 @@ func main() {
 	initRouter()
 	initRelayProxy()
 	initSharedState()
-	idb.Open(func() {
-		sw.Log("IDB ready")
-	})
+	idb.Open(func() {})
 	sw.OnInstall(onInstall)
 	sw.OnActivate(onActivate)
 	sw.OnFetch(onFetch)

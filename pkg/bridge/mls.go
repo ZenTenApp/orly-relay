@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"next.orly.dev/pkg/lol/log"
 	"next.orly.dev/pkg/nostr/encoders/event"
@@ -29,8 +30,7 @@ func (a *relayAdapter) Subscribe(ctx context.Context, ff *filter.S) (marmot.Even
 	return sub, nil
 }
 
-// initMLS initializes the MLS client for the bridge. Called during Start()
-// when MLSEnabled is true.
+// initMLS initializes the MLS client for the bridge.
 func (b *Bridge) initMLS() error {
 	groupDir := filepath.Join(b.cfg.DataDir, "mls-groups")
 	store, err := marmot.NewFileGroupStore(groupDir)
@@ -86,8 +86,6 @@ func (b *Bridge) handleMLSDM(senderPub []byte, plaintext []byte) {
 
 	log.I.F("received MLS DM from %s: %d bytes", senderPubHex, len(plaintext))
 
-	b.recordSenderFormat(senderPubHex, dmFormatMLS)
-
 	if b.router != nil {
 		b.router.RouteDM(b.ctx, senderPubHex, string(plaintext))
 	}
@@ -123,12 +121,23 @@ func (b *Bridge) mlsKeyPackageRelaysEvent(relayURL string) (*event.E, error) {
 func (b *Bridge) mlsWatchLoop() {
 	defer b.wg.Done()
 
+	delay := time.Second
 	for {
 		if err := b.mlsSubscribeAndProcess(); err != nil {
 			if b.ctx.Err() != nil {
 				return
 			}
-			log.W.F("MLS subscription error: %v", err)
+			log.W.F("MLS subscription error: %v, retrying in %v", err, delay)
+			select {
+			case <-time.After(delay):
+				if delay < 30*time.Second {
+					delay *= 2
+				}
+			case <-b.ctx.Done():
+				return
+			}
+		} else {
+			delay = time.Second // reset on success
 		}
 	}
 }

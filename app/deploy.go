@@ -75,7 +75,7 @@ func (s *Smesh3Server) deployBegin(w http.ResponseWriter, r *http.Request) {
 	}
 	deploySessionsMu.Unlock()
 
-	log.I.F("sm3sh deploy: begin hash=%s parts=%d", hash[:16], total)
+	log.I.F("smesh deploy: begin hash=%s parts=%d", hash[:16], total)
 	fmt.Fprint(w, "ok")
 }
 
@@ -183,7 +183,7 @@ func (s *Smesh3Server) deployApply(w http.ResponseWriter, r *http.Request) {
 	}
 	ok2, err := verifier.Verify(computed[:], sig)
 	if err != nil || !ok2 {
-		log.W.F("sm3sh deploy: signature verification failed")
+		log.W.F("smesh deploy: signature verification failed")
 		http.Error(w, "signature verification failed", http.StatusForbidden)
 		return
 	}
@@ -199,7 +199,7 @@ func (s *Smesh3Server) extractAndSwap(w http.ResponseWriter, bundle []byte, hash
 	os.RemoveAll(newDir)
 	if err := extractTarXz(bundle, newDir); err != nil {
 		os.RemoveAll(newDir)
-		log.E.F("sm3sh deploy: extract failed: %v", err)
+		log.E.F("smesh deploy: extract failed: %v", err)
 		http.Error(w, "extract failed: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -210,7 +210,7 @@ func (s *Smesh3Server) extractAndSwap(w http.ResponseWriter, bundle []byte, hash
 
 	if err := os.Symlink(newDir, tmpLink); err != nil {
 		os.RemoveAll(newDir)
-		log.E.F("sm3sh deploy: symlink failed: %v", err)
+		log.E.F("smesh deploy: symlink failed: %v", err)
 		http.Error(w, "deploy failed", http.StatusInternalServerError)
 		return
 	}
@@ -227,14 +227,14 @@ func (s *Smesh3Server) extractAndSwap(w http.ResponseWriter, bundle []byte, hash
 		os.RemoveAll(oldDir)
 		if err := os.Rename(s.dir, oldDir); err != nil {
 			os.RemoveAll(newDir)
-			log.E.F("sm3sh deploy: rename live→old failed: %v", err)
+			log.E.F("smesh deploy: rename live→old failed: %v", err)
 			http.Error(w, "deploy failed", http.StatusInternalServerError)
 			return
 		}
 		if err := os.Symlink(newDir, s.dir); err != nil {
 			os.Rename(oldDir, s.dir) // rollback
 			os.RemoveAll(newDir)
-			log.E.F("sm3sh deploy: symlink failed: %v", err)
+			log.E.F("smesh deploy: symlink failed: %v", err)
 			http.Error(w, "deploy failed", http.StatusInternalServerError)
 			return
 		}
@@ -249,7 +249,7 @@ func (s *Smesh3Server) extractAndSwap(w http.ResponseWriter, bundle []byte, hash
 
 	s.bumpVersion()
 
-	log.I.F("sm3sh deploy: applied %s (%d bytes xz)", hashHex, len(bundle))
+	log.I.F("smesh deploy: applied %s (%d bytes xz)", hashHex, len(bundle))
 	w.Header().Set("Content-Type", "text/plain")
 	fmt.Fprintf(w, "ok version=%d\n", s.version)
 }

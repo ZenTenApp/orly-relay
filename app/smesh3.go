@@ -21,7 +21,7 @@ import (
 //go:embed smesh3
 var smesh3FS embed.FS
 
-// Smesh3Server serves the sm3sh web client with optional hot-reload.
+// Smesh3Server serves the smesh web client with optional hot-reload.
 // When dir is set, serves from disk and watches for changes via fsnotify.
 // Connected clients receive version updates over SSE.
 type Smesh3Server struct {
@@ -32,6 +32,7 @@ type Smesh3Server struct {
 	dir      string
 
 	deployPub []byte // 32-byte x-only pubkey for /__deploy auth
+	clientTag string // client tag for published events (NIP-89)
 
 	mu       sync.RWMutex
 	version  int64
@@ -39,15 +40,16 @@ type Smesh3Server struct {
 	cancelFn context.CancelFunc
 }
 
-// NewSmesh3Server creates a new sm3sh HTTP server.
+// NewSmesh3Server creates a new smesh HTTP server.
 // If dir is non-empty, files are served from disk with hot-reload.
 // deployPubHex is the hex-encoded pubkey authorized for /__deploy (empty disables).
-func NewSmesh3Server(port int, dir, deployPubHex string) *Smesh3Server {
+func NewSmesh3Server(port int, dir, deployPubHex, clientTag string) *Smesh3Server {
 	s := &Smesh3Server{
-		port:    port,
-		dir:     dir,
-		version: time.Now().UnixMilli(),
-		clients: make(map[chan int64]struct{}),
+		port:      port,
+		dir:       dir,
+		clientTag: clientTag,
+		version:   time.Now().UnixMilli(),
+		clients:   make(map[chan int64]struct{}),
 	}
 	if len(deployPubHex) == 64 {
 		pub, err := hex.DecodeString(deployPubHex)
@@ -58,7 +60,7 @@ func NewSmesh3Server(port int, dir, deployPubHex string) *Smesh3Server {
 	return s
 }
 
-// Start begins serving the sm3sh client.
+// Start begins serving the smesh client.
 func (s *Smesh3Server) Start(ctx context.Context) error {
 	ctx, s.cancelFn = context.WithCancel(ctx)
 
@@ -66,12 +68,12 @@ func (s *Smesh3Server) Start(ctx context.Context) error {
 	if s.dir != "" {
 		fileHandler = http.FileServer(http.Dir(s.dir))
 		if err := s.startWatcher(ctx); err != nil {
-			log.W.F("sm3sh: fsnotify failed, hot-reload disabled: %v", err)
+			log.W.F("smesh: fsnotify failed, hot-reload disabled: %v", err)
 		}
 	} else {
 		webDist, err := fs.Sub(smesh3FS, "smesh3")
 		if err != nil {
-			return fmt.Errorf("failed to load embedded sm3sh app: %w", err)
+			return fmt.Errorf("failed to load embedded smesh app: %w", err)
 		}
 		fileHandler = http.FileServer(http.FS(webDist))
 	}
@@ -84,32 +86,72 @@ func (s *Smesh3Server) Start(ctx context.Context) error {
 	// Version endpoint (quick poll fallback).
 	mux.HandleFunc("/__version", s.handleVersion)
 
+	// Client tag for published events.
+	mux.HandleFunc("/__client-tag", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("Cache-Control", "no-cache")
+		fmt.Fprint(w, s.clientTag)
+	})
+
 	// Signed bundle deploy endpoint.
 	if len(s.deployPub) == 32 {
 		mux.HandleFunc("/__deploy", s.handleDeploy)
-		log.I.F("sm3sh: /__deploy enabled for pubkey %x", s.deployPub)
+		log.I.F("smesh: /__deploy enabled for pubkey %x", s.deployPub)
 	}
 
 	// Satellite SW loader pages — serve minimal HTML that registers the SW
 	// and periodically posts a keepalive message to prevent browser from
 	// terminating the SW. Without this, BroadcastChannel messages are lost.
-	for _, swDir := range []string{"$sw-marmot", "$sw-relay"} {
+	for _, swDir := range []string{"$sw-relay"} {
 		dir := swDir
 		mux.HandleFunc("/"+dir+"/loader.html", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			_ = s.version
 			fmt.Fprintf(w, `<!DOCTYPE html><html><body>
 <script>
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('/%s/$entry.mjs',{type:'module',scope:'/%s/'})
-    .then(()=>console.log('%s SW registered'))
-    .catch(e=>console.error('%s SW failed:',e));
+  function sendPort(w){
+    var ch=new MessageChannel();
+    w.postMessage({type:'bus-port'},[ch.port2]);
+    ch.port1.onmessage=function(ev){
+      var d=ev.data;
+      if(typeof d==='string'&&d.length>0&&d[0]==='{')
+        window.parent.postMessage(d,'*');
+    };
+    console.log('%s port sent to SW');
+  }
+  async function boot(){
+    var regs=await navigator.serviceWorker.getRegistrations();
+    for(var r of regs){if(r.scope.includes('/%s/'))await r.unregister();}
+    var reg=await navigator.serviceWorker.register('/%s/$entry.mjs',{type:'module',scope:'/%s/'});
+    console.log('%s SW registered');
+    var sw=reg.active;
+    if(sw) sendPort(sw);
+    reg.addEventListener('updatefound',function(){
+      var n=reg.installing;
+      if(n) n.addEventListener('statechange',function(){
+        if(n.state==='activated') sendPort(n);
+      });
+    });
+    if(!sw){
+      sw=reg.installing||reg.waiting;
+      if(sw) sw.addEventListener('statechange',function(){if(sw.state==='activated')sendPort(sw);});
+    }
+  }
+  boot().catch(e=>console.error('%s SW boot failed:',e));
+  window.addEventListener('message',ev=>{
+    var d=ev.data;
+    if(typeof d==='string'&&d.length>0&&d[0]==='{'&&navigator.serviceWorker.controller){
+      navigator.serviceWorker.controller.postMessage(d);
+    }
+  });
   setInterval(()=>{
     if(navigator.serviceWorker.controller)navigator.serviceWorker.controller.postMessage('keepalive');
   },20000);
 }
 </script>
-</body></html>`, dir, dir, dir, dir)
+</body></html>`, dir, dir, dir, dir, dir, dir)
 		})
 	}
 
@@ -169,7 +211,7 @@ if('serviceWorker' in navigator){
 	var err error
 	s.listener, err = net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("sm3sh: failed to listen on %s: %w", addr, err)
+		return fmt.Errorf("smesh: failed to listen on %s: %w", addr, err)
 	}
 
 	go func() {
@@ -177,7 +219,7 @@ if('serviceWorker' in navigator){
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := s.server.Shutdown(shutdownCtx); err != nil {
-			log.W.F("sm3sh server shutdown error: %v", err)
+			log.W.F("smesh server shutdown error: %v", err)
 		}
 	}()
 
@@ -185,18 +227,46 @@ if('serviceWorker' in navigator){
 	if s.dir != "" {
 		mode = "disk:" + s.dir
 	}
-	log.I.F("sm3sh web client serving on http://%s (%s)", addr, mode)
+	log.I.F("smesh web client serving on http://%s (%s)", addr, mode)
 
 	go func() {
 		if err := s.server.Serve(s.listener); err != nil && err != http.ErrServerClosed {
-			log.E.F("sm3sh server error: %v", err)
+			log.E.F("smesh server error: %v", err)
 		}
 	}()
+
+	// Extra listeners for SW origin isolation (127.0.0.2=marmot, 127.0.0.3=relay, 127.0.0.4=crypto)
+	for _, ip := range []string{"127.0.0.2", "127.0.0.3", "127.0.0.4"} {
+		swAddr := fmt.Sprintf("%s:%d", ip, s.port)
+		ln, err := net.Listen("tcp", swAddr)
+		if err != nil {
+			log.W.F("smesh: failed to listen on %s: %v", swAddr, err)
+			continue
+		}
+		srv := &http.Server{
+			Handler:      mux,
+			ReadTimeout:  15 * time.Second,
+			WriteTimeout: 0,
+			IdleTimeout:  120 * time.Second,
+		}
+		log.I.F("smesh SW origin serving on http://%s", swAddr)
+		go func() {
+			if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+				log.E.F("smesh SW server error on %s: %v", swAddr, err)
+			}
+		}()
+		go func() {
+			<-ctx.Done()
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			srv.Shutdown(shutdownCtx)
+		}()
+	}
 
 	return nil
 }
 
-// Stop shuts down the sm3sh server.
+// Stop shuts down the smesh server.
 func (s *Smesh3Server) Stop() {
 	if s.cancelFn != nil {
 		s.cancelFn()
@@ -238,7 +308,7 @@ func (s *Smesh3Server) startWatcher(ctx context.Context) error {
 	}
 
 	go s.watchLoop(ctx)
-	log.I.F("sm3sh: watching %s for changes", s.dir)
+	log.I.F("smesh: watching %s for changes", s.dir)
 	return nil
 }
 
@@ -267,7 +337,7 @@ func (s *Smesh3Server) watchLoop(ctx context.Context) {
 			if !ok {
 				return
 			}
-			log.W.F("sm3sh: fsnotify error: %v", err)
+			log.W.F("smesh: fsnotify error: %v", err)
 		}
 	}
 }
@@ -283,7 +353,7 @@ func (s *Smesh3Server) bumpVersion() {
 	}
 	s.mu.Unlock()
 
-	log.I.F("sm3sh: files changed, version=%d, notifying %d clients", v, len(clients))
+	log.I.F("smesh: files changed, version=%d, notifying %d clients", v, len(clients))
 	for _, ch := range clients {
 		select {
 		case ch <- v:

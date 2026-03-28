@@ -20,7 +20,7 @@ func TestOutboundProcessor_NotSubscribed(t *testing.T) {
 	}
 
 	store := NewMemorySubscriptionStore()
-	handler := NewSubscriptionHandler(store, nil, sendDM, 2100, nil, 0)
+	handler := NewSubscriptionHandler(store, nil, sendDM, 2100, nil, 0, "bridge.example.com")
 	op := NewOutboundProcessor(nil, nil, handler, "bridge.example.com", sendDM, nil)
 
 	err := op.ProcessOutbound("user1", "To: alice@example.com\n\nHello")
@@ -113,7 +113,7 @@ func TestOutboundProcessor_WithSubscription_SMTPNil(t *testing.T) {
 		PubkeyHex: "user1",
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	})
-	handler := NewSubscriptionHandler(store, nil, sendDM, 2100, nil, 0)
+	handler := NewSubscriptionHandler(store, nil, sendDM, 2100, nil, 0, "bridge.example.com")
 
 	op := NewOutboundProcessor(nil, nil, handler, "bridge.example.com", sendDM, nil)
 
@@ -196,7 +196,7 @@ func TestOutboundProcessor_FullFlow(t *testing.T) {
 		PubkeyHex: "user1pubkeyhex0123456789abcdef0123456789abcdef0123456789abcdef01",
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	})
-	handler := NewSubscriptionHandler(store, nil, sendDM, 2100, nil, 0)
+	handler := NewSubscriptionHandler(store, nil, sendDM, 2100, nil, 0, "bridge.example.com")
 
 	op := NewOutboundProcessor(smtpClient, nil, handler, "bridge.example.com", sendDM, nil)
 

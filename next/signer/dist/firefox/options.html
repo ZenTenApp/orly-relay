@@ -132,27 +132,26 @@
             <b>directly</b>
             possible in the extension's popup window. This is due to the
             browser's limitation of automatically closing the popup when it
-            looses focus, making it impossible to drop or select a file there.
+            loses focus, making it impossible to select a file there.
           </span>
           <span class="option-text">
-            To circumvent this limitation, you need to upload your snapshot here
-            and make it available for the extension to import in the popup.
+            To work around this, import your snapshot here first,
+            then use the extension popup to load it into the vault.
           </span>
           <span class="option-text">
             <b>
-              Uploading a snapshot here does NOT automatically start an import!
+              Importing a snapshot here does NOT automatically load it into your vault!
             </b>
           </span>
           <span class="option-text">
             <b>
-              The data remains inside this browser and is NOT uploaded to any
-              server!
+              The data remains inside this browser and is NOT sent to any server!
             </b>
           </span>
 
           <div class="sam-mt-h sam-flex-row gap">
             <button id="uploadSnapshotsButton" class="btn btn-primary">
-              Upload Snapshots
+              Import Snapshots
             </button>
 
             <button id="deleteSnapshotsButton" class="btn btn-danger">

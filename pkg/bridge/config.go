@@ -77,8 +77,7 @@ type Config struct {
 	// Default: $DataDir/profile.txt
 	ProfilePath string
 
-	// MLSEnabled enables MLS (NIP-EE) protocol support. When true, the bridge
-	// publishes MLS key packages and can exchange DMs with MLS-capable clients
-	// like White Noise.
-	MLSEnabled bool
+	// SMTPMXPort overrides the port for direct MX delivery.
+	// 0 (default) tries 2525 then falls back to 25.
+	SMTPMXPort int
 }

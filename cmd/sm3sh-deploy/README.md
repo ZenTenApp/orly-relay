@@ -1,6 +1,6 @@
-# sm3sh-deploy
+# smesh-deploy
 
-Deploys sm3sh frontend assets to a running orly server. Bundles the asset directory as `tar.xz -9`, signs the bundle hash with BIP-340, uploads in 512 KB chunks, and the server does an atomic symlink pivot to the new version.
+Deploys smesh frontend assets to a running orly server. Bundles the asset directory as `tar.xz -9`, signs the bundle hash with BIP-340, uploads in 512 KB chunks, and the server does an atomic symlink pivot to the new version.
 
 ## Prerequisites
 
@@ -12,14 +12,14 @@ Deploys sm3sh frontend assets to a running orly server. Bundles the asset direct
 ## Usage
 
 ```
-go run ./cmd/sm3sh-deploy --url https://sm3sh.mleku.dev --dir app/smesh3
+go run ./cmd/sm3sh-deploy --url https://smesh.lol --dir app/smesh3
 ```
 
 ### Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--url` | (required) | sm3sh base URL |
+| `--url` | (required) | smesh base URL |
 | `--dir` | `app/smesh3` | directory to bundle |
 | `--nsec` | | deploy nsec (bech32) |
 
@@ -27,7 +27,7 @@ go run ./cmd/sm3sh-deploy --url https://sm3sh.mleku.dev --dir app/smesh3
 
 | Variable | Description |
 |----------|-------------|
-| `DEPLOY_NSEC` | Fallback for `--nsec` flag. Store in `~/.config/sm3sh-deploy.env` or equivalent. |
+| `DEPLOY_NSEC` | Fallback for `--nsec` flag. Store in `~/.config/smesh-deploy.env` or equivalent. |
 
 ## How it works
 

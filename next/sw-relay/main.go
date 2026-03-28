@@ -34,8 +34,7 @@ func onInstall(event sw.Event) {
 func onActivate(event sw.Event) {
 	sw.WaitUntil(event, func(done func()) {
 		sw.ClaimClients(func() {
-			sw.Log("relay-sw: starting")
-			busSend("shell", "[\"READY\"]")
+				busSend("shell", "[\"READY\"]")
 			done()
 		})
 	})
@@ -73,15 +72,16 @@ func onBusMessage(raw string) {
 	w := newMW(msg)
 	msgType := w.str()
 
+	if msgType != "PING" && msgType != "SAVE_DM_QUIET" && msgType != "SAVE_DM" {
+		sw.Log("relay: bus→" + msgType)
+	}
+
 	switch msgType {
 	case "PING":
 		busSend("shell", "[\"READY\"]")
 		return
 
 	// Identity propagation.
-	case "SET_KEY":
-		k := w.str()
-		identitySetKey(k)
 	case "SET_PUBKEY":
 		identitySetPubkey(w.str())
 	case "CLEAR_KEY":
@@ -103,6 +103,10 @@ func onBusMessage(raw string) {
 		clientID := w.str()
 		eventRaw := w.raw()
 		routerPublish(clientID, eventRaw)
+	case "MLS_RELAY_PUBLISH":
+		eventRaw := w.raw()
+		relayURLs := w.strs()
+		routerPublishToRelays(eventRaw, relayURLs)
 	case "PROXY":
 		clientID := w.str()
 		subID := w.str()

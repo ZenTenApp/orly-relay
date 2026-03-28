@@ -20842,22 +20842,22 @@ h3.font-heading {
   --radius-md: 4px;
   --radius-lg: 8px;
   --radius-xl: 24px;
-  --primary: #ff3eb5;
-  --primary-hover: #e6359f;
-  --primary-foreground: #ffffff;
-  --primary-foreground-hover: #ffffff;
-  --primary-border: #ff3eb5;
-  --primary-border-hover: #e6359f;
-  --secondary: #ff3eb5;
-  --secondary-border: #ff3eb5;
-  --secondary-border-hover: #ff3eb5;
-  --focus: #ffd53d;
-  --focus-border: #ffd53d;
-  --focus-border-hover: #ffd53d;
-  --neo-purple: #ff3eb5;
+  --primary: #f59e0b;
+  --primary-hover: #d97706;
+  --primary-foreground: #000000;
+  --primary-foreground-hover: #000000;
+  --primary-border: #f59e0b;
+  --primary-border-hover: #d97706;
+  --secondary: #f59e0b;
+  --secondary-border: #f59e0b;
+  --secondary-border-hover: #d97706;
+  --focus: #fbbf24;
+  --focus-border: #fbbf24;
+  --focus-border-hover: #f59e0b;
+  --neo-purple: #f59e0b;
   --neo-blue: #18b9fe;
-  --neo-yellow: #ffd53d;
-  --ring: #ff3eb5;
+  --neo-yellow: #fbbf24;
+  --ring: #f59e0b;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
 }
@@ -20871,7 +20871,7 @@ h3.font-heading {
   --border-light: #4d4d4d;
   --secondary-hover: #0a0a0a;
   --secondary-foreground: #0a0a0a;
-  --secondary-foreground-hover: #ff3eb5;
+  --secondary-foreground-hover: #f59e0b;
   --focus-hover: #0a0a0a;
   --focus-foreground: #0a0a0a;
   --focus-foreground-hover: #ffd53d;
@@ -20896,9 +20896,9 @@ h3.font-heading {
     --foreground: #0a0a0a;
     --border: #e0e0e0;
     --border-light: #d0d0d0;
-    --secondary-hover: #fce7f3;
-    --secondary-foreground: #ffffff;
-    --secondary-foreground-hover: #ff3eb5;
+    --secondary-hover: #fef3c7;
+    --secondary-foreground: #000000;
+    --secondary-foreground-hover: #d97706;
     --focus-hover: #fef9c3;
     --focus-foreground: #0a0a0a;
     --focus-foreground-hover: #ca8a04;
@@ -20951,7 +20951,7 @@ button {
   opacity: 0.5;
 }
 .btn-primary:focus-visible {
-  box-shadow: 0 0 0 0.25rem rgba(255, 62, 181, 0.25);
+  box-shadow: 0 0 0 0.25rem rgba(245, 158, 11, 0.25);
 }
 
 .btn-outline-primary {
@@ -20973,7 +20973,7 @@ button {
   background-color: var(--input);
   border-color: var(--primary);
   color: var(--foreground);
-  box-shadow: 0 0 0 0.25rem rgba(255, 62, 181, 0.25);
+  box-shadow: 0 0 0 0.25rem rgba(245, 158, 11, 0.25);
 }
 .form-control::placeholder {
   color: var(--muted-foreground);

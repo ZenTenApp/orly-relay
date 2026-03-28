@@ -5,17 +5,18 @@ import (
 	"common/jsbridge/sw"
 )
 
-// Subscription Router — thin forwarder to relay and marmot SWs via bus.
+// Subscription Router — thin forwarder to relay SW via bus.
 // All relay operations, subscriptions, and caching are handled by the relay SW.
 
 // pendingSentDMs holds MLS_SEND saves deferred because myPubkey wasn't set yet.
-// Replayed when SET_KEY or SET_PUBKEY arrives.
+// Replayed when SET_PUBKEY arrives.
 type pendingSentDM struct {
 	recipient string
 	content   string
 }
 
 var pendingSentDMs []pendingSentDM
+var mlsRelays []string
 
 func flushPendingSentDMs() {
 	if myPubkey == "" || len(pendingSentDMs) == 0 {
@@ -30,27 +31,16 @@ func flushPendingSentDMs() {
 }
 
 func routeMessage(clientID string, w *mw, msgType string) {
+	sw.Log("shell: page→" + msgType)
 	switch msgType {
-	// Identity — handle locally + send to each SW (targeted, not broadcast,
-	// so the bus queues them if a SW hasn't connected yet).
-	case "SET_KEY":
-		hexKey := w.str()
-		identitySetKey(hexKey)
-		msg := "[\"SET_KEY\"," + jstr(hexKey) + "]"
-		busSend("marmot", msg)
-		busSend("relay", msg)
-		sendToClient(clientID, "[\"KEY_SET\"]")
-		flushPendingSentDMs()
+	// Identity — handle locally + forward to relay SW.
 	case "SET_PUBKEY":
 		pk := w.str()
 		identitySetPubkey(pk)
-		msg := "[\"SET_PUBKEY\"," + jstr(pk) + "]"
-		busSend("marmot", msg)
-		busSend("relay", msg)
+		busSend("relay", "[\"SET_PUBKEY\","+jstr(pk)+"]")
 		flushPendingSentDMs()
 	case "CLEAR_KEY":
 		identityClearKey()
-		busSend("marmot", "[\"CLEAR_KEY\"]")
 		busSend("relay", "[\"CLEAR_KEY\"]")
 
 	// Relay operations — forward to relay SW.
@@ -92,13 +82,15 @@ func routeMessage(clientID string, w *mw, msgType string) {
 		until := w.num()
 		busSend("relay", "[\"DM_HISTORY\","+jstr(clientID)+","+jstr(peer)+","+helpers.Itoa(int64(limit))+","+helpers.Itoa(until)+"]")
 
-	// MLS — forward to marmot SW.
+	// MLS — proxy through page to signer extension (marmot WASM runs inside signer).
 	case "MLS_INIT":
-		busSend("marmot", "[\"MLS_INIT\","+strsJSON(w.strs())+"]")
+		relays := w.strs()
+		mlsRelays = relays
+		sendToClient(clientID, "[\"MLS_PROXY\",\"init\","+strsJSON(relays)+"]")
 	case "MLS_SEND":
 		recipient := w.str()
 		content := w.str()
-		busSend("marmot", "[\"MLS_SEND\","+jstr(recipient)+","+jstr(content)+"]")
+		sendToClient(clientID, "[\"MLS_PROXY\",\"sendDM\","+jstr(recipient)+","+jstr(content)+"]")
 		// Save sent DM to relay's IDB (quiet — no DM_RECEIVED broadcast).
 		if myPubkey == "" {
 			pendingSentDMs = append(pendingSentDMs, pendingSentDM{recipient, content})
@@ -108,11 +100,58 @@ func routeMessage(clientID string, w *mw, msgType string) {
 			busSend("relay", "[\"SAVE_DM_QUIET\","+rec.ToJSON()+"]")
 		}
 	case "MLS_SUB":
-		busSend("marmot", "[\"MLS_SUB\"]")
+		sendToClient(clientID, "[\"MLS_PROXY\",\"subscribe\"]")
 	case "MLS_PUBLISH_KP":
-		busSend("marmot", "[\"MLS_PUBLISH_KP\","+strsJSON(w.strs())+"]")
+		sendToClient(clientID, "[\"MLS_PROXY\",\"publishKP\"]")
 	case "MLS_LIST_GROUPS":
-		busSend("marmot", "[\"MLS_LIST_GROUPS\"]")
+		sendToClient(clientID, "[\"MLS_PROXY\",\"listGroups\"]")
+
+	// MLS results from page (mls-bridge.mjs routes signer extension outputs here).
+	case "MLS_PUBLISH":
+		eventRaw := w.str()
+		if len(mlsRelays) > 0 {
+			busSend("relay", "[\"MLS_RELAY_PUBLISH\","+eventRaw+","+strsJSON(mlsRelays)+"]")
+		} else {
+			busSend("relay", "[\"EVENT\",\"\","+eventRaw+"]")
+		}
+	case "MLS_SUBSCRIBE":
+		subID := w.str()
+		filterRaw := w.raw()
+		// Pass filters as-is (array or single object) — relay SW's parseFilters handles both.
+		mSubID := "marmot-sub-" + subID
+		if len(mlsRelays) > 0 {
+			busSend("relay", "[\"PROXY\",\"\","+jstr(mSubID)+","+filterRaw+","+strsJSON(mlsRelays)+"]")
+		} else {
+			busSend("relay", "[\"REQ\",\"\","+jstr(mSubID)+","+filterRaw+"]")
+		}
+	case "MLS_DM":
+		dmJSON := w.raw()
+		// mls-bridge sends {peer, sender, content, ts, source, eventId}
+		// but IDB expects {id, peer, from, content, created_at, protocol, eventId}.
+		peer := jsonField(dmJSON, "peer")
+		sender := jsonField(dmJSON, "sender")
+		content := jsonField(dmJSON, "content")
+		ts := parseTS(jsonFieldRaw(dmJSON, "ts"))
+		source := jsonField(dmJSON, "source")
+		eventID := jsonField(dmJSON, "eventId")
+		rec := makeDMRecord(peer, sender, content, ts, source, eventID)
+		recJSON := rec.ToJSON()
+		busSend("relay", "[\"SAVE_DM_QUIET\","+recJSON+"]")
+		fwdDM(recJSON)
+	case "MLS_GROUPS":
+		groupsJSON := w.raw()
+		broadcastToClients("[\"MLS_GROUPS\"," + groupsJSON + "]")
+	case "MLS_STATUS":
+		statusMsg := w.str()
+		broadcastToClients("[\"MLS_STATUS\"," + jstr(statusMsg) + "]")
+
+	// MLS relay event delivery — when relay events match marmot subscriptions,
+	// forward them to the page which routes to the signer extension's WASM.
+	case "MLS_DELIVER_EVENT":
+		subID := w.str()
+		eventJSON := w.raw()
+		// Event must be a JSON string (not raw object) — Go WASM calls args[1].String().
+		broadcastToClients("[\"MLS_PROXY\",\"deliverEvent\"," + subID + "," + jstr(eventJSON) + "]")
 
 	// Crypto result from page — dispatch to waiting callback.
 	case "CRYPTO_RESULT":
@@ -124,4 +163,9 @@ func routeMessage(clientID string, w *mw, msgType string) {
 			fn(result, errMsg)
 		}
 	}
+}
+
+// fwdDM broadcasts a DM_RECEIVED message to all page clients.
+func fwdDM(dmJSON string) {
+	broadcastToClients("[\"DM_RECEIVED\"," + dmJSON + "]")
 }

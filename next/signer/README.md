@@ -113,7 +113,7 @@ Key cached in `browser.storage.session` while vault is unlocked. Cleared on lock
 
 ## Crypto Proxy Integration
 
-When sm3sh detects the signer extension, it delegates all crypto to the extension instead of requiring an nsec. The Marmot SW sends crypto requests through the bus:
+When smesh detects the signer extension, it delegates all crypto to the extension instead of requiring an nsec. The Marmot SW sends crypto requests through the bus:
 
 ```
 Marmot SW  -->  Bus WS  -->  Shell SW  -->  Page  -->  window.nostr.nip44Encrypt()

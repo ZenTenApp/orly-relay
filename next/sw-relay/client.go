@@ -42,28 +42,31 @@ func wireConn(c *relay.Conn, url string) {
 		onRelayAuth(url, challenge)
 	})
 	c.ScheduleReconnect = func(fn func()) {
-		sw.Log("relay-sw: scheduling reconnect to " + url)
 		sw.SetTimeout(5000, fn)
 	}
 }
 
 func onRelayAuth(relayURL, challenge string) {
-	if !hasKey || myPubkey == "" {
+	if myPubkey == "" {
 		return
 	}
 	authEv := &nostr.Event{
 		Kind:      22242,
+		PubKey:    myPubkey,
 		Content:   "",
 		Tags:      nostr.Tags{{"relay", relayURL}, {"challenge", challenge}},
 		CreatedAt: sw.NowSeconds(),
 	}
-	if !identitySignEvent(authEv) {
-		return
-	}
-	c := rpool.Get(relayURL)
-	if c != nil && c.IsOpen() {
-		c.Send("[\"AUTH\"," + authEv.ToJSON() + "]")
-	}
+	// Proxy signing through shell SW -> signer extension.
+	cryptoProxy("signEvent", "", authEv.ToJSON(), func(signedJSON, errMsg string) {
+		if errMsg != "" || signedJSON == "" {
+			return
+		}
+		c := rpool.Get(relayURL)
+		if c != nil && c.IsOpen() {
+			c.Send("[\"AUTH\"," + signedJSON + "]")
+		}
+	})
 }
 
 func relayPublish(ev *nostr.Event) {

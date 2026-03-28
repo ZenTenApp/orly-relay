@@ -35,7 +35,7 @@ func (c *testDMCollector) get(pubkeyHex string) []string {
 func TestSubscriptionHandler_IsSubscribed(t *testing.T) {
 	store := NewMemorySubscriptionStore()
 
-	sh := NewSubscriptionHandler(store, nil, nil, 2100, nil, 0)
+	sh := NewSubscriptionHandler(store, nil, nil, 2100, nil, 0, "test.example.com")
 
 	if sh.IsSubscribed("abc123") {
 		t.Error("should not be subscribed before saving")
@@ -74,7 +74,7 @@ func TestSubscriptionHandler_HandleSubscribe_AlreadyActive(t *testing.T) {
 	dms := newTestDMCollector()
 
 	// payments=nil is fine because we shouldn't reach the payment code
-	sh := NewSubscriptionHandler(store, nil, dms.sendDM, 2100, nil, 0)
+	sh := NewSubscriptionHandler(store, nil, dms.sendDM, 2100, nil, 0, "test.example.com")
 
 	ctx := context.Background()
 	sh.HandleSubscribe(ctx, "abc123", "")
@@ -92,7 +92,7 @@ func TestSubscriptionHandler_HandleSubscribe_NoPaymentProcessor(t *testing.T) {
 	store := NewMemorySubscriptionStore()
 	dms := newTestDMCollector()
 
-	sh := NewSubscriptionHandler(store, nil, dms.sendDM, 2100, nil, 0)
+	sh := NewSubscriptionHandler(store, nil, dms.sendDM, 2100, nil, 0, "test.example.com")
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -122,7 +122,7 @@ func TestSubscriptionHandler_HandleSubscribe_InvoiceCreationFails(t *testing.T) 
 	mock.errors["make_invoice"] = fmt.Errorf("wallet offline")
 	pp := NewPaymentProcessorWithClient(mock, 2100)
 
-	sh := NewSubscriptionHandler(store, pp, dms.sendDM, 2100, nil, 0)
+	sh := NewSubscriptionHandler(store, pp, dms.sendDM, 2100, nil, 0, "test.example.com")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -155,7 +155,7 @@ func TestSubscriptionHandler_HandleSubscribe_FullFlow(t *testing.T) {
 	}
 	pp := NewPaymentProcessorWithClient(mock, 2100)
 
-	sh := NewSubscriptionHandler(store, pp, dms.sendDM, 2100, nil, 0)
+	sh := NewSubscriptionHandler(store, pp, dms.sendDM, 2100, nil, 0, "test.example.com")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -198,7 +198,7 @@ func TestSubscriptionHandler_HandleSubscribe_PaymentTimeout(t *testing.T) {
 	}
 	pp := NewPaymentProcessorWithClient(mock, 2100)
 
-	sh := NewSubscriptionHandler(store, pp, dms.sendDM, 2100, nil, 0)
+	sh := NewSubscriptionHandler(store, pp, dms.sendDM, 2100, nil, 0, "test.example.com")
 
 	// Short timeout so the test doesn't take forever
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -229,7 +229,7 @@ func TestSubscriptionHandler_HandleSubscribe_SaveFails(t *testing.T) {
 	// Use a store that fails on Save
 	failStore := &failingSaveStore{}
 
-	sh := NewSubscriptionHandler(failStore, pp, dms.sendDM, 2100, nil, 0)
+	sh := NewSubscriptionHandler(failStore, pp, dms.sendDM, 2100, nil, 0, "test.example.com")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -253,7 +253,7 @@ func TestSubscriptionHandler_SendReply_Error(t *testing.T) {
 	store := NewMemorySubscriptionStore()
 	sh := NewSubscriptionHandler(store, nil, func(pk, c string) error {
 		return fmt.Errorf("send error")
-	}, 2100, nil, 0)
+	}, 2100, nil, 0, "test.example.com")
 	// Should not panic, just log
 	sh.sendReply("user1", "test")
 }

@@ -16,7 +16,11 @@ func main() {
 	}
 
 	deployPub := os.Getenv("ORLY_DEPLOY_PUBKEY")
-	s := app.NewSmesh3Server(8090, dir, deployPub)
+	clientTag := os.Getenv("ORLY_CLIENT_TAG")
+	if clientTag == "" {
+		clientTag = "smesh.lol"
+	}
+	s := app.NewSmesh3Server(8090, dir, deployPub, clientTag)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()

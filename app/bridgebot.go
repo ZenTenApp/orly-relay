@@ -76,7 +76,7 @@ func NewBridgeBot(ctx context.Context, relayURL string, freeMode bool, dataDir s
 		return client.SendDM(ctx, pub, []byte(content))
 	}
 
-	bot.handler = bridge.NewSubscriptionHandler(subStore, payments, sendDM, 1000, nil, 2000)
+	bot.handler = bridge.NewSubscriptionHandler(subStore, payments, sendDM, 1000, nil, 2000, "")
 	return bot, nil
 }
 
@@ -94,7 +94,7 @@ func (b *BridgeBot) Start(ctx context.Context) error {
 		CreatedAt: time.Now().Unix(),
 		Kind:      0,
 		Tags:      tag.NewS(),
-		Content:   []byte(`{"name":"sm3sh bridge","about":"MLS DM bridge bot"}`),
+		Content:   []byte(`{"name":"smesh bridge","about":"MLS DM bridge bot"}`),
 	}
 	if err := metaEv.Sign(b.sign); err != nil {
 		log.W.F("bridge-bot: failed to sign kind-0: %v", err)

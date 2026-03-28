@@ -20,12 +20,32 @@
 
       <span class="sam-text-muted">or</span>
 
+      @if (snapshots.length > 0) {
+        <select class="form-select sam-text-sm" [(ngModel)]="selectedSnapshot">
+          @for (snapshot of snapshots; track snapshot) {
+            <option [ngValue]="snapshot">
+              {{ snapshot.fileName }}
+            </option>
+          }
+        </select>
+
+        <button
+          [disabled]="!selectedSnapshot"
+          class="btn btn-primary"
+          (click)="onClickImport()"
+        >
+          Import selected vault
+        </button>
+      } @else {
+        <span class="sam-text-muted sam-text-sm">No vault snapshots available</span>
+      }
+
       <button
         type="button"
         class="btn btn-secondary"
-        (click)="router.navigateByUrl('/vault-import')"
+        (click)="openOptionsPage()"
       >
-        <span>Import a vault</span>
+        Import vault snapshot
       </button>
     </div>
   </div>

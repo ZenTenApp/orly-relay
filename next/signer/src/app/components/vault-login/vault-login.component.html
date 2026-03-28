@@ -46,18 +46,28 @@
   </div>
 </div>
 
-<button
-  class="reset-btn"
-  (click)="
-    confirm.show(
-      'Do you really want to reset the extension? All data will be lost.',
-      onClickResetExtension.bind(this)
-    )
-  "
-  type="button"
->
-  Reset Extension
-</button>
+<div class="bottom-links">
+  <button
+    type="button"
+    class="link-btn"
+    (click)="router.navigateByUrl('/vault-import')"
+  >
+    Import a different vault
+  </button>
+
+  <button
+    class="link-btn danger"
+    (click)="
+      confirm.show(
+        'Do you really want to reset the extension? All data will be lost.',
+        onClickResetExtension.bind(this)
+      )
+    "
+    type="button"
+  >
+    Reset Extension
+  </button>
+</div>
 
 <!----------->
 <!-- ALERT -->

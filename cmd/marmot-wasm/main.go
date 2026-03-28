@@ -9,7 +9,9 @@ import (
 	"os"
 	"sync"
 	"syscall/js"
+	"time"
 
+	"next.orly.dev/pkg/lol"
 	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/nostr/encoders/filter"
 	"next.orly.dev/pkg/nostr/encoders/hex"
@@ -17,11 +19,12 @@ import (
 )
 
 var (
-	client *marmot.Client
-	crypto *marmot.ProxyCrypto
-	store  *jsGroupStore
-	relay  *jsRelay
-	mu     sync.Mutex
+	client     *marmot.Client
+	crypto     *marmot.ProxyCrypto
+	store      *jsGroupStore
+	relay      *jsRelay
+	mu         sync.Mutex
+	statusFn   js.Value // onStatusFn callback — pushes status messages to page
 )
 
 // jsRelay bridges RelayConnection to JS callbacks.
@@ -86,32 +89,55 @@ func deliverEvent(subID int, evJSON string) {
 	}
 }
 
+// safeFunc wraps a js.Func callback with recover so panics don't kill the WASM instance.
+func safeFunc(name string, fn func(this js.Value, args []js.Value) any) js.Func {
+	return js.FuncOf(func(this js.Value, args []js.Value) (ret any) {
+		defer func() {
+			if r := recover(); r != nil {
+				msg := fmt.Sprintf("[marmot-wasm] PANIC in %s: %v", name, r)
+				js.Global().Get("console").Call("error", msg)
+				ret = "error: panic: " + fmt.Sprint(r)
+			}
+		}()
+		return fn(this, args)
+	})
+}
+
 func main() {
+	// Suppress error-level logging from hex decoder etc — these fire on every
+	// corrupt event and burn CPU with formatted output. Errors still propagate
+	// via return values; they just don't print.
+	lol.Level.Store(lol.Off)
+
 	store = newJSGroupStore()
 	relay = &jsRelay{eventChs: make(map[int]chan *event.E)}
 
-	// Register JS API
+	// Register JS API — all wrapped with panic recovery
 	js.Global().Set("_marmot", js.ValueOf(map[string]any{
-		"init":          js.FuncOf(jsInit),
-		"sendDM":        js.FuncOf(jsSendDM),
-		"subscribe":     js.FuncOf(jsSubscribe),
-		"publishKP":     js.FuncOf(jsPublishKP),
-		"listGroups":    js.FuncOf(jsListGroups),
-		"handleEvent":   js.FuncOf(jsHandleEvent),
-		"deliverEvent":  js.FuncOf(jsDeliverEvent),
-		"cryptoResult":    js.FuncOf(jsCryptoResult),
-		"storeResult":     js.FuncOf(jsStoreResult),
-		"keyPackageEvent": js.FuncOf(jsKeyPackageEvent),
+		"init":            safeFunc("init", jsInit),
+		"sendDM":          safeFunc("sendDM", jsSendDM),
+		"subscribe":       safeFunc("subscribe", jsSubscribe),
+		"publishKP":       safeFunc("publishKP", jsPublishKP),
+		"listGroups":      safeFunc("listGroups", jsListGroups),
+		"handleEvent":     safeFunc("handleEvent", jsHandleEvent),
+		"deliverEvent":    safeFunc("deliverEvent", jsDeliverEvent),
+		"cryptoResult":    safeFunc("cryptoResult", jsCryptoResult),
+		"storeResult":     safeFunc("storeResult", jsStoreResult),
+		"keyPackageEvent": safeFunc("keyPackageEvent", jsKeyPackageEvent),
+		"lastEventTS":     safeFunc("lastEventTS", jsLastEventTS),
 	}))
+
 
 	// Keep WASM alive
 	select {}
 }
 
-// jsInit(pubkeyHex, publishFn, subscribeFn, cryptoSendFn, onDMFn, onStatusFn, relayURLs[])
+// jsInit(pubkeyHex, publishFn, subscribeFn, cryptoSendFn, onDMFn, onStatusFn, onReadyFn, lastEventTS, relayURLs[])
+// NewClient calls store.ListGroups/LoadGroup which block on async IDB callbacks.
+// Running it in a goroutine lets the JS event loop process those callbacks.
 func jsInit(this js.Value, args []js.Value) any {
-	if len(args) < 6 {
-		return "error: need pubkeyHex, publishFn, subscribeFn, cryptoSendFn, onDMFn, onStatusFn"
+	if len(args) < 8 {
+		return "error: need pubkeyHex, publishFn, subscribeFn, cryptoSendFn, onDMFn, onStatusFn, onReadyFn, lastEventTS"
 	}
 	pubHex := args[0].String()
 	pubBytes, err := hex.Dec(pubHex)
@@ -124,10 +150,12 @@ func jsInit(this js.Value, args []js.Value) any {
 	cryptoSendFn := args[3]
 	onDMFn := args[4]
 	onStatusFn := args[5]
+	onReadyFn := args[6]
+	lastEventTS := int64(args[7].Int())
 
 	var relays []string
-	if len(args) > 6 {
-		for i := 6; i < len(args); i++ {
+	if len(args) > 8 {
+		for i := 8; i < len(args); i++ {
 			relays = append(relays, args[i].String())
 		}
 	}
@@ -136,37 +164,66 @@ func jsInit(this js.Value, args []js.Value) any {
 		cryptoSendFn.Invoke(op, peerHex, data, id)
 	})
 
-	mu.Lock()
-	defer mu.Unlock()
+	// Run NewClient in a goroutine — it calls store.ListGroups() which blocks
+	// on a channel waiting for async IDB callbacks. Running synchronously would
+	// deadlock because Go WASM's single thread can't yield to the JS event loop.
+	go func() {
+		mu.Lock()
+		defer mu.Unlock()
 
-	client, err = marmot.NewClient(crypto, store, relay, relays...)
-	if err != nil {
-		return "error: " + err.Error()
+		c, err := marmot.NewClient(crypto, store, relay, relays...)
+		if err != nil {
+			onReadyFn.Invoke("error: " + err.Error())
+			return
+		}
+
+		if lastEventTS > 0 {
+			c.SetLastEventTS(lastEventTS)
+		}
+
+		c.OnDM(func(senderPub []byte, plaintext []byte) {
+			onDMFn.Invoke(hex.Enc(senderPub), string(plaintext))
+		})
+
+		statusFn = onStatusFn
+		client = c
+		onReadyFn.Invoke("ok")
+	}()
+
+	return nil
+}
+
+func sendStatus(msg string) {
+	if statusFn.IsUndefined() || statusFn.IsNull() {
+		return
 	}
-
-	client.OnDM(func(senderPub []byte, plaintext []byte) {
-		onDMFn.Invoke(hex.Enc(senderPub), string(plaintext))
-	})
-
-	_ = onStatusFn
-	return "ok"
+	statusFn.Invoke(msg)
 }
 
 func jsSendDM(this js.Value, args []js.Value) any {
-	if len(args) < 2 || client == nil {
-		return nil
+	if len(args) < 2 {
+		return "error: missing args"
+	}
+	if client == nil {
+		return "error: not initialized"
 	}
 	recipientHex := args[0].String()
 	content := args[1].String()
+	sendStatus("sendDM: starting for " + recipientHex[:8] + "...")
 
 	go func() {
 		recipientPub, err := hex.Dec(recipientHex)
 		if err != nil {
+			sendStatus("sendDM error: invalid recipient: " + err.Error())
 			return
 		}
-		if err := client.SendDM(context.Background(), recipientPub, []byte(content)); err != nil {
-			fmt.Println("marmot-wasm: sendDM error:", err)
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := client.SendDM(ctx, recipientPub, []byte(content)); err != nil {
+			sendStatus("sendDM error: " + err.Error())
+			return
 		}
+		sendStatus("sendDM ok: sent to " + recipientHex[:8] + "...")
 	}()
 	return nil
 }
@@ -180,7 +237,6 @@ func jsSubscribe(this js.Value, args []js.Value) any {
 		ff := client.SubscriptionFilters()
 		stream, err := relay.Subscribe(ctx, ff)
 		if err != nil {
-			fmt.Println("marmot-wasm: subscribe error:", err)
 			return
 		}
 		defer stream.Close()
@@ -191,16 +247,12 @@ func jsSubscribe(this js.Value, args []js.Value) any {
 				if ev == nil {
 					return
 				}
-				if err := client.HandleEvent(ctx, ev); err != nil {
-					fmt.Println("marmot-wasm: handleEvent error:", err)
-				}
+				_ = client.HandleEvent(ctx, ev)
 			case <-client.GroupsChanged():
-				// Resubscribe with updated filters
 				stream.Close()
 				ff = client.SubscriptionFilters()
 				stream, err = relay.Subscribe(ctx, ff)
 				if err != nil {
-					fmt.Println("marmot-wasm: resubscribe error:", err)
 					return
 				}
 			}
@@ -247,9 +299,7 @@ func jsHandleEvent(this js.Value, args []js.Value) any {
 		if err := ev.UnmarshalJSON([]byte(evJSON)); err != nil {
 			return
 		}
-		if err := client.HandleEvent(context.Background(), ev); err != nil {
-			fmt.Println("marmot-wasm: handleEvent error:", err)
-		}
+		_ = client.HandleEvent(context.Background(), ev)
 	}()
 	return nil
 }
@@ -273,6 +323,13 @@ func jsCryptoResult(this js.Value, args []js.Value) any {
 	errMsg := args[2].String()
 	crypto.Resolve(id, result, errMsg)
 	return nil
+}
+
+func jsLastEventTS(this js.Value, args []js.Value) any {
+	if client == nil {
+		return 0
+	}
+	return client.LastEventTS()
 }
 
 func jsKeyPackageEvent(this js.Value, args []js.Value) any {

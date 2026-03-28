@@ -44,7 +44,8 @@ func Run(args []string) {
 		dataDir, dkimKeyPath, dkimSelector, nwcURI,
 		monthlyPriceSats, composeURL,
 		smtpRelayHost, smtpRelayPort, smtpRelayUsername, smtpRelayPassword,
-		aclGRPCServer, aliasPriceSats, profilePath, mlsEnabled := cfg.GetBridgeConfigValues()
+		aclGRPCServer, aliasPriceSats, profilePath,
+		smtpMXPort := cfg.GetBridgeConfigValues()
 
 	if !enabled && relayURL == "" {
 		// When run as a subcommand, enable by default even if ORLY_BRIDGE_ENABLED is false
@@ -72,7 +73,7 @@ func Run(args []string) {
 		ACLGRPCServer:     aclGRPCServer,
 		AliasPriceSats:    aliasPriceSats,
 		ProfilePath:       profilePath,
-		MLSEnabled:        mlsEnabled,
+		SMTPMXPort:        smtpMXPort,
 	}
 
 	// In standalone subcommand mode, no database getter is available.

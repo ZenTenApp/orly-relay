@@ -1,7 +1,6 @@
 package main
 
 import (
-	"common/crypto/secp256k1"
 	"common/helpers"
 	"common/jsbridge/dom"
 	"common/jsbridge/localstorage"
@@ -10,9 +9,8 @@ import (
 )
 
 const (
-	version     = "v0.65.46"
+	version     = "v0.65.49"
 	lsKeyPubkey = "smesh-pubkey"
-	lsKeyMode   = "smesh-mode"
 	lsKeyTheme  = "smesh-theme"
 )
 
@@ -106,8 +104,17 @@ var defaultRelays = []string{
 	"wss://nostr.land",
 }
 
+func isLocalDev() bool {
+	h := dom.Hostname()
+	return h == "localhost" || (len(h) > 4 && h[:4] == "127.")
+}
+
 func main() {
 	dom.ConsoleLog("starting smesh " + version)
+	if isLocalDev() {
+		defaultRelays = append(defaultRelays, "ws://localhost:3334")
+		dom.ConsoleLog("dev mode: added local relay ws://localhost:3334")
+	}
 	themePref := localstorage.GetItem(lsKeyTheme)
 	if themePref != "" {
 		isDark = themePref == "dark"
@@ -232,78 +239,11 @@ func showLogin() {
 			pubhex = hex
 			pubkey = helpers.HexDecode(hex)
 			localstorage.SetItem(lsKeyPubkey, pubhex)
-			localstorage.SetItem(lsKeyMode, "extension")
 			clearChildren(root)
 			showApp()
 		})
 	})
 	dom.AddEventListener(btn, "click", cb)
-
-	// nsec login — gives SW the secret key for DM crypto + marmot auth.
-	sep := dom.CreateElement("div")
-	dom.SetStyle(sep, "marginTop", "24px")
-	dom.SetStyle(sep, "color", "var(--muted)")
-	dom.SetStyle(sep, "fontSize", "12px")
-	dom.SetTextContent(sep, "or paste nsec")
-	dom.AppendChild(wrap, sep)
-
-	nsecInp := dom.CreateElement("input")
-	dom.SetAttribute(nsecInp, "type", "password")
-	dom.SetAttribute(nsecInp, "placeholder", "nsec1...")
-	dom.SetStyle(nsecInp, "marginTop", "8px")
-	dom.SetStyle(nsecInp, "padding", "8px 12px")
-	dom.SetStyle(nsecInp, "width", "320px")
-	dom.SetStyle(nsecInp, "maxWidth", "90vw")
-	dom.SetStyle(nsecInp, "fontFamily", "'Fira Code', monospace")
-	dom.SetStyle(nsecInp, "fontSize", "12px")
-	dom.SetStyle(nsecInp, "background", "var(--bg)")
-	dom.SetStyle(nsecInp, "border", "1px solid var(--border)")
-	dom.SetStyle(nsecInp, "borderRadius", "4px")
-	dom.SetStyle(nsecInp, "color", "var(--fg)")
-	dom.SetStyle(nsecInp, "textAlign", "center")
-	dom.AppendChild(wrap, nsecInp)
-
-	nsecBtn := dom.CreateElement("button")
-	dom.SetTextContent(nsecBtn, "login with nsec")
-	dom.SetStyle(nsecBtn, "marginTop", "8px")
-	dom.SetStyle(nsecBtn, "padding", "10px 32px")
-	dom.SetStyle(nsecBtn, "fontFamily", "'Fira Code', monospace")
-	dom.SetStyle(nsecBtn, "fontSize", "14px")
-	dom.SetStyle(nsecBtn, "background", "var(--bg2)")
-	dom.SetStyle(nsecBtn, "color", "var(--fg)")
-	dom.SetStyle(nsecBtn, "border", "1px solid var(--border)")
-	dom.SetStyle(nsecBtn, "borderRadius", "4px")
-	dom.SetStyle(nsecBtn, "cursor", "pointer")
-	dom.AppendChild(wrap, nsecBtn)
-
-	nsecCb := dom.RegisterCallback(func() {
-		val := dom.GetProperty(nsecInp, "value")
-		if val == "" {
-			dom.SetTextContent(errEl, "paste your nsec key")
-			return
-		}
-		secBytes := helpers.DecodeNsec(val)
-		if secBytes == nil {
-			dom.SetTextContent(errEl, "invalid nsec")
-			return
-		}
-		var sk [32]byte
-		copy(sk[:], secBytes)
-		pk, ok := secp256k1.PubKeyFromSecKey(sk)
-		if !ok {
-			dom.SetTextContent(errEl, "invalid secret key")
-			return
-		}
-		pubhex = helpers.HexEncode(pk[:])
-		pubkey = pk[:]
-		localstorage.SetItem(lsKeyPubkey, pubhex)
-		localstorage.SetItem(lsKeyMode, "nsec")
-		localstorage.SetItem("smesh-key", helpers.HexEncode(sk[:]))
-		clearChildren(root)
-		showApp()
-	})
-	dom.AddEventListener(nsecBtn, "click", nsecCb)
-	dom.SetAttribute(nsecInp, "onkeydown", "if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click()}")
 }
 
 // --- Sidebar ---
@@ -476,12 +416,7 @@ func showApp() {
 
 	// Set up SW communication.
 	dom.OnSWMessage(onSWMessage)
-	hexKey := localstorage.GetItem("smesh-key")
-	if hexKey != "" {
-		dom.PostToSW("[\"SET_KEY\"," + jstr(hexKey) + "]")
-	} else {
-		dom.PostToSW("[\"SET_PUBKEY\"," + jstr(pubhex) + "]")
-	}
+	dom.PostToSW("[\"SET_PUBKEY\"," + jstr(pubhex) + "]")
 
 	// Load cached profiles from IndexedDB.
 	dom.IDBGetAll("profiles", func(key, val string) {
@@ -865,8 +800,8 @@ func subscribeProfile() {
 		proxy = appendUnique(proxy, u)
 	}
 	dom.PostToSW(buildProxyMsg("prof",
-		"{\"authors\":["+jstr(pubhex)+"],\"kinds\":[0,3,10002,10000,10050],\"_proxy\":"+jstrArr(proxy)+",\"limit\":8}",
-		[]string{orlyRelay}))
+		"{\"authors\":["+jstr(pubhex)+"],\"kinds\":[0,3,10002,10000,10050],\"limit\":8}",
+		proxy))
 }
 
 func subscribeFeed() {
@@ -899,16 +834,27 @@ func jstr(s string) string {
 	return "\"" + jsonEsc(s) + "\""
 }
 
-// jstrArr builds a JSON array of quoted strings.
-func jstrArr(ss []string) string {
-	s := "["
-	for i, v := range ss {
-		if i > 0 {
-			s += ","
+// scheduleTabRetry schedules a retry for any pending profile fetches after
+// the follows/mutes tab renders. Independent of retryRound so it works even
+// after the feed's retry budget is exhausted.
+func scheduleTabRetry() {
+	dom.SetTimeout(func() {
+		var missing []string
+		for pk := range pendingNotes {
+			if _, ok := authorNames[pk]; !ok {
+				missing = append(missing, pk)
+			}
 		}
-		s += jstr(v)
-	}
-	return s + "]"
+		if len(missing) == 0 {
+			return
+		}
+		for _, pk := range missing {
+			fetchedK0[pk] = false
+		}
+		for _, pk := range missing {
+			queueProfileFetch(pk)
+		}
+	}, 5000)
 }
 
 // --- SW message handling ---
@@ -972,10 +918,7 @@ func onSWMessage(raw string) {
 	case "CRYPTO_REQ":
 		handleCryptoReq(raw, pos)
 	case "NEED_IDENTITY":
-		hexKey := localstorage.GetItem("smesh-key")
-		if hexKey != "" {
-			dom.PostToSW("[\"SET_KEY\"," + jstr(hexKey) + "]")
-		} else if pubhex != "" {
+		if pubhex != "" {
 			dom.PostToSW("[\"SET_PUBKEY\"," + jstr(pubhex) + "]")
 		}
 		resubscribe()
@@ -1101,7 +1044,14 @@ func handleCryptoReq(raw string, pos int) {
 	peer, pos4 := nextStr(raw, pos3)
 	data, _ := nextStr(raw, pos4)
 
+	dom.ConsoleLog("crypto: " + method + " #" + idStr)
+
 	sendResult := func(result, errMsg string) {
+		if errMsg != "" {
+			dom.ConsoleLog("crypto: " + method + " #" + idStr + " ERR=" + errMsg)
+		} else {
+			dom.ConsoleLog("crypto: " + method + " #" + idStr + " OK")
+		}
 		dom.PostToSW("[\"CRYPTO_RESULT\"," + idStr + "," + jstr(result) + "," + jstr(errMsg) + "]")
 	}
 
@@ -2214,6 +2164,7 @@ func renderProfileFollows(pk string) {
 		row := makeProfileRow(fpk)
 		dom.AppendChild(profileTabContent, row)
 	}
+	scheduleTabRetry()
 }
 
 func renderProfileRelays(pk string) {
@@ -2273,6 +2224,7 @@ func renderProfileMutes(pk string) {
 		row := makeProfileRow(mpk)
 		dom.AppendChild(profileTabContent, row)
 	}
+	scheduleTabRetry()
 }
 
 func makeProfileRow(pk string) dom.Element {
@@ -2476,14 +2428,26 @@ func formatTime(ts int64) string {
 }
 
 func initMessaging() {
+	if !signer.HasMLS() {
+		clearChildren(msgListContainer)
+		notice := dom.CreateElement("div")
+		dom.SetStyle(notice, "padding", "24px")
+		dom.SetStyle(notice, "textAlign", "center")
+		dom.SetStyle(notice, "color", "var(--muted)")
+		dom.SetStyle(notice, "fontSize", "13px")
+		dom.SetStyle(notice, "lineHeight", "1.6")
+		dom.SetInnerHTML(notice, "encrypted DMs require the <b>Smesh Signer</b> extension<br><br><i>coming soon</i>")
+		dom.AppendChild(msgListContainer, notice)
+		return
+	}
+
 	// Request conversation list from cache.
 	dom.PostToSW("[\"DM_LIST\"]")
 
-	// Init marmot if not already done.
+	// Init MLS if not already done. publishKP + subscribe auto-bootstrap inside signer.
 	if !marmotInited {
 		marmotInited = true
 		dom.PostToSW("[\"MLS_INIT\"," + relayURLsJSON() + "]")
-		dom.PostToSW("[\"MLS_PUBLISH_KP\"," + relayURLsJSON() + "]")
 	}
 }
 
@@ -3129,8 +3093,6 @@ func doLogout() {
 	relayUserPick = nil
 
 	localstorage.RemoveItem(lsKeyPubkey)
-	localstorage.RemoveItem(lsKeyMode)
-	localstorage.RemoveItem("smesh-key")
 
 	clearChildren(root)
 	showLogin()

@@ -360,6 +360,14 @@ export function GetPath() {
   return location.pathname + location.hash;
 }
 
+export function Hostname() {
+  return location.hostname;
+}
+
+export function Port() {
+  return location.port;
+}
+
 export function OnPopState(fn) {
   window.addEventListener('popstate', () => {
     fn(location.pathname + location.hash);

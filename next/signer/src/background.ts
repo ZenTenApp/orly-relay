@@ -33,8 +33,27 @@ import {
   UnlockRequestMessage,
   UnlockResponseMessage,
 } from './background-common';
+import {
+  isMlsMethod,
+  mlsInit,
+  mlsSendDM,
+  mlsSubscribe,
+  mlsPublishKP,
+  mlsListGroups,
+  mlsDeliverEvent,
+  mlsHandleEvent,
+  mlsSetTab,
+} from './mls-engine';
 import browser from 'webextension-polyfill';
 import { Buffer } from 'buffer';
+
+// Clear stale session data on extension install/update/reload.
+// Session storage can survive reloads in Firefox, causing the vault
+// to appear unlocked without the user entering their password.
+browser.runtime.onInstalled.addListener(async () => {
+  debug('Extension installed/updated — clearing session storage');
+  await browser.storage.session.clear();
+});
 
 // Cache for NWC clients to avoid reconnecting for each request
 const nwcClientCache = new Map<string, NwcClient>();
@@ -128,6 +147,7 @@ const openPrompts = new Map<
 
 // Track if unlock popup is already open
 let unlockPopupOpen = false;
+let unlockPopupWindowId: number | undefined;
 
 // Queue of pending NIP-07 requests waiting for unlock
 const pendingRequests: {
@@ -284,8 +304,20 @@ function queuePermissionPrompt(
   });
 }
 
-// Listen for window close events to clean up orphaned prompts
+// Listen for window close events to clean up orphaned prompts and unlock popup
 browser.windows.onRemoved.addListener((windowId: number) => {
+  // Handle unlock popup closed without successful unlock
+  if (unlockPopupWindowId === windowId) {
+    debug('Unlock popup closed without successful unlock');
+    unlockPopupOpen = false;
+    unlockPopupWindowId = undefined;
+    // Reject all pending requests — vault is still locked
+    while (pendingRequests.length > 0) {
+      const pending = pendingRequests.shift()!;
+      pending.reject(new Error('Vault unlock cancelled'));
+    }
+  }
+
   for (const [promptId, promptData] of openPrompts.entries()) {
     if (promptData.windowId === windowId) {
       debug(`Prompt window ${windowId} closed without response`);
@@ -343,7 +375,7 @@ function queuePermissionPromptDeduped(
   return promise;
 }
 
-browser.runtime.onMessage.addListener(async (message /*, sender*/) => {
+browser.runtime.onMessage.addListener(async (message, sender) => {
   debug('Message received');
 
   // Handle unlock request from unlock popup
@@ -360,16 +392,23 @@ browser.runtime.onMessage.addListener(async (message /*, sender*/) => {
 
     if (result.success) {
       unlockPopupOpen = false;
-      // Process any pending NIP-07 requests
-      debug(`Processing ${pendingRequests.length} pending requests`);
-      while (pendingRequests.length > 0) {
-        const pending = pendingRequests.shift()!;
-        try {
-          const pendingResult = await processNip07Request(pending.request);
-          pending.resolve(pendingResult);
-        } catch (error) {
-          pending.reject(error);
-        }
+      unlockPopupWindowId = undefined;
+      // Process pending requests asynchronously — don't block the response
+      // to the unlock popup (Firefox may timeout the sendMessage otherwise).
+      const queued = [...pendingRequests];
+      pendingRequests.length = 0;
+      if (queued.length > 0) {
+        debug(`Scheduling ${queued.length} pending requests`);
+        setTimeout(async () => {
+          for (const pending of queued) {
+            try {
+              const pendingResult = await processNip07Request(pending.request);
+              pending.resolve(pendingResult);
+            } catch (error) {
+              pending.reject(error);
+            }
+          }
+        }, 0);
       }
     }
 
@@ -439,7 +478,7 @@ browser.runtime.onMessage.addListener(async (message /*, sender*/) => {
 
     if (!unlockPopupOpen) {
       unlockPopupOpen = true;
-      await openUnlockPopup(req.host);
+      unlockPopupWindowId = await openUnlockPopup(req.host);
     }
 
     // Queue this request to be processed after unlock
@@ -453,13 +492,17 @@ browser.runtime.onMessage.addListener(async (message /*, sender*/) => {
   if (isWeblnMethod(req.method)) {
     return processWeblnRequest(req);
   }
-  return processNip07Request(req);
+  const tabId = sender?.tab?.id;
+  if (isMlsMethod(req.method) && tabId !== undefined) {
+    mlsSetTab(tabId);
+  }
+  return processNip07Request(req, tabId);
 });
 
 /**
  * Process a NIP-07 request after vault is unlocked
  */
-async function processNip07Request(req: BackgroundRequestMessage): Promise<any> {
+async function processNip07Request(req: BackgroundRequestMessage, tabId?: number): Promise<any> {
   const browserSessionData = await getBrowserSessionData();
 
   if (!browserSessionData) {
@@ -499,53 +542,54 @@ async function processNip07Request(req: BackgroundRequestMessage): Promise<any> 
       const width = 375;
       const height = 600;
 
+      // MLS methods are a single permission group — prompt and store as 'mls.*'
+      const isMls = (req.method as string).startsWith('mls.');
+      const promptMethod = isMls ? 'mls.*' : req.method;
+
       const base64Event = Buffer.from(
         JSON.stringify(req.params ?? {}, undefined, 2)
       ).toString('base64');
 
       // Include queue info for user awareness
       const queueSize = permissionQueue.length;
-      const promptUrl = `prompt.html?method=${req.method}&host=${req.host}&nick=${encodeURIComponent(currentIdentity.nick)}&event=${base64Event}&queue=${queueSize}`;
-      const response = await queuePermissionPromptDeduped(req.host, req.method, req.params, promptUrl, width, height);
+      const promptUrl = `prompt.html?method=${promptMethod}&host=${req.host}&nick=${encodeURIComponent(currentIdentity.nick)}&event=${base64Event}&queue=${queueSize}`;
+      const response = await queuePermissionPromptDeduped(req.host, promptMethod, req.params, promptUrl, width, height);
       debug(response);
 
       // Handle permission storage based on response type
       if (response === 'approve' || response === 'reject') {
-        // Store permission for this specific kind (if signEvent) or method
         const policy = response === 'approve' ? 'allow' : 'deny';
         await storePermission(
           browserSessionData,
           currentIdentity,
           req.host,
-          req.method,
+          promptMethod,
           policy,
           req.params?.kind
         );
-        await backgroundLogPermissionStored(req.host, req.method, policy, req.params?.kind);
+        await backgroundLogPermissionStored(req.host, promptMethod, policy, req.params?.kind);
       } else if (response === 'approve-all') {
-        // P2: Store permission for ALL kinds/uses of this method from this host
         await storePermission(
           browserSessionData,
           currentIdentity,
           req.host,
-          req.method,
+          promptMethod,
           'allow',
-          undefined // undefined kind = allow all kinds for signEvent
+          undefined
         );
-        await backgroundLogPermissionStored(req.host, req.method, 'allow', undefined);
-        debug(`Stored approve-all permission for ${req.method} from ${req.host}`);
+        await backgroundLogPermissionStored(req.host, promptMethod, 'allow', undefined);
+        debug(`Stored approve-all permission for ${promptMethod} from ${req.host}`);
       } else if (response === 'reject-all') {
-        // P2: Store deny permission for ALL uses of this method from this host
         await storePermission(
           browserSessionData,
           currentIdentity,
           req.host,
-          req.method,
+          promptMethod,
           'deny',
           undefined
         );
-        await backgroundLogPermissionStored(req.host, req.method, 'deny', undefined);
-        debug(`Stored reject-all permission for ${req.method} from ${req.host}`);
+        await backgroundLogPermissionStored(req.host, promptMethod, 'deny', undefined);
+        debug(`Stored reject-all permission for ${promptMethod} from ${req.host}`);
       }
 
       if (['reject', 'reject-once', 'reject-all'].includes(response)) {
@@ -626,6 +670,34 @@ async function processNip07Request(req: BackgroundRequestMessage): Promise<any> 
         peerPubkey: req.params.peerPubkey,
       });
       return result;
+
+    // MLS operations — all crypto happens locally in the extension
+    case 'mls.init':
+      if (tabId === undefined) throw new Error('MLS requires tab context');
+      result = await mlsInit(
+        currentIdentity.privkey,
+        NostrHelper.pubkeyFromPrivkey(currentIdentity.privkey),
+        req.params.relayURLs || [],
+        tabId,
+        req.params.lastEventTS || 0
+      );
+      return result;
+
+    case 'mls.sendDM':
+      return mlsSendDM(req.params.recipient, req.params.content);
+
+    case 'mls.subscribe':
+      return mlsSubscribe();
+
+    case 'mls.publishKP':
+      return mlsPublishKP();
+
+    case 'mls.listGroups':
+      return JSON.parse(await mlsListGroups());
+
+    case 'mls.deliverEvent':
+      mlsDeliverEvent(req.params.subId, req.params.eventJSON);
+      return 'ok';
 
     default:
       throw new Error(`Not supported request method '${req.method}'.`);

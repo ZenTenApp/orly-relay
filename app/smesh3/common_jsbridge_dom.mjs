@@ -199,6 +199,16 @@ export function GetPath() {
   return $rt.dom.GetPath();
 }
 
+// jsbridge: dom.Hostname
+export function Hostname() {
+  return $rt.dom.Hostname();
+}
+
+// jsbridge: dom.Port
+export function Port() {
+  return $rt.dom.Port();
+}
+
 // jsbridge: dom.OnPopState
 export function OnPopState(fn) {
   $rt.dom.OnPopState(fn);

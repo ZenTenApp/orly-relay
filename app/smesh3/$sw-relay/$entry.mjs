@@ -3,12 +3,12 @@
 
 import * as $rt from './$runtime/index.mjs';
 import * as $p0 from './common_crypto_sha256.mjs';
-import * as $p1 from './common_crypto_secp256k1.mjs';
-import * as $p2 from './common_helpers.mjs';
-import * as $p3 from './common_jsbridge_bc.mjs';
-import * as $p4 from './common_jsbridge_idb.mjs';
-import * as $p5 from './common_jsbridge_subtle.mjs';
-import * as $p6 from './common_jsbridge_sw.mjs';
+import * as $p1 from './common_helpers.mjs';
+import * as $p2 from './common_jsbridge_bc.mjs';
+import * as $p3 from './common_jsbridge_idb.mjs';
+import * as $p4 from './common_jsbridge_subtle.mjs';
+import * as $p5 from './common_jsbridge_sw.mjs';
+import * as $p6 from './common_crypto_secp256k1.mjs';
 import * as $p7 from './common_nostr.mjs';
 import * as $p8 from './common_jsbridge_ws.mjs';
 import * as $p9 from './common_relay.mjs';

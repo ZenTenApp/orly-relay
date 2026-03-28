@@ -70,6 +70,8 @@ func (rc *RelayConn) Connect(ctx context.Context) error {
 		}
 	}
 
+	conn.AssumeValid = true // trust our own relay's signature validation
+
 	rc.mu.Lock()
 	rc.conn = conn
 	rc.authed = false

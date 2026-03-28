@@ -403,22 +403,8 @@ export class LoggerService {
     this.#saveLogsToStorage();
   }
 
-  #consoleLog(level: 'log' | 'warn' | 'error' | 'debug', message: string) {
-    const nowString = new Date().toLocaleString();
-    const formattedMsg = `[${this.#namespace} - ${nowString}] ${message}`;
-    switch (level) {
-      case 'warn':
-        console.warn(formattedMsg);
-        break;
-      case 'error':
-        console.error(formattedMsg);
-        break;
-      case 'debug':
-        console.debug(formattedMsg);
-        break;
-      default:
-        console.log(formattedMsg);
-    }
+  #consoleLog(_level: 'log' | 'warn' | 'error' | 'debug', _message: string) {
+    // Logs stored in-memory + session storage; console output disabled to reduce noise.
   }
 
   #assureInitialized() {

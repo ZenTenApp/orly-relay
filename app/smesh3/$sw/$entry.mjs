@@ -3,11 +3,9 @@
 
 import * as $rt from './$runtime/index.mjs';
 import * as $p0 from './common_crypto_sha256.mjs';
-import * as $p1 from './common_crypto_secp256k1.mjs';
-import * as $p2 from './common_helpers.mjs';
-import * as $p3 from './common_jsbridge_bc.mjs';
-import * as $p4 from './common_jsbridge_subtle.mjs';
-import * as $p5 from './common_jsbridge_sw.mjs';
+import * as $p1 from './common_helpers.mjs';
+import * as $p2 from './common_jsbridge_bc.mjs';
+import * as $p3 from './common_jsbridge_sw.mjs';
 import * as $main from './sw.mjs';
 
 async function $start() {
@@ -16,8 +14,6 @@ async function $start() {
   if ($p1.init) $p1.init();
   if ($p2.init) $p2.init();
   if ($p3.init) $p3.init();
-  if ($p4.init) $p4.init();
-  if ($p5.init) $p5.init();
   if ($main.init) await $main.init();
   if ($main.main) await $main.main();
 }

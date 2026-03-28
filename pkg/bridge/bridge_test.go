@@ -104,22 +104,6 @@ func TestBridge_StopWithoutStart(t *testing.T) {
 	b.Stop()
 }
 
-func TestBridge_RelayWatchLoop(t *testing.T) {
-	// relayWatchLoop just blocks on ctx.Done — verify it exits cleanly
-	cfg := &Config{
-		NSEC:    keys.GenerateSecretKeyHex(),
-		DataDir: t.TempDir(),
-	}
-	b := New(cfg, nil)
-	b.ctx, b.cancel = context.WithCancel(context.Background())
-	b.wg.Add(1)
-	go b.relayWatchLoop()
-
-	// Cancel should cause relayWatchLoop to exit
-	b.cancel()
-	b.wg.Wait() // will hang if relayWatchLoop doesn't exit
-}
-
 func TestIdentitySourceString(t *testing.T) {
 	tests := []struct {
 		source IdentitySource

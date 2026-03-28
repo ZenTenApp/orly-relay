@@ -614,7 +614,8 @@ func Run(
 		bridgeNWCURI, bridgeMonthlyPriceSats, bridgeComposeURL,
 		bridgeSMTPRelayHost, bridgeSMTPRelayPort,
 		bridgeSMTPRelayUsername, bridgeSMTPRelayPassword,
-		bridgeACLGRPCServer, bridgeAliasPriceSats, bridgeProfilePath, bridgeMLSEnabled := cfg.GetBridgeConfigValues()
+		bridgeACLGRPCServer, bridgeAliasPriceSats, bridgeProfilePath,
+		bridgeSMTPMXPort := cfg.GetBridgeConfigValues()
 
 	if bridgeEnabled {
 		bridgeCfg := &emailbridge.Config{
@@ -637,7 +638,7 @@ func Run(
 			ACLGRPCServer:     bridgeACLGRPCServer,
 			AliasPriceSats:    bridgeAliasPriceSats,
 			ProfilePath:       bridgeProfilePath,
-			MLSEnabled:        bridgeMLSEnabled,
+			SMTPMXPort:        bridgeSMTPMXPort,
 		}
 
 		// In monolithic mode, provide a database getter for identity resolution
@@ -774,11 +775,11 @@ func Run(
 		}
 	}
 
-	// Start embedded Smesh3 web client if enabled
+	// Start embedded smesh web client if enabled
 	if cfg.Smesh3Enabled && cfg.Smesh3Port > 0 {
-		l.smesh3Server = NewSmesh3Server(cfg.Smesh3Port, cfg.Smesh3Dir, cfg.Smesh3DeployPub)
+		l.smesh3Server = NewSmesh3Server(cfg.Smesh3Port, cfg.Smesh3Dir, cfg.Smesh3DeployPub, cfg.ClientTag)
 		if err := l.smesh3Server.Start(ctx); err != nil {
-			log.E.F("failed to start smesh3 server: %v", err)
+			log.E.F("failed to start smesh server: %v", err)
 			l.smesh3Server = nil
 		}
 	}
@@ -1009,10 +1010,10 @@ func Run(
 			log.I.F("smesh2 server stopped")
 		}
 
-		// Stop smesh3 server if running
+		// Stop smesh server if running
 		if l.smesh3Server != nil {
 			l.smesh3Server.Stop()
-			log.I.F("smesh3 server stopped")
+			log.I.F("smesh server stopped")
 		}
 
 

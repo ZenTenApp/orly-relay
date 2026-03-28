@@ -1,4 +1,5 @@
 import { Component, inject, OnInit } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import {
   BrowserSyncFlow,
@@ -16,7 +17,7 @@ import browser from 'webextension-polyfill';
 
 @Component({
   selector: 'app-settings',
-  imports: [ConfirmComponent, NavItemComponent],
+  imports: [ConfirmComponent, NavItemComponent, FormsModule],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.scss',
 })
@@ -24,6 +25,9 @@ export class SettingsComponent extends NavComponent implements OnInit {
   readonly #router = inject(Router);
   syncFlow: string | undefined;
   override devMode = false;
+  newPassword = '';
+  changingPassword = false;
+  passwordChanged = false;
 
   readonly #storage = inject(StorageService);
   readonly #startup = inject(StartupService);
@@ -95,6 +99,21 @@ export class SettingsComponent extends NavComponent implements OnInit {
     } catch (error) {
       console.log(error);
       // TODO
+    }
+  }
+
+  async onChangePassword() {
+    if (!this.newPassword || this.changingPassword) return;
+    this.changingPassword = true;
+    this.passwordChanged = false;
+    try {
+      await this.#storage.changePassword(this.newPassword);
+      this.passwordChanged = true;
+      this.newPassword = '';
+    } catch (e) {
+      console.error('Change password failed:', e);
+    } finally {
+      this.changingPassword = false;
     }
   }
 

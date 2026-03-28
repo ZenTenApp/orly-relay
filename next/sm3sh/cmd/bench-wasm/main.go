@@ -17,7 +17,7 @@ func main() {
 		return
 	}
 
-	fmt.Println("=== sm3sh crypto benchmark (Go WASM) ===")
+	fmt.Println("=== smesh crypto benchmark (Go WASM) ===")
 	fmt.Printf("pubkey: %s\n", helpers.HexEncode(pubkey[:]))
 
 	const n = 100

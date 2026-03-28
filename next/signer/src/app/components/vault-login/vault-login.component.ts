@@ -26,7 +26,7 @@ export class VaultLoginComponent implements AfterViewInit {
   showInvalidPasswordAlert = false;
 
   readonly #storage = inject(StorageService);
-  readonly #router = inject(Router);
+  readonly router = inject(Router);
   readonly #startup = inject(StartupService);
   readonly #profileMetadata = inject(ProfileMetadataService);
   readonly #logger = inject(LoggerService);
@@ -44,22 +44,15 @@ export class VaultLoginComponent implements AfterViewInit {
   }
 
   async loginVault() {
-    console.log('[login] loginVault called');
     if (!this.loginPassword) {
-      console.log('[login] No password, returning');
       return;
     }
 
-    console.log('[login] Showing deriving modal');
-    // Show deriving modal during key derivation (~3-6 seconds)
     this.derivingModal.show('Unlocking vault');
 
     try {
-      console.log('[login] Calling unlockVault...');
       await this.#storage.unlockVault(this.loginPassword);
-      console.log('[login] unlockVault succeeded!');
     } catch (error) {
-      console.error('[login] unlockVault FAILED:', error);
       this.derivingModal.hide();
       this.showInvalidPasswordAlert = true;
       window.setTimeout(() => {
@@ -68,15 +61,13 @@ export class VaultLoginComponent implements AfterViewInit {
       return;
     }
 
-    // Unlock succeeded - hide modal and navigate
-    console.log('[login] Hiding modal and navigating');
     this.derivingModal.hide();
     this.#logger.logVaultUnlock();
 
     // Fetch profile metadata for all identities in the background
     this.#fetchAllProfiles();
 
-    this.#router.navigateByUrl('/home/identity');
+    this.router.navigateByUrl('/home/identity');
   }
 
   /**
@@ -109,8 +100,7 @@ export class VaultLoginComponent implements AfterViewInit {
       await this.#storage.resetExtension();
       this.#startup.startOver(getNewStorageServiceConfig());
     } catch (error) {
-      console.log(error);
-      // TODO
+      console.error('reset failed:', error);
     }
   }
 }

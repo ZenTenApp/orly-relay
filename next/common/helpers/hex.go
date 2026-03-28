@@ -1,4 +1,4 @@
-// Package helpers provides utility functions for smesh3.
+// Package helpers provides utility functions for smesh.
 package helpers
 
 const hexChars = "0123456789abcdef"

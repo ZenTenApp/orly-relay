@@ -86,7 +86,7 @@ func TestRouter_WithSubscriptionHandler(t *testing.T) {
 	store := NewMemorySubscriptionStore()
 
 	// Create handler with nil payment processor — will get "not available" reply
-	subHandler := NewSubscriptionHandler(store, nil, sink.send, 2100, nil, 0)
+	subHandler := NewSubscriptionHandler(store, nil, sink.send, 2100, nil, 0, "test.example.com")
 	router := NewRouter(subHandler, nil, sink.send)
 
 	router.RouteDM(context.Background(), "user1", "subscribe")

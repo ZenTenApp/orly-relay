@@ -305,12 +305,12 @@ type C struct {
 	BridgeComposeURL string `env:"ORLY_BRIDGE_COMPOSE_URL" usage:"public URL of the compose form (e.g., https://relay.example.com/compose)"`
 	BridgeSMTPRelayHost string `env:"ORLY_BRIDGE_SMTP_RELAY_HOST" usage:"SMTP smarthost for outbound delivery (e.g., smtp.migadu.com)"`
 	BridgeSMTPRelayPort int    `env:"ORLY_BRIDGE_SMTP_RELAY_PORT" default:"587" usage:"SMTP smarthost port (587 for STARTTLS)"`
+	BridgeSMTPMXPort int       `env:"ORLY_BRIDGE_SMTP_MX_PORT" default:"0" usage:"port for direct MX delivery (0=try 2525 then 25)"`
 	BridgeSMTPRelayUsername string `env:"ORLY_BRIDGE_SMTP_RELAY_USERNAME" usage:"SMTP smarthost AUTH username"`
 	BridgeSMTPRelayPassword string `env:"ORLY_BRIDGE_SMTP_RELAY_PASSWORD" usage:"SMTP smarthost AUTH password"`
 	BridgeACLGRPCServer string `env:"ORLY_BRIDGE_ACL_GRPC_SERVER" usage:"gRPC address of ACL server for paid subscription management"`
 	BridgeAliasPriceSats int64 `env:"ORLY_BRIDGE_ALIAS_PRICE_SATS" default:"4200" usage:"monthly price in sats for alias email (default 2x base price)"`
 	BridgeProfile string `env:"ORLY_BRIDGE_PROFILE" usage:"path to bridge profile template file (default: $BRIDGE_DATA_DIR/profile.txt)"`
-	BridgeMLS     bool   `env:"ORLY_BRIDGE_MLS" default:"false" usage:"enable MLS (NIP-EE) protocol support for E2E encrypted DMs with MLS-capable clients"`
 
 	// Smesh embedded web client
 	SmeshEnabled bool `env:"ORLY_SMESH_ENABLED" default:"true" usage:"enable embedded Smesh web client on a dedicated port"`
@@ -320,11 +320,12 @@ type C struct {
 	Smesh2Enabled bool `env:"ORLY_SMESH2_ENABLED" default:"true" usage:"enable embedded Smesh2 web client on a dedicated port"`
 	Smesh2Port    int  `env:"ORLY_SMESH2_PORT" default:"8089" usage:"port for the embedded Smesh2 web client"`
 
-	// Smesh3 embedded web client (tinygo/js)
-	Smesh3Enabled bool   `env:"ORLY_SMESH3_ENABLED" default:"true" usage:"enable embedded Smesh3 web client on a dedicated port"`
-	Smesh3Port    int    `env:"ORLY_SMESH3_PORT" default:"8090" usage:"port for the embedded Smesh3 web client"`
-	Smesh3Dir       string `env:"ORLY_SMESH3_DIR" usage:"serve sm3sh from disk directory (enables hot-reload via fsnotify + SSE)"`
+	// Smesh embedded web client (tinygo/js)
+	Smesh3Enabled bool   `env:"ORLY_SMESH3_ENABLED" default:"true" usage:"enable embedded smesh web client on a dedicated port"`
+	Smesh3Port    int    `env:"ORLY_SMESH3_PORT" default:"8090" usage:"port for the embedded smesh web client"`
+	Smesh3Dir       string `env:"ORLY_SMESH3_DIR" usage:"serve smesh from disk directory (enables hot-reload via fsnotify + SSE)"`
 	Smesh3DeployPub string `env:"ORLY_DEPLOY_PUBKEY" usage:"hex pubkey authorized to push signed asset bundles to /__deploy"`
+	ClientTag       string `env:"ORLY_CLIENT_TAG" default:"smesh.lol" usage:"client tag included in published events (NIP-89)"`
 
 	// ServeMode is set programmatically by the 'serve' subcommand to grant full owner
 	// access to all users (no env tag - internal use only)
@@ -1076,7 +1077,7 @@ func (cfg *C) GetBridgeConfigValues() (
 	aclGRPCServer string,
 	aliasPriceSats int64,
 	profilePath string,
-	mlsEnabled bool,
+	smtpMXPort int,
 ) {
 	dataDir = cfg.BridgeDataDir
 	if dataDir == "" {
@@ -1112,5 +1113,5 @@ func (cfg *C) GetBridgeConfigValues() (
 			}
 			return filepath.Join(dataDir, "profile.txt")
 		}(),
-		cfg.BridgeMLS
+		cfg.BridgeSMTPMXPort
 }

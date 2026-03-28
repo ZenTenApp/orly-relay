@@ -120,6 +120,12 @@ func ReplaceState(path string) { panic("jsbridge") }
 // GetPath returns the current location.pathname.
 func GetPath() string { panic("jsbridge") }
 
+// Hostname returns the current location.hostname.
+func Hostname() string { panic("jsbridge") }
+
+// Port returns the current location.port.
+func Port() string { panic("jsbridge") }
+
 // OnPopState registers a handler for browser back/forward navigation.
 // fn receives the new location.pathname.
 func OnPopState(fn func(string)) { panic("jsbridge") }

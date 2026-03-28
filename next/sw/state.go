@@ -2,7 +2,6 @@ package main
 
 import (
 	"common/helpers"
-	"common/jsbridge/subtle"
 	"common/jsbridge/sw"
 )
 
@@ -16,17 +15,19 @@ func initSharedState() {
 	cryptoCBs = make(map[int]func(string, string))
 }
 
-// cryptoProxy sends a crypto request to the main page (NIP-07 extension)
+// cryptoProxy sends a crypto request to the page's signer extension
 // and calls cb with (result, error) when CRYPTO_RESULT comes back.
 func cryptoProxy(method, peerPubkey, data string, cb func(string, string)) {
 	id := nextCryptoID
 	nextCryptoID++
 	cryptoCBs[id] = cb
+	sw.Log("shell: crypto→page " + method + " #" + helpers.Itoa(int64(id)))
 	broadcastToClients("[\"CRYPTO_REQ\"," + helpers.Itoa(int64(id)) + "," + jstr(method) + "," + jstr(peerPubkey) + "," + jstr(data) + "]")
 	capturedID := id
 	sw.SetTimeout(15000, func() {
 		if fn, ok := cryptoCBs[capturedID]; ok {
 			delete(cryptoCBs, capturedID)
+			sw.Log("shell: crypto TIMEOUT #" + helpers.Itoa(int64(capturedID)))
 			fn("", "crypto proxy timeout")
 		}
 	})
@@ -49,17 +50,6 @@ func broadcastToClients(msg string) {
 }
 
 func jstr(s string) string { return helpers.JsonString(s) }
-
-func hexTo32(s string) [32]byte {
-	out, _ := helpers.HexDecode32(s)
-	return out
-}
-
-func random32() [32]byte {
-	var b [32]byte
-	subtle.RandomBytes(b[:])
-	return b
-}
 
 // mw is a JSON array message walker for parsing client messages.
 type mw struct {

@@ -40,3 +40,12 @@ window.addEventListener('message', async (message) => {
     message.origin
   );
 });
+
+// Relay MLS push messages from background → page.
+// The extension background pushes events (publish, DM, subscribe, status)
+// when the marmot WASM produces output asynchronously.
+browser.runtime.onMessage.addListener((message: any) => {
+  if (message?.ext === 'smesh-signer' && message?.type === 'mls-push') {
+    window.postMessage(message, '*');
+  }
+});

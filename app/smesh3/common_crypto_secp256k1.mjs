@@ -6,12 +6,12 @@ import * as $rt from './$runtime/index.mjs';
 import * as common$crypto$sha256 from './common_crypto_sha256.mjs';
 
 // Package-level variables
-export let G = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let curveN = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let Infinity = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0), Z: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let feZero = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let feOne = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let feP = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let G = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let curveN = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let Infinity = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0), Z: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 
 $rt.types.registerType('common/crypto/secp256k1.Point', {
   id: 'common/crypto/secp256k1.Point',
@@ -609,6 +609,1077 @@ export function computeChallenge(rx, px, msg) {
       }
     }
   }
+}
+
+export function feAdd(a, b) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37;
+  $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t0_1.$set($rt.builtin.cloneValue(a));
+  $t1_2 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t1_2.$set($rt.builtin.cloneValue(b));
+  $t2_3 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t3_4 = $t0_1.$get().addr(0);
+  $t4_5 = $t3_4.$get();
+  $t5_6 = $t1_2.$get().addr(0);
+  $t6_7 = $t5_6.$get();
+  $t7_8 = addWithCarry($t4_5, $t6_7, 0);
+  $t8_9 = $t7_8[0];
+  $t9_10 = $t2_3.$get().addr(0);
+  $t9_10.$set($t8_9);
+  $t10_11 = $t7_8[1];
+  $t11_12 = $t0_1.$get().addr(1);
+  $t12_13 = $t11_12.$get();
+  $t13_14 = $t1_2.$get().addr(1);
+  $t14_15 = $t13_14.$get();
+  $t15_16 = addWithCarry($t12_13, $t14_15, $t10_11);
+  $t16_17 = $t15_16[0];
+  $t17_18 = $t2_3.$get().addr(1);
+  $t17_18.$set($t16_17);
+  $t18_19 = $t15_16[1];
+  $t19_20 = $t0_1.$get().addr(2);
+  $t20_21 = $t19_20.$get();
+  $t21_22 = $t1_2.$get().addr(2);
+  $t22_23 = $t21_22.$get();
+  $t23_24 = addWithCarry($t20_21, $t22_23, $t18_19);
+  $t24_25 = $t23_24[0];
+  $t25_26 = $t2_3.$get().addr(2);
+  $t25_26.$set($t24_25);
+  $t26_27 = $t23_24[1];
+  $t27_28 = $t0_1.$get().addr(3);
+  $t28_29 = $t27_28.$get();
+  $t29_30 = $t1_2.$get().addr(3);
+  $t30_31 = $t29_30.$get();
+  $t31_32 = addWithCarry($t28_29, $t30_31, $t26_27);
+  $t32_33 = $t31_32[0];
+  $t33_34 = $t2_3.$get().addr(3);
+  $t33_34.$set($t32_33);
+  $t34_35 = $t31_32[1];
+  $t35_36 = $t2_3.$get();
+  $t36_37 = feReduce($t35_36, $t34_35);
+  return $t36_37;
+}
+
+export function feSub(a, b) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set($rt.builtin.cloneValue(a));
+        $t1_2 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2.$set($rt.builtin.cloneValue(b));
+        $t2_3 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t3_4 = $t0_1.$get().addr(0);
+        $t4_5 = $t3_4.$get();
+        $t5_6 = $t1_2.$get().addr(0);
+        $t6_7 = $t5_6.$get();
+        $t7_8 = subWithBorrow($t4_5, $t6_7, 0);
+        $t8_9 = $t7_8[0];
+        $t9_10 = $t2_3.$get().addr(0);
+        $t9_10.$set($t8_9);
+        $t10_11 = $t7_8[1];
+        $t11_12 = $t0_1.$get().addr(1);
+        $t12_13 = $t11_12.$get();
+        $t13_14 = $t1_2.$get().addr(1);
+        $t14_15 = $t13_14.$get();
+        $t15_16 = subWithBorrow($t12_13, $t14_15, $t10_11);
+        $t16_17 = $t15_16[0];
+        $t17_18 = $t2_3.$get().addr(1);
+        $t17_18.$set($t16_17);
+        $t18_19 = $t15_16[1];
+        $t19_20 = $t0_1.$get().addr(2);
+        $t20_21 = $t19_20.$get();
+        $t21_22 = $t1_2.$get().addr(2);
+        $t22_23 = $t21_22.$get();
+        $t23_24 = subWithBorrow($t20_21, $t22_23, $t18_19);
+        $t24_25 = $t23_24[0];
+        $t25_26 = $t2_3.$get().addr(2);
+        $t25_26.$set($t24_25);
+        $t26_27 = $t23_24[1];
+        $t27_28 = $t0_1.$get().addr(3);
+        $t28_29 = $t27_28.$get();
+        $t29_30 = $t1_2.$get().addr(3);
+        $t30_31 = $t29_30.$get();
+        $t31_32 = subWithBorrow($t28_29, $t30_31, $t26_27);
+        $t32_33 = $t31_32[0];
+        $t33_34 = $t2_3.$get().addr(3);
+        $t33_34.$set($t32_33);
+        $t34_35 = $t31_32[1];
+        $t35_36 = ($t34_35 !== 0);
+        if ($t35_36) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t36_37 = $t2_3.$get().addr(0);
+        $t37_38 = $t36_37.$get();
+        $t38_39 = feP.$get().addr(0);
+        $t39_40 = $t38_39.$get();
+        $t40_41 = addWithCarry($t37_38, $t39_40, 0);
+        $t41_42 = $t40_41[0];
+        $t42_43 = $t2_3.$get().addr(0);
+        $t42_43.$set($t41_42);
+        $t43_44 = $t40_41[1];
+        $t44_45 = $t2_3.$get().addr(1);
+        $t45_46 = $t44_45.$get();
+        $t46_47 = feP.$get().addr(1);
+        $t47_48 = $t46_47.$get();
+        $t48_49 = addWithCarry($t45_46, $t47_48, $t43_44);
+        $t49_50 = $t48_49[0];
+        $t50_51 = $t2_3.$get().addr(1);
+        $t50_51.$set($t49_50);
+        $t51_52 = $t48_49[1];
+        $t52_53 = $t2_3.$get().addr(2);
+        $t53_54 = $t52_53.$get();
+        $t54_55 = feP.$get().addr(2);
+        $t55_56 = $t54_55.$get();
+        $t56_57 = addWithCarry($t53_54, $t55_56, $t51_52);
+        $t57_58 = $t56_57[0];
+        $t58_59 = $t2_3.$get().addr(2);
+        $t58_59.$set($t57_58);
+        $t59_60 = $t56_57[1];
+        $t60_61 = $t2_3.$get().addr(3);
+        $t61_62 = $t60_61.$get();
+        $t62_63 = feP.$get().addr(3);
+        $t63_64 = $t62_63.$get();
+        $t64_65 = addWithCarry($t61_62, $t63_64, $t59_60);
+        $t65_66 = $t64_65[0];
+        $t66_67 = $t2_3.$get().addr(3);
+        $t66_67.$set($t65_66);
+        $t67_68 = $t64_65[1];
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        $t68_69 = $t2_3.$get();
+        return $t68_69;
+        break;
+      }
+    }
+  }
+}
+
+export function feNeg(a) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = feZero.$get();
+        $t1_2 = (a === $t0_1);
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t2_3 = feZero.$get();
+        return $t2_3;
+        break;
+      }
+      case 2: {
+        $t3_4 = feP.$get();
+        $t4_5 = feSub($t3_4, a);
+        return $t4_5;
+        break;
+      }
+    }
+  }
+}
+
+export function feMul(a, b) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set($rt.builtin.cloneValue(a));
+        $t1_2 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2.$set($rt.builtin.cloneValue(b));
+        $t2_3 = { $value: $rt.builtin.makeSlice(8, 8, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t3_4 = 0;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t4_5 = ($t3_4 < 4);
+        if ($t4_5) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t7_8 = 0;
+        $t8_9 = 0;
+        $block = 4; break;
+        break;
+      }
+      case 3: {
+        $t5_6 = $t2_3.$get();
+        $t6_7 = feReduceFull($t5_6);
+        return $t6_7;
+        break;
+      }
+      case 4: {
+        $t9_10 = ($t8_9 < 4);
+        if ($t9_10) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 5: {
+        $t10_11 = $t0_1.$get().addr($t3_4);
+        $t11_12 = $t10_11.$get();
+        $t12_13 = $t1_2.$get().addr($t8_9);
+        $t13_14 = $t12_13.$get();
+        $t14_15 = mul64($t11_12, $t13_14);
+        $t15_16 = $t14_15[0];
+        $t16_17 = $t14_15[1];
+        $t17_18 = ($t3_4 + $t8_9);
+        $t18_19 = $t2_3.$get().addr($t17_18);
+        $t19_20 = $t18_19.$get();
+        $t20_21 = addWithCarry($t16_17, $t19_20, 0);
+        $t21_22 = $t20_21[0];
+        $t22_23 = $t20_21[1];
+        $t23_24 = ($t15_16 + $t22_23);
+        $t24_25 = addWithCarry($t21_22, $t7_8, 0);
+        $t25_26 = $t24_25[0];
+        $t26_27 = $t24_25[1];
+        $t27_28 = ($t23_24 + $t26_27);
+        $t28_29 = ($t3_4 + $t8_9);
+        $t29_30 = $t2_3.$get().addr($t28_29);
+        $t29_30.$set($t25_26);
+        $t30_31 = ($t8_9 + 1);
+        $t7_8 = $t27_28;
+        $t8_9 = $t30_31;
+        $block = 4; break;
+        break;
+      }
+      case 6: {
+        $t31_32 = ($t3_4 + 4);
+        $t32_33 = $t2_3.$get().addr($t31_32);
+        $t32_33.$set($t7_8);
+        $t33_34 = ($t3_4 + 1);
+        $t3_4 = $t33_34;
+        $block = 1; break;
+        break;
+      }
+    }
+  }
+}
+
+export function feSqr(a) {
+  let $t0_1;
+  $t0_1 = feMul(a, a);
+  return $t0_1;
+}
+
+export function feInv(a) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
+  $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t1_2 = $t0_1.$get().addr(0);
+  $t2_3 = $t0_1.$get().addr(1);
+  $t3_4 = $t0_1.$get().addr(2);
+  $t4_5 = $t0_1.$get().addr(3);
+  $t1_2.$set(18446744069414583341);
+  $t2_3.$set(18446744073709551615);
+  $t3_4.$set(18446744073709551615);
+  $t4_5.$set(18446744073709551615);
+  $t5_6 = $t0_1.$get();
+  $t6_7 = feExp(a, $t5_6);
+  return $t6_7;
+}
+
+export function feExp(base, exp) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set($rt.builtin.cloneValue(exp));
+        $t1_2 = feOne.$get();
+        $t2_3 = $t1_2;
+        $t3_4 = base;
+        $t4_5 = 0;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t5_6 = ($t4_5 < 4);
+        if ($t5_6) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t6_7 = $t0_1.$get().addr($t4_5);
+        $t7_8 = $t6_7.$get();
+        $t8_9 = $t2_3;
+        $t9_10 = $t3_4;
+        $t10_11 = $t7_8;
+        $t11_12 = 0;
+        $block = 4; break;
+        break;
+      }
+      case 3: {
+        return $t2_3;
+        break;
+      }
+      case 4: {
+        $t12_13 = ($t11_12 < 64);
+        if ($t12_13) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 5: {
+        $t13_14 = $rt.builtin.int64and($t10_11, 1);
+        $t14_15 = ($t13_14 === 1);
+        if ($t14_15) {
+          $block = 7; break;
+        }
+        else {
+          $t17_18 = $t8_9;
+          $block = 8; break;
+        }
+        break;
+      }
+      case 6: {
+        $t15_16 = ($t4_5 + 1);
+        $t2_3 = $t8_9;
+        $t3_4 = $t9_10;
+        $t4_5 = $t15_16;
+        $block = 1; break;
+        break;
+      }
+      case 7: {
+        $t16_17 = feMul($t8_9, $t9_10);
+        $t17_18 = $t16_17;
+        $block = 8; break;
+        break;
+      }
+      case 8: {
+        $t18_19 = feSqr($t9_10);
+        $t19_20 = Math.trunc($t10_11 / (2 ** 1));
+        $t20_21 = ($t11_12 + 1);
+        $t8_9 = $t17_18;
+        $t9_10 = $t18_19;
+        $t10_11 = $t19_20;
+        $t11_12 = $t20_21;
+        $block = 4; break;
+        break;
+      }
+    }
+  }
+}
+
+export function feSqrt(a) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2 = $t0_1.$get().addr(0);
+        $t2_3 = $t0_1.$get().addr(1);
+        $t3_4 = $t0_1.$get().addr(2);
+        $t4_5 = $t0_1.$get().addr(3);
+        $t1_2.$set(18446744072635809548);
+        $t2_3.$set(18446744073709551615);
+        $t3_4.$set(18446744073709551615);
+        $t4_5.$set(4611686018427387903);
+        $t5_6 = $t0_1.$get();
+        $t6_7 = feExp(a, $t5_6);
+        $t7_8 = feSqr($t6_7);
+        $t8_9 = ($t7_8 === a);
+        if ($t8_9) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return [$t6_7, true];
+        break;
+      }
+      case 2: {
+        $t9_10 = feZero.$get();
+        return [$t9_10, false];
+        break;
+      }
+    }
+  }
+}
+
+export function feFromBytes(b) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2 = $rt.builtin.len(b);
+        $t2_3 = ($t1_2 < 32);
+        if ($t2_3) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t3_4 = $t0_1.$get();
+        return $t3_4;
+        break;
+      }
+      case 2: {
+        $t4_5 = $rt.builtin.sliceSlice(b, 0, 8, undefined);
+        $t5_6 = beUint64($t4_5);
+        $t6_7 = $t0_1.$get().addr(3);
+        $t6_7.$set($t5_6);
+        $t7_8 = $rt.builtin.sliceSlice(b, 8, 16, undefined);
+        $t8_9 = beUint64($t7_8);
+        $t9_10 = $t0_1.$get().addr(2);
+        $t9_10.$set($t8_9);
+        $t10_11 = $rt.builtin.sliceSlice(b, 16, 24, undefined);
+        $t11_12 = beUint64($t10_11);
+        $t12_13 = $t0_1.$get().addr(1);
+        $t12_13.$set($t11_12);
+        $t13_14 = $rt.builtin.sliceSlice(b, 24, 32, undefined);
+        $t14_15 = beUint64($t13_14);
+        $t15_16 = $t0_1.$get().addr(0);
+        $t15_16.$set($t14_15);
+        $t16_17 = $t0_1.$get();
+        return $t16_17;
+        break;
+      }
+    }
+  }
+}
+
+export function feToBytes(a) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19;
+  $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t0_1.$set($rt.builtin.cloneValue(a));
+  $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t2_3 = $rt.builtin.sliceSlice($t1_2.$get(), 0, 8, undefined);
+  $t3_4 = $t0_1.$get().addr(3);
+  $t4_5 = $t3_4.$get();
+  $t5_6 = putBeUint64($t2_3, $t4_5);
+  $t6_7 = $rt.builtin.sliceSlice($t1_2.$get(), 8, 16, undefined);
+  $t7_8 = $t0_1.$get().addr(2);
+  $t8_9 = $t7_8.$get();
+  $t9_10 = putBeUint64($t6_7, $t8_9);
+  $t10_11 = $rt.builtin.sliceSlice($t1_2.$get(), 16, 24, undefined);
+  $t11_12 = $t0_1.$get().addr(1);
+  $t12_13 = $t11_12.$get();
+  $t13_14 = putBeUint64($t10_11, $t12_13);
+  $t14_15 = $rt.builtin.sliceSlice($t1_2.$get(), 24, 32, undefined);
+  $t15_16 = $t0_1.$get().addr(0);
+  $t16_17 = $t15_16.$get();
+  $t17_18 = putBeUint64($t14_15, $t16_17);
+  $t18_19 = $t1_2.$get();
+  return $t18_19;
+}
+
+export function feIsZero(a) {
+  let $t0_1, $t1_2;
+  $t0_1 = feZero.$get();
+  $t1_2 = (a === $t0_1);
+  return $t1_2;
+}
+
+export function feIsEven(a) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
+  $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t0_1.$set($rt.builtin.cloneValue(a));
+  $t1_2 = $t0_1.$get().addr(0);
+  $t2_3 = $t1_2.$get();
+  $t3_4 = $rt.builtin.int64and($t2_3, 1);
+  $t4_5 = ($t3_4 === 0);
+  return $t4_5;
+}
+
+export function feCmp(a, b) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set($rt.builtin.cloneValue(a));
+        $t1_2 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2.$set($rt.builtin.cloneValue(b));
+        $t2_3 = 3;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t3_4 = ($t2_3 >= 0);
+        if ($t3_4) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t4_5 = $t0_1.$get().addr($t2_3);
+        $t5_6 = $t4_5.$get();
+        $t6_7 = $t1_2.$get().addr($t2_3);
+        $t7_8 = $t6_7.$get();
+        $t8_9 = ($t5_6 < $t7_8);
+        if ($t8_9) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 3: {
+        return 0;
+        break;
+      }
+      case 4: {
+        return -1;
+        break;
+      }
+      case 5: {
+        $t9_10 = $t0_1.$get().addr($t2_3);
+        $t10_11 = $t9_10.$get();
+        $t11_12 = $t1_2.$get().addr($t2_3);
+        $t12_13 = $t11_12.$get();
+        $t13_14 = ($t10_11 > $t12_13);
+        if ($t13_14) {
+          $block = 6; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 6: {
+        return 1;
+        break;
+      }
+      case 7: {
+        $t14_15 = ($t2_3 - 1);
+        $t2_3 = $t14_15;
+        $block = 1; break;
+        break;
+      }
+    }
+  }
+}
+
+export function feReduce(r, carry) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set($rt.builtin.cloneValue(r));
+        $t1_2 = (carry !== 0);
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 1: {
+        $t2_3 = $t0_1.$get().addr(0);
+        $t3_4 = $t2_3.$get();
+        $t4_5 = feP.$get().addr(0);
+        $t5_6 = $t4_5.$get();
+        $t6_7 = subWithBorrow($t3_4, $t5_6, 0);
+        $t7_8 = $t6_7[0];
+        $t8_9 = $t0_1.$get().addr(0);
+        $t8_9.$set($t7_8);
+        $t9_10 = $t6_7[1];
+        $t10_11 = $t0_1.$get().addr(1);
+        $t11_12 = $t10_11.$get();
+        $t12_13 = feP.$get().addr(1);
+        $t13_14 = $t12_13.$get();
+        $t14_15 = subWithBorrow($t11_12, $t13_14, $t9_10);
+        $t15_16 = $t14_15[0];
+        $t16_17 = $t0_1.$get().addr(1);
+        $t16_17.$set($t15_16);
+        $t17_18 = $t14_15[1];
+        $t18_19 = $t0_1.$get().addr(2);
+        $t19_20 = $t18_19.$get();
+        $t20_21 = feP.$get().addr(2);
+        $t21_22 = $t20_21.$get();
+        $t22_23 = subWithBorrow($t19_20, $t21_22, $t17_18);
+        $t23_24 = $t22_23[0];
+        $t24_25 = $t0_1.$get().addr(2);
+        $t24_25.$set($t23_24);
+        $t25_26 = $t22_23[1];
+        $t26_27 = $t0_1.$get().addr(3);
+        $t27_28 = $t26_27.$get();
+        $t28_29 = feP.$get().addr(3);
+        $t29_30 = $t28_29.$get();
+        $t30_31 = subWithBorrow($t27_28, $t29_30, $t25_26);
+        $t31_32 = $t30_31[0];
+        $t32_33 = $t0_1.$get().addr(3);
+        $t32_33.$set($t31_32);
+        $t33_34 = $t30_31[1];
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        $t34_35 = $t0_1.$get();
+        return $t34_35;
+        break;
+      }
+      case 3: {
+        $t35_36 = $t0_1.$get();
+        $t36_37 = feP.$get();
+        $t37_38 = feCmp($t35_36, $t36_37);
+        $t38_39 = ($t37_38 >= 0);
+        if ($t38_39) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function feReduceFull(t) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(8, 8, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set($rt.builtin.cloneValue(t));
+        $t1_2 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t2_3 = 0;
+        $t3_4 = 0;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t4_5 = ($t3_4 < 4);
+        if ($t4_5) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t5_6 = ($t3_4 + 4);
+        $t6_7 = $t0_1.$get().addr($t5_6);
+        $t7_8 = $t6_7.$get();
+        $t8_9 = mul64($t7_8, 4294968273);
+        $t9_10 = $t8_9[0];
+        $t10_11 = $t8_9[1];
+        $t11_12 = $t0_1.$get().addr($t3_4);
+        $t12_13 = $t11_12.$get();
+        $t13_14 = addWithCarry($t10_11, $t12_13, 0);
+        $t14_15 = $t13_14[0];
+        $t15_16 = $t13_14[1];
+        $t16_17 = ($t9_10 + $t15_16);
+        $t17_18 = addWithCarry($t14_15, $t2_3, 0);
+        $t18_19 = $t17_18[0];
+        $t19_20 = $t17_18[1];
+        $t20_21 = ($t16_17 + $t19_20);
+        $t21_22 = $t1_2.$get().addr($t3_4);
+        $t21_22.$set($t18_19);
+        $t22_23 = ($t3_4 + 1);
+        $t2_3 = $t20_21;
+        $t3_4 = $t22_23;
+        $block = 1; break;
+        break;
+      }
+      case 3: {
+        $t23_24 = ($t2_3 !== 0);
+        if ($t23_24) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 4: {
+        $t24_25 = mul64($t2_3, 4294968273);
+        $t25_26 = $t24_25[0];
+        $t26_27 = $t24_25[1];
+        $t27_28 = $t1_2.$get().addr(0);
+        $t28_29 = $t27_28.$get();
+        $t29_30 = addWithCarry($t28_29, $t26_27, 0);
+        $t30_31 = $t29_30[0];
+        $t31_32 = $t1_2.$get().addr(0);
+        $t31_32.$set($t30_31);
+        $t32_33 = $t29_30[1];
+        $t33_34 = $t1_2.$get().addr(1);
+        $t34_35 = $t33_34.$get();
+        $t35_36 = addWithCarry($t34_35, $t25_26, $t32_33);
+        $t36_37 = $t35_36[0];
+        $t37_38 = $t1_2.$get().addr(1);
+        $t37_38.$set($t36_37);
+        $t38_39 = $t35_36[1];
+        $t39_40 = $t1_2.$get().addr(2);
+        $t40_41 = $t39_40.$get();
+        $t41_42 = addWithCarry($t40_41, 0, $t38_39);
+        $t42_43 = $t41_42[0];
+        $t43_44 = $t1_2.$get().addr(2);
+        $t43_44.$set($t42_43);
+        $t44_45 = $t41_42[1];
+        $t45_46 = $t1_2.$get().addr(3);
+        $t46_47 = $t45_46.$get();
+        $t47_48 = addWithCarry($t46_47, 0, $t44_45);
+        $t48_49 = $t47_48[0];
+        $t49_50 = $t1_2.$get().addr(3);
+        $t49_50.$set($t48_49);
+        $t50_51 = $t47_48[1];
+        $block = 5; break;
+        break;
+      }
+      case 5: {
+        $t51_52 = $t1_2.$get();
+        $t52_53 = feP.$get();
+        $t53_54 = feCmp($t51_52, $t52_53);
+        $t54_55 = ($t53_54 >= 0);
+        if ($t54_55) {
+          $block = 6; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 6: {
+        $t55_56 = $t1_2.$get().addr(0);
+        $t56_57 = $t55_56.$get();
+        $t57_58 = feP.$get().addr(0);
+        $t58_59 = $t57_58.$get();
+        $t59_60 = subWithBorrow($t56_57, $t58_59, 0);
+        $t60_61 = $t59_60[0];
+        $t61_62 = $t1_2.$get().addr(0);
+        $t61_62.$set($t60_61);
+        $t62_63 = $t59_60[1];
+        $t63_64 = $t1_2.$get().addr(1);
+        $t64_65 = $t63_64.$get();
+        $t65_66 = feP.$get().addr(1);
+        $t66_67 = $t65_66.$get();
+        $t67_68 = subWithBorrow($t64_65, $t66_67, $t62_63);
+        $t68_69 = $t67_68[0];
+        $t69_70 = $t1_2.$get().addr(1);
+        $t69_70.$set($t68_69);
+        $t70_71 = $t67_68[1];
+        $t71_72 = $t1_2.$get().addr(2);
+        $t72_73 = $t71_72.$get();
+        $t73_74 = feP.$get().addr(2);
+        $t74_75 = $t73_74.$get();
+        $t75_76 = subWithBorrow($t72_73, $t74_75, $t70_71);
+        $t76_77 = $t75_76[0];
+        $t77_78 = $t1_2.$get().addr(2);
+        $t77_78.$set($t76_77);
+        $t78_79 = $t75_76[1];
+        $t79_80 = $t1_2.$get().addr(3);
+        $t80_81 = $t79_80.$get();
+        $t81_82 = feP.$get().addr(3);
+        $t82_83 = $t81_82.$get();
+        $t83_84 = subWithBorrow($t80_81, $t82_83, $t78_79);
+        $t84_85 = $t83_84[0];
+        $t85_86 = $t1_2.$get().addr(3);
+        $t85_86.$set($t84_85);
+        $t86_87 = $t83_84[1];
+        $block = 7; break;
+        break;
+      }
+      case 7: {
+        $t87_88 = $t1_2.$get();
+        return $t87_88;
+        break;
+      }
+    }
+  }
+}
+
+export function addWithCarry(a, b, carry) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = (a + b);
+        $t1_2 = ($t0_1 + carry);
+        $t2_3 = ($t1_2 < a);
+        if ($t2_3) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 1: {
+        $t3_4 = 1;
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        return [$t1_2, $t3_4];
+        break;
+      }
+      case 3: {
+        $t4_5 = ($t1_2 === a);
+        if ($t4_5) {
+          $block = 4; break;
+        }
+        else {
+          $t3_4 = 0;
+          $block = 2; break;
+        }
+        break;
+      }
+      case 4: {
+        $t5_6 = $rt.builtin.int64or(b, carry);
+        $t6_7 = ($t5_6 !== 0);
+        if ($t6_7) {
+          $block = 1; break;
+        }
+        else {
+          $t3_4 = 0;
+          $block = 2; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function subWithBorrow(a, b, borrow) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = (a - b);
+        $t1_2 = ($t0_1 - borrow);
+        $t2_3 = (b + borrow);
+        $t3_4 = (a < $t2_3);
+        if ($t3_4) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 1: {
+        $t4_5 = 1;
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        return [$t1_2, $t4_5];
+        break;
+      }
+      case 3: {
+        $t5_6 = (borrow !== 0);
+        if ($t5_6) {
+          $block = 4; break;
+        }
+        else {
+          $t4_5 = 0;
+          $block = 2; break;
+        }
+        break;
+      }
+      case 4: {
+        $t6_7 = (b === 18446744073709551615);
+        if ($t6_7) {
+          $block = 1; break;
+        }
+        else {
+          $t4_5 = 0;
+          $block = 2; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function mul64(a, b) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = Math.trunc(a / (2 ** 32));
+        $t1_2 = $rt.builtin.int64and(a, 4294967295);
+        $t2_3 = Math.trunc(b / (2 ** 32));
+        $t3_4 = $rt.builtin.int64and(b, 4294967295);
+        $t4_5 = ($t1_2 * $t3_4);
+        $t5_6 = ($t0_1 * $t3_4);
+        $t6_7 = ($t1_2 * $t2_3);
+        $t7_8 = ($t0_1 * $t2_3);
+        $t8_9 = Math.trunc($t4_5 / (2 ** 32));
+        $t9_10 = ($t5_6 + $t8_9);
+        $t10_11 = ($t9_10 < $t5_6);
+        if ($t10_11) {
+          $block = 1; break;
+        }
+        else {
+          $t12_13 = $t7_8;
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t11_12 = ($t7_8 + 4294967296);
+        $t12_13 = $t11_12;
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        $t13_14 = ($t9_10 + $t6_7);
+        $t14_15 = ($t13_14 < $t9_10);
+        if ($t14_15) {
+          $block = 3; break;
+        }
+        else {
+          $t16_17 = $t12_13;
+          $block = 4; break;
+        }
+        break;
+      }
+      case 3: {
+        $t15_16 = ($t12_13 + 4294967296);
+        $t16_17 = $t15_16;
+        $block = 4; break;
+        break;
+      }
+      case 4: {
+        $t17_18 = ($t13_14 * (2 ** 32));
+        $t18_19 = $rt.builtin.int64and($t4_5, 4294967295);
+        $t19_20 = $rt.builtin.int64or($t17_18, $t18_19);
+        $t20_21 = Math.trunc($t13_14 / (2 ** 32));
+        $t21_22 = ($t16_17 + $t20_21);
+        return [$t21_22, $t19_20];
+        break;
+      }
+    }
+  }
+}
+
+export function beUint64(b) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38;
+  $t0_1 = b.addr(0);
+  $t1_2 = $t0_1.$get();
+  $t2_3 = $t1_2;
+  $t3_4 = ($t2_3 * (2 ** 56));
+  $t4_5 = b.addr(1);
+  $t5_6 = $t4_5.$get();
+  $t6_7 = $t5_6;
+  $t7_8 = ($t6_7 * (2 ** 48));
+  $t8_9 = $rt.builtin.int64or($t3_4, $t7_8);
+  $t9_10 = b.addr(2);
+  $t10_11 = $t9_10.$get();
+  $t11_12 = $t10_11;
+  $t12_13 = ($t11_12 * (2 ** 40));
+  $t13_14 = $rt.builtin.int64or($t8_9, $t12_13);
+  $t14_15 = b.addr(3);
+  $t15_16 = $t14_15.$get();
+  $t16_17 = $t15_16;
+  $t17_18 = ($t16_17 * (2 ** 32));
+  $t18_19 = $rt.builtin.int64or($t13_14, $t17_18);
+  $t19_20 = b.addr(4);
+  $t20_21 = $t19_20.$get();
+  $t21_22 = $t20_21;
+  $t22_23 = ($t21_22 * (2 ** 24));
+  $t23_24 = $rt.builtin.int64or($t18_19, $t22_23);
+  $t24_25 = b.addr(5);
+  $t25_26 = $t24_25.$get();
+  $t26_27 = $t25_26;
+  $t27_28 = ($t26_27 * (2 ** 16));
+  $t28_29 = $rt.builtin.int64or($t23_24, $t27_28);
+  $t29_30 = b.addr(6);
+  $t30_31 = $t29_30.$get();
+  $t31_32 = $t30_31;
+  $t32_33 = ($t31_32 * (2 ** 8));
+  $t33_34 = $rt.builtin.int64or($t28_29, $t32_33);
+  $t34_35 = b.addr(7);
+  $t35_36 = $t34_35.$get();
+  $t36_37 = $t35_36;
+  $t37_38 = $rt.builtin.int64or($t33_34, $t36_37);
+  return $t37_38;
+}
+
+export function putBeUint64(b, v) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23;
+  $t0_1 = Math.trunc(v / (2 ** 56));
+  $t1_2 = ($t0_1 & 0xFF);
+  $t2_3 = b.addr(0);
+  $t2_3.$set($t1_2);
+  $t3_4 = Math.trunc(v / (2 ** 48));
+  $t4_5 = ($t3_4 & 0xFF);
+  $t5_6 = b.addr(1);
+  $t5_6.$set($t4_5);
+  $t6_7 = Math.trunc(v / (2 ** 40));
+  $t7_8 = ($t6_7 & 0xFF);
+  $t8_9 = b.addr(2);
+  $t8_9.$set($t7_8);
+  $t9_10 = Math.trunc(v / (2 ** 32));
+  $t10_11 = ($t9_10 & 0xFF);
+  $t11_12 = b.addr(3);
+  $t11_12.$set($t10_11);
+  $t12_13 = Math.trunc(v / (2 ** 24));
+  $t13_14 = ($t12_13 & 0xFF);
+  $t14_15 = b.addr(4);
+  $t14_15.$set($t13_14);
+  $t15_16 = Math.trunc(v / (2 ** 16));
+  $t16_17 = ($t15_16 & 0xFF);
+  $t17_18 = b.addr(5);
+  $t17_18.$set($t16_17);
+  $t18_19 = Math.trunc(v / (2 ** 8));
+  $t19_20 = ($t18_19 & 0xFF);
+  $t20_21 = b.addr(6);
+  $t20_21.$set($t19_20);
+  $t21_22 = (v & 0xFF);
+  $t22_23 = b.addr(7);
+  $t22_23.$set($t21_22);
+  return;
 }
 
 export function pointFromAffine(p) {
@@ -1797,1077 +2868,6 @@ export function scalarFromBytes(b) {
   let $t0_1;
   $t0_1 = feFromBytes(b);
   return $t0_1;
-}
-
-export function feAdd(a, b) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37;
-  $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t0_1.$set($rt.builtin.cloneValue(a));
-  $t1_2 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2.$set($rt.builtin.cloneValue(b));
-  $t2_3 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t3_4 = $t0_1.$get().addr(0);
-  $t4_5 = $t3_4.$get();
-  $t5_6 = $t1_2.$get().addr(0);
-  $t6_7 = $t5_6.$get();
-  $t7_8 = addWithCarry($t4_5, $t6_7, 0);
-  $t8_9 = $t7_8[0];
-  $t9_10 = $t2_3.$get().addr(0);
-  $t9_10.$set($t8_9);
-  $t10_11 = $t7_8[1];
-  $t11_12 = $t0_1.$get().addr(1);
-  $t12_13 = $t11_12.$get();
-  $t13_14 = $t1_2.$get().addr(1);
-  $t14_15 = $t13_14.$get();
-  $t15_16 = addWithCarry($t12_13, $t14_15, $t10_11);
-  $t16_17 = $t15_16[0];
-  $t17_18 = $t2_3.$get().addr(1);
-  $t17_18.$set($t16_17);
-  $t18_19 = $t15_16[1];
-  $t19_20 = $t0_1.$get().addr(2);
-  $t20_21 = $t19_20.$get();
-  $t21_22 = $t1_2.$get().addr(2);
-  $t22_23 = $t21_22.$get();
-  $t23_24 = addWithCarry($t20_21, $t22_23, $t18_19);
-  $t24_25 = $t23_24[0];
-  $t25_26 = $t2_3.$get().addr(2);
-  $t25_26.$set($t24_25);
-  $t26_27 = $t23_24[1];
-  $t27_28 = $t0_1.$get().addr(3);
-  $t28_29 = $t27_28.$get();
-  $t29_30 = $t1_2.$get().addr(3);
-  $t30_31 = $t29_30.$get();
-  $t31_32 = addWithCarry($t28_29, $t30_31, $t26_27);
-  $t32_33 = $t31_32[0];
-  $t33_34 = $t2_3.$get().addr(3);
-  $t33_34.$set($t32_33);
-  $t34_35 = $t31_32[1];
-  $t35_36 = $t2_3.$get();
-  $t36_37 = feReduce($t35_36, $t34_35);
-  return $t36_37;
-}
-
-export function feSub(a, b) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set($rt.builtin.cloneValue(a));
-        $t1_2 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2.$set($rt.builtin.cloneValue(b));
-        $t2_3 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t3_4 = $t0_1.$get().addr(0);
-        $t4_5 = $t3_4.$get();
-        $t5_6 = $t1_2.$get().addr(0);
-        $t6_7 = $t5_6.$get();
-        $t7_8 = subWithBorrow($t4_5, $t6_7, 0);
-        $t8_9 = $t7_8[0];
-        $t9_10 = $t2_3.$get().addr(0);
-        $t9_10.$set($t8_9);
-        $t10_11 = $t7_8[1];
-        $t11_12 = $t0_1.$get().addr(1);
-        $t12_13 = $t11_12.$get();
-        $t13_14 = $t1_2.$get().addr(1);
-        $t14_15 = $t13_14.$get();
-        $t15_16 = subWithBorrow($t12_13, $t14_15, $t10_11);
-        $t16_17 = $t15_16[0];
-        $t17_18 = $t2_3.$get().addr(1);
-        $t17_18.$set($t16_17);
-        $t18_19 = $t15_16[1];
-        $t19_20 = $t0_1.$get().addr(2);
-        $t20_21 = $t19_20.$get();
-        $t21_22 = $t1_2.$get().addr(2);
-        $t22_23 = $t21_22.$get();
-        $t23_24 = subWithBorrow($t20_21, $t22_23, $t18_19);
-        $t24_25 = $t23_24[0];
-        $t25_26 = $t2_3.$get().addr(2);
-        $t25_26.$set($t24_25);
-        $t26_27 = $t23_24[1];
-        $t27_28 = $t0_1.$get().addr(3);
-        $t28_29 = $t27_28.$get();
-        $t29_30 = $t1_2.$get().addr(3);
-        $t30_31 = $t29_30.$get();
-        $t31_32 = subWithBorrow($t28_29, $t30_31, $t26_27);
-        $t32_33 = $t31_32[0];
-        $t33_34 = $t2_3.$get().addr(3);
-        $t33_34.$set($t32_33);
-        $t34_35 = $t31_32[1];
-        $t35_36 = ($t34_35 !== 0);
-        if ($t35_36) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t36_37 = $t2_3.$get().addr(0);
-        $t37_38 = $t36_37.$get();
-        $t38_39 = feP.$get().addr(0);
-        $t39_40 = $t38_39.$get();
-        $t40_41 = addWithCarry($t37_38, $t39_40, 0);
-        $t41_42 = $t40_41[0];
-        $t42_43 = $t2_3.$get().addr(0);
-        $t42_43.$set($t41_42);
-        $t43_44 = $t40_41[1];
-        $t44_45 = $t2_3.$get().addr(1);
-        $t45_46 = $t44_45.$get();
-        $t46_47 = feP.$get().addr(1);
-        $t47_48 = $t46_47.$get();
-        $t48_49 = addWithCarry($t45_46, $t47_48, $t43_44);
-        $t49_50 = $t48_49[0];
-        $t50_51 = $t2_3.$get().addr(1);
-        $t50_51.$set($t49_50);
-        $t51_52 = $t48_49[1];
-        $t52_53 = $t2_3.$get().addr(2);
-        $t53_54 = $t52_53.$get();
-        $t54_55 = feP.$get().addr(2);
-        $t55_56 = $t54_55.$get();
-        $t56_57 = addWithCarry($t53_54, $t55_56, $t51_52);
-        $t57_58 = $t56_57[0];
-        $t58_59 = $t2_3.$get().addr(2);
-        $t58_59.$set($t57_58);
-        $t59_60 = $t56_57[1];
-        $t60_61 = $t2_3.$get().addr(3);
-        $t61_62 = $t60_61.$get();
-        $t62_63 = feP.$get().addr(3);
-        $t63_64 = $t62_63.$get();
-        $t64_65 = addWithCarry($t61_62, $t63_64, $t59_60);
-        $t65_66 = $t64_65[0];
-        $t66_67 = $t2_3.$get().addr(3);
-        $t66_67.$set($t65_66);
-        $t67_68 = $t64_65[1];
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        $t68_69 = $t2_3.$get();
-        return $t68_69;
-        break;
-      }
-    }
-  }
-}
-
-export function feNeg(a) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = feZero.$get();
-        $t1_2 = (a === $t0_1);
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t2_3 = feZero.$get();
-        return $t2_3;
-        break;
-      }
-      case 2: {
-        $t3_4 = feP.$get();
-        $t4_5 = feSub($t3_4, a);
-        return $t4_5;
-        break;
-      }
-    }
-  }
-}
-
-export function feMul(a, b) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set($rt.builtin.cloneValue(a));
-        $t1_2 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2.$set($rt.builtin.cloneValue(b));
-        $t2_3 = { $value: $rt.builtin.makeSlice(8, 8, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t3_4 = 0;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t4_5 = ($t3_4 < 4);
-        if ($t4_5) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t7_8 = 0;
-        $t8_9 = 0;
-        $block = 4; break;
-        break;
-      }
-      case 3: {
-        $t5_6 = $t2_3.$get();
-        $t6_7 = feReduceFull($t5_6);
-        return $t6_7;
-        break;
-      }
-      case 4: {
-        $t9_10 = ($t8_9 < 4);
-        if ($t9_10) {
-          $block = 5; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 5: {
-        $t10_11 = $t0_1.$get().addr($t3_4);
-        $t11_12 = $t10_11.$get();
-        $t12_13 = $t1_2.$get().addr($t8_9);
-        $t13_14 = $t12_13.$get();
-        $t14_15 = mul64($t11_12, $t13_14);
-        $t15_16 = $t14_15[0];
-        $t16_17 = $t14_15[1];
-        $t17_18 = ($t3_4 + $t8_9);
-        $t18_19 = $t2_3.$get().addr($t17_18);
-        $t19_20 = $t18_19.$get();
-        $t20_21 = addWithCarry($t16_17, $t19_20, 0);
-        $t21_22 = $t20_21[0];
-        $t22_23 = $t20_21[1];
-        $t23_24 = ($t15_16 + $t22_23);
-        $t24_25 = addWithCarry($t21_22, $t7_8, 0);
-        $t25_26 = $t24_25[0];
-        $t26_27 = $t24_25[1];
-        $t27_28 = ($t23_24 + $t26_27);
-        $t28_29 = ($t3_4 + $t8_9);
-        $t29_30 = $t2_3.$get().addr($t28_29);
-        $t29_30.$set($t25_26);
-        $t30_31 = ($t8_9 + 1);
-        $t7_8 = $t27_28;
-        $t8_9 = $t30_31;
-        $block = 4; break;
-        break;
-      }
-      case 6: {
-        $t31_32 = ($t3_4 + 4);
-        $t32_33 = $t2_3.$get().addr($t31_32);
-        $t32_33.$set($t7_8);
-        $t33_34 = ($t3_4 + 1);
-        $t3_4 = $t33_34;
-        $block = 1; break;
-        break;
-      }
-    }
-  }
-}
-
-export function feSqr(a) {
-  let $t0_1;
-  $t0_1 = feMul(a, a);
-  return $t0_1;
-}
-
-export function feInv(a) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
-  $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2 = $t0_1.$get().addr(0);
-  $t2_3 = $t0_1.$get().addr(1);
-  $t3_4 = $t0_1.$get().addr(2);
-  $t4_5 = $t0_1.$get().addr(3);
-  $t1_2.$set(18446744069414583341);
-  $t2_3.$set(18446744073709551615);
-  $t3_4.$set(18446744073709551615);
-  $t4_5.$set(18446744073709551615);
-  $t5_6 = $t0_1.$get();
-  $t6_7 = feExp(a, $t5_6);
-  return $t6_7;
-}
-
-export function feExp(base, exp) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set($rt.builtin.cloneValue(exp));
-        $t1_2 = feOne.$get();
-        $t2_3 = $t1_2;
-        $t3_4 = base;
-        $t4_5 = 0;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t5_6 = ($t4_5 < 4);
-        if ($t5_6) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t6_7 = $t0_1.$get().addr($t4_5);
-        $t7_8 = $t6_7.$get();
-        $t8_9 = $t2_3;
-        $t9_10 = $t3_4;
-        $t10_11 = $t7_8;
-        $t11_12 = 0;
-        $block = 4; break;
-        break;
-      }
-      case 3: {
-        return $t2_3;
-        break;
-      }
-      case 4: {
-        $t12_13 = ($t11_12 < 64);
-        if ($t12_13) {
-          $block = 5; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 5: {
-        $t13_14 = $rt.builtin.int64and($t10_11, 1);
-        $t14_15 = ($t13_14 === 1);
-        if ($t14_15) {
-          $block = 7; break;
-        }
-        else {
-          $t17_18 = $t8_9;
-          $block = 8; break;
-        }
-        break;
-      }
-      case 6: {
-        $t15_16 = ($t4_5 + 1);
-        $t2_3 = $t8_9;
-        $t3_4 = $t9_10;
-        $t4_5 = $t15_16;
-        $block = 1; break;
-        break;
-      }
-      case 7: {
-        $t16_17 = feMul($t8_9, $t9_10);
-        $t17_18 = $t16_17;
-        $block = 8; break;
-        break;
-      }
-      case 8: {
-        $t18_19 = feSqr($t9_10);
-        $t19_20 = Math.trunc($t10_11 / (2 ** 1));
-        $t20_21 = ($t11_12 + 1);
-        $t8_9 = $t17_18;
-        $t9_10 = $t18_19;
-        $t10_11 = $t19_20;
-        $t11_12 = $t20_21;
-        $block = 4; break;
-        break;
-      }
-    }
-  }
-}
-
-export function feSqrt(a) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2 = $t0_1.$get().addr(0);
-        $t2_3 = $t0_1.$get().addr(1);
-        $t3_4 = $t0_1.$get().addr(2);
-        $t4_5 = $t0_1.$get().addr(3);
-        $t1_2.$set(18446744072635809548);
-        $t2_3.$set(18446744073709551615);
-        $t3_4.$set(18446744073709551615);
-        $t4_5.$set(4611686018427387903);
-        $t5_6 = $t0_1.$get();
-        $t6_7 = feExp(a, $t5_6);
-        $t7_8 = feSqr($t6_7);
-        $t8_9 = ($t7_8 === a);
-        if ($t8_9) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return [$t6_7, true];
-        break;
-      }
-      case 2: {
-        $t9_10 = feZero.$get();
-        return [$t9_10, false];
-        break;
-      }
-    }
-  }
-}
-
-export function feFromBytes(b) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2 = $rt.builtin.len(b);
-        $t2_3 = ($t1_2 < 32);
-        if ($t2_3) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t3_4 = $t0_1.$get();
-        return $t3_4;
-        break;
-      }
-      case 2: {
-        $t4_5 = $rt.builtin.sliceSlice(b, 0, 8, undefined);
-        $t5_6 = beUint64($t4_5);
-        $t6_7 = $t0_1.$get().addr(3);
-        $t6_7.$set($t5_6);
-        $t7_8 = $rt.builtin.sliceSlice(b, 8, 16, undefined);
-        $t8_9 = beUint64($t7_8);
-        $t9_10 = $t0_1.$get().addr(2);
-        $t9_10.$set($t8_9);
-        $t10_11 = $rt.builtin.sliceSlice(b, 16, 24, undefined);
-        $t11_12 = beUint64($t10_11);
-        $t12_13 = $t0_1.$get().addr(1);
-        $t12_13.$set($t11_12);
-        $t13_14 = $rt.builtin.sliceSlice(b, 24, 32, undefined);
-        $t14_15 = beUint64($t13_14);
-        $t15_16 = $t0_1.$get().addr(0);
-        $t15_16.$set($t14_15);
-        $t16_17 = $t0_1.$get();
-        return $t16_17;
-        break;
-      }
-    }
-  }
-}
-
-export function feToBytes(a) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19;
-  $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t0_1.$set($rt.builtin.cloneValue(a));
-  $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t2_3 = $rt.builtin.sliceSlice($t1_2.$get(), 0, 8, undefined);
-  $t3_4 = $t0_1.$get().addr(3);
-  $t4_5 = $t3_4.$get();
-  $t5_6 = putBeUint64($t2_3, $t4_5);
-  $t6_7 = $rt.builtin.sliceSlice($t1_2.$get(), 8, 16, undefined);
-  $t7_8 = $t0_1.$get().addr(2);
-  $t8_9 = $t7_8.$get();
-  $t9_10 = putBeUint64($t6_7, $t8_9);
-  $t10_11 = $rt.builtin.sliceSlice($t1_2.$get(), 16, 24, undefined);
-  $t11_12 = $t0_1.$get().addr(1);
-  $t12_13 = $t11_12.$get();
-  $t13_14 = putBeUint64($t10_11, $t12_13);
-  $t14_15 = $rt.builtin.sliceSlice($t1_2.$get(), 24, 32, undefined);
-  $t15_16 = $t0_1.$get().addr(0);
-  $t16_17 = $t15_16.$get();
-  $t17_18 = putBeUint64($t14_15, $t16_17);
-  $t18_19 = $t1_2.$get();
-  return $t18_19;
-}
-
-export function feIsZero(a) {
-  let $t0_1, $t1_2;
-  $t0_1 = feZero.$get();
-  $t1_2 = (a === $t0_1);
-  return $t1_2;
-}
-
-export function feIsEven(a) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
-  $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t0_1.$set($rt.builtin.cloneValue(a));
-  $t1_2 = $t0_1.$get().addr(0);
-  $t2_3 = $t1_2.$get();
-  $t3_4 = $rt.builtin.int64and($t2_3, 1);
-  $t4_5 = ($t3_4 === 0);
-  return $t4_5;
-}
-
-export function feCmp(a, b) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set($rt.builtin.cloneValue(a));
-        $t1_2 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2.$set($rt.builtin.cloneValue(b));
-        $t2_3 = 3;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t3_4 = ($t2_3 >= 0);
-        if ($t3_4) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t4_5 = $t0_1.$get().addr($t2_3);
-        $t5_6 = $t4_5.$get();
-        $t6_7 = $t1_2.$get().addr($t2_3);
-        $t7_8 = $t6_7.$get();
-        $t8_9 = ($t5_6 < $t7_8);
-        if ($t8_9) {
-          $block = 4; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 3: {
-        return 0;
-        break;
-      }
-      case 4: {
-        return -1;
-        break;
-      }
-      case 5: {
-        $t9_10 = $t0_1.$get().addr($t2_3);
-        $t10_11 = $t9_10.$get();
-        $t11_12 = $t1_2.$get().addr($t2_3);
-        $t12_13 = $t11_12.$get();
-        $t13_14 = ($t10_11 > $t12_13);
-        if ($t13_14) {
-          $block = 6; break;
-        }
-        else {
-          $block = 7; break;
-        }
-        break;
-      }
-      case 6: {
-        return 1;
-        break;
-      }
-      case 7: {
-        $t14_15 = ($t2_3 - 1);
-        $t2_3 = $t14_15;
-        $block = 1; break;
-        break;
-      }
-    }
-  }
-}
-
-export function feReduce(r, carry) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set($rt.builtin.cloneValue(r));
-        $t1_2 = (carry !== 0);
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 1: {
-        $t2_3 = $t0_1.$get().addr(0);
-        $t3_4 = $t2_3.$get();
-        $t4_5 = feP.$get().addr(0);
-        $t5_6 = $t4_5.$get();
-        $t6_7 = subWithBorrow($t3_4, $t5_6, 0);
-        $t7_8 = $t6_7[0];
-        $t8_9 = $t0_1.$get().addr(0);
-        $t8_9.$set($t7_8);
-        $t9_10 = $t6_7[1];
-        $t10_11 = $t0_1.$get().addr(1);
-        $t11_12 = $t10_11.$get();
-        $t12_13 = feP.$get().addr(1);
-        $t13_14 = $t12_13.$get();
-        $t14_15 = subWithBorrow($t11_12, $t13_14, $t9_10);
-        $t15_16 = $t14_15[0];
-        $t16_17 = $t0_1.$get().addr(1);
-        $t16_17.$set($t15_16);
-        $t17_18 = $t14_15[1];
-        $t18_19 = $t0_1.$get().addr(2);
-        $t19_20 = $t18_19.$get();
-        $t20_21 = feP.$get().addr(2);
-        $t21_22 = $t20_21.$get();
-        $t22_23 = subWithBorrow($t19_20, $t21_22, $t17_18);
-        $t23_24 = $t22_23[0];
-        $t24_25 = $t0_1.$get().addr(2);
-        $t24_25.$set($t23_24);
-        $t25_26 = $t22_23[1];
-        $t26_27 = $t0_1.$get().addr(3);
-        $t27_28 = $t26_27.$get();
-        $t28_29 = feP.$get().addr(3);
-        $t29_30 = $t28_29.$get();
-        $t30_31 = subWithBorrow($t27_28, $t29_30, $t25_26);
-        $t31_32 = $t30_31[0];
-        $t32_33 = $t0_1.$get().addr(3);
-        $t32_33.$set($t31_32);
-        $t33_34 = $t30_31[1];
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        $t34_35 = $t0_1.$get();
-        return $t34_35;
-        break;
-      }
-      case 3: {
-        $t35_36 = $t0_1.$get();
-        $t36_37 = feP.$get();
-        $t37_38 = feCmp($t35_36, $t36_37);
-        $t38_39 = ($t37_38 >= 0);
-        if ($t38_39) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-export function feReduceFull(t) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(8, 8, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set($rt.builtin.cloneValue(t));
-        $t1_2 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t2_3 = 0;
-        $t3_4 = 0;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t4_5 = ($t3_4 < 4);
-        if ($t4_5) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t5_6 = ($t3_4 + 4);
-        $t6_7 = $t0_1.$get().addr($t5_6);
-        $t7_8 = $t6_7.$get();
-        $t8_9 = mul64($t7_8, 4294968273);
-        $t9_10 = $t8_9[0];
-        $t10_11 = $t8_9[1];
-        $t11_12 = $t0_1.$get().addr($t3_4);
-        $t12_13 = $t11_12.$get();
-        $t13_14 = addWithCarry($t10_11, $t12_13, 0);
-        $t14_15 = $t13_14[0];
-        $t15_16 = $t13_14[1];
-        $t16_17 = ($t9_10 + $t15_16);
-        $t17_18 = addWithCarry($t14_15, $t2_3, 0);
-        $t18_19 = $t17_18[0];
-        $t19_20 = $t17_18[1];
-        $t20_21 = ($t16_17 + $t19_20);
-        $t21_22 = $t1_2.$get().addr($t3_4);
-        $t21_22.$set($t18_19);
-        $t22_23 = ($t3_4 + 1);
-        $t2_3 = $t20_21;
-        $t3_4 = $t22_23;
-        $block = 1; break;
-        break;
-      }
-      case 3: {
-        $t23_24 = ($t2_3 !== 0);
-        if ($t23_24) {
-          $block = 4; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 4: {
-        $t24_25 = mul64($t2_3, 4294968273);
-        $t25_26 = $t24_25[0];
-        $t26_27 = $t24_25[1];
-        $t27_28 = $t1_2.$get().addr(0);
-        $t28_29 = $t27_28.$get();
-        $t29_30 = addWithCarry($t28_29, $t26_27, 0);
-        $t30_31 = $t29_30[0];
-        $t31_32 = $t1_2.$get().addr(0);
-        $t31_32.$set($t30_31);
-        $t32_33 = $t29_30[1];
-        $t33_34 = $t1_2.$get().addr(1);
-        $t34_35 = $t33_34.$get();
-        $t35_36 = addWithCarry($t34_35, $t25_26, $t32_33);
-        $t36_37 = $t35_36[0];
-        $t37_38 = $t1_2.$get().addr(1);
-        $t37_38.$set($t36_37);
-        $t38_39 = $t35_36[1];
-        $t39_40 = $t1_2.$get().addr(2);
-        $t40_41 = $t39_40.$get();
-        $t41_42 = addWithCarry($t40_41, 0, $t38_39);
-        $t42_43 = $t41_42[0];
-        $t43_44 = $t1_2.$get().addr(2);
-        $t43_44.$set($t42_43);
-        $t44_45 = $t41_42[1];
-        $t45_46 = $t1_2.$get().addr(3);
-        $t46_47 = $t45_46.$get();
-        $t47_48 = addWithCarry($t46_47, 0, $t44_45);
-        $t48_49 = $t47_48[0];
-        $t49_50 = $t1_2.$get().addr(3);
-        $t49_50.$set($t48_49);
-        $t50_51 = $t47_48[1];
-        $block = 5; break;
-        break;
-      }
-      case 5: {
-        $t51_52 = $t1_2.$get();
-        $t52_53 = feP.$get();
-        $t53_54 = feCmp($t51_52, $t52_53);
-        $t54_55 = ($t53_54 >= 0);
-        if ($t54_55) {
-          $block = 6; break;
-        }
-        else {
-          $block = 7; break;
-        }
-        break;
-      }
-      case 6: {
-        $t55_56 = $t1_2.$get().addr(0);
-        $t56_57 = $t55_56.$get();
-        $t57_58 = feP.$get().addr(0);
-        $t58_59 = $t57_58.$get();
-        $t59_60 = subWithBorrow($t56_57, $t58_59, 0);
-        $t60_61 = $t59_60[0];
-        $t61_62 = $t1_2.$get().addr(0);
-        $t61_62.$set($t60_61);
-        $t62_63 = $t59_60[1];
-        $t63_64 = $t1_2.$get().addr(1);
-        $t64_65 = $t63_64.$get();
-        $t65_66 = feP.$get().addr(1);
-        $t66_67 = $t65_66.$get();
-        $t67_68 = subWithBorrow($t64_65, $t66_67, $t62_63);
-        $t68_69 = $t67_68[0];
-        $t69_70 = $t1_2.$get().addr(1);
-        $t69_70.$set($t68_69);
-        $t70_71 = $t67_68[1];
-        $t71_72 = $t1_2.$get().addr(2);
-        $t72_73 = $t71_72.$get();
-        $t73_74 = feP.$get().addr(2);
-        $t74_75 = $t73_74.$get();
-        $t75_76 = subWithBorrow($t72_73, $t74_75, $t70_71);
-        $t76_77 = $t75_76[0];
-        $t77_78 = $t1_2.$get().addr(2);
-        $t77_78.$set($t76_77);
-        $t78_79 = $t75_76[1];
-        $t79_80 = $t1_2.$get().addr(3);
-        $t80_81 = $t79_80.$get();
-        $t81_82 = feP.$get().addr(3);
-        $t82_83 = $t81_82.$get();
-        $t83_84 = subWithBorrow($t80_81, $t82_83, $t78_79);
-        $t84_85 = $t83_84[0];
-        $t85_86 = $t1_2.$get().addr(3);
-        $t85_86.$set($t84_85);
-        $t86_87 = $t83_84[1];
-        $block = 7; break;
-        break;
-      }
-      case 7: {
-        $t87_88 = $t1_2.$get();
-        return $t87_88;
-        break;
-      }
-    }
-  }
-}
-
-export function addWithCarry(a, b, carry) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = (a + b);
-        $t1_2 = ($t0_1 + carry);
-        $t2_3 = ($t1_2 < a);
-        if ($t2_3) {
-          $block = 1; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 1: {
-        $t3_4 = 1;
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        return [$t1_2, $t3_4];
-        break;
-      }
-      case 3: {
-        $t4_5 = ($t1_2 === a);
-        if ($t4_5) {
-          $block = 4; break;
-        }
-        else {
-          $t3_4 = 0;
-          $block = 2; break;
-        }
-        break;
-      }
-      case 4: {
-        $t5_6 = $rt.builtin.int64or(b, carry);
-        $t6_7 = ($t5_6 !== 0);
-        if ($t6_7) {
-          $block = 1; break;
-        }
-        else {
-          $t3_4 = 0;
-          $block = 2; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-export function subWithBorrow(a, b, borrow) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = (a - b);
-        $t1_2 = ($t0_1 - borrow);
-        $t2_3 = (b + borrow);
-        $t3_4 = (a < $t2_3);
-        if ($t3_4) {
-          $block = 1; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 1: {
-        $t4_5 = 1;
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        return [$t1_2, $t4_5];
-        break;
-      }
-      case 3: {
-        $t5_6 = (borrow !== 0);
-        if ($t5_6) {
-          $block = 4; break;
-        }
-        else {
-          $t4_5 = 0;
-          $block = 2; break;
-        }
-        break;
-      }
-      case 4: {
-        $t6_7 = (b === 18446744073709551615);
-        if ($t6_7) {
-          $block = 1; break;
-        }
-        else {
-          $t4_5 = 0;
-          $block = 2; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-export function mul64(a, b) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = Math.trunc(a / (2 ** 32));
-        $t1_2 = $rt.builtin.int64and(a, 4294967295);
-        $t2_3 = Math.trunc(b / (2 ** 32));
-        $t3_4 = $rt.builtin.int64and(b, 4294967295);
-        $t4_5 = ($t1_2 * $t3_4);
-        $t5_6 = ($t0_1 * $t3_4);
-        $t6_7 = ($t1_2 * $t2_3);
-        $t7_8 = ($t0_1 * $t2_3);
-        $t8_9 = Math.trunc($t4_5 / (2 ** 32));
-        $t9_10 = ($t5_6 + $t8_9);
-        $t10_11 = ($t9_10 < $t5_6);
-        if ($t10_11) {
-          $block = 1; break;
-        }
-        else {
-          $t12_13 = $t7_8;
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t11_12 = ($t7_8 + 4294967296);
-        $t12_13 = $t11_12;
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        $t13_14 = ($t9_10 + $t6_7);
-        $t14_15 = ($t13_14 < $t9_10);
-        if ($t14_15) {
-          $block = 3; break;
-        }
-        else {
-          $t16_17 = $t12_13;
-          $block = 4; break;
-        }
-        break;
-      }
-      case 3: {
-        $t15_16 = ($t12_13 + 4294967296);
-        $t16_17 = $t15_16;
-        $block = 4; break;
-        break;
-      }
-      case 4: {
-        $t17_18 = ($t13_14 * (2 ** 32));
-        $t18_19 = $rt.builtin.int64and($t4_5, 4294967295);
-        $t19_20 = $rt.builtin.int64or($t17_18, $t18_19);
-        $t20_21 = Math.trunc($t13_14 / (2 ** 32));
-        $t21_22 = ($t16_17 + $t20_21);
-        return [$t21_22, $t19_20];
-        break;
-      }
-    }
-  }
-}
-
-export function beUint64(b) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38;
-  $t0_1 = b.addr(0);
-  $t1_2 = $t0_1.$get();
-  $t2_3 = $t1_2;
-  $t3_4 = ($t2_3 * (2 ** 56));
-  $t4_5 = b.addr(1);
-  $t5_6 = $t4_5.$get();
-  $t6_7 = $t5_6;
-  $t7_8 = ($t6_7 * (2 ** 48));
-  $t8_9 = $rt.builtin.int64or($t3_4, $t7_8);
-  $t9_10 = b.addr(2);
-  $t10_11 = $t9_10.$get();
-  $t11_12 = $t10_11;
-  $t12_13 = ($t11_12 * (2 ** 40));
-  $t13_14 = $rt.builtin.int64or($t8_9, $t12_13);
-  $t14_15 = b.addr(3);
-  $t15_16 = $t14_15.$get();
-  $t16_17 = $t15_16;
-  $t17_18 = ($t16_17 * (2 ** 32));
-  $t18_19 = $rt.builtin.int64or($t13_14, $t17_18);
-  $t19_20 = b.addr(4);
-  $t20_21 = $t19_20.$get();
-  $t21_22 = $t20_21;
-  $t22_23 = ($t21_22 * (2 ** 24));
-  $t23_24 = $rt.builtin.int64or($t18_19, $t22_23);
-  $t24_25 = b.addr(5);
-  $t25_26 = $t24_25.$get();
-  $t26_27 = $t25_26;
-  $t27_28 = ($t26_27 * (2 ** 16));
-  $t28_29 = $rt.builtin.int64or($t23_24, $t27_28);
-  $t29_30 = b.addr(6);
-  $t30_31 = $t29_30.$get();
-  $t31_32 = $t30_31;
-  $t32_33 = ($t31_32 * (2 ** 8));
-  $t33_34 = $rt.builtin.int64or($t28_29, $t32_33);
-  $t34_35 = b.addr(7);
-  $t35_36 = $t34_35.$get();
-  $t36_37 = $t35_36;
-  $t37_38 = $rt.builtin.int64or($t33_34, $t36_37);
-  return $t37_38;
-}
-
-export function putBeUint64(b, v) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23;
-  $t0_1 = Math.trunc(v / (2 ** 56));
-  $t1_2 = ($t0_1 & 0xFF);
-  $t2_3 = b.addr(0);
-  $t2_3.$set($t1_2);
-  $t3_4 = Math.trunc(v / (2 ** 48));
-  $t4_5 = ($t3_4 & 0xFF);
-  $t5_6 = b.addr(1);
-  $t5_6.$set($t4_5);
-  $t6_7 = Math.trunc(v / (2 ** 40));
-  $t7_8 = ($t6_7 & 0xFF);
-  $t8_9 = b.addr(2);
-  $t8_9.$set($t7_8);
-  $t9_10 = Math.trunc(v / (2 ** 32));
-  $t10_11 = ($t9_10 & 0xFF);
-  $t11_12 = b.addr(3);
-  $t11_12.$set($t10_11);
-  $t12_13 = Math.trunc(v / (2 ** 24));
-  $t13_14 = ($t12_13 & 0xFF);
-  $t14_15 = b.addr(4);
-  $t14_15.$set($t13_14);
-  $t15_16 = Math.trunc(v / (2 ** 16));
-  $t16_17 = ($t15_16 & 0xFF);
-  $t17_18 = b.addr(5);
-  $t17_18.$set($t16_17);
-  $t18_19 = Math.trunc(v / (2 ** 8));
-  $t19_20 = ($t18_19 & 0xFF);
-  $t20_21 = b.addr(6);
-  $t20_21.$set($t19_20);
-  $t21_22 = (v & 0xFF);
-  $t22_23 = b.addr(7);
-  $t22_23.$set($t21_22);
-  return;
 }
 
 export function Point$isInfinity(p) {

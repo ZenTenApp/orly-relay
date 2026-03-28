@@ -308,76 +308,8 @@ func (r *GroupElementJacobian) mulLambda(a *GroupElementJacobian) {
 	r.infinity = false
 }
 
-// double sets r = 2*a (point doubling in Jacobian coordinates)
-// This follows the C secp256k1_gej_double implementation exactly
-func (r *GroupElementJacobian) double(a *GroupElementJacobian) {
-	// Exact C translation - no early return for infinity
-	// From C code - exact translation with proper variable reuse:
-	// secp256k1_fe_mul(&r->z, &a->z, &a->y); /* Z3 = Y1*Z1 (1) */
-	// secp256k1_fe_sqr(&s, &a->y);           /* S = Y1^2 (1) */
-	// secp256k1_fe_sqr(&l, &a->x);           /* L = X1^2 (1) */
-	// secp256k1_fe_mul_int(&l, 3);           /* L = 3*X1^2 (3) */
-	// secp256k1_fe_half(&l);                 /* L = 3/2*X1^2 (2) */
-	// secp256k1_fe_negate(&t, &s, 1);        /* T = -S (2) */
-	// secp256k1_fe_mul(&t, &t, &a->x);       /* T = -X1*S (1) */
-	// secp256k1_fe_sqr(&r->x, &l);           /* X3 = L^2 (1) */
-	// secp256k1_fe_add(&r->x, &t);           /* X3 = L^2 + T (2) */
-	// secp256k1_fe_add(&r->x, &t);           /* X3 = L^2 + 2*T (3) */
-	// secp256k1_fe_sqr(&s, &s);              /* S' = S^2 (1) */
-	// secp256k1_fe_add(&t, &r->x);           /* T' = X3 + T (4) */
-	// secp256k1_fe_mul(&r->y, &t, &l);       /* Y3 = L*(X3 + T) (1) */
-	// secp256k1_fe_add(&r->y, &s);           /* Y3 = L*(X3 + T) + S^2 (2) */
-	// secp256k1_fe_negate(&r->y, &r->y, 2);  /* Y3 = -(L*(X3 + T) + S^2) (3) */
-	
-	var l, s, t FieldElement
-	
-	r.infinity = a.infinity
-	
-	// Z3 = Y1*Z1 (1)
-	r.z.mul(&a.z, &a.y)
-	
-	// S = Y1^2 (1)
-	s.sqr(&a.y)
-	
-	// L = X1^2 (1)
-	l.sqr(&a.x)
-	
-	// L = 3*X1^2 (3)
-	l.mulInt(3)
-	
-	// L = 3/2*X1^2 (2)
-	l.half(&l)
-	
-	// T = -S (2) where S = Y1^2
-	t.negate(&s, 1)
-	
-	// T = -X1*S = -X1*Y1^2 (1)
-	t.mul(&t, &a.x)
-	
-	// X3 = L^2 (1)
-	r.x.sqr(&l)
-	
-	// X3 = L^2 + T (2)
-	r.x.add(&t)
-	
-	// X3 = L^2 + 2*T (3)
-	r.x.add(&t)
-	
-	// S = S^2 = (Y1^2)^2 = Y1^4 (1)
-	s.sqr(&s)
-	
-	// T = X3 + T = X3 + (-X1*Y1^2) (4)
-	t.add(&r.x)
-	
-	// Y3 = L*(X3 + T) = L*(X3 + (-X1*Y1^2)) (1)
-	r.y.mul(&t, &l)
-	
-	// Y3 = L*(X3 + T) + S^2 = L*(X3 + (-X1*Y1^2)) + Y1^4 (2)
-	r.y.add(&s)
-	
-	// Y3 = -(L*(X3 + T) + S^2) (3)
-	r.y.negate(&r.y, 2)
-}
+// double is defined in group_double_native.go (64-bit, uses half())
+// and group_double_32bit.go (32-bit/WASM, half-free formula)
 
 // addVar sets r = a + b (variable-time point addition in Jacobian coordinates)
 // This follows the C secp256k1_gej_add_var implementation exactly

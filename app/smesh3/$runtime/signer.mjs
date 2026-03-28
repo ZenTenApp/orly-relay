@@ -4,6 +4,10 @@ export function HasSigner() {
   return typeof window !== 'undefined' && !!window.nostr;
 }
 
+export function HasMLS() {
+  return typeof window !== 'undefined' && !!window.nostr && !!window.nostr.mls;
+}
+
 export function GetPublicKey(fn) {
   if (!window.nostr) { fn(''); return; }
   window.nostr.getPublicKey()

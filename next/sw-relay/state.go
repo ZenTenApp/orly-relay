@@ -3,6 +3,7 @@ package main
 import (
 	"common/helpers"
 	"common/jsbridge/subtle"
+	"common/jsbridge/sw"
 )
 
 // Shared state and utilities for the relay SW.
@@ -25,14 +26,48 @@ func cryptoProxy(method, peerPubkey, data string, cb func(string, string)) {
 	busSend("shell", "[\"CRYPTO_REQ\","+jstr("relay")+","+helpers.Itoa(int64(id))+","+jstr(method)+","+jstr(peerPubkey)+","+jstr(data)+"]")
 }
 
-// fwd sends a message to a specific browser client via the shell SW.
+// Batched FWD — accumulate messages and flush every 50ms to reduce
+// BroadcastChannel pressure. CRYPTO_RESULT and other control messages
+// bypass the batch and send immediately via busSend.
+
+var (
+	fwdBuf   []string
+	fwdTimer sw.Timer
+)
+
 func fwd(clientID, msg string) {
-	busSend("shell", "[\"FWD\","+jstr(clientID)+","+msg+"]")
+	fwdBuf = append(fwdBuf, "[\"FWD\","+jstr(clientID)+","+msg+"]")
+	scheduleFwdFlush()
 }
 
-// fwdAll broadcasts a message to all browser clients via the shell SW.
 func fwdAll(msg string) {
-	busSend("shell", "[\"FWD_ALL\","+msg+"]")
+	fwdBuf = append(fwdBuf, "[\"FWD_ALL\","+msg+"]")
+	scheduleFwdFlush()
+}
+
+func scheduleFwdFlush() {
+	if fwdTimer != 0 {
+		return
+	}
+	fwdTimer = sw.SetTimeout(50, flushFwd)
+}
+
+func flushFwd() {
+	fwdTimer = 0
+	if len(fwdBuf) == 0 {
+		return
+	}
+	// Build a single FWD_BATCH message: ["FWD_BATCH", [msg1, msg2, ...]]
+	out := "[\"FWD_BATCH\",["
+	for i, m := range fwdBuf {
+		if i > 0 {
+			out += ","
+		}
+		out += m
+	}
+	out += "]]"
+	fwdBuf = nil
+	busSend("shell", out)
 }
 
 func strsJSON(ss []string) string {

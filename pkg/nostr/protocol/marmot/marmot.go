@@ -14,6 +14,7 @@ import (
 	"next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/nostr/encoders/kind"
 	"next.orly.dev/pkg/nostr/encoders/tag"
+	"next.orly.dev/pkg/nostr/encoders/timestamp"
 )
 
 // RelayConnection abstracts the relay interface so the Marmot client can be
@@ -48,6 +49,11 @@ type Client struct {
 	// seenIDs tracks event IDs we published or processed, to skip duplicates
 	// when they come back via the subscription.
 	seenIDs map[string]struct{}
+
+	// lastEventTS is the highest created_at seen across HandleEvent calls.
+	// Used as "since" in subscription filters to skip already-processed events
+	// on restart. Set from persisted storage via SetLastEventTS before Subscribe.
+	lastEventTS int64
 
 	// groupsChanged is signalled when a new group is added so callers
 	// can refresh subscription filters.
@@ -107,6 +113,22 @@ func NewClient(crypto CryptoProvider, store GroupStore, relay RelayConnection, r
 // OnDM registers a handler for incoming decrypted DMs.
 func (c *Client) OnDM(handler DMHandler) {
 	c.onDM = handler
+}
+
+// SetLastEventTS sets the high-water mark for processed events.
+// Call this with a persisted value before Subscribe to skip old events.
+func (c *Client) SetLastEventTS(ts int64) {
+	c.mu.Lock()
+	c.lastEventTS = ts
+	c.mu.Unlock()
+}
+
+// LastEventTS returns the highest event created_at seen so far.
+// Persist this value to skip old events on next restart.
+func (c *Client) LastEventTS() int64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.lastEventTS
 }
 
 // PublishKeyPackage publishes our MLS key package as a kind 443 event so
@@ -235,9 +257,12 @@ func (c *Client) HandleEvent(ctx context.Context, ev *event.E) error {
 		return nil
 	}
 
-	// Mark as seen before processing.
+	// Mark as seen before processing and update high-water mark.
 	c.mu.Lock()
 	c.seenIDs[evKey] = struct{}{}
+	if ev.CreatedAt > c.lastEventTS {
+		c.lastEventTS = ev.CreatedAt
+	}
 	c.mu.Unlock()
 
 	switch ev.Kind {
@@ -382,6 +407,16 @@ func (c *Client) WelcomeFilter() *filter.F {
 	f.Tags = tag.NewS(
 		tag.NewFromAny("p", hex.Enc(c.crypto.Pub())),
 	)
+	c.mu.RLock()
+	ts := c.lastEventTS
+	c.mu.RUnlock()
+	if ts > 0 {
+		f.Since = timestamp.FromUnix(ts - 172800) // 2-day margin for NIP-59 timestamp randomization
+	} else {
+		// No persisted timestamp — first run. Only fetch recent events
+		// to avoid flooding the bus with hundreds of historical DMs.
+		f.Since = timestamp.FromUnix(time.Now().Unix() - 172800) // 2-day margin for NIP-59
+	}
 	return f
 }
 
@@ -409,6 +444,11 @@ func (c *Client) GroupMessageFilter() *filter.F {
 	f.Tags = tag.NewS(
 		tag.NewFromAny(hValues...),
 	)
+	if c.lastEventTS > 0 {
+		f.Since = timestamp.FromUnix(c.lastEventTS - 172800)
+	} else {
+		f.Since = timestamp.FromUnix(time.Now().Unix() - 172800) // 2-day margin for NIP-59
+	}
 	return f
 }
 
