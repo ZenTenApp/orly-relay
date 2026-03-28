@@ -9,110 +9,34 @@ export function init() {
   return;
 }
 
-export function HexEncode(b) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19;
+export function JsonString(s) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = $rt.builtin.len(b);
-        $t1_2 = ($t0_1 * 2);
-        $t2_3 = $rt.builtin.makeSlice($t1_2, $t1_2, 0);
-        $t3_4 = $rt.builtin.len(b);
-        $t4_5 = -1;
+        $t0_1 = '"';
+        $t1_2 = 0;
+        $t2_3 = 0;
         $block = 1; break;
         break;
       }
       case 1: {
-        $t5_6 = ($t4_5 + 1);
-        $t6_7 = ($t5_6 < $t3_4);
-        if ($t6_7) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t7_8 = b.addr($t5_6);
-        $t8_9 = $t7_8.$get();
-        $t9_10 = ($t5_6 * 2);
-        $t10_11 = (($t8_9 & 0xFF) >> 4);
-        $rt.runtime.boundsCheck($t10_11, $rt.builtin.byteLen('0123456789abcdef'));
-        $t11_12 = $rt.builtin.stringByteAt('0123456789abcdef', $t10_11);
-        $t12_13 = $t2_3.addr($t9_10);
-        $t12_13.$set($t11_12);
-        $t13_14 = ($t5_6 * 2);
-        $t14_15 = ($t13_14 + 1);
-        $t15_16 = ($t8_9 & 15);
-        $rt.runtime.boundsCheck($t15_16, $rt.builtin.byteLen('0123456789abcdef'));
-        $t16_17 = $rt.builtin.stringByteAt('0123456789abcdef', $t15_16);
-        $t17_18 = $t2_3.addr($t14_15);
-        $t17_18.$set($t16_17);
-        $t4_5 = $t5_6;
-        $block = 1; break;
-        break;
-      }
-      case 3: {
-        $t18_19 = $rt.builtin.bytesToString($t2_3);
-        return $t18_19;
-        break;
-      }
-    }
-  }
-}
-
-export function HexDecode(s) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(s);
-        $t1_2 = ($t0_1 % 2);
-        $t2_3 = ($t1_2 !== 0);
-        if ($t2_3) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        return null;
-        break;
-      }
-      case 2: {
         $t3_4 = $rt.builtin.len(s);
-        $t4_5 = Math.trunc($t3_4 / 2);
-        $t5_6 = $rt.builtin.makeSlice($t4_5, $t4_5, 0);
-        $t6_7 = 0;
-        $block = 3; break;
-        break;
-      }
-      case 3: {
-        $t7_8 = $rt.builtin.len(s);
-        $t8_9 = ($t6_7 < $t7_8);
-        if ($t8_9) {
+        $t4_5 = ($t2_3 < $t3_4);
+        if ($t4_5) {
+          $block = 2; break;
+        }
+        else {
           $block = 4; break;
         }
-        else {
-          $block = 5; break;
-        }
         break;
       }
-      case 4: {
-        $rt.runtime.boundsCheck($t6_7, $rt.builtin.byteLen(s));
-        $t9_10 = $rt.builtin.stringByteAt(s, $t6_7);
-        $t10_11 = hexVal($t9_10);
-        $t11_12 = ($t6_7 + 1);
-        $rt.runtime.boundsCheck($t11_12, $rt.builtin.byteLen(s));
-        $t12_13 = $rt.builtin.stringByteAt(s, $t11_12);
-        $t13_14 = hexVal($t12_13);
-        $t14_15 = ($t10_11 < 0);
-        if ($t14_15) {
+      case 2: {
+        $rt.runtime.boundsCheck($t2_3, $rt.builtin.byteLen(s));
+        $t5_6 = $rt.builtin.stringByteAt(s, $t2_3);
+        $t6_7 = ($t5_6 === 34);
+        if ($t6_7) {
           $block = 6; break;
         }
         else {
@@ -120,28 +44,254 @@ export function HexDecode(s) {
         }
         break;
       }
+      case 3: {
+        $t9_10 = ($t2_3 + 1);
+        $t0_1 = $t7_8;
+        $t1_2 = $t8_9;
+        $t2_3 = $t9_10;
+        $block = 1; break;
+        break;
+      }
+      case 4: {
+        $t10_11 = $rt.builtin.stringSlice(s, $t1_2, undefined);
+        $t11_12 = ($t0_1 + $t10_11);
+        $t12_13 = ($t11_12 + '"');
+        return $t12_13;
+        break;
+      }
       case 5: {
-        return $t5_6;
-        break;
-      }
-      case 6: {
-        return null;
-        break;
-      }
-      case 7: {
-        $t15_16 = Math.trunc($t6_7 / 2);
-        $t16_17 = ($t10_11 * (2 ** 4));
-        $t17_18 = $rt.builtin.int64or($t16_17, $t13_14);
-        $t18_19 = ($t17_18 & 0xFF);
-        $t19_20 = $t5_6.addr($t15_16);
-        $t19_20.$set($t18_19);
-        $t20_21 = ($t6_7 + 2);
-        $t6_7 = $t20_21;
+        $t14_15 = $rt.builtin.stringSlice(s, $t1_2, $t2_3);
+        $t15_16 = ($t14_15 + $t13_14);
+        $t16_17 = ($t0_1 + $t15_16);
+        $t17_18 = ($t2_3 + 1);
+        $t7_8 = $t16_17;
+        $t8_9 = $t17_18;
         $block = 3; break;
         break;
       }
+      case 6: {
+        $t13_14 = '\\"';
+        $block = 5; break;
+        break;
+      }
+      case 7: {
+        $t13_14 = '\\\\';
+        $block = 5; break;
+        break;
+      }
       case 8: {
-        $t21_22 = ($t13_14 < 0);
+        $t18_19 = ($t5_6 === 92);
+        if ($t18_19) {
+          $block = 7; break;
+        }
+        else {
+          $block = 10; break;
+        }
+        break;
+      }
+      case 9: {
+        $t13_14 = '\\n';
+        $block = 5; break;
+        break;
+      }
+      case 10: {
+        $t19_20 = ($t5_6 === 10);
+        if ($t19_20) {
+          $block = 9; break;
+        }
+        else {
+          $block = 12; break;
+        }
+        break;
+      }
+      case 11: {
+        $t13_14 = '\\r';
+        $block = 5; break;
+        break;
+      }
+      case 12: {
+        $t20_21 = ($t5_6 === 13);
+        if ($t20_21) {
+          $block = 11; break;
+        }
+        else {
+          $block = 14; break;
+        }
+        break;
+      }
+      case 13: {
+        $t13_14 = '\\t';
+        $block = 5; break;
+        break;
+      }
+      case 14: {
+        $t21_22 = ($t5_6 === 9);
+        if ($t21_22) {
+          $block = 13; break;
+        }
+        else {
+          $block = 16; break;
+        }
+        break;
+      }
+      case 15: {
+        $t13_14 = '\\b';
+        $block = 5; break;
+        break;
+      }
+      case 16: {
+        $t22_23 = ($t5_6 === 8);
+        if ($t22_23) {
+          $block = 15; break;
+        }
+        else {
+          $block = 18; break;
+        }
+        break;
+      }
+      case 17: {
+        $t13_14 = '\\f';
+        $block = 5; break;
+        break;
+      }
+      case 18: {
+        $t23_24 = ($t5_6 === 12);
+        if ($t23_24) {
+          $block = 17; break;
+        }
+        else {
+          $block = 19; break;
+        }
+        break;
+      }
+      case 19: {
+        $t24_25 = ($t5_6 < 32);
+        if ($t24_25) {
+          $block = 20; break;
+        }
+        else {
+          $t7_8 = $t0_1;
+          $t8_9 = $t1_2;
+          $block = 3; break;
+        }
+        break;
+      }
+      case 20: {
+        $t25_26 = (($t5_6 & 0xFF) >> 4);
+        $rt.runtime.boundsCheck($t25_26, $rt.builtin.byteLen('0123456789abcdef'));
+        $t26_27 = $rt.builtin.stringByteAt('0123456789abcdef', $t25_26);
+        $t27_28 = String.fromCodePoint($t26_27);
+        $t28_29 = ('\\u00' + $t27_28);
+        $t29_30 = ($t5_6 & 15);
+        $rt.runtime.boundsCheck($t29_30, $rt.builtin.byteLen('0123456789abcdef'));
+        $t30_31 = $rt.builtin.stringByteAt('0123456789abcdef', $t29_30);
+        $t31_32 = String.fromCodePoint($t30_31);
+        $t32_33 = ($t28_29 + $t31_32);
+        $t13_14 = $t32_33;
+        $block = 5; break;
+        break;
+      }
+    }
+  }
+}
+
+export function JsonGetString(s, key) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = ('"' + key);
+        $t1_2 = ($t0_1 + '"');
+        $t2_3 = $rt.builtin.len($t1_2);
+        $t3_4 = 0;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t4_5 = $rt.builtin.len(s);
+        $t5_6 = ($t4_5 - $t2_3);
+        $t6_7 = ($t3_4 <= $t5_6);
+        if ($t6_7) {
+          $block = 2; break;
+        }
+        else {
+          $block = 4; break;
+        }
+        break;
+      }
+      case 2: {
+        $t7_8 = ($t3_4 + $t2_3);
+        $t8_9 = $rt.builtin.stringSlice(s, $t3_4, $t7_8);
+        $t9_10 = ($t8_9 === $t1_2);
+        if ($t9_10) {
+          $block = 5; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 3: {
+        $t10_11 = ($t3_4 + 1);
+        $t3_4 = $t10_11;
+        $block = 1; break;
+        break;
+      }
+      case 4: {
+        return '';
+        break;
+      }
+      case 5: {
+        $t11_12 = ($t3_4 + $t2_3);
+        $t15_16 = $t11_12;
+        $block = 8; break;
+        break;
+      }
+      case 6: {
+        $t12_13 = ($t15_16 + 1);
+        $t15_16 = $t12_13;
+        $block = 8; break;
+        break;
+      }
+      case 7: {
+        $t13_14 = $rt.builtin.len(s);
+        $t14_15 = ($t15_16 >= $t13_14);
+        if ($t14_15) {
+          $block = 3; break;
+        }
+        else {
+          $block = 14; break;
+        }
+        break;
+      }
+      case 8: {
+        $t16_17 = $rt.builtin.len(s);
+        $t17_18 = ($t15_16 < $t16_17);
+        if ($t17_18) {
+          $block = 9; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 9: {
+        $rt.runtime.boundsCheck($t15_16, $rt.builtin.byteLen(s));
+        $t18_19 = $rt.builtin.stringByteAt(s, $t15_16);
+        $t19_20 = ($t18_19 === 32);
+        if ($t19_20) {
+          $block = 6; break;
+        }
+        else {
+          $block = 12; break;
+        }
+        break;
+      }
+      case 10: {
+        $rt.runtime.boundsCheck($t15_16, $rt.builtin.byteLen(s));
+        $t20_21 = $rt.builtin.stringByteAt(s, $t15_16);
+        $t21_22 = ($t20_21 === 13);
         if ($t21_22) {
           $block = 6; break;
         }
@@ -150,20 +300,327 @@ export function HexDecode(s) {
         }
         break;
       }
+      case 11: {
+        $rt.runtime.boundsCheck($t15_16, $rt.builtin.byteLen(s));
+        $t22_23 = $rt.builtin.stringByteAt(s, $t15_16);
+        $t23_24 = ($t22_23 === 10);
+        if ($t23_24) {
+          $block = 6; break;
+        }
+        else {
+          $block = 10; break;
+        }
+        break;
+      }
+      case 12: {
+        $rt.runtime.boundsCheck($t15_16, $rt.builtin.byteLen(s));
+        $t24_25 = $rt.builtin.stringByteAt(s, $t15_16);
+        $t25_26 = ($t24_25 === 9);
+        if ($t25_26) {
+          $block = 6; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 13: {
+        $t26_27 = ($t15_16 + 1);
+        $t32_33 = $t26_27;
+        $block = 17; break;
+        break;
+      }
+      case 14: {
+        $rt.runtime.boundsCheck($t15_16, $rt.builtin.byteLen(s));
+        $t27_28 = $rt.builtin.stringByteAt(s, $t15_16);
+        $t28_29 = ($t27_28 !== 58);
+        if ($t28_29) {
+          $block = 3; break;
+        }
+        else {
+          $block = 13; break;
+        }
+        break;
+      }
+      case 15: {
+        $t29_30 = ($t32_33 + 1);
+        $t32_33 = $t29_30;
+        $block = 17; break;
+        break;
+      }
+      case 16: {
+        $t30_31 = $rt.builtin.len(s);
+        $t31_32 = ($t32_33 >= $t30_31);
+        if ($t31_32) {
+          $block = 3; break;
+        }
+        else {
+          $block = 23; break;
+        }
+        break;
+      }
+      case 17: {
+        $t33_34 = $rt.builtin.len(s);
+        $t34_35 = ($t32_33 < $t33_34);
+        if ($t34_35) {
+          $block = 18; break;
+        }
+        else {
+          $block = 16; break;
+        }
+        break;
+      }
+      case 18: {
+        $rt.runtime.boundsCheck($t32_33, $rt.builtin.byteLen(s));
+        $t35_36 = $rt.builtin.stringByteAt(s, $t32_33);
+        $t36_37 = ($t35_36 === 32);
+        if ($t36_37) {
+          $block = 15; break;
+        }
+        else {
+          $block = 21; break;
+        }
+        break;
+      }
+      case 19: {
+        $rt.runtime.boundsCheck($t32_33, $rt.builtin.byteLen(s));
+        $t37_38 = $rt.builtin.stringByteAt(s, $t32_33);
+        $t38_39 = ($t37_38 === 13);
+        if ($t38_39) {
+          $block = 15; break;
+        }
+        else {
+          $block = 16; break;
+        }
+        break;
+      }
+      case 20: {
+        $rt.runtime.boundsCheck($t32_33, $rt.builtin.byteLen(s));
+        $t39_40 = $rt.builtin.stringByteAt(s, $t32_33);
+        $t40_41 = ($t39_40 === 10);
+        if ($t40_41) {
+          $block = 15; break;
+        }
+        else {
+          $block = 19; break;
+        }
+        break;
+      }
+      case 21: {
+        $rt.runtime.boundsCheck($t32_33, $rt.builtin.byteLen(s));
+        $t41_42 = $rt.builtin.stringByteAt(s, $t32_33);
+        $t42_43 = ($t41_42 === 9);
+        if ($t42_43) {
+          $block = 15; break;
+        }
+        else {
+          $block = 20; break;
+        }
+        break;
+      }
+      case 22: {
+        $t43_44 = ($t32_33 + 1);
+        $t48_49 = $t43_44;
+        $t49_50 = $t43_44;
+        $t50_51 = '';
+        $block = 25; break;
+        break;
+      }
+      case 23: {
+        $rt.runtime.boundsCheck($t32_33, $rt.builtin.byteLen(s));
+        $t44_45 = $rt.builtin.stringByteAt(s, $t32_33);
+        $t45_46 = ($t44_45 !== 34);
+        if ($t45_46) {
+          $block = 3; break;
+        }
+        else {
+          $block = 22; break;
+        }
+        break;
+      }
+      case 24: {
+        $rt.runtime.boundsCheck($t48_49, $rt.builtin.byteLen(s));
+        $t46_47 = $rt.builtin.stringByteAt(s, $t48_49);
+        $t47_48 = ($t46_47 === 92);
+        if ($t47_48) {
+          $block = 28; break;
+        }
+        else {
+          $block = 27; break;
+        }
+        break;
+      }
+      case 25: {
+        $t51_52 = $rt.builtin.len(s);
+        $t52_53 = ($t48_49 < $t51_52);
+        if ($t52_53) {
+          $block = 24; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 26: {
+        $t53_54 = $rt.builtin.stringSlice(s, $t49_50, $t48_49);
+        $t54_55 = ($t50_51 + $t53_54);
+        $t55_56 = ($t48_49 + 1);
+        $rt.runtime.boundsCheck($t55_56, $rt.builtin.byteLen(s));
+        $t56_57 = $rt.builtin.stringByteAt(s, $t55_56);
+        $t57_58 = ($t56_57 === 34);
+        if ($t57_58) {
+          $block = 30; break;
+        }
+        else {
+          $block = 32; break;
+        }
+        break;
+      }
+      case 27: {
+        $rt.runtime.boundsCheck($t48_49, $rt.builtin.byteLen(s));
+        $t58_59 = $rt.builtin.stringByteAt(s, $t48_49);
+        $t59_60 = ($t58_59 === 34);
+        if ($t59_60) {
+          $block = 40; break;
+        }
+        else {
+          $block = 41; break;
+        }
+        break;
+      }
+      case 28: {
+        $t60_61 = ($t48_49 + 1);
+        $t61_62 = $rt.builtin.len(s);
+        $t62_63 = ($t60_61 < $t61_62);
+        if ($t62_63) {
+          $block = 26; break;
+        }
+        else {
+          $block = 27; break;
+        }
+        break;
+      }
+      case 29: {
+        $t64_65 = ($t55_56 + 1);
+        $t48_49 = $t64_65;
+        $t49_50 = $t64_65;
+        $t50_51 = $t63_64;
+        $block = 25; break;
+        break;
+      }
+      case 30: {
+        $t65_66 = ($t55_56 + 1);
+        $t66_67 = $rt.builtin.stringSlice(s, $t55_56, $t65_66);
+        $t67_68 = ($t54_55 + $t66_67);
+        $t63_64 = $t67_68;
+        $block = 29; break;
+        break;
+      }
+      case 31: {
+        $t68_69 = ($t54_55 + '\n');
+        $t63_64 = $t68_69;
+        $block = 29; break;
+        break;
+      }
+      case 32: {
+        $t69_70 = ($t56_57 === 92);
+        if ($t69_70) {
+          $block = 30; break;
+        }
+        else {
+          $block = 33; break;
+        }
+        break;
+      }
+      case 33: {
+        $t70_71 = ($t56_57 === 47);
+        if ($t70_71) {
+          $block = 30; break;
+        }
+        else {
+          $block = 34; break;
+        }
+        break;
+      }
+      case 34: {
+        $t71_72 = ($t56_57 === 110);
+        if ($t71_72) {
+          $block = 31; break;
+        }
+        else {
+          $block = 36; break;
+        }
+        break;
+      }
+      case 35: {
+        $t72_73 = ($t54_55 + '\r');
+        $t63_64 = $t72_73;
+        $block = 29; break;
+        break;
+      }
+      case 36: {
+        $t73_74 = ($t56_57 === 114);
+        if ($t73_74) {
+          $block = 35; break;
+        }
+        else {
+          $block = 38; break;
+        }
+        break;
+      }
+      case 37: {
+        $t74_75 = ($t54_55 + '\t');
+        $t63_64 = $t74_75;
+        $block = 29; break;
+        break;
+      }
+      case 38: {
+        $t75_76 = ($t56_57 === 116);
+        if ($t75_76) {
+          $block = 37; break;
+        }
+        else {
+          $block = 39; break;
+        }
+        break;
+      }
+      case 39: {
+        $t76_77 = ($t55_56 + 1);
+        $t77_78 = $rt.builtin.stringSlice(s, $t55_56, $t76_77);
+        $t78_79 = ($t54_55 + $t77_78);
+        $t63_64 = $t78_79;
+        $block = 29; break;
+        break;
+      }
+      case 40: {
+        $t79_80 = $rt.builtin.stringSlice(s, $t49_50, $t48_49);
+        $t80_81 = ($t50_51 + $t79_80);
+        return $t80_81;
+        break;
+      }
+      case 41: {
+        $t81_82 = ($t48_49 + 1);
+        let $phi0 = $t81_82;
+        let $phi1 = $t49_50;
+        let $phi2 = $t50_51;
+        $t48_49 = $phi0;
+        $t49_50 = $phi1;
+        $t50_51 = $phi2;
+        $block = 25; break;
+        break;
+      }
     }
   }
 }
 
-export function HexDecode32(s) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25;
+export function Itoa(n) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2 = $rt.builtin.len(s);
-        $t2_3 = ($t1_2 !== 64);
-        if ($t2_3) {
+        $t0_1 = (n === 0);
+        if ($t0_1) {
           $block = 1; break;
         }
         else {
@@ -172,154 +629,62 @@ export function HexDecode32(s) {
         break;
       }
       case 1: {
-        $t3_4 = $t0_1.$get();
-        $t0_1.$set($rt.builtin.cloneValue($t3_4));
-        $t4_5 = $t0_1.$get();
-        return [$t4_5, false];
+        return '0';
         break;
       }
       case 2: {
-        $t5_6 = 0;
-        $block = 3; break;
+        $t1_2 = (n < 0);
+        if ($t1_2) {
+          $block = 3; break;
+        }
+        else {
+          $t3_4 = n;
+          $t4_5 = false;
+          $block = 4; break;
+        }
         break;
       }
       case 3: {
-        $t6_7 = ($t5_6 < 32);
-        if ($t6_7) {
-          $block = 4; break;
-        }
-        else {
-          $block = 5; break;
-        }
+        $t2_3 = -n;
+        $t3_4 = $t2_3;
+        $t4_5 = true;
+        $block = 4; break;
         break;
       }
       case 4: {
-        $t7_8 = ($t5_6 * 2);
-        $rt.runtime.boundsCheck($t7_8, $rt.builtin.byteLen(s));
-        $t8_9 = $rt.builtin.stringByteAt(s, $t7_8);
-        $t9_10 = hexVal($t8_9);
-        $t10_11 = ($t5_6 * 2);
-        $t11_12 = ($t10_11 + 1);
-        $rt.runtime.boundsCheck($t11_12, $rt.builtin.byteLen(s));
-        $t12_13 = $rt.builtin.stringByteAt(s, $t11_12);
-        $t13_14 = hexVal($t12_13);
-        $t14_15 = ($t9_10 < 0);
-        if ($t14_15) {
-          $block = 6; break;
-        }
-        else {
+        $t5_6 = { $value: $rt.builtin.makeSlice(20, 20, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t12_13 = $t3_4;
+        $t13_14 = 20;
+        $block = 7; break;
+        break;
+      }
+      case 5: {
+        $t6_7 = ($t13_14 - 1);
+        $t7_8 = ($t12_13 % 10);
+        $t8_9 = (48 + $t7_8);
+        $t9_10 = ($t8_9 & 0xFF);
+        $t10_11 = $t5_6.$get().addr($t6_7);
+        $t10_11.$set($t9_10);
+        $t11_12 = Math.trunc($t12_13 / 10);
+        $t12_13 = $t11_12;
+        $t13_14 = $t6_7;
+        $block = 7; break;
+        break;
+      }
+      case 6: {
+        if ($t4_5) {
           $block = 8; break;
         }
-        break;
-      }
-      case 5: {
-        $t15_16 = $t0_1.$get();
-        $t0_1.$set($rt.builtin.cloneValue($t15_16));
-        $t16_17 = $t0_1.$get();
-        return [$t16_17, true];
-        break;
-      }
-      case 6: {
-        $t17_18 = $t0_1.$get();
-        $t0_1.$set($rt.builtin.cloneValue($t17_18));
-        $t18_19 = $t0_1.$get();
-        return [$t18_19, false];
-        break;
-      }
-      case 7: {
-        $t19_20 = ($t9_10 * (2 ** 4));
-        $t20_21 = $rt.builtin.int64or($t19_20, $t13_14);
-        $t21_22 = ($t20_21 & 0xFF);
-        $t22_23 = $t0_1.$get().addr($t5_6);
-        $t22_23.$set($t21_22);
-        $t23_24 = ($t5_6 + 1);
-        $t5_6 = $t23_24;
-        $block = 3; break;
-        break;
-      }
-      case 8: {
-        $t24_25 = ($t13_14 < 0);
-        if ($t24_25) {
-          $block = 6; break;
-        }
         else {
-          $block = 7; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-export function hexVal(c) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = (c >= 48);
-        if ($t0_1) {
-          $block = 4; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 1: {
-        $t1_2 = ((c - 48) & 0xFF);
-        $t2_3 = $t1_2;
-        return $t2_3;
-        break;
-      }
-      case 2: {
-        $t3_4 = ((c - 97) & 0xFF);
-        $t4_5 = (($t3_4 + 10) & 0xFF);
-        $t5_6 = $t4_5;
-        return $t5_6;
-        break;
-      }
-      case 3: {
-        $t6_7 = (c >= 97);
-        if ($t6_7) {
-          $block = 7; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 4: {
-        $t7_8 = (c <= 57);
-        if ($t7_8) {
-          $block = 1; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 5: {
-        $t8_9 = ((c - 65) & 0xFF);
-        $t9_10 = (($t8_9 + 10) & 0xFF);
-        $t10_11 = $t9_10;
-        return $t10_11;
-        break;
-      }
-      case 6: {
-        $t11_12 = (c >= 65);
-        if ($t11_12) {
+          $t17_18 = $t13_14;
           $block = 9; break;
         }
-        else {
-          $block = 8; break;
-        }
         break;
       }
       case 7: {
-        $t12_13 = (c <= 102);
-        if ($t12_13) {
-          $block = 2; break;
+        $t14_15 = ($t12_13 > 0);
+        if ($t14_15) {
+          $block = 5; break;
         }
         else {
           $block = 6; break;
@@ -327,17 +692,17 @@ export function hexVal(c) {
         break;
       }
       case 8: {
-        return -1;
+        $t15_16 = ($t13_14 - 1);
+        $t16_17 = $t5_6.$get().addr($t15_16);
+        $t16_17.$set(45);
+        $t17_18 = $t15_16;
+        $block = 9; break;
         break;
       }
       case 9: {
-        $t13_14 = (c <= 70);
-        if ($t13_14) {
-          $block = 5; break;
-        }
-        else {
-          $block = 8; break;
-        }
+        $t18_19 = $rt.builtin.sliceSlice($t5_6.$get(), $t17_18, undefined, undefined);
+        $t19_20 = $rt.builtin.bytesToString($t18_19);
+        return $t19_20;
         break;
       }
     }
@@ -1638,618 +2003,70 @@ export function b64val(c) {
   }
 }
 
-export function JsonString(s) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33;
+export function HexEncode(b) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = '"';
-        $t1_2 = 0;
-        $t2_3 = 0;
+        $t0_1 = $rt.builtin.len(b);
+        $t1_2 = ($t0_1 * 2);
+        $t2_3 = $rt.builtin.makeSlice($t1_2, $t1_2, 0);
+        $t3_4 = $rt.builtin.len(b);
+        $t4_5 = -1;
         $block = 1; break;
         break;
       }
       case 1: {
-        $t3_4 = $rt.builtin.len(s);
-        $t4_5 = ($t2_3 < $t3_4);
-        if ($t4_5) {
+        $t5_6 = ($t4_5 + 1);
+        $t6_7 = ($t5_6 < $t3_4);
+        if ($t6_7) {
           $block = 2; break;
         }
         else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 2: {
-        $rt.runtime.boundsCheck($t2_3, $rt.builtin.byteLen(s));
-        $t5_6 = $rt.builtin.stringByteAt(s, $t2_3);
-        $t6_7 = ($t5_6 === 34);
-        if ($t6_7) {
-          $block = 6; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 3: {
-        $t9_10 = ($t2_3 + 1);
-        $t0_1 = $t7_8;
-        $t1_2 = $t8_9;
-        $t2_3 = $t9_10;
-        $block = 1; break;
-        break;
-      }
-      case 4: {
-        $t10_11 = $rt.builtin.stringSlice(s, $t1_2, undefined);
-        $t11_12 = ($t0_1 + $t10_11);
-        $t12_13 = ($t11_12 + '"');
-        return $t12_13;
-        break;
-      }
-      case 5: {
-        $t14_15 = $rt.builtin.stringSlice(s, $t1_2, $t2_3);
-        $t15_16 = ($t14_15 + $t13_14);
-        $t16_17 = ($t0_1 + $t15_16);
-        $t17_18 = ($t2_3 + 1);
-        $t7_8 = $t16_17;
-        $t8_9 = $t17_18;
-        $block = 3; break;
-        break;
-      }
-      case 6: {
-        $t13_14 = '\\"';
-        $block = 5; break;
-        break;
-      }
-      case 7: {
-        $t13_14 = '\\\\';
-        $block = 5; break;
-        break;
-      }
-      case 8: {
-        $t18_19 = ($t5_6 === 92);
-        if ($t18_19) {
-          $block = 7; break;
-        }
-        else {
-          $block = 10; break;
-        }
-        break;
-      }
-      case 9: {
-        $t13_14 = '\\n';
-        $block = 5; break;
-        break;
-      }
-      case 10: {
-        $t19_20 = ($t5_6 === 10);
-        if ($t19_20) {
-          $block = 9; break;
-        }
-        else {
-          $block = 12; break;
-        }
-        break;
-      }
-      case 11: {
-        $t13_14 = '\\r';
-        $block = 5; break;
-        break;
-      }
-      case 12: {
-        $t20_21 = ($t5_6 === 13);
-        if ($t20_21) {
-          $block = 11; break;
-        }
-        else {
-          $block = 14; break;
-        }
-        break;
-      }
-      case 13: {
-        $t13_14 = '\\t';
-        $block = 5; break;
-        break;
-      }
-      case 14: {
-        $t21_22 = ($t5_6 === 9);
-        if ($t21_22) {
-          $block = 13; break;
-        }
-        else {
-          $block = 16; break;
-        }
-        break;
-      }
-      case 15: {
-        $t13_14 = '\\b';
-        $block = 5; break;
-        break;
-      }
-      case 16: {
-        $t22_23 = ($t5_6 === 8);
-        if ($t22_23) {
-          $block = 15; break;
-        }
-        else {
-          $block = 18; break;
-        }
-        break;
-      }
-      case 17: {
-        $t13_14 = '\\f';
-        $block = 5; break;
-        break;
-      }
-      case 18: {
-        $t23_24 = ($t5_6 === 12);
-        if ($t23_24) {
-          $block = 17; break;
-        }
-        else {
-          $block = 19; break;
-        }
-        break;
-      }
-      case 19: {
-        $t24_25 = ($t5_6 < 32);
-        if ($t24_25) {
-          $block = 20; break;
-        }
-        else {
-          $t7_8 = $t0_1;
-          $t8_9 = $t1_2;
           $block = 3; break;
         }
         break;
       }
-      case 20: {
-        $t25_26 = (($t5_6 & 0xFF) >> 4);
-        $rt.runtime.boundsCheck($t25_26, $rt.builtin.byteLen('0123456789abcdef'));
-        $t26_27 = $rt.builtin.stringByteAt('0123456789abcdef', $t25_26);
-        $t27_28 = String.fromCodePoint($t26_27);
-        $t28_29 = ('\\u00' + $t27_28);
-        $t29_30 = ($t5_6 & 15);
-        $rt.runtime.boundsCheck($t29_30, $rt.builtin.byteLen('0123456789abcdef'));
-        $t30_31 = $rt.builtin.stringByteAt('0123456789abcdef', $t29_30);
-        $t31_32 = String.fromCodePoint($t30_31);
-        $t32_33 = ($t28_29 + $t31_32);
-        $t13_14 = $t32_33;
-        $block = 5; break;
+      case 2: {
+        $t7_8 = b.addr($t5_6);
+        $t8_9 = $t7_8.$get();
+        $t9_10 = ($t5_6 * 2);
+        $t10_11 = (($t8_9 & 0xFF) >> 4);
+        $rt.runtime.boundsCheck($t10_11, $rt.builtin.byteLen('0123456789abcdef'));
+        $t11_12 = $rt.builtin.stringByteAt('0123456789abcdef', $t10_11);
+        $t12_13 = $t2_3.addr($t9_10);
+        $t12_13.$set($t11_12);
+        $t13_14 = ($t5_6 * 2);
+        $t14_15 = ($t13_14 + 1);
+        $t15_16 = ($t8_9 & 15);
+        $rt.runtime.boundsCheck($t15_16, $rt.builtin.byteLen('0123456789abcdef'));
+        $t16_17 = $rt.builtin.stringByteAt('0123456789abcdef', $t15_16);
+        $t17_18 = $t2_3.addr($t14_15);
+        $t17_18.$set($t16_17);
+        $t4_5 = $t5_6;
+        $block = 1; break;
+        break;
+      }
+      case 3: {
+        $t18_19 = $rt.builtin.bytesToString($t2_3);
+        return $t18_19;
         break;
       }
     }
   }
 }
 
-export function JsonGetString(s, key) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82;
+export function HexDecode(s) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = ('"' + key);
-        $t1_2 = ($t0_1 + '"');
-        $t2_3 = $rt.builtin.len($t1_2);
-        $t3_4 = 0;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t4_5 = $rt.builtin.len(s);
-        $t5_6 = ($t4_5 - $t2_3);
-        $t6_7 = ($t3_4 <= $t5_6);
-        if ($t6_7) {
-          $block = 2; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 2: {
-        $t7_8 = ($t3_4 + $t2_3);
-        $t8_9 = $rt.builtin.stringSlice(s, $t3_4, $t7_8);
-        $t9_10 = ($t8_9 === $t1_2);
-        if ($t9_10) {
-          $block = 5; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 3: {
-        $t10_11 = ($t3_4 + 1);
-        $t3_4 = $t10_11;
-        $block = 1; break;
-        break;
-      }
-      case 4: {
-        return '';
-        break;
-      }
-      case 5: {
-        $t11_12 = ($t3_4 + $t2_3);
-        $t15_16 = $t11_12;
-        $block = 8; break;
-        break;
-      }
-      case 6: {
-        $t12_13 = ($t15_16 + 1);
-        $t15_16 = $t12_13;
-        $block = 8; break;
-        break;
-      }
-      case 7: {
-        $t13_14 = $rt.builtin.len(s);
-        $t14_15 = ($t15_16 >= $t13_14);
-        if ($t14_15) {
-          $block = 3; break;
-        }
-        else {
-          $block = 14; break;
-        }
-        break;
-      }
-      case 8: {
-        $t16_17 = $rt.builtin.len(s);
-        $t17_18 = ($t15_16 < $t16_17);
-        if ($t17_18) {
-          $block = 9; break;
-        }
-        else {
-          $block = 7; break;
-        }
-        break;
-      }
-      case 9: {
-        $rt.runtime.boundsCheck($t15_16, $rt.builtin.byteLen(s));
-        $t18_19 = $rt.builtin.stringByteAt(s, $t15_16);
-        $t19_20 = ($t18_19 === 32);
-        if ($t19_20) {
-          $block = 6; break;
-        }
-        else {
-          $block = 12; break;
-        }
-        break;
-      }
-      case 10: {
-        $rt.runtime.boundsCheck($t15_16, $rt.builtin.byteLen(s));
-        $t20_21 = $rt.builtin.stringByteAt(s, $t15_16);
-        $t21_22 = ($t20_21 === 13);
-        if ($t21_22) {
-          $block = 6; break;
-        }
-        else {
-          $block = 7; break;
-        }
-        break;
-      }
-      case 11: {
-        $rt.runtime.boundsCheck($t15_16, $rt.builtin.byteLen(s));
-        $t22_23 = $rt.builtin.stringByteAt(s, $t15_16);
-        $t23_24 = ($t22_23 === 10);
-        if ($t23_24) {
-          $block = 6; break;
-        }
-        else {
-          $block = 10; break;
-        }
-        break;
-      }
-      case 12: {
-        $rt.runtime.boundsCheck($t15_16, $rt.builtin.byteLen(s));
-        $t24_25 = $rt.builtin.stringByteAt(s, $t15_16);
-        $t25_26 = ($t24_25 === 9);
-        if ($t25_26) {
-          $block = 6; break;
-        }
-        else {
-          $block = 11; break;
-        }
-        break;
-      }
-      case 13: {
-        $t26_27 = ($t15_16 + 1);
-        $t32_33 = $t26_27;
-        $block = 17; break;
-        break;
-      }
-      case 14: {
-        $rt.runtime.boundsCheck($t15_16, $rt.builtin.byteLen(s));
-        $t27_28 = $rt.builtin.stringByteAt(s, $t15_16);
-        $t28_29 = ($t27_28 !== 58);
-        if ($t28_29) {
-          $block = 3; break;
-        }
-        else {
-          $block = 13; break;
-        }
-        break;
-      }
-      case 15: {
-        $t29_30 = ($t32_33 + 1);
-        $t32_33 = $t29_30;
-        $block = 17; break;
-        break;
-      }
-      case 16: {
-        $t30_31 = $rt.builtin.len(s);
-        $t31_32 = ($t32_33 >= $t30_31);
-        if ($t31_32) {
-          $block = 3; break;
-        }
-        else {
-          $block = 23; break;
-        }
-        break;
-      }
-      case 17: {
-        $t33_34 = $rt.builtin.len(s);
-        $t34_35 = ($t32_33 < $t33_34);
-        if ($t34_35) {
-          $block = 18; break;
-        }
-        else {
-          $block = 16; break;
-        }
-        break;
-      }
-      case 18: {
-        $rt.runtime.boundsCheck($t32_33, $rt.builtin.byteLen(s));
-        $t35_36 = $rt.builtin.stringByteAt(s, $t32_33);
-        $t36_37 = ($t35_36 === 32);
-        if ($t36_37) {
-          $block = 15; break;
-        }
-        else {
-          $block = 21; break;
-        }
-        break;
-      }
-      case 19: {
-        $rt.runtime.boundsCheck($t32_33, $rt.builtin.byteLen(s));
-        $t37_38 = $rt.builtin.stringByteAt(s, $t32_33);
-        $t38_39 = ($t37_38 === 13);
-        if ($t38_39) {
-          $block = 15; break;
-        }
-        else {
-          $block = 16; break;
-        }
-        break;
-      }
-      case 20: {
-        $rt.runtime.boundsCheck($t32_33, $rt.builtin.byteLen(s));
-        $t39_40 = $rt.builtin.stringByteAt(s, $t32_33);
-        $t40_41 = ($t39_40 === 10);
-        if ($t40_41) {
-          $block = 15; break;
-        }
-        else {
-          $block = 19; break;
-        }
-        break;
-      }
-      case 21: {
-        $rt.runtime.boundsCheck($t32_33, $rt.builtin.byteLen(s));
-        $t41_42 = $rt.builtin.stringByteAt(s, $t32_33);
-        $t42_43 = ($t41_42 === 9);
-        if ($t42_43) {
-          $block = 15; break;
-        }
-        else {
-          $block = 20; break;
-        }
-        break;
-      }
-      case 22: {
-        $t43_44 = ($t32_33 + 1);
-        $t48_49 = $t43_44;
-        $t49_50 = $t43_44;
-        $t50_51 = '';
-        $block = 25; break;
-        break;
-      }
-      case 23: {
-        $rt.runtime.boundsCheck($t32_33, $rt.builtin.byteLen(s));
-        $t44_45 = $rt.builtin.stringByteAt(s, $t32_33);
-        $t45_46 = ($t44_45 !== 34);
-        if ($t45_46) {
-          $block = 3; break;
-        }
-        else {
-          $block = 22; break;
-        }
-        break;
-      }
-      case 24: {
-        $rt.runtime.boundsCheck($t48_49, $rt.builtin.byteLen(s));
-        $t46_47 = $rt.builtin.stringByteAt(s, $t48_49);
-        $t47_48 = ($t46_47 === 92);
-        if ($t47_48) {
-          $block = 28; break;
-        }
-        else {
-          $block = 27; break;
-        }
-        break;
-      }
-      case 25: {
-        $t51_52 = $rt.builtin.len(s);
-        $t52_53 = ($t48_49 < $t51_52);
-        if ($t52_53) {
-          $block = 24; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 26: {
-        $t53_54 = $rt.builtin.stringSlice(s, $t49_50, $t48_49);
-        $t54_55 = ($t50_51 + $t53_54);
-        $t55_56 = ($t48_49 + 1);
-        $rt.runtime.boundsCheck($t55_56, $rt.builtin.byteLen(s));
-        $t56_57 = $rt.builtin.stringByteAt(s, $t55_56);
-        $t57_58 = ($t56_57 === 34);
-        if ($t57_58) {
-          $block = 30; break;
-        }
-        else {
-          $block = 32; break;
-        }
-        break;
-      }
-      case 27: {
-        $rt.runtime.boundsCheck($t48_49, $rt.builtin.byteLen(s));
-        $t58_59 = $rt.builtin.stringByteAt(s, $t48_49);
-        $t59_60 = ($t58_59 === 34);
-        if ($t59_60) {
-          $block = 40; break;
-        }
-        else {
-          $block = 41; break;
-        }
-        break;
-      }
-      case 28: {
-        $t60_61 = ($t48_49 + 1);
-        $t61_62 = $rt.builtin.len(s);
-        $t62_63 = ($t60_61 < $t61_62);
-        if ($t62_63) {
-          $block = 26; break;
-        }
-        else {
-          $block = 27; break;
-        }
-        break;
-      }
-      case 29: {
-        $t64_65 = ($t55_56 + 1);
-        $t48_49 = $t64_65;
-        $t49_50 = $t64_65;
-        $t50_51 = $t63_64;
-        $block = 25; break;
-        break;
-      }
-      case 30: {
-        $t65_66 = ($t55_56 + 1);
-        $t66_67 = $rt.builtin.stringSlice(s, $t55_56, $t65_66);
-        $t67_68 = ($t54_55 + $t66_67);
-        $t63_64 = $t67_68;
-        $block = 29; break;
-        break;
-      }
-      case 31: {
-        $t68_69 = ($t54_55 + '\n');
-        $t63_64 = $t68_69;
-        $block = 29; break;
-        break;
-      }
-      case 32: {
-        $t69_70 = ($t56_57 === 92);
-        if ($t69_70) {
-          $block = 30; break;
-        }
-        else {
-          $block = 33; break;
-        }
-        break;
-      }
-      case 33: {
-        $t70_71 = ($t56_57 === 47);
-        if ($t70_71) {
-          $block = 30; break;
-        }
-        else {
-          $block = 34; break;
-        }
-        break;
-      }
-      case 34: {
-        $t71_72 = ($t56_57 === 110);
-        if ($t71_72) {
-          $block = 31; break;
-        }
-        else {
-          $block = 36; break;
-        }
-        break;
-      }
-      case 35: {
-        $t72_73 = ($t54_55 + '\r');
-        $t63_64 = $t72_73;
-        $block = 29; break;
-        break;
-      }
-      case 36: {
-        $t73_74 = ($t56_57 === 114);
-        if ($t73_74) {
-          $block = 35; break;
-        }
-        else {
-          $block = 38; break;
-        }
-        break;
-      }
-      case 37: {
-        $t74_75 = ($t54_55 + '\t');
-        $t63_64 = $t74_75;
-        $block = 29; break;
-        break;
-      }
-      case 38: {
-        $t75_76 = ($t56_57 === 116);
-        if ($t75_76) {
-          $block = 37; break;
-        }
-        else {
-          $block = 39; break;
-        }
-        break;
-      }
-      case 39: {
-        $t76_77 = ($t55_56 + 1);
-        $t77_78 = $rt.builtin.stringSlice(s, $t55_56, $t76_77);
-        $t78_79 = ($t54_55 + $t77_78);
-        $t63_64 = $t78_79;
-        $block = 29; break;
-        break;
-      }
-      case 40: {
-        $t79_80 = $rt.builtin.stringSlice(s, $t49_50, $t48_49);
-        $t80_81 = ($t50_51 + $t79_80);
-        return $t80_81;
-        break;
-      }
-      case 41: {
-        $t81_82 = ($t48_49 + 1);
-        let $phi0 = $t81_82;
-        let $phi1 = $t49_50;
-        let $phi2 = $t50_51;
-        $t48_49 = $phi0;
-        $t49_50 = $phi1;
-        $t50_51 = $phi2;
-        $block = 25; break;
-        break;
-      }
-    }
-  }
-}
-
-export function Itoa(n) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = (n === 0);
-        if ($t0_1) {
+        $t0_1 = $rt.builtin.len(s);
+        $t1_2 = ($t0_1 % 2);
+        $t2_3 = ($t1_2 !== 0);
+        if ($t2_3) {
           $block = 1; break;
         }
         else {
@@ -2258,62 +2075,245 @@ export function Itoa(n) {
         break;
       }
       case 1: {
-        return '0';
+        return null;
         break;
       }
       case 2: {
-        $t1_2 = (n < 0);
-        if ($t1_2) {
-          $block = 3; break;
-        }
-        else {
-          $t3_4 = n;
-          $t4_5 = false;
-          $block = 4; break;
-        }
+        $t3_4 = $rt.builtin.len(s);
+        $t4_5 = Math.trunc($t3_4 / 2);
+        $t5_6 = $rt.builtin.makeSlice($t4_5, $t4_5, 0);
+        $t6_7 = 0;
+        $block = 3; break;
         break;
       }
       case 3: {
-        $t2_3 = -n;
-        $t3_4 = $t2_3;
-        $t4_5 = true;
-        $block = 4; break;
+        $t7_8 = $rt.builtin.len(s);
+        $t8_9 = ($t6_7 < $t7_8);
+        if ($t8_9) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
         break;
       }
       case 4: {
-        $t5_6 = { $value: $rt.builtin.makeSlice(20, 20, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t12_13 = $t3_4;
-        $t13_14 = 20;
-        $block = 7; break;
+        $rt.runtime.boundsCheck($t6_7, $rt.builtin.byteLen(s));
+        $t9_10 = $rt.builtin.stringByteAt(s, $t6_7);
+        $t10_11 = hexVal($t9_10);
+        $t11_12 = ($t6_7 + 1);
+        $rt.runtime.boundsCheck($t11_12, $rt.builtin.byteLen(s));
+        $t12_13 = $rt.builtin.stringByteAt(s, $t11_12);
+        $t13_14 = hexVal($t12_13);
+        $t14_15 = ($t10_11 < 0);
+        if ($t14_15) {
+          $block = 6; break;
+        }
+        else {
+          $block = 8; break;
+        }
         break;
       }
       case 5: {
-        $t6_7 = ($t13_14 - 1);
-        $t7_8 = ($t12_13 % 10);
-        $t8_9 = (48 + $t7_8);
-        $t9_10 = ($t8_9 & 0xFF);
-        $t10_11 = $t5_6.$get().addr($t6_7);
-        $t10_11.$set($t9_10);
-        $t11_12 = Math.trunc($t12_13 / 10);
-        $t12_13 = $t11_12;
-        $t13_14 = $t6_7;
-        $block = 7; break;
+        return $t5_6;
         break;
       }
       case 6: {
-        if ($t4_5) {
-          $block = 8; break;
+        return null;
+        break;
+      }
+      case 7: {
+        $t15_16 = Math.trunc($t6_7 / 2);
+        $t16_17 = ($t10_11 * (2 ** 4));
+        $t17_18 = $rt.builtin.int64or($t16_17, $t13_14);
+        $t18_19 = ($t17_18 & 0xFF);
+        $t19_20 = $t5_6.addr($t15_16);
+        $t19_20.$set($t18_19);
+        $t20_21 = ($t6_7 + 2);
+        $t6_7 = $t20_21;
+        $block = 3; break;
+        break;
+      }
+      case 8: {
+        $t21_22 = ($t13_14 < 0);
+        if ($t21_22) {
+          $block = 6; break;
         }
         else {
-          $t17_18 = $t13_14;
+          $block = 7; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function HexDecode32(s) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2 = $rt.builtin.len(s);
+        $t2_3 = ($t1_2 !== 64);
+        if ($t2_3) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t3_4 = $t0_1.$get();
+        $t0_1.$set($rt.builtin.cloneValue($t3_4));
+        $t4_5 = $t0_1.$get();
+        return [$t4_5, false];
+        break;
+      }
+      case 2: {
+        $t5_6 = 0;
+        $block = 3; break;
+        break;
+      }
+      case 3: {
+        $t6_7 = ($t5_6 < 32);
+        if ($t6_7) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 4: {
+        $t7_8 = ($t5_6 * 2);
+        $rt.runtime.boundsCheck($t7_8, $rt.builtin.byteLen(s));
+        $t8_9 = $rt.builtin.stringByteAt(s, $t7_8);
+        $t9_10 = hexVal($t8_9);
+        $t10_11 = ($t5_6 * 2);
+        $t11_12 = ($t10_11 + 1);
+        $rt.runtime.boundsCheck($t11_12, $rt.builtin.byteLen(s));
+        $t12_13 = $rt.builtin.stringByteAt(s, $t11_12);
+        $t13_14 = hexVal($t12_13);
+        $t14_15 = ($t9_10 < 0);
+        if ($t14_15) {
+          $block = 6; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 5: {
+        $t15_16 = $t0_1.$get();
+        $t0_1.$set($rt.builtin.cloneValue($t15_16));
+        $t16_17 = $t0_1.$get();
+        return [$t16_17, true];
+        break;
+      }
+      case 6: {
+        $t17_18 = $t0_1.$get();
+        $t0_1.$set($rt.builtin.cloneValue($t17_18));
+        $t18_19 = $t0_1.$get();
+        return [$t18_19, false];
+        break;
+      }
+      case 7: {
+        $t19_20 = ($t9_10 * (2 ** 4));
+        $t20_21 = $rt.builtin.int64or($t19_20, $t13_14);
+        $t21_22 = ($t20_21 & 0xFF);
+        $t22_23 = $t0_1.$get().addr($t5_6);
+        $t22_23.$set($t21_22);
+        $t23_24 = ($t5_6 + 1);
+        $t5_6 = $t23_24;
+        $block = 3; break;
+        break;
+      }
+      case 8: {
+        $t24_25 = ($t13_14 < 0);
+        if ($t24_25) {
+          $block = 6; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function hexVal(c) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = (c >= 48);
+        if ($t0_1) {
+          $block = 4; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 1: {
+        $t1_2 = ((c - 48) & 0xFF);
+        $t2_3 = $t1_2;
+        return $t2_3;
+        break;
+      }
+      case 2: {
+        $t3_4 = ((c - 97) & 0xFF);
+        $t4_5 = (($t3_4 + 10) & 0xFF);
+        $t5_6 = $t4_5;
+        return $t5_6;
+        break;
+      }
+      case 3: {
+        $t6_7 = (c >= 97);
+        if ($t6_7) {
+          $block = 7; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 4: {
+        $t7_8 = (c <= 57);
+        if ($t7_8) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 5: {
+        $t8_9 = ((c - 65) & 0xFF);
+        $t9_10 = (($t8_9 + 10) & 0xFF);
+        $t10_11 = $t9_10;
+        return $t10_11;
+        break;
+      }
+      case 6: {
+        $t11_12 = (c >= 65);
+        if ($t11_12) {
           $block = 9; break;
+        }
+        else {
+          $block = 8; break;
         }
         break;
       }
       case 7: {
-        $t14_15 = ($t12_13 > 0);
-        if ($t14_15) {
-          $block = 5; break;
+        $t12_13 = (c <= 102);
+        if ($t12_13) {
+          $block = 2; break;
         }
         else {
           $block = 6; break;
@@ -2321,17 +2321,17 @@ export function Itoa(n) {
         break;
       }
       case 8: {
-        $t15_16 = ($t13_14 - 1);
-        $t16_17 = $t5_6.$get().addr($t15_16);
-        $t16_17.$set(45);
-        $t17_18 = $t15_16;
-        $block = 9; break;
+        return -1;
         break;
       }
       case 9: {
-        $t18_19 = $rt.builtin.sliceSlice($t5_6.$get(), $t17_18, undefined, undefined);
-        $t19_20 = $rt.builtin.bytesToString($t18_19);
-        return $t19_20;
+        $t13_14 = (c <= 70);
+        if ($t13_14) {
+          $block = 5; break;
+        }
+        else {
+          $block = 8; break;
+        }
         break;
       }
     }

@@ -121,6 +121,11 @@ func onMessage(event sw.Event) {
 		refreshAndReload()
 		return
 	}
+	if data == "CLAIM" {
+		// Re-claim after hard refresh (onActivate doesn't re-fire).
+		sw.ClaimClients(func() {})
+		return
+	}
 
 	// JSON array messages — parse and route.
 	w := newMW(data)

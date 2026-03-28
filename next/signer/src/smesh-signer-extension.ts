@@ -159,6 +159,10 @@ const nostr = {
   mls: {
     async init(relayURLs: string[], lastEventTS?: number): Promise<string> {
       debug('mls.init received');
+      // Persist relay URLs on window so mls-bridge.mjs can pick them up even if
+      // it loaded after this CustomEvent fired (DOM events are not queued).
+      (window as any)._nostrMlsRelays = relayURLs;
+      window.dispatchEvent(new CustomEvent('nostr-mls', { detail: { cmd: 'relays', relays: relayURLs } }));
       const r = await nostr.messenger.request('mls.init' as any, { relayURLs, lastEventTS: lastEventTS || 0 });
       debug('mls.init result: ' + r);
       return r;

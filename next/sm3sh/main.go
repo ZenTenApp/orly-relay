@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	version     = "v0.65.49"
+	version     = "v0.65.50"
 	lsKeyPubkey = "smesh-pubkey"
 	lsKeyTheme  = "smesh-theme"
 )

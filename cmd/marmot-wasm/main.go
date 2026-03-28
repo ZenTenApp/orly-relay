@@ -34,6 +34,14 @@ type jsRelay struct {
 	eventChs    map[int]chan *event.E
 	nextSub     int
 	mu          sync.Mutex
+	// Fix 2a: buffer events arriving before any subscription is registered.
+	preSubBuf    []*preSubEvent
+	preSubActive bool
+}
+
+type preSubEvent struct {
+	subID int
+	ev    *event.E
 }
 
 func (r *jsRelay) Publish(ctx context.Context, ev *event.E) error {
@@ -50,8 +58,19 @@ func (r *jsRelay) Subscribe(ctx context.Context, ff *filter.S) (marmot.EventStre
 	r.mu.Lock()
 	id := r.nextSub
 	r.nextSub++
-	ch := make(chan *event.E, 16)
+	ch := make(chan *event.E, 64)
 	r.eventChs[id] = ch
+	// Fix 2a: drain pre-subscription buffer into the new channel.
+	if r.preSubActive {
+		r.preSubActive = false
+		for _, pe := range r.preSubBuf {
+			select {
+			case ch <- pe.ev:
+			default:
+			}
+		}
+		r.preSubBuf = nil
+	}
 	r.mu.Unlock()
 
 	r.subscribeFn.Invoke(id, string(b))
@@ -72,15 +91,23 @@ func (s *jsEventStream) Close() {
 }
 
 // deliverEvent routes an incoming event JSON to the right subscription channel.
+// Fix 2a: if no subscription channel exists yet, buffer the event for later delivery.
 func deliverEvent(subID int, evJSON string) {
-	relay.mu.Lock()
-	ch, ok := relay.eventChs[subID]
-	relay.mu.Unlock()
-	if !ok {
-		return
-	}
 	ev := event.New()
 	if err := ev.UnmarshalJSON([]byte(evJSON)); err != nil {
+		return
+	}
+	relay.mu.Lock()
+	ch, ok := relay.eventChs[subID]
+	if !ok && relay.preSubActive {
+		if len(relay.preSubBuf) < 64 {
+			relay.preSubBuf = append(relay.preSubBuf, &preSubEvent{subID: subID, ev: ev})
+		}
+		relay.mu.Unlock()
+		return
+	}
+	relay.mu.Unlock()
+	if !ok {
 		return
 	}
 	select {
@@ -110,7 +137,7 @@ func main() {
 	lol.Level.Store(lol.Off)
 
 	store = newJSGroupStore()
-	relay = &jsRelay{eventChs: make(map[int]chan *event.E)}
+	relay = &jsRelay{eventChs: make(map[int]chan *event.E), preSubActive: true}
 
 	// Register JS API — all wrapped with panic recovery
 	js.Global().Set("_marmot", js.ValueOf(map[string]any{
@@ -228,12 +255,26 @@ func jsSendDM(this js.Value, args []js.Value) any {
 	return nil
 }
 
+// Fix 2c: track active subscription so duplicate calls cancel the previous one.
+var (
+	activeSubCancel context.CancelFunc
+	activeSubMu     sync.Mutex
+)
+
 func jsSubscribe(this js.Value, args []js.Value) any {
 	if client == nil {
 		return nil
 	}
+	activeSubMu.Lock()
+	if activeSubCancel != nil {
+		activeSubCancel()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	activeSubCancel = cancel
+	activeSubMu.Unlock()
+
 	go func() {
-		ctx := context.Background()
+		defer cancel()
 		ff := client.SubscriptionFilters()
 		stream, err := relay.Subscribe(ctx, ff)
 		if err != nil {
@@ -243,6 +284,8 @@ func jsSubscribe(this js.Value, args []js.Value) any {
 
 		for {
 			select {
+			case <-ctx.Done():
+				return
 			case ev := <-stream.Events():
 				if ev == nil {
 					return

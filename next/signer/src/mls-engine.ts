@@ -8,9 +8,15 @@ import browser from 'webextension-polyfill';
 
 // --- State ---
 let wasmReady = false;
-let mlsTabId: number | null = null;
+const mlsTabIds = new Set<number>(); // Fix 2g: broadcast to all tabs
 let currentPrivkey = '';
 let mlsInitPromise: Promise<string> | null = null;
+let wasmLoadingPromise: Promise<void> | null = null; // Fix 2d: guard concurrent instantiation
+let lastEventTSInterval: ReturnType<typeof setInterval> | null = null; // Fix 2e: track interval
+
+// Fix 2b: queue events arriving before init completes
+let initDone = false;
+const pendingDeliverEvents: Array<{ subId: number; eventJSON: string }> = [];
 
 // --- IDB Group Store (same schema as the marmot SW used) ---
 const GDB_NAME = 'marmot-groups';
@@ -101,9 +107,20 @@ function setupStoreCallbacks() {
 
 // --- WASM Loading ---
 
+// Fix 2d: guard against concurrent instantiation
 async function loadWasm(): Promise<void> {
   if (wasmReady) return;
+  if (wasmLoadingPromise) return wasmLoadingPromise;
+  wasmLoadingPromise = doLoadWasm();
+  try {
+    await wasmLoadingPromise;
+  } catch (e) {
+    wasmLoadingPromise = null; // allow retry on failure
+    throw e;
+  }
+}
 
+async function doLoadWasm(): Promise<void> {
   // wasm_exec.js is loaded as a background script (manifest.json),
   // so globalThis.Go is already available.
   const GoClass = (globalThis as any).Go;
@@ -172,9 +189,9 @@ function setupMarmotInit(lastEventTS: number) {
       pushToTab({ cmd: 'status', msg });
     };
 
-    // Periodically push lastEventTS to page for localStorage persistence.
-    // Page localStorage survives extension reloads; browser.storage.local does not.
-    setInterval(() => {
+    // Fix 2e: clear previous interval before creating new.
+    if (lastEventTSInterval) clearInterval(lastEventTSInterval);
+    lastEventTSInterval = setInterval(() => {
       try {
         const ts = marmot.lastEventTS?.();
         if (ts > 0) pushToTab({ cmd: 'mls_ts', ts });
@@ -245,20 +262,36 @@ function handleCryptoLocal(op: string, peerHex: string, data: string, id: number
 }
 
 // --- Push to originating tab ---
+// Fix 1d + 2g: broadcast to all known tabs, recover on failure.
 
-function pushToTab(data: any) {
-  if (mlsTabId === null) {
-    console.warn('[mls-engine] pushToTab: no tab ID');
+let pushRecovering = false;
+const pushQueue: any[] = [];
+
+async function pushToTab(data: any) {
+  if (pushRecovering) {
+    pushQueue.push(data);
     return;
   }
-  browser.tabs.sendMessage(mlsTabId, {
-    ext: 'smesh-signer',
-    type: 'mls-push',
-    data,
-  }).catch((err) => {
-    console.warn('[mls-engine] pushToTab failed:', err);
-    mlsTabId = null;
-  });
+  if (mlsTabIds.size === 0) {
+    pushRecovering = true;
+    pushQueue.push(data);
+    try {
+      const tabs = await browser.tabs.query({ url: ['*://smesh.lol/*', '*://127.0.0.1:*/*', '*://localhost:*/*'] });
+      for (const t of tabs) {
+        if (t.id) mlsTabIds.add(t.id);
+      }
+    } catch (_) {}
+    pushRecovering = false;
+    const q = pushQueue.splice(0);
+    for (const d of q) pushToTab(d);
+    return;
+  }
+  const msg = { ext: 'smesh-signer', type: 'mls-push', data };
+  for (const tabId of mlsTabIds) {
+    browser.tabs.sendMessage(tabId, msg).catch(() => {
+      mlsTabIds.delete(tabId);
+    });
+  }
 }
 
 // --- Public API (called from background.ts) ---
@@ -270,8 +303,9 @@ export async function mlsInit(
   tabId: number,
   lastEventTS: number = 0
 ): Promise<string> {
-  mlsTabId = tabId;
+  mlsTabIds.add(tabId); // Fix 2g: add, don't overwrite
   currentPrivkey = privkey;
+  // Fix 2f: reset on failure so retry is possible
   mlsInitPromise = (async () => {
     await loadWasm();
     setupMarmotInit(lastEventTS);
@@ -286,13 +320,23 @@ export async function mlsInit(
         m.subscribe();
       }
     }
+    // Fix 2b: mark init done and drain pending events.
+    initDone = true;
+    const pending = pendingDeliverEvents.splice(0);
+    for (const p of pending) {
+      const m = (globalThis as any)._marmot;
+      if (m) m.deliverEvent(p.subId, p.eventJSON);
+    }
     return String(result || 'ok');
-  })();
+  })().catch(e => {
+    mlsInitPromise = null; // Fix 2f: allow retry
+    throw e;
+  });
   return mlsInitPromise;
 }
 
 export function mlsSetTab(tabId: number) {
-  mlsTabId = tabId;
+  mlsTabIds.add(tabId); // Fix 2g
 }
 
 export async function mlsSendDM(recipient: string, content: string): Promise<string> {
@@ -323,7 +367,12 @@ export async function mlsListGroups(): Promise<string> {
   return String(m.listGroups() || '[]');
 }
 
+// Fix 2b: queue events before init completes
 export function mlsDeliverEvent(subId: number, eventJSON: string): void {
+  if (!initDone) {
+    pendingDeliverEvents.push({ subId, eventJSON });
+    return;
+  }
   const m = (globalThis as any)._marmot;
   if (!m) return;
   m.deliverEvent(subId, eventJSON);

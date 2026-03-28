@@ -33,6 +33,10 @@ func connectBus() {
 func busSend(to, msg string) {
 	envelope := "{\"from\":\"shell\",\"to\":" + jstr(to) + ",\"msg\":" + msg + "}"
 	if to == "relay" && !relayReady {
+		// Fix 1f: cap queue to prevent unbounded growth if relay SW never starts.
+		if len(relayQueue) >= 256 {
+			relayQueue = relayQueue[1:]
+		}
 		relayQueue = append(relayQueue, envelope)
 		return
 	}

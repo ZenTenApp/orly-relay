@@ -45,6 +45,10 @@ async function tick() {
     try {
       const result = g.fn();
       if (result instanceof Promise) {
+        // Don't await — let the goroutine run asynchronously so other
+        // goroutines can interleave via channel awaits. Awaiting here would
+        // deadlock two goroutines communicating via a channel (the sender
+        // blocks, tick() waits for it, the receiver never starts).
         result.then(
           () => { g.done = true; },
           (e) => {
@@ -95,16 +99,15 @@ export async function runMain(mainFn) {
     const result = mainFn();
     if (result instanceof Promise) await result;
   } catch (e) {
-    console.error('relay-sw runMain error:', e);
     if (e && e.name === 'GoPanic') {
       console.error(`panic: ${e.message}`);
       console.error(e.stack);
-      try { if(self._busPort)self._busPort.postMessage('{"from":"relay","to":"shell","msg":["LOG","relay","PANIC: '+String(e.message).replace(/"/g,'\\"')+'"]}'); } catch(_){}
       if (typeof process !== 'undefined' && process.exit) process.exit(2);
     }
     throw e;
   }
 
+  // Kick the scheduler to start any queued goroutines.
   if (runQueue.length > 0) {
     scheduleRun();
   }

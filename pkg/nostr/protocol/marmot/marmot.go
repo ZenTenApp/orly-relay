@@ -94,10 +94,14 @@ func NewClient(crypto CryptoProvider, store GroupStore, relay RelayConnection, r
 				log.W.F("failed to unmarshal group %x: %v", id, err)
 				continue
 			}
-			// We store the serialized state but can't re-hydrate the
-			// mls.Group from bytes with the current go-mls API.
-			// For now, groups are re-established on restart via welcome
-			// re-exchange. Store the metadata so we know about them.
+			// Can't re-hydrate mls.Group from bytes with current go-mls API.
+			// Groups without MLS state are dead weight — they generate
+			// subscription noise and decrypt failures. Remove them; they'll
+			// be re-established via fresh welcome exchange when needed.
+			if len(gs.MLSState) == 0 {
+				_ = store.DeleteGroup(id)
+				continue
+			}
 			c.groups[string(gs.GroupID)] = &GroupState{
 				GroupID:      gs.GroupID,
 				NostrGroupID: gs.NostrGroupID,
@@ -278,7 +282,9 @@ func (c *Client) HandleEvent(ctx context.Context, ev *event.E) error {
 func (c *Client) handleWelcome(ctx context.Context, ev *event.E) error {
 	uw, err := UnwrapGiftWrap(ev, c.crypto)
 	if err != nil {
-		return fmt.Errorf("unwrap gift wrap: %w", err)
+		// Gift wraps we can't unwrap (wrong key, corrupt, etc.) are noise — skip.
+		log.D.F("skipping undecryptable gift wrap: %v", err)
+		return nil
 	}
 
 	// Dispatch based on inner event kind.
@@ -317,7 +323,10 @@ func (c *Client) processWelcome(ctx context.Context, uw *UnwrappedGiftWrap) erro
 	senderPub := uw.SenderPub
 	gs, err := JoinDMGroup(welcome, c.kpp, senderPub)
 	if err != nil {
-		return fmt.Errorf("join DM group: %w", err)
+		// Expected after restart — init_key from the consumed KeyPackage is
+		// destroyed per MLS spec, so old welcomes are permanently undecryptable.
+		log.D.F("skipping stale welcome from %s: %v", hex.Enc(senderPub), err)
+		return nil
 	}
 
 	if len(gs.GroupID) == 0 {

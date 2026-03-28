@@ -326,12 +326,10 @@ InVal:
 			return
 		}
 		// NIP-59 rumor events have empty sig — accept as unsigned.
+		// Non-standard sig lengths (e.g. from older MLS inner events) are
+		// treated as unsigned rather than failing the parse.
 		if len(sig) != 0 && len(sig) != schnorr.SignatureSize {
-			err = errorf.E(
-				"invalid sig length, require %d got %d '%s'\n%s",
-				schnorr.SignatureSize, len(sig), b, b,
-			)
-			return
+			sig = nil
 		}
 		ev.Sig = sig
 		goto BetweenKV

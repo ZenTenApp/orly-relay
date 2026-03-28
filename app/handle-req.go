@@ -837,8 +837,176 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		l.DB.CacheEvents(f, events)
 		log.D.F("REQ %s: cached %d events", env.Subscription, len(events))
 	}
-	// write the EOSE to signal to the client that all events found have been
-	// sent.
+	// Register subscription with publisher BEFORE sending EOSE.
+	// This closes a race where events saved between EOSE and subscription
+	// registration would be missed — too late for the historical query,
+	// too early for the live stream.
+	cancel := true
+	log.T.F(
+		"REQ %s: computing cancel/subscription; events_sent=%d",
+		env.Subscription, len(events),
+	)
+	var subbedFilters filter.S
+	for _, f := range *env.Filters {
+		// Check if this filter's limit was satisfied
+		limitSatisfied := false
+		if pointers.Present(f.Limit) {
+			if len(events) >= int(*f.Limit) {
+				limitSatisfied = true
+			}
+		}
+
+		if f.Ids.Len() < 1 {
+			// Filter has no IDs - keep subscription open unless limit was satisfied
+			if !limitSatisfied {
+				cancel = false
+				subbedFilters = append(subbedFilters, f)
+			}
+		} else {
+			// remove the IDs that we already sent, as it's one less
+			// comparison we have to make.
+			var notFounds [][]byte
+			for _, id := range f.Ids.T {
+				if _, ok := seen[hexenc.Enc(id)]; ok {
+					continue
+				}
+				notFounds = append(notFounds, id)
+			}
+			log.T.F(
+				"REQ %s: ids outstanding=%d of %d", env.Subscription,
+				len(notFounds), f.Ids.Len(),
+			)
+			// if all were found, don't add to subbedFilters
+			if len(notFounds) == 0 {
+				continue
+			}
+			// Check if limit was satisfied
+			if limitSatisfied {
+				continue
+			}
+			// rewrite the filter Ids to remove the ones we already sent
+			f.Ids = tag.NewFromBytesSlice(notFounds...)
+			// add the filter to the list of filters we're subscribing to
+			cancel = false
+			subbedFilters = append(subbedFilters, f)
+		}
+	}
+	receiver := make(event.C, 32)
+	if !cancel {
+		// Check global subscription limit (reduced in emergency mode)
+		maxSubs := int64(l.Config.MaxSubscriptions)
+		if maxSubs <= 0 {
+			maxSubs = 10000
+		}
+		if l.rateLimiter != nil && l.rateLimiter.InEmergencyMode() {
+			maxSubs = maxSubs / 10 // Restrict to 10% during emergency
+			if maxSubs < 100 {
+				maxSubs = 100
+			}
+		}
+		if l.activeSubscriptionCount.Load() >= maxSubs {
+			log.W.F("REQ %s: rejecting subscription (active=%d, max=%d)",
+				env.Subscription, l.activeSubscriptionCount.Load(), maxSubs)
+			// Send EOSE without creating subscription
+			if err = eoseenvelope.NewFrom(env.Subscription).Write(l); chk.E(err) {
+				return
+			}
+			return nil
+		}
+		l.activeSubscriptionCount.Add(1)
+
+		// Create a dedicated context for this subscription that's independent of query context
+		// but is child of the listener context so it gets cancelled when connection closes
+		subCtx, subCancel := context.WithCancel(l.ctx)
+
+		// Track this subscription so we can cancel it on CLOSE or connection close
+		subID := string(env.Subscription)
+		l.subscriptionsMu.Lock()
+		if l.subscriptions == nil {
+			l.subscriptions = make(map[string]context.CancelFunc)
+		}
+		l.subscriptions[subID] = subCancel
+		l.subscriptionsMu.Unlock()
+
+		// Register subscription with publisher BEFORE EOSE so events arriving
+		// between query completion and EOSE are buffered in the receiver channel
+		// instead of being silently dropped.
+		authRequired := acl.Registry.GetMode() != "none"
+		if !authRequired {
+			for _, f := range subbedFilters {
+				if f != nil && f.Kinds != nil {
+					for _, k := range f.Kinds.K {
+						if kind.IsChannelKind(k.K) && !kind.IsDiscoverableChannelKind(k.K) {
+							authRequired = true
+							break
+						}
+					}
+				}
+				if authRequired {
+					break
+				}
+			}
+		}
+		l.publishers.Receive(
+			&W{
+				Conn:         l.conn,
+				remote:       l.remote,
+				Id:           subID,
+				Receiver:     receiver,
+				Filters:      &subbedFilters,
+				AuthedPubkey: l.authedPubkey.Load(),
+				AuthRequired: authRequired,
+			},
+		)
+
+		// Launch consumer goroutine — reads from receiver and forwards to client
+		go func() {
+			defer func() {
+				l.activeSubscriptionCount.Add(-1)
+				l.subscriptionsMu.Lock()
+				delete(l.subscriptions, subID)
+				l.subscriptionsMu.Unlock()
+				log.D.F("subscription goroutine exiting for %s @ %s", subID, l.remote)
+			}()
+
+			for {
+				select {
+				case <-subCtx.Done():
+					log.D.F("subscription %s cancelled for %s", subID, l.remote)
+					return
+				case ev, ok := <-receiver:
+					if !ok {
+						log.D.F("subscription %s receiver channel closed for %s", subID, l.remote)
+						return
+					}
+
+					var res *eventenvelope.Result
+					var err error
+					if res, err = eventenvelope.NewResultWith(subID, ev); chk.E(err) {
+						log.E.F("failed to create event envelope for subscription %s: %v", subID, err)
+						continue
+					}
+
+					if err = res.Write(l); err != nil {
+						if !strings.Contains(err.Error(), "context canceled") {
+							log.E.F("failed to write event to subscription %s @ %s: %v", subID, l.remote, err)
+						}
+						continue
+					}
+
+					log.D.F("delivered real-time event %s to subscription %s @ %s",
+						hexenc.Enc(ev.ID), subID, l.remote)
+				}
+			}
+		}()
+
+		log.D.F("subscription %s created and goroutine launched for %s", subID, l.remote)
+	} else {
+		log.D.F("subscription request cancelled immediately (all IDs found or limit satisfied)")
+	}
+
+	// EOSE — subscription is already registered with publisher, so events
+	// arriving after this point are buffered and won't be lost.
 	log.T.F("sending EOSE to %s", l.remote)
 	if err = eoseenvelope.NewFrom(env.Subscription).
 		Write(l); chk.E(err) {
@@ -846,8 +1014,6 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 	}
 
 	// Record access for returned events (for GC access-based ranking).
-	// Copy event IDs before launching the goroutine because the deferred
-	// ev.Free() above will release the events when HandleReq returns.
 	if l.accessTracker != nil && len(events) > 0 {
 		eventIDs := make([][]byte, 0, len(events))
 		for _, ev := range events {
@@ -932,182 +1098,6 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		}
 	}
 
-	// if the query was for just Ids, we know there can't be any more results,
-	// so cancel the subscription.
-	cancel := true
-	log.T.F(
-		"REQ %s: computing cancel/subscription; events_sent=%d",
-		env.Subscription, len(events),
-	)
-	var subbedFilters filter.S
-	for _, f := range *env.Filters {
-		// Check if this filter's limit was satisfied
-		limitSatisfied := false
-		if pointers.Present(f.Limit) {
-			if len(events) >= int(*f.Limit) {
-				limitSatisfied = true
-			}
-		}
-
-		if f.Ids.Len() < 1 {
-			// Filter has no IDs - keep subscription open unless limit was satisfied
-			if !limitSatisfied {
-				cancel = false
-				subbedFilters = append(subbedFilters, f)
-			}
-		} else {
-			// remove the IDs that we already sent, as it's one less
-			// comparison we have to make.
-			var notFounds [][]byte
-			for _, id := range f.Ids.T {
-				if _, ok := seen[hexenc.Enc(id)]; ok {
-					continue
-				}
-				notFounds = append(notFounds, id)
-			}
-			log.T.F(
-				"REQ %s: ids outstanding=%d of %d", env.Subscription,
-				len(notFounds), f.Ids.Len(),
-			)
-			// if all were found, don't add to subbedFilters
-			if len(notFounds) == 0 {
-				continue
-			}
-			// Check if limit was satisfied
-			if limitSatisfied {
-				continue
-			}
-			// rewrite the filter Ids to remove the ones we already sent
-			f.Ids = tag.NewFromBytesSlice(notFounds...)
-			// add the filter to the list of filters we're subscribing to
-			cancel = false
-			subbedFilters = append(subbedFilters, f)
-		}
-	}
-	receiver := make(event.C, 32)
-	// if the subscription should be cancelled, do so
-	if !cancel {
-		// Check global subscription limit (reduced in emergency mode)
-		maxSubs := int64(l.Config.MaxSubscriptions)
-		if maxSubs <= 0 {
-			maxSubs = 10000
-		}
-		if l.rateLimiter != nil && l.rateLimiter.InEmergencyMode() {
-			maxSubs = maxSubs / 10 // Restrict to 10% during emergency
-			if maxSubs < 100 {
-				maxSubs = 100
-			}
-		}
-		if l.activeSubscriptionCount.Load() >= maxSubs {
-			log.W.F("REQ %s: rejecting subscription (active=%d, max=%d)",
-				env.Subscription, l.activeSubscriptionCount.Load(), maxSubs)
-			// Send EOSE without creating subscription
-			if err = eoseenvelope.NewFrom(env.Subscription).Write(l); chk.E(err) {
-				return
-			}
-			return nil
-		}
-		l.activeSubscriptionCount.Add(1)
-
-		// Create a dedicated context for this subscription that's independent of query context
-		// but is child of the listener context so it gets cancelled when connection closes
-		subCtx, subCancel := context.WithCancel(l.ctx)
-
-		// Track this subscription so we can cancel it on CLOSE or connection close
-		subID := string(env.Subscription)
-		l.subscriptionsMu.Lock()
-		if l.subscriptions == nil {
-			l.subscriptions = make(map[string]context.CancelFunc)
-		}
-		l.subscriptions[subID] = subCancel
-		l.subscriptionsMu.Unlock()
-
-		// Register subscription with publisher
-		// AuthRequired is set when ACL is active OR when the subscription includes
-		// non-discoverable channel kinds (42-44 require auth regardless of ACL mode)
-		authRequired := acl.Registry.GetMode() != "none"
-		if !authRequired {
-			for _, f := range subbedFilters {
-				if f != nil && f.Kinds != nil {
-					for _, k := range f.Kinds.K {
-						if kind.IsChannelKind(k.K) && !kind.IsDiscoverableChannelKind(k.K) {
-							authRequired = true
-							break
-						}
-					}
-				}
-				if authRequired {
-					break
-				}
-			}
-		}
-		l.publishers.Receive(
-			&W{
-				Conn:         l.conn,
-				remote:       l.remote,
-				Id:           subID,
-				Receiver:     receiver,
-				Filters:      &subbedFilters,
-				AuthedPubkey: l.authedPubkey.Load(),
-				AuthRequired: authRequired,
-			},
-		)
-
-		// Launch goroutine to consume from receiver channel and forward to client
-		// This is the critical missing piece - without this, the receiver channel fills up
-		// and the publisher times out trying to send, causing subscription to be removed
-		go func() {
-			defer func() {
-				// Clean up when subscription ends
-				l.activeSubscriptionCount.Add(-1)
-				l.subscriptionsMu.Lock()
-				delete(l.subscriptions, subID)
-				l.subscriptionsMu.Unlock()
-				log.D.F("subscription goroutine exiting for %s @ %s", subID, l.remote)
-			}()
-
-			for {
-				select {
-				case <-subCtx.Done():
-					// Subscription cancelled (CLOSE message or connection closing)
-					log.D.F("subscription %s cancelled for %s", subID, l.remote)
-					return
-				case ev, ok := <-receiver:
-					if !ok {
-						// Channel closed - subscription ended
-						log.D.F("subscription %s receiver channel closed for %s", subID, l.remote)
-						return
-					}
-
-					// Forward event to client via write channel
-					var res *eventenvelope.Result
-					var err error
-					if res, err = eventenvelope.NewResultWith(subID, ev); chk.E(err) {
-						log.E.F("failed to create event envelope for subscription %s: %v", subID, err)
-						continue
-					}
-
-					// Write to client - this goes through the write worker
-					if err = res.Write(l); err != nil {
-						if !strings.Contains(err.Error(), "context canceled") {
-							log.E.F("failed to write event to subscription %s @ %s: %v", subID, l.remote, err)
-						}
-						// Don't return here - write errors shouldn't kill the subscription
-						// The connection cleanup will handle removing the subscription
-						continue
-					}
-
-					log.D.F("delivered real-time event %s to subscription %s @ %s",
-						hexenc.Enc(ev.ID), subID, l.remote)
-				}
-			}
-		}()
-
-		log.D.F("subscription %s created and goroutine launched for %s", subID, l.remote)
-	} else {
-		// suppress server-sent CLOSED; client will close subscription if desired
-		log.D.F("subscription request cancelled immediately (all IDs found or limit satisfied)")
-	}
 	log.T.F("HandleReq: COMPLETED processing from %s", l.remote)
 	return
 }

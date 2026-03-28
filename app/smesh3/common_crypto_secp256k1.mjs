@@ -6,12 +6,12 @@ import * as $rt from './$runtime/index.mjs';
 import * as common$crypto$sha256 from './common_crypto_sha256.mjs';
 
 // Package-level variables
-export let feZero = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let feOne = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-export let feP = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let G = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let curveN = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let Infinity = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0), Z: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let feZero = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let feOne = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let feP = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
 
 $rt.types.registerType('common/crypto/secp256k1.Point', {
   id: 'common/crypto/secp256k1.Point',
@@ -605,6 +605,394 @@ export function computeChallenge(rx, px, msg) {
       }
       case 2: {
         return $t14_15;
+        break;
+      }
+    }
+  }
+}
+
+export function pointFromAffine(p) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11;
+  $t0_1 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t0_1.$set($rt.builtin.cloneValue(p));
+  $t1_2 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0), Z: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t2_3 = { $get() { return $t1_2.$get().X; }, $set(v) { const obj = $t1_2.$get(); obj.X = v; $t1_2.$set(obj); } };
+  $t3_4 = { $get() { return $t0_1.$get().X; }, $set(v) { const obj = $t0_1.$get(); obj.X = v; $t0_1.$set(obj); } };
+  $t4_5 = $t3_4.$get();
+  $t5_6 = { $get() { return $t1_2.$get().Y; }, $set(v) { const obj = $t1_2.$get(); obj.Y = v; $t1_2.$set(obj); } };
+  $t6_7 = { $get() { return $t0_1.$get().Y; }, $set(v) { const obj = $t0_1.$get(); obj.Y = v; $t0_1.$set(obj); } };
+  $t7_8 = $t6_7.$get();
+  $t8_9 = { $get() { return $t1_2.$get().Z; }, $set(v) { const obj = $t1_2.$get(); obj.Z = v; $t1_2.$set(obj); } };
+  $t9_10 = feOne.$get();
+  $t2_3.$set($rt.builtin.cloneValue($t4_5));
+  $t5_6.$set($rt.builtin.cloneValue($t7_8));
+  $t8_9.$set($rt.builtin.cloneValue($t9_10));
+  $t10_11 = $t1_2.$get();
+  return $t10_11;
+}
+
+export function pointDouble(p) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0), Z: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set($rt.builtin.cloneValue(p));
+        $t1_2 = { $get() { return $t0_1.$get().Z; }, $set(v) { const obj = $t0_1.$get(); obj.Z = v; $t0_1.$set(obj); } };
+        $t2_3 = $t1_2.$get();
+        $t3_4 = feIsZero($t2_3);
+        if ($t3_4) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t4_5 = $t0_1.$get();
+        return $t4_5;
+        break;
+      }
+      case 2: {
+        $t5_6 = { $get() { return $t0_1.$get().X; }, $set(v) { const obj = $t0_1.$get(); obj.X = v; $t0_1.$set(obj); } };
+        $t6_7 = $t5_6.$get();
+        $t7_8 = feSqr($t6_7);
+        $t8_9 = { $get() { return $t0_1.$get().Y; }, $set(v) { const obj = $t0_1.$get(); obj.Y = v; $t0_1.$set(obj); } };
+        $t9_10 = $t8_9.$get();
+        $t10_11 = feSqr($t9_10);
+        $t11_12 = feSqr($t10_11);
+        $t12_13 = { $get() { return $t0_1.$get().X; }, $set(v) { const obj = $t0_1.$get(); obj.X = v; $t0_1.$set(obj); } };
+        $t13_14 = $t12_13.$get();
+        $t14_15 = feAdd($t13_14, $t10_11);
+        $t15_16 = feSqr($t14_15);
+        $t16_17 = feSub($t15_16, $t7_8);
+        $t17_18 = feSub($t16_17, $t11_12);
+        $t18_19 = feAdd($t17_18, $t17_18);
+        $t19_20 = feAdd($t7_8, $t7_8);
+        $t20_21 = feAdd($t19_20, $t7_8);
+        $t21_22 = feSqr($t20_21);
+        $t22_23 = feAdd($t18_19, $t18_19);
+        $t23_24 = feSub($t21_22, $t22_23);
+        $t24_25 = feSub($t18_19, $t23_24);
+        $t25_26 = feMul($t20_21, $t24_25);
+        $t26_27 = feAdd($t11_12, $t11_12);
+        $t27_28 = feAdd($t26_27, $t26_27);
+        $t28_29 = feAdd($t27_28, $t27_28);
+        $t29_30 = feSub($t25_26, $t28_29);
+        $t30_31 = { $get() { return $t0_1.$get().Y; }, $set(v) { const obj = $t0_1.$get(); obj.Y = v; $t0_1.$set(obj); } };
+        $t31_32 = $t30_31.$get();
+        $t32_33 = { $get() { return $t0_1.$get().Z; }, $set(v) { const obj = $t0_1.$get(); obj.Z = v; $t0_1.$set(obj); } };
+        $t33_34 = $t32_33.$get();
+        $t34_35 = feMul($t31_32, $t33_34);
+        $t35_36 = feAdd($t34_35, $t34_35);
+        $t36_37 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0), Z: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t37_38 = { $get() { return $t36_37.$get().X; }, $set(v) { const obj = $t36_37.$get(); obj.X = v; $t36_37.$set(obj); } };
+        $t38_39 = { $get() { return $t36_37.$get().Y; }, $set(v) { const obj = $t36_37.$get(); obj.Y = v; $t36_37.$set(obj); } };
+        $t39_40 = { $get() { return $t36_37.$get().Z; }, $set(v) { const obj = $t36_37.$get(); obj.Z = v; $t36_37.$set(obj); } };
+        $t37_38.$set($rt.builtin.cloneValue($t23_24));
+        $t38_39.$set($rt.builtin.cloneValue($t29_30));
+        $t39_40.$set($rt.builtin.cloneValue($t35_36));
+        $t40_41 = $t36_37.$get();
+        return $t40_41;
+        break;
+      }
+    }
+  }
+}
+
+export function pointAdd(p, q) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0), Z: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set($rt.builtin.cloneValue(p));
+        $t1_2 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0), Z: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2.$set($rt.builtin.cloneValue(q));
+        $t2_3 = $t0_1.$get();
+        $t3_4 = Point$isInfinity($t2_3);
+        if ($t3_4) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t4_5 = $t1_2.$get();
+        return $t4_5;
+        break;
+      }
+      case 2: {
+        $t5_6 = $t1_2.$get();
+        $t6_7 = Point$isInfinity($t5_6);
+        if ($t6_7) {
+          $block = 3; break;
+        }
+        else {
+          $block = 4; break;
+        }
+        break;
+      }
+      case 3: {
+        $t7_8 = $t0_1.$get();
+        return $t7_8;
+        break;
+      }
+      case 4: {
+        $t8_9 = { $get() { return $t0_1.$get().Z; }, $set(v) { const obj = $t0_1.$get(); obj.Z = v; $t0_1.$set(obj); } };
+        $t9_10 = $t8_9.$get();
+        $t10_11 = feSqr($t9_10);
+        $t11_12 = { $get() { return $t1_2.$get().Z; }, $set(v) { const obj = $t1_2.$get(); obj.Z = v; $t1_2.$set(obj); } };
+        $t12_13 = $t11_12.$get();
+        $t13_14 = feSqr($t12_13);
+        $t14_15 = { $get() { return $t0_1.$get().X; }, $set(v) { const obj = $t0_1.$get(); obj.X = v; $t0_1.$set(obj); } };
+        $t15_16 = $t14_15.$get();
+        $t16_17 = feMul($t15_16, $t13_14);
+        $t17_18 = { $get() { return $t1_2.$get().X; }, $set(v) { const obj = $t1_2.$get(); obj.X = v; $t1_2.$set(obj); } };
+        $t18_19 = $t17_18.$get();
+        $t19_20 = feMul($t18_19, $t10_11);
+        $t20_21 = { $get() { return $t0_1.$get().Y; }, $set(v) { const obj = $t0_1.$get(); obj.Y = v; $t0_1.$set(obj); } };
+        $t21_22 = $t20_21.$get();
+        $t22_23 = { $get() { return $t1_2.$get().Z; }, $set(v) { const obj = $t1_2.$get(); obj.Z = v; $t1_2.$set(obj); } };
+        $t23_24 = $t22_23.$get();
+        $t24_25 = feMul($t13_14, $t23_24);
+        $t25_26 = feMul($t21_22, $t24_25);
+        $t26_27 = { $get() { return $t1_2.$get().Y; }, $set(v) { const obj = $t1_2.$get(); obj.Y = v; $t1_2.$set(obj); } };
+        $t27_28 = $t26_27.$get();
+        $t28_29 = { $get() { return $t0_1.$get().Z; }, $set(v) { const obj = $t0_1.$get(); obj.Z = v; $t0_1.$set(obj); } };
+        $t29_30 = $t28_29.$get();
+        $t30_31 = feMul($t10_11, $t29_30);
+        $t31_32 = feMul($t27_28, $t30_31);
+        $t32_33 = ($t16_17 === $t19_20);
+        if ($t32_33) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 5: {
+        $t33_34 = ($t25_26 === $t31_32);
+        if ($t33_34) {
+          $block = 7; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 6: {
+        $t34_35 = feSub($t19_20, $t16_17);
+        $t35_36 = feSub($t31_32, $t25_26);
+        $t36_37 = feSqr($t34_35);
+        $t37_38 = feMul($t36_37, $t34_35);
+        $t38_39 = feSqr($t35_36);
+        $t39_40 = feSub($t38_39, $t37_38);
+        $t40_41 = feMul($t16_17, $t36_37);
+        $t41_42 = feMul($t16_17, $t36_37);
+        $t42_43 = feAdd($t40_41, $t41_42);
+        $t43_44 = feSub($t39_40, $t42_43);
+        $t44_45 = feMul($t16_17, $t36_37);
+        $t45_46 = feSub($t44_45, $t43_44);
+        $t46_47 = feMul($t35_36, $t45_46);
+        $t47_48 = feMul($t25_26, $t37_38);
+        $t48_49 = feSub($t46_47, $t47_48);
+        $t49_50 = { $get() { return $t0_1.$get().Z; }, $set(v) { const obj = $t0_1.$get(); obj.Z = v; $t0_1.$set(obj); } };
+        $t50_51 = $t49_50.$get();
+        $t51_52 = { $get() { return $t1_2.$get().Z; }, $set(v) { const obj = $t1_2.$get(); obj.Z = v; $t1_2.$set(obj); } };
+        $t52_53 = $t51_52.$get();
+        $t53_54 = feMul($t50_51, $t52_53);
+        $t54_55 = feMul($t53_54, $t34_35);
+        $t55_56 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0), Z: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t56_57 = { $get() { return $t55_56.$get().X; }, $set(v) { const obj = $t55_56.$get(); obj.X = v; $t55_56.$set(obj); } };
+        $t57_58 = { $get() { return $t55_56.$get().Y; }, $set(v) { const obj = $t55_56.$get(); obj.Y = v; $t55_56.$set(obj); } };
+        $t58_59 = { $get() { return $t55_56.$get().Z; }, $set(v) { const obj = $t55_56.$get(); obj.Z = v; $t55_56.$set(obj); } };
+        $t56_57.$set($rt.builtin.cloneValue($t43_44));
+        $t57_58.$set($rt.builtin.cloneValue($t48_49));
+        $t58_59.$set($rt.builtin.cloneValue($t54_55));
+        $t59_60 = $t55_56.$get();
+        return $t59_60;
+        break;
+      }
+      case 7: {
+        $t60_61 = $t0_1.$get();
+        $t61_62 = pointDouble($t60_61);
+        return $t61_62;
+        break;
+      }
+      case 8: {
+        $t62_63 = Infinity.$get();
+        return $t62_63;
+        break;
+      }
+    }
+  }
+}
+
+export function ScalarBaseMult(k) {
+  let $t0_1, $t1_2, $t2_3, $t3_4;
+  $t0_1 = G.$get();
+  $t1_2 = pointFromAffine($t0_1);
+  $t2_3 = ScalarMult($t1_2, k);
+  $t3_4 = Point$toAffine($t2_3);
+  return $t3_4;
+}
+
+export function ScalarMult(p, k) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set($rt.builtin.cloneValue(k));
+        $t1_2 = Infinity.$get();
+        $t2_3 = $t1_2;
+        $t3_4 = p;
+        $t4_5 = 0;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t5_6 = ($t4_5 < 4);
+        if ($t5_6) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t6_7 = $t0_1.$get().addr($t4_5);
+        $t7_8 = $t6_7.$get();
+        $t8_9 = $t2_3;
+        $t9_10 = $t3_4;
+        $t10_11 = $t7_8;
+        $t11_12 = 0;
+        $block = 4; break;
+        break;
+      }
+      case 3: {
+        return $t2_3;
+        break;
+      }
+      case 4: {
+        $t12_13 = ($t11_12 < 64);
+        if ($t12_13) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 5: {
+        $t13_14 = $rt.builtin.int64and($t10_11, 1);
+        $t14_15 = ($t13_14 === 1);
+        if ($t14_15) {
+          $block = 7; break;
+        }
+        else {
+          $t17_18 = $t8_9;
+          $block = 8; break;
+        }
+        break;
+      }
+      case 6: {
+        $t15_16 = ($t4_5 + 1);
+        $t2_3 = $t8_9;
+        $t3_4 = $t9_10;
+        $t4_5 = $t15_16;
+        $block = 1; break;
+        break;
+      }
+      case 7: {
+        $t16_17 = pointAdd($t8_9, $t9_10);
+        $t17_18 = $t16_17;
+        $block = 8; break;
+        break;
+      }
+      case 8: {
+        $t18_19 = pointDouble($t9_10);
+        $t19_20 = Math.trunc($t10_11 / (2 ** 1));
+        $t20_21 = ($t11_12 + 1);
+        $t8_9 = $t17_18;
+        $t9_10 = $t18_19;
+        $t10_11 = $t19_20;
+        $t11_12 = $t20_21;
+        $block = 4; break;
+        break;
+      }
+    }
+  }
+}
+
+export function LiftX(x) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = feSqr(x);
+        $t1_2 = feMul($t0_1, x);
+        $t2_3 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t3_4 = $t2_3.$get().addr(0);
+        $t4_5 = $t2_3.$get().addr(1);
+        $t5_6 = $t2_3.$get().addr(2);
+        $t6_7 = $t2_3.$get().addr(3);
+        $t3_4.$set(7);
+        $t4_5.$set(0);
+        $t5_6.$set(0);
+        $t6_7.$set(0);
+        $t7_8 = $t2_3.$get();
+        $t8_9 = feAdd($t1_2, $t7_8);
+        $t9_10 = feSqrt($t8_9);
+        $t10_11 = $t9_10[0];
+        $t11_12 = $t9_10[1];
+        if ($t11_12) {
+          $block = 2; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+      case 1: {
+        return [{ X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, false];
+        break;
+      }
+      case 2: {
+        $t12_13 = feIsEven($t10_11);
+        if ($t12_13) {
+          $t14_15 = $t10_11;
+          $block = 4; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 3: {
+        $t13_14 = feNeg($t10_11);
+        $t14_15 = $t13_14;
+        $block = 4; break;
+        break;
+      }
+      case 4: {
+        $t15_16 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t16_17 = { $get() { return $t15_16.$get().X; }, $set(v) { const obj = $t15_16.$get(); obj.X = v; $t15_16.$set(obj); } };
+        $t17_18 = { $get() { return $t15_16.$get().Y; }, $set(v) { const obj = $t15_16.$get(); obj.Y = v; $t15_16.$set(obj); } };
+        $t16_17.$set($rt.builtin.cloneValue(x));
+        $t17_18.$set($rt.builtin.cloneValue($t14_15));
+        $t18_19 = $t15_16.$get();
+        return [$t18_19, true];
         break;
       }
     }
@@ -1680,394 +2068,6 @@ export function putBeUint64(b, v) {
   $t22_23 = b.addr(7);
   $t22_23.$set($t21_22);
   return;
-}
-
-export function pointFromAffine(p) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11;
-  $t0_1 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t0_1.$set($rt.builtin.cloneValue(p));
-  $t1_2 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0), Z: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t2_3 = { $get() { return $t1_2.$get().X; }, $set(v) { const obj = $t1_2.$get(); obj.X = v; $t1_2.$set(obj); } };
-  $t3_4 = { $get() { return $t0_1.$get().X; }, $set(v) { const obj = $t0_1.$get(); obj.X = v; $t0_1.$set(obj); } };
-  $t4_5 = $t3_4.$get();
-  $t5_6 = { $get() { return $t1_2.$get().Y; }, $set(v) { const obj = $t1_2.$get(); obj.Y = v; $t1_2.$set(obj); } };
-  $t6_7 = { $get() { return $t0_1.$get().Y; }, $set(v) { const obj = $t0_1.$get(); obj.Y = v; $t0_1.$set(obj); } };
-  $t7_8 = $t6_7.$get();
-  $t8_9 = { $get() { return $t1_2.$get().Z; }, $set(v) { const obj = $t1_2.$get(); obj.Z = v; $t1_2.$set(obj); } };
-  $t9_10 = feOne.$get();
-  $t2_3.$set($rt.builtin.cloneValue($t4_5));
-  $t5_6.$set($rt.builtin.cloneValue($t7_8));
-  $t8_9.$set($rt.builtin.cloneValue($t9_10));
-  $t10_11 = $t1_2.$get();
-  return $t10_11;
-}
-
-export function pointDouble(p) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0), Z: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set($rt.builtin.cloneValue(p));
-        $t1_2 = { $get() { return $t0_1.$get().Z; }, $set(v) { const obj = $t0_1.$get(); obj.Z = v; $t0_1.$set(obj); } };
-        $t2_3 = $t1_2.$get();
-        $t3_4 = feIsZero($t2_3);
-        if ($t3_4) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t4_5 = $t0_1.$get();
-        return $t4_5;
-        break;
-      }
-      case 2: {
-        $t5_6 = { $get() { return $t0_1.$get().X; }, $set(v) { const obj = $t0_1.$get(); obj.X = v; $t0_1.$set(obj); } };
-        $t6_7 = $t5_6.$get();
-        $t7_8 = feSqr($t6_7);
-        $t8_9 = { $get() { return $t0_1.$get().Y; }, $set(v) { const obj = $t0_1.$get(); obj.Y = v; $t0_1.$set(obj); } };
-        $t9_10 = $t8_9.$get();
-        $t10_11 = feSqr($t9_10);
-        $t11_12 = feSqr($t10_11);
-        $t12_13 = { $get() { return $t0_1.$get().X; }, $set(v) { const obj = $t0_1.$get(); obj.X = v; $t0_1.$set(obj); } };
-        $t13_14 = $t12_13.$get();
-        $t14_15 = feAdd($t13_14, $t10_11);
-        $t15_16 = feSqr($t14_15);
-        $t16_17 = feSub($t15_16, $t7_8);
-        $t17_18 = feSub($t16_17, $t11_12);
-        $t18_19 = feAdd($t17_18, $t17_18);
-        $t19_20 = feAdd($t7_8, $t7_8);
-        $t20_21 = feAdd($t19_20, $t7_8);
-        $t21_22 = feSqr($t20_21);
-        $t22_23 = feAdd($t18_19, $t18_19);
-        $t23_24 = feSub($t21_22, $t22_23);
-        $t24_25 = feSub($t18_19, $t23_24);
-        $t25_26 = feMul($t20_21, $t24_25);
-        $t26_27 = feAdd($t11_12, $t11_12);
-        $t27_28 = feAdd($t26_27, $t26_27);
-        $t28_29 = feAdd($t27_28, $t27_28);
-        $t29_30 = feSub($t25_26, $t28_29);
-        $t30_31 = { $get() { return $t0_1.$get().Y; }, $set(v) { const obj = $t0_1.$get(); obj.Y = v; $t0_1.$set(obj); } };
-        $t31_32 = $t30_31.$get();
-        $t32_33 = { $get() { return $t0_1.$get().Z; }, $set(v) { const obj = $t0_1.$get(); obj.Z = v; $t0_1.$set(obj); } };
-        $t33_34 = $t32_33.$get();
-        $t34_35 = feMul($t31_32, $t33_34);
-        $t35_36 = feAdd($t34_35, $t34_35);
-        $t36_37 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0), Z: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t37_38 = { $get() { return $t36_37.$get().X; }, $set(v) { const obj = $t36_37.$get(); obj.X = v; $t36_37.$set(obj); } };
-        $t38_39 = { $get() { return $t36_37.$get().Y; }, $set(v) { const obj = $t36_37.$get(); obj.Y = v; $t36_37.$set(obj); } };
-        $t39_40 = { $get() { return $t36_37.$get().Z; }, $set(v) { const obj = $t36_37.$get(); obj.Z = v; $t36_37.$set(obj); } };
-        $t37_38.$set($rt.builtin.cloneValue($t23_24));
-        $t38_39.$set($rt.builtin.cloneValue($t29_30));
-        $t39_40.$set($rt.builtin.cloneValue($t35_36));
-        $t40_41 = $t36_37.$get();
-        return $t40_41;
-        break;
-      }
-    }
-  }
-}
-
-export function pointAdd(p, q) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0), Z: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set($rt.builtin.cloneValue(p));
-        $t1_2 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0), Z: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2.$set($rt.builtin.cloneValue(q));
-        $t2_3 = $t0_1.$get();
-        $t3_4 = Point$isInfinity($t2_3);
-        if ($t3_4) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t4_5 = $t1_2.$get();
-        return $t4_5;
-        break;
-      }
-      case 2: {
-        $t5_6 = $t1_2.$get();
-        $t6_7 = Point$isInfinity($t5_6);
-        if ($t6_7) {
-          $block = 3; break;
-        }
-        else {
-          $block = 4; break;
-        }
-        break;
-      }
-      case 3: {
-        $t7_8 = $t0_1.$get();
-        return $t7_8;
-        break;
-      }
-      case 4: {
-        $t8_9 = { $get() { return $t0_1.$get().Z; }, $set(v) { const obj = $t0_1.$get(); obj.Z = v; $t0_1.$set(obj); } };
-        $t9_10 = $t8_9.$get();
-        $t10_11 = feSqr($t9_10);
-        $t11_12 = { $get() { return $t1_2.$get().Z; }, $set(v) { const obj = $t1_2.$get(); obj.Z = v; $t1_2.$set(obj); } };
-        $t12_13 = $t11_12.$get();
-        $t13_14 = feSqr($t12_13);
-        $t14_15 = { $get() { return $t0_1.$get().X; }, $set(v) { const obj = $t0_1.$get(); obj.X = v; $t0_1.$set(obj); } };
-        $t15_16 = $t14_15.$get();
-        $t16_17 = feMul($t15_16, $t13_14);
-        $t17_18 = { $get() { return $t1_2.$get().X; }, $set(v) { const obj = $t1_2.$get(); obj.X = v; $t1_2.$set(obj); } };
-        $t18_19 = $t17_18.$get();
-        $t19_20 = feMul($t18_19, $t10_11);
-        $t20_21 = { $get() { return $t0_1.$get().Y; }, $set(v) { const obj = $t0_1.$get(); obj.Y = v; $t0_1.$set(obj); } };
-        $t21_22 = $t20_21.$get();
-        $t22_23 = { $get() { return $t1_2.$get().Z; }, $set(v) { const obj = $t1_2.$get(); obj.Z = v; $t1_2.$set(obj); } };
-        $t23_24 = $t22_23.$get();
-        $t24_25 = feMul($t13_14, $t23_24);
-        $t25_26 = feMul($t21_22, $t24_25);
-        $t26_27 = { $get() { return $t1_2.$get().Y; }, $set(v) { const obj = $t1_2.$get(); obj.Y = v; $t1_2.$set(obj); } };
-        $t27_28 = $t26_27.$get();
-        $t28_29 = { $get() { return $t0_1.$get().Z; }, $set(v) { const obj = $t0_1.$get(); obj.Z = v; $t0_1.$set(obj); } };
-        $t29_30 = $t28_29.$get();
-        $t30_31 = feMul($t10_11, $t29_30);
-        $t31_32 = feMul($t27_28, $t30_31);
-        $t32_33 = ($t16_17 === $t19_20);
-        if ($t32_33) {
-          $block = 5; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 5: {
-        $t33_34 = ($t25_26 === $t31_32);
-        if ($t33_34) {
-          $block = 7; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 6: {
-        $t34_35 = feSub($t19_20, $t16_17);
-        $t35_36 = feSub($t31_32, $t25_26);
-        $t36_37 = feSqr($t34_35);
-        $t37_38 = feMul($t36_37, $t34_35);
-        $t38_39 = feSqr($t35_36);
-        $t39_40 = feSub($t38_39, $t37_38);
-        $t40_41 = feMul($t16_17, $t36_37);
-        $t41_42 = feMul($t16_17, $t36_37);
-        $t42_43 = feAdd($t40_41, $t41_42);
-        $t43_44 = feSub($t39_40, $t42_43);
-        $t44_45 = feMul($t16_17, $t36_37);
-        $t45_46 = feSub($t44_45, $t43_44);
-        $t46_47 = feMul($t35_36, $t45_46);
-        $t47_48 = feMul($t25_26, $t37_38);
-        $t48_49 = feSub($t46_47, $t47_48);
-        $t49_50 = { $get() { return $t0_1.$get().Z; }, $set(v) { const obj = $t0_1.$get(); obj.Z = v; $t0_1.$set(obj); } };
-        $t50_51 = $t49_50.$get();
-        $t51_52 = { $get() { return $t1_2.$get().Z; }, $set(v) { const obj = $t1_2.$get(); obj.Z = v; $t1_2.$set(obj); } };
-        $t52_53 = $t51_52.$get();
-        $t53_54 = feMul($t50_51, $t52_53);
-        $t54_55 = feMul($t53_54, $t34_35);
-        $t55_56 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0), Z: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t56_57 = { $get() { return $t55_56.$get().X; }, $set(v) { const obj = $t55_56.$get(); obj.X = v; $t55_56.$set(obj); } };
-        $t57_58 = { $get() { return $t55_56.$get().Y; }, $set(v) { const obj = $t55_56.$get(); obj.Y = v; $t55_56.$set(obj); } };
-        $t58_59 = { $get() { return $t55_56.$get().Z; }, $set(v) { const obj = $t55_56.$get(); obj.Z = v; $t55_56.$set(obj); } };
-        $t56_57.$set($rt.builtin.cloneValue($t43_44));
-        $t57_58.$set($rt.builtin.cloneValue($t48_49));
-        $t58_59.$set($rt.builtin.cloneValue($t54_55));
-        $t59_60 = $t55_56.$get();
-        return $t59_60;
-        break;
-      }
-      case 7: {
-        $t60_61 = $t0_1.$get();
-        $t61_62 = pointDouble($t60_61);
-        return $t61_62;
-        break;
-      }
-      case 8: {
-        $t62_63 = Infinity.$get();
-        return $t62_63;
-        break;
-      }
-    }
-  }
-}
-
-export function ScalarBaseMult(k) {
-  let $t0_1, $t1_2, $t2_3, $t3_4;
-  $t0_1 = G.$get();
-  $t1_2 = pointFromAffine($t0_1);
-  $t2_3 = ScalarMult($t1_2, k);
-  $t3_4 = Point$toAffine($t2_3);
-  return $t3_4;
-}
-
-export function ScalarMult(p, k) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t0_1.$set($rt.builtin.cloneValue(k));
-        $t1_2 = Infinity.$get();
-        $t2_3 = $t1_2;
-        $t3_4 = p;
-        $t4_5 = 0;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t5_6 = ($t4_5 < 4);
-        if ($t5_6) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t6_7 = $t0_1.$get().addr($t4_5);
-        $t7_8 = $t6_7.$get();
-        $t8_9 = $t2_3;
-        $t9_10 = $t3_4;
-        $t10_11 = $t7_8;
-        $t11_12 = 0;
-        $block = 4; break;
-        break;
-      }
-      case 3: {
-        return $t2_3;
-        break;
-      }
-      case 4: {
-        $t12_13 = ($t11_12 < 64);
-        if ($t12_13) {
-          $block = 5; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 5: {
-        $t13_14 = $rt.builtin.int64and($t10_11, 1);
-        $t14_15 = ($t13_14 === 1);
-        if ($t14_15) {
-          $block = 7; break;
-        }
-        else {
-          $t17_18 = $t8_9;
-          $block = 8; break;
-        }
-        break;
-      }
-      case 6: {
-        $t15_16 = ($t4_5 + 1);
-        $t2_3 = $t8_9;
-        $t3_4 = $t9_10;
-        $t4_5 = $t15_16;
-        $block = 1; break;
-        break;
-      }
-      case 7: {
-        $t16_17 = pointAdd($t8_9, $t9_10);
-        $t17_18 = $t16_17;
-        $block = 8; break;
-        break;
-      }
-      case 8: {
-        $t18_19 = pointDouble($t9_10);
-        $t19_20 = Math.trunc($t10_11 / (2 ** 1));
-        $t20_21 = ($t11_12 + 1);
-        $t8_9 = $t17_18;
-        $t9_10 = $t18_19;
-        $t10_11 = $t19_20;
-        $t11_12 = $t20_21;
-        $block = 4; break;
-        break;
-      }
-    }
-  }
-}
-
-export function LiftX(x) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = feSqr(x);
-        $t1_2 = feMul($t0_1, x);
-        $t2_3 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t3_4 = $t2_3.$get().addr(0);
-        $t4_5 = $t2_3.$get().addr(1);
-        $t5_6 = $t2_3.$get().addr(2);
-        $t6_7 = $t2_3.$get().addr(3);
-        $t3_4.$set(7);
-        $t4_5.$set(0);
-        $t5_6.$set(0);
-        $t6_7.$set(0);
-        $t7_8 = $t2_3.$get();
-        $t8_9 = feAdd($t1_2, $t7_8);
-        $t9_10 = feSqrt($t8_9);
-        $t10_11 = $t9_10[0];
-        $t11_12 = $t9_10[1];
-        if ($t11_12) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        return [{ X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, false];
-        break;
-      }
-      case 2: {
-        $t12_13 = feIsEven($t10_11);
-        if ($t12_13) {
-          $t14_15 = $t10_11;
-          $block = 4; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 3: {
-        $t13_14 = feNeg($t10_11);
-        $t14_15 = $t13_14;
-        $block = 4; break;
-        break;
-      }
-      case 4: {
-        $t15_16 = { $value: { X: $rt.builtin.makeSlice(4, 4, 0), Y: $rt.builtin.makeSlice(4, 4, 0) }, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t16_17 = { $get() { return $t15_16.$get().X; }, $set(v) { const obj = $t15_16.$get(); obj.X = v; $t15_16.$set(obj); } };
-        $t17_18 = { $get() { return $t15_16.$get().Y; }, $set(v) { const obj = $t15_16.$get(); obj.Y = v; $t15_16.$set(obj); } };
-        $t16_17.$set($rt.builtin.cloneValue(x));
-        $t17_18.$set($rt.builtin.cloneValue($t14_15));
-        $t18_19 = $t15_16.$get();
-        return [$t18_19, true];
-        break;
-      }
-    }
-  }
 }
 
 export function scalarAdd(a, b) {

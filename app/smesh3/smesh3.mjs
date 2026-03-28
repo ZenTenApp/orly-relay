@@ -154,7 +154,7 @@ export function main() {
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = common$jsbridge$dom.ConsoleLog('starting smesh v0.65.48');
+        $t0_1 = common$jsbridge$dom.ConsoleLog('starting smesh v0.65.50');
         $t1_2 = isLocalDev();
         if ($t1_2) {
           $block = 1; break;
@@ -354,7 +354,7 @@ export function showLogin() {
   $t24_25 = common$jsbridge$dom.SetStyle($t20_21, 'marginBottom', '4px');
   $t25_26 = common$jsbridge$dom.AppendChild($t2_3, $t20_21);
   $t26_27 = common$jsbridge$dom.CreateElement('span');
-  $t27_28 = common$jsbridge$dom.SetTextContent($t26_27, 'v0.65.48');
+  $t27_28 = common$jsbridge$dom.SetTextContent($t26_27, 'v0.65.50');
   $t28_29 = common$jsbridge$dom.SetStyle($t26_27, 'color', 'var(--muted)');
   $t29_30 = common$jsbridge$dom.SetStyle($t26_27, 'fontSize', '12px');
   $t30_31 = common$jsbridge$dom.AppendChild($t2_3, $t26_27);
@@ -1352,7 +1352,7 @@ export function showApp() {
         $t313_314 = common$jsbridge$dom.RegisterCallback(showApp$11);
         $t314_315 = common$jsbridge$dom.AddEventListener($t312_313, 'click', $t313_314);
         $t315_316 = common$jsbridge$dom.CreateElement('span');
-        $t316_317 = common$jsbridge$dom.SetTextContent($t315_316, 'smesh v0.65.48');
+        $t316_317 = common$jsbridge$dom.SetTextContent($t315_316, 'smesh v0.65.50');
         $t317_318 = common$jsbridge$dom.SetStyle($t315_316, 'marginLeft', 'auto');
         $t318_319 = common$jsbridge$dom.SetStyle($t315_316, 'color', 'var(--accent)');
         $t319_320 = common$jsbridge$dom.AppendChild($t233_234, $t315_316);

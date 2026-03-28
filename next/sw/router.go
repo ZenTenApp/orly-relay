@@ -107,20 +107,31 @@ func routeMessage(clientID string, w *mw, msgType string) {
 		sendToClient(clientID, "[\"MLS_PROXY\",\"listGroups\"]")
 
 	// MLS results from page (mls-bridge.mjs routes signer extension outputs here).
+	// Relay URLs may come from mlsRelays (set by MLS_INIT) or inline in the message
+	// (set by mls-bridge.mjs). The inline URLs ensure routing works even before the
+	// Go WASM app sends MLS_INIT.
 	case "MLS_PUBLISH":
 		eventRaw := w.str()
-		if len(mlsRelays) > 0 {
-			busSend("relay", "[\"MLS_RELAY_PUBLISH\","+eventRaw+","+strsJSON(mlsRelays)+"]")
+		relays := w.strs()
+		if len(relays) == 0 {
+			relays = mlsRelays
+		}
+		if len(relays) > 0 {
+			busSend("relay", "[\"MLS_RELAY_PUBLISH\","+eventRaw+","+strsJSON(relays)+"]")
 		} else {
 			busSend("relay", "[\"EVENT\",\"\","+eventRaw+"]")
 		}
 	case "MLS_SUBSCRIBE":
 		subID := w.str()
 		filterRaw := w.raw()
+		relays := w.strs()
+		if len(relays) == 0 {
+			relays = mlsRelays
+		}
 		// Pass filters as-is (array or single object) — relay SW's parseFilters handles both.
 		mSubID := "marmot-sub-" + subID
-		if len(mlsRelays) > 0 {
-			busSend("relay", "[\"PROXY\",\"\","+jstr(mSubID)+","+filterRaw+","+strsJSON(mlsRelays)+"]")
+		if len(relays) > 0 {
+			busSend("relay", "[\"PROXY\",\"\","+jstr(mSubID)+","+filterRaw+","+strsJSON(relays)+"]")
 		} else {
 			busSend("relay", "[\"REQ\",\"\","+jstr(mSubID)+","+filterRaw+"]")
 		}

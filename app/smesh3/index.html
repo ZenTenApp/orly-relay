@@ -88,12 +88,26 @@ body.dark {
 <div id="update-snackbar">new version available — click to update</div>
 <script>
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./$sw/$entry.mjs', { type: 'module', scope: '/' }).then(reg => {}).catch(err => {
+  navigator.serviceWorker.register('./$sw/$entry.mjs', { type: 'module', scope: '/' }).then(reg => {
+    // After hard refresh, controller is null and onActivate doesn't re-fire.
+    // Ask the active SW to re-claim so controllerchange fires and queued
+    // messages flush.
+    if (!navigator.serviceWorker.controller && reg.active) {
+      reg.active.postMessage('CLAIM');
+    }
+  }).catch(err => {
     console.error('smesh: sw registration failed:', err);
   });
 
   navigator.serviceWorker.addEventListener('message', (event) => {
     const d = event.data;
+    // Bus relay: shell SW → page → satellite SWs via _busPorts.
+    // Must run here (not in WASM-loaded dom.mjs) so bus is active before WASM loads.
+    if (typeof d === 'string' && d.length > 0 && d[0] === '{') {
+      var ports = window._busPorts;
+      if (ports) for (var name in ports) ports[name].postMessage(d);
+      return;
+    }
     if (typeof d === 'string' && d.startsWith('sw-error:')) {
       console.error('SW RUNTIME ERROR:', d.slice(9));
       return;

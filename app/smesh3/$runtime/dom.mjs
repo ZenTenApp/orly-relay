@@ -323,21 +323,15 @@ export function PostToSW(msg) {
   }
 }
 
-// --- Bus relay: shell SW ↔ page ↔ satellite SWs via MessagePorts ---
-
-// Register a handler for messages from the service worker.
+// Register a handler for non-bus messages from the service worker.
+// Bus relay (shell SW → satellite SWs) is handled in index.html inline script
+// so it's active before WASM loads.
 export function OnSWMessage(fn) {
   if (!navigator.serviceWorker) return;
   navigator.serviceWorker.addEventListener('message', (event) => {
     const d = event.data;
-    // Bus messages (JSON objects) from shell SW → relay to satellite SWs via ports.
-    if (typeof d === 'string' && d.length > 0 && d[0] === '{') {
-      const ports = window._busPorts || {};
-      for (const name in ports) {
-        ports[name].postMessage(d);
-      }
-      return;
-    }
+    // Bus messages handled by index.html — skip here.
+    if (typeof d === 'string' && d.length > 0 && d[0] === '{') return;
     if (typeof d === 'string') {
       fn(d);
     } else if (Array.isArray(d) && d.length > 0) {
