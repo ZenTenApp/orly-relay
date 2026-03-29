@@ -17,6 +17,7 @@ type pendingSentDM struct {
 
 var pendingSentDMs []pendingSentDM
 var mlsRelays []string
+var currentMarmotSub string // tracks active marmot proxy subscription for cleanup
 
 // sentDMDedup tracks recently sent DM content to filter self-echoes.
 // MLS handleGroupMessage always attributes messages to PeerPub, so when
@@ -103,6 +104,9 @@ func routeMessage(clientID string, w *mw, msgType string) {
 		limit := int(w.num())
 		until := w.num()
 		busSend("relay", "[\"DM_HISTORY\","+jstr(clientID)+","+jstr(peer)+","+helpers.Itoa(int64(limit))+","+helpers.Itoa(until)+"]")
+	case "CLEAR_DM_HISTORY":
+		peer := w.str()
+		busSend("relay", "[\"CLEAR_DM_HISTORY\","+jstr(peer)+"]")
 
 	// MLS — proxy through page to signer extension (marmot WASM runs inside signer).
 	case "MLS_INIT":
@@ -128,6 +132,13 @@ func routeMessage(clientID string, w *mw, msgType string) {
 		sendToClient(clientID, "[\"MLS_PROXY\",\"publishKP\"]")
 	case "MLS_LIST_GROUPS":
 		sendToClient(clientID, "[\"MLS_PROXY\",\"listGroups\"]")
+	case "MLS_BACKUP":
+		sendToClient(clientID, "[\"MLS_PROXY\",\"backupGroups\"]")
+	case "MLS_RESTORE":
+		sendToClient(clientID, "[\"MLS_PROXY\",\"restoreGroups\"]")
+	case "MLS_RATCHET":
+		peer := w.str()
+		sendToClient(clientID, "[\"MLS_PROXY\",\"ratchetGroup\","+jstr(peer)+"]")
 
 	// MLS results from page (mls-bridge.mjs routes signer extension outputs here).
 	// Relay URLs may come from mlsRelays (set by MLS_INIT) or inline in the message
@@ -153,6 +164,11 @@ func routeMessage(clientID string, w *mw, msgType string) {
 		}
 		// Pass filters as-is (array or single object) — relay SW's parseFilters handles both.
 		mSubID := "marmot-sub-" + subID
+		// Close previous marmot proxy subscription to prevent leak.
+		if currentMarmotSub != "" && currentMarmotSub != mSubID {
+			busSend("relay", "[\"CLOSE\","+jstr(currentMarmotSub)+"]")
+		}
+		currentMarmotSub = mSubID
 		if len(relays) > 0 {
 			busSend("relay", "[\"PROXY\",\"\","+jstr(mSubID)+","+filterRaw+","+strsJSON(relays)+"]")
 		} else {

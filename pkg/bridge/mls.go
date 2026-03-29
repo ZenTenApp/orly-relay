@@ -92,13 +92,12 @@ func (b *Bridge) handleMLSDM(senderPub []byte, plaintext []byte) {
 	}
 }
 
-// handleMLSGroupJoined sends a welcome/help message when a new peer establishes a group.
+// handleMLSGroupJoined is called when a new peer establishes a group.
+// No welcome message — the peer's first DM will get a response (command
+// result, email processing, or auto-help for unrecognized input).
 func (b *Bridge) handleMLSGroupJoined(peerPub []byte) {
 	peerHex := hex.Enc(peerPub)
-	log.I.F("new MLS group with %s, sending welcome", peerHex)
-	if b.router != nil {
-		b.router.SendWelcome(peerHex)
-	}
+	log.I.F("new MLS group with %s", peerHex)
 }
 
 // sendMLSDM sends an MLS-encrypted DM to the given recipient.

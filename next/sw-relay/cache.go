@@ -23,3 +23,7 @@ func cacheGetConversationList(cb func(string)) {
 func cacheQueryDMs(peer string, limit int, until int64, cb func(string)) {
 	idb.QueryDMs(peer, limit, until, cb)
 }
+
+func cacheClearDMsByPeer(peer string, cb func()) {
+	idb.ClearDMsByPeer(peer, cb)
+}

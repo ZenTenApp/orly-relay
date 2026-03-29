@@ -52,6 +52,15 @@ function handleMlsProxy(d) {
         case 'deliverEvent':
           await window.nostr.mls.deliverEvent(d[2], d[3]);
           break;
+        case 'backupGroups':
+          await window.nostr.mls.backupGroups();
+          break;
+        case 'restoreGroups':
+          await window.nostr.mls.restoreGroups();
+          break;
+        case 'ratchetGroup':
+          await window.nostr.mls.ratchetGroup(d[2]);
+          break;
       }
     } catch (err) {
       console.error('mls-bridge: ' + method + ' failed:', err);
@@ -88,9 +97,16 @@ window.addEventListener('nostr-mls', (event) => {
       postToSW('["MLS_DM",' + rec + ']');
       break;
     }
-    case 'status':
-      postToSW('["MLS_STATUS",' + JSON.stringify(data.msg) + ']');
+    case 'status': {
+      const msg = data.msg;
+      postToSW('["MLS_STATUS",' + JSON.stringify(msg) + ']');
+      // Ratchet completion — clear DM history for the peer.
+      if (typeof msg === 'string' && msg.startsWith('ratchet ok:')) {
+        const peer = msg.slice('ratchet ok:'.length);
+        postToSW('["CLEAR_DM_HISTORY",' + JSON.stringify(peer) + ']');
+      }
       break;
+    }
     case 'relays':
       _mlsRelays = data.relays || [];
       break;

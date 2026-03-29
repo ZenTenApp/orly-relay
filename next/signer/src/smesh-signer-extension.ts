@@ -187,6 +187,15 @@ const nostr = {
     async deliverEvent(subId: number, eventJSON: string): Promise<string> {
       return await nostr.messenger.request('mls.deliverEvent' as any, { subId, eventJSON });
     },
+    async backupGroups(): Promise<string> {
+      return await nostr.messenger.request('mls.backupGroups' as any, {});
+    },
+    async restoreGroups(): Promise<string> {
+      return await nostr.messenger.request('mls.restoreGroups' as any, {});
+    },
+    async ratchetGroup(peerHex: string): Promise<string> {
+      return await nostr.messenger.request('mls.ratchetGroup' as any, { peerHex });
+    },
   },
 };
 

@@ -301,6 +301,10 @@ export function ConsoleLog(msg) {
   console.log('[sm3sh]', msg);
 }
 
+export function Confirm(msg) {
+  return confirm(msg);
+}
+
 // Send a raw JSON string to the service worker controller.
 // Messages sent before the SW is active are queued and flushed on controllerchange.
 let _swQueue = null;

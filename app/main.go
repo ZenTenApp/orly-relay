@@ -87,6 +87,7 @@ func Run(
 	// dmLimiter := NewDMRateLimiter(db)
 	wsPublisher := NewPublisher(ctx)
 	wsPublisher.ChannelMembership = channelMembership
+	wsPublisher.PrivilegedOpen = cfg.PrivilegedOpen
 
 	l := &Server{
 		Ctx:               ctx,

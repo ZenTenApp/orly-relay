@@ -39,6 +39,11 @@ export function GetConversationList(fn) {
   $rt.idb.GetConversationList(fn);
 }
 
+// jsbridge: idb.ClearDMsByPeer
+export function ClearDMsByPeer(peer, fn) {
+  $rt.idb.ClearDMsByPeer(peer, fn);
+}
+
 // jsbridge: idb.SetVersion
 export function SetVersion(v) {
   $rt.idb.SetVersion(v);

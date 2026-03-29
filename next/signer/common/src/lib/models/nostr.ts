@@ -12,6 +12,9 @@ export type Nip07Method =
   | 'mls.publishKP'
   | 'mls.listGroups'
   | 'mls.deliverEvent'
+  | 'mls.backupGroups'
+  | 'mls.restoreGroups'
+  | 'mls.ratchetGroup'
   | 'mls.*';
 
 export type Nip07MethodPolicy = 'allow' | 'deny';

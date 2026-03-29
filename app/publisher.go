@@ -82,6 +82,8 @@ type P struct {
 	WriteChans WriteChanMap
 	// ChannelMembership is used for NIRC channel access control (kinds 40-44)
 	ChannelMembership *ChannelMembership
+	// PrivilegedOpen disables all privileged-kind auth checks in delivery
+	PrivilegedOpen bool
 }
 
 var _ publisher.I = &P{}
@@ -192,8 +194,9 @@ func (p *P) Deliver(ev *event.E) {
 		// If the event is privileged, enforce that the subscriber's authed pubkey matches
 		// either the event pubkey or appears in any 'p' tag of the event.
 		// Channel kinds always require auth check; other privileged kinds only when ACL is active.
+		// PrivilegedOpen bypasses all of this (for relays without NIP-42 support).
 		isChannel := kind.IsChannelKind(ev.Kind)
-		if kind.IsPrivileged(ev.Kind) && (d.sub.AuthRequired || isChannel) {
+		if !p.PrivilegedOpen && kind.IsPrivileged(ev.Kind) && (d.sub.AuthRequired || isChannel) {
 			pk := d.sub.AuthedPubkey
 
 			// Channel kinds (40-44) use channel membership instead of p-tag involvement

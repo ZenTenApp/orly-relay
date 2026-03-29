@@ -150,6 +150,11 @@ func onBusMessage(raw string) {
 	case "SAVE_DM_QUIET":
 		dmJSON := w.raw()
 		cacheSaveDM(dmJSON, func(result string) {})
+	case "CLEAR_DM_HISTORY":
+		peer := w.str()
+		cacheClearDMsByPeer(peer, func() {
+			busSend("shell", "[\"DM_HISTORY_CLEARED\","+jstr(peer)+"]")
+		})
 
 	// Crypto proxy result from shell.
 	case "CRYPTO_RESULT":

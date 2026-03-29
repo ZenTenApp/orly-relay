@@ -54,7 +54,13 @@ func NewClient(cfg ClientConfig) *Client {
 	return &Client{
 		cfg:      cfg,
 		resolver: net.LookupMX,
-		dialer:   gosmtp.Dial,
+		dialer: func(addr string) (*gosmtp.Client, error) {
+			conn, err := (&net.Dialer{Timeout: 10 * time.Second}).Dial("tcp", addr)
+			if err != nil {
+				return nil, err
+			}
+			return gosmtp.NewClient(conn), nil
+		},
 	}
 }
 

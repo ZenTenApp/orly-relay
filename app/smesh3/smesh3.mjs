@@ -154,7 +154,7 @@ export function main() {
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = common$jsbridge$dom.ConsoleLog('starting smesh v0.65.53');
+        $t0_1 = common$jsbridge$dom.ConsoleLog('starting smesh v0.65.55');
         $t1_2 = isLocalDev();
         if ($t1_2) {
           $block = 1; break;
@@ -354,7 +354,7 @@ export function showLogin() {
   $t24_25 = common$jsbridge$dom.SetStyle($t20_21, 'marginBottom', '4px');
   $t25_26 = common$jsbridge$dom.AppendChild($t2_3, $t20_21);
   $t26_27 = common$jsbridge$dom.CreateElement('span');
-  $t27_28 = common$jsbridge$dom.SetTextContent($t26_27, 'v0.65.53');
+  $t27_28 = common$jsbridge$dom.SetTextContent($t26_27, 'v0.65.55');
   $t28_29 = common$jsbridge$dom.SetStyle($t26_27, 'color', 'var(--muted)');
   $t29_30 = common$jsbridge$dom.SetStyle($t26_27, 'fontSize', '12px');
   $t30_31 = common$jsbridge$dom.AppendChild($t2_3, $t26_27);
@@ -1353,7 +1353,7 @@ export function showApp() {
         $t314_315 = common$jsbridge$dom.RegisterCallback(showApp$10);
         $t315_316 = common$jsbridge$dom.AddEventListener($t313_314, 'click', $t314_315);
         $t316_317 = common$jsbridge$dom.CreateElement('span');
-        $t317_318 = common$jsbridge$dom.SetTextContent($t316_317, 'smesh v0.65.53');
+        $t317_318 = common$jsbridge$dom.SetTextContent($t316_317, 'smesh v0.65.55');
         $t318_319 = common$jsbridge$dom.SetStyle($t316_317, 'marginLeft', 'auto');
         $t319_320 = common$jsbridge$dom.SetStyle($t316_317, 'color', 'var(--accent)');
         $t320_321 = common$jsbridge$dom.AppendChild($t233_234, $t316_317);
@@ -2152,7 +2152,7 @@ function scheduleTabRetry$1() {
 }
 
 export function onSWMessage(raw) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -2339,9 +2339,9 @@ export function onSWMessage(raw) {
       }
       case 22: {
         $t37_38 = nextNum(raw, $t8_9);
-        $t40_41 = 0;
-        $t41_42 = 0;
-        $block = 25; break;
+        $t45_46 = 0;
+        $t46_47 = 0;
+        $block = 26; break;
         break;
       }
       case 23: {
@@ -2350,47 +2350,111 @@ export function onSWMessage(raw) {
           $block = 22; break;
         }
         else {
-          $block = 24; break;
+          $block = 25; break;
         }
         break;
       }
       case 24: {
-        $t39_40 = ($t7_8 === 'MLS_GROUPS');
-        if ($t39_40) {
-          $block = 8; break;
+        $t39_40 = nextStr(raw, $t8_9);
+        $t40_41 = $t39_40[0];
+        $t41_42 = $t39_40[1];
+        $t42_43 = ('[mls] history cleared for ' + $t40_41);
+        $t43_44 = common$jsbridge$dom.ConsoleLog($t42_43);
+        $block = 8; break;
+        break;
+      }
+      case 25: {
+        $t44_45 = ($t7_8 === 'DM_HISTORY_CLEARED');
+        if ($t44_45) {
+          $block = 24; break;
         }
         else {
           $block = 34; break;
         }
         break;
       }
-      case 25: {
-        $t42_43 = $rt.builtin.len($t37_38);
-        $t43_44 = ($t41_42 < $t42_43);
-        if ($t43_44) {
-          $block = 26; break;
-        }
-        else {
+      case 26: {
+        $t47_48 = $rt.builtin.len($t37_38);
+        $t48_49 = ($t46_47 < $t47_48);
+        if ($t48_49) {
           $block = 27; break;
         }
-        break;
-      }
-      case 26: {
-        $rt.runtime.boundsCheck($t41_42, $rt.builtin.byteLen($t37_38));
-        $t44_45 = $rt.builtin.stringByteAt($t37_38, $t41_42);
-        $t45_46 = ($t44_45 >= 48);
-        if ($t45_46) {
-          $block = 30; break;
-        }
         else {
-          $t52_53 = $t40_41;
-          $block = 29; break;
+          $block = 28; break;
         }
         break;
       }
       case 27: {
-        $t46_47 = ($t40_41 > 0);
-        if ($t46_47) {
+        $rt.runtime.boundsCheck($t46_47, $rt.builtin.byteLen($t37_38));
+        $t49_50 = $rt.builtin.stringByteAt($t37_38, $t46_47);
+        $t50_51 = ($t49_50 >= 48);
+        if ($t50_51) {
+          $block = 31; break;
+        }
+        else {
+          $t57_58 = $t45_46;
+          $block = 30; break;
+        }
+        break;
+      }
+      case 28: {
+        $t51_52 = ($t45_46 > 0);
+        if ($t51_52) {
+          $block = 33; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 29: {
+        $t52_53 = ($t45_46 * 10);
+        $rt.runtime.boundsCheck($t46_47, $rt.builtin.byteLen($t37_38));
+        $t53_54 = $rt.builtin.stringByteAt($t37_38, $t46_47);
+        $t54_55 = (($t53_54 - 48) & 0xFF);
+        $t55_56 = $t54_55;
+        $t56_57 = ($t52_53 + $t55_56);
+        $t57_58 = $t56_57;
+        $block = 30; break;
+        break;
+      }
+      case 30: {
+        $t58_59 = ($t46_47 + 1);
+        $t45_46 = $t57_58;
+        $t46_47 = $t58_59;
+        $block = 26; break;
+        break;
+      }
+      case 31: {
+        $rt.runtime.boundsCheck($t46_47, $rt.builtin.byteLen($t37_38));
+        $t59_60 = $rt.builtin.stringByteAt($t37_38, $t46_47);
+        $t60_61 = ($t59_60 <= 57);
+        if ($t60_61) {
+          $block = 29; break;
+        }
+        else {
+          $t57_58 = $t45_46;
+          $block = 30; break;
+        }
+        break;
+      }
+      case 32: {
+        $t61_62 = pendingTsEls.$get();
+        $t62_63 = $t61_62.addr(0);
+        $t63_64 = $t62_63.$get();
+        $t64_65 = formatTime($t45_46);
+        $t65_66 = common$jsbridge$dom.SetTextContent($t63_64, $t64_65);
+        $t66_67 = pendingTsEls.$get();
+        $t67_68 = $rt.builtin.sliceSlice($t66_67, 1, undefined, undefined);
+        pendingTsEls.$set($t67_68);
+        $block = 8; break;
+        break;
+      }
+      case 33: {
+        $t68_69 = pendingTsEls.$get();
+        $t69_70 = $rt.builtin.len($t68_69);
+        $t70_71 = ($t69_70 > 0);
+        if ($t70_71) {
           $block = 32; break;
         }
         else {
@@ -2398,74 +2462,10 @@ export function onSWMessage(raw) {
         }
         break;
       }
-      case 28: {
-        $t47_48 = ($t40_41 * 10);
-        $rt.runtime.boundsCheck($t41_42, $rt.builtin.byteLen($t37_38));
-        $t48_49 = $rt.builtin.stringByteAt($t37_38, $t41_42);
-        $t49_50 = (($t48_49 - 48) & 0xFF);
-        $t50_51 = $t49_50;
-        $t51_52 = ($t47_48 + $t50_51);
-        $t52_53 = $t51_52;
-        $block = 29; break;
-        break;
-      }
-      case 29: {
-        $t53_54 = ($t41_42 + 1);
-        $t40_41 = $t52_53;
-        $t41_42 = $t53_54;
-        $block = 25; break;
-        break;
-      }
-      case 30: {
-        $rt.runtime.boundsCheck($t41_42, $rt.builtin.byteLen($t37_38));
-        $t54_55 = $rt.builtin.stringByteAt($t37_38, $t41_42);
-        $t55_56 = ($t54_55 <= 57);
-        if ($t55_56) {
-          $block = 28; break;
-        }
-        else {
-          $t52_53 = $t40_41;
-          $block = 29; break;
-        }
-        break;
-      }
-      case 31: {
-        $t56_57 = pendingTsEls.$get();
-        $t57_58 = $t56_57.addr(0);
-        $t58_59 = $t57_58.$get();
-        $t59_60 = formatTime($t40_41);
-        $t60_61 = common$jsbridge$dom.SetTextContent($t58_59, $t59_60);
-        $t61_62 = pendingTsEls.$get();
-        $t62_63 = $rt.builtin.sliceSlice($t61_62, 1, undefined, undefined);
-        pendingTsEls.$set($t62_63);
-        $block = 8; break;
-        break;
-      }
-      case 32: {
-        $t63_64 = pendingTsEls.$get();
-        $t64_65 = $rt.builtin.len($t63_64);
-        $t65_66 = ($t64_65 > 0);
-        if ($t65_66) {
-          $block = 31; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 33: {
-        $t66_67 = nextStr(raw, $t8_9);
-        $t67_68 = $t66_67[0];
-        $t68_69 = $t66_67[1];
-        $t69_70 = ('[mls] ' + $t67_68);
-        $t70_71 = common$jsbridge$dom.ConsoleLog($t69_70);
-        $block = 8; break;
-        break;
-      }
       case 34: {
-        $t71_72 = ($t7_8 === 'MLS_STATUS');
+        $t71_72 = ($t7_8 === 'MLS_GROUPS');
         if ($t71_72) {
-          $block = 33; break;
+          $block = 8; break;
         }
         else {
           $block = 36; break;
@@ -2476,19 +2476,14 @@ export function onSWMessage(raw) {
         $t72_73 = nextStr(raw, $t8_9);
         $t73_74 = $t72_73[0];
         $t74_75 = $t72_73[1];
-        $t75_76 = nextStr(raw, $t74_75);
-        $t76_77 = $t75_76[0];
-        $t77_78 = $t75_76[1];
-        $t78_79 = ('[' + $t73_74);
-        $t79_80 = ($t78_79 + '] ');
-        $t80_81 = ($t79_80 + $t76_77);
-        $t81_82 = common$jsbridge$dom.ConsoleLog($t80_81);
-        return;
+        $t75_76 = ('[mls] ' + $t73_74);
+        $t76_77 = common$jsbridge$dom.ConsoleLog($t75_76);
+        $block = 8; break;
         break;
       }
       case 36: {
-        $t82_83 = ($t7_8 === 'SW_LOG');
-        if ($t82_83) {
+        $t77_78 = ($t7_8 === 'MLS_STATUS');
+        if ($t77_78) {
           $block = 35; break;
         }
         else {
@@ -2497,13 +2492,22 @@ export function onSWMessage(raw) {
         break;
       }
       case 37: {
-        $t83_84 = handleCryptoReq(raw, $t8_9);
-        $block = 8; break;
+        $t78_79 = nextStr(raw, $t8_9);
+        $t79_80 = $t78_79[0];
+        $t80_81 = $t78_79[1];
+        $t81_82 = nextStr(raw, $t80_81);
+        $t82_83 = $t81_82[0];
+        $t83_84 = $t81_82[1];
+        $t84_85 = ('[' + $t79_80);
+        $t85_86 = ($t84_85 + '] ');
+        $t86_87 = ($t85_86 + $t82_83);
+        $t87_88 = common$jsbridge$dom.ConsoleLog($t86_87);
+        return;
         break;
       }
       case 38: {
-        $t84_85 = ($t7_8 === 'CRYPTO_REQ');
-        if ($t84_85) {
+        $t88_89 = ($t7_8 === 'SW_LOG');
+        if ($t88_89) {
           $block = 37; break;
         }
         else {
@@ -2512,19 +2516,13 @@ export function onSWMessage(raw) {
         break;
       }
       case 39: {
-        $t85_86 = pubhex.$get();
-        $t86_87 = ($t85_86 !== '');
-        if ($t86_87) {
-          $block = 43; break;
-        }
-        else {
-          $block = 44; break;
-        }
+        $t89_90 = handleCryptoReq(raw, $t8_9);
+        $block = 8; break;
         break;
       }
       case 40: {
-        $t87_88 = ($t7_8 === 'NEED_IDENTITY');
-        if ($t87_88) {
+        $t90_91 = ($t7_8 === 'CRYPTO_REQ');
+        if ($t90_91) {
           $block = 39; break;
         }
         else {
@@ -2533,31 +2531,52 @@ export function onSWMessage(raw) {
         break;
       }
       case 41: {
-        $t88_89 = resubscribe();
-        $block = 8; break;
+        $t91_92 = pubhex.$get();
+        $t92_93 = ($t91_92 !== '');
+        if ($t92_93) {
+          $block = 45; break;
+        }
+        else {
+          $block = 46; break;
+        }
         break;
       }
       case 42: {
-        $t89_90 = ($t7_8 === 'RESUB');
-        if ($t89_90) {
+        $t93_94 = ($t7_8 === 'NEED_IDENTITY');
+        if ($t93_94) {
           $block = 41; break;
+        }
+        else {
+          $block = 44; break;
+        }
+        break;
+      }
+      case 43: {
+        $t94_95 = resubscribe();
+        $block = 8; break;
+        break;
+      }
+      case 44: {
+        $t95_96 = ($t7_8 === 'RESUB');
+        if ($t95_96) {
+          $block = 43; break;
         }
         else {
           $block = 8; break;
         }
         break;
       }
-      case 43: {
-        $t90_91 = pubhex.$get();
-        $t91_92 = jstr($t90_91);
-        $t92_93 = ('["SET_PUBKEY",' + $t91_92);
-        $t93_94 = ($t92_93 + ']');
-        $t94_95 = common$jsbridge$dom.PostToSW($t93_94);
-        $block = 44; break;
+      case 45: {
+        $t96_97 = pubhex.$get();
+        $t97_98 = jstr($t96_97);
+        $t98_99 = ('["SET_PUBKEY",' + $t97_98);
+        $t99_100 = ($t98_99 + ']');
+        $t100_101 = common$jsbridge$dom.PostToSW($t99_100);
+        $block = 46; break;
         break;
       }
-      case 44: {
-        $t95_96 = resubscribe();
+      case 46: {
+        $t101_102 = resubscribe();
         $block = 8; break;
         break;
       }
@@ -8853,13 +8872,15 @@ export function formatTime(ts) {
 }
 
 export function initMessaging() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = common$jsbridge$signer.HasMLS();
-        if ($t0_1) {
+        $t0_1 = msgListContainer.$get();
+        $t1_2 = clearChildren($t0_1);
+        $t2_3 = common$jsbridge$signer.HasSigner();
+        if ($t2_3) {
           $block = 2; break;
         }
         else {
@@ -8868,27 +8889,23 @@ export function initMessaging() {
         break;
       }
       case 1: {
-        $t1_2 = msgListContainer.$get();
-        $t2_3 = clearChildren($t1_2);
         $t3_4 = common$jsbridge$dom.CreateElement('div');
         $t4_5 = common$jsbridge$dom.SetStyle($t3_4, 'padding', '24px');
         $t5_6 = common$jsbridge$dom.SetStyle($t3_4, 'textAlign', 'center');
         $t6_7 = common$jsbridge$dom.SetStyle($t3_4, 'color', 'var(--muted)');
         $t7_8 = common$jsbridge$dom.SetStyle($t3_4, 'fontSize', '13px');
         $t8_9 = common$jsbridge$dom.SetStyle($t3_4, 'lineHeight', '1.6');
-        $t9_10 = common$jsbridge$dom.SetInnerHTML($t3_4, 'encrypted DMs require the <b>Smesh Signer</b> extension<br><br><i>coming soon</i>');
+        $t9_10 = common$jsbridge$dom.SetInnerHTML($t3_4, 'encrypted DMs require the <b>Smesh Signer</b> extension');
         $t10_11 = msgListContainer.$get();
         $t11_12 = common$jsbridge$dom.AppendChild($t10_11, $t3_4);
         return;
         break;
       }
       case 2: {
-        $t12_13 = msgListContainer.$get();
-        $t13_14 = clearChildren($t12_13);
-        $t14_15 = renderNewChatButton();
-        $t15_16 = common$jsbridge$dom.PostToSW('["DM_LIST"]');
-        $t16_17 = marmotInited.$get();
-        if ($t16_17) {
+        $t12_13 = renderNewChatButton();
+        $t13_14 = common$jsbridge$dom.PostToSW('["DM_LIST"]');
+        $t14_15 = marmotInited.$get();
+        if ($t14_15) {
           $block = 4; break;
         }
         else {
@@ -8898,10 +8915,10 @@ export function initMessaging() {
       }
       case 3: {
         marmotInited.$set(true);
-        $t17_18 = relayURLsJSON();
-        $t18_19 = ('["MLS_INIT",' + $t17_18);
-        $t19_20 = ($t18_19 + ']');
-        $t20_21 = common$jsbridge$dom.PostToSW($t19_20);
+        $t15_16 = relayURLsJSON();
+        $t16_17 = ('["MLS_INIT",' + $t15_16);
+        $t17_18 = ($t16_17 + ']');
+        $t18_19 = common$jsbridge$dom.PostToSW($t17_18);
         $block = 4; break;
         break;
       }
@@ -9744,15 +9761,18 @@ function showNewChatInput$1(inp) {
 }
 
 export function openThread(peer) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129, $t129_130, $t130_131, $t131_132, $t132_133, $t133_134, $t134_135, $t135_136, $t136_137, $t137_138, $t138_139, $t139_140, $t140_141, $t141_142, $t142_143, $t143_144, $t144_145, $t145_146, $t146_147, $t147_148, $t148_149, $t149_150;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129, $t129_130, $t130_131, $t131_132, $t132_133, $t133_134, $t134_135, $t135_136, $t136_137, $t137_138, $t138_139, $t139_140, $t140_141, $t141_142, $t142_143, $t143_144, $t144_145, $t145_146, $t146_147, $t147_148, $t148_149, $t149_150, $t150_151, $t151_152, $t152_153, $t153_154, $t154_155, $t155_156, $t156_157, $t157_158, $t158_159, $t159_160, $t160_161, $t161_162, $t162_163, $t163_164, $t164_165, $t165_166, $t166_167, $t167_168, $t168_169, $t169_170, $t170_171, $t171_172, $t172_173, $t173_174, $t174_175, $t175_176, $t176_177;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        msgCurrentPeer.$set(peer);
+        $t0_1 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t0_1.$set(peer);
+        $t1_2 = $t0_1.$get();
+        msgCurrentPeer.$set($t1_2);
         msgView.$set('thread');
-        $t0_1 = navPop.$get();
-        if ($t0_1) {
+        $t2_3 = navPop.$get();
+        if ($t2_3) {
           $block = 2; break;
         }
         else {
@@ -9761,50 +9781,52 @@ export function openThread(peer) {
         break;
       }
       case 1: {
-        $t1_2 = common$helpers.HexDecode(peer);
-        $t2_3 = common$helpers.EncodeNpub($t1_2);
-        $t3_4 = ('/msg/' + $t2_3);
-        $t4_5 = common$jsbridge$dom.PushState($t3_4);
+        $t3_4 = $t0_1.$get();
+        $t4_5 = common$helpers.HexDecode($t3_4);
+        $t5_6 = common$helpers.EncodeNpub($t4_5);
+        $t6_7 = ('/msg/' + $t5_6);
+        $t7_8 = common$jsbridge$dom.PushState($t6_7);
         $block = 2; break;
         break;
       }
       case 2: {
-        $t5_6 = msgListContainer.$get();
-        $t6_7 = common$jsbridge$dom.SetStyle($t5_6, 'display', 'none');
-        $t7_8 = msgThreadContainer.$get();
-        $t8_9 = common$jsbridge$dom.SetStyle($t7_8, 'display', 'flex');
-        $t9_10 = msgThreadContainer.$get();
-        $t10_11 = clearChildren($t9_10);
-        $t11_12 = common$jsbridge$dom.CreateElement('div');
-        $t12_13 = common$jsbridge$dom.SetStyle($t11_12, 'display', 'flex');
-        $t13_14 = common$jsbridge$dom.SetStyle($t11_12, 'alignItems', 'center');
-        $t14_15 = common$jsbridge$dom.SetStyle($t11_12, 'gap', '10px');
-        $t15_16 = common$jsbridge$dom.SetStyle($t11_12, 'padding', '12px 16px');
-        $t16_17 = common$jsbridge$dom.SetStyle($t11_12, 'borderBottom', '1px solid var(--border)');
-        $t17_18 = common$jsbridge$dom.SetStyle($t11_12, 'flexShrink', '0');
-        $t18_19 = common$jsbridge$dom.CreateElement('button');
-        $t19_20 = common$jsbridge$dom.SetInnerHTML($t18_19, '&#x2190;');
-        $t20_21 = common$jsbridge$dom.SetStyle($t18_19, 'background', 'none');
-        $t21_22 = common$jsbridge$dom.SetStyle($t18_19, 'border', 'none');
-        $t22_23 = common$jsbridge$dom.SetStyle($t18_19, 'fontSize', '20px');
-        $t23_24 = common$jsbridge$dom.SetStyle($t18_19, 'cursor', 'pointer');
-        $t24_25 = common$jsbridge$dom.SetStyle($t18_19, 'color', 'var(--fg)');
-        $t25_26 = common$jsbridge$dom.SetStyle($t18_19, 'padding', '0');
-        $t26_27 = common$jsbridge$dom.RegisterCallback(openThread$1);
-        $t27_28 = common$jsbridge$dom.AddEventListener($t18_19, 'click', $t26_27);
-        $t28_29 = common$jsbridge$dom.AppendChild($t11_12, $t18_19);
-        $t29_30 = common$jsbridge$dom.CreateElement('div');
-        $t30_31 = common$jsbridge$dom.CreateElement('img');
-        $t31_32 = common$jsbridge$dom.SetAttribute($t30_31, 'width', '28');
-        $t32_33 = common$jsbridge$dom.SetAttribute($t30_31, 'height', '28');
-        $t33_34 = common$jsbridge$dom.SetStyle($t30_31, 'borderRadius', '50%');
-        $t34_35 = common$jsbridge$dom.SetStyle($t30_31, 'objectFit', 'cover');
-        $t35_36 = common$jsbridge$dom.SetStyle($t30_31, 'flexShrink', '0');
-        $t36_37 = authorPics.$get();
-        { const $r = $rt.builtin.mapLookup($t36_37, peer); $t37_38 = [$r.value, $r.ok]; }
-        $t38_39 = $t37_38[0];
-        $t39_40 = $t37_38[1];
-        if ($t39_40) {
+        $t8_9 = msgListContainer.$get();
+        $t9_10 = common$jsbridge$dom.SetStyle($t8_9, 'display', 'none');
+        $t10_11 = msgThreadContainer.$get();
+        $t11_12 = common$jsbridge$dom.SetStyle($t10_11, 'display', 'flex');
+        $t12_13 = msgThreadContainer.$get();
+        $t13_14 = clearChildren($t12_13);
+        $t14_15 = common$jsbridge$dom.CreateElement('div');
+        $t15_16 = common$jsbridge$dom.SetStyle($t14_15, 'display', 'flex');
+        $t16_17 = common$jsbridge$dom.SetStyle($t14_15, 'alignItems', 'center');
+        $t17_18 = common$jsbridge$dom.SetStyle($t14_15, 'gap', '10px');
+        $t18_19 = common$jsbridge$dom.SetStyle($t14_15, 'padding', '12px 16px');
+        $t19_20 = common$jsbridge$dom.SetStyle($t14_15, 'borderBottom', '1px solid var(--border)');
+        $t20_21 = common$jsbridge$dom.SetStyle($t14_15, 'flexShrink', '0');
+        $t21_22 = common$jsbridge$dom.CreateElement('button');
+        $t22_23 = common$jsbridge$dom.SetInnerHTML($t21_22, '&#x2190;');
+        $t23_24 = common$jsbridge$dom.SetStyle($t21_22, 'background', 'none');
+        $t24_25 = common$jsbridge$dom.SetStyle($t21_22, 'border', 'none');
+        $t25_26 = common$jsbridge$dom.SetStyle($t21_22, 'fontSize', '20px');
+        $t26_27 = common$jsbridge$dom.SetStyle($t21_22, 'cursor', 'pointer');
+        $t27_28 = common$jsbridge$dom.SetStyle($t21_22, 'color', 'var(--fg)');
+        $t28_29 = common$jsbridge$dom.SetStyle($t21_22, 'padding', '0');
+        $t29_30 = common$jsbridge$dom.RegisterCallback(openThread$1);
+        $t30_31 = common$jsbridge$dom.AddEventListener($t21_22, 'click', $t29_30);
+        $t31_32 = common$jsbridge$dom.AppendChild($t14_15, $t21_22);
+        $t32_33 = common$jsbridge$dom.CreateElement('div');
+        $t33_34 = common$jsbridge$dom.CreateElement('img');
+        $t34_35 = common$jsbridge$dom.SetAttribute($t33_34, 'width', '28');
+        $t35_36 = common$jsbridge$dom.SetAttribute($t33_34, 'height', '28');
+        $t36_37 = common$jsbridge$dom.SetStyle($t33_34, 'borderRadius', '50%');
+        $t37_38 = common$jsbridge$dom.SetStyle($t33_34, 'objectFit', 'cover');
+        $t38_39 = common$jsbridge$dom.SetStyle($t33_34, 'flexShrink', '0');
+        $t39_40 = authorPics.$get();
+        $t40_41 = $t0_1.$get();
+        { const $r = $rt.builtin.mapLookup($t39_40, $t40_41); $t41_42 = [$r.value, $r.ok]; }
+        $t42_43 = $t41_42[0];
+        $t43_44 = $t41_42[1];
+        if ($t43_44) {
           $block = 6; break;
         }
         else {
@@ -9813,22 +9835,23 @@ export function openThread(peer) {
         break;
       }
       case 3: {
-        $t40_41 = common$jsbridge$dom.SetAttribute($t30_31, 'src', $t38_39);
+        $t44_45 = common$jsbridge$dom.SetAttribute($t33_34, 'src', $t42_43);
         $block = 4; break;
         break;
       }
       case 4: {
-        $t41_42 = common$jsbridge$dom.SetAttribute($t30_31, 'onerror', 'this.style.display=\'none\'');
-        $t42_43 = common$jsbridge$dom.AppendChild($t29_30, $t30_31);
-        $t43_44 = common$jsbridge$dom.CreateElement('span');
-        $t44_45 = common$jsbridge$dom.SetStyle($t43_44, 'fontSize', '15px');
-        $t45_46 = common$jsbridge$dom.SetStyle($t43_44, 'fontWeight', 'bold');
-        $t46_47 = common$jsbridge$dom.SetStyle($t43_44, 'fontFamily', 'system-ui, sans-serif, \'Noto Color Emoji\'');
-        $t47_48 = authorNames.$get();
-        { const $r = $rt.builtin.mapLookup($t47_48, peer); $t48_49 = [$r.value, $r.ok]; }
-        $t49_50 = $t48_49[0];
-        $t50_51 = $t48_49[1];
-        if ($t50_51) {
+        $t45_46 = common$jsbridge$dom.SetAttribute($t33_34, 'onerror', 'this.style.display=\'none\'');
+        $t46_47 = common$jsbridge$dom.AppendChild($t32_33, $t33_34);
+        $t47_48 = common$jsbridge$dom.CreateElement('span');
+        $t48_49 = common$jsbridge$dom.SetStyle($t47_48, 'fontSize', '15px');
+        $t49_50 = common$jsbridge$dom.SetStyle($t47_48, 'fontWeight', 'bold');
+        $t50_51 = common$jsbridge$dom.SetStyle($t47_48, 'fontFamily', 'system-ui, sans-serif, \'Noto Color Emoji\'');
+        $t51_52 = authorNames.$get();
+        $t52_53 = $t0_1.$get();
+        { const $r = $rt.builtin.mapLookup($t51_52, $t52_53); $t53_54 = [$r.value, $r.ok]; }
+        $t54_55 = $t53_54[0];
+        $t55_56 = $t53_54[1];
+        if ($t55_56) {
           $block = 10; break;
         }
         else {
@@ -9837,13 +9860,13 @@ export function openThread(peer) {
         break;
       }
       case 5: {
-        $t51_52 = common$jsbridge$dom.SetStyle($t30_31, 'display', 'none');
+        $t56_57 = common$jsbridge$dom.SetStyle($t33_34, 'display', 'none');
         $block = 4; break;
         break;
       }
       case 6: {
-        $t52_53 = ($t38_39 !== '');
-        if ($t52_53) {
+        $t57_58 = ($t42_43 !== '');
+        if ($t57_58) {
           $block = 3; break;
         }
         else {
@@ -9852,23 +9875,39 @@ export function openThread(peer) {
         break;
       }
       case 7: {
-        $t53_54 = common$jsbridge$dom.SetTextContent($t43_44, $t49_50);
+        $t58_59 = common$jsbridge$dom.SetTextContent($t47_48, $t54_55);
         $block = 8; break;
         break;
       }
       case 8: {
-        $t54_55 = common$jsbridge$dom.AppendChild($t29_30, $t43_44);
-        $t55_56 = common$jsbridge$dom.SetStyle($t29_30, 'display', 'flex');
-        $t56_57 = common$jsbridge$dom.SetStyle($t29_30, 'alignItems', 'center');
-        $t57_58 = common$jsbridge$dom.SetStyle($t29_30, 'gap', '10px');
-        $t58_59 = common$jsbridge$dom.AppendChild($t11_12, $t29_30);
-        $t59_60 = msgThreadContainer.$get();
-        $t60_61 = common$jsbridge$dom.AppendChild($t59_60, $t11_12);
-        $t61_62 = authorNames.$get();
-        { const $r = $rt.builtin.mapLookup($t61_62, peer); $t62_63 = [$r.value, $r.ok]; }
-        $t63_64 = $t62_63[0];
-        $t64_65 = $t62_63[1];
-        if ($t64_65) {
+        $t59_60 = common$jsbridge$dom.AppendChild($t32_33, $t47_48);
+        $t60_61 = common$jsbridge$dom.SetStyle($t32_33, 'display', 'flex');
+        $t61_62 = common$jsbridge$dom.SetStyle($t32_33, 'alignItems', 'center');
+        $t62_63 = common$jsbridge$dom.SetStyle($t32_33, 'gap', '10px');
+        $t63_64 = common$jsbridge$dom.AppendChild($t14_15, $t32_33);
+        $t64_65 = common$jsbridge$dom.CreateElement('button');
+        $t65_66 = common$jsbridge$dom.SetTextContent($t64_65, 'ratchet');
+        $t66_67 = common$jsbridge$dom.SetStyle($t64_65, 'marginLeft', 'auto');
+        $t67_68 = common$jsbridge$dom.SetStyle($t64_65, 'background', 'none');
+        $t68_69 = common$jsbridge$dom.SetStyle($t64_65, 'border', '1px solid var(--border)');
+        $t69_70 = common$jsbridge$dom.SetStyle($t64_65, 'borderRadius', '4px');
+        $t70_71 = common$jsbridge$dom.SetStyle($t64_65, 'color', 'var(--fg)');
+        $t71_72 = common$jsbridge$dom.SetStyle($t64_65, 'cursor', 'pointer');
+        $t72_73 = common$jsbridge$dom.SetStyle($t64_65, 'fontSize', '11px');
+        $t73_74 = common$jsbridge$dom.SetStyle($t64_65, 'padding', '4px 8px');
+        $t74_75 = common$jsbridge$dom.SetStyle($t64_65, 'fontFamily', '\'Fira Code\', monospace');
+        $t75_76 = openThread$2.bind(null, $t0_1);
+        $t76_77 = common$jsbridge$dom.RegisterCallback($t75_76);
+        $t77_78 = common$jsbridge$dom.AddEventListener($t64_65, 'click', $t76_77);
+        $t78_79 = common$jsbridge$dom.AppendChild($t14_15, $t64_65);
+        $t79_80 = msgThreadContainer.$get();
+        $t80_81 = common$jsbridge$dom.AppendChild($t79_80, $t14_15);
+        $t81_82 = authorNames.$get();
+        $t82_83 = $t0_1.$get();
+        { const $r = $rt.builtin.mapLookup($t81_82, $t82_83); $t83_84 = [$r.value, $r.ok]; }
+        $t84_85 = $t83_84[0];
+        $t85_86 = $t83_84[1];
+        if ($t85_86) {
           $block = 13; break;
         }
         else {
@@ -9877,11 +9916,12 @@ export function openThread(peer) {
         break;
       }
       case 9: {
-        $t65_66 = common$helpers.HexDecode(peer);
-        $t66_67 = common$helpers.EncodeNpub($t65_66);
-        $t67_68 = $rt.builtin.len($t66_67);
-        $t68_69 = ($t67_68 > 20);
-        if ($t68_69) {
+        $t86_87 = $t0_1.$get();
+        $t87_88 = common$helpers.HexDecode($t86_87);
+        $t88_89 = common$helpers.EncodeNpub($t87_88);
+        $t89_90 = $rt.builtin.len($t88_89);
+        $t90_91 = ($t89_90 > 20);
+        if ($t90_91) {
           $block = 11; break;
         }
         else {
@@ -9890,8 +9930,8 @@ export function openThread(peer) {
         break;
       }
       case 10: {
-        $t69_70 = ($t49_50 !== '');
-        if ($t69_70) {
+        $t91_92 = ($t54_55 !== '');
+        if ($t91_92) {
           $block = 7; break;
         }
         else {
@@ -9900,94 +9940,97 @@ export function openThread(peer) {
         break;
       }
       case 11: {
-        $t70_71 = $rt.builtin.stringSlice($t66_67, undefined, 12);
-        $t71_72 = ($t70_71 + '...');
-        $t72_73 = $rt.builtin.len($t66_67);
-        $t73_74 = ($t72_73 - 4);
-        $t74_75 = $rt.builtin.stringSlice($t66_67, $t73_74, undefined);
-        $t75_76 = ($t71_72 + $t74_75);
-        $t76_77 = common$jsbridge$dom.SetTextContent($t43_44, $t75_76);
+        $t92_93 = $rt.builtin.stringSlice($t88_89, undefined, 12);
+        $t93_94 = ($t92_93 + '...');
+        $t94_95 = $rt.builtin.len($t88_89);
+        $t95_96 = ($t94_95 - 4);
+        $t96_97 = $rt.builtin.stringSlice($t88_89, $t95_96, undefined);
+        $t97_98 = ($t93_94 + $t96_97);
+        $t98_99 = common$jsbridge$dom.SetTextContent($t47_48, $t97_98);
         $block = 8; break;
         break;
       }
       case 12: {
-        $t77_78 = pendingNotes.$get();
-        $t78_79 = pendingNotes.$get();
-        $t79_80 = $rt.builtin.mapLookup($t78_79, peer).value;
-        $t80_81 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t81_82 = $t80_81.$get().addr(0);
-        $t81_82.$set($t29_30);
-        $t82_83 = $rt.builtin.sliceSlice($t80_81.$get(), undefined, undefined, undefined);
-        $t83_84 = $rt.builtin.appendSlice($t79_80, $t82_83);
-        $rt.builtin.mapUpdate($t77_78, peer, $t83_84);
+        $t99_100 = pendingNotes.$get();
+        $t100_101 = $t0_1.$get();
+        $t101_102 = pendingNotes.$get();
+        $t102_103 = $t0_1.$get();
+        $t103_104 = $rt.builtin.mapLookup($t101_102, $t102_103).value;
+        $t104_105 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t105_106 = $t104_105.$get().addr(0);
+        $t105_106.$set($t32_33);
+        $t106_107 = $rt.builtin.sliceSlice($t104_105.$get(), undefined, undefined, undefined);
+        $t107_108 = $rt.builtin.appendSlice($t103_104, $t106_107);
+        $rt.builtin.mapUpdate($t99_100, $t100_101, $t107_108);
         $block = 13; break;
         break;
       }
       case 13: {
-        $t84_85 = common$jsbridge$dom.CreateElement('div');
-        msgThreadMessages.$set($t84_85);
-        $t85_86 = msgThreadMessages.$get();
-        $t86_87 = common$jsbridge$dom.SetStyle($t85_86, 'flex', '1');
-        $t87_88 = msgThreadMessages.$get();
-        $t88_89 = common$jsbridge$dom.SetStyle($t87_88, 'overflowY', 'auto');
-        $t89_90 = msgThreadMessages.$get();
-        $t90_91 = common$jsbridge$dom.SetStyle($t89_90, 'padding', '12px 16px');
-        $t91_92 = msgThreadContainer.$get();
-        $t92_93 = msgThreadMessages.$get();
-        $t93_94 = common$jsbridge$dom.AppendChild($t91_92, $t92_93);
-        $t94_95 = common$jsbridge$dom.CreateElement('div');
-        $t95_96 = common$jsbridge$dom.SetStyle($t94_95, 'display', 'flex');
-        $t96_97 = common$jsbridge$dom.SetStyle($t94_95, 'gap', '8px');
-        $t97_98 = common$jsbridge$dom.SetStyle($t94_95, 'padding', '8px 16px');
-        $t98_99 = common$jsbridge$dom.SetStyle($t94_95, 'borderTop', '1px solid var(--border)');
-        $t99_100 = common$jsbridge$dom.SetStyle($t94_95, 'flexShrink', '0');
-        $t100_101 = common$jsbridge$dom.CreateElement('textarea');
-        msgComposeInput.$set($t100_101);
-        $t101_102 = msgComposeInput.$get();
-        $t102_103 = common$jsbridge$dom.SetAttribute($t101_102, 'rows', '1');
-        $t103_104 = msgComposeInput.$get();
-        $t104_105 = common$jsbridge$dom.SetAttribute($t103_104, 'placeholder', 'message...');
-        $t105_106 = msgComposeInput.$get();
-        $t106_107 = common$jsbridge$dom.SetStyle($t105_106, 'flex', '1');
-        $t107_108 = msgComposeInput.$get();
-        $t108_109 = common$jsbridge$dom.SetStyle($t107_108, 'padding', '8px');
-        $t109_110 = msgComposeInput.$get();
-        $t110_111 = common$jsbridge$dom.SetStyle($t109_110, 'fontFamily', '\'Fira Code\', monospace');
-        $t111_112 = msgComposeInput.$get();
-        $t112_113 = common$jsbridge$dom.SetStyle($t111_112, 'fontSize', '13px');
-        $t113_114 = msgComposeInput.$get();
-        $t114_115 = common$jsbridge$dom.SetStyle($t113_114, 'background', 'var(--bg)');
-        $t115_116 = msgComposeInput.$get();
-        $t116_117 = common$jsbridge$dom.SetStyle($t115_116, 'border', '1px solid var(--border)');
-        $t117_118 = msgComposeInput.$get();
-        $t118_119 = common$jsbridge$dom.SetStyle($t117_118, 'borderRadius', '4px');
-        $t119_120 = msgComposeInput.$get();
-        $t120_121 = common$jsbridge$dom.SetStyle($t119_120, 'color', 'var(--fg)');
-        $t121_122 = msgComposeInput.$get();
-        $t122_123 = common$jsbridge$dom.SetStyle($t121_122, 'resize', 'none');
-        $t123_124 = msgComposeInput.$get();
-        $t124_125 = common$jsbridge$dom.SetAttribute($t123_124, 'onkeydown', 'if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();this.nextSibling.click()}');
+        $t108_109 = common$jsbridge$dom.CreateElement('div');
+        msgThreadMessages.$set($t108_109);
+        $t109_110 = msgThreadMessages.$get();
+        $t110_111 = common$jsbridge$dom.SetStyle($t109_110, 'flex', '1');
+        $t111_112 = msgThreadMessages.$get();
+        $t112_113 = common$jsbridge$dom.SetStyle($t111_112, 'overflowY', 'auto');
+        $t113_114 = msgThreadMessages.$get();
+        $t114_115 = common$jsbridge$dom.SetStyle($t113_114, 'padding', '12px 16px');
+        $t115_116 = msgThreadContainer.$get();
+        $t116_117 = msgThreadMessages.$get();
+        $t117_118 = common$jsbridge$dom.AppendChild($t115_116, $t116_117);
+        $t118_119 = common$jsbridge$dom.CreateElement('div');
+        $t119_120 = common$jsbridge$dom.SetStyle($t118_119, 'display', 'flex');
+        $t120_121 = common$jsbridge$dom.SetStyle($t118_119, 'gap', '8px');
+        $t121_122 = common$jsbridge$dom.SetStyle($t118_119, 'padding', '8px 16px');
+        $t122_123 = common$jsbridge$dom.SetStyle($t118_119, 'borderTop', '1px solid var(--border)');
+        $t123_124 = common$jsbridge$dom.SetStyle($t118_119, 'flexShrink', '0');
+        $t124_125 = common$jsbridge$dom.CreateElement('textarea');
+        msgComposeInput.$set($t124_125);
         $t125_126 = msgComposeInput.$get();
-        $t126_127 = common$jsbridge$dom.AppendChild($t94_95, $t125_126);
-        $t127_128 = common$jsbridge$dom.CreateElement('button');
-        $t128_129 = common$jsbridge$dom.SetTextContent($t127_128, 'send');
-        $t129_130 = common$jsbridge$dom.SetStyle($t127_128, 'padding', '8px 16px');
-        $t130_131 = common$jsbridge$dom.SetStyle($t127_128, 'fontFamily', '\'Fira Code\', monospace');
-        $t131_132 = common$jsbridge$dom.SetStyle($t127_128, 'fontSize', '13px');
-        $t132_133 = common$jsbridge$dom.SetStyle($t127_128, 'background', 'var(--accent)');
-        $t133_134 = common$jsbridge$dom.SetStyle($t127_128, 'color', '#000');
-        $t134_135 = common$jsbridge$dom.SetStyle($t127_128, 'border', 'none');
-        $t135_136 = common$jsbridge$dom.SetStyle($t127_128, 'borderRadius', '4px');
-        $t136_137 = common$jsbridge$dom.SetStyle($t127_128, 'cursor', 'pointer');
-        $t137_138 = common$jsbridge$dom.SetStyle($t127_128, 'alignSelf', 'flex-end');
-        $t138_139 = common$jsbridge$dom.RegisterCallback(openThread$2);
-        $t139_140 = common$jsbridge$dom.AddEventListener($t127_128, 'click', $t138_139);
-        $t140_141 = common$jsbridge$dom.AppendChild($t94_95, $t127_128);
-        $t141_142 = msgThreadContainer.$get();
-        $t142_143 = common$jsbridge$dom.AppendChild($t141_142, $t94_95);
-        $t143_144 = fetchedK0.$get();
-        $t144_145 = $rt.builtin.mapLookup($t143_144, peer).value;
-        if ($t144_145) {
+        $t126_127 = common$jsbridge$dom.SetAttribute($t125_126, 'rows', '1');
+        $t127_128 = msgComposeInput.$get();
+        $t128_129 = common$jsbridge$dom.SetAttribute($t127_128, 'placeholder', 'message...');
+        $t129_130 = msgComposeInput.$get();
+        $t130_131 = common$jsbridge$dom.SetStyle($t129_130, 'flex', '1');
+        $t131_132 = msgComposeInput.$get();
+        $t132_133 = common$jsbridge$dom.SetStyle($t131_132, 'padding', '8px');
+        $t133_134 = msgComposeInput.$get();
+        $t134_135 = common$jsbridge$dom.SetStyle($t133_134, 'fontFamily', '\'Fira Code\', monospace');
+        $t135_136 = msgComposeInput.$get();
+        $t136_137 = common$jsbridge$dom.SetStyle($t135_136, 'fontSize', '13px');
+        $t137_138 = msgComposeInput.$get();
+        $t138_139 = common$jsbridge$dom.SetStyle($t137_138, 'background', 'var(--bg)');
+        $t139_140 = msgComposeInput.$get();
+        $t140_141 = common$jsbridge$dom.SetStyle($t139_140, 'border', '1px solid var(--border)');
+        $t141_142 = msgComposeInput.$get();
+        $t142_143 = common$jsbridge$dom.SetStyle($t141_142, 'borderRadius', '4px');
+        $t143_144 = msgComposeInput.$get();
+        $t144_145 = common$jsbridge$dom.SetStyle($t143_144, 'color', 'var(--fg)');
+        $t145_146 = msgComposeInput.$get();
+        $t146_147 = common$jsbridge$dom.SetStyle($t145_146, 'resize', 'none');
+        $t147_148 = msgComposeInput.$get();
+        $t148_149 = common$jsbridge$dom.SetAttribute($t147_148, 'onkeydown', 'if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();this.nextSibling.click()}');
+        $t149_150 = msgComposeInput.$get();
+        $t150_151 = common$jsbridge$dom.AppendChild($t118_119, $t149_150);
+        $t151_152 = common$jsbridge$dom.CreateElement('button');
+        $t152_153 = common$jsbridge$dom.SetTextContent($t151_152, 'send');
+        $t153_154 = common$jsbridge$dom.SetStyle($t151_152, 'padding', '8px 16px');
+        $t154_155 = common$jsbridge$dom.SetStyle($t151_152, 'fontFamily', '\'Fira Code\', monospace');
+        $t155_156 = common$jsbridge$dom.SetStyle($t151_152, 'fontSize', '13px');
+        $t156_157 = common$jsbridge$dom.SetStyle($t151_152, 'background', 'var(--accent)');
+        $t157_158 = common$jsbridge$dom.SetStyle($t151_152, 'color', '#000');
+        $t158_159 = common$jsbridge$dom.SetStyle($t151_152, 'border', 'none');
+        $t159_160 = common$jsbridge$dom.SetStyle($t151_152, 'borderRadius', '4px');
+        $t160_161 = common$jsbridge$dom.SetStyle($t151_152, 'cursor', 'pointer');
+        $t161_162 = common$jsbridge$dom.SetStyle($t151_152, 'alignSelf', 'flex-end');
+        $t162_163 = common$jsbridge$dom.RegisterCallback(openThread$3);
+        $t163_164 = common$jsbridge$dom.AddEventListener($t151_152, 'click', $t162_163);
+        $t164_165 = common$jsbridge$dom.AppendChild($t118_119, $t151_152);
+        $t165_166 = msgThreadContainer.$get();
+        $t166_167 = common$jsbridge$dom.AppendChild($t165_166, $t118_119);
+        $t167_168 = fetchedK0.$get();
+        $t168_169 = $t0_1.$get();
+        $t169_170 = $rt.builtin.mapLookup($t167_168, $t168_169).value;
+        if ($t169_170) {
           $block = 15; break;
         }
         else {
@@ -9996,15 +10039,17 @@ export function openThread(peer) {
         break;
       }
       case 14: {
-        $t145_146 = queueProfileFetch(peer);
+        $t170_171 = $t0_1.$get();
+        $t171_172 = queueProfileFetch($t170_171);
         $block = 15; break;
         break;
       }
       case 15: {
-        $t146_147 = jstr(peer);
-        $t147_148 = ('["DM_HISTORY",' + $t146_147);
-        $t148_149 = ($t147_148 + ',50,0]');
-        $t149_150 = common$jsbridge$dom.PostToSW($t148_149);
+        $t172_173 = $t0_1.$get();
+        $t173_174 = jstr($t172_173);
+        $t174_175 = ('["DM_HISTORY",' + $t173_174);
+        $t175_176 = ($t174_175 + ',50,0]');
+        $t176_177 = common$jsbridge$dom.PostToSW($t175_176);
         return;
         break;
       }
@@ -10018,7 +10063,41 @@ function openThread$1() {
   return;
 }
 
-function openThread$2() {
+function openThread$2(peer) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = common$jsbridge$dom.Confirm('Delete all messages and rotate encryption keys?');
+        if ($t0_1) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t1_2 = peer.$get();
+        $t2_3 = jstr($t1_2);
+        $t3_4 = ('["MLS_RATCHET",' + $t2_3);
+        $t4_5 = ($t3_4 + ']');
+        $t5_6 = common$jsbridge$dom.PostToSW($t4_5);
+        $t6_7 = msgThreadMessages.$get();
+        $t7_8 = clearChildren($t6_7);
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        return;
+        break;
+      }
+    }
+  }
+}
+
+function openThread$3() {
   let $t0_1;
   $t0_1 = sendMessage();
   return;

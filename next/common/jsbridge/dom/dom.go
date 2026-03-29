@@ -104,6 +104,9 @@ func PrefersDark() bool { panic("jsbridge") }
 // ConsoleLog logs a message to the browser console.
 func ConsoleLog(msg string) { panic("jsbridge") }
 
+// Confirm shows a browser confirm dialog and returns the user's choice.
+func Confirm(msg string) bool { panic("jsbridge") }
+
 // PostToSW sends a JSON message string to the service worker controller.
 func PostToSW(msg string) { panic("jsbridge") }
 

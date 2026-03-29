@@ -332,7 +332,7 @@ func (l *Listener) sendEventsForIDs(subscriptionID string, ids [][]byte) error {
 		// --- Auth-aware filtering ---
 
 		// Privileged events (DMs, gift wraps, channel kinds, etc.)
-		if kind.IsPrivileged(ev.Kind) {
+		if !l.Config.PrivilegedOpen && kind.IsPrivileged(ev.Kind) {
 			if !isFullSync {
 				skipped++
 				continue

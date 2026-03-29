@@ -8,6 +8,20 @@ import * as common$nostr from './common_nostr.mjs';
 
 // Package-level variables
 
+$rt.types.registerType('common/relay.Sub', {
+  id: 'common/relay.Sub',
+  kind: 'struct',
+  methods: new Map(),
+  fields: [
+    { name: 'ID', type: 'string', tag: '', embedded: false },
+    { name: 'Filters', type: '[]*common/nostr.Filter', tag: '', embedded: false },
+    { name: 'OnEvent', type: 'func', tag: '', embedded: false },
+    { name: 'OnEOSE', type: 'func', tag: '', embedded: false },
+    { name: 'conn', type: '*common/relay.Conn', tag: '', embedded: false },
+    { name: 'gotEOSE', type: 'bool', tag: '', embedded: false },
+  ],
+  zero: () => ({ ID: '', Filters: null, OnEvent: null, OnEOSE: null, conn: null, gotEOSE: false }),
+});
 $rt.types.registerType('common/relay.Conn', {
   id: 'common/relay.Conn',
   kind: 'struct',
@@ -36,20 +50,6 @@ $rt.types.registerType('common/relay.Pool', {
     { name: 'conns', type: 'map[string]*common/relay.Conn', tag: '', embedded: false },
   ],
   zero: () => ({ conns: null }),
-});
-$rt.types.registerType('common/relay.Sub', {
-  id: 'common/relay.Sub',
-  kind: 'struct',
-  methods: new Map(),
-  fields: [
-    { name: 'ID', type: 'string', tag: '', embedded: false },
-    { name: 'Filters', type: '[]*common/nostr.Filter', tag: '', embedded: false },
-    { name: 'OnEvent', type: 'func', tag: '', embedded: false },
-    { name: 'OnEOSE', type: 'func', tag: '', embedded: false },
-    { name: 'conn', type: '*common/relay.Conn', tag: '', embedded: false },
-    { name: 'gotEOSE', type: 'bool', tag: '', embedded: false },
-  ],
-  zero: () => ({ ID: '', Filters: null, OnEvent: null, OnEOSE: null, conn: null, gotEOSE: false }),
 });
 export function init() {
   return;
@@ -573,6 +573,49 @@ export function NewPool() {
   return $t0_1;
 }
 
+export function Sub$Close(s) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $get() { return s.$get().conn; }, $set(v) { const obj = s.$get(); obj.conn = v; s.$set(obj); } };
+        $t1_2 = $t0_1.$get();
+        $t2_3 = ($t1_2 !== null);
+        if ($t2_3) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t3_4 = { $get() { return s.$get().conn; }, $set(v) { const obj = s.$get(); obj.conn = v; s.$set(obj); } };
+        $t4_5 = $t3_4.$get();
+        $t5_6 = { $get() { return s.$get().ID; }, $set(v) { const obj = s.$get(); obj.ID = v; s.$set(obj); } };
+        $t6_7 = $t5_6.$get();
+        $t7_8 = Conn$CloseSubscription($t4_5, $t6_7);
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        return;
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/relay.Sub')?.methods?.set('Close', Sub$Close);
+export function Sub$GotEOSE(s) {
+  let $t0_1, $t1_2;
+  $t0_1 = { $get() { return s.$get().gotEOSE; }, $set(v) { const obj = s.$get(); obj.gotEOSE = v; s.$set(obj); } };
+  $t1_2 = $t0_1.$get();
+  return $t1_2;
+}
+
+$rt.types.getType('common/relay.Sub')?.methods?.set('GotEOSE', Sub$GotEOSE);
 export function Conn$Close(c) {
   let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
   $t0_1 = { $get() { return c.$get().closing; }, $set(v) { const obj = c.$get(); obj.closing = v; c.$set(obj); } };
@@ -1754,46 +1797,3 @@ export function Pool$evictClosed(p) {
 }
 
 $rt.types.getType('common/relay.Pool')?.methods?.set('evictClosed', Pool$evictClosed);
-export function Sub$Close(s) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $get() { return s.$get().conn; }, $set(v) { const obj = s.$get(); obj.conn = v; s.$set(obj); } };
-        $t1_2 = $t0_1.$get();
-        $t2_3 = ($t1_2 !== null);
-        if ($t2_3) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t3_4 = { $get() { return s.$get().conn; }, $set(v) { const obj = s.$get(); obj.conn = v; s.$set(obj); } };
-        $t4_5 = $t3_4.$get();
-        $t5_6 = { $get() { return s.$get().ID; }, $set(v) { const obj = s.$get(); obj.ID = v; s.$set(obj); } };
-        $t6_7 = $t5_6.$get();
-        $t7_8 = Conn$CloseSubscription($t4_5, $t6_7);
-        $block = 2; break;
-        break;
-      }
-      case 2: {
-        return;
-        break;
-      }
-    }
-  }
-}
-
-$rt.types.getType('common/relay.Sub')?.methods?.set('Close', Sub$Close);
-export function Sub$GotEOSE(s) {
-  let $t0_1, $t1_2;
-  $t0_1 = { $get() { return s.$get().gotEOSE; }, $set(v) { const obj = s.$get(); obj.gotEOSE = v; s.$set(obj); } };
-  $t1_2 = $t0_1.$get();
-  return $t1_2;
-}
-
-$rt.types.getType('common/relay.Sub')?.methods?.set('GotEOSE', Sub$GotEOSE);

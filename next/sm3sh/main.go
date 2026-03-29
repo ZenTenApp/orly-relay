@@ -913,6 +913,10 @@ func onSWMessage(raw string) {
 			dom.SetTextContent(pendingTsEls[0], formatTime(ts))
 			pendingTsEls = pendingTsEls[1:]
 		}
+	case "DM_HISTORY_CLEARED":
+		// Messages already cleared optimistically on ratchet button click.
+		peer, _ := nextStr(raw, pos)
+		dom.ConsoleLog("[mls] history cleared for " + peer)
 	case "MLS_GROUPS":
 		// Store for future use.
 	case "MLS_STATUS":
@@ -2516,21 +2520,21 @@ func formatTime(ts int64) string {
 }
 
 func initMessaging() {
-	if !signer.HasMLS() {
-		clearChildren(msgListContainer)
+	// Render new-chat button immediately — don't wait for DM_LIST round-trip.
+	clearChildren(msgListContainer)
+
+	if !signer.HasSigner() {
 		notice := dom.CreateElement("div")
 		dom.SetStyle(notice, "padding", "24px")
 		dom.SetStyle(notice, "textAlign", "center")
 		dom.SetStyle(notice, "color", "var(--muted)")
 		dom.SetStyle(notice, "fontSize", "13px")
 		dom.SetStyle(notice, "lineHeight", "1.6")
-		dom.SetInnerHTML(notice, "encrypted DMs require the <b>Smesh Signer</b> extension<br><br><i>coming soon</i>")
+		dom.SetInnerHTML(notice, "encrypted DMs require the <b>Smesh Signer</b> extension")
 		dom.AppendChild(msgListContainer, notice)
 		return
 	}
 
-	// Render new-chat button immediately — don't wait for DM_LIST round-trip.
-	clearChildren(msgListContainer)
 	renderNewChatButton()
 
 	// Request conversation list from cache (will re-render below the button).
@@ -2878,6 +2882,26 @@ func openThread(peer string) {
 	dom.SetStyle(threadHdrInner, "alignItems", "center")
 	dom.SetStyle(threadHdrInner, "gap", "10px")
 	dom.AppendChild(hdr, threadHdrInner)
+
+	ratchetBtn := dom.CreateElement("button")
+	dom.SetTextContent(ratchetBtn, "ratchet")
+	dom.SetStyle(ratchetBtn, "marginLeft", "auto")
+	dom.SetStyle(ratchetBtn, "background", "none")
+	dom.SetStyle(ratchetBtn, "border", "1px solid var(--border)")
+	dom.SetStyle(ratchetBtn, "borderRadius", "4px")
+	dom.SetStyle(ratchetBtn, "color", "var(--fg)")
+	dom.SetStyle(ratchetBtn, "cursor", "pointer")
+	dom.SetStyle(ratchetBtn, "fontSize", "11px")
+	dom.SetStyle(ratchetBtn, "padding", "4px 8px")
+	dom.SetStyle(ratchetBtn, "fontFamily", "'Fira Code', monospace")
+	dom.AddEventListener(ratchetBtn, "click", dom.RegisterCallback(func() {
+		if dom.Confirm("Delete all messages and rotate encryption keys?") {
+			dom.PostToSW("[\"MLS_RATCHET\"," + jstr(peer) + "]")
+			clearChildren(msgThreadMessages)
+		}
+	}))
+	dom.AppendChild(hdr, ratchetBtn)
+
 	dom.AppendChild(msgThreadContainer, hdr)
 
 	// Track for live update when profile arrives.

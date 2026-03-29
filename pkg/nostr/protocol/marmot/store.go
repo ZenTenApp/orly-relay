@@ -152,3 +152,18 @@ func unmarshalGroupState(data []byte) (*groupStateSerialized, error) {
 	}
 	return &s, nil
 }
+
+// backupPayload is the NIP-44-encrypted content of a kind 30078 group backup.
+type backupPayload struct {
+	Groups      []groupStateBackup `json:"groups"`
+	LastEventTS int64              `json:"last_event_ts"`
+}
+
+// groupStateBackup is the hex-encoded form for JSON transport in NIP-78 backup.
+type groupStateBackup struct {
+	GroupID      string `json:"group_id"`
+	NostrGroupID string `json:"nostr_group_id"`
+	PeerPub      string `json:"peer_pub"`
+	MLSState     string `json:"mls_state"` // base64
+	Epoch        uint64 `json:"epoch"`
+}

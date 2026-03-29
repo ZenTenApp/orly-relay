@@ -3,6 +3,7 @@ package marmot
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -62,6 +63,9 @@ type Client struct {
 	// groupsChanged is signalled when a new group is added so callers
 	// can refresh subscription filters.
 	groupsChanged chan struct{}
+
+	// lastBackupTime debounces relay backup writes.
+	lastBackupTime time.Time
 }
 
 // NewClient creates a Marmot client. The crypto provider handles identity,
@@ -84,13 +88,39 @@ func NewClient(crypto CryptoProvider, store GroupStore, relay RelayConnection, r
 		groupsChanged: make(chan struct{}, 1),
 	}
 
-	// Flush persisted groups — NewClient generates a fresh kpp each time,
-	// so any persisted group state references a dead init_key. Groups will
-	// be re-established on the next SendDM via establishGroup.
+	// Load persisted groups. The fresh kpp means old Welcomes are
+	// undecryptable (handled by "skipping stale welcome" in processWelcome),
+	// but existing group state is valid for send/receive — preserving
+	// groups avoids a full re-establishment on every WASM restart.
 	ids, err := store.ListGroups()
 	if err == nil {
 		for _, id := range ids {
-			_ = store.DeleteGroup(id)
+			data, loadErr := store.LoadGroup(id)
+			if loadErr != nil {
+				_ = store.DeleteGroup(id)
+				continue
+			}
+			ss, unmarshalErr := unmarshalGroupState(data)
+			if unmarshalErr != nil {
+				_ = store.DeleteGroup(id)
+				continue
+			}
+			group, mlsErr := mls.UnmarshalGroup(ss.MLSState)
+			if mlsErr != nil {
+				log.I.F("discarding corrupted group %x: %v", id, mlsErr)
+				_ = store.DeleteGroup(id)
+				continue
+			}
+			c.groups[string(ss.GroupID)] = &GroupState{
+				GroupID:      ss.GroupID,
+				NostrGroupID: ss.NostrGroupID,
+				PeerPub:      ss.PeerPub,
+				group:        group,
+				mlsBytes:     ss.MLSState,
+			}
+		}
+		if len(c.groups) > 0 {
+			log.I.F("restored %d persisted MLS groups", len(c.groups))
 		}
 	}
 
@@ -253,6 +283,7 @@ func (c *Client) establishGroup(ctx context.Context, peerPub []byte) (*GroupStat
 	default:
 	}
 
+	c.backupAsync()
 	return gs, nil
 }
 
@@ -352,6 +383,8 @@ func (c *Client) processWelcome(ctx context.Context, uw *UnwrappedGiftWrap) erro
 	}
 
 	log.I.F("joined DM group with %s (nostr_group_id: %s)", hex.Enc(senderPub), hex.Enc(gs.NostrGroupID))
+
+	c.backupAsync()
 
 	// MIP-00: rotate KeyPackage after Welcome — the consumed init_key is
 	// dead, so peers fetching the old KP would fail to create a group.
@@ -556,4 +589,235 @@ func (c *Client) PublishKeyPackageRelays(ctx context.Context, relayURLs []string
 		return fmt.Errorf("sign key package relays: %w", err)
 	}
 	return c.relay.Publish(ctx, ev)
+}
+
+const KindAppSpecific = 30078
+
+// BackupGroups serializes all active MLS groups, NIP-44 encrypts to self,
+// and publishes as a kind 30078 event. Enables cross-device sync and
+// recovery from IDB loss without full re-establishment.
+func (c *Client) BackupGroups(ctx context.Context) error {
+	c.mu.RLock()
+	if time.Since(c.lastBackupTime) < 30*time.Second {
+		c.mu.RUnlock()
+		return nil
+	}
+	groups := make([]groupStateBackup, 0, len(c.groups))
+	for _, gs := range c.groups {
+		mlsBytes := gs.mlsBytes
+		var epoch uint64
+		if gs.group != nil {
+			if b, err := gs.group.Marshal(); err == nil {
+				mlsBytes = b
+			}
+			epoch = gs.group.Epoch()
+		}
+		groups = append(groups, groupStateBackup{
+			GroupID:      hex.Enc(gs.GroupID),
+			NostrGroupID: hex.Enc(gs.NostrGroupID),
+			PeerPub:      hex.Enc(gs.PeerPub),
+			MLSState:     base64.StdEncoding.EncodeToString(mlsBytes),
+			Epoch:        epoch,
+		})
+	}
+	lastTS := c.lastEventTS
+	c.mu.RUnlock()
+
+	if len(groups) == 0 {
+		return nil
+	}
+
+	payload, err := json.Marshal(&backupPayload{Groups: groups, LastEventTS: lastTS})
+	if err != nil {
+		return fmt.Errorf("marshal backup: %w", err)
+	}
+
+	ciphertext, err := c.crypto.Nip44Encrypt(c.crypto.Pub(), payload)
+	if err != nil {
+		return fmt.Errorf("nip44 encrypt backup: %w", err)
+	}
+
+	ev := event.New()
+	ev.CreatedAt = time.Now().Unix()
+	ev.Kind = KindAppSpecific
+	ev.Content = []byte(ciphertext)
+	ev.Tags = tag.NewS(tag.NewFromAny("d", "marmot-groups"))
+	if err := c.crypto.SignEvent(ev); err != nil {
+		return fmt.Errorf("sign backup event: %w", err)
+	}
+	if err := c.relay.Publish(ctx, ev); err != nil {
+		return fmt.Errorf("publish backup: %w", err)
+	}
+
+	c.mu.Lock()
+	c.lastBackupTime = time.Now()
+	c.mu.Unlock()
+
+	log.I.F("backed up %d MLS groups to relay", len(groups))
+	return nil
+}
+
+// RestoreGroups fetches the latest kind 30078 group backup from the relay,
+// decrypts it, and restores MLS groups. Returns the number of groups restored.
+func (c *Client) RestoreGroups(ctx context.Context) (int, error) {
+	f := filter.New()
+	f.Kinds = kind.NewS(kind.New(KindAppSpecific))
+	f.Authors = &tag.T{T: [][]byte{c.crypto.Pub()}}
+	f.Tags = tag.NewS(tag.NewFromAny("d", "marmot-groups"))
+	limit := uint(1)
+	f.Limit = &limit
+
+	stream, err := c.relay.Subscribe(ctx, filter.NewS(f))
+	if err != nil {
+		return 0, fmt.Errorf("subscribe for backup: %w", err)
+	}
+	defer stream.Close()
+
+	var backupEv *event.E
+	select {
+	case ev := <-stream.Events():
+		backupEv = ev
+	case <-time.After(10 * time.Second):
+		return 0, nil // no backup found
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+
+	if backupEv == nil {
+		return 0, nil
+	}
+
+	plaintext, err := c.crypto.Nip44Decrypt(c.crypto.Pub(), string(backupEv.Content))
+	if err != nil {
+		return 0, fmt.Errorf("nip44 decrypt backup: %w", err)
+	}
+
+	var bp backupPayload
+	if err := json.Unmarshal([]byte(plaintext), &bp); err != nil {
+		return 0, fmt.Errorf("unmarshal backup: %w", err)
+	}
+
+	restored := 0
+	for _, gsb := range bp.Groups {
+		groupID, err := hex.Dec(gsb.GroupID)
+		if err != nil {
+			continue
+		}
+		nostrGroupID, err := hex.Dec(gsb.NostrGroupID)
+		if err != nil {
+			continue
+		}
+		peerPub, err := hex.Dec(gsb.PeerPub)
+		if err != nil {
+			continue
+		}
+		mlsBytes, err := base64.StdEncoding.DecodeString(gsb.MLSState)
+		if err != nil {
+			continue
+		}
+		group, err := mls.UnmarshalGroup(mlsBytes)
+		if err != nil {
+			log.I.F("backup: skipping corrupted group %s: %v", gsb.GroupID, err)
+			continue
+		}
+
+		// Epoch-aware merge: keep the state with the higher epoch.
+		c.mu.RLock()
+		existing, hasLocal := c.groups[string(groupID)]
+		c.mu.RUnlock()
+		if hasLocal && existing.group != nil && existing.group.Epoch() >= gsb.Epoch {
+			continue // local state is same or more advanced
+		}
+
+		gs := &GroupState{
+			GroupID:      groupID,
+			NostrGroupID: nostrGroupID,
+			PeerPub:      peerPub,
+			group:        group,
+			mlsBytes:     mlsBytes,
+		}
+
+		c.mu.Lock()
+		c.groups[string(groupID)] = gs
+		c.mu.Unlock()
+
+		c.persistGroup(gs)
+		restored++
+	}
+
+	if bp.LastEventTS > 0 {
+		c.mu.Lock()
+		if bp.LastEventTS > c.lastEventTS {
+			c.lastEventTS = bp.LastEventTS
+		}
+		c.mu.Unlock()
+	}
+
+	if restored > 0 {
+		select {
+		case c.groupsChanged <- struct{}{}:
+		default:
+		}
+		log.I.F("restored %d MLS groups from relay backup", restored)
+	}
+
+	return restored, nil
+}
+
+// RatchetGroup destroys the existing MLS group with a peer, publishes a
+// delete event for the old kind 445 events, and creates a fresh group.
+// The caller should also clear local DM history for the peer.
+func (c *Client) RatchetGroup(ctx context.Context, peerPub []byte) error {
+	groupID := DMGroupID(c.crypto.Pub(), peerPub)
+
+	c.mu.Lock()
+	oldGS, hadOld := c.groups[string(groupID)]
+	delete(c.groups, string(groupID))
+	c.mu.Unlock()
+
+	_ = c.store.DeleteGroup(groupID)
+
+	// Publish kind 5 to request deletion of old kind 445 events by h-tag.
+	if hadOld && len(oldGS.NostrGroupID) > 0 {
+		delEv := event.New()
+		delEv.CreatedAt = time.Now().Unix()
+		delEv.Kind = 5
+		delEv.Tags = tag.NewS(
+			tag.NewFromAny("h", hex.Enc(oldGS.NostrGroupID)),
+			tag.NewFromAny("k", "445"),
+		)
+		if err := c.crypto.SignEvent(delEv); err != nil {
+			log.W.F("ratchet: sign delete event: %v", err)
+		} else if err := c.relay.Publish(ctx, delEv); err != nil {
+			log.W.F("ratchet: publish delete event: %v", err)
+		} else {
+			log.I.F("ratchet: published delete for group %s", hex.Enc(oldGS.NostrGroupID))
+		}
+	}
+
+	// Create new group with the same peer.
+	if _, err := c.establishGroup(ctx, peerPub); err != nil {
+		return fmt.Errorf("ratchet: establish new group: %w", err)
+	}
+
+	// Backup new state to relay.
+	c.mu.Lock()
+	c.lastBackupTime = time.Time{} // force immediate backup
+	c.mu.Unlock()
+	go func() {
+		if err := c.BackupGroups(context.Background()); err != nil {
+			log.W.F("ratchet: backup: %v", err)
+		}
+	}()
+
+	return nil
+}
+
+// backupAsync triggers a debounced backup in a fire-and-forget goroutine.
+func (c *Client) backupAsync() {
+	go func() {
+		if err := c.BackupGroups(context.Background()); err != nil {
+			log.W.F("async backup: %v", err)
+		}
+	}()
 }

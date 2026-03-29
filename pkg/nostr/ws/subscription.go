@@ -141,11 +141,14 @@ func (sub *Subscription) dispatchEose() {
 
 // handleClosed handles the CLOSED message from a relay.
 func (sub *Subscription) handleClosed(reason string) {
-	go func() {
-		sub.ClosedReason <- reason
-		sub.live.Store(false) // set this so we don't send an unnecessary CLOSE to the relay
-		sub.unsub(fmt.Errorf("CLOSED received: %s", reason))
-	}()
+	sub.live.Store(false) // relay already closed it — don't send CLOSE back
+	sub.cancel(fmt.Errorf("CLOSED received: %s", reason))
+	// Non-blocking send so callers who read ClosedReason still get notified,
+	// but we don't block unsub on a channel nobody may be reading.
+	select {
+	case sub.ClosedReason <- reason:
+	default:
+	}
 }
 
 // Unsub closes the subscription, sending "CLOSE" to relay as in NIP-01.

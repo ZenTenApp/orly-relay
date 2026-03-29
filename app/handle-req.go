@@ -219,7 +219,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 	// Privileged kinds (DMs, gift-wrap, seals, channels, etc.) require
 	// authentication when auth is enabled. Discoverable channel kinds (40, 41)
 	// are exempt since they're needed for channel listing.
-	if l.Config.AuthRequired && len(l.authedPubkey.Load()) == 0 {
+	if !l.Config.PrivilegedOpen && l.Config.AuthRequired && len(l.authedPubkey.Load()) == 0 {
 		hasPrivilegedKinds := false
 		for _, f := range *env.Filters {
 			if f != nil && f.Kinds != nil {
@@ -601,7 +601,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		// Filter privileged events based on kind.
 		// When auth is required, privileged kinds need party-involvement checks
 		// to protect DM metadata.
-		if l.Config.AuthRequired && kind.IsPrivileged(ev.Kind) && accessLevel != "admin" {
+		if !l.Config.PrivilegedOpen && l.Config.AuthRequired && kind.IsPrivileged(ev.Kind) && accessLevel != "admin" {
 			log.T.C(
 				func() string {
 					return fmt.Sprintf(
@@ -931,7 +931,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		// Register subscription with publisher BEFORE EOSE so events arriving
 		// between query completion and EOSE are buffered in the receiver channel
 		// instead of being silently dropped.
-		authRequired := acl.Registry.GetMode() != "none"
+		authRequired := !l.Config.PrivilegedOpen && acl.Registry.GetMode() != "none"
 		if !authRequired {
 			for _, f := range subbedFilters {
 				if f != nil && f.Kinds != nil {

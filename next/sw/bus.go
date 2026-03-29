@@ -116,6 +116,9 @@ func onBusMessage(raw string) {
 		cryptoProxy(method, peerPubkey, data, func(result, errMsg string) {
 			busSend(from, "[\"CRYPTO_RESULT\","+helpers.Itoa(int64(id))+","+jstr(result)+","+jstr(errMsg)+"]")
 		})
+	case "DM_HISTORY_CLEARED":
+		peer := w.str()
+		broadcastToClients("[\"DM_HISTORY_CLEARED\"," + jstr(peer) + "]")
 	}
 }
 

@@ -32,6 +32,12 @@ type Group struct {
 	pendingProposals []pendingProposal
 }
 
+// Epoch returns the current MLS epoch number. The epoch increments on every
+// Commit (including application message encrypt/decrypt that triggers ratcheting).
+func (group *Group) Epoch() uint64 {
+	return group.groupContext.epoch
+}
+
 // ExporterSecret derives the exporter secret from the current epoch secret.
 // This is needed by NIP-EE to derive the NIP-44 conversation key for
 // encrypting kind 445 group message content.

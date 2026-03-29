@@ -104,13 +104,11 @@ func routerProxy(clientID, subID, filterRaw string, relayURLs []string) {
 	}
 	clientSubs[subID] = &clientSub{filters: filters, filterRaw: filterRaw, clientID: clientID}
 
-	// Serve cached events immediately — no waiting for relay connections.
-	cacheQuery(filterRaw, func(eventsJSON string) {
-		events := nostr.ParseEventsJSON(eventsJSON)
-		for _, ev := range events {
-			fwd(clientID, "[\"EVENT\","+jstr(subID)+","+ev.ToJSON()+"]")
-		}
-	})
+	// Skip IDB cache for PROXY subscriptions — marmot needs fresh relay data.
+	// IDB may hold stale key packages from a previous bridge session (bridge
+	// restarts generate a new kpp without a version bump, so the epoch check
+	// doesn't flush them). Serving a stale key package causes the WASM to
+	// create a Welcome with the wrong KeyPackageRef → bridge can't decrypt.
 
 	remoteIDs := make(map[string]bool)
 	base := "p_" + subID + "_"

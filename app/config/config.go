@@ -57,6 +57,7 @@ type C struct {
 	ACLMode             string        `env:"ORLY_ACL_MODE" usage:"ACL mode: follows, managed (nip-86), curating, none" default:"none"`
 	AuthRequired        bool          `env:"ORLY_AUTH_REQUIRED" usage:"require authentication for all requests (works with managed ACL)" default:"false"`
 	AuthToWrite         bool          `env:"ORLY_AUTH_TO_WRITE" usage:"require authentication only for write operations (EVENT), allow REQ/COUNT without auth" default:"false"`
+	PrivilegedOpen      bool          `env:"ORLY_PRIVILEGED_OPEN" usage:"fully disable privileged-kind auth checks (kinds 4,13,14,1059 etc served without NIP-42); required for relays that don't support NIP-42 like whitenoise" default:"false"`
 	NIP46BypassAuth     bool          `env:"ORLY_NIP46_BYPASS_AUTH" usage:"allow NIP-46 bunker events (kind 24133) through without authentication even when auth is required" default:"false"`
 	BootstrapRelays     []string      `env:"ORLY_BOOTSTRAP_RELAYS" usage:"comma-separated list of bootstrap relay URLs for initial sync"`
 	NWCUri              string        `env:"ORLY_NWC_URI" usage:"NWC (Nostr Wallet Connect) connection string for Lightning payments"`

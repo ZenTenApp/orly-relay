@@ -18,6 +18,58 @@ let lastEventTSInterval: ReturnType<typeof setInterval> | null = null; // Fix 2e
 let initDone = false;
 const pendingDeliverEvents: Array<{ subId: number; eventJSON: string }> = [];
 
+// Persist init params so the extension can auto-reinitialize after MV3
+// background termination. browser.storage.session is encrypted, cleared
+// on browser close — same lifecycle as in-memory state, but survives
+// background script restarts.
+const MLS_SESSION_KEY = '_mls_init_params';
+
+interface MlsInitParams {
+  privkey: string;
+  pubkey: string;
+  relayURLs: string[];
+  lastEventTS: number;
+}
+
+async function persistInitParams(params: MlsInitParams): Promise<void> {
+  try { await browser.storage.session.set({ [MLS_SESSION_KEY]: params }); } catch (_) {}
+}
+
+async function loadInitParams(): Promise<MlsInitParams | null> {
+  try {
+    const r = await browser.storage.session.get(MLS_SESSION_KEY);
+    return (r[MLS_SESSION_KEY] as MlsInitParams) || null;
+  } catch (_) { return null; }
+}
+
+// Auto-reinitialize from session storage if background was restarted.
+async function ensureInit(): Promise<boolean> {
+  if ((globalThis as any)._marmot) return true;
+  const params = await loadInitParams();
+  if (!params) return false;
+  currentPrivkey = params.privkey;
+  mlsInitPromise = (async () => {
+    await loadWasm();
+    setupMarmotInit(params.lastEventTS);
+    const initFn = (globalThis as any)._marmot_init;
+    if (!initFn) return 'error: wasm bridge not ready';
+    const result = await initFn(params.pubkey, ...params.relayURLs);
+    if (!result || result === 'ok') {
+      const m = (globalThis as any)._marmot;
+      if (m) {
+        m.publishKP();
+        const groups = String(m.listGroups() || '[]');
+        if (groups === '[]') m.restoreGroups();
+        m.subscribe();
+      }
+    }
+    initDone = true;
+    return String(result || 'ok');
+  })().catch(e => { mlsInitPromise = null; throw e; });
+  await mlsInitPromise;
+  return !!(globalThis as any)._marmot;
+}
+
 // --- IDB Group Store (same schema as the marmot SW used) ---
 const GDB_NAME = 'marmot-groups';
 const GDB_VER = 1;
@@ -332,6 +384,7 @@ export async function mlsInit(
 ): Promise<string> {
   mlsTabIds.add(tabId); // Fix 2g: add, don't overwrite
   currentPrivkey = privkey;
+  persistInitParams({ privkey, pubkey, relayURLs, lastEventTS });
   // Fix 2f: reset on failure so retry is possible
   mlsInitPromise = (async () => {
     await loadWasm();
@@ -339,11 +392,14 @@ export async function mlsInit(
     const initFn = (globalThis as any)._marmot_init;
     if (!initFn) return 'error: wasm bridge not ready';
     const result = await initFn(pubkey, ...relayURLs);
-    // Auto-bootstrap: publish key package and start subscription loop.
+    // Auto-bootstrap: publish key package, restore groups if empty, subscribe.
     if (!result || result === 'ok') {
       const m = (globalThis as any)._marmot;
       if (m) {
         m.publishKP();
+        // Restore groups from relay backup if IDB was empty.
+        const groups = String(m.listGroups() || '[]');
+        if (groups === '[]') m.restoreGroups();
         m.subscribe();
       }
     }
@@ -368,6 +424,7 @@ export function mlsSetTab(tabId: number) {
 
 export async function mlsSendDM(recipient: string, content: string): Promise<string> {
   if (mlsInitPromise) await mlsInitPromise;
+  if (!(globalThis as any)._marmot) await ensureInit();
   const m = (globalThis as any)._marmot;
   if (!m) return 'error: not initialized';
   return String(m.sendDM(recipient, content) || 'ok');
@@ -375,6 +432,7 @@ export async function mlsSendDM(recipient: string, content: string): Promise<str
 
 export async function mlsSubscribe(): Promise<string> {
   if (mlsInitPromise) await mlsInitPromise;
+  if (!(globalThis as any)._marmot) await ensureInit();
   const m = (globalThis as any)._marmot;
   if (!m) return 'error: not initialized';
   return String(m.subscribe() || 'ok');
@@ -382,6 +440,7 @@ export async function mlsSubscribe(): Promise<string> {
 
 export async function mlsPublishKP(): Promise<string> {
   if (mlsInitPromise) await mlsInitPromise;
+  if (!(globalThis as any)._marmot) await ensureInit();
   const m = (globalThis as any)._marmot;
   if (!m) return 'error: not initialized';
   return String(m.publishKP() || 'ok');
@@ -409,6 +468,24 @@ export function mlsHandleEvent(eventJSON: string): void {
   const m = (globalThis as any)._marmot;
   if (!m) return;
   m.handleEvent(eventJSON);
+}
+
+export async function mlsBackupGroups(): Promise<void> {
+  if (mlsInitPromise) await mlsInitPromise;
+  const m = (globalThis as any)._marmot;
+  if (m?.backupGroups) m.backupGroups();
+}
+
+export async function mlsRestoreGroups(): Promise<void> {
+  if (mlsInitPromise) await mlsInitPromise;
+  const m = (globalThis as any)._marmot;
+  if (m?.restoreGroups) m.restoreGroups();
+}
+
+export async function mlsRatchetGroup(peerHex: string): Promise<void> {
+  if (mlsInitPromise) await mlsInitPromise;
+  const m = (globalThis as any)._marmot;
+  if (m?.ratchetGroup) m.ratchetGroup(peerHex);
 }
 
 export function isMlsMethod(method: string): boolean {

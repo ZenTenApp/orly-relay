@@ -139,6 +139,61 @@ func (d *D) ProcessDelete(ev *event.E, admins [][]byte) (err error) {
 		}
 	}
 	
+	// h-tag deletion: admin-only bulk delete of kind 445 events by group ID.
+	// Kind 445 (MLS group messages) uses ephemeral keys per MIP-03, so
+	// standard pubkey ownership checks cannot apply. Relay admins can
+	// delete by h-tag to support forward secrecy wipe after group ratchet.
+	hTags := ev.Tags.GetAll([]byte("h"))
+	if len(hTags) > 0 {
+		isAdmin := false
+		for _, admin := range admins {
+			if utils.FastEqual(admin, ev.Pubkey) {
+				isAdmin = true
+				break
+			}
+		}
+		if isAdmin {
+			for _, hTag := range hTags {
+				hVal := hTag.Value()
+				if len(hVal) == 0 {
+					continue
+				}
+				delFilter := &filter.F{
+					Kinds: kind.NewS(kind.New(445)),
+					Tags:  tag.NewS(tag.NewFromAny([]byte("h"), hVal)),
+				}
+				var idxs []Range
+				if idxs, err = GetIndexesFromFilter(delFilter); chk.E(err) {
+					continue
+				}
+				var sers types.Uint40s
+				for _, idx := range idxs {
+					var s types.Uint40s
+					if s, err = d.GetSerialsByRange(idx); chk.E(err) {
+						continue
+					}
+					sers = append(sers, s...)
+				}
+				deleted := 0
+				for _, ser := range sers {
+					var targetEv *event.E
+					if targetEv, err = d.FetchEventBySerial(ser); chk.E(err) || targetEv == nil {
+						continue
+					}
+					if targetEv.CreatedAt < ev.CreatedAt {
+						if err = d.DeleteEvent(context.Background(), targetEv.ID); chk.E(err) {
+							continue
+						}
+						deleted++
+					}
+				}
+				if deleted > 0 {
+					log.D.F("admin deleted %d kind 445 events via h-tag %s", deleted, string(hVal))
+				}
+			}
+		}
+	}
+
 	// if there are no e or a tags, we assume the intent is to delete all
 	// replaceable events of the kinds specified by the k tags for the pubkey of
 	// the delete event.

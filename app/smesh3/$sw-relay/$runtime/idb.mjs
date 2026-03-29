@@ -250,6 +250,23 @@ export function GetConversationList(fn) {
   });
 }
 
+export function ClearDMsByPeer(peer, fn) {
+  getDB().then(db => {
+    const tx = db.transaction('dms', 'readwrite');
+    const store = tx.objectStore('dms');
+    const idx = store.index('peer_ts');
+    const range = IDBKeyRange.bound([peer, 0], [peer, Infinity]);
+    const req = idx.openCursor(range);
+    req.onsuccess = (e) => {
+      const cursor = e.target.result;
+      if (!cursor) { fn(); return; }
+      cursor.delete();
+      cursor.continue();
+    };
+    req.onerror = () => fn();
+  });
+}
+
 export function SetVersion(v) {
   _expectedVersion = v;
 }

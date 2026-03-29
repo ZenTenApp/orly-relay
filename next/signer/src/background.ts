@@ -43,6 +43,9 @@ import {
   mlsDeliverEvent,
   mlsHandleEvent,
   mlsSetTab,
+  mlsBackupGroups,
+  mlsRestoreGroups,
+  mlsRatchetGroup,
 } from './mls-engine';
 import browser from 'webextension-polyfill';
 import { Buffer } from 'buffer';
@@ -697,6 +700,18 @@ async function processNip07Request(req: BackgroundRequestMessage, tabId?: number
 
     case 'mls.deliverEvent':
       mlsDeliverEvent(req.params.subId, req.params.eventJSON);
+      return 'ok';
+
+    case 'mls.backupGroups':
+      await mlsBackupGroups();
+      return 'ok';
+
+    case 'mls.restoreGroups':
+      await mlsRestoreGroups();
+      return 'ok';
+
+    case 'mls.ratchetGroup':
+      await mlsRatchetGroup(req.params.peerHex);
       return 'ok';
 
     default:

@@ -174,6 +174,11 @@ export function ConsoleLog(msg) {
   $rt.dom.ConsoleLog(msg);
 }
 
+// jsbridge: dom.Confirm
+export function Confirm(msg) {
+  return $rt.dom.Confirm(msg);
+}
+
 // jsbridge: dom.PostToSW
 export function PostToSW(msg) {
   $rt.dom.PostToSW(msg);

@@ -153,6 +153,9 @@ func main() {
 		"storeResult":     safeFunc("storeResult", jsStoreResult),
 		"keyPackageEvent": safeFunc("keyPackageEvent", jsKeyPackageEvent),
 		"lastEventTS":     safeFunc("lastEventTS", jsLastEventTS),
+		"backupGroups":    safeFunc("backupGroups", jsBackupGroups),
+		"restoreGroups":   safeFunc("restoreGroups", jsRestoreGroups),
+		"ratchetGroup":    safeFunc("ratchetGroup", jsRatchetGroup),
 		"version":         version.V,
 	}))
 
@@ -332,6 +335,61 @@ func jsListGroups(this js.Value, args []js.Value) any {
 	}
 	out += "]"
 	return out
+}
+
+func jsBackupGroups(this js.Value, args []js.Value) any {
+	if client == nil {
+		return "error: not initialized"
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := client.BackupGroups(ctx); err != nil {
+			sendStatus("backup error: " + err.Error())
+			return
+		}
+		sendStatus("backup ok")
+	}()
+	return nil
+}
+
+func jsRestoreGroups(this js.Value, args []js.Value) any {
+	if client == nil {
+		return "error: not initialized"
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		n, err := client.RestoreGroups(ctx)
+		if err != nil {
+			sendStatus("restore error: " + err.Error())
+			return
+		}
+		sendStatus(fmt.Sprintf("restore ok:%d", n))
+	}()
+	return nil
+}
+
+func jsRatchetGroup(this js.Value, args []js.Value) any {
+	if len(args) < 1 || client == nil {
+		return "error: missing args or not initialized"
+	}
+	peerHex := args[0].String()
+	go func() {
+		peerPub, err := hex.Dec(peerHex)
+		if err != nil {
+			sendStatus("ratchet error: invalid peer: " + err.Error())
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := client.RatchetGroup(ctx, peerPub); err != nil {
+			sendStatus("ratchet error: " + err.Error())
+			return
+		}
+		sendStatus("ratchet ok:" + peerHex)
+	}()
+	return nil
 }
 
 func jsHandleEvent(this js.Value, args []js.Value) any {
