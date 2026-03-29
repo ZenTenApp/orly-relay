@@ -316,7 +316,6 @@ func (c *Client) handleWelcome(ctx context.Context, ev *event.E) error {
 	uw, err := UnwrapGiftWrap(ev, c.crypto)
 	if err != nil {
 		// Gift wraps we can't unwrap (wrong key, corrupt, etc.) are noise — skip.
-		log.D.F("skipping undecryptable gift wrap: %v", err)
 		return nil
 	}
 
@@ -331,7 +330,6 @@ func (c *Client) handleWelcome(ctx context.Context, ev *event.E) error {
 		}
 		return nil
 	default:
-		// Unknown inner kind — skip silently.
 		return nil
 	}
 }
@@ -358,7 +356,7 @@ func (c *Client) processWelcome(ctx context.Context, uw *UnwrappedGiftWrap) erro
 	if err != nil {
 		// Expected after restart — init_key from the consumed KeyPackage is
 		// destroyed per MLS spec, so old welcomes are permanently undecryptable.
-		log.D.F("skipping stale welcome from %s: %v", hex.Enc(senderPub), err)
+		log.I.F("skipping stale welcome from %s: %v", hex.Enc(senderPub), err)
 		return nil
 	}
 

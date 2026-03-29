@@ -9,7 +9,6 @@ import (
 
 	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/nostr/encoders/kind"
 	"next.orly.dev/pkg/nostr/encoders/tag"
 	"next.orly.dev/pkg/nostr/interfaces/signer"
@@ -241,7 +240,7 @@ func (rc *RelayConn) FetchKind0(ctx context.Context, pubkey []byte) *event.E {
 	defer cancel()
 
 	f := filter.New()
-	f.Authors = &tag.T{T: [][]byte{[]byte(hex.Enc(pubkey))}}
+	f.Authors = &tag.T{T: [][]byte{pubkey}}
 	f.Kinds = kind.NewS(kind.New(0))
 	one := uint(1)
 	f.Limit = &one

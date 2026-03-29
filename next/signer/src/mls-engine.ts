@@ -276,8 +276,10 @@ async function discoverTabs(): Promise<void> {
 }
 
 async function pushToTab(data: any) {
-  // Always re-discover — tabs.query is fast (<1ms) and prevents stale IDs.
-  await discoverTabs();
+  // Only discover if we have no known tabs — otherwise use IDs from mlsInit/mlsSendDM.
+  // discoverTabs() clears the set, so calling it unconditionally destroys manually-added
+  // IDs when browser.tabs.query({url:...}) returns empty (requires tabs permission).
+  if (mlsTabIds.size === 0) await discoverTabs();
   if (mlsTabIds.size === 0) return;
   const msg = { ext: 'smesh-signer', type: 'mls-push', data };
   for (const tabId of mlsTabIds) {

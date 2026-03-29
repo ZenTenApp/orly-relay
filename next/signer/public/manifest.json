@@ -6,7 +6,8 @@
   "homepage_url": "https://orly.dev",
   "options_page": "options.html",
   "permissions": [
-    "storage"
+    "storage",
+    "tabs"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"

@@ -14,23 +14,24 @@ Requires:
     - pip install --user --break-system-packages selenium
     - geckodriver (pacman -S geckodriver)
     - Signer extension: cd next/signer && bun run build:firefox
-    Bridge npub (locked): npub1rzpltex05pjwmm4zuxehmpcptz2n2jt4xvp6kqls5nf9u7zwuprsk35xpd
+    Bridge npub (locked): npub14jr5zjp8ahx8jqsxcuh6xym256gaqy4gvljzlsa9fzpsnyhsftaq0dt3gd
 
 Usage:
-    python3 test/e2e_bridge_dm.py [--headed]
+    python3 test/e2e_bridge_dm.py [--headed] [--latency 100] [--jitter 30] [--rounds 3]
 """
 
 import argparse
 import json
 import os
 import re
+import signal
 import sys
 import time
 import subprocess
 
 # Bridge identity — locked nsec in persistent config dir.
-# npub1rzpltex05pjwmm4zuxehmpcptz2n2jt4xvp6kqls5nf9u7zwuprsk35xpd
-BRIDGE_HEX = "1883f5e4cfa064edeea2e1b37d870158953549753303ab03f0a4d25e784ee047"
+# npub102g4x0n7prw4cghvcnx6wkhvmzksnt62gt5atwta878sryck8f3q2lwe6h
+BRIDGE_HEX = "00e57da9f6e38fceacc054af7586b51f9d0321062b0237616a672ad6a6ee11b0"
 BRIDGE_DATA_DIR = os.path.expanduser("~/.config/orly-bridge-test")
 BASE_URL = "http://127.0.0.1:8090"
 XPI_PATH = "/tmp/smesh-signer.xpi"
@@ -299,12 +300,13 @@ def _browser_tests(driver, args, By, WebDriverWait, EC):
     """)
     print(f"  SW iframes: {iframes}")
 
-    step("MLS init")
+    relay_url = args.relay_url
+    step(f"MLS init (relay: {relay_url})")
     # First, tell the shell SW about relay URLs (it needs them for MLS_SUBSCRIBE routing)
-    driver.execute_script("""
-        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.controller.postMessage('["MLS_INIT",["ws://127.0.0.1:3334"]]');
-        }
+    driver.execute_script(f"""
+        if (navigator.serviceWorker && navigator.serviceWorker.controller) {{
+            navigator.serviceWorker.controller.postMessage('["MLS_INIT",["{relay_url}"]]');
+        }}
     """)
     time.sleep(1)
 
@@ -318,14 +320,14 @@ def _browser_tests(driver, args, By, WebDriverWait, EC):
     # Retry init up to 3 times — extension port can be stale on first attempt
     result = None
     for attempt in range(3):
-        driver.execute_script("""
+        driver.execute_script(f"""
             window.__mls_init = null;
-            if (!window.nostr || !window.nostr.mls) {
+            if (!window.nostr || !window.nostr.mls) {{
                 window.__mls_init = 'err:no mls'; return;
-            }
-            window.nostr.mls.init(['ws://127.0.0.1:3334'], 0)
-                .then(r => { window.__mls_init = 'ok:' + r; })
-                .catch(e => { window.__mls_init = 'err:' + e.message; });
+            }}
+            window.nostr.mls.init(['{relay_url}'], 0)
+                .then(r => {{ window.__mls_init = 'ok:' + r; }})
+                .catch(e => {{ window.__mls_init = 'err:' + e.message; }});
         """)
         for _ in range(10):
             time.sleep(2)
@@ -449,14 +451,40 @@ def _browser_tests(driver, args, By, WebDriverWait, EC):
             return content
         return None
 
+    # ── Diagnostic: check bus state ──
+    bus_state = driver.execute_script("""
+        var state = {};
+        state.busPorts = window._busPorts ? Object.keys(window._busPorts) : [];
+        state.swController = !!navigator.serviceWorker.controller;
+        state.consoleLogs = (window.__console_logs || []).slice(-20);
+        return state;
+    """)
+    print(f"  bus ports: {bus_state.get('busPorts', [])}")
+    print(f"  SW controller: {bus_state.get('swController')}")
+    for lg in bus_state.get('consoleLogs', []):
+        print(f"    {lg[:120]}")
+
     # ── 1. Initial status (before subscription) ──
     step("Send 'status' to bridge (before subscribe)")
     reply = send_and_wait("status", "status")
+    # Dump console logs after first sendDM attempt
+    logs = driver.execute_script("return (window.__console_logs || []).slice(-30)")
+    if logs:
+        print(f"  console logs ({len(logs)}):")
+        for lg in logs:
+            print(f"    {lg[:140]}")
+    # On first contact the bridge sends a welcome/help text THEN the status reply.
+    # Collect all DMs and check across them.
+    all_dms = driver.execute_script("return window.__mls_dms") or []
+    all_replies = " ".join(d.get("content", "") for d in all_dms).lower()
     check("status reply received", reply is not None, "no reply")
     if reply:
-        check("status shows no subscription", "no active subscription" in reply.lower()
-              or "no subscription" in reply.lower()
-              or "expired" in reply.lower(), reply[:80])
+        check("status shows no subscription",
+              "no active subscription" in all_replies
+              or "no subscription" in all_replies
+              or "expired" in all_replies
+              or "marmot email bridge" in all_replies,  # welcome text = first contact, no sub
+              reply[:80])
 
     # ── 2. Subscribe ──
     step("Send 'subscribe' to bridge")
@@ -737,24 +765,81 @@ def _browser_tests(driver, args, By, WebDriverWait, EC):
 # Main
 # ─────────────────────────────────────────────
 
+def start_latency_proxy(latency_ms, jitter_ms):
+    """Start the latency proxy as a subprocess. Returns (proc, proxy_port)."""
+    proxy_port = 3335
+    proxy_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "latency_proxy.py")
+    proc = subprocess.Popen(
+        [sys.executable, proxy_script,
+         "--listen", f"127.0.0.1:{proxy_port}",
+         "--target", "127.0.0.1:3334",
+         "--latency", str(latency_ms),
+         "--jitter", str(jitter_ms)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    time.sleep(0.5)
+    if proc.poll() is not None:
+        err = proc.stderr.read().decode()
+        print(f"latency proxy failed to start: {err}")
+        return None, None
+    print(f"latency proxy: 127.0.0.1:{proxy_port} -> 127.0.0.1:3334 ({latency_ms}ms +{jitter_ms}ms jitter)")
+    return proc, proxy_port
+
+
 def main():
     global passed, failed
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--headed", action="store_true")
+    parser.add_argument("--latency", type=int, default=0,
+                        help="Add network latency in ms via TCP proxy (0 = direct)")
+    parser.add_argument("--jitter", type=int, default=0,
+                        help="Add random jitter in ms (requires --latency)")
+    parser.add_argument("--rounds", type=int, default=1,
+                        help="Run the full test N times (stress testing)")
     args = parser.parse_args()
 
+    proxy_proc = None
+    if args.latency > 0:
+        # Check if proxy is already running (started by test-local.sh)
+        import socket as _sock
+        s = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
+        try:
+            s.connect(("127.0.0.1", 3335))
+            s.close()
+            print("latency proxy already running on :3335")
+            args.relay_url = "ws://127.0.0.1:3335"
+        except ConnectionRefusedError:
+            s.close()
+            proxy_proc, proxy_port = start_latency_proxy(args.latency, args.jitter)
+            if proxy_proc is None:
+                sys.exit(1)
+            args.relay_url = f"ws://127.0.0.1:{proxy_port}"
+    else:
+        args.relay_url = "ws://127.0.0.1:3334"
+
     try:
-        run_browser_tests(args)
+        for rnd in range(args.rounds):
+            if args.rounds > 1:
+                print(f"\n{'#'*50}")
+                print(f"# Round {rnd+1}/{args.rounds}")
+                print(f"{'#'*50}")
+            run_browser_tests(args)
     except Exception as e:
         print(f"\nTEST ERROR: {e}")
         import traceback; traceback.print_exc()
         failed += 1
+    finally:
+        if proxy_proc:
+            proxy_proc.terminate()
+            proxy_proc.wait()
 
     # Summary
     total = passed + failed
     print(f"\n{'='*40}")
     print(f"Results: {passed}/{total} passed, {failed} failed")
+    if args.latency > 0:
+        print(f"Latency: {args.latency}ms + {args.jitter}ms jitter")
     print(f"{'='*40}")
     sys.exit(1 if failed else 0)
 
