@@ -106,6 +106,9 @@ pkg/database/testrealy
 cmd/benchmark/external/**
 private*
 
+# Generated version files (build.sh creates these before tinyjs compile)
+next/*/version_gen.go
+
 # Build outputs
 build/orly-*
 build/libsecp256k1-*

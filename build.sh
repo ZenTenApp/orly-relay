@@ -13,6 +13,12 @@ fi
 
 DIST=app/smesh3
 
+# Generate version_gen.go in each tinyjs target — single source of truth from pkg/version/version.
+VER=$(cat pkg/version/version)
+for dir in next/sm3sh next/sw next/sw-relay; do
+  printf 'package main\n\nconst version = "%s"\n' "$VER" > "$dir/version_gen.go"
+done
+
 # Wipe compiled .mjs files in each target dir (not subdirs — $runtime is safe).
 # Preserve hand-written files: mls-bridge.mjs
 for dir in "$DIST" "$DIST/\$sw" "$DIST/\$sw-relay"; do

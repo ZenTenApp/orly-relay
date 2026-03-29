@@ -84,37 +84,13 @@ func NewClient(crypto CryptoProvider, store GroupStore, relay RelayConnection, r
 		groupsChanged: make(chan struct{}, 1),
 	}
 
-	// Load persisted groups
+	// Flush persisted groups — NewClient generates a fresh kpp each time,
+	// so any persisted group state references a dead init_key. Groups will
+	// be re-established on the next SendDM via establishGroup.
 	ids, err := store.ListGroups()
 	if err == nil {
 		for _, id := range ids {
-			data, err := store.LoadGroup(id)
-			if err != nil {
-				log.W.F("failed to load group %x: %v", id, err)
-				continue
-			}
-			gs, err := unmarshalGroupState(data)
-			if err != nil {
-				log.W.F("failed to unmarshal group %x: %v", id, err)
-				continue
-			}
-			if len(gs.MLSState) == 0 {
-				_ = store.DeleteGroup(id)
-				continue
-			}
-			group, err := mls.UnmarshalGroup(gs.MLSState)
-			if err != nil {
-				log.W.F("failed to restore MLS group %x: %v", id, err)
-				_ = store.DeleteGroup(id)
-				continue
-			}
-			c.groups[string(gs.GroupID)] = &GroupState{
-				GroupID:      gs.GroupID,
-				NostrGroupID: gs.NostrGroupID,
-				PeerPub:      gs.PeerPub,
-				group:        group,
-				mlsBytes:     gs.MLSState,
-			}
+			_ = store.DeleteGroup(id)
 		}
 	}
 

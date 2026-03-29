@@ -16,6 +16,7 @@ import (
 	"next.orly.dev/pkg/nostr/encoders/filter"
 	"next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/nostr/protocol/marmot"
+	"next.orly.dev/pkg/version"
 )
 
 var (
@@ -152,6 +153,7 @@ func main() {
 		"storeResult":     safeFunc("storeResult", jsStoreResult),
 		"keyPackageEvent": safeFunc("keyPackageEvent", jsKeyPackageEvent),
 		"lastEventTS":     safeFunc("lastEventTS", jsLastEventTS),
+		"version":         version.V,
 	}))
 
 

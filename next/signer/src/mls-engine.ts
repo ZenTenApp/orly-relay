@@ -105,6 +105,33 @@ function setupStoreCallbacks() {
   };
 }
 
+// --- Epoch Check ---
+
+async function marmotEpochCheck(wasmVer: string): Promise<void> {
+  try {
+    const db = await gdbOpenWrite();
+    const tx = db.transaction(GDB_STORE, 'readonly');
+    const req = tx.objectStore(GDB_STORE).get('__version__');
+    const stored: string | undefined = await new Promise((resolve) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(undefined);
+    });
+    if (stored === wasmVer) { db.close(); return; }
+    console.warn('[mls-engine] version epoch mismatch: stored=' + (stored || 'none') + ' running=' + wasmVer + ' — flushing marmot groups');
+    const flushTx = db.transaction(GDB_STORE, 'readwrite');
+    const store = flushTx.objectStore(GDB_STORE);
+    store.clear();
+    store.put(wasmVer, '__version__');
+    await new Promise<void>((resolve) => {
+      flushTx.oncomplete = () => resolve();
+      flushTx.onerror = () => resolve();
+    });
+    db.close();
+  } catch (e) {
+    console.warn('[mls-engine] epoch check failed:', e);
+  }
+}
+
 // --- WASM Loading ---
 
 // Fix 2d: guard against concurrent instantiation
@@ -145,6 +172,11 @@ async function doLoadWasm(): Promise<void> {
   }
 
   setupStoreCallbacks();
+
+  // Epoch check: flush stale marmot groups if WASM version changed.
+  const wasmVer = (globalThis as any)._marmot?.version;
+  if (wasmVer) await marmotEpochCheck(wasmVer);
+
   wasmReady = true;
 }
 

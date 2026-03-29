@@ -2,10 +2,11 @@
 // Port of smesh2/db.js with same schema and query logic.
 
 const DB_NAME = 'sm3sh';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let _db = null;
 let _dbPromise = null;
+let _expectedVersion = '';
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -26,6 +27,7 @@ function openDB() {
         dms.createIndex('peer', 'peer', { unique: false });
         dms.createIndex('peer_ts', ['peer', 'created_at'], { unique: false });
       }
+      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta');
     };
     req.onblocked = () => { console.warn('[sm3sh-sw] IDB upgrade blocked'); };
     req.onsuccess = () => {
@@ -33,9 +35,39 @@ function openDB() {
       db._closed = false;
       db.onclose = () => { db._closed = true; };
       db.onversionchange = () => { db.close(); db._closed = true; _db = null; };
-      resolve(db);
+      if (_expectedVersion) {
+        _epochCheck(db).then(() => resolve(db)).catch(() => resolve(db));
+      } else {
+        resolve(db);
+      }
     };
     req.onerror = () => reject(req.error);
+  });
+}
+
+function _epochCheck(db) {
+  return new Promise((resolve) => {
+    const tx = db.transaction('meta', 'readonly');
+    const store = tx.objectStore('meta');
+    const req = store.get('_version');
+    req.onsuccess = () => {
+      const stored = req.result;
+      if (stored === _expectedVersion) { resolve(); return; }
+      console.warn('[sm3sh-sw] version epoch mismatch: stored=' + (stored || 'none') + ' running=' + _expectedVersion + ' — flushing IDB');
+      _flushAndStamp(db).then(resolve);
+    };
+    req.onerror = () => { _flushAndStamp(db).then(resolve); };
+  });
+}
+
+function _flushAndStamp(db) {
+  return new Promise((resolve) => {
+    const names = ['profiles', 'relays', 'events', 'dms'];
+    const tx = db.transaction([...names, 'meta'], 'readwrite');
+    for (const name of names) tx.objectStore(name).clear();
+    tx.objectStore('meta').put(_expectedVersion, '_version');
+    tx.oncomplete = () => { resolve(); };
+    tx.onerror = () => { resolve(); };
   });
 }
 
@@ -216,4 +248,8 @@ export function GetConversationList(fn) {
     };
     req.onerror = () => { console.warn('GetConversationList error:', req.error); fn('[]'); };
   });
+}
+
+export function SetVersion(v) {
+  _expectedVersion = v;
 }

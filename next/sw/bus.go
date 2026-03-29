@@ -24,7 +24,7 @@ var (
 func connectBus() {
 	bus = bc.Open("smesh-bus", func(msg string) { onBusMessage(msg) })
 	// Ask satellite SWs to re-announce readiness (shell may have restarted).
-	bc.Send(bus, "{\"from\":\"shell\",\"to\":\"*\",\"msg\":[\"PING\"]}")
+	bc.Send(bus, "{\"from\":\"shell\",\"to\":\"*\",\"msg\":[\"PING\","+jstr(version)+"]}")
 	if myPubkey == "" {
 		broadcastToClients("[\"NEED_IDENTITY\"]")
 	}
@@ -76,6 +76,12 @@ func onBusMessage(raw string) {
 
 	// READY handshake — satellite SW just connected to bus.
 	if msgType == "READY" {
+		satVer := w.str() // may be empty for old satellites
+		if satVer != "" && satVer != version {
+			sw.Log("shell: version mismatch from " + from + ": " + satVer + " != " + version)
+			broadcastToClients("[\"FORCE_UPDATE_SW\"," + jstr(from) + "]")
+			return
+		}
 		flushQueue(from)
 		return
 	}

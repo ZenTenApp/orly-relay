@@ -25,3 +25,7 @@ func QueryDMs(peer string, limit int, until int64, fn func(string)) { panic("jsb
 // GetConversationList returns all DM conversations.
 // Calls fn with a JSON array of conversation summaries.
 func GetConversationList(fn func(string)) { panic("jsbridge") }
+
+// SetVersion sets the expected app version for epoch checks.
+// On Open, if stored version != this version, all data stores are flushed.
+func SetVersion(v string) { panic("jsbridge") }

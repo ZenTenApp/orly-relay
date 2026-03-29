@@ -137,6 +137,25 @@ if ('serviceWorker' in navigator) {
     if (d === 'update-activated') {
       window.location.reload();
     }
+    // Version epoch: shell SW detected satellite version mismatch — force re-register.
+    if (Array.isArray(d) && d[0] === 'FORCE_UPDATE_SW') {
+      var dir = d[1];
+      console.warn('FORCE_UPDATE_SW: re-registering ' + dir);
+      var isLocalDev = location.hostname === 'localhost' || /^127\.0\.0\.\d+$/.test(location.hostname);
+      if (isLocalDev) {
+        // Dev mode: reload the iframe to pick up new SW.
+        var iframe = document.getElementById('sw-iframe-' + dir);
+        if (iframe) iframe.contentWindow.location.reload();
+      } else {
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          for (var i = 0; i < regs.length; i++) {
+            if (regs[i].scope.indexOf('/' + dir + '/') !== -1) {
+              regs[i].unregister().then(function() { regSW(dir); });
+            }
+          }
+        });
+      }
+    }
   });
 
   document.getElementById('update-snackbar').addEventListener('click', () => {

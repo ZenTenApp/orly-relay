@@ -2,6 +2,7 @@ package main
 
 import (
 	"common/jsbridge/bc"
+	"common/jsbridge/idb"
 	"common/jsbridge/sw"
 )
 
@@ -11,6 +12,7 @@ import (
 var bus bc.BC
 
 func main() {
+	idb.SetVersion(version)
 	initSharedState()
 	initRouter()
 	initRelayProxy()
@@ -21,7 +23,7 @@ func main() {
 	connectBus()
 	// Send READY on every start — not just onActivate, which doesn't re-fire
 	// when the browser stops and restarts the SW thread.
-	busSend("shell", "[\"READY\"]")
+	busSend("shell", "[\"READY\","+jstr(version)+"]")
 }
 
 func onInstall(event sw.Event) {
@@ -34,7 +36,7 @@ func onInstall(event sw.Event) {
 func onActivate(event sw.Event) {
 	sw.WaitUntil(event, func(done func()) {
 		sw.ClaimClients(func() {
-				busSend("shell", "[\"READY\"]")
+				busSend("shell", "[\"READY\","+jstr(version)+"]")
 			done()
 		})
 	})
@@ -78,7 +80,7 @@ func onBusMessage(raw string) {
 
 	switch msgType {
 	case "PING":
-		busSend("shell", "[\"READY\"]")
+		busSend("shell", "[\"READY\","+jstr(version)+"]")
 		return
 
 	// Identity propagation.
