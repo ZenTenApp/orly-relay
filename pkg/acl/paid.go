@@ -223,6 +223,11 @@ func (p *Paid) GetAliasByPubkey(pubkeyHex string) (string, error) {
 	return p.db.GetAliasByPubkey(pubkeyHex)
 }
 
+// GetAliasesByPubkey returns all aliases for a pubkey.
+func (p *Paid) GetAliasesByPubkey(pubkeyHex string) ([]string, error) {
+	return p.db.GetAliasesByPubkey(pubkeyHex)
+}
+
 // GetPubkeyByAlias returns the pubkey for an alias, or "" if not found.
 func (p *Paid) GetPubkeyByAlias(alias string) (string, error) {
 	return p.db.GetPubkeyByAlias(alias)

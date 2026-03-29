@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/emersion/go-mls"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/nostr/encoders/filter"
 	"next.orly.dev/pkg/nostr/encoders/hex"
 	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // mockRelay is a test relay that routes events between connected clients.
@@ -104,6 +105,70 @@ func TestKeyPackageRoundTrip(t *testing.T) {
 	require.NotNil(t, kp)
 
 	assert.Equal(t, kpp.Public.RawBytes(), kp.RawBytes())
+}
+
+func TestGroupMarshalRoundTrip(t *testing.T) {
+	alice := generateSigner(t)
+	bob := generateSigner(t)
+
+	aliceKPP, err := GenerateKeyPackage(&LocalCrypto{Sign: alice})
+	require.NoError(t, err)
+	bobKPP, err := GenerateKeyPackage(&LocalCrypto{Sign: bob})
+	require.NoError(t, err)
+
+	// Alice creates group
+	gs, welcome, _, err := CreateDMGroup(aliceKPP, &bobKPP.Public, alice.Pub(), bob.Pub(), nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, gs.mlsBytes, "mlsBytes must be set after CreateDMGroup")
+
+	// Bob joins
+	bobGS, err := JoinDMGroup(welcome, bobKPP, alice.Pub())
+	require.NoError(t, err)
+	require.NotEmpty(t, bobGS.mlsBytes, "mlsBytes must be set after JoinDMGroup")
+
+	// Send a message to advance epoch, then persist+restore Alice's group
+	plaintext := []byte("test persistence")
+	ct, err := gs.Encrypt(plaintext)
+	require.NoError(t, err)
+
+	// Re-marshal after encrypt (epoch may have advanced)
+	aliceBytes, err := gs.group.Marshal()
+	require.NoError(t, err)
+
+	// Restore from bytes and verify decryption still works from Bob's side
+	_, err = bobGS.Decrypt(ct)
+	require.NoError(t, err)
+
+	// Re-marshal Bob's state after decrypt
+	bobBytes, err := bobGS.group.Marshal()
+	require.NoError(t, err)
+
+	// Restore both sides from serialized state
+	restoredAlice, err := mls.UnmarshalGroup(aliceBytes)
+	require.NoError(t, err)
+	restoredBob, err := mls.UnmarshalGroup(bobBytes)
+	require.NoError(t, err)
+
+	// Verify restored groups can still encrypt/decrypt
+	aliceGS2 := &GroupState{group: restoredAlice}
+	bobGS2 := &GroupState{group: restoredBob}
+
+	msg2 := []byte("after restore")
+	ct2, err := aliceGS2.Encrypt(msg2)
+	require.NoError(t, err)
+
+	dec2, err := bobGS2.Decrypt(ct2)
+	require.NoError(t, err)
+	assert.Equal(t, msg2, dec2)
+
+	// And the reverse direction
+	msg3 := []byte("bob replies after restore")
+	ct3, err := bobGS2.Encrypt(msg3)
+	require.NoError(t, err)
+
+	dec3, err := aliceGS2.Decrypt(ct3)
+	require.NoError(t, err)
+	assert.Equal(t, msg3, dec3)
 }
 
 func TestGroupCreateJoinEncryptDecrypt(t *testing.T) {

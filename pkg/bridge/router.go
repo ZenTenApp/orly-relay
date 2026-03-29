@@ -6,6 +6,18 @@ import (
 	"next.orly.dev/pkg/lol/log"
 )
 
+const helpText = "Marmot Email Bridge\n\n" +
+	"Commands:\n" +
+	"  help — Show this message\n" +
+	"  subscribe — Free tier: npub-only email (20s send limit)\n" +
+	"  subscribe <alias> — Custom alias + paid tier (5s send limit)\n" +
+	"  status — Check your subscription status\n\n" +
+	"To send an email, DM this bridge with:\n\n" +
+	"To: recipient@example.com\n" +
+	"Subject: Your subject\n\n" +
+	"Your message here.\n\n" +
+	"All standard email headers (Cc, Bcc, Attachment) will also be included if added."
+
 // Router dispatches incoming DMs to the appropriate handler.
 type Router struct {
 	subHandler *SubscriptionHandler
@@ -51,6 +63,11 @@ func (r *Router) RouteDM(ctx context.Context, senderPubkeyHex, content string) {
 			r.reply(senderPubkeyHex, "Subscriptions are not configured on this bridge.")
 		}
 		return
+
+	case DMCommandHelp:
+		log.I.F("help command from %s", senderPubkeyHex)
+		r.reply(senderPubkeyHex, helpText)
+		return
 	}
 
 	// Check if it's an outbound email
@@ -66,17 +83,12 @@ func (r *Router) RouteDM(ctx context.Context, senderPubkeyHex, content string) {
 
 	// Not a recognized command or email — auto-reply with help
 	log.I.F("unrecognized DM from %s", senderPubkeyHex)
-	r.reply(senderPubkeyHex,
-		"Marmot Email Bridge\n\n"+
-			"Commands:\n"+
-			"  subscribe — Subscribe with npub-only email\n"+
-			"  subscribe <alias> — Subscribe with a custom email alias\n"+
-			"  status — Check your subscription status\n\n"+
-			"To send an email, format your DM like:\n\n"+
-			"To: recipient@example.com\n"+
-			"Subject: Your subject\n\n"+
-			"Your message here.",
-	)
+	r.reply(senderPubkeyHex, helpText)
+}
+
+// SendWelcome sends the help text to a new peer (triggered by group establishment).
+func (r *Router) SendWelcome(pubkeyHex string) {
+	r.reply(pubkeyHex, helpText)
 }
 
 func (r *Router) reply(pubkeyHex, content string) {

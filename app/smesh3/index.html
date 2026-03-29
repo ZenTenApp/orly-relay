@@ -88,10 +88,29 @@ body.dark {
 <div id="update-snackbar">new version available — click to update</div>
 <script>
 if ('serviceWorker' in navigator) {
+  // Queue for relay→shell messages that arrive before controller is set.
+  // After hard refresh or deploy, controller is null until claimClients() completes.
+  // Without this queue, READY from the relay SW is silently dropped and the shell
+  // SW never learns the relay is alive → all messages queue forever.
+  var _pendingBus = [];
+
+  function busToShell(d) {
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage(d);
+    } else {
+      _pendingBus.push(d);
+    }
+  }
+
+  navigator.serviceWorker.addEventListener('controllerchange', function() {
+    if (_pendingBus.length && navigator.serviceWorker.controller) {
+      for (var i = 0; i < _pendingBus.length; i++)
+        navigator.serviceWorker.controller.postMessage(_pendingBus[i]);
+      _pendingBus = [];
+    }
+  });
+
   navigator.serviceWorker.register('./$sw/$entry.mjs', { type: 'module', scope: '/' }).then(reg => {
-    // After hard refresh, controller is null and onActivate doesn't re-fire.
-    // Ask the active SW to re-claim so controllerchange fires and queued
-    // messages flush.
     if (!navigator.serviceWorker.controller && reg.active) {
       reg.active.postMessage('CLAIM');
     }
@@ -102,7 +121,6 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (event) => {
     const d = event.data;
     // Bus relay: shell SW → page → satellite SWs via _busPorts.
-    // Must run here (not in WASM-loaded dom.mjs) so bus is active before WASM loads.
     if (typeof d === 'string' && d.length > 0 && d[0] === '{') {
       var ports = window._busPorts;
       if (ports) for (var name in ports) ports[name].postMessage(d);
@@ -141,14 +159,15 @@ if ('serviceWorker' in navigator) {
     try {
       var reg = await navigator.serviceWorker.register('/'+dir+'/$entry.mjs',{type:'module',scope:'/'+dir+'/',updateViaCache:'none'});
       reg.update().catch(function(){});
+      var _pongOk = false;
       function sendPort(w) {
         var ch = new MessageChannel();
         w.postMessage({type:'bus-port'},[ch.port2]);
         window._busPorts[dir] = ch.port1;
         ch.port1.onmessage = function(ev) {
           var d = ev.data;
-          if(typeof d==='string'&&d.length>0&&d[0]==='{'&&navigator.serviceWorker.controller)
-            navigator.serviceWorker.controller.postMessage(d);
+          if(d === 'PONG') { _pongOk = true; return; }
+          if(typeof d==='string'&&d.length>0&&d[0]==='{') busToShell(d);
         };
       }
       var sw = reg.active;
@@ -163,6 +182,38 @@ if ('serviceWorker' in navigator) {
         sw = reg.installing||reg.waiting;
         if(sw) sw.addEventListener('statechange',function(){if(sw.state==='activated')sendPort(sw);});
       }
+      // --- Layer 1: Keepalive (10s) ---
+      // postMessage creates ExtendableMessageEvent → resets termination timer.
+      // SW calls waitUntil(25s promise) on each → overlapping holds.
+      // Detects SW restart (new Worker instance) → re-establishes MessagePort.
+      var _lastPortTarget = sw || null;
+      setInterval(function(){
+        var w = reg.active;
+        if(!w) return;
+        if(w !== _lastPortTarget) {
+          _lastPortTarget = w;
+          sendPort(w);
+        } else {
+          w.postMessage('keepalive');
+        }
+      }, 10000);
+      // --- Layer 2: Health check (30s) ---
+      // PING via MessagePort, expect PONG within 3s.
+      // On failure: re-send bus-port to recover from terminated/restarted SW.
+      var _failCount = 0;
+      setInterval(function(){
+        var port = window._busPorts[dir];
+        if(!port) return;
+        _pongOk = false;
+        try { port.postMessage('PING'); } catch(e) { _failCount++; return; }
+        setTimeout(function(){
+          if(_pongOk) { _failCount = 0; return; }
+          _failCount++;
+          console.warn(dir+' health check failed ('+_failCount+')');
+          var w = reg.active;
+          if(w) { _lastPortTarget = w; sendPort(w); }
+        }, 3000);
+      }, 30000);
     } catch(e) { console.error(dir+' SW failed:',e); }
   }
 
@@ -179,8 +230,7 @@ if ('serviceWorker' in navigator) {
     window.addEventListener('message', function(ev) {
       if(ev.origin !== origin) return;
       var d = ev.data;
-      if(typeof d==='string'&&d.length>0&&d[0]==='{'&&navigator.serviceWorker.controller)
-        navigator.serviceWorker.controller.postMessage(d);
+      if(typeof d==='string'&&d.length>0&&d[0]==='{') busToShell(d);
     });
     // Forward shell→satellite messages via iframe.
     window._busPorts[dir] = {postMessage: function(msg) { iframe.contentWindow.postMessage(msg, origin); }};

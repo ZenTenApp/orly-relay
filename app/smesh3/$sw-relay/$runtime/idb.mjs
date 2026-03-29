@@ -54,17 +54,33 @@ export function Open(fn) {
 }
 
 export function SaveEvent(eventJSON, fn) {
-  const event = JSON.parse(eventJSON);
+  let event;
+  try { event = JSON.parse(eventJSON); } catch (e) {
+    console.error('SaveEvent JSON parse error:', e.message);
+    fn(false); return;
+  }
   getDB().then(db => {
-    const tx = db.transaction('events', 'readwrite');
-    const store = tx.objectStore('events');
-    const req = store.put(event);
-    req.onsuccess = () => fn(true);
-    req.onerror = () => {
-      if (req.error?.name === 'ConstraintError') fn(false);
-      else { console.warn('SaveEvent error:', req.error); fn(false); }
-    };
-  });
+    try {
+      const tx = db.transaction('events', 'readwrite');
+      const store = tx.objectStore('events');
+      const req = store.put(event);
+      req.onsuccess = () => { try { fn(true); } catch(e) { _busErr('SaveEvent cb', e); } };
+      req.onerror = () => {
+        if (req.error?.name === 'ConstraintError') fn(false);
+        else { console.warn('SaveEvent error:', req.error); fn(false); }
+      };
+    } catch (e) {
+      console.error('SaveEvent tx error:', e.message);
+      _busErr('SaveEvent tx', e);
+      fn(false);
+    }
+  }).catch(e => { console.error('SaveEvent getDB error:', e.message); _busErr('SaveEvent getDB', e); fn(false); });
+}
+
+function _busErr(ctx, e) {
+  if (self._busPort) {
+    self._busPort.postMessage('{"from":"relay","to":"shell","msg":["LOG","relay","IDB CRASH ' + ctx + ': ' + String(e.message).replace(/"/g, '\\"').replace(/\n/g, ' ') + '"]}');
+  }
 }
 
 export function QueryEvents(filterJSON, fn) {

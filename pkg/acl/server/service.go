@@ -838,13 +838,18 @@ func (s *ACLService) GetSubscription(ctx context.Context, req *orlyaclv1.PubkeyR
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "subscription not found: %v", err)
 	}
-	alias, _ := paid.GetAliasByPubkey(req.Pubkey)
+	aliases, _ := paid.GetAliasesByPubkey(req.Pubkey)
+	first := ""
+	if len(aliases) > 0 {
+		first = aliases[0]
+	}
 	return &orlyaclv1.SubscriptionResponse{
 		Pubkey:    sub.PubkeyHex,
-		Alias:     alias,
+		Alias:     first,
 		ExpiresAt: sub.ExpiresAt.Unix(),
 		CreatedAt: sub.CreatedAt.Unix(),
-		HasAlias:  alias != "",
+		HasAlias:  len(aliases) > 0,
+		Aliases:   aliases,
 	}, nil
 }
 

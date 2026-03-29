@@ -90,6 +90,7 @@ type Database interface {
 	ListPaidSubscriptions() ([]*PaidSubscription, error)
 	ClaimAlias(alias, pubkeyHex string) error
 	GetAliasByPubkey(pubkeyHex string) (string, error)
+	GetAliasesByPubkey(pubkeyHex string) ([]string, error)
 	GetPubkeyByAlias(alias string) (string, error)
 	IsAliasTaken(alias string) (bool, error)
 

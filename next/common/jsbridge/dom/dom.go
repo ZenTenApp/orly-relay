@@ -117,6 +117,9 @@ func PushState(path string) { panic("jsbridge") }
 // ReplaceState replaces the current browser history entry with the given path.
 func ReplaceState(path string) { panic("jsbridge") }
 
+// LocationReload reloads the current page.
+func LocationReload() { panic("jsbridge") }
+
 // GetPath returns the current location.pathname.
 func GetPath() string { panic("jsbridge") }
 

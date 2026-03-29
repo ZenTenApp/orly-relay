@@ -33,6 +33,9 @@ type EventStream interface {
 // DMHandler is called when an incoming DM is decrypted.
 type DMHandler func(senderPub []byte, plaintext []byte)
 
+// GroupJoinedHandler is called when a new DM group is established (Welcome processed).
+type GroupJoinedHandler func(peerPub []byte)
+
 // Client manages Marmot DM conversations. It holds MLS group state for
 // active 1:1 conversations and handles the lifecycle of key packages,
 // welcomes, and encrypted messages.
@@ -41,7 +44,8 @@ type Client struct {
 	store  GroupStore
 	relay  RelayConnection
 	relays []string // relay URLs for key package discovery
-	onDM   DMHandler
+	onDM          DMHandler
+	onGroupJoined GroupJoinedHandler
 	kpp    *mls.KeyPairPackage // our current key pair package
 	groups map[string]*GroupState
 	mu     sync.RWMutex
@@ -94,11 +98,13 @@ func NewClient(crypto CryptoProvider, store GroupStore, relay RelayConnection, r
 				log.W.F("failed to unmarshal group %x: %v", id, err)
 				continue
 			}
-			// Can't re-hydrate mls.Group from bytes with current go-mls API.
-			// Groups without MLS state are dead weight — they generate
-			// subscription noise and decrypt failures. Remove them; they'll
-			// be re-established via fresh welcome exchange when needed.
 			if len(gs.MLSState) == 0 {
+				_ = store.DeleteGroup(id)
+				continue
+			}
+			group, err := mls.UnmarshalGroup(gs.MLSState)
+			if err != nil {
+				log.W.F("failed to restore MLS group %x: %v", id, err)
 				_ = store.DeleteGroup(id)
 				continue
 			}
@@ -106,6 +112,7 @@ func NewClient(crypto CryptoProvider, store GroupStore, relay RelayConnection, r
 				GroupID:      gs.GroupID,
 				NostrGroupID: gs.NostrGroupID,
 				PeerPub:      gs.PeerPub,
+				group:        group,
 				mlsBytes:     gs.MLSState,
 			}
 		}
@@ -117,6 +124,11 @@ func NewClient(crypto CryptoProvider, store GroupStore, relay RelayConnection, r
 // OnDM registers a handler for incoming decrypted DMs.
 func (c *Client) OnDM(handler DMHandler) {
 	c.onDM = handler
+}
+
+// OnGroupJoined registers a handler called when a new DM group is established.
+func (c *Client) OnGroupJoined(handler GroupJoinedHandler) {
+	c.onGroupJoined = handler
 }
 
 // SetLastEventTS sets the high-water mark for processed events.
@@ -143,6 +155,21 @@ func (c *Client) PublishKeyPackage(ctx context.Context) error {
 		return err
 	}
 	return c.relay.Publish(ctx, ev)
+}
+
+// rotateKeyPackage generates a fresh KP and publishes it. Called after
+// processing a Welcome — the consumed init_key is destroyed per MLS spec,
+// so the old KP on relays is now useless.
+func (c *Client) rotateKeyPackage(ctx context.Context) {
+	kpp, err := GenerateKeyPackage(c.crypto)
+	if err != nil {
+		log.W.F("rotate key package: generate: %v", err)
+		return
+	}
+	c.kpp = kpp
+	if err := c.PublishKeyPackage(ctx); err != nil {
+		log.W.F("rotate key package: publish: %v", err)
+	}
 }
 
 // SendDM sends an encrypted DM to the given recipient. If no group exists,
@@ -178,6 +205,9 @@ func (c *Client) SendDM(ctx context.Context, recipientPub []byte, plaintext []by
 	if err != nil {
 		return err
 	}
+
+	// Re-persist after encrypt — MLS state may have advanced.
+	c.persistGroup(gs)
 
 	// Track this event ID so we skip it when it comes back via subscription.
 	c.mu.Lock()
@@ -252,20 +282,23 @@ func (c *Client) establishGroup(ctx context.Context, peerPub []byte) (*GroupStat
 
 // HandleEvent processes an incoming event. Call this from the subscription loop.
 func (c *Client) HandleEvent(ctx context.Context, ev *event.E) error {
-	// Skip events we already processed or published.
+	// Atomic check-and-set to avoid TOCTOU: a separate read-lock check
+	// followed by write-lock set would let two goroutines both pass the
+	// check for the same event.
 	evKey := string(ev.ID)
-	c.mu.RLock()
-	_, seen := c.seenIDs[evKey]
-	c.mu.RUnlock()
-	if seen {
+	c.mu.Lock()
+	if _, seen := c.seenIDs[evKey]; seen {
+		c.mu.Unlock()
 		return nil
 	}
-
-	// Mark as seen before processing and update high-water mark.
-	c.mu.Lock()
 	c.seenIDs[evKey] = struct{}{}
 	if ev.CreatedAt > c.lastEventTS {
 		c.lastEventTS = ev.CreatedAt
+	}
+	// Prune seenIDs to cap memory. 4096 is ~128KB of 32-byte event IDs.
+	if len(c.seenIDs) > 4096 {
+		c.seenIDs = make(map[string]struct{})
+		c.seenIDs[evKey] = struct{}{}
 	}
 	c.mu.Unlock()
 
@@ -345,6 +378,14 @@ func (c *Client) processWelcome(ctx context.Context, uw *UnwrappedGiftWrap) erro
 	}
 
 	log.I.F("joined DM group with %s (nostr_group_id: %s)", hex.Enc(senderPub), hex.Enc(gs.NostrGroupID))
+
+	// MIP-00: rotate KeyPackage after Welcome — the consumed init_key is
+	// dead, so peers fetching the old KP would fail to create a group.
+	c.rotateKeyPackage(ctx)
+
+	if c.onGroupJoined != nil {
+		c.onGroupJoined(senderPub)
+	}
 	return nil
 }
 
@@ -390,6 +431,9 @@ func (c *Client) handleGroupMessage(ctx context.Context, ev *event.E) error {
 		return fmt.Errorf("decrypt: %w", err)
 	}
 
+	// Re-persist after decrypt — MLS state may have advanced (epoch ratchet).
+	c.persistGroup(gs)
+
 	if c.onDM != nil {
 		c.onDM(gs.PeerPub, plaintext)
 	}
@@ -398,6 +442,12 @@ func (c *Client) handleGroupMessage(ctx context.Context, ev *event.E) error {
 }
 
 func (c *Client) persistGroup(gs *GroupState) {
+	// Refresh mlsBytes from live group state (may have advanced epoch).
+	if gs.group != nil {
+		if b, err := gs.group.Marshal(); err == nil {
+			gs.mlsBytes = b
+		}
+	}
 	data, err := marshalGroupState(gs)
 	if err != nil {
 		log.W.F("failed to marshal group state: %v", err)

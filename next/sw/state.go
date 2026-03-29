@@ -36,9 +36,17 @@ func cryptoProxy(method, peerPubkey, data string, cb func(string, string)) {
 // --- Shared utilities ---
 
 func sendToClient(clientID, msg string) {
+	if clientID == "" {
+		broadcastToClients(msg)
+		return
+	}
 	sw.GetClientByID(clientID, func(c sw.Client, ok bool) {
 		if ok {
 			sw.PostMessageJSON(c, msg)
+		} else {
+			// Client gone (tab closed, reloaded) — broadcast to all windows.
+			sw.Log("shell: client gone " + clientID[:8] + "… → broadcast")
+			broadcastToClients(msg)
 		}
 	})
 }

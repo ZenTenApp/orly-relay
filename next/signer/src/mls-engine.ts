@@ -262,30 +262,23 @@ function handleCryptoLocal(op: string, peerHex: string, data: string, id: number
 }
 
 // --- Push to originating tab ---
-// Fix 1d + 2g: broadcast to all known tabs, recover on failure.
+// Broadcast to all smesh tabs. Re-discover on every send to avoid stale IDs
+// after idle (tab refresh assigns new ID, old one stays in Set forever).
 
-let pushRecovering = false;
-const pushQueue: any[] = [];
+async function discoverTabs(): Promise<void> {
+  try {
+    const tabs = await browser.tabs.query({ url: ['*://smesh.lol/*', '*://127.0.0.1:*/*', '*://localhost:*/*'] });
+    mlsTabIds.clear();
+    for (const t of tabs) {
+      if (t.id) mlsTabIds.add(t.id);
+    }
+  } catch (_) {}
+}
 
 async function pushToTab(data: any) {
-  if (pushRecovering) {
-    pushQueue.push(data);
-    return;
-  }
-  if (mlsTabIds.size === 0) {
-    pushRecovering = true;
-    pushQueue.push(data);
-    try {
-      const tabs = await browser.tabs.query({ url: ['*://smesh.lol/*', '*://127.0.0.1:*/*', '*://localhost:*/*'] });
-      for (const t of tabs) {
-        if (t.id) mlsTabIds.add(t.id);
-      }
-    } catch (_) {}
-    pushRecovering = false;
-    const q = pushQueue.splice(0);
-    for (const d of q) pushToTab(d);
-    return;
-  }
+  // Always re-discover — tabs.query is fast (<1ms) and prevents stale IDs.
+  await discoverTabs();
+  if (mlsTabIds.size === 0) return;
   const msg = { ext: 'smesh-signer', type: 'mls-push', data };
   for (const tabId of mlsTabIds) {
     browser.tabs.sendMessage(tabId, msg).catch(() => {

@@ -53,6 +53,85 @@ func (group *Group) FindGroupContextExtension(t extensionType) []byte {
 	return findExtensionData(group.groupContext.extensions, t)
 }
 
+// Marshal serializes the full Group state (including private keys and epoch
+// secrets) so it can be persisted and restored later. This is NOT a wire
+// format — it's for local storage only. The output contains sensitive key
+// material and must be encrypted at rest.
+func (group *Group) Marshal() ([]byte, error) {
+	var b cryptobyte.Builder
+
+	// 1. groupContext (TLS-serialized)
+	group.groupContext.marshal(&b)
+
+	// 2. ratchetTree
+	group.tree.marshal(&b)
+
+	// 3. Secrets
+	writeOpaqueVec(&b, group.interimTranscriptHash)
+	writeOpaqueVec(&b, group.pskSecret)
+	writeOpaqueVec(&b, group.epochSecret)
+	writeOpaqueVec(&b, group.initSecret)
+
+	// 4. My identity within the group
+	b.AddUint32(uint32(group.myLeafIndex))
+	writeOpaqueVec(&b, []byte(group.signaturePriv))
+
+	// 5. Private tree (HPKE private keys, indexed by node position)
+	writeVector(&b, len(group.privTree), func(b *cryptobyte.Builder, i int) {
+		writeOpaqueVec(b, []byte(group.privTree[i]))
+	})
+
+	return b.Bytes()
+}
+
+// UnmarshalGroup restores a Group from bytes produced by Marshal.
+func UnmarshalGroup(raw []byte) (*Group, error) {
+	s := cryptobyte.String(raw)
+	g := &Group{}
+
+	// 1. groupContext
+	if err := g.groupContext.unmarshal(&s); err != nil {
+		return nil, fmt.Errorf("mls: unmarshal group context: %w", err)
+	}
+
+	// 2. ratchetTree
+	if err := g.tree.unmarshal(&s); err != nil {
+		return nil, fmt.Errorf("mls: unmarshal ratchet tree: %w", err)
+	}
+
+	// 3. Secrets
+	if !readOpaqueVec(&s, &g.interimTranscriptHash) ||
+		!readOpaqueVec(&s, &g.pskSecret) ||
+		!readOpaqueVec(&s, &g.epochSecret) ||
+		!readOpaqueVec(&s, &g.initSecret) {
+		return nil, fmt.Errorf("mls: unmarshal secrets: unexpected EOF")
+	}
+
+	// 4. My identity
+	if !s.ReadUint32((*uint32)(&g.myLeafIndex)) {
+		return nil, fmt.Errorf("mls: unmarshal leaf index: unexpected EOF")
+	}
+	var sigPriv []byte
+	if !readOpaqueVec(&s, &sigPriv) {
+		return nil, fmt.Errorf("mls: unmarshal signature priv: unexpected EOF")
+	}
+	g.signaturePriv = signaturePrivateKey(sigPriv)
+
+	// 5. Private tree
+	if err := readVector(&s, func(s *cryptobyte.String) error {
+		var k []byte
+		if !readOpaqueVec(s, &k) {
+			return io.ErrUnexpectedEOF
+		}
+		g.privTree = append(g.privTree, hpkePrivateKey(k))
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("mls: unmarshal priv tree: %w", err)
+	}
+
+	return g, nil
+}
+
 // GroupID returns the MLS group ID.
 func (group *Group) GroupID() GroupID {
 	return group.groupContext.groupID

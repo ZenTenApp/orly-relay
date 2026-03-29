@@ -18,7 +18,13 @@ export function Dial(url, onMessage, onOpen, onClose, onError) {
   };
 
   ws.onmessage = (ev) => {
-    if (onMessage) onMessage(id, String(ev.data));
+    if (onMessage) {
+      try {
+        onMessage(id, String(ev.data));
+      } catch (e) {
+        console.error('relay-sw: WS onmessage CRASH:', e.message, e.stack);
+      }
+    }
   };
 
   ws.onclose = (ev) => {

@@ -18,6 +18,28 @@ type pendingSentDM struct {
 var pendingSentDMs []pendingSentDM
 var mlsRelays []string
 
+// sentDMDedup tracks recently sent DM content to filter self-echoes.
+// MLS handleGroupMessage always attributes messages to PeerPub, so when
+// our own outbound echoes back (seenIDs lost on WASM restart), it appears
+// as a message from the peer. This ring buffer catches that.
+var sentDMDedup [32]string
+var sentDMIdx int
+
+func markSentDM(peer, content string) {
+	sentDMDedup[sentDMIdx%32] = peer + "\x00" + content
+	sentDMIdx++
+}
+
+func isSentDMEcho(peer, content string) bool {
+	needle := peer + "\x00" + content
+	for _, s := range sentDMDedup {
+		if s == needle {
+			return true
+		}
+	}
+	return false
+}
+
 func flushPendingSentDMs() {
 	if myPubkey == "" || len(pendingSentDMs) == 0 {
 		return
@@ -90,6 +112,7 @@ func routeMessage(clientID string, w *mw, msgType string) {
 	case "MLS_SEND":
 		recipient := w.str()
 		content := w.str()
+		markSentDM(recipient, content)
 		sendToClient(clientID, "[\"MLS_PROXY\",\"sendDM\","+jstr(recipient)+","+jstr(content)+"]")
 		// Save sent DM to relay's IDB (quiet — no DM_RECEIVED broadcast).
 		if myPubkey == "" {
@@ -142,6 +165,11 @@ func routeMessage(clientID string, w *mw, msgType string) {
 		peer := jsonField(dmJSON, "peer")
 		sender := jsonField(dmJSON, "sender")
 		content := jsonField(dmJSON, "content")
+		// Self-echo filter: MLS handleGroupMessage always sets sender=PeerPub.
+		// If we recently sent this exact content to this peer, it's our own echo.
+		if isSentDMEcho(peer, content) {
+			return
+		}
 		ts := parseTS(jsonFieldRaw(dmJSON, "ts"))
 		source := jsonField(dmJSON, "source")
 		eventID := jsonField(dmJSON, "eventId")

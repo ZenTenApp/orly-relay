@@ -9,6 +9,9 @@ import (
 
 	"next.orly.dev/pkg/nostr/encoders/event"
 	"next.orly.dev/pkg/nostr/encoders/filter"
+	"next.orly.dev/pkg/nostr/encoders/hex"
+	"next.orly.dev/pkg/nostr/encoders/kind"
+	"next.orly.dev/pkg/nostr/encoders/tag"
 	"next.orly.dev/pkg/nostr/interfaces/signer"
 	"next.orly.dev/pkg/nostr/ws"
 	"next.orly.dev/pkg/lol/log"
@@ -222,6 +225,32 @@ func (rc *RelayConn) Close() {
 		rc.conn = nil
 	}
 	rc.mu.Unlock()
+}
+
+// FetchKind0 fetches the latest kind 0 profile event for a pubkey.
+// Returns nil if not found or on error.
+func (rc *RelayConn) FetchKind0(ctx context.Context, pubkey []byte) *event.E {
+	rc.mu.RLock()
+	conn := rc.conn
+	rc.mu.RUnlock()
+	if conn == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	f := filter.New()
+	f.Authors = &tag.T{T: [][]byte{[]byte(hex.Enc(pubkey))}}
+	f.Kinds = kind.NewS(kind.New(0))
+	one := uint(1)
+	f.Limit = &one
+
+	events, err := conn.QuerySync(ctx, f)
+	if err != nil || len(events) == 0 {
+		return nil
+	}
+	return events[0]
 }
 
 // WsEventStream wraps a ws.Subscription to deliver events.

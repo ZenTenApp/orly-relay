@@ -1022,6 +1022,18 @@ func (c *Client) GetAliasByPubkey(pubkeyHex string) (string, error) {
 	return resp.Alias, nil
 }
 
+func (c *Client) GetAliasesByPubkey(pubkeyHex string) ([]string, error) {
+	// DB gRPC proto doesn't have a multi-alias RPC yet — use single alias.
+	alias, err := c.GetAliasByPubkey(pubkeyHex)
+	if err != nil {
+		return nil, err
+	}
+	if alias == "" {
+		return nil, nil
+	}
+	return []string{alias}, nil
+}
+
 func (c *Client) GetPubkeyByAlias(alias string) (string, error) {
 	resp, err := c.client.GetPubkeyByAlias(context.Background(), &orlydbv1.GetPubkeyByAliasRequest{
 		Alias: alias,

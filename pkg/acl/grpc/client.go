@@ -389,6 +389,7 @@ func (c *Client) IsCuratingConfigured() (bool, error) {
 type SubscriptionInfo struct {
 	PubkeyHex string
 	Alias     string
+	Aliases   []string
 	ExpiresAt time.Time
 	CreatedAt time.Time
 	HasAlias  bool
@@ -444,9 +445,14 @@ func (c *Client) GetSubscription(pubkey string) (*SubscriptionInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	aliases := resp.Aliases
+	if len(aliases) == 0 && resp.Alias != "" {
+		aliases = []string{resp.Alias}
+	}
 	return &SubscriptionInfo{
 		PubkeyHex: resp.Pubkey,
 		Alias:     resp.Alias,
+		Aliases:   aliases,
 		ExpiresAt: time.Unix(resp.ExpiresAt, 0),
 		CreatedAt: time.Unix(resp.CreatedAt, 0),
 		HasAlias:  resp.HasAlias,

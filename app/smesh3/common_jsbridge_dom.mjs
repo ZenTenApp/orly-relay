@@ -194,6 +194,11 @@ export function ReplaceState(path) {
   $rt.dom.ReplaceState(path);
 }
 
+// jsbridge: dom.LocationReload
+export function LocationReload() {
+  $rt.dom.LocationReload();
+}
+
 // jsbridge: dom.GetPath
 export function GetPath() {
   return $rt.dom.GetPath();

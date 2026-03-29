@@ -27,6 +27,7 @@ const (
 	DMCommandNone      DMCommand = iota // Not a command — treat as email or contact
 	DMCommandSubscribe                  // "subscribe" or "subscribe <alias>" command
 	DMCommandStatus                     // "status" command
+	DMCommandHelp                       // "help" command
 )
 
 // ClassifyDMResult holds the classified command and any extracted alias.
@@ -60,6 +61,9 @@ func ClassifyDMFull(content string) ClassifyDMResult {
 	}
 	if trimmed == "status" {
 		return ClassifyDMResult{Command: DMCommandStatus}
+	}
+	if trimmed == "help" {
+		return ClassifyDMResult{Command: DMCommandHelp}
 	}
 	return ClassifyDMResult{Command: DMCommandNone}
 }

@@ -104,6 +104,14 @@ func routerProxy(clientID, subID, filterRaw string, relayURLs []string) {
 	}
 	clientSubs[subID] = &clientSub{filters: filters, filterRaw: filterRaw, clientID: clientID}
 
+	// Serve cached events immediately — no waiting for relay connections.
+	cacheQuery(filterRaw, func(eventsJSON string) {
+		events := nostr.ParseEventsJSON(eventsJSON)
+		for _, ev := range events {
+			fwd(clientID, "[\"EVENT\","+jstr(subID)+","+ev.ToJSON()+"]")
+		}
+	})
+
 	remoteIDs := make(map[string]bool)
 	base := "p_" + subID + "_"
 
@@ -121,7 +129,7 @@ func routerProxy(clientID, subID, filterRaw string, relayURLs []string) {
 	}
 
 	proxyID := subID
-	proxySubs[subID].timer = sw.SetTimeout(20000, func() {
+	proxySubs[subID].timer = sw.SetTimeout(10000, func() {
 		info, ok := proxySubs[proxyID]
 		if ok && !info.done {
 			info.done = true
@@ -178,7 +186,7 @@ func routerOnRelayEOSE(subID string) {
 			if !info.done {
 				sw.ClearTimeout(info.timer)
 				pid := proxyID
-				info.timer = sw.SetTimeout(10000, func() {
+				info.timer = sw.SetTimeout(3000, func() {
 					inf, ok := proxySubs[pid]
 					if ok && !inf.done {
 						inf.done = true

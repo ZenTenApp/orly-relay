@@ -158,12 +158,22 @@ func notifyUpdate() {
 }
 
 func refreshAndReload() {
-	sw.CacheOpen(cacheName, func(cache sw.Cache) {
-		refreshFiles(cache, 0, func() {
-			sw.MatchClients(func(client sw.Client) {
-				sw.Navigate(client, "")
-			})
+	done := false
+	doNavigate := func() {
+		if done {
+			return
+		}
+		done = true
+		sw.MatchClients(func(client sw.Client) {
+			sw.Navigate(client, "")
 		})
+	}
+
+	// Hard deadline: navigate even if some fetches are stuck.
+	sw.SetTimeout(8000, doNavigate)
+
+	sw.CacheOpen(cacheName, func(cache sw.Cache) {
+		refreshFiles(cache, 0, doNavigate)
 	})
 }
 

@@ -394,6 +394,9 @@ func (w *RelySQLiteWrapper) ClaimAlias(alias, pubkeyHex string) error {
 func (w *RelySQLiteWrapper) GetAliasByPubkey(pubkeyHex string) (string, error) {
 	return "", fmt.Errorf("not supported")
 }
+func (w *RelySQLiteWrapper) GetAliasesByPubkey(pubkeyHex string) ([]string, error) {
+	return nil, fmt.Errorf("not supported")
+}
 func (w *RelySQLiteWrapper) GetPubkeyByAlias(alias string) (string, error) {
 	return "", fmt.Errorf("not supported")
 }

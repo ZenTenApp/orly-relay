@@ -9,21 +9,6 @@ import * as common$helpers from './common_helpers.mjs';
 
 // Package-level variables
 
-$rt.types.registerType('common/nostr.Event', {
-  id: 'common/nostr.Event',
-  kind: 'struct',
-  methods: new Map(),
-  fields: [
-    { name: 'ID', type: 'string', tag: 'json:"id"', embedded: false },
-    { name: 'PubKey', type: 'string', tag: 'json:"pubkey"', embedded: false },
-    { name: 'CreatedAt', type: 'int64', tag: 'json:"created_at"', embedded: false },
-    { name: 'Kind', type: 'int', tag: 'json:"kind"', embedded: false },
-    { name: 'Tags', type: 'common/nostr.Tags', tag: 'json:"tags"', embedded: false },
-    { name: 'Content', type: 'string', tag: 'json:"content"', embedded: false },
-    { name: 'Sig', type: 'string', tag: 'json:"sig"', embedded: false },
-  ],
-  zero: () => ({ ID: '', PubKey: '', CreatedAt: 0, Kind: 0, Tags: null, Content: '', Sig: '' }),
-});
 $rt.types.registerType('common/nostr.Filter', {
   id: 'common/nostr.Filter',
   kind: 'struct',
@@ -40,137 +25,23 @@ $rt.types.registerType('common/nostr.Filter', {
   ],
   zero: () => ({ IDs: null, Authors: null, Kinds: null, Tags: null, Since: 0, Until: 0, Limit: 0, Proxy: null }),
 });
+$rt.types.registerType('common/nostr.Event', {
+  id: 'common/nostr.Event',
+  kind: 'struct',
+  methods: new Map(),
+  fields: [
+    { name: 'ID', type: 'string', tag: 'json:"id"', embedded: false },
+    { name: 'PubKey', type: 'string', tag: 'json:"pubkey"', embedded: false },
+    { name: 'CreatedAt', type: 'int64', tag: 'json:"created_at"', embedded: false },
+    { name: 'Kind', type: 'int', tag: 'json:"kind"', embedded: false },
+    { name: 'Tags', type: 'common/nostr.Tags', tag: 'json:"tags"', embedded: false },
+    { name: 'Content', type: 'string', tag: 'json:"content"', embedded: false },
+    { name: 'Sig', type: 'string', tag: 'json:"sig"', embedded: false },
+  ],
+  zero: () => ({ ID: '', PubKey: '', CreatedAt: 0, Kind: 0, Tags: null, Content: '', Sig: '' }),
+});
 export function init() {
   return;
-}
-
-export function serializeTags(buf, tags) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2 = $t0_1.$get().addr(0);
-        $t1_2.$set(91);
-        $t2_3 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-        $t3_4 = $rt.builtin.appendSlice(buf, $t2_3);
-        $t4_5 = $rt.builtin.len(tags);
-        $t5_6 = $t3_4;
-        $t6_7 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t7_8 = ($t6_7 + 1);
-        $t8_9 = ($t7_8 < $t4_5);
-        if ($t8_9) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t9_10 = tags.addr($t7_8);
-        $t10_11 = $t9_10.$get();
-        $t11_12 = ($t7_8 > 0);
-        if ($t11_12) {
-          $block = 4; break;
-        }
-        else {
-          $t20_21 = $t5_6;
-          $block = 5; break;
-        }
-        break;
-      }
-      case 3: {
-        $t12_13 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t13_14 = $t12_13.$get().addr(0);
-        $t13_14.$set(93);
-        $t14_15 = $rt.builtin.sliceSlice($t12_13.$get(), undefined, undefined, undefined);
-        $t15_16 = $rt.builtin.appendSlice($t5_6, $t14_15);
-        return $t15_16;
-        break;
-      }
-      case 4: {
-        $t16_17 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t17_18 = $t16_17.$get().addr(0);
-        $t17_18.$set(44);
-        $t18_19 = $rt.builtin.sliceSlice($t16_17.$get(), undefined, undefined, undefined);
-        $t19_20 = $rt.builtin.appendSlice($t5_6, $t18_19);
-        $t20_21 = $t19_20;
-        $block = 5; break;
-        break;
-      }
-      case 5: {
-        $t21_22 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t22_23 = $t21_22.$get().addr(0);
-        $t22_23.$set(91);
-        $t23_24 = $rt.builtin.sliceSlice($t21_22.$get(), undefined, undefined, undefined);
-        $t24_25 = $rt.builtin.appendSlice($t20_21, $t23_24);
-        $t25_26 = $rt.builtin.len($t10_11);
-        $t26_27 = $t24_25;
-        $t27_28 = -1;
-        $block = 6; break;
-        break;
-      }
-      case 6: {
-        $t28_29 = ($t27_28 + 1);
-        $t29_30 = ($t28_29 < $t25_26);
-        if ($t29_30) {
-          $block = 7; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 7: {
-        $t30_31 = $t10_11.addr($t28_29);
-        $t31_32 = $t30_31.$get();
-        $t32_33 = ($t28_29 > 0);
-        if ($t32_33) {
-          $block = 9; break;
-        }
-        else {
-          $t41_42 = $t26_27;
-          $block = 10; break;
-        }
-        break;
-      }
-      case 8: {
-        $t33_34 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t34_35 = $t33_34.$get().addr(0);
-        $t34_35.$set(93);
-        $t35_36 = $rt.builtin.sliceSlice($t33_34.$get(), undefined, undefined, undefined);
-        $t36_37 = $rt.builtin.appendSlice($t26_27, $t35_36);
-        $t5_6 = $t36_37;
-        $t6_7 = $t7_8;
-        $block = 1; break;
-        break;
-      }
-      case 9: {
-        $t37_38 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t38_39 = $t37_38.$get().addr(0);
-        $t38_39.$set(44);
-        $t39_40 = $rt.builtin.sliceSlice($t37_38.$get(), undefined, undefined, undefined);
-        $t40_41 = $rt.builtin.appendSlice($t26_27, $t39_40);
-        $t41_42 = $t40_41;
-        $block = 10; break;
-        break;
-      }
-      case 10: {
-        $t42_43 = common$helpers.JsonString($t31_32);
-        $t43_44 = $rt.builtin.appendString($t41_42, $t42_43);
-        $t26_27 = $t43_44;
-        $t27_28 = $t28_29;
-        $block = 6; break;
-        break;
-      }
-    }
-  }
 }
 
 export function appendField(buf, first) {
@@ -665,6 +536,135 @@ export function eventHasTagValue(e, tagKey, values) {
       }
       case 8: {
         return true;
+        break;
+      }
+    }
+  }
+}
+
+export function serializeTags(buf, tags) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2 = $t0_1.$get().addr(0);
+        $t1_2.$set(91);
+        $t2_3 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+        $t3_4 = $rt.builtin.appendSlice(buf, $t2_3);
+        $t4_5 = $rt.builtin.len(tags);
+        $t5_6 = $t3_4;
+        $t6_7 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t7_8 = ($t6_7 + 1);
+        $t8_9 = ($t7_8 < $t4_5);
+        if ($t8_9) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t9_10 = tags.addr($t7_8);
+        $t10_11 = $t9_10.$get();
+        $t11_12 = ($t7_8 > 0);
+        if ($t11_12) {
+          $block = 4; break;
+        }
+        else {
+          $t20_21 = $t5_6;
+          $block = 5; break;
+        }
+        break;
+      }
+      case 3: {
+        $t12_13 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t13_14 = $t12_13.$get().addr(0);
+        $t13_14.$set(93);
+        $t14_15 = $rt.builtin.sliceSlice($t12_13.$get(), undefined, undefined, undefined);
+        $t15_16 = $rt.builtin.appendSlice($t5_6, $t14_15);
+        return $t15_16;
+        break;
+      }
+      case 4: {
+        $t16_17 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t17_18 = $t16_17.$get().addr(0);
+        $t17_18.$set(44);
+        $t18_19 = $rt.builtin.sliceSlice($t16_17.$get(), undefined, undefined, undefined);
+        $t19_20 = $rt.builtin.appendSlice($t5_6, $t18_19);
+        $t20_21 = $t19_20;
+        $block = 5; break;
+        break;
+      }
+      case 5: {
+        $t21_22 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t22_23 = $t21_22.$get().addr(0);
+        $t22_23.$set(91);
+        $t23_24 = $rt.builtin.sliceSlice($t21_22.$get(), undefined, undefined, undefined);
+        $t24_25 = $rt.builtin.appendSlice($t20_21, $t23_24);
+        $t25_26 = $rt.builtin.len($t10_11);
+        $t26_27 = $t24_25;
+        $t27_28 = -1;
+        $block = 6; break;
+        break;
+      }
+      case 6: {
+        $t28_29 = ($t27_28 + 1);
+        $t29_30 = ($t28_29 < $t25_26);
+        if ($t29_30) {
+          $block = 7; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 7: {
+        $t30_31 = $t10_11.addr($t28_29);
+        $t31_32 = $t30_31.$get();
+        $t32_33 = ($t28_29 > 0);
+        if ($t32_33) {
+          $block = 9; break;
+        }
+        else {
+          $t41_42 = $t26_27;
+          $block = 10; break;
+        }
+        break;
+      }
+      case 8: {
+        $t33_34 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t34_35 = $t33_34.$get().addr(0);
+        $t34_35.$set(93);
+        $t35_36 = $rt.builtin.sliceSlice($t33_34.$get(), undefined, undefined, undefined);
+        $t36_37 = $rt.builtin.appendSlice($t26_27, $t35_36);
+        $t5_6 = $t36_37;
+        $t6_7 = $t7_8;
+        $block = 1; break;
+        break;
+      }
+      case 9: {
+        $t37_38 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t38_39 = $t37_38.$get().addr(0);
+        $t38_39.$set(44);
+        $t39_40 = $rt.builtin.sliceSlice($t37_38.$get(), undefined, undefined, undefined);
+        $t40_41 = $rt.builtin.appendSlice($t26_27, $t39_40);
+        $t41_42 = $t40_41;
+        $block = 10; break;
+        break;
+      }
+      case 10: {
+        $t42_43 = common$helpers.JsonString($t31_32);
+        $t43_44 = $rt.builtin.appendString($t41_42, $t42_43);
+        $t26_27 = $t43_44;
+        $t27_28 = $t28_29;
+        $block = 6; break;
         break;
       }
     }
@@ -4159,310 +4159,6 @@ export function Tags$GetFirst(ts, key) {
 }
 
 $rt.types.getType('common/nostr.Tags')?.methods?.set('GetFirst', Tags$GetFirst);
-export function Event$CheckID(e) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
-  $t0_1 = Event$Serialize(e);
-  $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t2_3 = $rt.builtin.stringToBytes($t0_1);
-  $t3_4 = common$crypto$sha256.Sum($t2_3);
-  $t1_2.$set($rt.builtin.cloneValue($t3_4));
-  $t4_5 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
-  $t5_6 = common$helpers.HexEncode($t4_5);
-  $t6_7 = { $get() { return e.$get().ID; }, $set(v) { const obj = e.$get(); obj.ID = v; e.$set(obj); } };
-  $t7_8 = $t6_7.$get();
-  $t8_9 = ($t7_8 === $t5_6);
-  return $t8_9;
-}
-
-$rt.types.getType('common/nostr.Event')?.methods?.set('CheckID', Event$CheckID);
-export function Event$CheckSig(e) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $get() { return e.$get().PubKey; }, $set(v) { const obj = e.$get(); obj.PubKey = v; e.$set(obj); } };
-        $t1_2 = $t0_1.$get();
-        $t2_3 = common$helpers.HexDecode32($t1_2);
-        $t3_4 = $t2_3[0];
-        $t4_5 = $t2_3[1];
-        if ($t4_5) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        return false;
-        break;
-      }
-      case 2: {
-        $t5_6 = { $get() { return e.$get().ID; }, $set(v) { const obj = e.$get(); obj.ID = v; e.$set(obj); } };
-        $t6_7 = $t5_6.$get();
-        $t7_8 = common$helpers.HexDecode32($t6_7);
-        $t8_9 = $t7_8[0];
-        $t9_10 = $t7_8[1];
-        if ($t9_10) {
-          $block = 4; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 3: {
-        return false;
-        break;
-      }
-      case 4: {
-        $t10_11 = { $get() { return e.$get().Sig; }, $set(v) { const obj = e.$get(); obj.Sig = v; e.$set(obj); } };
-        $t11_12 = $t10_11.$get();
-        $t12_13 = $rt.builtin.len($t11_12);
-        $t13_14 = ($t12_13 !== 128);
-        if ($t13_14) {
-          $block = 5; break;
-        }
-        else {
-          $block = 6; break;
-        }
-        break;
-      }
-      case 5: {
-        return false;
-        break;
-      }
-      case 6: {
-        $t14_15 = { $value: $rt.builtin.makeSlice(64, 64, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t15_16 = { $get() { return e.$get().Sig; }, $set(v) { const obj = e.$get(); obj.Sig = v; e.$set(obj); } };
-        $t16_17 = $t15_16.$get();
-        $t17_18 = common$helpers.HexDecode($t16_17);
-        $t18_19 = $rt.builtin.len($t17_18);
-        $t19_20 = ($t18_19 !== 64);
-        if ($t19_20) {
-          $block = 7; break;
-        }
-        else {
-          $block = 8; break;
-        }
-        break;
-      }
-      case 7: {
-        return false;
-        break;
-      }
-      case 8: {
-        $t20_21 = $rt.builtin.sliceSlice($t14_15.$get(), undefined, undefined, undefined);
-        $t21_22 = $rt.builtin.copy($t20_21, $t17_18);
-        $t22_23 = $t14_15.$get();
-        $t23_24 = common$crypto$secp256k1.VerifySchnorr($t3_4, $t8_9, $t22_23);
-        return $t23_24;
-        break;
-      }
-    }
-  }
-}
-
-$rt.types.getType('common/nostr.Event')?.methods?.set('CheckSig', Event$CheckSig);
-export function Event$ComputeID(e) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
-  $t0_1 = Event$Serialize(e);
-  $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t2_3 = $rt.builtin.stringToBytes($t0_1);
-  $t3_4 = common$crypto$sha256.Sum($t2_3);
-  $t1_2.$set($rt.builtin.cloneValue($t3_4));
-  $t4_5 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
-  $t5_6 = common$helpers.HexEncode($t4_5);
-  $t6_7 = { $get() { return e.$get().ID; }, $set(v) { const obj = e.$get(); obj.ID = v; e.$set(obj); } };
-  $t6_7.$set($t5_6);
-  $t7_8 = { $get() { return e.$get().ID; }, $set(v) { const obj = e.$get(); obj.ID = v; e.$set(obj); } };
-  $t8_9 = $t7_8.$get();
-  return $t8_9;
-}
-
-$rt.types.getType('common/nostr.Event')?.methods?.set('ComputeID', Event$ComputeID);
-export function Event$Serialize(e) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44;
-  $t0_1 = { $value: $rt.builtin.makeSlice(256, 256, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, 0, undefined);
-  $t2_3 = $rt.builtin.appendString($t1_2, '[0,');
-  $t3_4 = { $get() { return e.$get().PubKey; }, $set(v) { const obj = e.$get(); obj.PubKey = v; e.$set(obj); } };
-  $t4_5 = $t3_4.$get();
-  $t5_6 = common$helpers.JsonString($t4_5);
-  $t6_7 = $rt.builtin.appendString($t2_3, $t5_6);
-  $t7_8 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t8_9 = $t7_8.$get().addr(0);
-  $t8_9.$set(44);
-  $t9_10 = $rt.builtin.sliceSlice($t7_8.$get(), undefined, undefined, undefined);
-  $t10_11 = $rt.builtin.appendSlice($t6_7, $t9_10);
-  $t11_12 = { $get() { return e.$get().CreatedAt; }, $set(v) { const obj = e.$get(); obj.CreatedAt = v; e.$set(obj); } };
-  $t12_13 = $t11_12.$get();
-  $t13_14 = common$helpers.Itoa($t12_13);
-  $t14_15 = $rt.builtin.appendString($t10_11, $t13_14);
-  $t15_16 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t16_17 = $t15_16.$get().addr(0);
-  $t16_17.$set(44);
-  $t17_18 = $rt.builtin.sliceSlice($t15_16.$get(), undefined, undefined, undefined);
-  $t18_19 = $rt.builtin.appendSlice($t14_15, $t17_18);
-  $t19_20 = { $get() { return e.$get().Kind; }, $set(v) { const obj = e.$get(); obj.Kind = v; e.$set(obj); } };
-  $t20_21 = $t19_20.$get();
-  $t21_22 = $t20_21;
-  $t22_23 = common$helpers.Itoa($t21_22);
-  $t23_24 = $rt.builtin.appendString($t18_19, $t22_23);
-  $t24_25 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t25_26 = $t24_25.$get().addr(0);
-  $t25_26.$set(44);
-  $t26_27 = $rt.builtin.sliceSlice($t24_25.$get(), undefined, undefined, undefined);
-  $t27_28 = $rt.builtin.appendSlice($t23_24, $t26_27);
-  $t28_29 = { $get() { return e.$get().Tags; }, $set(v) { const obj = e.$get(); obj.Tags = v; e.$set(obj); } };
-  $t29_30 = $t28_29.$get();
-  $t30_31 = serializeTags($t27_28, $t29_30);
-  $t31_32 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t32_33 = $t31_32.$get().addr(0);
-  $t32_33.$set(44);
-  $t33_34 = $rt.builtin.sliceSlice($t31_32.$get(), undefined, undefined, undefined);
-  $t34_35 = $rt.builtin.appendSlice($t30_31, $t33_34);
-  $t35_36 = { $get() { return e.$get().Content; }, $set(v) { const obj = e.$get(); obj.Content = v; e.$set(obj); } };
-  $t36_37 = $t35_36.$get();
-  $t37_38 = common$helpers.JsonString($t36_37);
-  $t38_39 = $rt.builtin.appendString($t34_35, $t37_38);
-  $t39_40 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t40_41 = $t39_40.$get().addr(0);
-  $t40_41.$set(93);
-  $t41_42 = $rt.builtin.sliceSlice($t39_40.$get(), undefined, undefined, undefined);
-  $t42_43 = $rt.builtin.appendSlice($t38_39, $t41_42);
-  $t43_44 = $rt.builtin.bytesToString($t42_43);
-  return $t43_44;
-}
-
-$rt.types.getType('common/nostr.Event')?.methods?.set('Serialize', Event$Serialize);
-export function Event$Sign(e, seckey, auxRand) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t1_2 = common$crypto$secp256k1.PubKeyFromSecKey(seckey);
-        $t2_3 = $t1_2[0];
-        $t0_1.$set($rt.builtin.cloneValue($t2_3));
-        $t3_4 = $t1_2[1];
-        if ($t3_4) {
-          $block = 2; break;
-        }
-        else {
-          $block = 1; break;
-        }
-        break;
-      }
-      case 1: {
-        return false;
-        break;
-      }
-      case 2: {
-        $t4_5 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
-        $t5_6 = common$helpers.HexEncode($t4_5);
-        $t6_7 = { $get() { return e.$get().PubKey; }, $set(v) { const obj = e.$get(); obj.PubKey = v; e.$set(obj); } };
-        $t6_7.$set($t5_6);
-        $t7_8 = Event$ComputeID(e);
-        $t8_9 = { $get() { return e.$get().ID; }, $set(v) { const obj = e.$get(); obj.ID = v; e.$set(obj); } };
-        $t9_10 = $t8_9.$get();
-        $t10_11 = common$helpers.HexDecode32($t9_10);
-        $t11_12 = $t10_11[0];
-        $t12_13 = $t10_11[1];
-        if ($t12_13) {
-          $block = 4; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 3: {
-        return false;
-        break;
-      }
-      case 4: {
-        $t13_14 = { $value: $rt.builtin.makeSlice(64, 64, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t14_15 = common$crypto$secp256k1.SignSchnorr(seckey, $t11_12, auxRand);
-        $t15_16 = $t14_15[0];
-        $t13_14.$set($rt.builtin.cloneValue($t15_16));
-        $t16_17 = $t14_15[1];
-        if ($t16_17) {
-          $block = 6; break;
-        }
-        else {
-          $block = 5; break;
-        }
-        break;
-      }
-      case 5: {
-        return false;
-        break;
-      }
-      case 6: {
-        $t17_18 = $rt.builtin.sliceSlice($t13_14.$get(), undefined, undefined, undefined);
-        $t18_19 = common$helpers.HexEncode($t17_18);
-        $t19_20 = { $get() { return e.$get().Sig; }, $set(v) { const obj = e.$get(); obj.Sig = v; e.$set(obj); } };
-        $t19_20.$set($t18_19);
-        return true;
-        break;
-      }
-    }
-  }
-}
-
-$rt.types.getType('common/nostr.Event')?.methods?.set('Sign', Event$Sign);
-export function Event$ToJSON(e) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42;
-  $t0_1 = { $value: $rt.builtin.makeSlice(512, 512, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t1_2 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, 0, undefined);
-  $t2_3 = $rt.builtin.appendString($t1_2, '{"id":');
-  $t3_4 = { $get() { return e.$get().ID; }, $set(v) { const obj = e.$get(); obj.ID = v; e.$set(obj); } };
-  $t4_5 = $t3_4.$get();
-  $t5_6 = common$helpers.JsonString($t4_5);
-  $t6_7 = $rt.builtin.appendString($t2_3, $t5_6);
-  $t7_8 = $rt.builtin.appendString($t6_7, ',"pubkey":');
-  $t8_9 = { $get() { return e.$get().PubKey; }, $set(v) { const obj = e.$get(); obj.PubKey = v; e.$set(obj); } };
-  $t9_10 = $t8_9.$get();
-  $t10_11 = common$helpers.JsonString($t9_10);
-  $t11_12 = $rt.builtin.appendString($t7_8, $t10_11);
-  $t12_13 = $rt.builtin.appendString($t11_12, ',"created_at":');
-  $t13_14 = { $get() { return e.$get().CreatedAt; }, $set(v) { const obj = e.$get(); obj.CreatedAt = v; e.$set(obj); } };
-  $t14_15 = $t13_14.$get();
-  $t15_16 = common$helpers.Itoa($t14_15);
-  $t16_17 = $rt.builtin.appendString($t12_13, $t15_16);
-  $t17_18 = $rt.builtin.appendString($t16_17, ',"kind":');
-  $t18_19 = { $get() { return e.$get().Kind; }, $set(v) { const obj = e.$get(); obj.Kind = v; e.$set(obj); } };
-  $t19_20 = $t18_19.$get();
-  $t20_21 = $t19_20;
-  $t21_22 = common$helpers.Itoa($t20_21);
-  $t22_23 = $rt.builtin.appendString($t17_18, $t21_22);
-  $t23_24 = $rt.builtin.appendString($t22_23, ',"tags":');
-  $t24_25 = { $get() { return e.$get().Tags; }, $set(v) { const obj = e.$get(); obj.Tags = v; e.$set(obj); } };
-  $t25_26 = $t24_25.$get();
-  $t26_27 = serializeTags($t23_24, $t25_26);
-  $t27_28 = $rt.builtin.appendString($t26_27, ',"content":');
-  $t28_29 = { $get() { return e.$get().Content; }, $set(v) { const obj = e.$get(); obj.Content = v; e.$set(obj); } };
-  $t29_30 = $t28_29.$get();
-  $t30_31 = common$helpers.JsonString($t29_30);
-  $t31_32 = $rt.builtin.appendString($t27_28, $t30_31);
-  $t32_33 = $rt.builtin.appendString($t31_32, ',"sig":');
-  $t33_34 = { $get() { return e.$get().Sig; }, $set(v) { const obj = e.$get(); obj.Sig = v; e.$set(obj); } };
-  $t34_35 = $t33_34.$get();
-  $t35_36 = common$helpers.JsonString($t34_35);
-  $t36_37 = $rt.builtin.appendString($t32_33, $t35_36);
-  $t37_38 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-  $t38_39 = $t37_38.$get().addr(0);
-  $t38_39.$set(125);
-  $t39_40 = $rt.builtin.sliceSlice($t37_38.$get(), undefined, undefined, undefined);
-  $t40_41 = $rt.builtin.appendSlice($t36_37, $t39_40);
-  $t41_42 = $rt.builtin.bytesToString($t40_41);
-  return $t41_42;
-}
-
-$rt.types.getType('common/nostr.Event')?.methods?.set('ToJSON', Event$ToJSON);
 export function Filter$Matches(f, e) {
   let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59;
   let $block = 0;
@@ -4999,3 +4695,307 @@ export function Filter$Serialize(f) {
 }
 
 $rt.types.getType('common/nostr.Filter')?.methods?.set('Serialize', Filter$Serialize);
+export function Event$CheckID(e) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
+  $t0_1 = Event$Serialize(e);
+  $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t2_3 = $rt.builtin.stringToBytes($t0_1);
+  $t3_4 = common$crypto$sha256.Sum($t2_3);
+  $t1_2.$set($rt.builtin.cloneValue($t3_4));
+  $t4_5 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
+  $t5_6 = common$helpers.HexEncode($t4_5);
+  $t6_7 = { $get() { return e.$get().ID; }, $set(v) { const obj = e.$get(); obj.ID = v; e.$set(obj); } };
+  $t7_8 = $t6_7.$get();
+  $t8_9 = ($t7_8 === $t5_6);
+  return $t8_9;
+}
+
+$rt.types.getType('common/nostr.Event')?.methods?.set('CheckID', Event$CheckID);
+export function Event$CheckSig(e) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $get() { return e.$get().PubKey; }, $set(v) { const obj = e.$get(); obj.PubKey = v; e.$set(obj); } };
+        $t1_2 = $t0_1.$get();
+        $t2_3 = common$helpers.HexDecode32($t1_2);
+        $t3_4 = $t2_3[0];
+        $t4_5 = $t2_3[1];
+        if ($t4_5) {
+          $block = 2; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+      case 1: {
+        return false;
+        break;
+      }
+      case 2: {
+        $t5_6 = { $get() { return e.$get().ID; }, $set(v) { const obj = e.$get(); obj.ID = v; e.$set(obj); } };
+        $t6_7 = $t5_6.$get();
+        $t7_8 = common$helpers.HexDecode32($t6_7);
+        $t8_9 = $t7_8[0];
+        $t9_10 = $t7_8[1];
+        if ($t9_10) {
+          $block = 4; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 3: {
+        return false;
+        break;
+      }
+      case 4: {
+        $t10_11 = { $get() { return e.$get().Sig; }, $set(v) { const obj = e.$get(); obj.Sig = v; e.$set(obj); } };
+        $t11_12 = $t10_11.$get();
+        $t12_13 = $rt.builtin.len($t11_12);
+        $t13_14 = ($t12_13 !== 128);
+        if ($t13_14) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 5: {
+        return false;
+        break;
+      }
+      case 6: {
+        $t14_15 = { $value: $rt.builtin.makeSlice(64, 64, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t15_16 = { $get() { return e.$get().Sig; }, $set(v) { const obj = e.$get(); obj.Sig = v; e.$set(obj); } };
+        $t16_17 = $t15_16.$get();
+        $t17_18 = common$helpers.HexDecode($t16_17);
+        $t18_19 = $rt.builtin.len($t17_18);
+        $t19_20 = ($t18_19 !== 64);
+        if ($t19_20) {
+          $block = 7; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 7: {
+        return false;
+        break;
+      }
+      case 8: {
+        $t20_21 = $rt.builtin.sliceSlice($t14_15.$get(), undefined, undefined, undefined);
+        $t21_22 = $rt.builtin.copy($t20_21, $t17_18);
+        $t22_23 = $t14_15.$get();
+        $t23_24 = common$crypto$secp256k1.VerifySchnorr($t3_4, $t8_9, $t22_23);
+        return $t23_24;
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/nostr.Event')?.methods?.set('CheckSig', Event$CheckSig);
+export function Event$ComputeID(e) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9;
+  $t0_1 = Event$Serialize(e);
+  $t1_2 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t2_3 = $rt.builtin.stringToBytes($t0_1);
+  $t3_4 = common$crypto$sha256.Sum($t2_3);
+  $t1_2.$set($rt.builtin.cloneValue($t3_4));
+  $t4_5 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
+  $t5_6 = common$helpers.HexEncode($t4_5);
+  $t6_7 = { $get() { return e.$get().ID; }, $set(v) { const obj = e.$get(); obj.ID = v; e.$set(obj); } };
+  $t6_7.$set($t5_6);
+  $t7_8 = { $get() { return e.$get().ID; }, $set(v) { const obj = e.$get(); obj.ID = v; e.$set(obj); } };
+  $t8_9 = $t7_8.$get();
+  return $t8_9;
+}
+
+$rt.types.getType('common/nostr.Event')?.methods?.set('ComputeID', Event$ComputeID);
+export function Event$Serialize(e) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44;
+  $t0_1 = { $value: $rt.builtin.makeSlice(256, 256, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t1_2 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, 0, undefined);
+  $t2_3 = $rt.builtin.appendString($t1_2, '[0,');
+  $t3_4 = { $get() { return e.$get().PubKey; }, $set(v) { const obj = e.$get(); obj.PubKey = v; e.$set(obj); } };
+  $t4_5 = $t3_4.$get();
+  $t5_6 = common$helpers.JsonString($t4_5);
+  $t6_7 = $rt.builtin.appendString($t2_3, $t5_6);
+  $t7_8 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t8_9 = $t7_8.$get().addr(0);
+  $t8_9.$set(44);
+  $t9_10 = $rt.builtin.sliceSlice($t7_8.$get(), undefined, undefined, undefined);
+  $t10_11 = $rt.builtin.appendSlice($t6_7, $t9_10);
+  $t11_12 = { $get() { return e.$get().CreatedAt; }, $set(v) { const obj = e.$get(); obj.CreatedAt = v; e.$set(obj); } };
+  $t12_13 = $t11_12.$get();
+  $t13_14 = common$helpers.Itoa($t12_13);
+  $t14_15 = $rt.builtin.appendString($t10_11, $t13_14);
+  $t15_16 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t16_17 = $t15_16.$get().addr(0);
+  $t16_17.$set(44);
+  $t17_18 = $rt.builtin.sliceSlice($t15_16.$get(), undefined, undefined, undefined);
+  $t18_19 = $rt.builtin.appendSlice($t14_15, $t17_18);
+  $t19_20 = { $get() { return e.$get().Kind; }, $set(v) { const obj = e.$get(); obj.Kind = v; e.$set(obj); } };
+  $t20_21 = $t19_20.$get();
+  $t21_22 = $t20_21;
+  $t22_23 = common$helpers.Itoa($t21_22);
+  $t23_24 = $rt.builtin.appendString($t18_19, $t22_23);
+  $t24_25 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t25_26 = $t24_25.$get().addr(0);
+  $t25_26.$set(44);
+  $t26_27 = $rt.builtin.sliceSlice($t24_25.$get(), undefined, undefined, undefined);
+  $t27_28 = $rt.builtin.appendSlice($t23_24, $t26_27);
+  $t28_29 = { $get() { return e.$get().Tags; }, $set(v) { const obj = e.$get(); obj.Tags = v; e.$set(obj); } };
+  $t29_30 = $t28_29.$get();
+  $t30_31 = serializeTags($t27_28, $t29_30);
+  $t31_32 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t32_33 = $t31_32.$get().addr(0);
+  $t32_33.$set(44);
+  $t33_34 = $rt.builtin.sliceSlice($t31_32.$get(), undefined, undefined, undefined);
+  $t34_35 = $rt.builtin.appendSlice($t30_31, $t33_34);
+  $t35_36 = { $get() { return e.$get().Content; }, $set(v) { const obj = e.$get(); obj.Content = v; e.$set(obj); } };
+  $t36_37 = $t35_36.$get();
+  $t37_38 = common$helpers.JsonString($t36_37);
+  $t38_39 = $rt.builtin.appendString($t34_35, $t37_38);
+  $t39_40 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t40_41 = $t39_40.$get().addr(0);
+  $t40_41.$set(93);
+  $t41_42 = $rt.builtin.sliceSlice($t39_40.$get(), undefined, undefined, undefined);
+  $t42_43 = $rt.builtin.appendSlice($t38_39, $t41_42);
+  $t43_44 = $rt.builtin.bytesToString($t42_43);
+  return $t43_44;
+}
+
+$rt.types.getType('common/nostr.Event')?.methods?.set('Serialize', Event$Serialize);
+export function Event$Sign(e, seckey, auxRand) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(32, 32, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2 = common$crypto$secp256k1.PubKeyFromSecKey(seckey);
+        $t2_3 = $t1_2[0];
+        $t0_1.$set($rt.builtin.cloneValue($t2_3));
+        $t3_4 = $t1_2[1];
+        if ($t3_4) {
+          $block = 2; break;
+        }
+        else {
+          $block = 1; break;
+        }
+        break;
+      }
+      case 1: {
+        return false;
+        break;
+      }
+      case 2: {
+        $t4_5 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+        $t5_6 = common$helpers.HexEncode($t4_5);
+        $t6_7 = { $get() { return e.$get().PubKey; }, $set(v) { const obj = e.$get(); obj.PubKey = v; e.$set(obj); } };
+        $t6_7.$set($t5_6);
+        $t7_8 = Event$ComputeID(e);
+        $t8_9 = { $get() { return e.$get().ID; }, $set(v) { const obj = e.$get(); obj.ID = v; e.$set(obj); } };
+        $t9_10 = $t8_9.$get();
+        $t10_11 = common$helpers.HexDecode32($t9_10);
+        $t11_12 = $t10_11[0];
+        $t12_13 = $t10_11[1];
+        if ($t12_13) {
+          $block = 4; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 3: {
+        return false;
+        break;
+      }
+      case 4: {
+        $t13_14 = { $value: $rt.builtin.makeSlice(64, 64, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t14_15 = common$crypto$secp256k1.SignSchnorr(seckey, $t11_12, auxRand);
+        $t15_16 = $t14_15[0];
+        $t13_14.$set($rt.builtin.cloneValue($t15_16));
+        $t16_17 = $t14_15[1];
+        if ($t16_17) {
+          $block = 6; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 5: {
+        return false;
+        break;
+      }
+      case 6: {
+        $t17_18 = $rt.builtin.sliceSlice($t13_14.$get(), undefined, undefined, undefined);
+        $t18_19 = common$helpers.HexEncode($t17_18);
+        $t19_20 = { $get() { return e.$get().Sig; }, $set(v) { const obj = e.$get(); obj.Sig = v; e.$set(obj); } };
+        $t19_20.$set($t18_19);
+        return true;
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/nostr.Event')?.methods?.set('Sign', Event$Sign);
+export function Event$ToJSON(e) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42;
+  $t0_1 = { $value: $rt.builtin.makeSlice(512, 512, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t1_2 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, 0, undefined);
+  $t2_3 = $rt.builtin.appendString($t1_2, '{"id":');
+  $t3_4 = { $get() { return e.$get().ID; }, $set(v) { const obj = e.$get(); obj.ID = v; e.$set(obj); } };
+  $t4_5 = $t3_4.$get();
+  $t5_6 = common$helpers.JsonString($t4_5);
+  $t6_7 = $rt.builtin.appendString($t2_3, $t5_6);
+  $t7_8 = $rt.builtin.appendString($t6_7, ',"pubkey":');
+  $t8_9 = { $get() { return e.$get().PubKey; }, $set(v) { const obj = e.$get(); obj.PubKey = v; e.$set(obj); } };
+  $t9_10 = $t8_9.$get();
+  $t10_11 = common$helpers.JsonString($t9_10);
+  $t11_12 = $rt.builtin.appendString($t7_8, $t10_11);
+  $t12_13 = $rt.builtin.appendString($t11_12, ',"created_at":');
+  $t13_14 = { $get() { return e.$get().CreatedAt; }, $set(v) { const obj = e.$get(); obj.CreatedAt = v; e.$set(obj); } };
+  $t14_15 = $t13_14.$get();
+  $t15_16 = common$helpers.Itoa($t14_15);
+  $t16_17 = $rt.builtin.appendString($t12_13, $t15_16);
+  $t17_18 = $rt.builtin.appendString($t16_17, ',"kind":');
+  $t18_19 = { $get() { return e.$get().Kind; }, $set(v) { const obj = e.$get(); obj.Kind = v; e.$set(obj); } };
+  $t19_20 = $t18_19.$get();
+  $t20_21 = $t19_20;
+  $t21_22 = common$helpers.Itoa($t20_21);
+  $t22_23 = $rt.builtin.appendString($t17_18, $t21_22);
+  $t23_24 = $rt.builtin.appendString($t22_23, ',"tags":');
+  $t24_25 = { $get() { return e.$get().Tags; }, $set(v) { const obj = e.$get(); obj.Tags = v; e.$set(obj); } };
+  $t25_26 = $t24_25.$get();
+  $t26_27 = serializeTags($t23_24, $t25_26);
+  $t27_28 = $rt.builtin.appendString($t26_27, ',"content":');
+  $t28_29 = { $get() { return e.$get().Content; }, $set(v) { const obj = e.$get(); obj.Content = v; e.$set(obj); } };
+  $t29_30 = $t28_29.$get();
+  $t30_31 = common$helpers.JsonString($t29_30);
+  $t31_32 = $rt.builtin.appendString($t27_28, $t30_31);
+  $t32_33 = $rt.builtin.appendString($t31_32, ',"sig":');
+  $t33_34 = { $get() { return e.$get().Sig; }, $set(v) { const obj = e.$get(); obj.Sig = v; e.$set(obj); } };
+  $t34_35 = $t33_34.$get();
+  $t35_36 = common$helpers.JsonString($t34_35);
+  $t36_37 = $rt.builtin.appendString($t32_33, $t35_36);
+  $t37_38 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t38_39 = $t37_38.$get().addr(0);
+  $t38_39.$set(125);
+  $t39_40 = $rt.builtin.sliceSlice($t37_38.$get(), undefined, undefined, undefined);
+  $t40_41 = $rt.builtin.appendSlice($t36_37, $t39_40);
+  $t41_42 = $rt.builtin.bytesToString($t40_41);
+  return $t41_42;
+}
+
+$rt.types.getType('common/nostr.Event')?.methods?.set('ToJSON', Event$ToJSON);

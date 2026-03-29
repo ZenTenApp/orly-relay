@@ -47,46 +47,20 @@ func NewSubscriptionHandler(
 }
 
 // HandleSubscribe processes a "subscribe" or "subscribe <alias>" command.
-// It creates an invoice, sends it to the user, waits for payment,
-// then activates the subscription and sends confirmation.
+// Plain subscribe is free and instant. Alias subscribe requires payment.
 func (sh *SubscriptionHandler) HandleSubscribe(ctx context.Context, pubkeyHex, alias string) {
-	// Determine price based on alias request
-	price := sh.priceSats
-	if alias != "" {
-		price = sh.aliasPriceSats
-		if price == 0 {
-			price = sh.priceSats * 2
-		}
+	if alias == "" {
+		sh.handleFreeSubscribe(pubkeyHex)
+	} else {
+		sh.handleAliasSubscribe(ctx, pubkeyHex, alias)
 	}
+}
 
-	// If alias requested, validate and check availability BEFORE creating invoice
-	if alias != "" {
-		if err := acl.ValidateAlias(alias); err != nil {
-			sh.sendReply(pubkeyHex, fmt.Sprintf("Invalid alias: %v", err))
-			return
-		}
-		if sh.aclClient != nil {
-			taken, err := sh.aclClient.IsAliasTaken(alias)
-			if err != nil {
-				log.E.F("alias check failed for %s: %v", alias, err)
-				sh.sendReply(pubkeyHex, "Failed to check alias availability. Please try again.")
-				return
-			}
-			if taken {
-				// Check if this pubkey already owns it (re-subscribe is ok)
-				existingPubkey, _ := sh.aclClient.GetPubkeyByAlias(alias)
-				if existingPubkey != pubkeyHex {
-					sh.sendReply(pubkeyHex, fmt.Sprintf("Alias %q is already taken. Try a different alias.", alias))
-					return
-				}
-			}
-		}
-	}
-
+// handleFreeSubscribe activates npub-only email instantly, no payment.
+func (sh *SubscriptionHandler) handleFreeSubscribe(pubkeyHex string) {
 	month := 30 * 24 * time.Hour
 	now := time.Now()
 
-	// Look up existing subscription expiry.
 	var currentExpiry time.Time
 	if sh.aclClient != nil {
 		sub, err := sh.aclClient.GetSubscription(pubkeyHex)
@@ -100,95 +74,35 @@ func (sh *SubscriptionHandler) HandleSubscribe(ctx context.Context, pubkeyHex, a
 		}
 	}
 
-	var expiresAt time.Time
-	var paymentHash string
-
-	if sh.payments == nil {
-		// Free tier: max 2 months from now, can't re-subscribe until halfway through.
-		if !currentExpiry.IsZero() && currentExpiry.After(now) {
-			remaining := currentExpiry.Sub(now)
-			if remaining > month/2 {
-				sh.sendReply(pubkeyHex, fmt.Sprintf(
-					"You can renew after %s (halfway through your current period).",
-					now.Add(remaining-month/2).Format("2006-01-02"),
-				))
-				return
-			}
-		}
-		expiresAt = now.Add(month)
-		if !currentExpiry.IsZero() && currentExpiry.After(now) {
-			expiresAt = currentExpiry.Add(month)
-			// Cap at 2 months from now.
-			cap := now.Add(2 * month)
-			if expiresAt.After(cap) {
-				expiresAt = cap
-			}
-		}
-		log.I.F("free subscription activated for %s (alias=%q)", pubkeyHex, alias)
-	} else {
-		// Paid tier: extend from current expiry (stacks).
-		baseTime := now
-		if !currentExpiry.IsZero() && currentExpiry.After(now) {
-			baseTime = currentExpiry
-		}
-		expiresAt = baseTime.Add(month)
-		// Paid mode — create invoice and wait for payment
-		invoice, err := sh.payments.CreateInvoice(ctx, price)
-		if err != nil {
-			log.E.F("failed to create subscription invoice for %s: %v", pubkeyHex, err)
-			sh.sendReply(pubkeyHex, "Failed to create invoice. Please try again later.")
+	// Can't renew until halfway through current period.
+	if !currentExpiry.IsZero() && currentExpiry.After(now) {
+		remaining := currentExpiry.Sub(now)
+		if remaining > month/2 {
+			sh.sendReply(pubkeyHex, fmt.Sprintf(
+				"You can renew after %s (halfway through your current period).",
+				now.Add(remaining-month/2).Format("2006-01-02"),
+			))
 			return
 		}
-
-		desc := fmt.Sprintf("Marmot Email Bridge subscription: %d sats/month", price)
-		if alias != "" {
-			desc = fmt.Sprintf("Marmot Email Bridge subscription with alias %q: %d sats/month", alias, price)
-		}
-		sh.sendReply(pubkeyHex, fmt.Sprintf(
-			"%s\n\nPay this Lightning invoice to activate:\n\n%s\n\n"+
-				"The invoice expires in 10 minutes. "+
-				"You'll receive a confirmation DM when payment is received.",
-			desc,
-			invoice.Bolt11,
-		))
-
-		payCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-		defer cancel()
-
-		status, err := sh.payments.WaitForPayment(payCtx, invoice.PaymentHash, 5*time.Second)
-		if err != nil {
-			log.D.F("subscription payment wait ended for %s: %v", pubkeyHex, err)
-			return
-		}
-		paymentHash = status.PaymentHash
 	}
 
-	// Activate subscription
+	expiresAt := now.Add(month)
+	if !currentExpiry.IsZero() && currentExpiry.After(now) {
+		expiresAt = currentExpiry.Add(month)
+		cap := now.Add(2 * month)
+		if expiresAt.After(cap) {
+			expiresAt = cap
+		}
+	}
+
 	if sh.aclClient != nil {
-		if err := sh.aclClient.SubscribePubkey(pubkeyHex, expiresAt, paymentHash, alias); err != nil {
-			log.E.F("failed to activate ACL subscription for %s: %v", pubkeyHex, err)
+		if err := sh.aclClient.SubscribePubkey(pubkeyHex, expiresAt, "", ""); err != nil {
+			log.E.F("failed to activate subscription for %s: %v", pubkeyHex, err)
 			sh.sendReply(pubkeyHex, "Failed to activate subscription. Contact the relay operator.")
 			return
 		}
-		if alias != "" {
-			if err := sh.aclClient.ClaimAlias(alias, pubkeyHex); err != nil {
-				log.W.F("alias claim failed for %s → %s: %v", alias, pubkeyHex, err)
-				sh.sendReply(pubkeyHex, fmt.Sprintf(
-					"Subscription active (expires %s).\n\n"+
-						"However, alias %q could not be claimed: %v\n"+
-						"You can still send email using your npub address.",
-					expiresAt.Format("2006-01-02"), alias, err,
-				))
-				return
-			}
-		}
 	} else {
-		sub := &Subscription{
-			PubkeyHex:   pubkeyHex,
-			ExpiresAt:   expiresAt,
-			CreatedAt:   time.Now(),
-			InvoiceHash: paymentHash,
-		}
+		sub := &Subscription{PubkeyHex: pubkeyHex, ExpiresAt: expiresAt, CreatedAt: time.Now()}
 		if err := sh.store.Save(sub); err != nil {
 			log.E.F("failed to save subscription for %s: %v", pubkeyHex, err)
 			sh.sendReply(pubkeyHex, "Failed to activate subscription. Contact the relay operator.")
@@ -196,24 +110,106 @@ func (sh *SubscriptionHandler) HandleSubscribe(ctx context.Context, pubkeyHex, a
 		}
 	}
 
-	log.I.F("subscription activated for %s (alias=%q, expires %s)", pubkeyHex, alias, expiresAt.Format(time.RFC3339))
-
 	email := sh.userEmail(pubkeyHex)
-	confirmMsg := fmt.Sprintf(
-		"Payment received! Your subscription is now active.\n\n"+
-			"Your email address: %s\n"+
-			"Expires: %s\n",
+	log.I.F("free subscription activated for %s, email: %s", pubkeyHex, email)
+	sh.sendReply(pubkeyHex, fmt.Sprintf(
+		"Subscription active!\n\nYour email address: %s\nExpires: %s\nSend rate: 1 per 20 seconds\n\n"+
+			"To send an email, DM this bridge with:\n\n"+
+			"To: recipient@example.com\nSubject: Your subject\n\nYour message here.",
 		email, expiresAt.Format("2006-01-02"),
-	)
-	if alias != "" {
-		confirmMsg += fmt.Sprintf("Alias: %s@%s\n", alias, sh.domain)
-	}
-	confirmMsg += "\nYou can now send emails by DMing this bridge with email headers:\n\n" +
-		"To: recipient@example.com\n" +
-		"Subject: Your subject\n\n" +
-		"Your message here."
+	))
+}
 
-	sh.sendReply(pubkeyHex, confirmMsg)
+// handleAliasSubscribe validates alias, creates invoice, waits for payment, claims alias.
+// One pubkey can have multiple aliases — each costs the same.
+func (sh *SubscriptionHandler) handleAliasSubscribe(ctx context.Context, pubkeyHex, alias string) {
+	if err := acl.ValidateAlias(alias); err != nil {
+		sh.sendReply(pubkeyHex, fmt.Sprintf("Invalid alias: %v", err))
+		return
+	}
+	if sh.aclClient != nil {
+		taken, err := sh.aclClient.IsAliasTaken(alias)
+		if err != nil {
+			log.E.F("alias check failed for %s: %v", alias, err)
+			sh.sendReply(pubkeyHex, "Failed to check alias availability. Please try again.")
+			return
+		}
+		if taken {
+			existingPubkey, _ := sh.aclClient.GetPubkeyByAlias(alias)
+			if existingPubkey != pubkeyHex {
+				sh.sendReply(pubkeyHex, fmt.Sprintf("Alias %q is already taken. Try a different alias.", alias))
+				return
+			}
+			sh.sendReply(pubkeyHex, fmt.Sprintf("You already own alias %q.", alias))
+			return
+		}
+	}
+
+	price := sh.aliasPriceSats
+	if price == 0 {
+		price = sh.priceSats
+	}
+
+	if sh.payments == nil {
+		sh.sendReply(pubkeyHex, "Alias subscriptions require Lightning payment, which is not configured.")
+		return
+	}
+
+	invoice, err := sh.payments.CreateInvoice(ctx, price)
+	if err != nil {
+		log.E.F("failed to create alias invoice for %s: %v", pubkeyHex, err)
+		sh.sendReply(pubkeyHex, "Failed to create invoice. Please try again later.")
+		return
+	}
+
+	sh.sendReply(pubkeyHex, fmt.Sprintf(
+		"Alias %q: %d sats\n\nPay this Lightning invoice:\n\n%s\n\n"+
+			"Expires in 10 minutes.",
+		alias, price, invoice.Bolt11,
+	))
+
+	payCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	status, err := sh.payments.WaitForPayment(payCtx, invoice.PaymentHash, 5*time.Second)
+	if err != nil {
+		log.D.F("alias payment wait ended for %s: %v", pubkeyHex, err)
+		return
+	}
+
+	// Ensure base subscription exists (extend or create).
+	month := 30 * 24 * time.Hour
+	now := time.Now()
+	expiresAt := now.Add(month)
+	if sh.aclClient != nil {
+		sub, err := sh.aclClient.GetSubscription(pubkeyHex)
+		if err == nil && sub.ExpiresAt.After(now) {
+			expiresAt = sub.ExpiresAt.Add(month)
+		}
+		if err := sh.aclClient.SubscribePubkey(pubkeyHex, expiresAt, status.PaymentHash, alias); err != nil {
+			log.E.F("failed to activate subscription for %s: %v", pubkeyHex, err)
+			sh.sendReply(pubkeyHex, "Payment received but subscription failed. Contact the relay operator.")
+			return
+		}
+		if err := sh.aclClient.ClaimAlias(alias, pubkeyHex); err != nil {
+			log.W.F("alias claim failed for %s → %s: %v", alias, pubkeyHex, err)
+			sh.sendReply(pubkeyHex, fmt.Sprintf("Payment received but alias %q could not be claimed: %v", alias, err))
+			return
+		}
+	} else {
+		sub := &Subscription{PubkeyHex: pubkeyHex, ExpiresAt: expiresAt, CreatedAt: now, InvoiceHash: status.PaymentHash}
+		if err := sh.store.Save(sub); err != nil {
+			log.E.F("failed to save subscription for %s: %v", pubkeyHex, err)
+		}
+	}
+
+	aliasEmail := fmt.Sprintf("%s@%s", alias, sh.domain)
+	npubEmail := sh.userEmail(pubkeyHex)
+	log.I.F("alias %q claimed by %s, email: %s", alias, pubkeyHex, aliasEmail)
+	sh.sendReply(pubkeyHex, fmt.Sprintf(
+		"Payment received! Alias claimed.\n\nAlias email: %s\nnpub email: %s\nExpires: %s\nSend rate: 1 per 5 seconds",
+		aliasEmail, npubEmail, expiresAt.Format("2006-01-02"),
+	))
 }
 
 // HandleStatus replies with the user's subscription info.
@@ -226,9 +222,13 @@ func (sh *SubscriptionHandler) HandleStatus(pubkeyHex string) {
 			sh.sendReply(pubkeyHex, "No active subscription found.")
 			return
 		}
-		msg := fmt.Sprintf("Subscription status:\n\nYour email: %s\nExpires: %s\n", email, sub.ExpiresAt.Format("2006-01-02"))
-		if sub.HasAlias {
-			msg += fmt.Sprintf("Alias: %s@%s\n", sub.Alias, sh.domain)
+		msg := fmt.Sprintf("Subscription status:\n\nYour npub email: %s\nExpires: %s\n", email, sub.ExpiresAt.Format("2006-01-02"))
+		if len(sub.Aliases) > 0 {
+			for _, a := range sub.Aliases {
+				msg += fmt.Sprintf("Alias email: %s@%s\n", a, sh.domain)
+			}
+		} else if sub.HasAlias {
+			msg += fmt.Sprintf("Alias email: %s@%s\n", sub.Alias, sh.domain)
 		}
 		remaining := time.Until(sub.ExpiresAt).Round(time.Hour)
 		if remaining > 0 {

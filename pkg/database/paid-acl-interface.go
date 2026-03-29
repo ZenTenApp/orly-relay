@@ -39,6 +39,12 @@ func (d *D) GetAliasByPubkey(pubkeyHex string) (string, error) {
 	return p.GetAliasByPubkey(pubkeyHex)
 }
 
+// GetAliasesByPubkey returns all aliases for a pubkey.
+func (d *D) GetAliasesByPubkey(pubkeyHex string) ([]string, error) {
+	p := NewPaidACL(d)
+	return p.GetAliasesByPubkey(pubkeyHex)
+}
+
 // GetPubkeyByAlias returns the pubkey for an alias, or "" if not found.
 func (d *D) GetPubkeyByAlias(alias string) (string, error) {
 	p := NewPaidACL(d)

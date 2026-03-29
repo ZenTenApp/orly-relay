@@ -165,6 +165,7 @@ func (c *Conn) handleMessage(msg string) {
 }
 
 // Subscribe sends a REQ and tracks the subscription.
+// If the connection is still opening, the REQ is deferred to flushSubs().
 func (c *Conn) Subscribe(id string, filters []*nostr.Filter) *Sub {
 	sub := &Sub{
 		ID:      id,
@@ -173,12 +174,15 @@ func (c *Conn) Subscribe(id string, filters []*nostr.Filter) *Sub {
 	}
 	c.subs[id] = sub
 
-	msg := "[\"REQ\",\"" + id + "\""
-	for _, f := range filters {
-		msg += "," + f.Serialize()
+	if c.state == StateOpen {
+		msg := "[\"REQ\",\"" + id + "\""
+		for _, f := range filters {
+			msg += "," + f.Serialize()
+		}
+		msg += "]"
+		ws.Send(c.wsConn, msg)
 	}
-	msg += "]"
-	ws.Send(c.wsConn, msg)
+	// else: flushSubs() sends all stored subs when connection opens.
 
 	return sub
 }

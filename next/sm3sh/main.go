@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	version     = "v0.65.50"
+	version     = "v0.65.51"
 	lsKeyPubkey = "smesh-pubkey"
 	lsKeyTheme  = "smesh-theme"
 )
@@ -496,7 +496,7 @@ func showApp() {
 	dom.SetStyle(right, "justifyContent", "flex-end")
 
 	themeBtn = dom.CreateElement("button")
-	dom.SetStyle(themeBtn, "background", "color-mix(in srgb, var(--fg) 40%, transparent)")
+	dom.SetStyle(themeBtn, "background", "transparent")
 	dom.SetStyle(themeBtn, "border", "none")
 	dom.SetStyle(themeBtn, "borderRadius", "50%")
 	dom.SetStyle(themeBtn, "width", "32px")
@@ -518,7 +518,7 @@ func showApp() {
 	dom.SetTextContent(logout, "logout")
 	dom.SetStyle(logout, "fontFamily", "'Fira Code', monospace")
 	dom.SetStyle(logout, "fontSize", "12px")
-	dom.SetStyle(logout, "background", "color-mix(in srgb, var(--fg) 40%, transparent)")
+	dom.SetStyle(logout, "background", "transparent")
 	dom.SetStyle(logout, "border", "none")
 	dom.SetStyle(logout, "color", "var(--fg)")
 	dom.SetStyle(logout, "borderRadius", "4px")
@@ -660,7 +660,16 @@ func showApp() {
 	dom.SetStyle(bottomBar, "color", "var(--fg)")
 	dom.SetStyle(bottomBar, "zIndex", "100")
 
-	// Avatar + name.
+	// Avatar + name in clickable box.
+	userBtn := dom.CreateElement("div")
+	dom.SetStyle(userBtn, "display", "flex")
+	dom.SetStyle(userBtn, "alignItems", "center")
+	dom.SetStyle(userBtn, "gap", "6px")
+	dom.SetStyle(userBtn, "padding", "4px 10px")
+	dom.SetStyle(userBtn, "border", "none")
+	dom.SetStyle(userBtn, "borderRadius", "4px")
+	dom.SetStyle(userBtn, "cursor", "pointer")
+
 	avatarEl = dom.CreateElement("img")
 	dom.SetAttribute(avatarEl, "width", "20")
 	dom.SetAttribute(avatarEl, "height", "20")
@@ -668,7 +677,7 @@ func showApp() {
 	dom.SetStyle(avatarEl, "objectFit", "cover")
 	dom.SetStyle(avatarEl, "display", "none")
 	dom.SetAttribute(avatarEl, "onerror", "this.style.display='none'")
-	dom.AppendChild(bottomBar, avatarEl)
+	dom.AppendChild(userBtn, avatarEl)
 
 	nameEl = dom.CreateElement("span")
 	dom.SetStyle(nameEl, "fontSize", "12px")
@@ -682,16 +691,12 @@ func showApp() {
 	if len(npubStr) > 20 {
 		dom.SetTextContent(nameEl, npubStr[:12]+"..."+npubStr[len(npubStr)-4:])
 	}
-	dom.AppendChild(bottomBar, nameEl)
+	dom.AppendChild(userBtn, nameEl)
 
-	dom.SetStyle(avatarEl, "cursor", "pointer")
-	dom.SetStyle(nameEl, "cursor", "pointer")
-	dom.AddEventListener(avatarEl, "click", dom.RegisterCallback(func() {
+	dom.AddEventListener(userBtn, "click", dom.RegisterCallback(func() {
 		showProfile(pubhex)
 	}))
-	dom.AddEventListener(nameEl, "click", dom.RegisterCallback(func() {
-		showProfile(pubhex)
-	}))
+	dom.AppendChild(bottomBar, userBtn)
 
 	sep := dom.CreateElement("span")
 	dom.SetTextContent(sep, "|")
@@ -864,6 +869,10 @@ func onSWMessage(raw string) {
 		dom.PostToSW("activate-update")
 		return
 	}
+	if raw == "reload" {
+		dom.LocationReload()
+		return
+	}
 	if len(raw) < 5 || raw[0] != '[' {
 		return
 	}
@@ -909,7 +918,7 @@ func onSWMessage(raw string) {
 		// Store for future use.
 	case "MLS_STATUS":
 		text, _ := nextStr(raw, pos)
-		appendSystemBubble(text)
+		dom.ConsoleLog("[mls] " + text)
 	case "SW_LOG":
 		origin, pos2 := nextStr(raw, pos)
 		logMsg, _ := nextStr(raw, pos2)
@@ -1530,7 +1539,7 @@ func flushFetchQueue() {
 		proxy = appendUnique(proxy, r)
 	}
 
-	const batchSize = 10
+	const batchSize = 100
 	for i := 0; i < len(queue); i += batchSize {
 		end := i + batchSize
 		if end > len(queue) {
@@ -1591,8 +1600,7 @@ func retryMissingProfiles() {
 		proxy = appendUnique(proxy, u)
 	}
 
-	// Chunk into batches of 10 to avoid relay timeouts.
-	const batchSize = 10
+	const batchSize = 100
 	batchNum := 0
 	for i := 0; i < len(missing); i += batchSize {
 		end := i + batchSize
@@ -1719,6 +1727,75 @@ func showProfile(pk string) {
 	}
 }
 
+func verifyNip05(nip05, pubkeyHex string, badge dom.Element) {
+	at := -1
+	for i := 0; i < len(nip05); i++ {
+		if nip05[i] == '@' {
+			at = i
+			break
+		}
+	}
+	if at < 1 || at >= len(nip05)-1 {
+		dom.SetTextContent(badge, "\xe2\x9a\xa0\xef\xb8\x8f") // ⚠️
+		return
+	}
+	local := nip05[:at]
+	domain := nip05[at+1:]
+	url := "https://" + domain + "/.well-known/nostr.json?name=" + local
+	dom.FetchText(url, func(body string) {
+		if body == "" {
+			dom.SetTextContent(badge, "\xe2\x9a\xa0\xef\xb8\x8f") // ⚠️
+			return
+		}
+		namesObj := helpers.JsonGetString(body, "names")
+		if namesObj == "" {
+			// names might be an object not a string — extract manually
+			namesStart := -1
+			key := "\"names\""
+			for i := 0; i < len(body)-len(key); i++ {
+				if body[i:i+len(key)] == key {
+					namesStart = i + len(key)
+					break
+				}
+			}
+			if namesStart < 0 {
+				dom.SetTextContent(badge, "\xe2\x9a\xa0\xef\xb8\x8f")
+				return
+			}
+			// Skip colon and whitespace to find the object
+			for namesStart < len(body) && (body[namesStart] == ':' || body[namesStart] == ' ' || body[namesStart] == '\t') {
+				namesStart++
+			}
+			if namesStart >= len(body) || body[namesStart] != '{' {
+				dom.SetTextContent(badge, "\xe2\x9a\xa0\xef\xb8\x8f")
+				return
+			}
+			// Find matching brace
+			depth := 0
+			end := namesStart
+			for end < len(body) {
+				if body[end] == '{' {
+					depth++
+				} else if body[end] == '}' {
+					depth--
+					if depth == 0 {
+						end++
+						break
+					}
+				}
+				end++
+			}
+			namesObj = body[namesStart:end]
+		}
+		got := helpers.JsonGetString(namesObj, local)
+		if got == pubkeyHex {
+			dom.SetTextContent(badge, "\xe2\x9c\x85") // ✅
+		} else {
+			dom.SetTextContent(badge, "\xe2\x9a\xa0\xef\xb8\x8f") // ⚠️
+		}
+	})
+}
+
 func renderProfilePage(pk string) {
 	savedTab := profileTab
 	clearChildren(profilePage)
@@ -1739,7 +1816,7 @@ func renderProfilePage(pk string) {
 		bannerEl := dom.CreateElement("img")
 		dom.SetAttribute(bannerEl, "src", banner)
 		dom.SetStyle(bannerEl, "width", "100%")
-		dom.SetStyle(bannerEl, "height", "200px")
+		dom.SetStyle(bannerEl, "height", "240px")
 		dom.SetStyle(bannerEl, "objectFit", "cover")
 		dom.SetStyle(bannerEl, "objectPosition", "center")
 		dom.SetStyle(bannerEl, "display", "block")
@@ -1759,6 +1836,8 @@ func renderProfilePage(pk string) {
 		dom.SetStyle(card, "margin", "16px")
 	}
 	dom.SetStyle(card, "position", "relative")
+	dom.SetStyle(card, "width", "fit-content")
+	dom.SetStyle(card, "maxWidth", "calc(100% - 32px)")
 
 	// Top row: avatar + info.
 	topRow := dom.CreateElement("div")
@@ -1782,6 +1861,7 @@ func renderProfilePage(pk string) {
 	info := dom.CreateElement("div")
 	dom.SetStyle(info, "minWidth", "0")
 	dom.SetStyle(info, "flex", "1")
+	dom.SetStyle(info, "overflow", "hidden")
 
 	if name != "" {
 		nameSpan := dom.CreateElement("div")
@@ -1793,29 +1873,37 @@ func renderProfilePage(pk string) {
 	}
 
 	if nip05 != "" {
-		nip05El := dom.CreateElement("div")
-		dom.SetTextContent(nip05El, nip05)
-		dom.SetStyle(nip05El, "color", "var(--muted)")
-		dom.SetStyle(nip05El, "fontSize", "13px")
-		dom.AppendChild(info, nip05El)
+		nip05Row := dom.CreateElement("div")
+		dom.SetStyle(nip05Row, "display", "flex")
+		dom.SetStyle(nip05Row, "alignItems", "center")
+		dom.SetStyle(nip05Row, "gap", "4px")
+		nip05Text := dom.CreateElement("span")
+		dom.SetTextContent(nip05Text, nip05)
+		dom.SetStyle(nip05Text, "color", "var(--muted)")
+		dom.SetStyle(nip05Text, "fontSize", "13px")
+		dom.AppendChild(nip05Row, nip05Text)
+		nip05Badge := dom.CreateElement("span")
+		dom.SetStyle(nip05Badge, "fontSize", "14px")
+		dom.AppendChild(nip05Row, nip05Badge)
+		dom.AppendChild(info, nip05Row)
+
+		// Async NIP-05 validation.
+		verifyNip05(nip05, pk, nip05Badge)
 	}
 
-	// npub (truncated) with copy button.
+	// npub (full length) with copy button.
 	npubBytes := helpers.HexDecode(pk)
 	npubStr := helpers.EncodeNpub(npubBytes)
 	npubRow := dom.CreateElement("div")
 	dom.SetStyle(npubRow, "display", "flex")
-	dom.SetStyle(npubRow, "alignItems", "center")
+	dom.SetStyle(npubRow, "alignItems", "flex-start")
 	dom.SetStyle(npubRow, "gap", "6px")
 	dom.SetStyle(npubRow, "marginTop", "2px")
 	npubEl := dom.CreateElement("span")
 	dom.SetStyle(npubEl, "color", "var(--muted)")
 	dom.SetStyle(npubEl, "fontSize", "12px")
-	if len(npubStr) > 20 {
-		dom.SetTextContent(npubEl, npubStr[:16]+"..."+npubStr[len(npubStr)-8:])
-	} else {
-		dom.SetTextContent(npubEl, npubStr)
-	}
+	dom.SetStyle(npubEl, "wordBreak", "break-all")
+	dom.SetTextContent(npubEl, npubStr)
 	dom.AppendChild(npubRow, npubEl)
 	copyBtn := dom.CreateElement("span")
 	dom.SetTextContent(copyBtn, "copy")
@@ -1843,6 +1931,7 @@ func renderProfilePage(pk string) {
 		if lud16 != "" {
 			lEl := dom.CreateElement("span")
 			dom.SetStyle(lEl, "color", "var(--muted)")
+			dom.SetStyle(lEl, "wordBreak", "break-all")
 			dom.SetTextContent(lEl, "\xE2\x9A\xA1 "+lud16)
 			dom.AppendChild(metaRow, lEl)
 		}
@@ -2441,7 +2530,11 @@ func initMessaging() {
 		return
 	}
 
-	// Request conversation list from cache.
+	// Render new-chat button immediately — don't wait for DM_LIST round-trip.
+	clearChildren(msgListContainer)
+	renderNewChatButton()
+
+	// Request conversation list from cache (will re-render below the button).
 	dom.PostToSW("[\"DM_LIST\"]")
 
 	// Init MLS if not already done. publishKP + subscribe auto-bootstrap inside signer.
@@ -2451,13 +2544,7 @@ func initMessaging() {
 	}
 }
 
-func renderConversationList(listJSON string) {
-	if msgView != "list" {
-		return
-	}
-	clearChildren(msgListContainer)
-
-	// "New chat" button.
+func renderNewChatButton() {
 	newBtn := dom.CreateElement("button")
 	dom.SetTextContent(newBtn, "+ new chat")
 	dom.SetStyle(newBtn, "display", "block")
@@ -2476,6 +2563,14 @@ func renderConversationList(listJSON string) {
 		showNewChatInput()
 	}))
 	dom.AppendChild(msgListContainer, newBtn)
+}
+
+func renderConversationList(listJSON string) {
+	if msgView != "list" {
+		return
+	}
+	clearChildren(msgListContainer)
+	renderNewChatButton()
 
 	// Parse the list JSON array: [{peer,lastMessage,lastTs,from}, ...]
 	if listJSON == "" || listJSON == "[]" {

@@ -32,6 +32,10 @@ func (n *N) GetAliasByPubkey(pubkeyHex string) (string, error) {
 	return "", errPaidACLNotSupported
 }
 
+func (n *N) GetAliasesByPubkey(pubkeyHex string) ([]string, error) {
+	return nil, errPaidACLNotSupported
+}
+
 func (n *N) GetPubkeyByAlias(alias string) (string, error) {
 	return "", errPaidACLNotSupported
 }

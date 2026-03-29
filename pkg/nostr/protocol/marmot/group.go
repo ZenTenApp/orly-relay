@@ -73,11 +73,17 @@ func CreateDMGroup(selfKPP *mls.KeyPairPackage, peerKP *mls.KeyPackage, selfPub,
 		return nil, nil, nil, fmt.Errorf("process own commit: %w", err)
 	}
 
+	mlsBytes, err := group.Marshal()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("marshal group state: %w", err)
+	}
+
 	gs := &GroupState{
 		GroupID:      groupID,
 		NostrGroupID: ngd.NostrGroupID[:],
 		PeerPub:      peerPub,
 		group:        group,
+		mlsBytes:     mlsBytes,
 	}
 	return gs, welcome, welcome.Bytes(), nil
 }
@@ -90,10 +96,16 @@ func JoinDMGroup(welcome *mls.Welcome, selfKPP *mls.KeyPairPackage, peerPub []by
 		return nil, fmt.Errorf("mls join from welcome: %w", err)
 	}
 
+	mlsBytes, err := group.Marshal()
+	if err != nil {
+		return nil, fmt.Errorf("marshal group state: %w", err)
+	}
+
 	gs := &GroupState{
-		GroupID: group.GroupID(),
-		PeerPub: peerPub,
-		group:   group,
+		GroupID:  group.GroupID(),
+		PeerPub:  peerPub,
+		group:    group,
+		mlsBytes: mlsBytes,
 	}
 
 	// Extract nostr_group_id from the 0xf2ee extension

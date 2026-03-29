@@ -87,13 +87,13 @@ func (p *PaidACL) ListSubscriptions() ([]*PaidSubscription, error) {
 
 // ClaimAlias atomically claims an alias for a pubkey.
 // Returns an error if the alias is already taken by another pubkey.
+// One pubkey can have multiple aliases — each claim appends to the list.
 func (p *PaidACL) ClaimAlias(alias, pubkeyHex string) error {
 	return p.Update(func(txn *badger.Txn) error {
 		// Check if alias is already taken
 		aliasKey := p.getAliasKey(alias)
 		item, err := txn.Get(aliasKey)
 		if err == nil {
-			// Alias exists — check if it's the same pubkey (re-claim is ok)
 			val, err := item.ValueCopy(nil)
 			if err != nil {
 				return err
@@ -111,16 +111,6 @@ func (p *PaidACL) ClaimAlias(alias, pubkeyHex string) error {
 			return err
 		}
 
-		// Remove old alias for this pubkey if any
-		revKey := p.getAliasRevKey(pubkeyHex)
-		if item, err := txn.Get(revKey); err == nil {
-			val, _ := item.ValueCopy(nil)
-			if len(val) > 0 {
-				// Delete old forward mapping
-				txn.Delete(p.getAliasKey(string(val)))
-			}
-		}
-
 		// Write forward mapping: alias → pubkey
 		claim := AliasClaim{
 			Alias:     alias,
@@ -135,31 +125,61 @@ func (p *PaidACL) ClaimAlias(alias, pubkeyHex string) error {
 			return err
 		}
 
-		// Write reverse mapping: pubkey → alias
-		return txn.Set(revKey, []byte(alias))
+		// Append to reverse mapping: pubkey → JSON array of aliases
+		revKey := p.getAliasRevKey(pubkeyHex)
+		existing := p.readAliasRev(txn, revKey)
+		for _, a := range existing {
+			if a == alias {
+				return nil // already in list
+			}
+		}
+		existing = append(existing, alias)
+		revData, err := json.Marshal(existing)
+		if err != nil {
+			return err
+		}
+		return txn.Set(revKey, revData)
 	})
 }
 
-// GetAliasByPubkey returns the alias for a pubkey, or "" if none.
+// GetAliasByPubkey returns the first alias for a pubkey, or "" if none.
 func (p *PaidACL) GetAliasByPubkey(pubkeyHex string) (string, error) {
-	var alias string
+	aliases, err := p.GetAliasesByPubkey(pubkeyHex)
+	if err != nil || len(aliases) == 0 {
+		return "", err
+	}
+	return aliases[0], nil
+}
+
+// GetAliasesByPubkey returns all aliases for a pubkey.
+func (p *PaidACL) GetAliasesByPubkey(pubkeyHex string) ([]string, error) {
+	var aliases []string
 	err := p.View(func(txn *badger.Txn) error {
 		key := p.getAliasRevKey(pubkeyHex)
-		item, err := txn.Get(key)
-		if err == badger.ErrKeyNotFound {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		val, err := item.ValueCopy(nil)
-		if err != nil {
-			return err
-		}
-		alias = string(val)
+		aliases = p.readAliasRev(txn, key)
 		return nil
 	})
-	return alias, err
+	return aliases, err
+}
+
+// readAliasRev reads the reverse mapping, handling both old (plain string)
+// and new (JSON array) formats.
+func (p *PaidACL) readAliasRev(txn *badger.Txn, key []byte) []string {
+	item, err := txn.Get(key)
+	if err != nil {
+		return nil
+	}
+	val, err := item.ValueCopy(nil)
+	if err != nil || len(val) == 0 {
+		return nil
+	}
+	// Try JSON array first (new format)
+	var arr []string
+	if json.Unmarshal(val, &arr) == nil {
+		return arr
+	}
+	// Fall back to plain string (old format)
+	return []string{string(val)}
 }
 
 // GetPubkeyByAlias returns the pubkey for an alias, or "" if not found.

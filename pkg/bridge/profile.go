@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -15,57 +14,46 @@ import (
 	"next.orly.dev/pkg/lol/log"
 )
 
-// parseProfileTemplate reads a profile template file in email-header format
-// (key: value lines, one per line, blank line ends headers). Returns a map
-// of profile fields suitable for JSON marshaling as kind 0 content.
-func parseProfileTemplate(path string) (map[string]string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
+// bridgeAbout returns the desired about text for the bridge profile.
+func (b *Bridge) bridgeAbout() string {
+	url := b.publicRelayURL()
+	if url == "" {
+		url = b.cfg.RelayURL
 	}
-
-	profile := make(map[string]string)
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			break // blank line ends headers
-		}
-		if line[0] == '#' {
-			continue // skip comments
-		}
-		i := strings.IndexByte(line, ':')
-		if i <= 0 {
-			continue
-		}
-		key := strings.TrimSpace(strings.ToLower(line[:i]))
-		val := strings.TrimSpace(line[i+1:])
-		if val != "" {
-			profile[key] = val
-		}
-	}
-	return profile, nil
+	return "nostr to email bridge at " + url
 }
 
-// publishProfile reads the profile template and publishes a kind 0 metadata
-// event to the relay. Silently returns nil if the template file doesn't exist.
+// publishProfile publishes a kind 0 metadata event for the bridge.
+// Checks the existing profile first and only publishes if the about
+// text doesn't match the current config.
 func (b *Bridge) publishProfile() error {
-	path := b.cfg.ProfilePath
-	if path == "" {
-		return nil
-	}
+	wantAbout := b.bridgeAbout()
 
-	profile, err := parseProfileTemplate(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			log.D.F("no profile template at %s, skipping kind 0 publish", path)
+	// Fetch current kind 0 to check if update is needed.
+	existing := b.relay.FetchKind0(b.ctx, b.sign.Pub())
+	if existing != nil {
+		currentAbout := extractJSONString(string(existing.Content), "about")
+		if currentAbout == wantAbout {
+			log.D.F("bridge profile already up to date")
 			return nil
 		}
-		return fmt.Errorf("parse profile template %s: %w", path, err)
 	}
-	if len(profile) == 0 {
-		log.D.F("profile template %s is empty, skipping kind 0 publish", path)
-		return nil
+
+	// Build profile preserving existing fields if any, updating about.
+	profile := make(map[string]string)
+	if existing != nil {
+		// Preserve name/picture/etc from existing profile.
+		for _, key := range []string{"name", "picture", "display_name", "website", "lud16", "nip05", "banner"} {
+			val := extractJSONString(string(existing.Content), key)
+			if val != "" {
+				profile[key] = val
+			}
+		}
 	}
+	if profile["name"] == "" {
+		profile["name"] = "marmot bridge"
+	}
+	profile["about"] = wantAbout
 
 	content, err := json.Marshal(profile)
 	if err != nil {
@@ -85,8 +73,52 @@ func (b *Bridge) publishProfile() error {
 		return fmt.Errorf("publish profile event: %w", err)
 	}
 
-	log.D.F("published kind 0 profile (%d fields) for bridge identity", len(profile))
+	log.I.F("published kind 0 profile: %s", wantAbout)
 	return nil
+}
+
+// extractJSONString extracts a string value from a JSON object by key.
+// Minimal parser — no dependencies.
+func extractJSONString(json, key string) string {
+	needle := "\"" + key + "\""
+	i := strings.Index(json, needle)
+	if i < 0 {
+		return ""
+	}
+	i += len(needle)
+	// Skip : and whitespace
+	for i < len(json) && (json[i] == ':' || json[i] == ' ' || json[i] == '\t') {
+		i++
+	}
+	if i >= len(json) || json[i] != '"' {
+		return ""
+	}
+	i++ // skip opening quote
+	var b strings.Builder
+	for i < len(json) {
+		if json[i] == '\\' && i+1 < len(json) {
+			i++
+			switch json[i] {
+			case '"', '\\', '/':
+				b.WriteByte(json[i])
+			case 'n':
+				b.WriteByte('\n')
+			case 't':
+				b.WriteByte('\t')
+			default:
+				b.WriteByte('\\')
+				b.WriteByte(json[i])
+			}
+			i++
+			continue
+		}
+		if json[i] == '"' {
+			return b.String()
+		}
+		b.WriteByte(json[i])
+		i++
+	}
+	return ""
 }
 
 // publicRelayURL returns the public relay URL for relay list events.
@@ -165,20 +197,21 @@ func (b *Bridge) broadcastIdentity() {
 	var events []*event.E
 
 	// Kind 0 profile
-	if b.cfg.ProfilePath != "" {
-		profile, err := parseProfileTemplate(b.cfg.ProfilePath)
-		if err == nil && len(profile) > 0 {
-			content, err := json.Marshal(profile)
-			if err == nil {
-				ev := &event.E{
-					Content:   content,
-					CreatedAt: time.Now().Unix(),
-					Kind:      0,
-					Tags:      tag.NewS(),
-				}
-				if err := ev.Sign(b.sign); err == nil {
-					events = append(events, ev)
-				}
+	{
+		profile := map[string]string{
+			"name":  "marmot bridge",
+			"about": b.bridgeAbout(),
+		}
+		content, err := json.Marshal(profile)
+		if err == nil {
+			ev := &event.E{
+				Content:   content,
+				CreatedAt: time.Now().Unix(),
+				Kind:      0,
+				Tags:      tag.NewS(),
+			}
+			if err := ev.Sign(b.sign); err == nil {
+				events = append(events, ev)
 			}
 		}
 	}

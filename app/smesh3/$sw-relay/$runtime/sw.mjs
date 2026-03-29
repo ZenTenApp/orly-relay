@@ -251,7 +251,17 @@ let _nextTimerId = 1;
 
 export function SetTimeout(ms, fn) {
   const id = _nextTimerId++;
-  _timers.set(id, setTimeout(() => { _timers.delete(id); fn(); }, ms));
+  _timers.set(id, setTimeout(() => {
+    _timers.delete(id);
+    try {
+      fn();
+    } catch (e) {
+      console.error('relay-sw: SetTimeout CRASH:', e.message, e.stack);
+      if (self._busPort) {
+        self._busPort.postMessage('{"from":"relay","to":"shell","msg":["LOG","relay","TIMER CRASH: ' + String(e.message).replace(/"/g, '\\"').replace(/\n/g, ' ') + '"]}');
+      }
+    }
+  }, ms));
   return id;
 }
 

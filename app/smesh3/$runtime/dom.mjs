@@ -350,6 +350,10 @@ export function ReplaceState(path) {
   history.replaceState(null, '', path);
 }
 
+export function LocationReload() {
+  location.reload();
+}
+
 export function GetPath() {
   return location.pathname + location.hash;
 }

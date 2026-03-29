@@ -50,6 +50,7 @@ func (b *Bridge) initMLS() error {
 	}
 
 	client.OnDM(b.handleMLSDM)
+	client.OnGroupJoined(b.handleMLSGroupJoined)
 	b.mlsClient = client
 
 	// Publish our key package so MLS peers can find us
@@ -88,6 +89,15 @@ func (b *Bridge) handleMLSDM(senderPub []byte, plaintext []byte) {
 
 	if b.router != nil {
 		b.router.RouteDM(b.ctx, senderPubHex, string(plaintext))
+	}
+}
+
+// handleMLSGroupJoined sends a welcome/help message when a new peer establishes a group.
+func (b *Bridge) handleMLSGroupJoined(peerPub []byte) {
+	peerHex := hex.Enc(peerPub)
+	log.I.F("new MLS group with %s, sending welcome", peerHex)
+	if b.router != nil {
+		b.router.SendWelcome(peerHex)
 	}
 }
 
@@ -149,7 +159,6 @@ func (b *Bridge) mlsSubscribeAndProcess() error {
 	if err != nil {
 		return fmt.Errorf("MLS subscribe: %w", err)
 	}
-	defer sub.Close()
 
 	groupIDs := b.mlsClient.ActiveGroupIDs()
 	log.I.F("MLS subscribed (welcomes + %d active groups)", len(groupIDs))
@@ -157,12 +166,24 @@ func (b *Bridge) mlsSubscribeAndProcess() error {
 	for {
 		select {
 		case <-b.ctx.Done():
+			sub.Close()
 			return nil
 		case <-b.mlsClient.GroupsChanged():
-			log.I.F("MLS group added, refreshing subscription filters")
-			return nil // causes mlsWatchLoop to re-subscribe with updated filters
+			// Open new subscription BEFORE closing old — no gap where events are lost.
+			// seenIDs deduplicates any overlap; Since=now-2days catches stragglers.
+			newFF := b.mlsClient.SubscriptionFilters()
+			newSub, err := b.relay.Subscribe(b.ctx, newFF)
+			if err != nil {
+				sub.Close()
+				return fmt.Errorf("MLS re-subscribe: %w", err)
+			}
+			sub.Close()
+			sub = newSub
+			groupIDs = b.mlsClient.ActiveGroupIDs()
+			log.I.F("MLS group added, re-subscribed (welcomes + %d active groups)", len(groupIDs))
 		case ev, ok := <-sub.Events():
 			if !ok {
+				sub.Close()
 				return fmt.Errorf("MLS event channel closed")
 			}
 			if err := b.mlsClient.HandleEvent(b.ctx, ev); err != nil {
