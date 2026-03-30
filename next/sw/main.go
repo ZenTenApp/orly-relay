@@ -60,6 +60,14 @@ var appFiles = []string{
 }
 
 var currentVersion string
+var refreshing bool
+
+// File categories for smart reload.
+const (
+	catAppCode = 0 // full page reload
+	catSWCode  = 1 // SW re-register via FORCE_UPDATE_SW
+	catStatic  = 2 // silent cache update only
+)
 
 func main() {
 	initSharedState()
@@ -76,7 +84,6 @@ func main() {
 
 func onInstall(event sw.Event) {
 	sw.WaitUntil(event, func(done func()) {
-		// Skip pre-caching — refreshAndReload() populates cache on SSE version check.
 		sw.SkipWaiting()
 		done()
 	})
@@ -118,7 +125,7 @@ func onMessage(event sw.Event) {
 
 	// Simple string messages — App Shell handles directly.
 	if data == "activate-update" {
-		refreshAndReload()
+		fullRefresh()
 		return
 	}
 	if data == "CLAIM" {
@@ -141,56 +148,173 @@ func onMessage(event sw.Event) {
 
 func connectSSE() {
 	sw.SSEConnect("/__sse", func(data string) {
-		v := data
-		if currentVersion == "" {
-			currentVersion = v
-			return // First version after start — just store it.
+		v := jsonFieldRaw(data, "v")
+		if v == "" {
+			// Old-format SSE (plain number) — treat entire data as version.
+			v = data
 		}
-		if v != currentVersion {
-			currentVersion = v
-			notifyUpdate()
-		}
-	})
-}
-
-func notifyUpdate() {
-	refreshAndReload()
-}
-
-func refreshAndReload() {
-	done := false
-	doNavigate := func() {
-		if done {
+		if v == "" {
 			return
 		}
-		done = true
-		sw.MatchClients(func(client sw.Client) {
-			sw.Navigate(client, "")
-		})
-	}
-
-	// Hard deadline: navigate even if some fetches are stuck.
-	sw.SetTimeout(8000, doNavigate)
-
-	sw.CacheOpen(cacheName, func(cache sw.Cache) {
-		refreshFiles(cache, 0, doNavigate)
+		if currentVersion == "" {
+			currentVersion = v
+			// First connect: populate cache silently — page is already loading.
+			populateCache()
+			return
+		}
+		if v != currentVersion && !refreshing {
+			currentVersion = v
+			refreshing = true
+			raw := jsonFieldRaw(data, "files")
+			if raw == "" {
+				fullRefresh()
+			} else {
+				w := mw{s: raw, i: 0}
+				files := w.strs()
+				if len(files) == 0 {
+					fullRefresh()
+				} else {
+					smartRefresh(files)
+				}
+			}
+		}
 	})
 }
 
-func refreshFiles(cache sw.Cache, idx int, done func()) {
-	if idx >= len(appFiles) {
-		done()
-		return
+func categorize(path string) int {
+	if len(path) > 4 && path[:4] == "/$sw" {
+		return catSWCode
 	}
-	file := appFiles[idx]
-	bust := file + "?v=" + currentVersion
-	sw.Fetch(bust, func(resp sw.Response, ok bool) {
-		if ok && sw.ResponseOK(resp) {
-			sw.CachePut(cache, file, resp, func() {
-				refreshFiles(cache, idx+1, done)
-			})
-		} else {
-			refreshFiles(cache, idx+1, done)
+	if hasSuffix(path, ".svg") || hasSuffix(path, ".css") ||
+		hasSuffix(path, ".woff2") || hasSuffix(path, ".html") {
+		return catStatic
+	}
+	return catAppCode
+}
+
+func hasSuffix(s, suffix string) bool {
+	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
+}
+
+func smartRefresh(files []string) {
+	needReload := false
+	needSWUpdate := false
+	var cacheFiles []string
+
+	for _, f := range files {
+		switch categorize(f) {
+		case catAppCode:
+			needReload = true
+			cacheFiles = append(cacheFiles, f)
+		case catSWCode:
+			needSWUpdate = true
+			// SW files pass through to network, no cache entry.
+		case catStatic:
+			cacheFiles = append(cacheFiles, f)
 		}
+	}
+
+	after := func() {
+		if needReload {
+			doNavigate()
+		} else if needSWUpdate {
+			broadcastToClients(`["FORCE_UPDATE_SW","$sw-relay"]`)
+		}
+	}
+
+	if len(cacheFiles) > 0 {
+		refreshChanged(cacheFiles, after)
+	} else {
+		after()
+	}
+}
+
+func refreshChanged(files []string, done func()) {
+	once := false
+	finish := func() {
+		if once {
+			return
+		}
+		once = true
+		refreshing = false
+		done()
+	}
+	sw.SetTimeout(5000, finish)
+
+	sw.CacheOpen(cacheName, func(cache sw.Cache) {
+		urls := make([]string, len(files))
+		for i, f := range files {
+			urls[i] = f + "?v=" + currentVersion
+		}
+		pending := 0
+		fetchesDone := false
+		sw.FetchAll(urls, func(idx int, resp sw.Response, ok bool) {
+			if ok && sw.ResponseOK(resp) {
+				pending++
+				sw.CachePut(cache, files[idx], resp, func() {
+					pending--
+					if fetchesDone && pending == 0 {
+						finish()
+					}
+				})
+			}
+		}, func() {
+			fetchesDone = true
+			if pending == 0 {
+				finish()
+			}
+		})
+	})
+}
+
+func populateCache() {
+	cacheAll(func() {})
+}
+
+func fullRefresh() {
+	cacheAll(doNavigate)
+}
+
+func cacheAll(done func()) {
+	once := false
+	finish := func() {
+		if once {
+			return
+		}
+		once = true
+		refreshing = false
+		done()
+	}
+	sw.SetTimeout(8000, finish)
+
+	sw.CacheOpen(cacheName, func(cache sw.Cache) {
+		urls := make([]string, len(appFiles))
+		for i, f := range appFiles {
+			urls[i] = f + "?v=" + currentVersion
+		}
+		pending := 0
+		fetchesDone := false
+		sw.FetchAll(urls, func(idx int, resp sw.Response, ok bool) {
+			if ok && sw.ResponseOK(resp) {
+				pending++
+				sw.CachePut(cache, appFiles[idx], resp, func() {
+					pending--
+					if fetchesDone && pending == 0 {
+						finish()
+					}
+				})
+			}
+		}, func() {
+			fetchesDone = true
+			if pending == 0 {
+				finish()
+			}
+		})
+	})
+}
+
+func doNavigate() {
+	sw.MatchClients(func(client sw.Client) {
+		sw.Navigate(client, "")
 	})
 }

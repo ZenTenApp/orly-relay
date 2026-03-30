@@ -234,6 +234,210 @@ SW logs go via BroadcastChannel to the page console. Fire-and-forget — if no p
 - Crypto proxy, session state, key material, message content
 - Anything that makes the server aware of user activity beyond EVENT/REQ
 
+## TinyJS Bridge Invariants
+
+**These rules are derived from the working codebase. Violating them causes silent corruption, not compile errors. Every bug from the past week traces to one of these being broken.**
+
+### 1. The `panic("jsbridge")` Contract
+
+Every Go function in `next/common/jsbridge/*/` that panics with `"jsbridge"` MUST have a matching `export function` with the **exact same name** in the corresponding `$runtime/*.mjs` file. The tinyjs compiler replaces the Go call with a direct JS import at compile time.
+
+- Go stub signature defines the contract; JS implements it
+- If you add a Go bridge function, you MUST add the JS export in the same commit
+- If you rename a Go bridge function, you MUST rename the JS export
+- There are MULTIPLE runtime directories — each SW has its own `$runtime/`:
+  - `app/smesh3/$runtime/dom.mjs` — page runtime (DOM, fetch, SW messaging)
+  - `app/smesh3/$sw/$runtime/sw.mjs` — shell SW runtime
+  - `app/smesh3/$sw-relay/$runtime/sw.mjs` — relay SW runtime
+  - `app/smesh3/$sw-relay/$runtime/bc.mjs` — relay bus runtime
+  - `app/smesh3/$sw/$runtime/bc.mjs` — shell bus runtime
+- `$runtime/*.mjs` files are **hand-written**. All other `.mjs` files in `app/smesh3/` are **tinyjs compiler output** — never edit them by hand
+- When adding a function to the shared jsbridge Go package (`next/common/jsbridge/sw/sw.go`), the JS implementation must be added to **every** `$runtime/sw.mjs` that uses it
+
+### 2. Opaque Handle System
+
+All browser objects cross the Go↔JS boundary as **integer handles**. Never pass DOM elements, Response objects, Cache objects, Client objects, or Events directly to Go.
+
+```
+Go type     | JS storage        | Meaning
+------------|-------------------|------------------
+dom.Element | _elements Map     | DOM node
+sw.Event    | _events Map       | SW lifecycle event
+sw.Client   | _clients Map      | SW client (tab)
+sw.Cache    | _caches Map       | CacheStorage cache
+sw.Response | _responses Map    | fetch Response
+sw.SSE      | _sseConns Map     | EventSource
+sw.Timer    | setTimeout return | Timer handle
+```
+
+- Handle 0 for `dom.Element` is `document.body` (special case)
+- Handle 0 or -1 for other types means "not found" or "error"
+- JS `_store*()` functions allocate monotonically increasing IDs
+- Handles are never reused, never freed — acceptable for SW lifetime
+
+### 3. Fire-and-Forget Callbacks
+
+All async operations use **callbacks**, never Promises that return to Go. The pattern:
+
+```go
+// Go side — callback receives result
+sw.Fetch(url, func(resp sw.Response, ok bool) {
+    // handle result
+})
+```
+
+```javascript
+// JS side — Promise resolves into callback
+export function Fetch(url, fn) {
+  fetch(url).then(
+    (resp) => fn(_storeResponse(resp), true),
+    () => fn(0, false)
+  );
+}
+```
+
+Rules:
+- JS async operations resolve into the Go callback, never return a Promise
+- Callbacks must always be called exactly once (success or failure path)
+- If a callback might never fire (network timeout, etc.), set a safety timeout in Go
+- The `done func()` pattern signals completion of multi-step operations (CacheAddAll, ClaimClients)
+
+### 4. String-Only Boundary Crossing
+
+**Go and JS communicate exclusively via strings and integers.** No Go structs cross to JS. No JS objects cross to Go. Structured data crosses as JSON strings.
+
+- `GetMessageData()` returns `typeof d === 'string' ? d : JSON.stringify(d)` — always a string to Go
+- `PostToSW(msg)` sends a string from page to SW
+- `PostMessageJSON(client, json)` **parses** JSON before posting — receiver gets a real JS array, not a string
+- `PostMessage(client, msg)` sends a raw string — receiver gets a string
+
+This distinction is critical:
+- **SW→Page messages** use `PostMessageJSON` → page receives `Array` → `OnSWMessage` re-serializes to string for Go
+- **Page→SW messages** use `PostToSW` → sends raw string → SW's `GetMessageData` returns it directly
+- **Bus messages** are always strings (JSON objects starting with `{`)
+
+### 5. Message Format Convention
+
+Two message shapes coexist. They are distinguished by the first character:
+
+| First char | Shape | Used by | Example |
+|-----------|-------|---------|---------|
+| `[` | JSON array (as string) | App messages: page↔shell SW | `["EVENT","sub-1",{...}]` |
+| `{` | JSON object (as string) | Bus envelopes: inter-SW | `{"from":"relay","to":"shell","msg":[...]}` |
+
+- `OnSWMessage` in `dom.mjs` **skips** messages starting with `{` — those are bus traffic handled by `index.html`
+- Bus messages use envelope format: `{"from":"<origin>","to":"<dest>","msg":<payload>}`
+- The `msg` field contains the inner array message — it is a JSON value, not a string-escaped JSON
+- SW `message` event handlers check `d[0] === '{'` to route bus vs app messages
+
+### 6. Bus Protocol
+
+Shell SW ↔ Satellite SWs communicate via bus. Shell uses BroadcastChannel (`$sw/$runtime/bc.mjs`). Relay uses MessagePort (`$sw-relay/$runtime/bc.mjs`) for production, despite the Go import being `common/jsbridge/bc`.
+
+**Envelope format:**
+```json
+{"from":"shell","to":"relay","msg":["PROXY","sub-1",{"kinds":[1],"limit":10},["wss://relay.example.com"]]}
+```
+
+**Readiness protocol:**
+1. Shell sends `PING` with version on bus connect
+2. Satellite responds with `READY` + version
+3. Shell compares versions — if mismatch, sends `FORCE_UPDATE_SW` to page
+4. Shell flushes queued messages for that satellite
+5. Messages sent before READY are queued (max 256, oldest dropped)
+
+**FWD batching (relay→shell):**
+- Relay accumulates `FWD`/`FWD_ALL` into buffer
+- 50ms `SetTimeout` flushes as single `FWD_BATCH` message
+- Reduces BroadcastChannel pressure during subscription floods
+
+### 7. Crypto Proxy Chain
+
+Key material NEVER exists in any SW. All crypto routes through:
+
+```
+Relay SW → bus → Shell SW → PostMessageJSON → Page → Signer Extension → result
+                                                   ← CRYPTO_RESULT ←
+```
+
+- Each request gets an incrementing ID
+- Callbacks stored in `cryptoCBs` map
+- 15-second timeout with cleanup
+- The signer extension intercepts `CRYPTO_REQ` via `window.nostr` NIP-07 interface
+
+### 8. JSON Construction — String Concatenation, Not Marshaling
+
+All JSON messages in SWs are built by **string concatenation**, not `json.Marshal` or equivalent. This is intentional — TinyGo's `encoding/json` pulls in reflection.
+
+```go
+// Correct: string concatenation
+busSend("relay", "[\"PROXY\","+jstr(subID)+","+filterRaw+","+strsJSON(relays)+"]")
+
+// Wrong: never use json.Marshal in SW code
+```
+
+- `jstr(s)` wraps a string in quotes with proper escaping (calls `helpers.JsonString`)
+- `strsJSON(ss)` serializes `[]string` to `["a","b","c"]`
+- `raw` values (from `mw.raw()`) are already valid JSON — embed directly, don't re-quote
+- The `mw` (message walker) type parses JSON arrays without deserialization — use `str()`, `num()`, `raw()`, `strs()`
+
+### 9. $runtime Files Are Hand-Written
+
+The `$runtime/` directories contain hand-written JavaScript that implements the Go bridge contracts. Everything else in `app/smesh3/` (and subdirs) with a `.mjs` extension is **tinyjs compiler output**.
+
+- **Never edit** files like `app/smesh3/smesh3.mjs` or `app/smesh3/common_helpers.mjs` — they are regenerated on every compile
+- **Always edit** `$runtime/*.mjs` files when adding/changing bridge functions
+- When the tinyjs compiler has a bug, fix the compiler (`next/tinygo/`), don't hand-patch the output
+- Other hand-written JS: `app/smesh3/mls-bridge.mjs`, `app/smesh3/index.html` inline scripts
+
+### 10. Page-as-Router for Satellite SWs
+
+In production (HTTPS), satellite SWs run on subdomains (`relay.smesh.lol`, `marmot.smesh.lol`). The page on the main origin acts as message router:
+
+1. Page opens hidden iframe to subdomain
+2. Iframe registers satellite SW
+3. Iframe establishes MessagePort to satellite SW
+4. Page bridges: shell SW ↔ page ↔ iframe ↔ satellite SW
+
+In dev (127.0.0.x), same pattern but loopback addresses instead of subdomains.
+
+The **page MUST relay bus messages** between shell and satellite SWs. SWs on different origins cannot communicate directly. The bus relay code lives in `index.html` inline script, NOT in the compiled WASM app, because it must be active before WASM loads.
+
+### 11. Marmot Subscription Convention
+
+MLS DM subscriptions use a prefix convention to route relay events back through the MLS pipeline:
+
+- Shell creates subscription with ID `"marmot-sub-<n>"` where `<n>` is a bare number
+- Relay SW treats it as a normal PROXY subscription
+- When events arrive, shell checks for `["EVENT","marmot-sub-` prefix
+- Matching events get converted to `["MLS_PROXY","deliverEvent",<n>,<eventJSON>]`
+- `<n>` is a bare number (not quoted) — marmot WASM expects numeric type
+- `<eventJSON>` is a JSON-escaped string — marmot WASM calls `args[1].String()`
+
+### 12. Error Handling — Silent, Never Throwing
+
+Errors do not propagate across the bridge. If a JS function fails, it returns a zero/empty value. If a Go callback receives unexpected input, it logs and returns.
+
+- JS runtime functions catch errors silently — `if (!el) return;`, `if (!cache) { if (done) done(); return; }`
+- Go bridge stubs cannot throw — they are replaced at compile time
+- SW crash handlers (`self.addEventListener('error', ...)`) log via bus, never halt execution
+- The `mw` walker returns empty strings for missing/malformed fields, never panics
+
+### 13. No encoding/json, No reflect, No fmt
+
+TinyGo SW binaries must be small and fast. These Go packages are **forbidden** in SW code:
+
+- `encoding/json` — pulls in reflect, doubles binary size
+- `reflect` — not fully supported in TinyGo
+- `fmt` — pulls in reflect via `%v` formatting
+
+Use instead:
+- `helpers.JsonString(s)` for JSON string escaping
+- `helpers.Itoa(n)` for int-to-string
+- `mw` walker for JSON parsing
+- String concatenation for JSON construction
+- `sw.Log()` for debug output (not `fmt.Println`)
+
 ## What NOT To Do
 
 - Never suggest sleep, rest, or taking a break

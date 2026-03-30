@@ -21,11 +21,6 @@
   font-style: normal;
   font-display: swap;
 }
-@font-face {
-  font-family: 'Noto Color Emoji';
-  src: url('./fonts/NotoColorEmoji-Regular.woff2') format('woff2');
-  font-display: swap;
-}
 html { margin: 0; padding: 0; }
 body {
   --bg: #fff;
@@ -42,7 +37,7 @@ body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--fg);
-  font-family: 'Fira Code', 'Noto Color Emoji', system-ui, monospace;
+  font-family: 'Fira Code', emoji, system-ui, monospace;
 }
 body.dark {
   --bg: #000;
@@ -67,7 +62,7 @@ body.dark {
   color: #000;
   text-align: center;
   padding: 12px;
-  font-family: 'Fira Code', 'Noto Color Emoji', system-ui, monospace;
+  font-family: 'Fira Code', emoji, system-ui, monospace;
   font-size: 14px;
   cursor: pointer;
   transform: translateY(calc(100% + 37px));
@@ -150,7 +145,7 @@ if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(function(regs) {
           for (var i = 0; i < regs.length; i++) {
             if (regs[i].scope.indexOf('/' + dir + '/') !== -1) {
-              regs[i].unregister().then(function() { regSW(dir); });
+              regs[i].unregister().then(function() { regSW(dir); }).catch(function() { regSW(dir); });
             }
           }
         });

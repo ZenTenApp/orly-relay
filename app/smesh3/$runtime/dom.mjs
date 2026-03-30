@@ -91,22 +91,10 @@ export function InsertBefore(parentId, newId, refId) {
   if (parent && newEl) parent.insertBefore(newEl, ref);
 }
 
-export function ReplaceChild(parentId, newId, oldId) {
-  const parent = _elements.get(parentId);
-  const newEl = _elements.get(newId);
-  const oldEl = _elements.get(oldId);
-  if (parent && newEl && oldEl) parent.replaceChild(newEl, oldEl);
-}
-
 // Properties and attributes.
 export function SetAttribute(elId, name, value) {
   const el = _elements.get(elId);
   if (el) el.setAttribute(name, value);
-}
-
-export function RemoveAttribute(elId, name) {
-  const el = _elements.get(elId);
-  if (el) el.removeAttribute(name);
 }
 
 export function SetTextContent(elId, text) {
@@ -182,13 +170,7 @@ export function SetTimeout(fn, ms) {
   return setTimeout(fn, ms);
 }
 
-export function SetInterval(fn, ms) {
-  return setInterval(fn, ms);
-}
 
-export function ClearInterval(id) {
-  clearInterval(id);
-}
 
 export function ClearTimeout(id) {
   clearTimeout(id);
@@ -376,7 +358,3 @@ export function OnPopState(fn) {
   });
 }
 
-// Get raw element (for advanced use within JS runtime only).
-export function getRawElement(id) {
-  return _elements.get(id);
-}

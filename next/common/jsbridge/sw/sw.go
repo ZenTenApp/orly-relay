@@ -108,6 +108,11 @@ func CacheDelete(name string, done func()) { panic("jsbridge") }
 // Fetch fetches a URL. Calls fn with (response, ok).
 func Fetch(url string, fn func(Response, bool)) { panic("jsbridge") }
 
+// FetchAll fetches multiple URLs in parallel.
+// Calls onEach(index, response, ok) for each completed fetch.
+// Calls onDone() when all fetches have completed.
+func FetchAll(urls []string, onEach func(int, Response, bool), onDone func()) { panic("jsbridge") }
+
 // ResponseOK returns whether the response status is 200-299.
 func ResponseOK(resp Response) bool { panic("jsbridge") }
 
@@ -142,14 +147,3 @@ func NowMillis() int64 { panic("jsbridge") }
 
 // Log writes to console.log in the SW context.
 func Log(msg string) { panic("jsbridge") }
-
-// Warn writes to console.warn in the SW context.
-func Warn(msg string) { panic("jsbridge") }
-
-// --- Global calls ---
-
-// CallGlobal calls a global JS function with string args. Fire-and-forget.
-func CallGlobal(name string, args ...string) { panic("jsbridge") }
-
-// CallGlobalResult calls a global JS function and returns the string result.
-func CallGlobalResult(name string, args ...string) string { panic("jsbridge") }

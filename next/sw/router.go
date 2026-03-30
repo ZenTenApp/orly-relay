@@ -200,14 +200,6 @@ func routeMessage(clientID string, w *mw, msgType string) {
 		statusMsg := w.str()
 		broadcastToClients("[\"MLS_STATUS\"," + jstr(statusMsg) + "]")
 
-	// MLS relay event delivery — when relay events match marmot subscriptions,
-	// forward them to the page which routes to the signer extension's WASM.
-	case "MLS_DELIVER_EVENT":
-		subID := w.str()
-		eventJSON := w.raw()
-		// Event must be a JSON string (not raw object) — Go WASM calls args[1].String().
-		broadcastToClients("[\"MLS_PROXY\",\"deliverEvent\"," + subID + "," + jstr(eventJSON) + "]")
-
 	// Crypto result from page — dispatch to waiting callback.
 	case "CRYPTO_RESULT":
 		id := int(w.num())

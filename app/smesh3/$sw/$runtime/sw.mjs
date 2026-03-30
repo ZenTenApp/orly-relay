@@ -37,15 +37,13 @@ function _storeClient(client) {
 
 export function OnInstall(fn) {
   self.addEventListener('install', (event) => {
-    const id = _storeEvent(event);
-    fn(id);
+    fn(_storeEvent(event));
   });
 }
 
 export function OnActivate(fn) {
   self.addEventListener('activate', (event) => {
-    const id = _storeEvent(event);
-    fn(id);
+    fn(_storeEvent(event));
   });
 }
 
@@ -64,15 +62,13 @@ export function OnFetch(fn) {
       event.respondWith(resolver);
       _fetchResolvers.delete(id);
     }
-    _events.delete(id);
+    // If no resolver was set, browser handles the fetch normally.
   });
 }
 
 export function OnMessage(fn) {
   self.addEventListener('message', (event) => {
-    const id = _storeEvent(event);
-    fn(id);
-    _events.delete(id);
+    fn(_storeEvent(event));
   });
 }
 
@@ -127,7 +123,8 @@ export function GetMessageData(eventId) {
 
 export function GetMessageClientID(eventId) {
   const ev = _events.get(eventId);
-  return ev?.source?.id || '';
+  if (!ev) return '';
+  return ev.source ? ev.source.id || '' : '';
 }
 
 // --- SW globals ---
@@ -141,7 +138,7 @@ export function SkipWaiting() {
 }
 
 export function ClaimClients(done) {
-  self.clients.claim().then(() => { if (done) done(); });
+  self.clients.claim().then(() => { if (done) done(); }).catch(() => { if (done) done(); });
 }
 
 export function MatchClients(fn) {
@@ -159,14 +156,20 @@ export function PostMessage(clientId, msg) {
 
 export function PostMessageJSON(clientId, json) {
   const c = _clients.get(clientId);
-  if (c) c.postMessage(JSON.parse(json));
+  if (c) {
+    try { c.postMessage(JSON.parse(json)); }
+    catch { c.postMessage(json); }
+  }
 }
 
 export function GetClientByID(id, fn) {
-  self.clients.get(id).then(c => {
-    if (c) fn(_storeClient(c), true);
-    else fn(0, false);
-  });
+  self.clients.get(id).then((client) => {
+    if (client) {
+      fn(_storeClient(client), true);
+    } else {
+      fn(0, false);
+    }
+  }).catch(() => fn(0, false));
 }
 
 export function Navigate(clientId, url) {
@@ -181,37 +184,30 @@ export function CacheOpen(name, fn) {
     const id = _nextCacheId++;
     _caches.set(id, cache);
     fn(id);
-  });
+  }).catch(() => fn(0));
 }
 
 export function CacheAddAll(cacheId, urls, done) {
   const cache = _caches.get(cacheId);
   if (!cache) { if (done) done(); return; }
-  // Convert Go slice to native JS array for Cache API.
-  const arr = urls.$array.slice(urls.$offset, urls.$offset + urls.$length);
-  cache.addAll(arr).then(() => { if (done) done(); }).catch((e) => {
-    console.error('CacheAddAll failed:', e, 'urls:', arr);
-    // Don't block install — proceed without full cache.
-    if (done) done();
-  });
+  cache.addAll(urls).then(() => { if (done) done(); }).catch(() => { if (done) done(); });
 }
 
 export function CachePut(cacheId, url, respId, done) {
   const cache = _caches.get(cacheId);
   const resp = _responses.get(respId);
-  _responses.delete(respId);
   if (!cache || !resp) { if (done) done(); return; }
-  cache.put(new Request(url), resp).then(() => { if (done) done(); });
+  cache.put(new Request(url), resp).then(() => { if (done) done(); }).catch(() => { if (done) done(); });
 }
 
 export function CacheMatch(url, fn) {
   caches.match(new Request(url)).then((resp) => {
     fn(_storeResponse(resp));
-  });
+  }).catch(() => fn(0));
 }
 
 export function CacheDelete(name, done) {
-  caches.delete(name).then(() => { if (done) done(); });
+  caches.delete(name).then(() => { if (done) done(); }).catch(() => { if (done) done(); });
 }
 
 // --- Fetch ---
@@ -223,6 +219,22 @@ export function Fetch(url, fn) {
   );
 }
 
+export function FetchAll(urls, onEach, onDone) {
+  const arr = urls.$array
+    ? urls.$array.slice(urls.$offset, urls.$offset + urls.$length)
+    : urls;
+  if (arr.length === 0) { if (onDone) onDone(); return; }
+  let remaining = arr.length;
+  for (let i = 0; i < arr.length; i++) {
+    ((idx) => {
+      fetch(arr[idx]).then(
+        (resp) => { onEach(idx, _storeResponse(resp), true); if (--remaining === 0 && onDone) onDone(); },
+        ()     => { onEach(idx, 0, false);                   if (--remaining === 0 && onDone) onDone(); }
+      );
+    })(i);
+  }
+}
+
 export function ResponseOK(respId) {
   const resp = _responses.get(respId);
   return resp ? resp.ok : false;
@@ -232,11 +244,49 @@ export function ResponseOK(respId) {
 
 export function SSEConnect(url, onMessage) {
   const id = _nextSseId++;
-  const es = new EventSource(url);
-  _sseConns.set(id, es);
-  es.onmessage = (event) => {
-    if (onMessage) onMessage(event.data);
-  };
+  if (typeof EventSource !== 'undefined') {
+    const es = new EventSource(url);
+    _sseConns.set(id, es);
+    es.onmessage = (event) => {
+      if (onMessage) onMessage(event.data);
+    };
+  } else {
+    // SW scope: EventSource not available. Poll with fetch.
+    let active = true;
+    _sseConns.set(id, { close() { active = false; } });
+    (async function poll() {
+      let backoff = 3000;
+      while (active) {
+        try {
+          const resp = await fetch(url, { headers: { 'Accept': 'text/event-stream' } });
+          backoff = 3000;
+          const reader = resp.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = '';
+          while (active) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            let idx;
+            while ((idx = buf.indexOf('\n\n')) !== -1) {
+              const msg = buf.substring(0, idx);
+              buf = buf.substring(idx + 2);
+              for (const line of msg.split('\n')) {
+                if (line.startsWith('data: ') && onMessage) {
+                  onMessage(line.substring(6));
+                }
+              }
+            }
+          }
+        } catch (e) {
+          if (active) {
+            await new Promise(r => setTimeout(r, backoff));
+            backoff = Math.min(backoff * 2, 60000);
+          }
+        }
+      }
+    })();
+  }
   return id;
 }
 
@@ -250,21 +300,13 @@ export function SSEClose(sseId) {
 
 // --- Timers ---
 
-const _timers = new Map();
-let _nextTimerId = 1;
-
 export function SetTimeout(ms, fn) {
-  const id = _nextTimerId++;
-  _timers.set(id, setTimeout(() => { _timers.delete(id); fn(); }, ms));
-  return id;
+  return setTimeout(fn, ms);
 }
 
-export function ClearTimeout(timerId) {
-  const t = _timers.get(timerId);
-  if (t !== undefined) { clearTimeout(t); _timers.delete(timerId); }
+export function ClearTimeout(t) {
+  clearTimeout(t);
 }
-
-// --- Time ---
 
 export function NowSeconds() {
   return Math.floor(Date.now() / 1000);
@@ -278,28 +320,4 @@ export function NowMillis() {
 
 export function Log(msg) {
   console.log('sw:', msg);
-  // Forward to page console.
-  self.clients.matchAll({ type: 'window' }).then(all => {
-    for (const c of all) c.postMessage(['SW_LOG', 'shell', msg]);
-  });
-}
-
-export function Warn(msg) {
-  console.warn('sw:', msg);
-  self.clients.matchAll({ type: 'window' }).then(all => {
-    for (const c of all) c.postMessage(['SW_LOG', 'shell', msg]);
-  });
-}
-
-// --- Global calls ---
-
-export function CallGlobal(name, ...args) {
-  const fn = self[name];
-  if (typeof fn === 'function') fn(...args);
-}
-
-export function CallGlobalResult(name, ...args) {
-  const fn = self[name];
-  if (typeof fn === 'function') return String(fn(...args));
-  return '';
 }

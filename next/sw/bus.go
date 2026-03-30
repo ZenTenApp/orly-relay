@@ -28,6 +28,13 @@ func connectBus() {
 	if myPubkey == "" {
 		broadcastToClients("[\"NEED_IDENTITY\"]")
 	}
+	// Detect relay SW failure — if no READY within 30s, notify page.
+	sw.SetTimeout(30000, func() {
+		if !relayReady {
+			sw.Log("shell: relay SW not responding after 30s")
+			broadcastToClients("[\"SW_STATUS\",\"relay-timeout\"]")
+		}
+	})
 }
 
 func busSend(to, msg string) {
@@ -47,15 +54,12 @@ func flushQueue(to string) {
 	if to != "relay" {
 		return
 	}
-	wasReady := relayReady
 	relayReady = true
 	for _, msg := range relayQueue {
 		bc.Send(bus, msg)
 	}
 	relayQueue = nil
-	if wasReady {
-		broadcastToClients("[\"RESUB\"]")
-	}
+	broadcastToClients("[\"RESUB\"]")
 }
 
 func onBusMessage(raw string) {
