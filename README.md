@@ -1091,3 +1091,7 @@ The `/release` command pushes to the origin remote with tags:
 ```bash
 git push origin main --tags
 ```
+
+## License
+
+Licensed under [AGPL-3.0-or-later](LICENSE).
