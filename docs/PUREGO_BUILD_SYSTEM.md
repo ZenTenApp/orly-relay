@@ -31,7 +31,7 @@ ORLY relay uses **pure Go builds (`CGO_ENABLED=0`)** across all platforms. The p
 
 ### Purego Dynamic Loading
 
-The p8k library (from `git.mleku.dev/mleku/nostr`) uses purego to:
+The p8k library (from `git.smesh.lol/orly/pkg/nostr`) uses purego to:
 
 1. **At build time**: Compile pure Go code (`CGO_ENABLED=0`)
 2. **At runtime**: Attempt to dynamically load `libsecp256k1`

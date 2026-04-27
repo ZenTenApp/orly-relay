@@ -11,19 +11,19 @@ import (
 	"time"
 
 	"github.com/aperturerobotics/go-indexeddb/idb"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 	sha256 "github.com/minio/sha256-simd"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/encoders/ints"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/interfaces/store"
-	"next.orly.dev/pkg/utils"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/ints"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/interfaces/store"
+	"git.smesh.lol/orly/pkg/utils"
 )
 
 // CheckExpiration checks if an event has expired based on its "expiration" tag

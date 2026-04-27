@@ -3,12 +3,12 @@ package authenvelope
 import (
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/envelopes"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
-	"next.orly.dev/pkg/nostr/protocol/auth"
-	"next.orly.dev/pkg/nostr/utils"
-	"next.orly.dev/pkg/nostr/utils/bufpool"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/nostr/protocol/auth"
+	"git.smesh.lol/orly/pkg/nostr/utils"
+	"git.smesh.lol/orly/pkg/nostr/utils/bufpool"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 const relayURL = "wss://example.com"

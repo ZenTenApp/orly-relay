@@ -4,13 +4,13 @@ import (
 	"reflect"
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/bech32encoding/pointers"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/utils"
-	"next.orly.dev/pkg/nostr/utils/constraints"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding/pointers"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/utils"
+	"git.smesh.lol/orly/pkg/nostr/utils/constraints"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 func TestEncodeNpub(t *testing.T) {

@@ -12,9 +12,9 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/minio/sha256-simd"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
 )
 
 // CuratingConfig represents the configuration for curating ACL mode

@@ -12,11 +12,11 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	orlyaclv1 "next.orly.dev/pkg/proto/orlyacl/v1"
-	orlynitsv1 "next.orly.dev/pkg/proto/orlynits/v1"
+	orlyaclv1 "git.smesh.lol/orly/pkg/proto/orlyacl/v1"
+	orlynitsv1 "git.smesh.lol/orly/pkg/proto/orlynits/v1"
 )
 
 // Supervisor manages the database, ACL, sync, and relay processes.

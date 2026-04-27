@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This report documents the profiling and optimization of tag encoding functions in the `next.orly.dev/pkg/encoders/tag` package. The optimization focused on reducing memory allocations and CPU processing time for tag marshaling, unmarshaling, and conversion operations.
+This report documents the profiling and optimization of tag encoding functions in the `git.smesh.lol/orly/pkg/encoders/tag` package. The optimization focused on reducing memory allocations and CPU processing time for tag marshaling, unmarshaling, and conversion operations.
 
 ## Methodology
 

@@ -117,7 +117,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 func main() {
@@ -197,7 +197,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 func main() {

@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 // Migration represents a database migration with a version identifier

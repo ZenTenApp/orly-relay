@@ -1,9 +1,9 @@
 package app
 
 import (
-	"next.orly.dev/pkg/nostr/encoders/envelopes/eventenvelope"
-	"next.orly.dev/pkg/nostr/encoders/envelopes/okenvelope"
-	"next.orly.dev/pkg/nostr/encoders/reason"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/eventenvelope"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/okenvelope"
+	"git.smesh.lol/orly/pkg/nostr/encoders/reason"
 )
 
 // OK represents a function that processes events or operations, using provided

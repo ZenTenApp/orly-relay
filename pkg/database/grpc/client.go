@@ -12,16 +12,16 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/database"
-	indextypes "next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/interfaces/store"
-	orlydbv1 "next.orly.dev/pkg/proto/orlydb/v1"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/database"
+	indextypes "git.smesh.lol/orly/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/interfaces/store"
+	orlydbv1 "git.smesh.lol/orly/pkg/proto/orlydb/v1"
 )
 
 // Client implements the database.Database interface via gRPC.

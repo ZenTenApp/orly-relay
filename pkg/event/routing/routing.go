@@ -3,7 +3,7 @@
 package routing
 
 import (
-	"next.orly.dev/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 )
 
 // Action indicates what to do after routing.

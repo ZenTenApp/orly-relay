@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"next.orly.dev/pkg/nostr/crypto/keys"
-	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
+	"git.smesh.lol/orly/pkg/nostr/crypto/keys"
+	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

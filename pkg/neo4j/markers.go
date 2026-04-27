@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 // Markers provide metadata key-value storage using Neo4j Marker nodes

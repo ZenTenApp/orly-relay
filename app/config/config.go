@@ -23,11 +23,11 @@ import (
 
 	"github.com/adrg/xdg"
 	"go-simpler.org/env"
-	"next.orly.dev/pkg/logbuffer"
-	lol "next.orly.dev/pkg/lol"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/version"
+	"git.smesh.lol/orly/pkg/logbuffer"
+	lol "git.smesh.lol/orly/pkg/lol"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/version"
 )
 
 // C holds application configuration settings loaded from environment variables

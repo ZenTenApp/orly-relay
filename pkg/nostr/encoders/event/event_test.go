@@ -8,14 +8,14 @@ import (
 
 	"encoding/json"
 
-	"next.orly.dev/pkg/nostr/encoders/event/examples"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/utils"
-	"next.orly.dev/pkg/nostr/utils/bufpool"
-	"next.orly.dev/pkg/nostr/utils/units"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event/examples"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/utils"
+	"git.smesh.lol/orly/pkg/nostr/utils/bufpool"
+	"git.smesh.lol/orly/pkg/nostr/utils/units"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 	"lukechampine.com/frand"
 )
 

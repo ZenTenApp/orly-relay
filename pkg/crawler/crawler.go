@@ -19,17 +19,17 @@ import (
 	"sync/atomic"
 	"time"
 
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/interfaces/publisher"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/nostr/crypto/keys"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/utils/normalize"
-	"next.orly.dev/pkg/nostr/ws"
-	dsync "next.orly.dev/pkg/sync"
-	"next.orly.dev/pkg/sync/negentropy"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/interfaces/publisher"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/crypto/keys"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/utils/normalize"
+	"git.smesh.lol/orly/pkg/nostr/ws"
+	dsync "git.smesh.lol/orly/pkg/sync"
+	"git.smesh.lol/orly/pkg/sync/negentropy"
 )
 
 const (

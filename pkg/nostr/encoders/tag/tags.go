@@ -3,9 +3,9 @@ package tag
 import (
 	"bytes"
 
-	"next.orly.dev/pkg/nostr/utils"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/utils"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // S is a list of tag.T - which are lists of string elements with ordering and

@@ -3,7 +3,7 @@ package bufpool
 import (
 	"sync"
 
-	"next.orly.dev/pkg/nostr/utils/units"
+	"git.smesh.lol/orly/pkg/nostr/utils/units"
 )
 
 const (

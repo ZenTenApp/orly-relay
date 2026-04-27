@@ -11,7 +11,7 @@
     let launcherUpdated = false;
 
     // Official releases - fetched via backend proxy to avoid CORS
-    const RELEASES_BASE = 'https://git.nostrdev.com/mleku/next.orly.dev/releases/download';
+    const RELEASES_BASE = 'https://git.nostrdev.com/mleku/git.smesh.lol/orly/releases/download';
     let availableReleases = [];
     let selectedRelease = '';
     let loadingReleases = false;
@@ -140,7 +140,7 @@
     }
 
     function setReleaseUrl() {
-        let inputUrl = prompt('Enter release URL (e.g., https://git.mleku.dev/mleku/next.orly.dev/releases/tag/v0.56.1):');
+        let inputUrl = prompt('Enter release URL (e.g., https://git.smesh.lol/mleku/git.smesh.lol/orly/releases/tag/v0.56.1):');
         if (!inputUrl) return;
 
         // Normalize the URL

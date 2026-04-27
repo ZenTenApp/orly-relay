@@ -69,7 +69,7 @@ func CreateDMGroup(selfKPP *mls.KeyPairPackage, peerKP *mls.KeyPackage, selfPub,
 	}
 
 	// The creator must process the commit to advance their own epoch
-	if _, err := group.UnmarshalAndProcessMessage(commitMsg); err != nil {
+	if _, _, err := group.UnmarshalAndProcessMessage(commitMsg); err != nil {
 		return nil, nil, nil, fmt.Errorf("process own commit: %w", err)
 	}
 
@@ -147,13 +147,14 @@ func (gs *GroupState) Encrypt(plaintext []byte) ([]byte, error) {
 }
 
 // Decrypt decrypts a ciphertext message received from the MLS group.
-func (gs *GroupState) Decrypt(ciphertext []byte) ([]byte, error) {
+// selfSent is true if MLS identifies the sender as ourselves.
+func (gs *GroupState) Decrypt(ciphertext []byte) ([]byte, bool, error) {
 	if gs.group == nil {
-		return nil, fmt.Errorf("group not initialized")
+		return nil, false, fmt.Errorf("group not initialized")
 	}
-	plaintext, err := gs.group.UnmarshalAndProcessMessage(ciphertext)
+	plaintext, selfSent, err := gs.group.UnmarshalAndProcessMessage(ciphertext)
 	if err != nil {
-		return nil, fmt.Errorf("mls decrypt: %w", err)
+		return nil, false, fmt.Errorf("mls decrypt: %w", err)
 	}
-	return plaintext, nil
+	return plaintext, selfSent, nil
 }

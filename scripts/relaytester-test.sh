@@ -19,5 +19,5 @@ export ORLY_DATA_DIR=/tmp/orlytest
 go run . &
 sleep 5
 relay-tester ws://127.0.0.1:3334 nsec12l4072hvvyjpmkyjtdxn48xf8qj299zw60u7ddg58s2aphv3rpjqtg0tvr nsec1syvtjgqauyeezgrev5nqrp36d87apjk87043tgu2usgv8umyy6wq4yl6tu
-killall next.orly.dev
+killall git.smesh.lol/orly
 rm -rf /tmp/orlytest

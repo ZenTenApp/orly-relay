@@ -4,7 +4,7 @@ package negentropy
 import (
 	"context"
 
-	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
+	commonv1 "git.smesh.lol/orly/pkg/proto/orlysync/common/v1"
 )
 
 // ClientSession represents an active client negentropy session.

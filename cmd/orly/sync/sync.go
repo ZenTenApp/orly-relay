@@ -21,16 +21,16 @@ import (
 	"syscall"
 	"time"
 
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/encoders/timestamp"
-	"next.orly.dev/pkg/database"
-	pkgsync "next.orly.dev/pkg/sync"
-	"next.orly.dev/pkg/sync/negentropy"
-	negentropygrpc "next.orly.dev/pkg/sync/negentropy/grpc"
-	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/timestamp"
+	"git.smesh.lol/orly/pkg/database"
+	pkgsync "git.smesh.lol/orly/pkg/sync"
+	"git.smesh.lol/orly/pkg/sync/negentropy"
+	negentropygrpc "git.smesh.lol/orly/pkg/sync/negentropy/grpc"
+	commonv1 "git.smesh.lol/orly/pkg/proto/orlysync/common/v1"
 )
 
 // SyncDirection specifies which direction to sync

@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/interfaces/store"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/interfaces/store"
 )
 
 // FetchEventBySerial retrieves an event by its serial number

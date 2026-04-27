@@ -1,4 +1,4 @@
-# Dockerfile for Stella's Nostr Relay (next.orly.dev)
+# Dockerfile for Stella's Nostr Relay (git.smesh.lol/orly)
 # Owner: npub1v30tsz9vw6ylpz63g0a702nj3xa26t3m7p5us8f2y2sd8v6cnsvq465zjx
 #
 # Build from repository root:

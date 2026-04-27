@@ -3,7 +3,7 @@ package graph
 import (
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
 )
 
 func TestQueryValidate(t *testing.T) {

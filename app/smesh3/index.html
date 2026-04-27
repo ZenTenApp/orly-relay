@@ -105,13 +105,16 @@ if ('serviceWorker' in navigator) {
     }
   });
 
-  navigator.serviceWorker.register('./$sw/$entry.mjs', { type: 'module', scope: '/' }).then(reg => {
+  navigator.serviceWorker.register('./$sw/$entry.mjs', { type: 'module', scope: '/', updateViaCache: 'none' }).then(reg => {
     if (!navigator.serviceWorker.controller && reg.active) {
       reg.active.postMessage('CLAIM');
     }
+    // Trigger update check on every page load — catches stale SW modules.
+    reg.update().catch(function(){});
   }).catch(err => {
     console.error('smesh: sw registration failed:', err);
   });
+
 
   navigator.serviceWorker.addEventListener('message', (event) => {
     const d = event.data;
@@ -135,7 +138,15 @@ if ('serviceWorker' in navigator) {
     // Version epoch: shell SW detected satellite version mismatch — force re-register.
     if (Array.isArray(d) && d[0] === 'FORCE_UPDATE_SW') {
       var dir = d[1];
-      console.warn('FORCE_UPDATE_SW: re-registering ' + dir);
+      // Loop protection: max 3 retries per dir per page load.
+      if (!window._fuswRetries) window._fuswRetries = {};
+      var count = window._fuswRetries[dir] || 0;
+      if (count >= 3) {
+        console.error('FORCE_UPDATE_SW: giving up on ' + dir + ' after 3 retries — rebuild required');
+        return;
+      }
+      window._fuswRetries[dir] = count + 1;
+      console.warn('FORCE_UPDATE_SW: re-registering ' + dir + ' (attempt ' + (count+1) + '/3)');
       var isLocalDev = location.hostname === 'localhost' || /^127\.0\.0\.\d+$/.test(location.hostname);
       if (isLocalDev) {
         // Dev mode: reload the iframe to pick up new SW.

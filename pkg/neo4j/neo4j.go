@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"next.orly.dev/pkg/lol"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/utils/apputil"
+	"git.smesh.lol/orly/pkg/lol"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/utils/apputil"
 )
 
 // Default configuration values (used when config values are 0 or not set)

@@ -6,9 +6,9 @@ import (
 	"context"
 	"net/http"
 
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	torservice "next.orly.dev/pkg/tor"
+	torservice "git.smesh.lol/orly/pkg/tor"
 )
 
 // Config holds Tor transport configuration.

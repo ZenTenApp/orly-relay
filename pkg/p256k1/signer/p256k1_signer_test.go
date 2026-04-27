@@ -5,7 +5,7 @@ package signer
 import (
 	"testing"
 
-	"next.orly.dev/pkg/p256k1"
+	"git.smesh.lol/orly/pkg/p256k1"
 )
 
 func TestP256K1Signer_Generate(t *testing.T) {

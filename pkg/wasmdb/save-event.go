@@ -11,15 +11,15 @@ import (
 
 	"github.com/aperturerobotics/go-indexeddb/idb"
 	"github.com/hack-pad/safejs"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/database/indexes"
-	"next.orly.dev/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/database/indexes"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
 )
 
 var (

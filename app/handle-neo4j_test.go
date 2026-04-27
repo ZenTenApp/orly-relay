@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"next.orly.dev/app/config"
+	"git.smesh.lol/orly/app/config"
 )
 
 func TestHandleNeo4jConfig_ReturnsDBType(t *testing.T) {

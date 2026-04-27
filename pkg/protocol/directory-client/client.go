@@ -58,9 +58,9 @@
 package directory_client
 
 import (
-	"next.orly.dev/pkg/lol/errorf"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/protocol/directory"
+	"git.smesh.lol/orly/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/protocol/directory"
 )
 
 // IsDirectoryEvent checks if an event is a directory consensus event.

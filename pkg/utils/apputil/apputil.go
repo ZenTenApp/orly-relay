@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 // EnsureDir checks if a file could be written to a path and creates the

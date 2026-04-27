@@ -56,7 +56,7 @@ If no argument provided, default to `patch`.
 
     Build on remote (faster than uploading cross-compiled binary due to slow local bandwidth):
     ```bash
-    ssh relay.orly.dev 'cd ~/src/next.orly.dev && git pull origin main && GOPATH=$HOME CGO_ENABLED=0 ~/go/bin/go build -o ~/.local/bin/orly ./cmd/orly'
+    ssh relay.orly.dev 'cd ~/src/git.smesh.lol/orly && git pull origin main && GOPATH=$HOME CGO_ENABLED=0 ~/go/bin/go build -o ~/.local/bin/orly ./cmd/orly'
     ssh root@relay.orly.dev '/usr/sbin/setcap cap_net_bind_service=+ep /home/mleku/.local/bin/orly && systemctl restart orly'
     ssh relay.orly.dev '~/.local/bin/orly version'
     ```

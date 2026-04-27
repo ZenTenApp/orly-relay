@@ -16,13 +16,13 @@ import (
 	"sync"
 	"time"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 	"github.com/adrg/xdg"
 	"github.com/sosodev/duration"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/utils"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/utils"
 )
 
 // parseDuration parses an ISO-8601 duration string into seconds.

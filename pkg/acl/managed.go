@@ -7,13 +7,13 @@ import (
 	"reflect"
 	"sync"
 
-	"next.orly.dev/pkg/lol/errorf"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/app/config"
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/utils"
+	"git.smesh.lol/orly/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/app/config"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/utils"
 )
 
 type Managed struct {

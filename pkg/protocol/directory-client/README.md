@@ -18,7 +18,7 @@ This package provides a convenient API for working with directory events, managi
 ## Installation
 
 ```go
-import "next.orly.dev/pkg/protocol/directory-client"
+import "git.smesh.lol/orly/pkg/protocol/directory-client"
 ```
 
 ## Quick Start

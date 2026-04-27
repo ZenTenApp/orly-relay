@@ -4,7 +4,7 @@ import (
 	"errors"
 	"io"
 
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 // MaxUint40 is the maximum value of a 40-bit unsigned integer: 2^40 - 1.

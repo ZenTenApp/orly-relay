@@ -3,7 +3,7 @@ package routing
 import (
 	"context"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 )
 
 // DeleteProcessor handles event deletion operations.

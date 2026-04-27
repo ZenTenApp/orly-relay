@@ -3,7 +3,7 @@
 package pointers
 
 import (
-	"next.orly.dev/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
 )
 
 // Profile pointer is a combination of pubkey and relay list.

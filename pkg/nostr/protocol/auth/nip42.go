@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/utils"
-	"next.orly.dev/pkg/nostr/utils/normalize"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/utils"
+	"git.smesh.lol/orly/pkg/nostr/utils/normalize"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/errorf"
 )
 
 // GenerateChallenge creates a reasonable, 16-byte base64 challenge string

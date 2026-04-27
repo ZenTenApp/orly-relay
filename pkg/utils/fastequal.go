@@ -1,6 +1,6 @@
 package utils
 
-import "next.orly.dev/pkg/nostr/utils/constraints"
+import "git.smesh.lol/orly/pkg/nostr/utils/constraints"
 
 func FastEqual[A constraints.Bytes, B constraints.Bytes](a A, b B) (same bool) {
 	if len(a) != len(b) {

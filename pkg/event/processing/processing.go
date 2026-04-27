@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
 
-	"next.orly.dev/pkg/domain/events"
+	"git.smesh.lol/orly/pkg/domain/events"
 )
 
 // Result contains the outcome of event processing.

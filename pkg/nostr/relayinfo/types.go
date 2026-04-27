@@ -7,11 +7,11 @@ import (
 	"sort"
 	"sync"
 
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/encoders/timestamp"
-	"next.orly.dev/pkg/nostr/utils/number"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/timestamp"
+	"git.smesh.lol/orly/pkg/nostr/utils/number"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // NIP is a number and description of a nostr "improvement" possibility.

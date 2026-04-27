@@ -6,7 +6,7 @@ This report compares three signer implementations for secp256k1 operations:
 
 1. **P256K1Signer** - This repository's new port from Bitcoin Core secp256k1 (pure Go)
 2. ~~BtcecSigner - Pure Go wrapper around btcec/v2~~ (removed)
-3. **NextP256K Signer** - CGO version using next.orly.dev/pkg/crypto/p256k (CGO bindings to libsecp256k1)
+3. **NextP256K Signer** - CGO version using git.smesh.lol/orly/pkg/crypto/p256k (CGO bindings to libsecp256k1)
 
 **Generated:** 2025-11-02 (Updated after comprehensive CPU optimizations)  
 **Platform:** linux/amd64  

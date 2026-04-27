@@ -16,17 +16,17 @@ import (
 	"sync"
 	"time"
 
-	lol "next.orly.dev/pkg/lol"
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/nostr/encoders/envelopes/eventenvelope"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	examples "next.orly.dev/pkg/nostr/encoders/event/examples"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/encoders/timestamp"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
-	"next.orly.dev/pkg/nostr/ws"
+	lol "git.smesh.lol/orly/pkg/lol"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/eventenvelope"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	examples "git.smesh.lol/orly/pkg/nostr/encoders/event/examples"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/encoders/timestamp"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/nostr/ws"
 )
 
 type BenchmarkConfig struct {
@@ -1644,7 +1644,7 @@ func (b *Benchmark) saveReportToFile(path string) error {
 			"Generated: %s\n", time.Now().Format(time.RFC3339),
 		),
 	)
-	file.WriteString(fmt.Sprintf("Relay: next.orly.dev\n"))
+	file.WriteString(fmt.Sprintf("Relay: git.smesh.lol/orly\n"))
 	file.WriteString(fmt.Sprintf("Database: BadgerDB\n"))
 	file.WriteString(fmt.Sprintf("Workers: %d\n", b.config.ConcurrentWorkers))
 	file.WriteString(

@@ -5,7 +5,7 @@ import (
 	"math"
 	"testing"
 
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 	"lukechampine.com/frand"
 )
 

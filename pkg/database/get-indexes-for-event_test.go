@@ -4,14 +4,14 @@ import (
 	"bytes"
 	"testing"
 
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 	"github.com/minio/sha256-simd"
-	"next.orly.dev/pkg/database/indexes"
-	types2 "next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/utils"
+	"git.smesh.lol/orly/pkg/database/indexes"
+	types2 "git.smesh.lol/orly/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/utils"
 )
 
 func TestGetIndexesForEvent(t *testing.T) {

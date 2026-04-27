@@ -5,7 +5,7 @@ package database
 import (
 	"context"
 
-	"next.orly.dev/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
 )
 
 // CountEvents mirrors the initial selection logic of QueryEvents but stops

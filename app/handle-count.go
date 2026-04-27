@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"time"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
-	"next.orly.dev/pkg/nostr/encoders/envelopes/authenvelope"
-	"next.orly.dev/pkg/nostr/encoders/envelopes/countenvelope"
-	"next.orly.dev/pkg/nostr/utils/normalize"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/acl"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/schnorr"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/authenvelope"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/countenvelope"
+	"git.smesh.lol/orly/pkg/nostr/utils/normalize"
 )
 
 // HandleCount processes a COUNT envelope by parsing the request, verifying

@@ -5,10 +5,10 @@ package database
 import (
 	"context"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/interfaces/store"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/interfaces/store"
 )
 
 // QueryForSerials takes a filter and returns the serials of events that match,

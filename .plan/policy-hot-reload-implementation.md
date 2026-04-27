@@ -1,6 +1,6 @@
 # Implementation Plan: Policy Hot Reload, Follow List Whitelisting, and Web UI
 
-**Issue:** https://git.nostrdev.com/mleku/next.orly.dev/issues/6
+**Issue:** https://git.nostrdev.com/mleku/git.smesh.lol/orly/issues/6
 
 ## Overview
 
@@ -723,7 +723,7 @@ import (
     "encoding/json"
     "net/http"
     "lol.mleku.dev/log"
-    "git.mleku.dev/mleku/nostr/encoders/hex"
+    "git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 // handlePolicyConfig returns the current policy configuration

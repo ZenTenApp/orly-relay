@@ -3,11 +3,11 @@ package database
 import (
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/encoders/timestamp"
-	"next.orly.dev/pkg/utils"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/encoders/timestamp"
+	"git.smesh.lol/orly/pkg/utils"
 )
 
 func TestGetSerialsByRange(t *testing.T) {

@@ -1,9 +1,9 @@
 package event
 
 import (
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/encoders/ints"
-	"next.orly.dev/pkg/nostr/encoders/text"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/ints"
+	"git.smesh.lol/orly/pkg/nostr/encoders/text"
 	"github.com/minio/sha256-simd"
 )
 

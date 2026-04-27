@@ -1,6 +1,6 @@
 /**
  * Nostr Event Kinds Database
- * Auto-generated from https://git.mleku.dev/mleku/nostr/raw/branch/main/encoders/kind/kinds.json
+ * Auto-generated from https://git.smesh.lol/orly/pkg/nostr/raw/branch/main/encoders/kind/kinds.json
  * Version: 2025-12-21
  * Source: https://github.com/nostr-protocol/nips
  *

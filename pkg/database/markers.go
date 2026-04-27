@@ -4,7 +4,7 @@ package database
 
 import (
 	"github.com/dgraph-io/badger/v4"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 const (

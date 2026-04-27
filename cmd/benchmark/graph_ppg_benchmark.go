@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 // PPGBenchmark compares graph traversal performance between:

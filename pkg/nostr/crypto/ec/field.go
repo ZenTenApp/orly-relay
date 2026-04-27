@@ -1,7 +1,7 @@
 package btcec
 
 import (
-	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/secp256k1"
 )
 
 // FieldVal implements optimized fixed-precision arithmetic over the secp256k1

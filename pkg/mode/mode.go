@@ -3,7 +3,7 @@
 // circular dependencies.
 package mode
 
-import "next.orly.dev/pkg/utils/atomic"
+import "git.smesh.lol/orly/pkg/utils/atomic"
 
 // ACLMode holds the current ACL mode as a string.
 // This is set by the ACL package when configured and can be read by other

@@ -139,6 +139,11 @@ export function Fetch(url, fn) {
   $rt.sw.Fetch(url, fn);
 }
 
+// jsbridge: sw.FetchAll
+export function FetchAll(urls, onEach, onDone) {
+  $rt.sw.FetchAll(urls, onEach, onDone);
+}
+
 // jsbridge: sw.ResponseOK
 export function ResponseOK(resp) {
   return $rt.sw.ResponseOK(resp);
@@ -177,20 +182,5 @@ export function NowMillis() {
 // jsbridge: sw.Log
 export function Log(msg) {
   $rt.sw.Log(msg);
-}
-
-// jsbridge: sw.Warn
-export function Warn(msg) {
-  $rt.sw.Warn(msg);
-}
-
-// jsbridge: sw.CallGlobal
-export function CallGlobal(name, args) {
-  $rt.sw.CallGlobal(name, args);
-}
-
-// jsbridge: sw.CallGlobalResult
-export function CallGlobalResult(name, args) {
-  return $rt.sw.CallGlobalResult(name, args);
 }
 

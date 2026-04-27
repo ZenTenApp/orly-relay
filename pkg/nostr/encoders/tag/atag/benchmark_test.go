@@ -3,8 +3,8 @@ package atag
 import (
 	"testing"
 
-	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
-	"next.orly.dev/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/schnorr"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
 	"lukechampine.com/frand"
 )
 

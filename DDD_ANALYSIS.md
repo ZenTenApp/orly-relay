@@ -174,7 +174,7 @@ ORLY organizes code into **11 distinct bounded contexts**, each with its own mod
          ▼                               ▼                               │
 ┌────────────────────────────────────────────────────────────┐          │
 │                      Event Entity                          │          │
-│                 (git.mleku.dev/mleku/nostr)                │◀─────────┘
+│                 (git.smesh.lol/orly/pkg/nostr)                │◀─────────┘
 │            Filter, Tag, Subscription types                 │
 └────────────────────────────────────────────────────────────┘
          │                               │

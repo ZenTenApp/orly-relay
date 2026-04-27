@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This report documents the profiling and optimization of text encoding functions in the `next.orly.dev/pkg/encoders/text` package. The optimization focused on reducing memory allocations and CPU processing time for escape, unmarshaling, and array operations.
+This report documents the profiling and optimization of text encoding functions in the `git.smesh.lol/orly/pkg/encoders/text` package. The optimization focused on reducing memory allocations and CPU processing time for escape, unmarshaling, and array operations.
 
 ## Methodology
 

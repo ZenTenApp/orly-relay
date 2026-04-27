@@ -316,7 +316,7 @@ package neo4j
 
 import (
     "context"
-    "git.mleku.dev/mleku/nostr/encoders/event"
+    "git.smesh.lol/orly/pkg/nostr/encoders/event"
 )
 
 // SocialEventProcessor handles kind 0, 3, 1984, 10000 events

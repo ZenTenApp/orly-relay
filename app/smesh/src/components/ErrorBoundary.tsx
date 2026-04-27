@@ -33,7 +33,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <p className="text-lg text-center max-w-md">
             Sorry for the inconvenience. If you don't mind helping, you can{' '}
             <a
-              href="https://git.mleku.dev/mleku/smesh/issues/new"
+              href="https://git.smesh.lol/orly/issues/new"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary underline"

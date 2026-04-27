@@ -19,7 +19,7 @@
 //
 // # Usage
 //
-//	import "next.orly.dev/pkg/p256k1/exchange"
+//	import "git.smesh.lol/orly/pkg/p256k1/exchange"
 //
 //	// Compute shared secret between Alice and Bob
 //	// Alice has alicePrivate, Bob has bobPublic

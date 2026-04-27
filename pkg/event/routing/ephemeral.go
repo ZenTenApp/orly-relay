@@ -1,9 +1,9 @@
 package routing
 
 import (
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // Publisher abstracts event delivery to subscribers.

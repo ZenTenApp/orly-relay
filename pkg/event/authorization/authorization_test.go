@@ -3,7 +3,7 @@ package authorization
 import (
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 )
 
 // mockACLRegistry is a mock implementation of ACLRegistry for testing.

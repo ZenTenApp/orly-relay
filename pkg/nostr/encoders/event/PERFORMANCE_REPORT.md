@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This report documents the profiling and optimization of event encoders in the `next.orly.dev/pkg/encoders/event` package. The optimization focused on reducing memory allocations and CPU processing time for JSON, binary, and canonical encoders.
+This report documents the profiling and optimization of event encoders in the `git.smesh.lol/orly/pkg/encoders/event` package. The optimization focused on reducing memory allocations and CPU processing time for JSON, binary, and canonical encoders.
 
 ## Methodology
 

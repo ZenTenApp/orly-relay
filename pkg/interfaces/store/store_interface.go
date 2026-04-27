@@ -10,12 +10,12 @@ import (
 	"context"
 	"io"
 
-	"next.orly.dev/app/config"
-	"next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	ntypes "next.orly.dev/pkg/nostr/types"
+	"git.smesh.lol/orly/app/config"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	ntypes "git.smesh.lol/orly/pkg/nostr/types"
 )
 
 // I am a type for a persistence layer for nostr events handled by a relay.

@@ -56,7 +56,7 @@
         </div>
     </div>
     {#if version}
-        <a href="https://next.orly.dev" target="_blank" rel="noopener noreferrer" class="version-link">
+        <a href="https://git.smesh.lol/orly" target="_blank" rel="noopener noreferrer" class="version-link">
             <svg class="version-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                 <!-- Mug body -->
                 <path d="M5 6h12v2h1.5c1.38 0 2.5 1.12 2.5 2.5v1c0 1.38-1.12 2.5-2.5 2.5H17v1c0 1.66-1.34 3-3 3H8c-1.66 0-3-1.34-3-3V6zm12 6h1.5c.28 0 .5-.22.5-.5v-1c0-.28-.22-.5-.5-.5H17v2z"/>

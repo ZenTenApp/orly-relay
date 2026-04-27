@@ -36,7 +36,7 @@ BENCHMARK_BIN="${BENCHMARK_BIN:-}"            # if empty, we will build to $RUN_
 BENCHMARK_EVENTS="${BENCHMARK_EVENTS:-}"      # optional override for -events
 BENCHMARK_DURATION="${BENCHMARK_DURATION:-}"  # optional override for -duration (e.g. 30s); defaults to DURATION seconds
 
-BIN="$REPO_ROOT/next.orly.dev"
+BIN="$REPO_ROOT/git.smesh.lol/orly"
 LOG_DIR="${LOG_DIR:-$REPO_ROOT/cmd/benchmark/reports}"
 mkdir -p "$LOG_DIR"
 RUN_TS="$(date +%Y%m%d_%H%M%S)"

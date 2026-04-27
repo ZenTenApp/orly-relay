@@ -3,7 +3,7 @@ package encryption
 import (
 	"testing"
 
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 	"lukechampine.com/frand"
 )
 

@@ -55,7 +55,7 @@ const best = selectVariantForViewport(variants, containerWidth, devicePixelRatio
 For relay servers:
 
 ```go
-import "git.mleku.dev/mleku/responsive-variants/go/variants"
+import "git.smesh.lol/orly/app/smesh/lib/responsive-variants/go/variants"
 
 // Generate variants
 generated, err := variants.GenerateResponsiveVariants(reader)

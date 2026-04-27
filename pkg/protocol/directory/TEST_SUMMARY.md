@@ -86,7 +86,7 @@ Comprehensive test suite for the distributed directory consensus protocol (NIP-X
 
 ### Run All Tests
 ```bash
-cd /home/mleku/src/next.orly.dev/pkg/protocol/directory
+cd /home/mleku/src/git.smesh.lol/orly/pkg/protocol/directory
 go test -v -timeout 30s
 ```
 
@@ -198,11 +198,11 @@ All events are properly signed using `p256k.Signer` which implements the `signer
 ## Dependencies
 
 ### Production Code
-- `next.orly.dev/pkg/crypto/p256k` - Schnorr signature implementation
-- `next.orly.dev/pkg/crypto/ec/secp256k1` - Elliptic curve operations
-- `next.orly.dev/pkg/encoders/bech32encoding` - NPub encoding
-- `next.orly.dev/pkg/encoders/event` - Nostr event structures
-- `next.orly.dev/pkg/encoders/tag` - Event tag handling
+- `git.smesh.lol/orly/pkg/crypto/p256k` - Schnorr signature implementation
+- `git.smesh.lol/orly/pkg/crypto/ec/secp256k1` - Elliptic curve operations
+- `git.smesh.lol/orly/pkg/encoders/bech32encoding` - NPub encoding
+- `git.smesh.lol/orly/pkg/encoders/event` - Nostr event structures
+- `git.smesh.lol/orly/pkg/encoders/tag` - Event tag handling
 
 ### Test Dependencies
 - Standard Go `testing` package

@@ -15,7 +15,7 @@ Nostr Wallet Connect (NIP-47) client implementation for the ORLY relay. This pac
 ## Installation
 
 ```bash
-go get next.orly.dev/pkg/protocol/nwc
+go get git.smesh.lol/orly/pkg/protocol/nwc
 ```
 
 ## Usage
@@ -23,7 +23,7 @@ go get next.orly.dev/pkg/protocol/nwc
 ### Basic Client Setup
 
 ```go
-import "next.orly.dev/pkg/protocol/nwc"
+import "git.smesh.lol/orly/pkg/protocol/nwc"
 
 // Create client from NWC connection URI
 client, err := nwc.NewClient("nostr+walletconnect://...")
@@ -245,7 +245,7 @@ import (
     "log"
     "time"
 
-    "next.orly.dev/pkg/protocol/nwc"
+    "git.smesh.lol/orly/pkg/protocol/nwc"
 )
 
 func main() {
@@ -365,4 +365,4 @@ Monitor relay logs for NWC operations.
 
 ## License
 
-Part of the next.orly.dev project. See main LICENSE file.
+Part of the git.smesh.lol/orly project. See main LICENSE file.

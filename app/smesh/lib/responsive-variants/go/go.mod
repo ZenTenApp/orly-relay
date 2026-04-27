@@ -1,4 +1,4 @@
-module git.mleku.dev/mleku/responsive-variants/go
+module git.smesh.lol/orly/app/smesh/lib/responsive-variants/go
 
 go 1.22
 

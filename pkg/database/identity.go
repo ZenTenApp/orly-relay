@@ -7,10 +7,10 @@ import (
 	"fmt"
 
 	"github.com/dgraph-io/badger/v4"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/nostr/crypto/keys"
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/crypto/keys"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 const relayIdentitySecretKey = "relay:identity:sk"

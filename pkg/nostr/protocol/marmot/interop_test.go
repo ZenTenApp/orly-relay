@@ -15,9 +15,9 @@ import (
 	"testing"
 
 	"github.com/emersion/go-mls"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 )
 
 var interopBinaryPath string

@@ -1,11 +1,11 @@
-# next.orly.dev
+# git.smesh.lol/orly
 
 ---
 
 ![orly.dev](./docs/orly.png)
 
 ![Version v0.62.0](https://img.shields.io/badge/version-v0.62.0-blue.svg)
-[![Documentation](https://img.shields.io/badge/godoc-documentation-blue.svg)](https://pkg.go.dev/next.orly.dev)
+[![Documentation](https://img.shields.io/badge/godoc-documentation-blue.svg)](https://pkg.go.dev/git.smesh.lol/orly)
 ## Can Youse Paradigm?
 
 Every hour you don’t zap, a donkey eats another cabbage. You can stop this. 🫏
@@ -137,7 +137,7 @@ To build the unified binary (relay + all subcommands):
 
 ```bash
 git clone <repository-url>
-cd next.orly.dev
+cd git.smesh.lol/orly
 go build -o orly ./cmd/orly
 ```
 
@@ -321,7 +321,7 @@ The deployment script (`scripts/deploy.sh`) provides a complete setup solution:
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd next.orly.dev
+cd git.smesh.lol/orly
 
 # Run the deployment script
 ./scripts/deploy.sh
@@ -551,7 +551,7 @@ You can deploy ORLY on a remote server using SSH:
 ssh user@your-server.com << 'EOF'
   # Clone and deploy
   git clone <repository-url>
-  cd next.orly.dev
+  cd git.smesh.lol/orly
   ./scripts/deploy.sh
 
   # Configure your relay
@@ -1066,7 +1066,7 @@ For detailed configuration including Docker deployments, filtering options, and 
 
 ### Binary-Optimized Tag Storage
 
-The nostr library (`git.mleku.dev/mleku/nostr/encoders/tag`) uses binary optimization for `e` and `p` tags to reduce memory usage and improve comparison performance.
+The nostr library (`git.smesh.lol/orly/pkg/nostr/encoders/tag`) uses binary optimization for `e` and `p` tags to reduce memory usage and improve comparison performance.
 
 When events are unmarshaled from JSON, 64-character hex values in e/p tags are converted to 33-byte binary format (32 bytes hash + null terminator).
 

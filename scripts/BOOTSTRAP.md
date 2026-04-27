@@ -9,7 +9,7 @@ This directory contains a bootstrap script that automates the deployment of the 
 Clone the repository and deploy the relay with a single command:
 
 ```bash
-curl -sSL https://git.nostrdev.com/mleku/next.orly.dev/raw/branch/main/scripts/bootstrap.sh | bash
+curl -sSL https://git.nostrdev.com/mleku/git.smesh.lol/orly/raw/branch/main/scripts/bootstrap.sh | bash
 ```
 
 **Note:** This assumes the script is accessible at the raw URL path. Adjust the URL based on your git server's raw file URL format.
@@ -20,7 +20,7 @@ If you prefer to review the script before running it:
 
 ```bash
 # Download the script
-curl -o bootstrap.sh https://git.nostrdev.com/mleku/next.orly.dev/raw/branch/main/scripts/bootstrap.sh
+curl -o bootstrap.sh https://git.nostrdev.com/mleku/git.smesh.lol/orly/raw/branch/main/scripts/bootstrap.sh
 
 # Review the script
 cat bootstrap.sh
@@ -36,7 +36,7 @@ chmod +x bootstrap.sh
    - Verifies that `git` is installed on your system
 
 2. **Clones or Updates Repository**
-   - Clones the repository to `~/src/next.orly.dev` if it doesn't exist
+   - Clones the repository to `~/src/git.smesh.lol/orly` if it doesn't exist
    - If the repository already exists, pulls the latest changes from the main branch
    - Stashes any local changes before updating
 
@@ -129,10 +129,10 @@ If you prefer to deploy manually without the bootstrap script:
 
 ```bash
 # Clone repository
-git clone https://git.nostrdev.com/mleku/next.orly.dev.git ~/src/next.orly.dev
+git clone https://git.nostrdev.com/mleku/git.smesh.lol/orly.git ~/src/git.smesh.lol/orly
 
 # Enter directory
-cd ~/src/next.orly.dev
+cd ~/src/git.smesh.lol/orly
 
 # Run deployment
 ./scripts/deploy.sh

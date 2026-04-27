@@ -1,7 +1,7 @@
 package wire
 
 import (
-	"next.orly.dev/pkg/nostr/crypto/ec/chainhash"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/chainhash"
 )
 
 // OutPoint defines a bitcoin data type that is used to track previous

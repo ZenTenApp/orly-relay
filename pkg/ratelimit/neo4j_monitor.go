@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/interfaces/loadmonitor"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/interfaces/loadmonitor"
 )
 
 // Neo4jMonitor implements loadmonitor.Monitor for Neo4j database.

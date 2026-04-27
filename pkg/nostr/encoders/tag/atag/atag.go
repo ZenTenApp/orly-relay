@@ -5,10 +5,10 @@ package atag
 import (
 	"bytes"
 
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/encoders/ints"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/ints"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 // T is a data structure for what is found in an `a` tag: kind:pubkey:arbitrary data

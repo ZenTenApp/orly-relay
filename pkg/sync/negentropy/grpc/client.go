@@ -8,11 +8,11 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	negentropyiface "next.orly.dev/pkg/interfaces/negentropy"
-	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
-	negentropyv1 "next.orly.dev/pkg/proto/orlysync/negentropy/v1"
+	negentropyiface "git.smesh.lol/orly/pkg/interfaces/negentropy"
+	commonv1 "git.smesh.lol/orly/pkg/proto/orlysync/common/v1"
+	negentropyv1 "git.smesh.lol/orly/pkg/proto/orlysync/negentropy/v1"
 )
 
 // Verify Client implements the Handler interface

@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"testing"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/schnorr"
 	"github.com/minio/sha256-simd"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/utils"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/utils"
 )
 
 func TestPubHash_FromPubkey(t *testing.T) {

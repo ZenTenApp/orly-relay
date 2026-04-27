@@ -7,7 +7,7 @@ import (
 	"time"
 
 	gosmtp "github.com/emersion/go-smtp"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // InboundEmail represents a parsed inbound email ready for bridge processing.

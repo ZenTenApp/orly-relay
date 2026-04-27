@@ -13,7 +13,7 @@ Type-safe atomic operations for Go primitive types. This package provides conven
 ## Installation
 
 ```bash
-go get next.orly.dev/pkg/utils/atomic
+go get git.smesh.lol/orly/pkg/utils/atomic
 ```
 
 ## Usage
@@ -23,7 +23,7 @@ The atomic package provides type-safe wrappers around Go's standard `sync/atomic
 ### Basic Operations
 
 ```go
-import "next.orly.dev/pkg/utils/atomic"
+import "git.smesh.lol/orly/pkg/utils/atomic"
 
 // Integer types
 var counter atomic.Uint64
@@ -171,4 +171,4 @@ See the test files for comprehensive usage examples and edge cases.
 
 ## License
 
-Part of the next.orly.dev project. See main LICENSE file.
+Part of the git.smesh.lol/orly project. See main LICENSE file.

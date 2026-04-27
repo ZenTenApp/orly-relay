@@ -13,15 +13,15 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
-	"next.orly.dev/pkg/lol"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/database"
-	databasegrpc "next.orly.dev/pkg/database/grpc"
-	negentropyv1 "next.orly.dev/pkg/proto/orlysync/negentropy/v1"
-	"next.orly.dev/pkg/sync/negentropy"
-	negentropyserver "next.orly.dev/pkg/sync/negentropy/server"
+	"git.smesh.lol/orly/pkg/database"
+	databasegrpc "git.smesh.lol/orly/pkg/database/grpc"
+	negentropyv1 "git.smesh.lol/orly/pkg/proto/orlysync/negentropy/v1"
+	"git.smesh.lol/orly/pkg/sync/negentropy"
+	negentropyserver "git.smesh.lol/orly/pkg/sync/negentropy/server"
 )
 
 func main() {

@@ -26,7 +26,7 @@
 //
 // # Usage
 //
-//	import "next.orly.dev/pkg/p256k1/ecdsa"
+//	import "git.smesh.lol/orly/pkg/p256k1/ecdsa"
 //
 //	// Sign a message hash
 //	sig, err := ecdsa.Sign(messageHash, privateKey)

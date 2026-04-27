@@ -25,7 +25,7 @@
 //
 // # Usage
 //
-//	import "next.orly.dev/pkg/p256k1/schnorr"
+//	import "git.smesh.lol/orly/pkg/p256k1/schnorr"
 //
 //	// Create a key pair
 //	keypair, err := schnorr.NewKeyPair(privateKey)

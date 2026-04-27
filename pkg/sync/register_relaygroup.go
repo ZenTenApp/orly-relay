@@ -5,7 +5,7 @@ package sync
 import (
 	"context"
 
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 func init() {

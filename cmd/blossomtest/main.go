@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
-	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
-	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/schnorr"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/secp256k1"
+	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 	"github.com/minio/sha256-simd"
 )
 

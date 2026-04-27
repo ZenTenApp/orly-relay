@@ -3,7 +3,7 @@ package validation
 import (
 	"time"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 )
 
 // ValidateTimestamp checks that the event timestamp is not too far in the future.

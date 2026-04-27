@@ -11,13 +11,13 @@ import (
 	"strconv"
 	"time"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/interfaces/signer"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 )
 
 // Response kind for graph queries (ephemeral, relay-signed)

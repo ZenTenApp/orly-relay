@@ -305,7 +305,7 @@
 //		"log"
 //		"time"
 //
-//		"next.orly.dev/pkg/protocol/directory"
+//		"git.smesh.lol/orly/pkg/protocol/directory"
 //	)
 //
 //	func main() {

@@ -7,14 +7,14 @@ import (
 	"fmt"
 
 	"google.golang.org/grpc"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	negentropylib "next.orly.dev/pkg/nostr/negentropy"
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/sync/negentropy"
-	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
-	negentropyv1 "next.orly.dev/pkg/proto/orlysync/negentropy/v1"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	negentropylib "git.smesh.lol/orly/pkg/nostr/negentropy"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/sync/negentropy"
+	commonv1 "git.smesh.lol/orly/pkg/proto/orlysync/common/v1"
+	negentropyv1 "git.smesh.lol/orly/pkg/proto/orlysync/negentropy/v1"
 )
 
 // Service implements the NegentropyServiceServer interface.

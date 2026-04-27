@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // GetRemoteFromReq retrieves the originating IP address of the client from

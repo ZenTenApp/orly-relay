@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"testing"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/utils"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/utils"
 )
 
 func TestT(t *testing.T) {

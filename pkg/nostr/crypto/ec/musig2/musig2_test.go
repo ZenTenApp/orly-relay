@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"next.orly.dev/pkg/nostr/crypto/ec"
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 	"github.com/minio/sha256-simd"
 )
 

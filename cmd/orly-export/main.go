@@ -12,14 +12,14 @@ import (
 	"strings"
 	"time"
 
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 
-	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
-	"next.orly.dev/pkg/nostr/httpauth"
-	"next.orly.dev/pkg/nostr/interfaces/signer"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
+	"git.smesh.lol/orly/pkg/nostr/httpauth"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 
-	"next.orly.dev/pkg/version"
+	"git.smesh.lol/orly/pkg/version"
 )
 
 var userAgent = fmt.Sprintf("orly-export/%s", strings.TrimSpace(version.V))

@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"net/http"
 
-	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/httpauth"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/httpauth"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/acl"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 // WireGuardConfigResponse is returned by the /api/wireguard/config endpoint.

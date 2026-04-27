@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
-	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/encoders/varint"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/database/indexes"
-	"next.orly.dev/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/schnorr"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/encoders/varint"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/database/indexes"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
 )
 
 // RepairReport contains the results of a database repair operation.

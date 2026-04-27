@@ -354,4 +354,4 @@ The aggregator follows Go best practices and includes:
 
 ## License
 
-This tool is part of the next.orly.dev project and follows the same licensing terms.
+This tool is part of the git.smesh.lol/orly project and follows the same licensing terms.

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 )
 
 // mockDatabase is a mock implementation of Database for testing.

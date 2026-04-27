@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"sort"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 // SocialEventProcessor handles kind 0, 3, 1984, 10000 events for social graph management

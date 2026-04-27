@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	orlynitsv1 "next.orly.dev/pkg/proto/orlynits/v1"
+	orlynitsv1 "git.smesh.lol/orly/pkg/proto/orlynits/v1"
 )
 
 // NitsService implements the gRPC NitsService interface.

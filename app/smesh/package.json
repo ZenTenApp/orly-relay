@@ -8,9 +8,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://git.mleku.dev/mleku/smesh"
+    "url": "git+https://git.smesh.lol/orly"
   },
-  "homepage": "https://git.mleku.dev/mleku/smesh",
+  "homepage": "https://git.smesh.lol/orly",
   "scripts": {
     "dev": "vite --host",
     "dev:8080": "vite --host 0.0.0.0 --port 8080",

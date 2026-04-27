@@ -3,8 +3,8 @@ package auth
 import (
 	"testing"
 
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 func TestCreateUnsigned(t *testing.T) {

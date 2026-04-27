@@ -5,8 +5,8 @@ import (
 	"bytes"
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 // TestExport tests the Export function by:

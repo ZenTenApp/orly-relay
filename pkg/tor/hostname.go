@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // HostnameWatcher watches the Tor hidden service hostname file for changes.

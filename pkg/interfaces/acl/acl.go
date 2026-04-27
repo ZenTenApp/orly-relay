@@ -2,8 +2,8 @@
 package acl
 
 import (
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/interfaces/typer"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/interfaces/typer"
 )
 
 const (

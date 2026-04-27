@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strings"
 
-	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/httpauth"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/acl"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/httpauth"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 // handleGrapeVineScores handles GET /api/grapevine/scores?observer=<hex>

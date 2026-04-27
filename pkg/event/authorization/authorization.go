@@ -3,8 +3,8 @@
 package authorization
 
 import (
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 // Decision carries authorization context through the event processing pipeline.

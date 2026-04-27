@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
 )
 
 // TestLargeContactListBatching tests that kind 3 events with many follows

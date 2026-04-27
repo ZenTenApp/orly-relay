@@ -7,7 +7,7 @@ package specialkinds
 import (
 	"context"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 )
 
 // Result represents the outcome of handling a special kind event.

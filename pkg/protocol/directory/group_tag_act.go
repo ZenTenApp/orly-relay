@@ -4,10 +4,10 @@ import (
 	"strconv"
 	"time"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/errorf"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
 )
 
 // GroupTagAct represents a complete Group Tag Act event

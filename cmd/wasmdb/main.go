@@ -27,8 +27,8 @@ import (
 	"context"
 	"fmt"
 
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/wasmdb"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/wasmdb"
 )
 
 func main() {

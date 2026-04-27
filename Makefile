@@ -56,7 +56,7 @@ all-split: proto orly orly-db-badger orly-acl-follows orly-launcher
 all-backends: proto orly orly-db-badger orly-db-neo4j orly-acl-follows orly-acl-managed orly-acl-curation orly-launcher
 	@echo "All backend and ACL mode binaries installed to $(GOBIN)"
 
-# Main relay binary (uses go build to control output name since module is next.orly.dev)
+# Main relay binary (uses go build to control output name since module is git.smesh.lol/orly)
 orly:
 	$(BUILD_FLAGS) go build -o $(GOBIN)/orly .
 
@@ -152,15 +152,15 @@ test:
 
 # Deploy to relay.orly.dev (builds on remote) - legacy
 deploy:
-	ssh relay.orly.dev 'cd ~/src/next.orly.dev && git pull origin main && make all && sudo /usr/sbin/setcap cap_net_bind_service=+ep ~/go/bin/next.orly.dev && sudo systemctl restart orly'
+	ssh relay.orly.dev 'cd ~/src/git.smesh.lol/orly && git pull origin main && make all && sudo /usr/sbin/setcap cap_net_bind_service=+ep ~/go/bin/git.smesh.lol/orly && sudo systemctl restart orly'
 
 # Deploy with ACL server - legacy
 deploy-acl:
-	ssh relay.orly.dev 'cd ~/src/next.orly.dev && git pull origin main && make all-acl && sudo /usr/sbin/setcap cap_net_bind_service=+ep ~/go/bin/next.orly.dev && sudo systemctl restart orly'
+	ssh relay.orly.dev 'cd ~/src/git.smesh.lol/orly && git pull origin main && make all-acl && sudo /usr/sbin/setcap cap_net_bind_service=+ep ~/go/bin/git.smesh.lol/orly && sudo systemctl restart orly'
 
 # Deploy split mode (recommended)
 deploy-split:
-	ssh relay.orly.dev 'cd ~/src/next.orly.dev && git pull origin main && make all-split && sudo /usr/sbin/setcap cap_net_bind_service=+ep ~/go/bin/next.orly.dev && sudo systemctl restart orly'
+	ssh relay.orly.dev 'cd ~/src/git.smesh.lol/orly && git pull origin main && make all-split && sudo /usr/sbin/setcap cap_net_bind_service=+ep ~/go/bin/git.smesh.lol/orly && sudo systemctl restart orly'
 
 # === Symlink-Based Deployment ===
 

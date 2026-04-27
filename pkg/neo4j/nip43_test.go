@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 )
 
 // All tests in this file use the shared testDB instance from testmain_test.go

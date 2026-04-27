@@ -254,7 +254,7 @@ go test ./pkg/neo4j/...
 
 Output:
 ```
-?       next.orly.dev/pkg/neo4j [no test files]
+?       git.smesh.lol/orly/pkg/neo4j [no test files]
 --- SKIP: TestSocialEventProcessor (0.00s)
     testmain_test.go:14: Neo4j not available (set ORLY_NEO4J_URI to enable tests)
 ```

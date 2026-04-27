@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"next.orly.dev/pkg/p256k1"
+	"git.smesh.lol/orly/pkg/p256k1"
 )
 
 func main() {

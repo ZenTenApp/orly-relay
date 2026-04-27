@@ -6,9 +6,9 @@ import (
 	"net/url"
 	"strings"
 
-	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
+	bridgesmtp "git.smesh.lol/orly/pkg/bridge/smtp"
 
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // BlossomUploader uploads encrypted data to a Blossom server and returns the URL.

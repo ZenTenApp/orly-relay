@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"next.orly.dev/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
 )
 
 // QueryCache tracks which filters have been queried recently to avoid

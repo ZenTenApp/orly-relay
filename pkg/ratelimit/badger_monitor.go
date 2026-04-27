@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/interfaces/loadmonitor"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/interfaces/loadmonitor"
 )
 
 // BadgerMonitor implements loadmonitor.Monitor for the Badger database.

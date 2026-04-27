@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/sync/distributed"
-	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
-	distributedv1 "next.orly.dev/pkg/proto/orlysync/distributed/v1"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/sync/distributed"
+	commonv1 "git.smesh.lol/orly/pkg/proto/orlysync/common/v1"
+	distributedv1 "git.smesh.lol/orly/pkg/proto/orlysync/distributed/v1"
 )
 
 // Service implements the DistributedSyncServiceServer interface.

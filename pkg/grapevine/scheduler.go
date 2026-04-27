@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // Scheduler runs periodic GrapeVine score computation for configured observers.

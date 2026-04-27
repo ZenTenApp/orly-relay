@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 // RelySQLiteBenchmark wraps a Benchmark with rely-sqlite-specific setup

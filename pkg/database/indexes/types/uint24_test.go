@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 func TestUint24(t *testing.T) {

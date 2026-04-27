@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	pidif "next.orly.dev/pkg/interfaces/pid"
+	pidif "git.smesh.lol/orly/pkg/interfaces/pid"
 )
 
 func TestController_BasicOperation(t *testing.T) {

@@ -7,9 +7,9 @@ import (
 	"time"
 	"unsafe"
 
-	"next.orly.dev/pkg/nostr/encoders/ints"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/nostr/encoders/ints"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/errorf"
 )
 
 // T is a convenience type for UNIX 64 bit timestamps of 1 second

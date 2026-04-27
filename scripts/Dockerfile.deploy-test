@@ -21,10 +21,10 @@ USER testuser
 WORKDIR /home/testuser
 
 # Copy the project files
-COPY --chown=testuser:testuser . /home/testuser/next.orly.dev/
+COPY --chown=testuser:testuser . /home/testuser/git.smesh.lol/orly/
 
 # Set working directory to the project
-WORKDIR /home/testuser/next.orly.dev
+WORKDIR /home/testuser/git.smesh.lol/orly
 
 # Make the deploy script executable (in case it wasn't copied with correct permissions)
 RUN chmod +x scripts/deploy.sh
@@ -49,7 +49,7 @@ echo "2. Testing Go installation check..."
 
 echo "3. Testing script validation..."
 # Check that we're in the right directory
-if [[ ! -f "go.mod" ]] || ! grep -q "next.orly.dev" go.mod; then
+if [[ ! -f "go.mod" ]] || ! grep -q "git.smesh.lol/orly" go.mod; then
     echo "ERROR: Not in correct directory"
     exit 1
 fi
@@ -211,7 +211,7 @@ RUN ./test-deploy.sh
 
 # Test that we can at least parse the go.mod file
 RUN echo "Testing Go module validation..." && \
-    grep -q "module next.orly.dev" go.mod && \
+    grep -q "module git.smesh.lol/orly" go.mod && \
     echo "✓ Go module is correctly configured"
 
 # Test that required scripts exist and are executable

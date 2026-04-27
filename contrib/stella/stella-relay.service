@@ -1,6 +1,6 @@
 [Unit]
 Description=Stella's Orly Nostr Relay (Docker Compose)
-Documentation=https://github.com/Silberengel/next.orly.dev
+Documentation=https://github.com/Silberengel/git.smesh.lol/orly
 After=network-online.target docker.service
 Wants=network-online.target
 Requires=docker.service
@@ -10,7 +10,7 @@ Type=oneshot
 RemainAfterExit=yes
 User=madmin
 Group=madmin
-WorkingDirectory=/home/madmin/Projects/GitCitadel/next.orly.dev
+WorkingDirectory=/home/madmin/Projects/GitCitadel/git.smesh.lol/orly
 
 # Start the relay using docker compose
 ExecStart=/usr/bin/docker compose up -d orly-relay
@@ -26,7 +26,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/home/madmin/.local/share/orly-relay
-ReadWritePaths=/home/madmin/Projects/GitCitadel/next.orly.dev/data
+ReadWritePaths=/home/madmin/Projects/GitCitadel/git.smesh.lol/orly/data
 
 # Resource limits
 LimitNOFILE=65536

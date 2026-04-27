@@ -5,12 +5,12 @@ package database
 import (
 	"bytes"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/database/indexes"
-	"next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/database/indexes"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 // CanUsePTagGraph determines if a filter can benefit from p-tag graph optimization.

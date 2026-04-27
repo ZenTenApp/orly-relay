@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"next.orly.dev/pkg/interfaces/loadmonitor"
+	"git.smesh.lol/orly/pkg/interfaces/loadmonitor"
 )
 
 // MemoryMonitor is a simple load monitor that only tracks process memory.

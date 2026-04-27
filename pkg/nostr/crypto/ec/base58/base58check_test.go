@@ -7,7 +7,7 @@ package base58_test
 import (
 	"testing"
 
-	"next.orly.dev/pkg/nostr/crypto/ec/base58"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/base58"
 )
 
 var checkEncodingStringTests = []struct {

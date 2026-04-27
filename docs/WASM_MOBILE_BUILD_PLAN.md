@@ -21,8 +21,8 @@ This document outlines the work required to enable ORLY and the nostr library to
 ### Problem
 Two packages fail to compile for js/wasm due to missing platform-specific implementations:
 
-1. **`next.orly.dev/pkg/utils/interrupt`** - Missing `Restart()` function
-2. **`git.mleku.dev/mleku/nostr/ws`** - Missing `getConnectionOptions()` function
+1. **`git.smesh.lol/orly/pkg/utils/interrupt`** - Missing `Restart()` function
+2. **`git.smesh.lol/orly/pkg/nostr/ws`** - Missing `getConnectionOptions()` function
 
 ### Root Cause Analysis
 
@@ -386,7 +386,7 @@ This can be linked into any iOS project using the C header.
 
 ## Appendix: File Changes Summary
 
-### nostr Repository (`git.mleku.dev/mleku/nostr`) - COMPLETED
+### nostr Repository (`git.smesh.lol/orly/pkg/nostr`) - COMPLETED
 
 | File | Change |
 |------|--------|
@@ -402,7 +402,7 @@ This can be linked into any iOS project using the C header.
 | `crypto/p8k/utils_other.go` | Build tag: `!linux \|\| android \|\| purego` |
 | `crypto/p8k/constants.go` | NEW - shared constants (no build tags) |
 
-### ORLY Repository (`next.orly.dev`)
+### ORLY Repository (`git.smesh.lol/orly`)
 
 | File | Change |
 |------|--------|

@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
 
-	aclgrpc "next.orly.dev/pkg/acl/grpc"
-	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
+	aclgrpc "git.smesh.lol/orly/pkg/acl/grpc"
+	bridgesmtp "git.smesh.lol/orly/pkg/bridge/smtp"
 )
 
 // OutboundProcessor handles converting DMs to outbound emails.

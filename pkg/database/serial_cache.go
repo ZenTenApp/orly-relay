@@ -6,10 +6,10 @@ import (
 	"errors"
 
 	"github.com/dgraph-io/badger/v4"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/database/bufpool"
-	"next.orly.dev/pkg/database/indexes"
-	"next.orly.dev/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/database/bufpool"
+	"git.smesh.lol/orly/pkg/database/indexes"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
 )
 
 // SerialCache provides LRU caching for pubkey and event ID serial lookups.

@@ -13,12 +13,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/nostr/crypto/ec/bech32"
-	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/bech32"
+	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 
 	"github.com/alexflint/go-arg"
 )

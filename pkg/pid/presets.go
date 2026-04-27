@@ -1,7 +1,7 @@
 package pid
 
 import (
-	pidif "next.orly.dev/pkg/interfaces/pid"
+	pidif "git.smesh.lol/orly/pkg/interfaces/pid"
 )
 
 // Presets for common PID controller use cases.

@@ -3,7 +3,7 @@
 package grapevine
 
 import (
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 // BadgerGraphSource adapts Badger's graph indexes to the GraphSource interface.

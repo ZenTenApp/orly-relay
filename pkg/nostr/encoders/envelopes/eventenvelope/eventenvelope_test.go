@@ -5,12 +5,12 @@ import (
 	"bytes"
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/envelopes"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/event/examples"
-	"next.orly.dev/pkg/nostr/utils"
-	"next.orly.dev/pkg/nostr/utils/bufpool"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event/examples"
+	"git.smesh.lol/orly/pkg/nostr/utils"
+	"git.smesh.lol/orly/pkg/nostr/utils/bufpool"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 func TestSubmission(t *testing.T) {

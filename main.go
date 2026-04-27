@@ -13,17 +13,17 @@ import (
 
 	"github.com/adrg/xdg"
 	"golang.org/x/term"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/app"
-	"next.orly.dev/app/branding"
-	"next.orly.dev/app/config"
-	"next.orly.dev/pkg/nostr/crypto/keys"
-	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/relay"
-	"next.orly.dev/pkg/version"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/app"
+	"git.smesh.lol/orly/app/branding"
+	"git.smesh.lol/orly/app/config"
+	"git.smesh.lol/orly/pkg/nostr/crypto/keys"
+	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/relay"
+	"git.smesh.lol/orly/pkg/version"
 )
 
 func main() {

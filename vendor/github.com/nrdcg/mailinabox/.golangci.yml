@@ -1,0 +1,100 @@
+version: "2"
+
+formatters:
+  enable:
+    - gci
+    - gofumpt
+  settings:
+    gofumpt:
+      extra-rules: true
+
+linters:
+  default: all
+  disable:
+    - cyclop # duplicate of gocyclo
+    - dupl
+    - err113
+    - exhaustive
+    - exhaustruct
+    - forcetypeassert
+    - lll
+    - mnd
+    - nilnil
+    - nlreturn
+    - noinlineerr
+    - paralleltest
+    - prealloc
+    - rowserrcheck # not relevant (SQL)
+    - sqlclosecheck # not relevant (SQL)
+    - testpackage
+    - tparallel
+    - varnamelen
+    - wrapcheck
+    - wsl # deprecated
+
+  settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: github.com/instana/testify
+              desc: not allowed
+            - pkg: github.com/pkg/errors
+              desc: Should be replaced by standard lib errors package
+    funlen:
+      lines: -1
+      statements: 40
+    goconst:
+      min-len: 5
+      min-occurrences: 3
+    gocritic:
+      disabled-checks:
+        - sloppyReassign
+        - rangeValCopy
+        - octalLiteral
+        - paramTypeCombine
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      settings:
+        hugeParam:
+          sizeThreshold: 120
+    gocyclo:
+      min-complexity: 15
+    godox:
+      keywords:
+        - FIXME
+    govet:
+      disable:
+        - fieldalignment
+      enable-all: true
+    misspell:
+      locale: US
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+    perfsprint:
+      err-error: true
+      errorf: true
+      sprintf1: true
+      strconcat: false
+
+  exclusions:
+    warn-unused: true
+    presets:
+      - comments
+    rules:
+      - linters:
+          - funlen
+          - gosec
+        path: .*_test.go
+      - linters:
+          - unparam
+        path: mailinabox_test.go
+        text: 'testHandler - statusCode always receives http.StatusOK \(200\)'
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

@@ -3,11 +3,11 @@ package types
 import (
 	"io"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/errorf"
-	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/schnorr"
 	"github.com/minio/sha256-simd"
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 const PubHashLen = 8

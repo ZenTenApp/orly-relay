@@ -1,6 +1,6 @@
 syntax = "proto3";
 package orlydb.v1;
-option go_package = "next.orly.dev/pkg/proto/orlydb/v1;orlydbv1";
+option go_package = "git.smesh.lol/orly/pkg/proto/orlydb/v1;orlydbv1";
 
 // Empty is used for requests/responses with no data
 message Empty {}

@@ -5,9 +5,9 @@ package marmot
 import (
 	"context"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/ws"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/ws"
 )
 
 // WSRelayAdapter wraps a ws.Client to satisfy the RelayConnection interface.

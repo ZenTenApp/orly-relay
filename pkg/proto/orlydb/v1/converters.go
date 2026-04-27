@@ -4,15 +4,15 @@ package orlydbv1
 import (
 	"time"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/encoders/timestamp"
-	ntypes "next.orly.dev/pkg/nostr/types"
-	"next.orly.dev/pkg/database"
-	indextypes "next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/interfaces/store"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/encoders/timestamp"
+	ntypes "git.smesh.lol/orly/pkg/nostr/types"
+	"git.smesh.lol/orly/pkg/database"
+	indextypes "git.smesh.lol/orly/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/interfaces/store"
 )
 
 // EventToProto converts a nostr event.E to a proto Event.

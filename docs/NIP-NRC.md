@@ -306,7 +306,7 @@ Receivers MUST implement chunk buffer cleanup:
 
 ## Reference Implementations
 
-- ORLY Relay (Bridge): [https://git.nostrdev.com/mleku/next.orly.dev](https://git.nostrdev.com/mleku/next.orly.dev)
+- ORLY Relay (Bridge): [https://git.nostrdev.com/mleku/git.smesh.lol/orly](https://git.nostrdev.com/mleku/git.smesh.lol/orly)
 - Smesh Client: [https://git.nostrdev.com/mleku/smesh](https://git.nostrdev.com/mleku/smesh)
 
 ## See Also

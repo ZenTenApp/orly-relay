@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"go.uber.org/atomic"
-	"next.orly.dev/pkg/lol"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // NewLogger creates a new neo4j logger.

@@ -6,10 +6,10 @@ package tag
 import (
 	"bytes"
 
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/encoders/text"
-	"next.orly.dev/pkg/nostr/utils"
-	"next.orly.dev/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/text"
+	"git.smesh.lol/orly/pkg/nostr/utils"
+	"git.smesh.lol/orly/pkg/lol/errorf"
 )
 
 // The tag position meanings, so they are clear when reading.

@@ -14,6 +14,13 @@ type GroupStore interface {
 	LoadGroup(groupID []byte) ([]byte, error)
 	ListGroups() ([][]byte, error)
 	DeleteGroup(groupID []byte) error
+	// SaveKeyPackage persists the MLS key package so welcomes referencing it
+	// remain valid across restarts. Without this, every restart generates a
+	// fresh key package and all pending welcomes become undecryptable.
+	SaveKeyPackage(data []byte) error
+	// LoadKeyPackage loads the persisted key package. Returns os.ErrNotExist
+	// if no key package was saved.
+	LoadKeyPackage() ([]byte, error)
 }
 
 // FileGroupStore implements GroupStore using one file per group in a directory.
@@ -80,6 +87,22 @@ func (s *FileGroupStore) DeleteGroup(groupID []byte) error {
 	return os.Remove(s.path(groupID))
 }
 
+func (s *FileGroupStore) kppPath() string {
+	return filepath.Join(s.dir, "_keypackage.dat")
+}
+
+func (s *FileGroupStore) SaveKeyPackage(data []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return os.WriteFile(s.kppPath(), data, 0600)
+}
+
+func (s *FileGroupStore) LoadKeyPackage() ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return os.ReadFile(s.kppPath())
+}
+
 // MemoryGroupStore implements GroupStore in memory. Useful for testing.
 type MemoryGroupStore struct {
 	mu     sync.Mutex
@@ -126,6 +149,27 @@ func (s *MemoryGroupStore) DeleteGroup(groupID []byte) error {
 	defer s.mu.Unlock()
 	delete(s.groups, string(groupID))
 	return nil
+}
+
+func (s *MemoryGroupStore) SaveKeyPackage(data []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	s.groups["_kpp"] = cp
+	return nil
+}
+
+func (s *MemoryGroupStore) LoadKeyPackage() ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, ok := s.groups["_kpp"]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	return cp, nil
 }
 
 // groupStateSerialized is the JSON structure for persisting group state.

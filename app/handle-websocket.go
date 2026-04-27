@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/nostr/encoders/envelopes/authenvelope"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/protocol/publish"
-	"next.orly.dev/pkg/nostr/utils/units"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/authenvelope"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/protocol/publish"
+	"git.smesh.lol/orly/pkg/nostr/utils/units"
 )
 
 const (

@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"strconv"
 
-	lol "next.orly.dev/pkg/lol"
-	"next.orly.dev/pkg/lol/chk"
+	lol "git.smesh.lol/orly/pkg/lol"
+	"git.smesh.lol/orly/pkg/lol/chk"
 
-	"next.orly.dev/pkg/nostr/httpauth"
-	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/logbuffer"
+	"git.smesh.lol/orly/pkg/nostr/httpauth"
+	"git.smesh.lol/orly/pkg/acl"
+	"git.smesh.lol/orly/pkg/logbuffer"
 )
 
 // LogsResponse is the response structure for GET /api/logs

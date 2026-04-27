@@ -11,12 +11,12 @@ import (
 	"syscall/js"
 	"time"
 
-	"next.orly.dev/pkg/lol"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/protocol/marmot"
-	"next.orly.dev/pkg/version"
+	"git.smesh.lol/orly/pkg/lol"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/protocol/marmot"
+	"git.smesh.lol/orly/pkg/version"
 )
 
 var (
@@ -550,6 +550,12 @@ func (s *jsGroupStore) DeleteGroup(groupID []byte) error {
 	}
 	return nil
 }
+
+// SaveKeyPackage is a no-op in WASM — key packages are ephemeral.
+func (s *jsGroupStore) SaveKeyPackage([]byte) error { return nil }
+
+// LoadKeyPackage always returns not-found in WASM — generates fresh each time.
+func (s *jsGroupStore) LoadKeyPackage() ([]byte, error) { return nil, os.ErrNotExist }
 
 func jsStoreResult(this js.Value, args []js.Value) any {
 	if len(args) < 3 || store == nil {

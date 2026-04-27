@@ -9,8 +9,8 @@ import (
 	"math/rand"
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 // TestIsZero ensures that checking if a field IsZero works as expected.

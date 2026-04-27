@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	aclgrpc "next.orly.dev/pkg/acl/grpc"
-	"next.orly.dev/pkg/protocol/nwc"
+	aclgrpc "git.smesh.lol/orly/pkg/acl/grpc"
+	"git.smesh.lol/orly/pkg/protocol/nwc"
 )
 
 func Run(args []string) {

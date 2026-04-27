@@ -39,7 +39,7 @@ import (
 	"encoding/json"
 	"fmt"
 	p256k1signer "p256k1.mleku.dev/signer"
-	"next.orly.dev/pkg/encoders/hex"
+	"git.smesh.lol/orly/pkg/encoders/hex"
 )
 
 func main() {

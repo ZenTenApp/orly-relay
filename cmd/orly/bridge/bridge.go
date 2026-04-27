@@ -10,11 +10,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/app/config"
-	bridgepkg "next.orly.dev/pkg/bridge"
-	"next.orly.dev/pkg/version"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/app/config"
+	bridgepkg "git.smesh.lol/orly/pkg/bridge"
+	"git.smesh.lol/orly/pkg/version"
 )
 
 // Run executes the bridge subcommand.

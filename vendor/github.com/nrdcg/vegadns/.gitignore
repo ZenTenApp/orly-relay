@@ -1,0 +1,11 @@
+.gitcookies
+.idea
+.vscode/
+.DS_Store
+.coverage
+coverage.out
+coverage.xml
+*.test
+vendor
+dist/
+builds/

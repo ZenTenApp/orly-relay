@@ -43,8 +43,8 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 # Check if we're in the right directory
-if [[ ! -f "go.mod" ]] || ! grep -q "next.orly.dev" go.mod; then
-    echo -e "${RED}ERROR: This script must be run from the next.orly.dev project root${NC}"
+if [[ ! -f "go.mod" ]] || ! grep -q "git.smesh.lol/orly" go.mod; then
+    echo -e "${RED}ERROR: This script must be run from the git.smesh.lol/orly project root${NC}"
     exit 1
 fi
 

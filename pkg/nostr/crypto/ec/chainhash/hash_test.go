@@ -7,7 +7,7 @@ package chainhash
 import (
 	"testing"
 
-	"next.orly.dev/pkg/nostr/utils"
+	"git.smesh.lol/orly/pkg/nostr/utils"
 )
 
 // mainNetGenesisHash is the hash of the first block in the block chain for the

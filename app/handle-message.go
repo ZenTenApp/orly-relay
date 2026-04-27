@@ -6,15 +6,15 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/nostr/encoders/envelopes"
-	"next.orly.dev/pkg/nostr/encoders/envelopes/authenvelope"
-	"next.orly.dev/pkg/nostr/encoders/envelopes/closeenvelope"
-	"next.orly.dev/pkg/nostr/encoders/envelopes/countenvelope"
-	"next.orly.dev/pkg/nostr/encoders/envelopes/eventenvelope"
-	"next.orly.dev/pkg/nostr/encoders/envelopes/noticeenvelope"
-	"next.orly.dev/pkg/nostr/encoders/envelopes/reqenvelope"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/authenvelope"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/closeenvelope"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/countenvelope"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/eventenvelope"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/noticeenvelope"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/reqenvelope"
 )
 
 // validateJSONMessage checks if a message contains invalid control characters

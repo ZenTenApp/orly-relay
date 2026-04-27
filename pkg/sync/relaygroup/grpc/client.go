@@ -7,10 +7,10 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
-	relaygroupv1 "next.orly.dev/pkg/proto/orlysync/relaygroup/v1"
+	commonv1 "git.smesh.lol/orly/pkg/proto/orlysync/common/v1"
+	relaygroupv1 "git.smesh.lol/orly/pkg/proto/orlysync/relaygroup/v1"
 )
 
 // Client is a gRPC client for the relay group service.

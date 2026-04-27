@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This report documents the profiling and optimization of database operations in the `next.orly.dev/pkg/database` package. The optimization focused on reducing memory allocations, improving query efficiency, and ensuring proper batching is used throughout the codebase.
+This report documents the profiling and optimization of database operations in the `git.smesh.lol/orly/pkg/database` package. The optimization focused on reducing memory allocations, improving query efficiency, and ensuring proper batching is used throughout the codebase.
 
 ## Methodology
 

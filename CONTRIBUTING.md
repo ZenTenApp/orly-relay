@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to ORLY! This document outlines the process for reporting bugs, requesting features, and submitting contributions.
 
-**Canonical Repository:** https://git.nostrdev.com/mleku/next.orly.dev
+**Canonical Repository:** https://git.nostrdev.com/mleku/git.smesh.lol/orly
 
 ## Issue Reporting Policy
 
@@ -57,8 +57,8 @@ Use the **Feature Request** template when suggesting new functionality. A good f
 
 ```bash
 # Clone the repository
-git clone https://git.nostrdev.com/mleku/next.orly.dev.git
-cd next.orly.dev
+git clone https://git.nostrdev.com/mleku/git.smesh.lol/orly.git
+cd git.smesh.lol/orly
 
 # Build
 CGO_ENABLED=0 go build -o orly
@@ -93,8 +93,8 @@ Files modified:
 
 ## Communication
 
-- **Issues:** https://git.nostrdev.com/mleku/next.orly.dev/issues
-- **Documentation:** https://git.nostrdev.com/mleku/next.orly.dev
+- **Issues:** https://git.nostrdev.com/mleku/git.smesh.lol/orly/issues
+- **Documentation:** https://git.nostrdev.com/mleku/git.smesh.lol/orly
 
 ## License
 

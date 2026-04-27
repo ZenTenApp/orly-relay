@@ -3,7 +3,7 @@
 package database
 
 import (
-	"next.orly.dev/pkg/protocol/graph"
+	"git.smesh.lol/orly/pkg/protocol/graph"
 )
 
 // GraphAdapter wraps a database instance and implements graph.GraphDatabase interface.

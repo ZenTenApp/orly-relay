@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
-	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
-	"next.orly.dev/pkg/protocol/directory"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/secp256k1"
+	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/protocol/directory"
 )
 
 // Helper to create a test keypair using p8k.Signer

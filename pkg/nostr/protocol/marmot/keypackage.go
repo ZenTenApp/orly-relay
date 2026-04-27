@@ -2,13 +2,14 @@ package marmot
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/emersion/go-mls"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
 )
 
 // GenerateKeyPackage creates a new MLS key pair package using the Nostr
@@ -96,4 +97,42 @@ func EventToKeyPackage(ev *event.E) (*mls.KeyPackage, error) {
 		return nil, fmt.Errorf("unmarshal key package: %w", err)
 	}
 	return kp, nil
+}
+
+// kppPersisted is the JSON format for persisting a KeyPairPackage across restarts.
+type kppPersisted struct {
+	PublicRaw     []byte `json:"public"`
+	InitKey       []byte `json:"init_key"`
+	EncryptionKey []byte `json:"encryption_key"`
+	SignatureKey  []byte `json:"signature_key"`
+}
+
+// MarshalKeyPairPackage serializes a KeyPairPackage for persistent storage.
+func MarshalKeyPairPackage(kpp *mls.KeyPairPackage) ([]byte, error) {
+	return json.Marshal(&kppPersisted{
+		PublicRaw:     kpp.Public.RawBytes(),
+		InitKey:       kpp.Private.InitKey,
+		EncryptionKey: kpp.Private.EncryptionKey,
+		SignatureKey:  kpp.Private.SignatureKey,
+	})
+}
+
+// UnmarshalKeyPairPackage deserializes a KeyPairPackage from persistent storage.
+func UnmarshalKeyPairPackage(data []byte) (*mls.KeyPairPackage, error) {
+	var p kppPersisted
+	if err := json.Unmarshal(data, &p); err != nil {
+		return nil, err
+	}
+	pub, err := mls.UnmarshalRawKeyPackage(p.PublicRaw)
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal public key package: %w", err)
+	}
+	return &mls.KeyPairPackage{
+		Public: *pub,
+		Private: mls.PrivateKeyPackage{
+			InitKey:       p.InitKey,
+			EncryptionKey: p.EncryptionKey,
+			SignatureKey:  p.SignatureKey,
+		},
+	}, nil
 }

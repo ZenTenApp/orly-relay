@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"io"
 
-	"next.orly.dev/pkg/nostr/crypto/ec/schnorr"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/encoders/varint"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/schnorr"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/encoders/varint"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 // MarshalBinary writes a binary encoding of an event.

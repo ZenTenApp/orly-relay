@@ -34,14 +34,14 @@ import (
 	"fmt"
 	"os"
 
-	"next.orly.dev/cmd/orly/acl"
-	"next.orly.dev/cmd/orly/bridge"
-	"next.orly.dev/cmd/orly/bridgebot"
-	"next.orly.dev/cmd/orly/db"
-	"next.orly.dev/cmd/orly/launcher"
-	"next.orly.dev/cmd/orly/relay"
-	"next.orly.dev/cmd/orly/sync"
-	"next.orly.dev/cmd/orly/testsubscribe"
+	"git.smesh.lol/orly/cmd/orly/acl"
+	"git.smesh.lol/orly/cmd/orly/bridge"
+	"git.smesh.lol/orly/cmd/orly/bridgebot"
+	"git.smesh.lol/orly/cmd/orly/db"
+	"git.smesh.lol/orly/cmd/orly/launcher"
+	"git.smesh.lol/orly/cmd/orly/relay"
+	"git.smesh.lol/orly/cmd/orly/sync"
+	"git.smesh.lol/orly/cmd/orly/testsubscribe"
 )
 
 // Version information (set by build flags)

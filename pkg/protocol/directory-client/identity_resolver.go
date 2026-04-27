@@ -3,9 +3,9 @@ package directory_client
 import (
 	"sync"
 
-	"next.orly.dev/pkg/lol/errorf"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/protocol/directory"
+	"git.smesh.lol/orly/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/protocol/directory"
 )
 
 // IdentityResolver manages identity resolution and key delegation tracking.

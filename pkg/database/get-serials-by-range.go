@@ -7,8 +7,8 @@ import (
 	"sort"
 
 	"github.com/dgraph-io/badger/v4"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
 )
 
 func (d *D) GetSerialsByRange(idx Range) (

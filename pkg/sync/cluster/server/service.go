@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/sync/cluster"
-	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
-	clusterv1 "next.orly.dev/pkg/proto/orlysync/cluster/v1"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/sync/cluster"
+	commonv1 "git.smesh.lol/orly/pkg/proto/orlysync/common/v1"
+	clusterv1 "git.smesh.lol/orly/pkg/proto/orlysync/cluster/v1"
 )
 
 // Service implements the ClusterSyncServiceServer interface.

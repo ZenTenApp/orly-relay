@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"testing"
 
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 	"github.com/minio/sha256-simd"
-	"next.orly.dev/pkg/utils"
+	"git.smesh.lol/orly/pkg/utils"
 )
 
 func TestFromIdent(t *testing.T) {

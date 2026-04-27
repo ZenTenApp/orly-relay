@@ -7,11 +7,8 @@ var myPubkey string
 
 func identitySetPubkey(hex string) {
 	if myPubkey != "" && hex != myPubkey {
-		// Identity change: close old marmot sub, reset relay, notify page.
-		if currentMarmotSub != "" {
-			busSend("relay", "[\"CLOSE\","+jstr(currentMarmotSub)+"]")
-			currentMarmotSub = ""
-		}
+		// Identity change: close all marmot subs, reset relay, notify page.
+		closeMarmotSubs()
 		busSend("relay", "[\"CLEAR_KEY\"]")
 		broadcastToClients("[\"RESUB\"]")
 	}
@@ -19,9 +16,13 @@ func identitySetPubkey(hex string) {
 }
 
 func identityClearKey() {
-	if currentMarmotSub != "" {
-		busSend("relay", "[\"CLOSE\","+jstr(currentMarmotSub)+"]")
-		currentMarmotSub = ""
-	}
+	closeMarmotSubs()
 	myPubkey = ""
+}
+
+func closeMarmotSubs() {
+	for subID := range marmotSubs {
+		busSend("relay", "[\"CLOSE\","+jstr(subID)+"]")
+	}
+	marmotSubs = nil
 }

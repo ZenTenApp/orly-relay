@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This report documents the profiling and optimization of filter encoders in the `next.orly.dev/pkg/encoders/filter` package. The optimization focused on reducing memory allocations and CPU processing time for filter marshaling, unmarshaling, sorting, and matching operations.
+This report documents the profiling and optimization of filter encoders in the `git.smesh.lol/orly/pkg/encoders/filter` package. The optimization focused on reducing memory allocations and CPU processing time for filter marshaling, unmarshaling, sorting, and matching operations.
 
 ## Methodology
 

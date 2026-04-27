@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"fmt"
 
-	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
+	bridgesmtp "git.smesh.lol/orly/pkg/bridge/smtp"
 )
 
 const maxZipBytes = 25 * 1024 * 1024 // 25MB per spec

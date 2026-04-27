@@ -3,11 +3,11 @@ package okenvelope
 import (
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/envelopes"
-	"next.orly.dev/pkg/nostr/encoders/envelopes/messages"
-	"next.orly.dev/pkg/nostr/utils"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/messages"
+	"git.smesh.lol/orly/pkg/nostr/utils"
 	"github.com/minio/sha256-simd"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 	"lukechampine.com/frand"
 )
 

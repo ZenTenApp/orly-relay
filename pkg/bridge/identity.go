@@ -5,11 +5,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"next.orly.dev/pkg/nostr/crypto/keys"
-	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/interfaces/signer"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/nostr/crypto/keys"
+	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 )
 
 // IdentitySource describes where the bridge identity came from.

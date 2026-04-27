@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/acl"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 // Server provides a Blossom server implementation

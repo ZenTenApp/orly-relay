@@ -10,7 +10,7 @@ import (
 	"runtime/pprof"
 	"testing"
 
-	"next.orly.dev/pkg/p256k1"
+	"git.smesh.lol/orly/pkg/p256k1"
 )
 
 // Generate memory profiles for optimization

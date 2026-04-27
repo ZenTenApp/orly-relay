@@ -9,14 +9,14 @@ import (
 	"sync"
 	"time"
 
-	"next.orly.dev/pkg/bridge"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
-	"next.orly.dev/pkg/nostr/protocol/marmot"
-	"next.orly.dev/pkg/nostr/ws"
+	"git.smesh.lol/orly/pkg/bridge"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/nostr/protocol/marmot"
+	"git.smesh.lol/orly/pkg/nostr/ws"
 )
 
 // BridgeBot is a server-side marmot client that receives DMs and processes

@@ -17,7 +17,7 @@ A comprehensive, high-performance Go implementation of the Nostr protocol provid
 ## Installation
 
 ```bash
-go get git.mleku.dev/mleku/nostr
+go get git.smesh.lol/orly/pkg/nostr
 ```
 
 ## Quick Start
@@ -31,9 +31,9 @@ import (
     "context"
     "fmt"
 
-    "git.mleku.dev/mleku/nostr/encoders/filter"
-    "git.mleku.dev/mleku/nostr/encoders/kind"
-    "git.mleku.dev/mleku/nostr/ws"
+    "git.smesh.lol/orly/pkg/nostr/encoders/filter"
+    "git.smesh.lol/orly/pkg/nostr/encoders/kind"
+    "git.smesh.lol/orly/pkg/nostr/ws"
 )
 
 func main() {
@@ -105,7 +105,7 @@ package main
 import (
     "context"
 
-    "git.mleku.dev/mleku/nostr/ws"
+    "git.smesh.lol/orly/pkg/nostr/ws"
 )
 
 func main() {
@@ -131,9 +131,9 @@ import (
     "context"
     "fmt"
 
-    "git.mleku.dev/mleku/nostr/encoders/filter"
-    "git.mleku.dev/mleku/nostr/encoders/kind"
-    "git.mleku.dev/mleku/nostr/ws"
+    "git.smesh.lol/orly/pkg/nostr/encoders/filter"
+    "git.smesh.lol/orly/pkg/nostr/encoders/kind"
+    "git.smesh.lol/orly/pkg/nostr/ws"
 )
 
 func main() {
@@ -177,10 +177,10 @@ import (
     "fmt"
     "time"
 
-    "git.mleku.dev/mleku/nostr/encoders/event"
-    "git.mleku.dev/mleku/nostr/encoders/kind"
-    "git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
-    "git.mleku.dev/mleku/nostr/ws"
+    "git.smesh.lol/orly/pkg/nostr/encoders/event"
+    "git.smesh.lol/orly/pkg/nostr/encoders/kind"
+    "git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
+    "git.smesh.lol/orly/pkg/nostr/ws"
 )
 
 func main() {
@@ -217,8 +217,8 @@ package main
 import (
     "context"
 
-    "git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
-    "git.mleku.dev/mleku/nostr/ws"
+    "git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
+    "git.smesh.lol/orly/pkg/nostr/ws"
 )
 
 func main() {
@@ -331,10 +331,10 @@ import (
     "fmt"
     "time"
 
-    "git.mleku.dev/mleku/nostr/encoders/event"
-    "git.mleku.dev/mleku/nostr/encoders/kind"
-    "git.mleku.dev/mleku/nostr/encoders/tag"
-    "git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+    "git.smesh.lol/orly/pkg/nostr/encoders/event"
+    "git.smesh.lol/orly/pkg/nostr/encoders/kind"
+    "git.smesh.lol/orly/pkg/nostr/encoders/tag"
+    "git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 )
 
 func main() {
@@ -436,11 +436,11 @@ package main
 import (
     "fmt"
 
-    "git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
-    "git.mleku.dev/mleku/nostr/encoders/event"
-    "git.mleku.dev/mleku/nostr/encoders/filter"
-    "git.mleku.dev/mleku/nostr/encoders/kind"
-    "git.mleku.dev/mleku/nostr/encoders/tag"
+    "git.smesh.lol/orly/pkg/nostr/crypto/ec/schnorr"
+    "git.smesh.lol/orly/pkg/nostr/encoders/event"
+    "git.smesh.lol/orly/pkg/nostr/encoders/filter"
+    "git.smesh.lol/orly/pkg/nostr/encoders/kind"
+    "git.smesh.lol/orly/pkg/nostr/encoders/tag"
 )
 
 func main() {
@@ -554,8 +554,8 @@ package main
 import (
     "fmt"
 
-    "git.mleku.dev/mleku/nostr/encoders/hex"
-    "git.mleku.dev/mleku/nostr/encoders/tag"
+    "git.smesh.lol/orly/pkg/nostr/encoders/hex"
+    "git.smesh.lol/orly/pkg/nostr/encoders/tag"
 )
 
 func main() {
@@ -683,7 +683,7 @@ package main
 import (
     "fmt"
 
-    "git.mleku.dev/mleku/nostr/encoders/kind"
+    "git.smesh.lol/orly/pkg/nostr/encoders/kind"
 )
 
 func main() {
@@ -761,8 +761,8 @@ package main
 import (
     "fmt"
 
-    "git.mleku.dev/mleku/nostr/encoders/envelopes/eventenvelope"
-    "git.mleku.dev/mleku/nostr/encoders/event"
+    "git.smesh.lol/orly/pkg/nostr/encoders/envelopes/eventenvelope"
+    "git.smesh.lol/orly/pkg/nostr/encoders/event"
 )
 
 func main() {
@@ -794,8 +794,8 @@ func main() {
 package main
 
 import (
-    "git.mleku.dev/mleku/nostr/encoders/envelopes/reqenvelope"
-    "git.mleku.dev/mleku/nostr/encoders/filter"
+    "git.smesh.lol/orly/pkg/nostr/encoders/envelopes/reqenvelope"
+    "git.smesh.lol/orly/pkg/nostr/encoders/filter"
 )
 
 func main() {
@@ -821,8 +821,8 @@ func main() {
 package main
 
 import (
-    "git.mleku.dev/mleku/nostr/encoders/envelopes/okenvelope"
-    "git.mleku.dev/mleku/nostr/encoders/reason"
+    "git.smesh.lol/orly/pkg/nostr/encoders/envelopes/okenvelope"
+    "git.smesh.lol/orly/pkg/nostr/encoders/reason"
 )
 
 func main() {
@@ -907,7 +907,7 @@ import (
     "context"
     "fmt"
 
-    "git.mleku.dev/mleku/nostr/relayinfo"
+    "git.smesh.lol/orly/pkg/nostr/relayinfo"
 )
 
 func main() {
@@ -983,8 +983,8 @@ import (
     "net/url"
     "time"
 
-    "git.mleku.dev/mleku/nostr/httpauth"
-    "git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+    "git.smesh.lol/orly/pkg/nostr/httpauth"
+    "git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 )
 
 func main() {
@@ -1046,7 +1046,7 @@ package main
 import (
     "fmt"
 
-    "git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+    "git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 )
 
 func main() {
@@ -1097,8 +1097,8 @@ func main() {
 package main
 
 import (
-    "git.mleku.dev/mleku/nostr/encoders/hex"
-    "git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+    "git.smesh.lol/orly/pkg/nostr/encoders/hex"
+    "git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 )
 
 func main() {
@@ -1125,7 +1125,7 @@ The `schnorr` package provides low-level signature operations.
 package main
 
 import (
-    "git.mleku.dev/mleku/nostr/crypto/ec/schnorr"
+    "git.smesh.lol/orly/pkg/nostr/crypto/ec/schnorr"
 )
 
 func main() {
@@ -1151,8 +1151,8 @@ func main() {
 package main
 
 import (
-    "git.mleku.dev/mleku/nostr/crypto/encryption"
-    "git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+    "git.smesh.lol/orly/pkg/nostr/crypto/encryption"
+    "git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 )
 
 func main() {
@@ -1215,8 +1215,8 @@ package main
 import (
     "fmt"
 
-    "git.mleku.dev/mleku/nostr/encoders/bech32encoding"
-    "git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
+    "git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
+    "git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 )
 
 func main() {
@@ -1270,8 +1270,8 @@ package main
 import (
     "time"
 
-    "git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
-    "git.mleku.dev/mleku/nostr/protocol/auth"
+    "git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
+    "git.smesh.lol/orly/pkg/nostr/protocol/auth"
 )
 
 func main() {
@@ -1307,7 +1307,7 @@ The `bufpool` package provides efficient buffer pooling for zero-copy operations
 package main
 
 import (
-    "git.mleku.dev/mleku/nostr/utils/bufpool"
+    "git.smesh.lol/orly/pkg/nostr/utils/bufpool"
 )
 
 func main() {
@@ -1330,7 +1330,7 @@ The `normalize` package provides URL and message normalization utilities.
 package main
 
 import (
-    "git.mleku.dev/mleku/nostr/utils/normalize"
+    "git.smesh.lol/orly/pkg/nostr/utils/normalize"
 )
 
 func main() {
@@ -1356,7 +1356,7 @@ The `hex` package provides SIMD-accelerated hex encoding.
 package main
 
 import (
-    "git.mleku.dev/mleku/nostr/encoders/hex"
+    "git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 func main() {
@@ -1381,7 +1381,7 @@ The `text` package provides JSON escaping and text processing.
 package main
 
 import (
-    "git.mleku.dev/mleku/nostr/encoders/text"
+    "git.smesh.lol/orly/pkg/nostr/encoders/text"
 )
 
 func main() {
@@ -1483,7 +1483,7 @@ go test -bench=. -benchmem ./encoders/filter
 ### Package Structure
 
 ```
-git.mleku.dev/mleku/nostr/
+git.smesh.lol/orly/pkg/nostr/
 ├── crypto/              # Cryptographic operations
 │   ├── ec/              # Elliptic curve crypto
 │   │   ├── schnorr/     # Schnorr signatures
@@ -1552,11 +1552,11 @@ import (
     "fmt"
     "time"
 
-    "git.mleku.dev/mleku/nostr/encoders/event"
-    "git.mleku.dev/mleku/nostr/encoders/filter"
-    "git.mleku.dev/mleku/nostr/encoders/kind"
-    "git.mleku.dev/mleku/nostr/interfaces/signer/p8k"
-    "git.mleku.dev/mleku/nostr/ws"
+    "git.smesh.lol/orly/pkg/nostr/encoders/event"
+    "git.smesh.lol/orly/pkg/nostr/encoders/filter"
+    "git.smesh.lol/orly/pkg/nostr/encoders/kind"
+    "git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
+    "git.smesh.lol/orly/pkg/nostr/ws"
 )
 
 func main() {
@@ -1626,7 +1626,7 @@ Contributions are welcome! Please ensure:
 
 ## Credits
 
-This library is extracted from the [ORLY](https://next.orly.dev) relay implementation, designed for high-performance Nostr protocol handling.
+This library is extracted from the [ORLY](https://git.smesh.lol/orly) relay implementation, designed for high-performance Nostr protocol handling.
 
 ### Key Technologies
 
@@ -1641,4 +1641,4 @@ This library is extracted from the [ORLY](https://next.orly.dev) relay implement
 
 - [Nostr Protocol](https://github.com/nostr-protocol/nostr)
 - [NIPs](https://github.com/nostr-protocol/nips)
-- [ORLY Relay](https://next.orly.dev)
+- [ORLY Relay](https://git.smesh.lol/orly)

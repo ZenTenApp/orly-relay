@@ -122,7 +122,7 @@
 // # Integration with Directory Protocol
 //
 // This package is designed to work seamlessly with the lower-level
-// directory protocol package (next.orly.dev/pkg/protocol/directory).
+// directory protocol package (git.smesh.lol/orly/pkg/protocol/directory).
 // Use the protocol package for:
 //
 //   - Parsing individual directory events

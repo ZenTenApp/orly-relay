@@ -5,10 +5,10 @@ package schnorr
 import (
 	"fmt"
 
-	"next.orly.dev/pkg/nostr/crypto/ec"
-	"next.orly.dev/pkg/nostr/crypto/ec/chainhash"
-	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/chainhash"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/secp256k1"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 const (

@@ -42,7 +42,7 @@ import (
 	"sync"
 	"time"
 
-	pidif "next.orly.dev/pkg/interfaces/pid"
+	pidif "git.smesh.lol/orly/pkg/interfaces/pid"
 )
 
 // Controller implements a PID controller with filtered derivative.

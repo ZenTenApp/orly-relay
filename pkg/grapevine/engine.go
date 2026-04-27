@@ -5,8 +5,8 @@ import (
 	"math"
 	"time"
 
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 // Engine computes GrapeVine influence and WoT intersection scores.

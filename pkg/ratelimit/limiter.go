@@ -8,10 +8,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/interfaces/loadmonitor"
-	pidif "next.orly.dev/pkg/interfaces/pid"
-	"next.orly.dev/pkg/pid"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/interfaces/loadmonitor"
+	pidif "git.smesh.lol/orly/pkg/interfaces/pid"
+	"git.smesh.lol/orly/pkg/pid"
 )
 
 // ErrCompactionPause is returned by Wait() during STW compaction.

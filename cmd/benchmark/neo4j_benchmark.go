@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"next.orly.dev/pkg/database"
-	_ "next.orly.dev/pkg/neo4j" // Import to register neo4j factory
+	"git.smesh.lol/orly/pkg/database"
+	_ "git.smesh.lol/orly/pkg/neo4j" // Import to register neo4j factory
 )
 
 // Neo4jBenchmark wraps a Benchmark with Neo4j-specific setup

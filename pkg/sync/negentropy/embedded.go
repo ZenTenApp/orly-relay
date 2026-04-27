@@ -5,16 +5,16 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/encoders/timestamp"
-	negentropylib "next.orly.dev/pkg/nostr/negentropy"
-	"next.orly.dev/pkg/database"
-	negentropyiface "next.orly.dev/pkg/interfaces/negentropy"
-	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/encoders/timestamp"
+	negentropylib "git.smesh.lol/orly/pkg/nostr/negentropy"
+	"git.smesh.lol/orly/pkg/database"
+	negentropyiface "git.smesh.lol/orly/pkg/interfaces/negentropy"
+	commonv1 "git.smesh.lol/orly/pkg/proto/orlysync/common/v1"
 )
 
 // EmbeddedHandler wraps the negentropy Manager to implement the Handler interface.

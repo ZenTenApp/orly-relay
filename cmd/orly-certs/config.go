@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"go-simpler.org/env"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // Config holds the configuration for the certificate manager.

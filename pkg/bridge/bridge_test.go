@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"next.orly.dev/pkg/nostr/crypto/keys"
+	"git.smesh.lol/orly/pkg/nostr/crypto/keys"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

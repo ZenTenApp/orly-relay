@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 // Storage provides blob storage operations using the database interface.

@@ -57,8 +57,8 @@ case "$JOB_NAME" in
   "ref": "refs/tags/v1.0.0",
   "pusher": {"name": "test"},
   "repository": {
-    "name": "next.orly.dev",
-    "full_name": "test/next.orly.dev"
+    "name": "git.smesh.lol/orly",
+    "full_name": "test/git.smesh.lol/orly"
   },
   "head_commit": {
     "id": "test123"

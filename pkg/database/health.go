@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/database/indexes"
-	"next.orly.dev/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/database/indexes"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
 )
 
 // HealthReport contains the results of a database health check.

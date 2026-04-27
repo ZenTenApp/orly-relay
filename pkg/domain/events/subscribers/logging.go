@@ -4,9 +4,9 @@ package subscribers
 import (
 	"encoding/hex"
 
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/domain/events"
+	"git.smesh.lol/orly/pkg/domain/events"
 )
 
 // LoggingSubscriber logs domain events for analytics and debugging.

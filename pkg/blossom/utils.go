@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"next.orly.dev/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/lol/errorf"
 	"github.com/minio/sha256-simd"
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 const (

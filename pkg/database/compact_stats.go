@@ -7,9 +7,9 @@ import (
 	"sync/atomic"
 
 	"github.com/dgraph-io/badger/v4"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/database/indexes"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/database/indexes"
 )
 
 // CompactStorageStats holds statistics about compact vs legacy storage.

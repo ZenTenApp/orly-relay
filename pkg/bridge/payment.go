@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"next.orly.dev/pkg/protocol/nwc"
+	"git.smesh.lol/orly/pkg/protocol/nwc"
 )
 
 // NWCRequester abstracts the NWC client's Request method for testing.

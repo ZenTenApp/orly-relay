@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/timestamp"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/timestamp"
 )
 
 func TestQueryForCreatedAt(t *testing.T) {

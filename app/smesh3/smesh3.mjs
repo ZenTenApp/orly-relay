@@ -10,6 +10,10 @@ import * as common$jsbridge$signer from './common_jsbridge_signer.mjs';
 import * as common$nostr from './common_nostr.mjs';
 
 // Package-level variables
+export let gfExp = { $value: $rt.builtin.makeSlice(512, 512, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let gfLog = { $value: $rt.builtin.makeSlice(256, 256, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let gfReady = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let formatBits = { $value: $rt.builtin.makeSlice(8, 8, $rt.builtin.makeSlice(15, 15, 0)), $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let pubkey = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let pubhex = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let isDark = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
@@ -62,6 +66,7 @@ export let retryRound = { $value: 0, $get() { return this.$value; }, $set(v) { t
 export let retryTimer = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let fetchQueue = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let fetchTimer = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+export let logoSVGCache = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let profileTab = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let profileTabContent = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 export let profileTabBtns = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
@@ -75,7 +80,7 @@ export let profileSubCounter = { $value: 0, $get() { return this.$value; }, $set
 export let discoveryRelays = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
 
 export function init() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129, $t129_130, $t130_131, $t131_132, $t132_133, $t133_134, $t134_135, $t135_136, $t136_137, $t137_138, $t138_139;
   $t0_1 = { $value: $rt.builtin.makeSlice(3, 3, ''), $get() { return this.$value; }, $set(v) { this.$value = v; } };
   $t1_2 = $t0_1.$get().addr(0);
   $t1_2.$set('wss://relay.orly.dev');
@@ -96,7 +101,3824 @@ export function init() {
   $t9_10.$set('wss://nos.lol');
   $t10_11 = $rt.builtin.sliceSlice($t5_6.$get(), undefined, undefined, undefined);
   discoveryRelays.$set($t10_11);
+  $t11_12 = formatBits.$get().addr(0);
+  $t12_13 = $t11_12.$get().addr(0);
+  $t13_14 = $t11_12.$get().addr(1);
+  $t14_15 = $t11_12.$get().addr(2);
+  $t15_16 = $t11_12.$get().addr(3);
+  $t16_17 = $t11_12.$get().addr(4);
+  $t17_18 = $t11_12.$get().addr(5);
+  $t18_19 = $t11_12.$get().addr(6);
+  $t19_20 = $t11_12.$get().addr(7);
+  $t20_21 = $t11_12.$get().addr(8);
+  $t21_22 = $t11_12.$get().addr(9);
+  $t22_23 = $t11_12.$get().addr(10);
+  $t23_24 = $t11_12.$get().addr(11);
+  $t24_25 = $t11_12.$get().addr(12);
+  $t25_26 = $t11_12.$get().addr(13);
+  $t26_27 = $t11_12.$get().addr(14);
+  $t27_28 = formatBits.$get().addr(1);
+  $t28_29 = $t27_28.$get().addr(0);
+  $t29_30 = $t27_28.$get().addr(1);
+  $t30_31 = $t27_28.$get().addr(2);
+  $t31_32 = $t27_28.$get().addr(3);
+  $t32_33 = $t27_28.$get().addr(4);
+  $t33_34 = $t27_28.$get().addr(5);
+  $t34_35 = $t27_28.$get().addr(6);
+  $t35_36 = $t27_28.$get().addr(7);
+  $t36_37 = $t27_28.$get().addr(8);
+  $t37_38 = $t27_28.$get().addr(9);
+  $t38_39 = $t27_28.$get().addr(10);
+  $t39_40 = $t27_28.$get().addr(11);
+  $t40_41 = $t27_28.$get().addr(12);
+  $t41_42 = $t27_28.$get().addr(13);
+  $t42_43 = $t27_28.$get().addr(14);
+  $t43_44 = formatBits.$get().addr(2);
+  $t44_45 = $t43_44.$get().addr(0);
+  $t45_46 = $t43_44.$get().addr(1);
+  $t46_47 = $t43_44.$get().addr(2);
+  $t47_48 = $t43_44.$get().addr(3);
+  $t48_49 = $t43_44.$get().addr(4);
+  $t49_50 = $t43_44.$get().addr(5);
+  $t50_51 = $t43_44.$get().addr(6);
+  $t51_52 = $t43_44.$get().addr(7);
+  $t52_53 = $t43_44.$get().addr(8);
+  $t53_54 = $t43_44.$get().addr(9);
+  $t54_55 = $t43_44.$get().addr(10);
+  $t55_56 = $t43_44.$get().addr(11);
+  $t56_57 = $t43_44.$get().addr(12);
+  $t57_58 = $t43_44.$get().addr(13);
+  $t58_59 = $t43_44.$get().addr(14);
+  $t59_60 = formatBits.$get().addr(3);
+  $t60_61 = $t59_60.$get().addr(0);
+  $t61_62 = $t59_60.$get().addr(1);
+  $t62_63 = $t59_60.$get().addr(2);
+  $t63_64 = $t59_60.$get().addr(3);
+  $t64_65 = $t59_60.$get().addr(4);
+  $t65_66 = $t59_60.$get().addr(5);
+  $t66_67 = $t59_60.$get().addr(6);
+  $t67_68 = $t59_60.$get().addr(7);
+  $t68_69 = $t59_60.$get().addr(8);
+  $t69_70 = $t59_60.$get().addr(9);
+  $t70_71 = $t59_60.$get().addr(10);
+  $t71_72 = $t59_60.$get().addr(11);
+  $t72_73 = $t59_60.$get().addr(12);
+  $t73_74 = $t59_60.$get().addr(13);
+  $t74_75 = $t59_60.$get().addr(14);
+  $t75_76 = formatBits.$get().addr(4);
+  $t76_77 = $t75_76.$get().addr(0);
+  $t77_78 = $t75_76.$get().addr(1);
+  $t78_79 = $t75_76.$get().addr(2);
+  $t79_80 = $t75_76.$get().addr(3);
+  $t80_81 = $t75_76.$get().addr(4);
+  $t81_82 = $t75_76.$get().addr(5);
+  $t82_83 = $t75_76.$get().addr(6);
+  $t83_84 = $t75_76.$get().addr(7);
+  $t84_85 = $t75_76.$get().addr(8);
+  $t85_86 = $t75_76.$get().addr(9);
+  $t86_87 = $t75_76.$get().addr(10);
+  $t87_88 = $t75_76.$get().addr(11);
+  $t88_89 = $t75_76.$get().addr(12);
+  $t89_90 = $t75_76.$get().addr(13);
+  $t90_91 = $t75_76.$get().addr(14);
+  $t91_92 = formatBits.$get().addr(5);
+  $t92_93 = $t91_92.$get().addr(0);
+  $t93_94 = $t91_92.$get().addr(1);
+  $t94_95 = $t91_92.$get().addr(2);
+  $t95_96 = $t91_92.$get().addr(3);
+  $t96_97 = $t91_92.$get().addr(4);
+  $t97_98 = $t91_92.$get().addr(5);
+  $t98_99 = $t91_92.$get().addr(6);
+  $t99_100 = $t91_92.$get().addr(7);
+  $t100_101 = $t91_92.$get().addr(8);
+  $t101_102 = $t91_92.$get().addr(9);
+  $t102_103 = $t91_92.$get().addr(10);
+  $t103_104 = $t91_92.$get().addr(11);
+  $t104_105 = $t91_92.$get().addr(12);
+  $t105_106 = $t91_92.$get().addr(13);
+  $t106_107 = $t91_92.$get().addr(14);
+  $t107_108 = formatBits.$get().addr(6);
+  $t108_109 = $t107_108.$get().addr(0);
+  $t109_110 = $t107_108.$get().addr(1);
+  $t110_111 = $t107_108.$get().addr(2);
+  $t111_112 = $t107_108.$get().addr(3);
+  $t112_113 = $t107_108.$get().addr(4);
+  $t113_114 = $t107_108.$get().addr(5);
+  $t114_115 = $t107_108.$get().addr(6);
+  $t115_116 = $t107_108.$get().addr(7);
+  $t116_117 = $t107_108.$get().addr(8);
+  $t117_118 = $t107_108.$get().addr(9);
+  $t118_119 = $t107_108.$get().addr(10);
+  $t119_120 = $t107_108.$get().addr(11);
+  $t120_121 = $t107_108.$get().addr(12);
+  $t121_122 = $t107_108.$get().addr(13);
+  $t122_123 = $t107_108.$get().addr(14);
+  $t123_124 = formatBits.$get().addr(7);
+  $t124_125 = $t123_124.$get().addr(0);
+  $t125_126 = $t123_124.$get().addr(1);
+  $t126_127 = $t123_124.$get().addr(2);
+  $t127_128 = $t123_124.$get().addr(3);
+  $t128_129 = $t123_124.$get().addr(4);
+  $t129_130 = $t123_124.$get().addr(5);
+  $t130_131 = $t123_124.$get().addr(6);
+  $t131_132 = $t123_124.$get().addr(7);
+  $t132_133 = $t123_124.$get().addr(8);
+  $t133_134 = $t123_124.$get().addr(9);
+  $t134_135 = $t123_124.$get().addr(10);
+  $t135_136 = $t123_124.$get().addr(11);
+  $t136_137 = $t123_124.$get().addr(12);
+  $t137_138 = $t123_124.$get().addr(13);
+  $t138_139 = $t123_124.$get().addr(14);
+  $t12_13.$set(1);
+  $t13_14.$set(0);
+  $t14_15.$set(1);
+  $t15_16.$set(0);
+  $t16_17.$set(1);
+  $t17_18.$set(0);
+  $t18_19.$set(0);
+  $t19_20.$set(0);
+  $t20_21.$set(0);
+  $t21_22.$set(0);
+  $t22_23.$set(1);
+  $t23_24.$set(0);
+  $t24_25.$set(0);
+  $t25_26.$set(1);
+  $t26_27.$set(0);
+  $t28_29.$set(1);
+  $t29_30.$set(0);
+  $t30_31.$set(1);
+  $t31_32.$set(0);
+  $t32_33.$set(0);
+  $t33_34.$set(0);
+  $t34_35.$set(1);
+  $t35_36.$set(0);
+  $t36_37.$set(1);
+  $t37_38.$set(1);
+  $t38_39.$set(0);
+  $t39_40.$set(1);
+  $t40_41.$set(1);
+  $t41_42.$set(0);
+  $t42_43.$set(0);
+  $t44_45.$set(1);
+  $t45_46.$set(0);
+  $t46_47.$set(1);
+  $t47_48.$set(1);
+  $t48_49.$set(1);
+  $t49_50.$set(1);
+  $t50_51.$set(0);
+  $t51_52.$set(1);
+  $t52_53.$set(1);
+  $t53_54.$set(0);
+  $t54_55.$set(0);
+  $t55_56.$set(0);
+  $t56_57.$set(1);
+  $t57_58.$set(1);
+  $t58_59.$set(1);
+  $t60_61.$set(1);
+  $t61_62.$set(0);
+  $t62_63.$set(1);
+  $t63_64.$set(1);
+  $t64_65.$set(0);
+  $t65_66.$set(1);
+  $t66_67.$set(1);
+  $t67_68.$set(1);
+  $t68_69.$set(0);
+  $t69_70.$set(1);
+  $t70_71.$set(1);
+  $t71_72.$set(1);
+  $t72_73.$set(0);
+  $t73_74.$set(0);
+  $t74_75.$set(1);
+  $t76_77.$set(1);
+  $t77_78.$set(0);
+  $t78_79.$set(0);
+  $t79_80.$set(0);
+  $t80_81.$set(1);
+  $t81_82.$set(0);
+  $t82_83.$set(1);
+  $t83_84.$set(1);
+  $t84_85.$set(0);
+  $t85_86.$set(1);
+  $t86_87.$set(0);
+  $t87_88.$set(1);
+  $t88_89.$set(1);
+  $t89_90.$set(1);
+  $t90_91.$set(0);
+  $t92_93.$set(1);
+  $t93_94.$set(0);
+  $t94_95.$set(0);
+  $t95_96.$set(0);
+  $t96_97.$set(0);
+  $t97_98.$set(0);
+  $t98_99.$set(0);
+  $t99_100.$set(1);
+  $t100_101.$set(1);
+  $t101_102.$set(0);
+  $t102_103.$set(1);
+  $t103_104.$set(0);
+  $t104_105.$set(0);
+  $t105_106.$set(0);
+  $t106_107.$set(0);
+  $t108_109.$set(1);
+  $t109_110.$set(0);
+  $t110_111.$set(0);
+  $t111_112.$set(1);
+  $t112_113.$set(1);
+  $t113_114.$set(1);
+  $t114_115.$set(1);
+  $t115_116.$set(0);
+  $t116_117.$set(1);
+  $t117_118.$set(1);
+  $t118_119.$set(1);
+  $t119_120.$set(1);
+  $t120_121.$set(0);
+  $t121_122.$set(1);
+  $t122_123.$set(1);
+  $t124_125.$set(1);
+  $t125_126.$set(0);
+  $t126_127.$set(0);
+  $t127_128.$set(1);
+  $t128_129.$set(0);
+  $t129_130.$set(1);
+  $t130_131.$set(0);
+  $t131_132.$set(0);
+  $t132_133.$set(0);
+  $t133_134.$set(0);
+  $t134_135.$set(0);
+  $t135_136.$set(0);
+  $t136_137.$set(1);
+  $t137_138.$set(0);
+  $t138_139.$set(1);
   return;
+}
+
+export function qrSVG(data, size, logoSVG) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = qrEncode(data);
+        $t1_2 = ($t0_1 === null);
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return '';
+        break;
+      }
+      case 2: {
+        $t2_3 = $rt.builtin.len($t0_1);
+        $t3_4 = (2 * 2);
+        $t4_5 = ($t2_3 + $t3_4);
+        $t5_6 = Math.trunc(size / $t4_5);
+        $t6_7 = ($t5_6 < 1);
+        if ($t6_7) {
+          $block = 3; break;
+        }
+        else {
+          $t7_8 = $t5_6;
+          $block = 4; break;
+        }
+        break;
+      }
+      case 3: {
+        $t7_8 = 1;
+        $block = 4; break;
+        break;
+      }
+      case 4: {
+        $t8_9 = ($t4_5 * $t7_8);
+        $t9_10 = itoa($t8_9);
+        $t10_11 = ('<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'' + $t9_10);
+        $t11_12 = ($t10_11 + '\' height=\'');
+        $t12_13 = itoa($t8_9);
+        $t13_14 = ($t11_12 + $t12_13);
+        $t14_15 = ($t13_14 + '\' viewBox=\'0 0 ');
+        $t15_16 = itoa($t8_9);
+        $t16_17 = ($t14_15 + $t15_16);
+        $t17_18 = ($t16_17 + ' ');
+        $t18_19 = itoa($t8_9);
+        $t19_20 = ($t17_18 + $t18_19);
+        $t20_21 = ($t19_20 + '\'>');
+        $t21_22 = ($t20_21 + '<rect width=\'100%\' height=\'100%\' fill=\'white\'/>');
+        $t22_23 = ($t2_3 - 9);
+        $t23_24 = Math.trunc($t22_23 / 2);
+        $t24_25 = ($t23_24 + 9);
+        $t25_26 = $t21_22;
+        $t26_27 = 0;
+        $block = 5; break;
+        break;
+      }
+      case 5: {
+        $t27_28 = ($t26_27 < $t2_3);
+        if ($t27_28) {
+          $block = 6; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 6: {
+        $t29_30 = $t25_26;
+        $t30_31 = 0;
+        $block = 8; break;
+        break;
+      }
+      case 7: {
+        $t28_29 = (logoSVG !== '');
+        if ($t28_29) {
+          $block = 17; break;
+        }
+        else {
+          $t99_100 = $t25_26;
+          $block = 18; break;
+        }
+        break;
+      }
+      case 8: {
+        $t31_32 = ($t30_31 < $t2_3);
+        if ($t31_32) {
+          $block = 9; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 9: {
+        $t32_33 = $t0_1.addr($t26_27);
+        $t33_34 = $t32_33.$get();
+        $t34_35 = $t33_34.addr($t30_31);
+        $t35_36 = $t34_35.$get();
+        $t36_37 = ($t35_36 & 1);
+        $t37_38 = ($t36_37 === 1);
+        if ($t37_38) {
+          $block = 12; break;
+        }
+        else {
+          $t38_39 = $t29_30;
+          $block = 10; break;
+        }
+        break;
+      }
+      case 10: {
+        $t39_40 = ($t30_31 + 1);
+        $t29_30 = $t38_39;
+        $t30_31 = $t39_40;
+        $block = 8; break;
+        break;
+      }
+      case 11: {
+        $t40_41 = ($t26_27 + 1);
+        $t25_26 = $t29_30;
+        $t26_27 = $t40_41;
+        $block = 5; break;
+        break;
+      }
+      case 12: {
+        $t41_42 = ($t30_31 >= $t23_24);
+        if ($t41_42) {
+          $block = 16; break;
+        }
+        else {
+          $block = 13; break;
+        }
+        break;
+      }
+      case 13: {
+        $t42_43 = ($t30_31 + 2);
+        $t43_44 = ($t42_43 * $t7_8);
+        $t44_45 = ($t26_27 + 2);
+        $t45_46 = ($t44_45 * $t7_8);
+        $t46_47 = itoa($t43_44);
+        $t47_48 = ('<rect x=\'' + $t46_47);
+        $t48_49 = ($t47_48 + '\' y=\'');
+        $t49_50 = itoa($t45_46);
+        $t50_51 = ($t48_49 + $t49_50);
+        $t51_52 = ($t50_51 + '\' width=\'');
+        $t52_53 = itoa($t7_8);
+        $t53_54 = ($t51_52 + $t52_53);
+        $t54_55 = ($t53_54 + '\' height=\'');
+        $t55_56 = itoa($t7_8);
+        $t56_57 = ($t54_55 + $t55_56);
+        $t57_58 = ($t56_57 + '\' fill=\'black\'/>');
+        $t58_59 = ($t29_30 + $t57_58);
+        $t38_39 = $t58_59;
+        $block = 10; break;
+        break;
+      }
+      case 14: {
+        $t59_60 = ($t26_27 < $t24_25);
+        if ($t59_60) {
+          $t38_39 = $t29_30;
+          $block = 10; break;
+        }
+        else {
+          $block = 13; break;
+        }
+        break;
+      }
+      case 15: {
+        $t60_61 = ($t26_27 >= $t23_24);
+        if ($t60_61) {
+          $block = 14; break;
+        }
+        else {
+          $block = 13; break;
+        }
+        break;
+      }
+      case 16: {
+        $t61_62 = ($t30_31 < $t24_25);
+        if ($t61_62) {
+          $block = 15; break;
+        }
+        else {
+          $block = 13; break;
+        }
+        break;
+      }
+      case 17: {
+        $t62_63 = ($t23_24 + 2);
+        $t63_64 = ($t62_63 * $t7_8);
+        $t64_65 = (9 * $t7_8);
+        $t65_66 = itoa($t63_64);
+        $t66_67 = ('<g transform=\'translate(' + $t65_66);
+        $t67_68 = ($t66_67 + ',');
+        $t68_69 = itoa($t63_64);
+        $t69_70 = ($t67_68 + $t68_69);
+        $t70_71 = ($t69_70 + ')\'>');
+        $t71_72 = ($t25_26 + $t70_71);
+        $t72_73 = itoa($t64_65);
+        $t73_74 = ('<rect width=\'' + $t72_73);
+        $t74_75 = ($t73_74 + '\' height=\'');
+        $t75_76 = itoa($t64_65);
+        $t76_77 = ($t74_75 + $t75_76);
+        $t77_78 = ($t76_77 + '\' fill=\'white\' rx=\'4\'/>');
+        $t78_79 = ($t71_72 + $t77_78);
+        $t79_80 = Math.trunc($t64_65 / 6);
+        $t80_81 = ($t79_80 * 2);
+        $t81_82 = ($t64_65 - $t80_81);
+        $t82_83 = itoa($t79_80);
+        $t83_84 = ('<g transform=\'translate(' + $t82_83);
+        $t84_85 = ($t83_84 + ',');
+        $t85_86 = itoa($t79_80);
+        $t86_87 = ($t84_85 + $t85_86);
+        $t87_88 = ($t86_87 + ')\'>');
+        $t88_89 = ($t78_79 + $t87_88);
+        $t89_90 = itoa($t81_82);
+        $t90_91 = ('<svg width=\'' + $t89_90);
+        $t91_92 = ($t90_91 + '\' height=\'');
+        $t92_93 = itoa($t81_82);
+        $t93_94 = ($t91_92 + $t92_93);
+        $t94_95 = ($t93_94 + '\' viewBox=\'0 0 100 100\'>');
+        $t95_96 = ($t88_89 + $t94_95);
+        $t96_97 = extractSVGContent(logoSVG);
+        $t97_98 = ($t95_96 + $t96_97);
+        $t98_99 = ($t97_98 + '</svg></g></g>');
+        $t99_100 = $t98_99;
+        $block = 18; break;
+        break;
+      }
+      case 18: {
+        $t100_101 = ($t99_100 + '</svg>');
+        return $t100_101;
+        break;
+      }
+    }
+  }
+}
+
+export function extractSVGContent(s) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t3_4 = 0;
+        $block = 3; break;
+        break;
+      }
+      case 1: {
+        $t0_1 = ($t3_4 + 1);
+        $t3_4 = $t0_1;
+        $block = 3; break;
+        break;
+      }
+      case 2: {
+        $t1_2 = $rt.builtin.len(s);
+        $t2_3 = ($t3_4 >= $t1_2);
+        if ($t2_3) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 3: {
+        $t4_5 = $rt.builtin.len(s);
+        $t5_6 = ($t3_4 < $t4_5);
+        if ($t5_6) {
+          $block = 4; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 4: {
+        $rt.runtime.boundsCheck($t3_4, $rt.builtin.byteLen(s));
+        $t6_7 = $rt.builtin.stringByteAt(s, $t3_4);
+        $t7_8 = ($t6_7 !== 60);
+        if ($t7_8) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 5: {
+        return s;
+        break;
+      }
+      case 6: {
+        $t8_9 = ($t3_4 + 1);
+        $t12_13 = $t8_9;
+        $block = 9; break;
+        break;
+      }
+      case 7: {
+        $t9_10 = ($t12_13 + 1);
+        $t12_13 = $t9_10;
+        $block = 9; break;
+        break;
+      }
+      case 8: {
+        $t10_11 = $rt.builtin.len(s);
+        $t11_12 = ($t12_13 >= $t10_11);
+        if ($t11_12) {
+          $block = 11; break;
+        }
+        else {
+          $block = 12; break;
+        }
+        break;
+      }
+      case 9: {
+        $t13_14 = $rt.builtin.len(s);
+        $t14_15 = ($t12_13 < $t13_14);
+        if ($t14_15) {
+          $block = 10; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 10: {
+        $rt.runtime.boundsCheck($t12_13, $rt.builtin.byteLen(s));
+        $t15_16 = $rt.builtin.stringByteAt(s, $t12_13);
+        $t16_17 = ($t15_16 !== 62);
+        if ($t16_17) {
+          $block = 7; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 11: {
+        return s;
+        break;
+      }
+      case 12: {
+        $t17_18 = ($t12_13 + 1);
+        $t18_19 = $rt.builtin.len(s);
+        $t19_20 = $rt.builtin.len(s);
+        $t20_21 = ($t19_20 - 1);
+        $t21_22 = $t20_21;
+        $block = 13; break;
+        break;
+      }
+      case 13: {
+        $t22_23 = ($t21_22 >= 6);
+        if ($t22_23) {
+          $block = 14; break;
+        }
+        else {
+          $t25_26 = $t18_19;
+          $block = 15; break;
+        }
+        break;
+      }
+      case 14: {
+        $rt.runtime.boundsCheck($t21_22, $rt.builtin.byteLen(s));
+        $t23_24 = $rt.builtin.stringByteAt(s, $t21_22);
+        $t24_25 = ($t23_24 === 62);
+        if ($t24_25) {
+          $block = 19; break;
+        }
+        else {
+          $block = 17; break;
+        }
+        break;
+      }
+      case 15: {
+        $t26_27 = $rt.builtin.stringSlice(s, $t17_18, $t25_26);
+        return $t26_27;
+        break;
+      }
+      case 16: {
+        $t27_28 = ($t21_22 - 5);
+        $t25_26 = $t27_28;
+        $block = 15; break;
+        break;
+      }
+      case 17: {
+        $t28_29 = ($t21_22 - 1);
+        $t21_22 = $t28_29;
+        $block = 13; break;
+        break;
+      }
+      case 18: {
+        $t29_30 = ($t21_22 - 5);
+        $t30_31 = ($t21_22 + 1);
+        $t31_32 = $rt.builtin.stringSlice(s, $t29_30, $t30_31);
+        $t32_33 = ($t31_32 === '</svg>');
+        if ($t32_33) {
+          $block = 16; break;
+        }
+        else {
+          $block = 17; break;
+        }
+        break;
+      }
+      case 19: {
+        $t33_34 = ($t21_22 >= 5);
+        if ($t33_34) {
+          $block = 18; break;
+        }
+        else {
+          $block = 17; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function qrEncode(data) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = gfInit();
+        $t1_2 = qrAlphanumericBits(data);
+        $t2_3 = ($t1_2 === null);
+        if ($t2_3) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return null;
+        break;
+      }
+      case 2: {
+        $t3_4 = qrPadBits($t1_2);
+        $t4_5 = bitsToBytes($t3_4);
+        $t5_6 = rsEncode($t4_5);
+        $t6_7 = $rt.builtin.len($t4_5);
+        $t7_8 = null;
+        $t8_9 = -1;
+        $block = 3; break;
+        break;
+      }
+      case 3: {
+        $t9_10 = ($t8_9 + 1);
+        $t10_11 = ($t9_10 < $t6_7);
+        if ($t10_11) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 4: {
+        $t11_12 = $t4_5.addr($t9_10);
+        $t12_13 = $t11_12.$get();
+        $t13_14 = byteToBits($t12_13);
+        $t14_15 = $rt.builtin.appendSlice($t7_8, $t13_14);
+        $t7_8 = $t14_15;
+        $t8_9 = $t9_10;
+        $block = 3; break;
+        break;
+      }
+      case 5: {
+        $t15_16 = $rt.builtin.len($t5_6);
+        $t16_17 = $t7_8;
+        $t17_18 = -1;
+        $block = 6; break;
+        break;
+      }
+      case 6: {
+        $t18_19 = ($t17_18 + 1);
+        $t19_20 = ($t18_19 < $t15_16);
+        if ($t19_20) {
+          $block = 7; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 7: {
+        $t20_21 = $t5_6.addr($t18_19);
+        $t21_22 = $t20_21.$get();
+        $t22_23 = byteToBits($t21_22);
+        $t23_24 = $rt.builtin.appendSlice($t16_17, $t22_23);
+        $t16_17 = $t23_24;
+        $t17_18 = $t18_19;
+        $block = 6; break;
+        break;
+      }
+      case 8: {
+        $t24_25 = $t16_17;
+        $t25_26 = 0;
+        $block = 9; break;
+        break;
+      }
+      case 9: {
+        $t26_27 = ($t25_26 < 7);
+        if ($t26_27) {
+          $block = 10; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 10: {
+        $t27_28 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t28_29 = $t27_28.$get().addr(0);
+        $t28_29.$set(0);
+        $t29_30 = $rt.builtin.sliceSlice($t27_28.$get(), undefined, undefined, undefined);
+        $t30_31 = $rt.builtin.appendSlice($t24_25, $t29_30);
+        $t31_32 = ($t25_26 + 1);
+        $t24_25 = $t30_31;
+        $t25_26 = $t31_32;
+        $block = 9; break;
+        break;
+      }
+      case 11: {
+        $t32_33 = { $value: $rt.builtin.makeSlice(33, 33, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t33_34 = $rt.builtin.sliceSlice($t32_33.$get(), undefined, 33, undefined);
+        $t34_35 = $rt.builtin.len($t33_34);
+        $t35_36 = -1;
+        $block = 12; break;
+        break;
+      }
+      case 12: {
+        $t36_37 = ($t35_36 + 1);
+        $t37_38 = ($t36_37 < $t34_35);
+        if ($t37_38) {
+          $block = 13; break;
+        }
+        else {
+          $block = 14; break;
+        }
+        break;
+      }
+      case 13: {
+        $t38_39 = { $value: $rt.builtin.makeSlice(33, 33, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t39_40 = $rt.builtin.sliceSlice($t38_39.$get(), undefined, 33, undefined);
+        $t40_41 = $t33_34.addr($t36_37);
+        $t40_41.$set($t39_40);
+        $t35_36 = $t36_37;
+        $block = 12; break;
+        break;
+      }
+      case 14: {
+        $t41_42 = qrPlaceFinderPatterns($t33_34);
+        $t42_43 = qrPlaceAlignmentPattern($t33_34);
+        $t43_44 = qrPlaceTimingPatterns($t33_34);
+        $t44_45 = qrPlaceDarkModule($t33_34);
+        $t45_46 = qrReserveFormatArea($t33_34);
+        $t46_47 = qrReserveVersionArea($t33_34);
+        $t47_48 = qrPlaceData($t33_34, $t24_25);
+        $t48_49 = qrApplyBestMask($t33_34);
+        return $t33_34;
+        break;
+      }
+    }
+  }
+}
+
+export function alphaVal(c) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = 0;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t1_2 = ($t0_1 < 45);
+        if ($t1_2) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $rt.runtime.boundsCheck($t0_1, $rt.builtin.byteLen('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:'));
+        $t2_3 = $rt.builtin.stringByteAt('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:', $t0_1);
+        $t3_4 = ($t2_3 === c);
+        if ($t3_4) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 3: {
+        return -1;
+        break;
+      }
+      case 4: {
+        return $t0_1;
+        break;
+      }
+      case 5: {
+        $t4_5 = ($t0_1 + 1);
+        $t0_1 = $t4_5;
+        $block = 1; break;
+        break;
+      }
+    }
+  }
+}
+
+export function qrAlphanumericBits(data) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = toUpper(data);
+        $t1_2 = { $value: $rt.builtin.makeSlice(4, 4, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t2_3 = $t1_2.$get().addr(0);
+        $t2_3.$set(0);
+        $t3_4 = $t1_2.$get().addr(1);
+        $t3_4.$set(0);
+        $t4_5 = $t1_2.$get().addr(2);
+        $t4_5.$set(1);
+        $t5_6 = $t1_2.$get().addr(3);
+        $t5_6.$set(0);
+        $t6_7 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, undefined, undefined);
+        $t7_8 = $rt.builtin.len($t0_1);
+        $t8_9 = $t6_7;
+        $t9_10 = 8;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t10_11 = ($t9_10 >= 0);
+        if ($t10_11) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t11_12 = $t9_10;
+        $t12_13 = Math.trunc($t7_8 / (2 ** $t11_12));
+        $t13_14 = $rt.builtin.int64and($t12_13, 1);
+        $t14_15 = ($t13_14 & 0xFF);
+        $t15_16 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t16_17 = $t15_16.$get().addr(0);
+        $t16_17.$set($t14_15);
+        $t17_18 = $rt.builtin.sliceSlice($t15_16.$get(), undefined, undefined, undefined);
+        $t18_19 = $rt.builtin.appendSlice($t8_9, $t17_18);
+        $t19_20 = ($t9_10 - 1);
+        $t8_9 = $t18_19;
+        $t9_10 = $t19_20;
+        $block = 1; break;
+        break;
+      }
+      case 3: {
+        $t20_21 = $t8_9;
+        $t21_22 = 0;
+        $block = 4; break;
+        break;
+      }
+      case 4: {
+        $t22_23 = ($t21_22 + 1);
+        $t23_24 = $rt.builtin.len($t0_1);
+        $t24_25 = ($t22_23 < $t23_24);
+        if ($t24_25) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 5: {
+        $rt.runtime.boundsCheck($t21_22, $rt.builtin.byteLen($t0_1));
+        $t25_26 = $rt.builtin.stringByteAt($t0_1, $t21_22);
+        $t26_27 = alphaVal($t25_26);
+        $t27_28 = ($t21_22 + 1);
+        $rt.runtime.boundsCheck($t27_28, $rt.builtin.byteLen($t0_1));
+        $t28_29 = $rt.builtin.stringByteAt($t0_1, $t27_28);
+        $t29_30 = alphaVal($t28_29);
+        $t30_31 = ($t26_27 < 0);
+        if ($t30_31) {
+          $block = 7; break;
+        }
+        else {
+          $block = 9; break;
+        }
+        break;
+      }
+      case 6: {
+        $t31_32 = $rt.builtin.len($t0_1);
+        $t32_33 = ($t31_32 % 2);
+        $t33_34 = ($t32_33 === 1);
+        if ($t33_34) {
+          $block = 13; break;
+        }
+        else {
+          $t55_56 = $t20_21;
+          $block = 14; break;
+        }
+        break;
+      }
+      case 7: {
+        return null;
+        break;
+      }
+      case 8: {
+        $t34_35 = ($t26_27 * 45);
+        $t35_36 = ($t34_35 + $t29_30);
+        $t37_38 = $t20_21;
+        $t38_39 = 10;
+        $block = 10; break;
+        break;
+      }
+      case 9: {
+        $t36_37 = ($t29_30 < 0);
+        if ($t36_37) {
+          $block = 7; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 10: {
+        $t39_40 = ($t38_39 >= 0);
+        if ($t39_40) {
+          $block = 11; break;
+        }
+        else {
+          $block = 12; break;
+        }
+        break;
+      }
+      case 11: {
+        $t40_41 = $t38_39;
+        $t41_42 = Math.trunc($t35_36 / (2 ** $t40_41));
+        $t42_43 = $rt.builtin.int64and($t41_42, 1);
+        $t43_44 = ($t42_43 & 0xFF);
+        $t44_45 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t45_46 = $t44_45.$get().addr(0);
+        $t45_46.$set($t43_44);
+        $t46_47 = $rt.builtin.sliceSlice($t44_45.$get(), undefined, undefined, undefined);
+        $t47_48 = $rt.builtin.appendSlice($t37_38, $t46_47);
+        $t48_49 = ($t38_39 - 1);
+        $t37_38 = $t47_48;
+        $t38_39 = $t48_49;
+        $block = 10; break;
+        break;
+      }
+      case 12: {
+        $t49_50 = ($t21_22 + 2);
+        $t20_21 = $t37_38;
+        $t21_22 = $t49_50;
+        $block = 4; break;
+        break;
+      }
+      case 13: {
+        $t50_51 = $rt.builtin.len($t0_1);
+        $t51_52 = ($t50_51 - 1);
+        $rt.runtime.boundsCheck($t51_52, $rt.builtin.byteLen($t0_1));
+        $t52_53 = $rt.builtin.stringByteAt($t0_1, $t51_52);
+        $t53_54 = alphaVal($t52_53);
+        $t54_55 = ($t53_54 < 0);
+        if ($t54_55) {
+          $block = 15; break;
+        }
+        else {
+          $block = 16; break;
+        }
+        break;
+      }
+      case 14: {
+        return $t55_56;
+        break;
+      }
+      case 15: {
+        return null;
+        break;
+      }
+      case 16: {
+        $t56_57 = $t20_21;
+        $t57_58 = 5;
+        $block = 17; break;
+        break;
+      }
+      case 17: {
+        $t58_59 = ($t57_58 >= 0);
+        if ($t58_59) {
+          $block = 18; break;
+        }
+        else {
+          $t55_56 = $t56_57;
+          $block = 14; break;
+        }
+        break;
+      }
+      case 18: {
+        $t59_60 = $t57_58;
+        $t60_61 = Math.trunc($t53_54 / (2 ** $t59_60));
+        $t61_62 = $rt.builtin.int64and($t60_61, 1);
+        $t62_63 = ($t61_62 & 0xFF);
+        $t63_64 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t64_65 = $t63_64.$get().addr(0);
+        $t64_65.$set($t62_63);
+        $t65_66 = $rt.builtin.sliceSlice($t63_64.$get(), undefined, undefined, undefined);
+        $t66_67 = $rt.builtin.appendSlice($t56_57, $t65_66);
+        $t67_68 = ($t57_58 - 1);
+        $t56_57 = $t66_67;
+        $t57_58 = $t67_68;
+        $block = 17; break;
+        break;
+      }
+    }
+  }
+}
+
+export function toUpper(s) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(s);
+        $t1_2 = $rt.builtin.makeSlice($t0_1, $t0_1, 0);
+        $t2_3 = 0;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t3_4 = $rt.builtin.len(s);
+        $t4_5 = ($t2_3 < $t3_4);
+        if ($t4_5) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $rt.runtime.boundsCheck($t2_3, $rt.builtin.byteLen(s));
+        $t5_6 = $rt.builtin.stringByteAt(s, $t2_3);
+        $t6_7 = ($t5_6 >= 97);
+        if ($t6_7) {
+          $block = 6; break;
+        }
+        else {
+          $t9_10 = $t5_6;
+          $block = 5; break;
+        }
+        break;
+      }
+      case 3: {
+        $t7_8 = $rt.builtin.bytesToString($t1_2);
+        return $t7_8;
+        break;
+      }
+      case 4: {
+        $t8_9 = (($t5_6 - 32) & 0xFF);
+        $t9_10 = $t8_9;
+        $block = 5; break;
+        break;
+      }
+      case 5: {
+        $t10_11 = $t1_2.addr($t2_3);
+        $t10_11.$set($t9_10);
+        $t11_12 = ($t2_3 + 1);
+        $t2_3 = $t11_12;
+        $block = 1; break;
+        break;
+      }
+      case 6: {
+        $t12_13 = ($t5_6 <= 122);
+        if ($t12_13) {
+          $block = 4; break;
+        }
+        else {
+          $t9_10 = $t5_6;
+          $block = 5; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function qrPadBits(bits) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(bits);
+        $t1_2 = (640 - $t0_1);
+        $t2_3 = ($t1_2 < 4);
+        if ($t2_3) {
+          $block = 1; break;
+        }
+        else {
+          $t5_6 = 4;
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t3_4 = $rt.builtin.len(bits);
+        $t4_5 = (640 - $t3_4);
+        $t5_6 = $t4_5;
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        $t6_7 = bits;
+        $t7_8 = 0;
+        $block = 3; break;
+        break;
+      }
+      case 3: {
+        $t8_9 = ($t7_8 < $t5_6);
+        if ($t8_9) {
+          $block = 4; break;
+        }
+        else {
+          $t22_23 = $t6_7;
+          $block = 7; break;
+        }
+        break;
+      }
+      case 4: {
+        $t9_10 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t10_11 = $t9_10.$get().addr(0);
+        $t10_11.$set(0);
+        $t11_12 = $rt.builtin.sliceSlice($t9_10.$get(), undefined, undefined, undefined);
+        $t12_13 = $rt.builtin.appendSlice($t6_7, $t11_12);
+        $t13_14 = ($t7_8 + 1);
+        $t6_7 = $t12_13;
+        $t7_8 = $t13_14;
+        $block = 3; break;
+        break;
+      }
+      case 5: {
+        $t14_15 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t15_16 = $t14_15.$get().addr(0);
+        $t15_16.$set(0);
+        $t16_17 = $rt.builtin.sliceSlice($t14_15.$get(), undefined, undefined, undefined);
+        $t17_18 = $rt.builtin.appendSlice($t22_23, $t16_17);
+        $t22_23 = $t17_18;
+        $block = 7; break;
+        break;
+      }
+      case 6: {
+        $t18_19 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t19_20 = $t18_19.$get().addr(0);
+        $t19_20.$set(236);
+        $t20_21 = $t18_19.$get().addr(1);
+        $t20_21.$set(17);
+        $t21_22 = $rt.builtin.sliceSlice($t18_19.$get(), undefined, undefined, undefined);
+        $t33_34 = $t22_23;
+        $t34_35 = 0;
+        $block = 10; break;
+        break;
+      }
+      case 7: {
+        $t23_24 = $rt.builtin.len($t22_23);
+        $t24_25 = ($t23_24 % 8);
+        $t25_26 = ($t24_25 !== 0);
+        if ($t25_26) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 8: {
+        $t26_27 = ($t34_35 % 2);
+        $t27_28 = $t21_22.addr($t26_27);
+        $t28_29 = $t27_28.$get();
+        $t29_30 = byteToBits($t28_29);
+        $t30_31 = $rt.builtin.appendSlice($t33_34, $t29_30);
+        $t31_32 = ($t34_35 + 1);
+        $t33_34 = $t30_31;
+        $t34_35 = $t31_32;
+        $block = 10; break;
+        break;
+      }
+      case 9: {
+        $t32_33 = $rt.builtin.sliceSlice($t33_34, undefined, 640, undefined);
+        return $t32_33;
+        break;
+      }
+      case 10: {
+        $t35_36 = $rt.builtin.len($t33_34);
+        $t36_37 = ($t35_36 < 640);
+        if ($t36_37) {
+          $block = 8; break;
+        }
+        else {
+          $block = 9; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function bitsToBytes(bits) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(bits);
+        $t1_2 = Math.trunc($t0_1 / 8);
+        $t2_3 = $rt.builtin.makeSlice($t1_2, $t1_2, 0);
+        $t3_4 = 0;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t4_5 = ($t3_4 < $t1_2);
+        if ($t4_5) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t5_6 = 0;
+        $t6_7 = 0;
+        $block = 4; break;
+        break;
+      }
+      case 3: {
+        return $t2_3;
+        break;
+      }
+      case 4: {
+        $t7_8 = ($t6_7 < 8);
+        if ($t7_8) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 5: {
+        $t8_9 = (($t5_6 << 1) & 0xFF);
+        $t9_10 = ($t3_4 * 8);
+        $t10_11 = ($t9_10 + $t6_7);
+        $t11_12 = bits.addr($t10_11);
+        $t12_13 = $t11_12.$get();
+        $t13_14 = ($t8_9 | $t12_13);
+        $t14_15 = ($t6_7 + 1);
+        $t5_6 = $t13_14;
+        $t6_7 = $t14_15;
+        $block = 4; break;
+        break;
+      }
+      case 6: {
+        $t15_16 = $t2_3.addr($t3_4);
+        $t15_16.$set($t5_6);
+        $t16_17 = ($t3_4 + 1);
+        $t3_4 = $t16_17;
+        $block = 1; break;
+        break;
+      }
+    }
+  }
+}
+
+export function byteToBits(b) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(8, 8, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, 8, undefined);
+        $t2_3 = 7;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t3_4 = ($t2_3 >= 0);
+        if ($t3_4) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t4_5 = (7 - $t2_3);
+        $t5_6 = $t2_3;
+        $t6_7 = ((b & 0xFF) >> $t5_6);
+        $t7_8 = ($t6_7 & 1);
+        $t8_9 = $t1_2.addr($t4_5);
+        $t8_9.$set($t7_8);
+        $t9_10 = ($t2_3 - 1);
+        $t2_3 = $t9_10;
+        $block = 1; break;
+        break;
+      }
+      case 3: {
+        return $t1_2;
+        break;
+      }
+    }
+  }
+}
+
+export function gfInit() {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = gfReady.$get();
+        if ($t0_1) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return;
+        break;
+      }
+      case 2: {
+        gfReady.$set(true);
+        $t1_2 = 1;
+        $t2_3 = 0;
+        $block = 3; break;
+        break;
+      }
+      case 3: {
+        $t3_4 = ($t2_3 < 255);
+        if ($t3_4) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 4: {
+        $t4_5 = ($t1_2 & 0xFF);
+        $t5_6 = gfExp.$get().addr($t2_3);
+        $t5_6.$set($t4_5);
+        $t6_7 = ($t2_3 & 0xFF);
+        $t7_8 = gfLog.$get().addr($t1_2);
+        $t7_8.$set($t6_7);
+        $t8_9 = ($t1_2 * (2 ** 1));
+        $t9_10 = ($t8_9 >= 256);
+        if ($t9_10) {
+          $block = 6; break;
+        }
+        else {
+          $t11_12 = $t8_9;
+          $block = 7; break;
+        }
+        break;
+      }
+      case 5: {
+        $t13_14 = 255;
+        $block = 8; break;
+        break;
+      }
+      case 6: {
+        $t10_11 = $rt.builtin.int64xor($t8_9, 285);
+        $t11_12 = $t10_11;
+        $block = 7; break;
+        break;
+      }
+      case 7: {
+        $t12_13 = ($t2_3 + 1);
+        $t1_2 = $t11_12;
+        $t2_3 = $t12_13;
+        $block = 3; break;
+        break;
+      }
+      case 8: {
+        $t14_15 = ($t13_14 < 512);
+        if ($t14_15) {
+          $block = 9; break;
+        }
+        else {
+          $block = 10; break;
+        }
+        break;
+      }
+      case 9: {
+        $t15_16 = ($t13_14 - 255);
+        $t16_17 = gfExp.$get().addr($t15_16);
+        $t17_18 = $t16_17.$get();
+        $t18_19 = gfExp.$get().addr($t13_14);
+        $t18_19.$set($t17_18);
+        $t19_20 = ($t13_14 + 1);
+        $t13_14 = $t19_20;
+        $block = 8; break;
+        break;
+      }
+      case 10: {
+        return;
+        break;
+      }
+    }
+  }
+}
+
+export function gfMul(a, b) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = (a === 0);
+        if ($t0_1) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 1: {
+        return 0;
+        break;
+      }
+      case 2: {
+        $t1_2 = gfLog.$get().addr(a);
+        $t2_3 = $t1_2.$get();
+        $t3_4 = $t2_3;
+        $t4_5 = gfLog.$get().addr(b);
+        $t5_6 = $t4_5.$get();
+        $t6_7 = $t5_6;
+        $t7_8 = ($t3_4 + $t6_7);
+        $t8_9 = gfExp.$get().addr($t7_8);
+        $t9_10 = $t8_9.$get();
+        return $t9_10;
+        break;
+      }
+      case 3: {
+        $t10_11 = (b === 0);
+        if ($t10_11) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function rsEncode(data) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = rsGeneratorPoly(18);
+        $t1_2 = { $value: $rt.builtin.makeSlice(18, 18, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t2_3 = $rt.builtin.sliceSlice($t1_2.$get(), undefined, 18, undefined);
+        $t3_4 = $rt.builtin.len(data);
+        $t4_5 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t5_6 = ($t4_5 + 1);
+        $t6_7 = ($t5_6 < $t3_4);
+        if ($t6_7) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t7_8 = data.addr($t5_6);
+        $t8_9 = $t7_8.$get();
+        $t9_10 = $t2_3.addr(0);
+        $t10_11 = $t9_10.$get();
+        $t11_12 = ($t8_9 ^ $t10_11);
+        $t12_13 = $rt.builtin.sliceSlice($t2_3, 1, undefined, undefined);
+        $t13_14 = $rt.builtin.copy($t2_3, $t12_13);
+        $t14_15 = $t2_3.addr(17);
+        $t14_15.$set(0);
+        $t15_16 = 0;
+        $block = 4; break;
+        break;
+      }
+      case 3: {
+        return $t2_3;
+        break;
+      }
+      case 4: {
+        $t16_17 = ($t15_16 < 18);
+        if ($t16_17) {
+          $block = 5; break;
+        }
+        else {
+          $t4_5 = $t5_6;
+          $block = 1; break;
+        }
+        break;
+      }
+      case 5: {
+        $t17_18 = $t0_1.addr($t15_16);
+        $t18_19 = $t17_18.$get();
+        $t19_20 = gfMul($t18_19, $t11_12);
+        $t20_21 = $t2_3.addr($t15_16);
+        $t21_22 = $t20_21.$get();
+        $t22_23 = ($t21_22 ^ $t19_20);
+        $t23_24 = $t2_3.addr($t15_16);
+        $t23_24.$set($t22_23);
+        $t24_25 = ($t15_16 + 1);
+        $t15_16 = $t24_25;
+        $block = 4; break;
+        break;
+      }
+    }
+  }
+}
+
+export function rsGeneratorPoly(n) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(1, 1, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2 = $t0_1.$get().addr(0);
+        $t1_2.$set(1);
+        $t2_3 = $rt.builtin.sliceSlice($t0_1.$get(), undefined, undefined, undefined);
+        $t3_4 = $t2_3;
+        $t4_5 = 0;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t5_6 = ($t4_5 < n);
+        if ($t5_6) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t6_7 = $rt.builtin.len($t3_4);
+        $t7_8 = ($t6_7 + 1);
+        $t8_9 = $rt.builtin.makeSlice($t7_8, $t7_8, 0);
+        $t10_11 = 0;
+        $block = 4; break;
+        break;
+      }
+      case 3: {
+        $t9_10 = $rt.builtin.sliceSlice($t3_4, 1, undefined, undefined);
+        return $t9_10;
+        break;
+      }
+      case 4: {
+        $t11_12 = $rt.builtin.len($t3_4);
+        $t12_13 = ($t10_11 < $t11_12);
+        if ($t12_13) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 5: {
+        $t13_14 = $t3_4.addr($t10_11);
+        $t14_15 = $t13_14.$get();
+        $t15_16 = $t8_9.addr($t10_11);
+        $t16_17 = $t15_16.$get();
+        $t17_18 = ($t16_17 ^ $t14_15);
+        $t18_19 = $t8_9.addr($t10_11);
+        $t18_19.$set($t17_18);
+        $t19_20 = ($t10_11 + 1);
+        $t20_21 = $t3_4.addr($t10_11);
+        $t21_22 = $t20_21.$get();
+        $t22_23 = gfExp.$get().addr($t4_5);
+        $t23_24 = $t22_23.$get();
+        $t24_25 = gfMul($t21_22, $t23_24);
+        $t25_26 = $t8_9.addr($t19_20);
+        $t26_27 = $t25_26.$get();
+        $t27_28 = ($t26_27 ^ $t24_25);
+        $t28_29 = $t8_9.addr($t19_20);
+        $t28_29.$set($t27_28);
+        $t29_30 = ($t10_11 + 1);
+        $t10_11 = $t29_30;
+        $block = 4; break;
+        break;
+      }
+      case 6: {
+        $t30_31 = ($t4_5 + 1);
+        $t3_4 = $t8_9;
+        $t4_5 = $t30_31;
+        $block = 1; break;
+        break;
+      }
+    }
+  }
+}
+
+export function setMod(mods, x, y, val) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = (x >= 0);
+        if ($t0_1) {
+          $block = 5; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t1_2 = mods.addr(y);
+        $t2_3 = $t1_2.$get();
+        $t3_4 = $t2_3.addr(x);
+        $t3_4.$set(val);
+        $block = 2; break;
+        break;
+      }
+      case 2: {
+        return;
+        break;
+      }
+      case 3: {
+        $t4_5 = (y < 33);
+        if ($t4_5) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 4: {
+        $t5_6 = (y >= 0);
+        if ($t5_6) {
+          $block = 3; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 5: {
+        $t6_7 = (x < 33);
+        if ($t6_7) {
+          $block = 4; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function qrPlaceFinderPatterns(mods) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5;
+  $t0_1 = { $value: null, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+  $t0_1.$set(mods);
+  $t1_2 = qrPlaceFinderPatterns$1.bind(null, $t0_1);
+  $t2_3 = qrPlaceFinderPatterns$1(3, 3);
+  $t3_4 = qrPlaceFinderPatterns$1(29, 3);
+  $t4_5 = qrPlaceFinderPatterns$1(3, 29);
+  return;
+}
+
+function qrPlaceFinderPatterns$1(mods, cx, cy) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = -4;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t1_2 = ($t0_1 <= 4);
+        if ($t1_2) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t2_3 = -4;
+        $block = 4; break;
+        break;
+      }
+      case 3: {
+        return;
+        break;
+      }
+      case 4: {
+        $t3_4 = ($t2_3 <= 4);
+        if ($t3_4) {
+          $block = 5; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 5: {
+        $t4_5 = (cx + $t2_3);
+        $t5_6 = (cy + $t0_1);
+        $t6_7 = ($t4_5 < 0);
+        if ($t6_7) {
+          $block = 6; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 6: {
+        $t7_8 = ($t2_3 + 1);
+        $t2_3 = $t7_8;
+        $block = 4; break;
+        break;
+      }
+      case 7: {
+        $t8_9 = ($t0_1 + 1);
+        $t0_1 = $t8_9;
+        $block = 1; break;
+        break;
+      }
+      case 8: {
+        $t9_10 = ($t2_3 < 0);
+        if ($t9_10) {
+          $block = 12; break;
+        }
+        else {
+          $t14_15 = $t2_3;
+          $block = 13; break;
+        }
+        break;
+      }
+      case 9: {
+        $t10_11 = ($t5_6 >= 33);
+        if ($t10_11) {
+          $block = 6; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 10: {
+        $t11_12 = ($t5_6 < 0);
+        if ($t11_12) {
+          $block = 6; break;
+        }
+        else {
+          $block = 9; break;
+        }
+        break;
+      }
+      case 11: {
+        $t12_13 = ($t4_5 >= 33);
+        if ($t12_13) {
+          $block = 6; break;
+        }
+        else {
+          $block = 10; break;
+        }
+        break;
+      }
+      case 12: {
+        $t13_14 = -$t2_3;
+        $t14_15 = $t13_14;
+        $block = 13; break;
+        break;
+      }
+      case 13: {
+        $t15_16 = ($t0_1 < 0);
+        if ($t15_16) {
+          $block = 14; break;
+        }
+        else {
+          $t17_18 = $t0_1;
+          $block = 15; break;
+        }
+        break;
+      }
+      case 14: {
+        $t16_17 = -$t0_1;
+        $t17_18 = $t16_17;
+        $block = 15; break;
+        break;
+      }
+      case 15: {
+        $t18_19 = ($t17_18 > $t14_15);
+        if ($t18_19) {
+          $block = 16; break;
+        }
+        else {
+          $t19_20 = $t14_15;
+          $block = 17; break;
+        }
+        break;
+      }
+      case 16: {
+        $t19_20 = $t17_18;
+        $block = 17; break;
+        break;
+      }
+      case 17: {
+        $t20_21 = ($t19_20 === 4);
+        if ($t20_21) {
+          $block = 19; break;
+        }
+        else {
+          $block = 21; break;
+        }
+        break;
+      }
+      case 18: {
+        $t22_23 = mods.$get();
+        $t23_24 = $t22_23.addr($t5_6);
+        $t24_25 = $t23_24.$get();
+        $t25_26 = $t24_25.addr($t4_5);
+        $t25_26.$set($t21_22);
+        $block = 6; break;
+        break;
+      }
+      case 19: {
+        $t21_22 = 2;
+        $block = 18; break;
+        break;
+      }
+      case 20: {
+        $t21_22 = 3;
+        $block = 18; break;
+        break;
+      }
+      case 21: {
+        $t26_27 = ($t19_20 === 0);
+        if ($t26_27) {
+          $block = 20; break;
+        }
+        else {
+          $block = 24; break;
+        }
+        break;
+      }
+      case 22: {
+        $t21_22 = 2;
+        $block = 18; break;
+        break;
+      }
+      case 23: {
+        $t27_28 = ($t19_20 === 1);
+        if ($t27_28) {
+          $block = 22; break;
+        }
+        else {
+          $block = 26; break;
+        }
+        break;
+      }
+      case 24: {
+        $t28_29 = ($t19_20 === 2);
+        if ($t28_29) {
+          $block = 20; break;
+        }
+        else {
+          $block = 23; break;
+        }
+        break;
+      }
+      case 25: {
+        $t21_22 = 3;
+        $block = 18; break;
+        break;
+      }
+      case 26: {
+        $t29_30 = ($t19_20 === 3);
+        if ($t29_30) {
+          $block = 25; break;
+        }
+        else {
+          $t21_22 = 0;
+          $block = 18; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+export function qrPlaceAlignmentPattern(mods) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = -2;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t1_2 = ($t0_1 <= 2);
+        if ($t1_2) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t2_3 = -2;
+        $block = 4; break;
+        break;
+      }
+      case 3: {
+        return;
+        break;
+      }
+      case 4: {
+        $t3_4 = ($t2_3 <= 2);
+        if ($t3_4) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 5: {
+        $t4_5 = ($t2_3 < 0);
+        if ($t4_5) {
+          $block = 7; break;
+        }
+        else {
+          $t7_8 = $t2_3;
+          $block = 8; break;
+        }
+        break;
+      }
+      case 6: {
+        $t5_6 = ($t0_1 + 1);
+        $t0_1 = $t5_6;
+        $block = 1; break;
+        break;
+      }
+      case 7: {
+        $t6_7 = -$t2_3;
+        $t7_8 = $t6_7;
+        $block = 8; break;
+        break;
+      }
+      case 8: {
+        $t8_9 = ($t0_1 < 0);
+        if ($t8_9) {
+          $block = 9; break;
+        }
+        else {
+          $t10_11 = $t0_1;
+          $block = 10; break;
+        }
+        break;
+      }
+      case 9: {
+        $t9_10 = -$t0_1;
+        $t10_11 = $t9_10;
+        $block = 10; break;
+        break;
+      }
+      case 10: {
+        $t11_12 = ($t10_11 > $t7_8);
+        if ($t11_12) {
+          $block = 11; break;
+        }
+        else {
+          $t12_13 = $t7_8;
+          $block = 12; break;
+        }
+        break;
+      }
+      case 11: {
+        $t12_13 = $t10_11;
+        $block = 12; break;
+        break;
+      }
+      case 12: {
+        $t13_14 = ($t12_13 === 1);
+        if ($t13_14) {
+          $block = 13; break;
+        }
+        else {
+          $block = 15; break;
+        }
+        break;
+      }
+      case 13: {
+        $t14_15 = 2;
+        $block = 14; break;
+        break;
+      }
+      case 14: {
+        $t15_16 = (26 + $t0_1);
+        $t16_17 = mods.addr($t15_16);
+        $t17_18 = $t16_17.$get();
+        $t18_19 = (26 + $t2_3);
+        $t19_20 = $t17_18.addr($t18_19);
+        $t19_20.$set($t14_15);
+        $t20_21 = ($t2_3 + 1);
+        $t2_3 = $t20_21;
+        $block = 4; break;
+        break;
+      }
+      case 15: {
+        $t14_15 = 3;
+        $block = 14; break;
+        break;
+      }
+    }
+  }
+}
+
+export function qrPlaceTimingPatterns(mods) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = 8;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t1_2 = ($t0_1 < 25);
+        if ($t1_2) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t2_3 = ($t0_1 % 2);
+        $t3_4 = ($t2_3 === 1);
+        if ($t3_4) {
+          $block = 4; break;
+        }
+        else {
+          $t4_5 = 3;
+          $block = 5; break;
+        }
+        break;
+      }
+      case 3: {
+        return;
+        break;
+      }
+      case 4: {
+        $t4_5 = 2;
+        $block = 5; break;
+        break;
+      }
+      case 5: {
+        $t5_6 = mods.addr(6);
+        $t6_7 = $t5_6.$get();
+        $t7_8 = $t6_7.addr($t0_1);
+        $t8_9 = $t7_8.$get();
+        $t9_10 = ($t8_9 === 0);
+        if ($t9_10) {
+          $block = 6; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 6: {
+        $t10_11 = mods.addr(6);
+        $t11_12 = $t10_11.$get();
+        $t12_13 = $t11_12.addr($t0_1);
+        $t12_13.$set($t4_5);
+        $block = 7; break;
+        break;
+      }
+      case 7: {
+        $t13_14 = mods.addr($t0_1);
+        $t14_15 = $t13_14.$get();
+        $t15_16 = $t14_15.addr(6);
+        $t16_17 = $t15_16.$get();
+        $t17_18 = ($t16_17 === 0);
+        if ($t17_18) {
+          $block = 8; break;
+        }
+        else {
+          $block = 9; break;
+        }
+        break;
+      }
+      case 8: {
+        $t18_19 = mods.addr($t0_1);
+        $t19_20 = $t18_19.$get();
+        $t20_21 = $t19_20.addr(6);
+        $t20_21.$set($t4_5);
+        $block = 9; break;
+        break;
+      }
+      case 9: {
+        $t21_22 = ($t0_1 + 1);
+        $t0_1 = $t21_22;
+        $block = 1; break;
+        break;
+      }
+    }
+  }
+}
+
+export function qrPlaceDarkModule(mods) {
+  let $t0_1, $t1_2, $t2_3;
+  $t0_1 = mods.addr(25);
+  $t1_2 = $t0_1.$get();
+  $t2_3 = $t1_2.addr(8);
+  $t2_3.$set(3);
+  return;
+}
+
+export function qrReserveFormatArea(mods) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = 0;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t1_2 = ($t0_1 < 9);
+        if ($t1_2) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t2_3 = mods.addr(8);
+        $t3_4 = $t2_3.$get();
+        $t4_5 = $t3_4.addr($t0_1);
+        $t5_6 = $t4_5.$get();
+        $t6_7 = ($t5_6 === 0);
+        if ($t6_7) {
+          $block = 4; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 3: {
+        $t19_20 = 0;
+        $block = 8; break;
+        break;
+      }
+      case 4: {
+        $t7_8 = mods.addr(8);
+        $t8_9 = $t7_8.$get();
+        $t9_10 = $t8_9.addr($t0_1);
+        $t9_10.$set(2);
+        $block = 5; break;
+        break;
+      }
+      case 5: {
+        $t10_11 = mods.addr($t0_1);
+        $t11_12 = $t10_11.$get();
+        $t12_13 = $t11_12.addr(8);
+        $t13_14 = $t12_13.$get();
+        $t14_15 = ($t13_14 === 0);
+        if ($t14_15) {
+          $block = 6; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 6: {
+        $t15_16 = mods.addr($t0_1);
+        $t16_17 = $t15_16.$get();
+        $t17_18 = $t16_17.addr(8);
+        $t17_18.$set(2);
+        $block = 7; break;
+        break;
+      }
+      case 7: {
+        $t18_19 = ($t0_1 + 1);
+        $t0_1 = $t18_19;
+        $block = 1; break;
+        break;
+      }
+      case 8: {
+        $t20_21 = ($t19_20 < 8);
+        if ($t20_21) {
+          $block = 9; break;
+        }
+        else {
+          $block = 10; break;
+        }
+        break;
+      }
+      case 9: {
+        $t21_22 = mods.addr(8);
+        $t22_23 = $t21_22.$get();
+        $t23_24 = (32 - $t19_20);
+        $t24_25 = $t22_23.addr($t23_24);
+        $t25_26 = $t24_25.$get();
+        $t26_27 = ($t25_26 === 0);
+        if ($t26_27) {
+          $block = 11; break;
+        }
+        else {
+          $block = 12; break;
+        }
+        break;
+      }
+      case 10: {
+        $t32_33 = 0;
+        $block = 13; break;
+        break;
+      }
+      case 11: {
+        $t27_28 = mods.addr(8);
+        $t28_29 = $t27_28.$get();
+        $t29_30 = (32 - $t19_20);
+        $t30_31 = $t28_29.addr($t29_30);
+        $t30_31.$set(2);
+        $block = 12; break;
+        break;
+      }
+      case 12: {
+        $t31_32 = ($t19_20 + 1);
+        $t19_20 = $t31_32;
+        $block = 8; break;
+        break;
+      }
+      case 13: {
+        $t33_34 = ($t32_33 < 7);
+        if ($t33_34) {
+          $block = 14; break;
+        }
+        else {
+          $block = 15; break;
+        }
+        break;
+      }
+      case 14: {
+        $t34_35 = (32 - $t32_33);
+        $t35_36 = mods.addr($t34_35);
+        $t36_37 = $t35_36.$get();
+        $t37_38 = $t36_37.addr(8);
+        $t38_39 = $t37_38.$get();
+        $t39_40 = ($t38_39 === 0);
+        if ($t39_40) {
+          $block = 16; break;
+        }
+        else {
+          $block = 17; break;
+        }
+        break;
+      }
+      case 15: {
+        return;
+        break;
+      }
+      case 16: {
+        $t40_41 = (32 - $t32_33);
+        $t41_42 = mods.addr($t40_41);
+        $t42_43 = $t41_42.$get();
+        $t43_44 = $t42_43.addr(8);
+        $t43_44.$set(2);
+        $block = 17; break;
+        break;
+      }
+      case 17: {
+        $t44_45 = ($t32_33 + 1);
+        $t32_33 = $t44_45;
+        $block = 13; break;
+        break;
+      }
+    }
+  }
+}
+
+export function qrReserveVersionArea(mods) {
+  return;
+}
+
+export function qrPlaceData(mods, bits) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t1_2 = 0;
+        $t2_3 = 32;
+        $t3_4 = true;
+        $block = 3; break;
+        break;
+      }
+      case 1: {
+        $t0_1 = ($t2_3 === 6);
+        if ($t0_1) {
+          $block = 4; break;
+        }
+        else {
+          $t6_7 = $t2_3;
+          $block = 5; break;
+        }
+        break;
+      }
+      case 2: {
+        return;
+        break;
+      }
+      case 3: {
+        $t4_5 = ($t2_3 > 0);
+        if ($t4_5) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 4: {
+        $t5_6 = ($t2_3 - 1);
+        $t6_7 = $t5_6;
+        $block = 5; break;
+        break;
+      }
+      case 5: {
+        $t7_8 = $t1_2;
+        $t8_9 = 0;
+        $block = 6; break;
+        break;
+      }
+      case 6: {
+        $t9_10 = ($t8_9 < 33);
+        if ($t9_10) {
+          $block = 7; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 7: {
+        if ($t3_4) {
+          $block = 9; break;
+        }
+        else {
+          $t13_14 = $t8_9;
+          $block = 10; break;
+        }
+        break;
+      }
+      case 8: {
+        $t10_11 = !$t3_4;
+        $t11_12 = ($t6_7 - 2);
+        $t1_2 = $t7_8;
+        $t2_3 = $t11_12;
+        $t3_4 = $t10_11;
+        $block = 3; break;
+        break;
+      }
+      case 9: {
+        $t12_13 = (32 - $t8_9);
+        $t13_14 = $t12_13;
+        $block = 10; break;
+        break;
+      }
+      case 10: {
+        $t14_15 = $t7_8;
+        $t15_16 = 0;
+        $block = 11; break;
+        break;
+      }
+      case 11: {
+        $t16_17 = ($t15_16 <= 1);
+        if ($t16_17) {
+          $block = 12; break;
+        }
+        else {
+          $block = 14; break;
+        }
+        break;
+      }
+      case 12: {
+        $t17_18 = ($t6_7 - $t15_16);
+        $t18_19 = mods.addr($t13_14);
+        $t19_20 = $t18_19.$get();
+        $t20_21 = $t19_20.addr($t17_18);
+        $t21_22 = $t20_21.$get();
+        $t22_23 = ($t21_22 !== 0);
+        if ($t22_23) {
+          $t23_24 = $t14_15;
+          $block = 13; break;
+        }
+        else {
+          $block = 15; break;
+        }
+        break;
+      }
+      case 13: {
+        $t24_25 = ($t15_16 + 1);
+        $t14_15 = $t23_24;
+        $t15_16 = $t24_25;
+        $block = 11; break;
+        break;
+      }
+      case 14: {
+        $t25_26 = ($t8_9 + 1);
+        $t7_8 = $t14_15;
+        $t8_9 = $t25_26;
+        $block = 6; break;
+        break;
+      }
+      case 15: {
+        $t26_27 = $rt.builtin.len(bits);
+        $t27_28 = ($t14_15 < $t26_27);
+        if ($t27_28) {
+          $block = 16; break;
+        }
+        else {
+          $block = 17; break;
+        }
+        break;
+      }
+      case 16: {
+        $t28_29 = mods.addr($t13_14);
+        $t29_30 = $t28_29.$get();
+        $t30_31 = bits.addr($t14_15);
+        $t31_32 = $t30_31.$get();
+        $t32_33 = $t29_30.addr($t17_18);
+        $t32_33.$set($t31_32);
+        $block = 17; break;
+        break;
+      }
+      case 17: {
+        $t33_34 = ($t14_15 + 1);
+        $t23_24 = $t33_34;
+        $block = 13; break;
+        break;
+      }
+    }
+  }
+}
+
+export function maskFunc(mask, x, y) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = (mask === 0);
+        if ($t0_1) {
+          $block = 1; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 1: {
+        $t1_2 = (x + y);
+        $t2_3 = ($t1_2 % 2);
+        $t3_4 = ($t2_3 === 0);
+        return $t3_4;
+        break;
+      }
+      case 2: {
+        $t4_5 = (y % 2);
+        $t5_6 = ($t4_5 === 0);
+        return $t5_6;
+        break;
+      }
+      case 3: {
+        $t6_7 = (mask === 1);
+        if ($t6_7) {
+          $block = 2; break;
+        }
+        else {
+          $block = 5; break;
+        }
+        break;
+      }
+      case 4: {
+        $t7_8 = (x % 3);
+        $t8_9 = ($t7_8 === 0);
+        return $t8_9;
+        break;
+      }
+      case 5: {
+        $t9_10 = (mask === 2);
+        if ($t9_10) {
+          $block = 4; break;
+        }
+        else {
+          $block = 7; break;
+        }
+        break;
+      }
+      case 6: {
+        $t10_11 = (x + y);
+        $t11_12 = ($t10_11 % 3);
+        $t12_13 = ($t11_12 === 0);
+        return $t12_13;
+        break;
+      }
+      case 7: {
+        $t13_14 = (mask === 3);
+        if ($t13_14) {
+          $block = 6; break;
+        }
+        else {
+          $block = 9; break;
+        }
+        break;
+      }
+      case 8: {
+        $t14_15 = Math.trunc(y / 2);
+        $t15_16 = Math.trunc(x / 3);
+        $t16_17 = ($t14_15 + $t15_16);
+        $t17_18 = ($t16_17 % 2);
+        $t18_19 = ($t17_18 === 0);
+        return $t18_19;
+        break;
+      }
+      case 9: {
+        $t19_20 = (mask === 4);
+        if ($t19_20) {
+          $block = 8; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 10: {
+        $t20_21 = (x * y);
+        $t21_22 = ($t20_21 % 2);
+        $t22_23 = (x * y);
+        $t23_24 = ($t22_23 % 3);
+        $t24_25 = ($t21_22 + $t23_24);
+        $t25_26 = ($t24_25 === 0);
+        return $t25_26;
+        break;
+      }
+      case 11: {
+        $t26_27 = (mask === 5);
+        if ($t26_27) {
+          $block = 10; break;
+        }
+        else {
+          $block = 13; break;
+        }
+        break;
+      }
+      case 12: {
+        $t27_28 = (x * y);
+        $t28_29 = ($t27_28 % 2);
+        $t29_30 = (x * y);
+        $t30_31 = ($t29_30 % 3);
+        $t31_32 = ($t28_29 + $t30_31);
+        $t32_33 = ($t31_32 % 2);
+        $t33_34 = ($t32_33 === 0);
+        return $t33_34;
+        break;
+      }
+      case 13: {
+        $t34_35 = (mask === 6);
+        if ($t34_35) {
+          $block = 12; break;
+        }
+        else {
+          $block = 15; break;
+        }
+        break;
+      }
+      case 14: {
+        $t35_36 = (x + y);
+        $t36_37 = ($t35_36 % 2);
+        $t37_38 = (x * y);
+        $t38_39 = ($t37_38 % 3);
+        $t39_40 = ($t36_37 + $t38_39);
+        $t40_41 = ($t39_40 % 2);
+        $t41_42 = ($t40_41 === 0);
+        return $t41_42;
+        break;
+      }
+      case 15: {
+        $t42_43 = (mask === 7);
+        if ($t42_43) {
+          $block = 14; break;
+        }
+        else {
+          $block = 16; break;
+        }
+        break;
+      }
+      case 16: {
+        return false;
+        break;
+      }
+    }
+  }
+}
+
+export function isData(v) {
+  let $t0_1;
+  $t0_1 = (v <= 1);
+  return $t0_1;
+}
+
+export function qrApplyBestMask(mods) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = 0;
+        $t1_2 = 2147483647;
+        $t2_3 = 0;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t3_4 = ($t2_3 < 8);
+        if ($t3_4) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t4_5 = 0;
+        $block = 4; break;
+        break;
+      }
+      case 3: {
+        $t45_46 = 0;
+        $block = 24; break;
+        break;
+      }
+      case 4: {
+        $t5_6 = ($t4_5 < 33);
+        if ($t5_6) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 5: {
+        $t7_8 = 0;
+        $block = 7; break;
+        break;
+      }
+      case 6: {
+        $t6_7 = qrPenaltyScore(mods);
+        $t23_24 = 0;
+        $block = 13; break;
+        break;
+      }
+      case 7: {
+        $t8_9 = ($t7_8 < 33);
+        if ($t8_9) {
+          $block = 8; break;
+        }
+        else {
+          $block = 9; break;
+        }
+        break;
+      }
+      case 8: {
+        $t9_10 = mods.addr($t4_5);
+        $t10_11 = $t9_10.$get();
+        $t11_12 = $t10_11.addr($t7_8);
+        $t12_13 = $t11_12.$get();
+        $t13_14 = isData($t12_13);
+        if ($t13_14) {
+          $block = 12; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 9: {
+        $t14_15 = ($t4_5 + 1);
+        $t4_5 = $t14_15;
+        $block = 4; break;
+        break;
+      }
+      case 10: {
+        $t15_16 = mods.addr($t4_5);
+        $t16_17 = $t15_16.$get();
+        $t17_18 = $t16_17.addr($t7_8);
+        $t18_19 = $t17_18.$get();
+        $t19_20 = ($t18_19 ^ 1);
+        $t20_21 = $t16_17.addr($t7_8);
+        $t20_21.$set($t19_20);
+        $block = 11; break;
+        break;
+      }
+      case 11: {
+        $t21_22 = ($t7_8 + 1);
+        $t7_8 = $t21_22;
+        $block = 7; break;
+        break;
+      }
+      case 12: {
+        $t22_23 = maskFunc($t2_3, $t7_8, $t4_5);
+        if ($t22_23) {
+          $block = 10; break;
+        }
+        else {
+          $block = 11; break;
+        }
+        break;
+      }
+      case 13: {
+        $t24_25 = ($t23_24 < 33);
+        if ($t24_25) {
+          $block = 14; break;
+        }
+        else {
+          $block = 15; break;
+        }
+        break;
+      }
+      case 14: {
+        $t26_27 = 0;
+        $block = 16; break;
+        break;
+      }
+      case 15: {
+        $t25_26 = ($t6_7 < $t1_2);
+        if ($t25_26) {
+          $block = 22; break;
+        }
+        else {
+          $t42_43 = $t0_1;
+          $t43_44 = $t1_2;
+          $block = 23; break;
+        }
+        break;
+      }
+      case 16: {
+        $t27_28 = ($t26_27 < 33);
+        if ($t27_28) {
+          $block = 17; break;
+        }
+        else {
+          $block = 18; break;
+        }
+        break;
+      }
+      case 17: {
+        $t28_29 = mods.addr($t23_24);
+        $t29_30 = $t28_29.$get();
+        $t30_31 = $t29_30.addr($t26_27);
+        $t31_32 = $t30_31.$get();
+        $t32_33 = isData($t31_32);
+        if ($t32_33) {
+          $block = 21; break;
+        }
+        else {
+          $block = 20; break;
+        }
+        break;
+      }
+      case 18: {
+        $t33_34 = ($t23_24 + 1);
+        $t23_24 = $t33_34;
+        $block = 13; break;
+        break;
+      }
+      case 19: {
+        $t34_35 = mods.addr($t23_24);
+        $t35_36 = $t34_35.$get();
+        $t36_37 = $t35_36.addr($t26_27);
+        $t37_38 = $t36_37.$get();
+        $t38_39 = ($t37_38 ^ 1);
+        $t39_40 = $t35_36.addr($t26_27);
+        $t39_40.$set($t38_39);
+        $block = 20; break;
+        break;
+      }
+      case 20: {
+        $t40_41 = ($t26_27 + 1);
+        $t26_27 = $t40_41;
+        $block = 16; break;
+        break;
+      }
+      case 21: {
+        $t41_42 = maskFunc($t2_3, $t26_27, $t23_24);
+        if ($t41_42) {
+          $block = 19; break;
+        }
+        else {
+          $block = 20; break;
+        }
+        break;
+      }
+      case 22: {
+        $t42_43 = $t2_3;
+        $t43_44 = $t6_7;
+        $block = 23; break;
+        break;
+      }
+      case 23: {
+        $t44_45 = ($t2_3 + 1);
+        $t0_1 = $t42_43;
+        $t1_2 = $t43_44;
+        $t2_3 = $t44_45;
+        $block = 1; break;
+        break;
+      }
+      case 24: {
+        $t46_47 = ($t45_46 < 33);
+        if ($t46_47) {
+          $block = 25; break;
+        }
+        else {
+          $block = 26; break;
+        }
+        break;
+      }
+      case 25: {
+        $t48_49 = 0;
+        $block = 27; break;
+        break;
+      }
+      case 26: {
+        $t47_48 = qrWriteFormatInfo(mods, $t0_1);
+        $t64_65 = 0;
+        $block = 33; break;
+        break;
+      }
+      case 27: {
+        $t49_50 = ($t48_49 < 33);
+        if ($t49_50) {
+          $block = 28; break;
+        }
+        else {
+          $block = 29; break;
+        }
+        break;
+      }
+      case 28: {
+        $t50_51 = mods.addr($t45_46);
+        $t51_52 = $t50_51.$get();
+        $t52_53 = $t51_52.addr($t48_49);
+        $t53_54 = $t52_53.$get();
+        $t54_55 = isData($t53_54);
+        if ($t54_55) {
+          $block = 32; break;
+        }
+        else {
+          $block = 31; break;
+        }
+        break;
+      }
+      case 29: {
+        $t55_56 = ($t45_46 + 1);
+        $t45_46 = $t55_56;
+        $block = 24; break;
+        break;
+      }
+      case 30: {
+        $t56_57 = mods.addr($t45_46);
+        $t57_58 = $t56_57.$get();
+        $t58_59 = $t57_58.addr($t48_49);
+        $t59_60 = $t58_59.$get();
+        $t60_61 = ($t59_60 ^ 1);
+        $t61_62 = $t57_58.addr($t48_49);
+        $t61_62.$set($t60_61);
+        $block = 31; break;
+        break;
+      }
+      case 31: {
+        $t62_63 = ($t48_49 + 1);
+        $t48_49 = $t62_63;
+        $block = 27; break;
+        break;
+      }
+      case 32: {
+        $t63_64 = maskFunc($t0_1, $t48_49, $t45_46);
+        if ($t63_64) {
+          $block = 30; break;
+        }
+        else {
+          $block = 31; break;
+        }
+        break;
+      }
+      case 33: {
+        $t65_66 = ($t64_65 < 33);
+        if ($t65_66) {
+          $block = 34; break;
+        }
+        else {
+          $block = 35; break;
+        }
+        break;
+      }
+      case 34: {
+        $t66_67 = 0;
+        $block = 36; break;
+        break;
+      }
+      case 35: {
+        return;
+        break;
+      }
+      case 36: {
+        $t67_68 = ($t66_67 < 33);
+        if ($t67_68) {
+          $block = 37; break;
+        }
+        else {
+          $block = 38; break;
+        }
+        break;
+      }
+      case 37: {
+        $t68_69 = mods.addr($t64_65);
+        $t69_70 = $t68_69.$get();
+        $t70_71 = $t69_70.addr($t66_67);
+        $t71_72 = $t70_71.$get();
+        $t72_73 = ($t71_72 === 2);
+        if ($t72_73) {
+          $block = 39; break;
+        }
+        else {
+          $block = 41; break;
+        }
+        break;
+      }
+      case 38: {
+        $t73_74 = ($t64_65 + 1);
+        $t64_65 = $t73_74;
+        $block = 33; break;
+        break;
+      }
+      case 39: {
+        $t74_75 = mods.addr($t64_65);
+        $t75_76 = $t74_75.$get();
+        $t76_77 = $t75_76.addr($t66_67);
+        $t76_77.$set(0);
+        $block = 40; break;
+        break;
+      }
+      case 40: {
+        $t77_78 = ($t66_67 + 1);
+        $t66_67 = $t77_78;
+        $block = 36; break;
+        break;
+      }
+      case 41: {
+        $t78_79 = mods.addr($t64_65);
+        $t79_80 = $t78_79.$get();
+        $t80_81 = $t79_80.addr($t66_67);
+        $t81_82 = $t80_81.$get();
+        $t82_83 = ($t81_82 === 3);
+        if ($t82_83) {
+          $block = 42; break;
+        }
+        else {
+          $block = 40; break;
+        }
+        break;
+      }
+      case 42: {
+        $t83_84 = mods.addr($t64_65);
+        $t84_85 = $t83_84.$get();
+        $t85_86 = $t84_85.addr($t66_67);
+        $t85_86.$set(1);
+        $block = 40; break;
+        break;
+      }
+    }
+  }
+}
+
+export function qrWriteFormatInfo(mods, mask) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = { $value: $rt.builtin.makeSlice(15, 15, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t1_2 = formatBits.$get().addr(mask);
+        $t2_3 = $t1_2.$get();
+        $t0_1.$set($rt.builtin.cloneValue($t2_3));
+        $t3_4 = { $value: $rt.builtin.makeSlice(15, 15, $rt.builtin.makeSlice(2, 2, 0)), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t4_5 = $t3_4.$get().addr(0);
+        $t5_6 = $t4_5.$get().addr(0);
+        $t6_7 = $t4_5.$get().addr(1);
+        $t7_8 = $t3_4.$get().addr(1);
+        $t8_9 = $t7_8.$get().addr(0);
+        $t9_10 = $t7_8.$get().addr(1);
+        $t10_11 = $t3_4.$get().addr(2);
+        $t11_12 = $t10_11.$get().addr(0);
+        $t12_13 = $t10_11.$get().addr(1);
+        $t13_14 = $t3_4.$get().addr(3);
+        $t14_15 = $t13_14.$get().addr(0);
+        $t15_16 = $t13_14.$get().addr(1);
+        $t16_17 = $t3_4.$get().addr(4);
+        $t17_18 = $t16_17.$get().addr(0);
+        $t18_19 = $t16_17.$get().addr(1);
+        $t19_20 = $t3_4.$get().addr(5);
+        $t20_21 = $t19_20.$get().addr(0);
+        $t21_22 = $t19_20.$get().addr(1);
+        $t22_23 = $t3_4.$get().addr(6);
+        $t23_24 = $t22_23.$get().addr(0);
+        $t24_25 = $t22_23.$get().addr(1);
+        $t25_26 = $t3_4.$get().addr(7);
+        $t26_27 = $t25_26.$get().addr(0);
+        $t27_28 = $t25_26.$get().addr(1);
+        $t28_29 = $t3_4.$get().addr(8);
+        $t29_30 = $t28_29.$get().addr(0);
+        $t30_31 = $t28_29.$get().addr(1);
+        $t31_32 = $t3_4.$get().addr(9);
+        $t32_33 = $t31_32.$get().addr(0);
+        $t33_34 = $t31_32.$get().addr(1);
+        $t34_35 = $t3_4.$get().addr(10);
+        $t35_36 = $t34_35.$get().addr(0);
+        $t36_37 = $t34_35.$get().addr(1);
+        $t37_38 = $t3_4.$get().addr(11);
+        $t38_39 = $t37_38.$get().addr(0);
+        $t39_40 = $t37_38.$get().addr(1);
+        $t40_41 = $t3_4.$get().addr(12);
+        $t41_42 = $t40_41.$get().addr(0);
+        $t42_43 = $t40_41.$get().addr(1);
+        $t43_44 = $t3_4.$get().addr(13);
+        $t44_45 = $t43_44.$get().addr(0);
+        $t45_46 = $t43_44.$get().addr(1);
+        $t46_47 = $t3_4.$get().addr(14);
+        $t47_48 = $t46_47.$get().addr(0);
+        $t48_49 = $t46_47.$get().addr(1);
+        $t5_6.$set(0);
+        $t6_7.$set(8);
+        $t8_9.$set(1);
+        $t9_10.$set(8);
+        $t11_12.$set(2);
+        $t12_13.$set(8);
+        $t14_15.$set(3);
+        $t15_16.$set(8);
+        $t17_18.$set(4);
+        $t18_19.$set(8);
+        $t20_21.$set(5);
+        $t21_22.$set(8);
+        $t23_24.$set(7);
+        $t24_25.$set(8);
+        $t26_27.$set(8);
+        $t27_28.$set(8);
+        $t29_30.$set(8);
+        $t30_31.$set(7);
+        $t32_33.$set(8);
+        $t33_34.$set(5);
+        $t35_36.$set(8);
+        $t36_37.$set(4);
+        $t38_39.$set(8);
+        $t39_40.$set(3);
+        $t41_42.$set(8);
+        $t42_43.$set(2);
+        $t44_45.$set(8);
+        $t45_46.$set(1);
+        $t47_48.$set(8);
+        $t48_49.$set(0);
+        $t49_50 = $t3_4.$get();
+        $t50_51 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t51_52 = ($t50_51 + 1);
+        $t52_53 = ($t51_52 < 15);
+        if ($t52_53) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t53_54 = $t49_50.get($t51_52);
+        $t54_55 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t54_55.$set($rt.builtin.cloneValue($t53_54));
+        $t55_56 = $t0_1.$get().addr($t51_52);
+        $t56_57 = $t55_56.$get();
+        $t57_58 = ($t56_57 === 1);
+        if ($t57_58) {
+          $block = 4; break;
+        }
+        else {
+          $t105_106 = 2;
+          $block = 5; break;
+        }
+        break;
+      }
+      case 3: {
+        $t58_59 = { $value: $rt.builtin.makeSlice(15, 15, $rt.builtin.makeSlice(2, 2, 0)), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t59_60 = $t58_59.$get().addr(0);
+        $t60_61 = $t59_60.$get().addr(0);
+        $t61_62 = $t59_60.$get().addr(1);
+        $t62_63 = $t58_59.$get().addr(1);
+        $t63_64 = $t62_63.$get().addr(0);
+        $t64_65 = $t62_63.$get().addr(1);
+        $t65_66 = $t58_59.$get().addr(2);
+        $t66_67 = $t65_66.$get().addr(0);
+        $t67_68 = $t65_66.$get().addr(1);
+        $t68_69 = $t58_59.$get().addr(3);
+        $t69_70 = $t68_69.$get().addr(0);
+        $t70_71 = $t68_69.$get().addr(1);
+        $t71_72 = $t58_59.$get().addr(4);
+        $t72_73 = $t71_72.$get().addr(0);
+        $t73_74 = $t71_72.$get().addr(1);
+        $t74_75 = $t58_59.$get().addr(5);
+        $t75_76 = $t74_75.$get().addr(0);
+        $t76_77 = $t74_75.$get().addr(1);
+        $t77_78 = $t58_59.$get().addr(6);
+        $t78_79 = $t77_78.$get().addr(0);
+        $t79_80 = $t77_78.$get().addr(1);
+        $t80_81 = $t58_59.$get().addr(7);
+        $t81_82 = $t80_81.$get().addr(0);
+        $t82_83 = $t80_81.$get().addr(1);
+        $t83_84 = $t58_59.$get().addr(8);
+        $t84_85 = $t83_84.$get().addr(0);
+        $t85_86 = $t83_84.$get().addr(1);
+        $t86_87 = $t58_59.$get().addr(9);
+        $t87_88 = $t86_87.$get().addr(0);
+        $t88_89 = $t86_87.$get().addr(1);
+        $t89_90 = $t58_59.$get().addr(10);
+        $t90_91 = $t89_90.$get().addr(0);
+        $t91_92 = $t89_90.$get().addr(1);
+        $t92_93 = $t58_59.$get().addr(11);
+        $t93_94 = $t92_93.$get().addr(0);
+        $t94_95 = $t92_93.$get().addr(1);
+        $t95_96 = $t58_59.$get().addr(12);
+        $t96_97 = $t95_96.$get().addr(0);
+        $t97_98 = $t95_96.$get().addr(1);
+        $t98_99 = $t58_59.$get().addr(13);
+        $t99_100 = $t98_99.$get().addr(0);
+        $t100_101 = $t98_99.$get().addr(1);
+        $t101_102 = $t58_59.$get().addr(14);
+        $t102_103 = $t101_102.$get().addr(0);
+        $t103_104 = $t101_102.$get().addr(1);
+        $t60_61.$set(8);
+        $t61_62.$set(32);
+        $t63_64.$set(8);
+        $t64_65.$set(31);
+        $t66_67.$set(8);
+        $t67_68.$set(30);
+        $t69_70.$set(8);
+        $t70_71.$set(29);
+        $t72_73.$set(8);
+        $t73_74.$set(28);
+        $t75_76.$set(8);
+        $t76_77.$set(27);
+        $t78_79.$set(8);
+        $t79_80.$set(26);
+        $t81_82.$set(25);
+        $t82_83.$set(8);
+        $t84_85.$set(26);
+        $t85_86.$set(8);
+        $t87_88.$set(27);
+        $t88_89.$set(8);
+        $t90_91.$set(28);
+        $t91_92.$set(8);
+        $t93_94.$set(29);
+        $t94_95.$set(8);
+        $t96_97.$set(30);
+        $t97_98.$set(8);
+        $t99_100.$set(31);
+        $t100_101.$set(8);
+        $t102_103.$set(32);
+        $t103_104.$set(8);
+        $t104_105 = $t58_59.$get();
+        $t113_114 = -1;
+        $block = 6; break;
+        break;
+      }
+      case 4: {
+        $t105_106 = 3;
+        $block = 5; break;
+        break;
+      }
+      case 5: {
+        $t106_107 = $t54_55.$get().addr(1);
+        $t107_108 = $t106_107.$get();
+        $t108_109 = mods.addr($t107_108);
+        $t109_110 = $t108_109.$get();
+        $t110_111 = $t54_55.$get().addr(0);
+        $t111_112 = $t110_111.$get();
+        $t112_113 = $t109_110.addr($t111_112);
+        $t112_113.$set($t105_106);
+        $t50_51 = $t51_52;
+        $block = 1; break;
+        break;
+      }
+      case 6: {
+        $t114_115 = ($t113_114 + 1);
+        $t115_116 = ($t114_115 < 15);
+        if ($t115_116) {
+          $block = 7; break;
+        }
+        else {
+          $block = 8; break;
+        }
+        break;
+      }
+      case 7: {
+        $t116_117 = $t104_105.get($t114_115);
+        $t117_118 = { $value: $rt.builtin.makeSlice(2, 2, 0), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t117_118.$set($rt.builtin.cloneValue($t116_117));
+        $t118_119 = $t0_1.$get().addr($t114_115);
+        $t119_120 = $t118_119.$get();
+        $t120_121 = ($t119_120 === 1);
+        if ($t120_121) {
+          $block = 9; break;
+        }
+        else {
+          $t121_122 = 2;
+          $block = 10; break;
+        }
+        break;
+      }
+      case 8: {
+        return;
+        break;
+      }
+      case 9: {
+        $t121_122 = 3;
+        $block = 10; break;
+        break;
+      }
+      case 10: {
+        $t122_123 = $t117_118.$get().addr(1);
+        $t123_124 = $t122_123.$get();
+        $t124_125 = mods.addr($t123_124);
+        $t125_126 = $t124_125.$get();
+        $t126_127 = $t117_118.$get().addr(0);
+        $t127_128 = $t126_127.$get();
+        $t128_129 = $t125_126.addr($t127_128);
+        $t128_129.$set($t121_122);
+        $t113_114 = $t114_115;
+        $block = 6; break;
+        break;
+      }
+    }
+  }
+}
+
+export function qrPenaltyScore(mods) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = 0;
+        $t1_2 = 0;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t2_3 = ($t1_2 < 33);
+        if ($t2_3) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t3_4 = $t0_1;
+        $t4_5 = 1;
+        $t5_6 = 1;
+        $block = 4; break;
+        break;
+      }
+      case 3: {
+        $t32_33 = $t0_1;
+        $t33_34 = 0;
+        $block = 14; break;
+        break;
+      }
+      case 4: {
+        $t6_7 = ($t5_6 < 33);
+        if ($t6_7) {
+          $block = 5; break;
+        }
+        else {
+          $block = 6; break;
+        }
+        break;
+      }
+      case 5: {
+        $t7_8 = mods.addr($t1_2);
+        $t8_9 = $t7_8.$get();
+        $t9_10 = $t8_9.addr($t5_6);
+        $t10_11 = $t9_10.$get();
+        $t11_12 = ($t10_11 & 1);
+        $t12_13 = mods.addr($t1_2);
+        $t13_14 = $t12_13.$get();
+        $t14_15 = ($t5_6 - 1);
+        $t15_16 = $t13_14.addr($t14_15);
+        $t16_17 = $t15_16.$get();
+        $t17_18 = ($t16_17 & 1);
+        $t18_19 = ($t11_12 === $t17_18);
+        if ($t18_19) {
+          $block = 7; break;
+        }
+        else {
+          $block = 9; break;
+        }
+        break;
+      }
+      case 6: {
+        $t19_20 = ($t4_5 >= 5);
+        if ($t19_20) {
+          $block = 12; break;
+        }
+        else {
+          $t30_31 = $t3_4;
+          $block = 13; break;
+        }
+        break;
+      }
+      case 7: {
+        $t20_21 = ($t4_5 + 1);
+        $t21_22 = $t3_4;
+        $t22_23 = $t20_21;
+        $block = 8; break;
+        break;
+      }
+      case 8: {
+        $t23_24 = ($t5_6 + 1);
+        $t3_4 = $t21_22;
+        $t4_5 = $t22_23;
+        $t5_6 = $t23_24;
+        $block = 4; break;
+        break;
+      }
+      case 9: {
+        $t24_25 = ($t4_5 >= 5);
+        if ($t24_25) {
+          $block = 10; break;
+        }
+        else {
+          $t27_28 = $t3_4;
+          $block = 11; break;
+        }
+        break;
+      }
+      case 10: {
+        $t25_26 = ($t4_5 - 2);
+        $t26_27 = ($t3_4 + $t25_26);
+        $t27_28 = $t26_27;
+        $block = 11; break;
+        break;
+      }
+      case 11: {
+        $t21_22 = $t27_28;
+        $t22_23 = 1;
+        $block = 8; break;
+        break;
+      }
+      case 12: {
+        $t28_29 = ($t4_5 - 2);
+        $t29_30 = ($t3_4 + $t28_29);
+        $t30_31 = $t29_30;
+        $block = 13; break;
+        break;
+      }
+      case 13: {
+        $t31_32 = ($t1_2 + 1);
+        $t0_1 = $t30_31;
+        $t1_2 = $t31_32;
+        $block = 1; break;
+        break;
+      }
+      case 14: {
+        $t34_35 = ($t33_34 < 33);
+        if ($t34_35) {
+          $block = 15; break;
+        }
+        else {
+          $block = 16; break;
+        }
+        break;
+      }
+      case 15: {
+        $t35_36 = $t32_33;
+        $t36_37 = 1;
+        $t37_38 = 1;
+        $block = 17; break;
+        break;
+      }
+      case 16: {
+        $t64_65 = $t32_33;
+        $t65_66 = 0;
+        $block = 27; break;
+        break;
+      }
+      case 17: {
+        $t38_39 = ($t37_38 < 33);
+        if ($t38_39) {
+          $block = 18; break;
+        }
+        else {
+          $block = 19; break;
+        }
+        break;
+      }
+      case 18: {
+        $t39_40 = mods.addr($t37_38);
+        $t40_41 = $t39_40.$get();
+        $t41_42 = $t40_41.addr($t33_34);
+        $t42_43 = $t41_42.$get();
+        $t43_44 = ($t42_43 & 1);
+        $t44_45 = ($t37_38 - 1);
+        $t45_46 = mods.addr($t44_45);
+        $t46_47 = $t45_46.$get();
+        $t47_48 = $t46_47.addr($t33_34);
+        $t48_49 = $t47_48.$get();
+        $t49_50 = ($t48_49 & 1);
+        $t50_51 = ($t43_44 === $t49_50);
+        if ($t50_51) {
+          $block = 20; break;
+        }
+        else {
+          $block = 22; break;
+        }
+        break;
+      }
+      case 19: {
+        $t51_52 = ($t36_37 >= 5);
+        if ($t51_52) {
+          $block = 25; break;
+        }
+        else {
+          $t62_63 = $t35_36;
+          $block = 26; break;
+        }
+        break;
+      }
+      case 20: {
+        $t52_53 = ($t36_37 + 1);
+        $t53_54 = $t35_36;
+        $t54_55 = $t52_53;
+        $block = 21; break;
+        break;
+      }
+      case 21: {
+        $t55_56 = ($t37_38 + 1);
+        $t35_36 = $t53_54;
+        $t36_37 = $t54_55;
+        $t37_38 = $t55_56;
+        $block = 17; break;
+        break;
+      }
+      case 22: {
+        $t56_57 = ($t36_37 >= 5);
+        if ($t56_57) {
+          $block = 23; break;
+        }
+        else {
+          $t59_60 = $t35_36;
+          $block = 24; break;
+        }
+        break;
+      }
+      case 23: {
+        $t57_58 = ($t36_37 - 2);
+        $t58_59 = ($t35_36 + $t57_58);
+        $t59_60 = $t58_59;
+        $block = 24; break;
+        break;
+      }
+      case 24: {
+        $t53_54 = $t59_60;
+        $t54_55 = 1;
+        $block = 21; break;
+        break;
+      }
+      case 25: {
+        $t60_61 = ($t36_37 - 2);
+        $t61_62 = ($t35_36 + $t60_61);
+        $t62_63 = $t61_62;
+        $block = 26; break;
+        break;
+      }
+      case 26: {
+        $t63_64 = ($t33_34 + 1);
+        $t32_33 = $t62_63;
+        $t33_34 = $t63_64;
+        $block = 14; break;
+        break;
+      }
+      case 27: {
+        $t66_67 = ($t65_66 < 32);
+        if ($t66_67) {
+          $block = 28; break;
+        }
+        else {
+          $block = 29; break;
+        }
+        break;
+      }
+      case 28: {
+        $t67_68 = $t64_65;
+        $t68_69 = 0;
+        $block = 30; break;
+        break;
+      }
+      case 29: {
+        $t101_102 = 0;
+        $t102_103 = 0;
+        $block = 37; break;
+        break;
+      }
+      case 30: {
+        $t69_70 = ($t68_69 < 32);
+        if ($t69_70) {
+          $block = 31; break;
+        }
+        else {
+          $block = 32; break;
+        }
+        break;
+      }
+      case 31: {
+        $t70_71 = mods.addr($t65_66);
+        $t71_72 = $t70_71.$get();
+        $t72_73 = $t71_72.addr($t68_69);
+        $t73_74 = $t72_73.$get();
+        $t74_75 = ($t73_74 & 1);
+        $t75_76 = mods.addr($t65_66);
+        $t76_77 = $t75_76.$get();
+        $t77_78 = ($t68_69 + 1);
+        $t78_79 = $t76_77.addr($t77_78);
+        $t79_80 = $t78_79.$get();
+        $t80_81 = ($t79_80 & 1);
+        $t81_82 = ($t80_81 === $t74_75);
+        if ($t81_82) {
+          $block = 36; break;
+        }
+        else {
+          $t84_85 = $t67_68;
+          $block = 34; break;
+        }
+        break;
+      }
+      case 32: {
+        $t82_83 = ($t65_66 + 1);
+        $t64_65 = $t67_68;
+        $t65_66 = $t82_83;
+        $block = 27; break;
+        break;
+      }
+      case 33: {
+        $t83_84 = ($t67_68 + 3);
+        $t84_85 = $t83_84;
+        $block = 34; break;
+        break;
+      }
+      case 34: {
+        $t85_86 = ($t68_69 + 1);
+        $t67_68 = $t84_85;
+        $t68_69 = $t85_86;
+        $block = 30; break;
+        break;
+      }
+      case 35: {
+        $t86_87 = ($t65_66 + 1);
+        $t87_88 = mods.addr($t86_87);
+        $t88_89 = $t87_88.$get();
+        $t89_90 = ($t68_69 + 1);
+        $t90_91 = $t88_89.addr($t89_90);
+        $t91_92 = $t90_91.$get();
+        $t92_93 = ($t91_92 & 1);
+        $t93_94 = ($t92_93 === $t74_75);
+        if ($t93_94) {
+          $block = 33; break;
+        }
+        else {
+          $t84_85 = $t67_68;
+          $block = 34; break;
+        }
+        break;
+      }
+      case 36: {
+        $t94_95 = ($t65_66 + 1);
+        $t95_96 = mods.addr($t94_95);
+        $t96_97 = $t95_96.$get();
+        $t97_98 = $t96_97.addr($t68_69);
+        $t98_99 = $t97_98.$get();
+        $t99_100 = ($t98_99 & 1);
+        $t100_101 = ($t99_100 === $t74_75);
+        if ($t100_101) {
+          $block = 35; break;
+        }
+        else {
+          $t84_85 = $t67_68;
+          $block = 34; break;
+        }
+        break;
+      }
+      case 37: {
+        $t103_104 = ($t102_103 < 33);
+        if ($t103_104) {
+          $block = 38; break;
+        }
+        else {
+          $block = 39; break;
+        }
+        break;
+      }
+      case 38: {
+        $t108_109 = $t101_102;
+        $t109_110 = 0;
+        $block = 40; break;
+        break;
+      }
+      case 39: {
+        $t104_105 = ($t101_102 * 100);
+        $t105_106 = Math.trunc($t104_105 / 1089);
+        $t106_107 = ($t105_106 - 50);
+        $t107_108 = ($t106_107 < 0);
+        if ($t107_108) {
+          $block = 45; break;
+        }
+        else {
+          $t122_123 = $t106_107;
+          $block = 46; break;
+        }
+        break;
+      }
+      case 40: {
+        $t110_111 = ($t109_110 < 33);
+        if ($t110_111) {
+          $block = 41; break;
+        }
+        else {
+          $block = 42; break;
+        }
+        break;
+      }
+      case 41: {
+        $t111_112 = mods.addr($t102_103);
+        $t112_113 = $t111_112.$get();
+        $t113_114 = $t112_113.addr($t109_110);
+        $t114_115 = $t113_114.$get();
+        $t115_116 = ($t114_115 & 1);
+        $t116_117 = ($t115_116 === 1);
+        if ($t116_117) {
+          $block = 43; break;
+        }
+        else {
+          $t119_120 = $t108_109;
+          $block = 44; break;
+        }
+        break;
+      }
+      case 42: {
+        $t117_118 = ($t102_103 + 1);
+        $t101_102 = $t108_109;
+        $t102_103 = $t117_118;
+        $block = 37; break;
+        break;
+      }
+      case 43: {
+        $t118_119 = ($t108_109 + 1);
+        $t119_120 = $t118_119;
+        $block = 44; break;
+        break;
+      }
+      case 44: {
+        $t120_121 = ($t109_110 + 1);
+        $t108_109 = $t119_120;
+        $t109_110 = $t120_121;
+        $block = 40; break;
+        break;
+      }
+      case 45: {
+        $t121_122 = -$t106_107;
+        $t122_123 = $t121_122;
+        $block = 46; break;
+        break;
+      }
+      case 46: {
+        $t123_124 = Math.trunc($t122_123 / 5);
+        $t124_125 = ($t123_124 * 10);
+        $t125_126 = ($t64_65 + $t124_125);
+        return $t125_126;
+        break;
+      }
+    }
+  }
 }
 
 export function isLocalDev() {
@@ -149,12 +3971,12 @@ export function isLocalDev() {
 }
 
 export function main() {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23;
   let $block = 0;
   while (true) {
     switch ($block) {
       case 0: {
-        $t0_1 = common$jsbridge$dom.ConsoleLog('starting smesh v0.65.55');
+        $t0_1 = common$jsbridge$dom.ConsoleLog('starting smesh v0.65.57');
         $t1_2 = isLocalDev();
         if ($t1_2) {
           $block = 1; break;
@@ -218,9 +4040,11 @@ export function main() {
       case 7: {
         $t15_16 = common$jsbridge$dom.GetElementById('app-root');
         root.$set($t15_16);
-        $t16_17 = common$jsbridge$localstorage.GetItem('smesh-pubkey');
-        $t17_18 = ($t16_17 !== '');
-        if ($t17_18) {
+        $t16_17 = root.$get();
+        $t17_18 = common$jsbridge$dom.SetAttribute($t16_17, 'data-version', 'v0.65.57');
+        $t18_19 = common$jsbridge$localstorage.GetItem('smesh-pubkey');
+        $t19_20 = ($t18_19 !== '');
+        if ($t19_20) {
           $block = 8; break;
         }
         else {
@@ -229,10 +4053,10 @@ export function main() {
         break;
       }
       case 8: {
-        pubhex.$set($t16_17);
-        $t18_19 = common$helpers.HexDecode($t16_17);
-        pubkey.$set($t18_19);
-        $t19_20 = showApp();
+        pubhex.$set($t18_19);
+        $t20_21 = common$helpers.HexDecode($t18_19);
+        pubkey.$set($t20_21);
+        $t21_22 = showApp();
         $block = 9; break;
         break;
       }
@@ -241,7 +4065,7 @@ export function main() {
         break;
       }
       case 10: {
-        $t20_21 = showLogin();
+        $t22_23 = showLogin();
         $block = 9; break;
         break;
       }
@@ -354,7 +4178,7 @@ export function showLogin() {
   $t24_25 = common$jsbridge$dom.SetStyle($t20_21, 'marginBottom', '4px');
   $t25_26 = common$jsbridge$dom.AppendChild($t2_3, $t20_21);
   $t26_27 = common$jsbridge$dom.CreateElement('span');
-  $t27_28 = common$jsbridge$dom.SetTextContent($t26_27, 'v0.65.55');
+  $t27_28 = common$jsbridge$dom.SetTextContent($t26_27, 'v0.65.57');
   $t28_29 = common$jsbridge$dom.SetStyle($t26_27, 'color', 'var(--muted)');
   $t29_30 = common$jsbridge$dom.SetStyle($t26_27, 'fontSize', '12px');
   $t30_31 = common$jsbridge$dom.AppendChild($t2_3, $t26_27);
@@ -1353,7 +5177,7 @@ export function showApp() {
         $t314_315 = common$jsbridge$dom.RegisterCallback(showApp$10);
         $t315_316 = common$jsbridge$dom.AddEventListener($t313_314, 'click', $t314_315);
         $t316_317 = common$jsbridge$dom.CreateElement('span');
-        $t317_318 = common$jsbridge$dom.SetTextContent($t316_317, 'smesh v0.65.55');
+        $t317_318 = common$jsbridge$dom.SetTextContent($t316_317, 'smesh v0.65.57');
         $t318_319 = common$jsbridge$dom.SetStyle($t316_317, 'marginLeft', 'auto');
         $t319_320 = common$jsbridge$dom.SetStyle($t316_317, 'color', 'var(--accent)');
         $t320_321 = common$jsbridge$dom.AppendChild($t233_234, $t316_317);
@@ -1554,6 +5378,7 @@ function showApp$3(logo, svg) {
   while (true) {
     switch ($block) {
       case 0: {
+        logoSVGCache.$set(svg);
         $t0_1 = logo.$get();
         $t1_2 = common$jsbridge$dom.SetInnerHTML($t0_1, svg);
         $t2_3 = logo.$get();
@@ -6890,7 +10715,7 @@ function verifyNip05$1(badge, local, pubkeyHex, body) {
 }
 
 export function renderProfilePage(pk) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129, $t129_130, $t130_131, $t131_132, $t132_133, $t133_134, $t134_135, $t135_136, $t136_137, $t137_138, $t138_139, $t139_140, $t140_141, $t141_142, $t142_143, $t143_144, $t144_145, $t145_146, $t146_147, $t147_148, $t148_149, $t149_150, $t150_151, $t151_152, $t152_153, $t153_154, $t154_155, $t155_156, $t156_157, $t157_158, $t158_159, $t159_160, $t160_161, $t161_162, $t162_163, $t163_164, $t164_165, $t165_166, $t166_167, $t167_168, $t168_169, $t169_170, $t170_171, $t171_172, $t172_173, $t173_174, $t174_175, $t175_176, $t176_177, $t177_178, $t178_179, $t179_180, $t180_181, $t181_182, $t182_183, $t183_184, $t184_185, $t185_186, $t186_187, $t187_188, $t188_189, $t189_190, $t190_191, $t191_192, $t192_193, $t193_194, $t194_195, $t195_196, $t196_197, $t197_198, $t198_199, $t199_200, $t200_201, $t201_202, $t202_203, $t203_204, $t204_205, $t205_206, $t206_207, $t207_208, $t208_209, $t209_210, $t210_211, $t211_212, $t212_213, $t213_214, $t214_215, $t215_216, $t216_217, $t217_218, $t218_219, $t219_220, $t220_221, $t221_222, $t222_223, $t223_224, $t224_225, $t225_226, $t226_227, $t227_228, $t228_229, $t229_230, $t230_231, $t231_232, $t232_233, $t233_234, $t234_235, $t235_236, $t236_237, $t237_238, $t238_239, $t239_240, $t240_241, $t241_242, $t242_243, $t243_244, $t244_245, $t245_246, $t246_247, $t247_248, $t248_249, $t249_250, $t250_251, $t251_252;
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59, $t59_60, $t60_61, $t61_62, $t62_63, $t63_64, $t64_65, $t65_66, $t66_67, $t67_68, $t68_69, $t69_70, $t70_71, $t71_72, $t72_73, $t73_74, $t74_75, $t75_76, $t76_77, $t77_78, $t78_79, $t79_80, $t80_81, $t81_82, $t82_83, $t83_84, $t84_85, $t85_86, $t86_87, $t87_88, $t88_89, $t89_90, $t90_91, $t91_92, $t92_93, $t93_94, $t94_95, $t95_96, $t96_97, $t97_98, $t98_99, $t99_100, $t100_101, $t101_102, $t102_103, $t103_104, $t104_105, $t105_106, $t106_107, $t107_108, $t108_109, $t109_110, $t110_111, $t111_112, $t112_113, $t113_114, $t114_115, $t115_116, $t116_117, $t117_118, $t118_119, $t119_120, $t120_121, $t121_122, $t122_123, $t123_124, $t124_125, $t125_126, $t126_127, $t127_128, $t128_129, $t129_130, $t130_131, $t131_132, $t132_133, $t133_134, $t134_135, $t135_136, $t136_137, $t137_138, $t138_139, $t139_140, $t140_141, $t141_142, $t142_143, $t143_144, $t144_145, $t145_146, $t146_147, $t147_148, $t148_149, $t149_150, $t150_151, $t151_152, $t152_153, $t153_154, $t154_155, $t155_156, $t156_157, $t157_158, $t158_159, $t159_160, $t160_161, $t161_162, $t162_163, $t163_164, $t164_165, $t165_166, $t166_167, $t167_168, $t168_169, $t169_170, $t170_171, $t171_172, $t172_173, $t173_174, $t174_175, $t175_176, $t176_177, $t177_178, $t178_179, $t179_180, $t180_181, $t181_182, $t182_183, $t183_184, $t184_185, $t185_186, $t186_187, $t187_188, $t188_189, $t189_190, $t190_191, $t191_192, $t192_193, $t193_194, $t194_195, $t195_196, $t196_197, $t197_198, $t198_199, $t199_200, $t200_201, $t201_202, $t202_203, $t203_204, $t204_205, $t205_206, $t206_207, $t207_208, $t208_209, $t209_210, $t210_211, $t211_212, $t212_213, $t213_214, $t214_215, $t215_216, $t216_217, $t217_218, $t218_219, $t219_220, $t220_221, $t221_222, $t222_223, $t223_224, $t224_225, $t225_226, $t226_227, $t227_228, $t228_229, $t229_230, $t230_231, $t231_232, $t232_233, $t233_234, $t234_235, $t235_236, $t236_237, $t237_238, $t238_239, $t239_240, $t240_241, $t241_242, $t242_243, $t243_244, $t244_245, $t245_246, $t246_247, $t247_248, $t248_249, $t249_250, $t250_251, $t251_252, $t252_253, $t253_254, $t254_255, $t255_256, $t256_257, $t257_258, $t258_259, $t259_260, $t260_261, $t261_262, $t262_263, $t263_264, $t264_265, $t265_266, $t266_267, $t267_268, $t268_269, $t269_270, $t270_271, $t271_272;
   let $block = 0;
   while (true) {
     switch ($block) {
@@ -6965,8 +10790,10 @@ export function renderProfilePage(pk) {
         $t39_40 = common$jsbridge$dom.SetStyle($t38_39, 'display', 'flex');
         $t40_41 = common$jsbridge$dom.SetStyle($t38_39, 'gap', '16px');
         $t41_42 = common$jsbridge$dom.SetStyle($t38_39, 'alignItems', 'flex-start');
-        $t42_43 = ($t10_11 !== '');
-        if ($t42_43) {
+        $t42_43 = common$helpers.HexDecode(pk);
+        $t43_44 = common$helpers.EncodeNpub($t42_43);
+        $t44_45 = ($t10_11 !== '');
+        if ($t44_45) {
           $block = 6; break;
         }
         else {
@@ -6975,31 +10802,37 @@ export function renderProfilePage(pk) {
         break;
       }
       case 5: {
-        $t43_44 = common$jsbridge$dom.SetStyle($t28_29, 'margin', '16px');
+        $t45_46 = common$jsbridge$dom.SetStyle($t28_29, 'margin', '16px');
         $block = 4; break;
         break;
       }
       case 6: {
-        $t44_45 = common$jsbridge$dom.CreateElement('img');
-        $t45_46 = common$jsbridge$dom.SetAttribute($t44_45, 'src', $t10_11);
-        $t46_47 = common$jsbridge$dom.SetAttribute($t44_45, 'width', '64');
-        $t47_48 = common$jsbridge$dom.SetAttribute($t44_45, 'height', '64');
-        $t48_49 = common$jsbridge$dom.SetStyle($t44_45, 'borderRadius', '50%');
-        $t49_50 = common$jsbridge$dom.SetStyle($t44_45, 'objectFit', 'cover');
-        $t50_51 = common$jsbridge$dom.SetStyle($t44_45, 'flexShrink', '0');
-        $t51_52 = common$jsbridge$dom.SetStyle($t44_45, 'border', '3px solid var(--bg)');
-        $t52_53 = common$jsbridge$dom.SetAttribute($t44_45, 'onerror', 'this.style.display=\'none\'');
-        $t53_54 = common$jsbridge$dom.AppendChild($t38_39, $t44_45);
+        $t46_47 = common$jsbridge$dom.CreateElement('img');
+        $t47_48 = common$jsbridge$dom.SetAttribute($t46_47, 'src', $t10_11);
+        $t48_49 = common$jsbridge$dom.SetAttribute($t46_47, 'width', '64');
+        $t49_50 = common$jsbridge$dom.SetAttribute($t46_47, 'height', '64');
+        $t50_51 = common$jsbridge$dom.SetStyle($t46_47, 'borderRadius', '50%');
+        $t51_52 = common$jsbridge$dom.SetStyle($t46_47, 'objectFit', 'cover');
+        $t52_53 = common$jsbridge$dom.SetStyle($t46_47, 'flexShrink', '0');
+        $t53_54 = common$jsbridge$dom.SetStyle($t46_47, 'border', '3px solid var(--bg)');
+        $t54_55 = common$jsbridge$dom.SetStyle($t46_47, 'cursor', 'pointer');
+        $t55_56 = common$jsbridge$dom.SetAttribute($t46_47, 'onerror', 'this.style.display=\'none\'');
+        $t56_57 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t56_57.$set($t43_44);
+        $t57_58 = renderProfilePage$1.bind(null, $t56_57);
+        $t58_59 = common$jsbridge$dom.RegisterCallback($t57_58);
+        $t59_60 = common$jsbridge$dom.AddEventListener($t46_47, 'click', $t58_59);
+        $t60_61 = common$jsbridge$dom.AppendChild($t38_39, $t46_47);
         $block = 7; break;
         break;
       }
       case 7: {
-        $t54_55 = common$jsbridge$dom.CreateElement('div');
-        $t55_56 = common$jsbridge$dom.SetStyle($t54_55, 'minWidth', '0');
-        $t56_57 = common$jsbridge$dom.SetStyle($t54_55, 'flex', '1');
-        $t57_58 = common$jsbridge$dom.SetStyle($t54_55, 'overflow', 'hidden');
-        $t58_59 = ($t8_9 !== '');
-        if ($t58_59) {
+        $t61_62 = common$jsbridge$dom.CreateElement('div');
+        $t62_63 = common$jsbridge$dom.SetStyle($t61_62, 'minWidth', '0');
+        $t63_64 = common$jsbridge$dom.SetStyle($t61_62, 'flex', '1');
+        $t64_65 = common$jsbridge$dom.SetStyle($t61_62, 'overflow', 'hidden');
+        $t65_66 = ($t8_9 !== '');
+        if ($t65_66) {
           $block = 8; break;
         }
         else {
@@ -7008,18 +10841,24 @@ export function renderProfilePage(pk) {
         break;
       }
       case 8: {
-        $t59_60 = common$jsbridge$dom.CreateElement('div');
-        $t60_61 = common$jsbridge$dom.SetTextContent($t59_60, $t8_9);
-        $t61_62 = common$jsbridge$dom.SetStyle($t59_60, 'fontSize', '20px');
-        $t62_63 = common$jsbridge$dom.SetStyle($t59_60, 'fontWeight', 'bold');
-        $t63_64 = common$jsbridge$dom.SetStyle($t59_60, 'fontFamily', 'system-ui, sans-serif, \'Noto Color Emoji\'');
-        $t64_65 = common$jsbridge$dom.AppendChild($t54_55, $t59_60);
+        $t66_67 = common$jsbridge$dom.CreateElement('div');
+        $t67_68 = common$jsbridge$dom.SetTextContent($t66_67, $t8_9);
+        $t68_69 = common$jsbridge$dom.SetStyle($t66_67, 'fontSize', '20px');
+        $t69_70 = common$jsbridge$dom.SetStyle($t66_67, 'fontWeight', 'bold');
+        $t70_71 = common$jsbridge$dom.SetStyle($t66_67, 'fontFamily', 'system-ui, sans-serif, \'Noto Color Emoji\'');
+        $t71_72 = common$jsbridge$dom.SetStyle($t66_67, 'cursor', 'pointer');
+        $t72_73 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t72_73.$set($t43_44);
+        $t73_74 = renderProfilePage$2.bind(null, $t72_73);
+        $t74_75 = common$jsbridge$dom.RegisterCallback($t73_74);
+        $t75_76 = common$jsbridge$dom.AddEventListener($t66_67, 'click', $t74_75);
+        $t76_77 = common$jsbridge$dom.AppendChild($t61_62, $t66_67);
         $block = 9; break;
         break;
       }
       case 9: {
-        $t65_66 = ($t14_15 !== '');
-        if ($t65_66) {
+        $t77_78 = ($t14_15 !== '');
+        if ($t77_78) {
           $block = 10; break;
         }
         else {
@@ -7028,49 +10867,58 @@ export function renderProfilePage(pk) {
         break;
       }
       case 10: {
-        $t66_67 = common$jsbridge$dom.CreateElement('div');
-        $t67_68 = common$jsbridge$dom.SetStyle($t66_67, 'display', 'flex');
-        $t68_69 = common$jsbridge$dom.SetStyle($t66_67, 'alignItems', 'center');
-        $t69_70 = common$jsbridge$dom.SetStyle($t66_67, 'gap', '4px');
-        $t70_71 = common$jsbridge$dom.CreateElement('span');
-        $t71_72 = common$jsbridge$dom.SetTextContent($t70_71, $t14_15);
-        $t72_73 = common$jsbridge$dom.SetStyle($t70_71, 'color', 'var(--muted)');
-        $t73_74 = common$jsbridge$dom.SetStyle($t70_71, 'fontSize', '13px');
-        $t74_75 = common$jsbridge$dom.AppendChild($t66_67, $t70_71);
-        $t75_76 = common$jsbridge$dom.CreateElement('span');
-        $t76_77 = common$jsbridge$dom.SetStyle($t75_76, 'fontSize', '14px');
-        $t77_78 = common$jsbridge$dom.AppendChild($t66_67, $t75_76);
-        $t78_79 = common$jsbridge$dom.AppendChild($t54_55, $t66_67);
-        $t79_80 = verifyNip05($t14_15, pk, $t75_76);
+        $t78_79 = common$jsbridge$dom.CreateElement('div');
+        $t79_80 = common$jsbridge$dom.SetStyle($t78_79, 'display', 'flex');
+        $t80_81 = common$jsbridge$dom.SetStyle($t78_79, 'alignItems', 'center');
+        $t81_82 = common$jsbridge$dom.SetStyle($t78_79, 'gap', '4px');
+        $t82_83 = common$jsbridge$dom.CreateElement('span');
+        $t83_84 = common$jsbridge$dom.SetTextContent($t82_83, $t14_15);
+        $t84_85 = common$jsbridge$dom.SetStyle($t82_83, 'color', 'var(--muted)');
+        $t85_86 = common$jsbridge$dom.SetStyle($t82_83, 'fontSize', '13px');
+        $t86_87 = common$jsbridge$dom.AppendChild($t78_79, $t82_83);
+        $t87_88 = common$jsbridge$dom.CreateElement('span');
+        $t88_89 = common$jsbridge$dom.SetStyle($t87_88, 'fontSize', '14px');
+        $t89_90 = common$jsbridge$dom.AppendChild($t78_79, $t87_88);
+        $t90_91 = common$jsbridge$dom.AppendChild($t61_62, $t78_79);
+        $t91_92 = verifyNip05($t14_15, pk, $t87_88);
         $block = 11; break;
         break;
       }
       case 11: {
-        $t80_81 = common$helpers.HexDecode(pk);
-        $t81_82 = common$helpers.EncodeNpub($t80_81);
-        $t82_83 = common$jsbridge$dom.CreateElement('div');
-        $t83_84 = common$jsbridge$dom.SetStyle($t82_83, 'display', 'flex');
-        $t84_85 = common$jsbridge$dom.SetStyle($t82_83, 'alignItems', 'flex-start');
-        $t85_86 = common$jsbridge$dom.SetStyle($t82_83, 'gap', '6px');
-        $t86_87 = common$jsbridge$dom.SetStyle($t82_83, 'marginTop', '2px');
-        $t87_88 = common$jsbridge$dom.CreateElement('span');
-        $t88_89 = common$jsbridge$dom.SetStyle($t87_88, 'color', 'var(--muted)');
-        $t89_90 = common$jsbridge$dom.SetStyle($t87_88, 'fontSize', '12px');
-        $t90_91 = common$jsbridge$dom.SetStyle($t87_88, 'wordBreak', 'break-all');
-        $t91_92 = common$jsbridge$dom.SetTextContent($t87_88, $t81_82);
-        $t92_93 = common$jsbridge$dom.AppendChild($t82_83, $t87_88);
-        $t93_94 = common$jsbridge$dom.CreateElement('span');
-        $t94_95 = common$jsbridge$dom.SetTextContent($t93_94, 'copy');
-        $t95_96 = common$jsbridge$dom.SetStyle($t93_94, 'color', 'var(--accent)');
-        $t96_97 = common$jsbridge$dom.SetStyle($t93_94, 'fontSize', '11px');
-        $t97_98 = common$jsbridge$dom.SetStyle($t93_94, 'cursor', 'pointer');
-        $t98_99 = ('navigator.clipboard.writeText(\'' + $t81_82);
-        $t99_100 = ($t98_99 + '\').then(()=>{this.textContent=\'copied!\'});setTimeout(()=>{this.textContent=\'copy\'},1500)');
-        $t100_101 = common$jsbridge$dom.SetAttribute($t93_94, 'onclick', $t99_100);
-        $t101_102 = common$jsbridge$dom.AppendChild($t82_83, $t93_94);
-        $t102_103 = common$jsbridge$dom.AppendChild($t54_55, $t82_83);
-        $t103_104 = ($t13_14 !== '');
-        if ($t103_104) {
+        $t92_93 = common$jsbridge$dom.CreateElement('div');
+        $t93_94 = common$jsbridge$dom.SetStyle($t92_93, 'display', 'flex');
+        $t94_95 = common$jsbridge$dom.SetStyle($t92_93, 'alignItems', 'flex-start');
+        $t95_96 = common$jsbridge$dom.SetStyle($t92_93, 'gap', '6px');
+        $t96_97 = common$jsbridge$dom.SetStyle($t92_93, 'marginTop', '2px');
+        $t97_98 = common$jsbridge$dom.CreateElement('span');
+        $t98_99 = common$jsbridge$dom.SetStyle($t97_98, 'color', 'var(--muted)');
+        $t99_100 = common$jsbridge$dom.SetStyle($t97_98, 'fontSize', '12px');
+        $t100_101 = common$jsbridge$dom.SetStyle($t97_98, 'wordBreak', 'break-all');
+        $t101_102 = common$jsbridge$dom.SetTextContent($t97_98, $t43_44);
+        $t102_103 = common$jsbridge$dom.AppendChild($t92_93, $t97_98);
+        $t103_104 = common$jsbridge$dom.CreateElement('span');
+        $t104_105 = common$jsbridge$dom.SetTextContent($t103_104, 'copy');
+        $t105_106 = common$jsbridge$dom.SetStyle($t103_104, 'color', 'var(--accent)');
+        $t106_107 = common$jsbridge$dom.SetStyle($t103_104, 'fontSize', '11px');
+        $t107_108 = common$jsbridge$dom.SetStyle($t103_104, 'cursor', 'pointer');
+        $t108_109 = ('navigator.clipboard.writeText(\'' + $t43_44);
+        $t109_110 = ($t108_109 + '\').then(()=>{this.textContent=\'copied!\'});setTimeout(()=>{this.textContent=\'copy\'},1500)');
+        $t110_111 = common$jsbridge$dom.SetAttribute($t103_104, 'onclick', $t109_110);
+        $t111_112 = common$jsbridge$dom.AppendChild($t92_93, $t103_104);
+        $t112_113 = common$jsbridge$dom.CreateElement('span');
+        $t113_114 = common$jsbridge$dom.SetTextContent($t112_113, 'qr');
+        $t114_115 = common$jsbridge$dom.SetStyle($t112_113, 'color', 'var(--accent)');
+        $t115_116 = common$jsbridge$dom.SetStyle($t112_113, 'fontSize', '11px');
+        $t116_117 = common$jsbridge$dom.SetStyle($t112_113, 'cursor', 'pointer');
+        $t117_118 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t117_118.$set($t43_44);
+        $t118_119 = renderProfilePage$3.bind(null, $t117_118);
+        $t119_120 = common$jsbridge$dom.RegisterCallback($t118_119);
+        $t120_121 = common$jsbridge$dom.AddEventListener($t112_113, 'click', $t119_120);
+        $t121_122 = common$jsbridge$dom.AppendChild($t92_93, $t112_113);
+        $t122_123 = common$jsbridge$dom.AppendChild($t61_62, $t92_93);
+        $t123_124 = ($t13_14 !== '');
+        if ($t123_124) {
           $block = 12; break;
         }
         else {
@@ -7079,13 +10927,13 @@ export function renderProfilePage(pk) {
         break;
       }
       case 12: {
-        $t104_105 = common$jsbridge$dom.CreateElement('div');
-        $t105_106 = common$jsbridge$dom.SetStyle($t104_105, 'display', 'flex');
-        $t106_107 = common$jsbridge$dom.SetStyle($t104_105, 'gap', '12px');
-        $t107_108 = common$jsbridge$dom.SetStyle($t104_105, 'marginTop', '6px');
-        $t108_109 = common$jsbridge$dom.SetStyle($t104_105, 'fontSize', '12px');
-        $t109_110 = ($t13_14 !== '');
-        if ($t109_110) {
+        $t124_125 = common$jsbridge$dom.CreateElement('div');
+        $t125_126 = common$jsbridge$dom.SetStyle($t124_125, 'display', 'flex');
+        $t126_127 = common$jsbridge$dom.SetStyle($t124_125, 'gap', '12px');
+        $t127_128 = common$jsbridge$dom.SetStyle($t124_125, 'marginTop', '6px');
+        $t128_129 = common$jsbridge$dom.SetStyle($t124_125, 'fontSize', '12px');
+        $t129_130 = ($t13_14 !== '');
+        if ($t129_130) {
           $block = 15; break;
         }
         else {
@@ -7094,11 +10942,11 @@ export function renderProfilePage(pk) {
         break;
       }
       case 13: {
-        $t110_111 = common$jsbridge$dom.AppendChild($t38_39, $t54_55);
-        $t111_112 = common$jsbridge$dom.AppendChild($t28_29, $t38_39);
-        $t112_113 = pubhex.$get();
-        $t113_114 = (pk !== $t112_113);
-        if ($t113_114) {
+        $t130_131 = common$jsbridge$dom.AppendChild($t38_39, $t61_62);
+        $t131_132 = common$jsbridge$dom.AppendChild($t28_29, $t38_39);
+        $t132_133 = pubhex.$get();
+        $t133_134 = (pk !== $t132_133);
+        if ($t133_134) {
           $block = 19; break;
         }
         else {
@@ -7107,8 +10955,8 @@ export function renderProfilePage(pk) {
         break;
       }
       case 14: {
-        $t114_115 = ($t15_16 !== '');
-        if ($t114_115) {
+        $t134_135 = ($t15_16 !== '');
+        if ($t134_135) {
           $block = 12; break;
         }
         else {
@@ -7117,17 +10965,17 @@ export function renderProfilePage(pk) {
         break;
       }
       case 15: {
-        $t115_116 = common$jsbridge$dom.CreateElement('span');
-        $t116_117 = common$jsbridge$dom.SetStyle($t115_116, 'color', 'var(--accent)');
-        $t117_118 = common$jsbridge$dom.SetStyle($t115_116, 'wordBreak', 'break-all');
-        $t118_119 = common$jsbridge$dom.SetTextContent($t115_116, $t13_14);
-        $t119_120 = common$jsbridge$dom.AppendChild($t104_105, $t115_116);
+        $t135_136 = common$jsbridge$dom.CreateElement('span');
+        $t136_137 = common$jsbridge$dom.SetStyle($t135_136, 'color', 'var(--accent)');
+        $t137_138 = common$jsbridge$dom.SetStyle($t135_136, 'wordBreak', 'break-all');
+        $t138_139 = common$jsbridge$dom.SetTextContent($t135_136, $t13_14);
+        $t139_140 = common$jsbridge$dom.AppendChild($t124_125, $t135_136);
         $block = 16; break;
         break;
       }
       case 16: {
-        $t120_121 = ($t15_16 !== '');
-        if ($t120_121) {
+        $t140_141 = ($t15_16 !== '');
+        if ($t140_141) {
           $block = 17; break;
         }
         else {
@@ -7136,47 +10984,47 @@ export function renderProfilePage(pk) {
         break;
       }
       case 17: {
-        $t121_122 = common$jsbridge$dom.CreateElement('span');
-        $t122_123 = common$jsbridge$dom.SetStyle($t121_122, 'color', 'var(--muted)');
-        $t123_124 = common$jsbridge$dom.SetStyle($t121_122, 'wordBreak', 'break-all');
-        $t124_125 = ('⚡ ' + $t15_16);
-        $t125_126 = common$jsbridge$dom.SetTextContent($t121_122, $t124_125);
-        $t126_127 = common$jsbridge$dom.AppendChild($t104_105, $t121_122);
+        $t141_142 = common$jsbridge$dom.CreateElement('span');
+        $t142_143 = common$jsbridge$dom.SetStyle($t141_142, 'color', 'var(--muted)');
+        $t143_144 = common$jsbridge$dom.SetStyle($t141_142, 'wordBreak', 'break-all');
+        $t144_145 = ('⚡ ' + $t15_16);
+        $t145_146 = common$jsbridge$dom.SetTextContent($t141_142, $t144_145);
+        $t146_147 = common$jsbridge$dom.AppendChild($t124_125, $t141_142);
         $block = 18; break;
         break;
       }
       case 18: {
-        $t127_128 = common$jsbridge$dom.AppendChild($t54_55, $t104_105);
+        $t147_148 = common$jsbridge$dom.AppendChild($t61_62, $t124_125);
         $block = 13; break;
         break;
       }
       case 19: {
-        $t128_129 = common$jsbridge$dom.CreateElement('button');
-        $t129_130 = common$jsbridge$dom.SetTextContent($t128_129, 'message');
-        $t130_131 = common$jsbridge$dom.SetStyle($t128_129, 'padding', '6px 16px');
-        $t131_132 = common$jsbridge$dom.SetStyle($t128_129, 'fontFamily', '\'Fira Code\', monospace');
-        $t132_133 = common$jsbridge$dom.SetStyle($t128_129, 'fontSize', '12px');
-        $t133_134 = common$jsbridge$dom.SetStyle($t128_129, 'background', 'var(--accent)');
-        $t134_135 = common$jsbridge$dom.SetStyle($t128_129, 'color', '#000');
-        $t135_136 = common$jsbridge$dom.SetStyle($t128_129, 'border', 'none');
-        $t136_137 = common$jsbridge$dom.SetStyle($t128_129, 'borderRadius', '4px');
-        $t137_138 = common$jsbridge$dom.SetStyle($t128_129, 'cursor', 'pointer');
-        $t138_139 = common$jsbridge$dom.SetStyle($t128_129, 'marginTop', '12px');
-        $t139_140 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t139_140.$set(pk);
-        $t140_141 = renderProfilePage$1.bind(null, $t139_140);
-        $t141_142 = common$jsbridge$dom.RegisterCallback($t140_141);
-        $t142_143 = common$jsbridge$dom.AddEventListener($t128_129, 'click', $t141_142);
-        $t143_144 = common$jsbridge$dom.AppendChild($t28_29, $t128_129);
+        $t148_149 = common$jsbridge$dom.CreateElement('button');
+        $t149_150 = common$jsbridge$dom.SetTextContent($t148_149, 'message');
+        $t150_151 = common$jsbridge$dom.SetStyle($t148_149, 'padding', '6px 16px');
+        $t151_152 = common$jsbridge$dom.SetStyle($t148_149, 'fontFamily', '\'Fira Code\', monospace');
+        $t152_153 = common$jsbridge$dom.SetStyle($t148_149, 'fontSize', '12px');
+        $t153_154 = common$jsbridge$dom.SetStyle($t148_149, 'background', 'var(--accent)');
+        $t154_155 = common$jsbridge$dom.SetStyle($t148_149, 'color', '#000');
+        $t155_156 = common$jsbridge$dom.SetStyle($t148_149, 'border', 'none');
+        $t156_157 = common$jsbridge$dom.SetStyle($t148_149, 'borderRadius', '4px');
+        $t157_158 = common$jsbridge$dom.SetStyle($t148_149, 'cursor', 'pointer');
+        $t158_159 = common$jsbridge$dom.SetStyle($t148_149, 'marginTop', '12px');
+        $t159_160 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t159_160.$set(pk);
+        $t160_161 = renderProfilePage$4.bind(null, $t159_160);
+        $t161_162 = common$jsbridge$dom.RegisterCallback($t160_161);
+        $t162_163 = common$jsbridge$dom.AddEventListener($t148_149, 'click', $t161_162);
+        $t163_164 = common$jsbridge$dom.AppendChild($t28_29, $t148_149);
         $block = 20; break;
         break;
       }
       case 20: {
-        $t144_145 = profilePage.$get();
-        $t145_146 = common$jsbridge$dom.AppendChild($t144_145, $t28_29);
-        $t146_147 = $t11_12.$get();
-        $t147_148 = ($t146_147 !== '');
-        if ($t147_148) {
+        $t164_165 = profilePage.$get();
+        $t165_166 = common$jsbridge$dom.AppendChild($t164_165, $t28_29);
+        $t166_167 = $t11_12.$get();
+        $t167_168 = ($t166_167 !== '');
+        if ($t167_168) {
           $block = 21; break;
         }
         else {
@@ -7185,94 +11033,94 @@ export function renderProfilePage(pk) {
         break;
       }
       case 21: {
-        $t148_149 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t149_150 = common$jsbridge$dom.CreateElement('div');
-        $t148_149.$set($t149_150);
-        $t150_151 = $t148_149.$get();
-        $t151_152 = common$jsbridge$dom.SetStyle($t150_151, 'padding', '12px 16px');
-        $t152_153 = $t148_149.$get();
-        $t153_154 = common$jsbridge$dom.SetStyle($t152_153, 'fontSize', '14px');
-        $t154_155 = $t148_149.$get();
-        $t155_156 = common$jsbridge$dom.SetStyle($t154_155, 'lineHeight', '1.5');
-        $t156_157 = $t148_149.$get();
-        $t157_158 = common$jsbridge$dom.SetStyle($t156_157, 'fontFamily', 'system-ui, sans-serif, \'Noto Color Emoji\'');
-        $t158_159 = $t148_149.$get();
-        $t159_160 = common$jsbridge$dom.SetStyle($t158_159, 'wordBreak', 'break-word');
-        $t160_161 = $t11_12.$get();
-        $t161_162 = $rt.builtin.len($t160_161);
-        $t162_163 = ($t161_162 > 300);
-        $t163_164 = $t11_12.$get();
-        if ($t162_163) {
+        $t168_169 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t169_170 = common$jsbridge$dom.CreateElement('div');
+        $t168_169.$set($t169_170);
+        $t170_171 = $t168_169.$get();
+        $t171_172 = common$jsbridge$dom.SetStyle($t170_171, 'padding', '12px 16px');
+        $t172_173 = $t168_169.$get();
+        $t173_174 = common$jsbridge$dom.SetStyle($t172_173, 'fontSize', '14px');
+        $t174_175 = $t168_169.$get();
+        $t175_176 = common$jsbridge$dom.SetStyle($t174_175, 'lineHeight', '1.5');
+        $t176_177 = $t168_169.$get();
+        $t177_178 = common$jsbridge$dom.SetStyle($t176_177, 'fontFamily', 'system-ui, sans-serif, \'Noto Color Emoji\'');
+        $t178_179 = $t168_169.$get();
+        $t179_180 = common$jsbridge$dom.SetStyle($t178_179, 'wordBreak', 'break-word');
+        $t180_181 = $t11_12.$get();
+        $t181_182 = $rt.builtin.len($t180_181);
+        $t182_183 = ($t181_182 > 300);
+        $t183_184 = $t11_12.$get();
+        if ($t182_183) {
           $block = 23; break;
         }
         else {
-          $t216_217 = $t163_164;
+          $t236_237 = $t183_184;
           $block = 24; break;
         }
         break;
       }
       case 22: {
-        $t164_165 = common$jsbridge$dom.CreateElement('div');
-        $t165_166 = common$jsbridge$dom.SetStyle($t164_165, 'display', 'flex');
-        $t166_167 = common$jsbridge$dom.SetStyle($t164_165, 'gap', '0');
-        $t167_168 = common$jsbridge$dom.SetStyle($t164_165, 'margin', '0 16px');
-        $t168_169 = common$jsbridge$dom.SetStyle($t164_165, 'border', '1px solid var(--border)');
-        $t169_170 = common$jsbridge$dom.SetStyle($t164_165, 'borderRadius', '6px');
-        $t170_171 = common$jsbridge$dom.SetStyle($t164_165, 'overflow', 'hidden');
-        $t171_172 = $rt.builtin.makeMap('string');
-        profileTabBtns.$set($t171_172);
-        $t172_173 = makeProtoBtn('notes');
-        $t173_174 = common$jsbridge$dom.SetStyle($t172_173, 'cursor', 'pointer');
-        $t174_175 = profileTabBtns.$get();
-        $rt.builtin.mapUpdate($t174_175, 'notes', $t172_173);
-        $t175_176 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t175_176.$set(pk);
-        $t176_177 = renderProfilePage$3.bind(null, $t175_176);
-        $t177_178 = common$jsbridge$dom.RegisterCallback($t176_177);
-        $t178_179 = common$jsbridge$dom.AddEventListener($t172_173, 'click', $t177_178);
-        $t179_180 = common$jsbridge$dom.AppendChild($t164_165, $t172_173);
-        $t180_181 = makeProtoBtn('follows');
-        $t181_182 = common$jsbridge$dom.SetStyle($t180_181, 'cursor', 'pointer');
-        $t182_183 = profileTabBtns.$get();
-        $rt.builtin.mapUpdate($t182_183, 'follows', $t180_181);
-        $t183_184 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t183_184.$set(pk);
-        $t184_185 = renderProfilePage$4.bind(null, $t183_184);
-        $t185_186 = common$jsbridge$dom.RegisterCallback($t184_185);
-        $t186_187 = common$jsbridge$dom.AddEventListener($t180_181, 'click', $t185_186);
-        $t187_188 = common$jsbridge$dom.AppendChild($t164_165, $t180_181);
-        $t188_189 = makeProtoBtn('relays');
-        $t189_190 = common$jsbridge$dom.SetStyle($t188_189, 'cursor', 'pointer');
-        $t190_191 = profileTabBtns.$get();
-        $rt.builtin.mapUpdate($t190_191, 'relays', $t188_189);
-        $t191_192 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t191_192.$set(pk);
-        $t192_193 = renderProfilePage$5.bind(null, $t191_192);
-        $t193_194 = common$jsbridge$dom.RegisterCallback($t192_193);
-        $t194_195 = common$jsbridge$dom.AddEventListener($t188_189, 'click', $t193_194);
-        $t195_196 = common$jsbridge$dom.AppendChild($t164_165, $t188_189);
-        $t196_197 = makeProtoBtn('mutes');
-        $t197_198 = common$jsbridge$dom.SetStyle($t196_197, 'cursor', 'pointer');
-        $t198_199 = profileTabBtns.$get();
-        $rt.builtin.mapUpdate($t198_199, 'mutes', $t196_197);
-        $t199_200 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t199_200.$set(pk);
-        $t200_201 = renderProfilePage$6.bind(null, $t199_200);
-        $t201_202 = common$jsbridge$dom.RegisterCallback($t200_201);
-        $t202_203 = common$jsbridge$dom.AddEventListener($t196_197, 'click', $t201_202);
-        $t203_204 = common$jsbridge$dom.AppendChild($t164_165, $t196_197);
-        $t204_205 = profilePage.$get();
-        $t205_206 = common$jsbridge$dom.AppendChild($t204_205, $t164_165);
-        $t206_207 = common$jsbridge$dom.CreateElement('div');
-        profileTabContent.$set($t206_207);
-        $t207_208 = profileTabContent.$get();
-        $t208_209 = common$jsbridge$dom.SetStyle($t207_208, 'padding', '8px 0');
-        $t209_210 = profilePage.$get();
-        $t210_211 = profileTabContent.$get();
-        $t211_212 = common$jsbridge$dom.AppendChild($t209_210, $t210_211);
+        $t184_185 = common$jsbridge$dom.CreateElement('div');
+        $t185_186 = common$jsbridge$dom.SetStyle($t184_185, 'display', 'flex');
+        $t186_187 = common$jsbridge$dom.SetStyle($t184_185, 'gap', '0');
+        $t187_188 = common$jsbridge$dom.SetStyle($t184_185, 'margin', '0 16px');
+        $t188_189 = common$jsbridge$dom.SetStyle($t184_185, 'border', '1px solid var(--border)');
+        $t189_190 = common$jsbridge$dom.SetStyle($t184_185, 'borderRadius', '6px');
+        $t190_191 = common$jsbridge$dom.SetStyle($t184_185, 'overflow', 'hidden');
+        $t191_192 = $rt.builtin.makeMap('string');
+        profileTabBtns.$set($t191_192);
+        $t192_193 = makeProtoBtn('notes');
+        $t193_194 = common$jsbridge$dom.SetStyle($t192_193, 'cursor', 'pointer');
+        $t194_195 = profileTabBtns.$get();
+        $rt.builtin.mapUpdate($t194_195, 'notes', $t192_193);
+        $t195_196 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t195_196.$set(pk);
+        $t196_197 = renderProfilePage$6.bind(null, $t195_196);
+        $t197_198 = common$jsbridge$dom.RegisterCallback($t196_197);
+        $t198_199 = common$jsbridge$dom.AddEventListener($t192_193, 'click', $t197_198);
+        $t199_200 = common$jsbridge$dom.AppendChild($t184_185, $t192_193);
+        $t200_201 = makeProtoBtn('follows');
+        $t201_202 = common$jsbridge$dom.SetStyle($t200_201, 'cursor', 'pointer');
+        $t202_203 = profileTabBtns.$get();
+        $rt.builtin.mapUpdate($t202_203, 'follows', $t200_201);
+        $t203_204 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t203_204.$set(pk);
+        $t204_205 = renderProfilePage$7.bind(null, $t203_204);
+        $t205_206 = common$jsbridge$dom.RegisterCallback($t204_205);
+        $t206_207 = common$jsbridge$dom.AddEventListener($t200_201, 'click', $t205_206);
+        $t207_208 = common$jsbridge$dom.AppendChild($t184_185, $t200_201);
+        $t208_209 = makeProtoBtn('relays');
+        $t209_210 = common$jsbridge$dom.SetStyle($t208_209, 'cursor', 'pointer');
+        $t210_211 = profileTabBtns.$get();
+        $rt.builtin.mapUpdate($t210_211, 'relays', $t208_209);
+        $t211_212 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t211_212.$set(pk);
+        $t212_213 = renderProfilePage$8.bind(null, $t211_212);
+        $t213_214 = common$jsbridge$dom.RegisterCallback($t212_213);
+        $t214_215 = common$jsbridge$dom.AddEventListener($t208_209, 'click', $t213_214);
+        $t215_216 = common$jsbridge$dom.AppendChild($t184_185, $t208_209);
+        $t216_217 = makeProtoBtn('mutes');
+        $t217_218 = common$jsbridge$dom.SetStyle($t216_217, 'cursor', 'pointer');
+        $t218_219 = profileTabBtns.$get();
+        $rt.builtin.mapUpdate($t218_219, 'mutes', $t216_217);
+        $t219_220 = { $value: '', $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t219_220.$set(pk);
+        $t220_221 = renderProfilePage$9.bind(null, $t219_220);
+        $t221_222 = common$jsbridge$dom.RegisterCallback($t220_221);
+        $t222_223 = common$jsbridge$dom.AddEventListener($t216_217, 'click', $t221_222);
+        $t223_224 = common$jsbridge$dom.AppendChild($t184_185, $t216_217);
+        $t224_225 = profilePage.$get();
+        $t225_226 = common$jsbridge$dom.AppendChild($t224_225, $t184_185);
+        $t226_227 = common$jsbridge$dom.CreateElement('div');
+        profileTabContent.$set($t226_227);
+        $t227_228 = profileTabContent.$get();
+        $t228_229 = common$jsbridge$dom.SetStyle($t227_228, 'padding', '8px 0');
+        $t229_230 = profilePage.$get();
+        $t230_231 = profileTabContent.$get();
+        $t231_232 = common$jsbridge$dom.AppendChild($t229_230, $t230_231);
         profileTab.$set('');
-        $t212_213 = ($t0_1 !== '');
-        if ($t212_213) {
+        $t232_233 = ($t0_1 !== '');
+        if ($t232_233) {
           $block = 26; break;
         }
         else {
@@ -7281,21 +11129,21 @@ export function renderProfilePage(pk) {
         break;
       }
       case 23: {
-        $t213_214 = $t11_12.$get();
-        $t214_215 = $rt.builtin.stringSlice($t213_214, undefined, 300);
-        $t215_216 = ($t214_215 + '...');
-        $t216_217 = $t215_216;
+        $t233_234 = $t11_12.$get();
+        $t234_235 = $rt.builtin.stringSlice($t233_234, undefined, 300);
+        $t235_236 = ($t234_235 + '...');
+        $t236_237 = $t235_236;
         $block = 24; break;
         break;
       }
       case 24: {
-        $t217_218 = $t148_149.$get();
-        $t218_219 = renderMarkdown($t216_217);
-        $t219_220 = common$jsbridge$dom.SetInnerHTML($t217_218, $t218_219);
-        $t220_221 = profilePage.$get();
-        $t221_222 = $t148_149.$get();
-        $t222_223 = common$jsbridge$dom.AppendChild($t220_221, $t221_222);
-        if ($t162_163) {
+        $t237_238 = $t168_169.$get();
+        $t238_239 = renderMarkdown($t236_237);
+        $t239_240 = common$jsbridge$dom.SetInnerHTML($t237_238, $t238_239);
+        $t240_241 = profilePage.$get();
+        $t241_242 = $t168_169.$get();
+        $t242_243 = common$jsbridge$dom.AppendChild($t240_241, $t241_242);
+        if ($t182_183) {
           $block = 25; break;
         }
         else {
@@ -7304,41 +11152,41 @@ export function renderProfilePage(pk) {
         break;
       }
       case 25: {
-        $t223_224 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t224_225 = common$jsbridge$dom.CreateElement('span');
-        $t223_224.$set($t224_225);
-        $t225_226 = $t223_224.$get();
-        $t226_227 = common$jsbridge$dom.SetTextContent($t225_226, 'show more');
-        $t227_228 = $t223_224.$get();
-        $t228_229 = common$jsbridge$dom.SetStyle($t227_228, 'color', 'var(--accent)');
-        $t229_230 = $t223_224.$get();
-        $t230_231 = common$jsbridge$dom.SetStyle($t229_230, 'cursor', 'pointer');
-        $t231_232 = $t223_224.$get();
-        $t232_233 = common$jsbridge$dom.SetStyle($t231_232, 'fontSize', '13px');
-        $t233_234 = $t223_224.$get();
-        $t234_235 = common$jsbridge$dom.SetStyle($t233_234, 'display', 'inline-block');
-        $t235_236 = $t223_224.$get();
-        $t236_237 = common$jsbridge$dom.SetStyle($t235_236, 'padding', '0 16px 8px');
-        $t237_238 = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t237_238.$set(false);
-        $t238_239 = $t223_224.$get();
-        $t239_240 = renderProfilePage$2.bind(null, $t237_238, $t148_149, $t11_12, $t223_224);
-        $t240_241 = common$jsbridge$dom.RegisterCallback($t239_240);
-        $t241_242 = common$jsbridge$dom.AddEventListener($t238_239, 'click', $t240_241);
-        $t242_243 = profilePage.$get();
-        $t243_244 = $t223_224.$get();
-        $t244_245 = common$jsbridge$dom.AppendChild($t242_243, $t243_244);
+        $t243_244 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t244_245 = common$jsbridge$dom.CreateElement('span');
+        $t243_244.$set($t244_245);
+        $t245_246 = $t243_244.$get();
+        $t246_247 = common$jsbridge$dom.SetTextContent($t245_246, 'show more');
+        $t247_248 = $t243_244.$get();
+        $t248_249 = common$jsbridge$dom.SetStyle($t247_248, 'color', 'var(--accent)');
+        $t249_250 = $t243_244.$get();
+        $t250_251 = common$jsbridge$dom.SetStyle($t249_250, 'cursor', 'pointer');
+        $t251_252 = $t243_244.$get();
+        $t252_253 = common$jsbridge$dom.SetStyle($t251_252, 'fontSize', '13px');
+        $t253_254 = $t243_244.$get();
+        $t254_255 = common$jsbridge$dom.SetStyle($t253_254, 'display', 'inline-block');
+        $t255_256 = $t243_244.$get();
+        $t256_257 = common$jsbridge$dom.SetStyle($t255_256, 'padding', '0 16px 8px');
+        $t257_258 = { $value: false, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t257_258.$set(false);
+        $t258_259 = $t243_244.$get();
+        $t259_260 = renderProfilePage$5.bind(null, $t257_258, $t168_169, $t11_12, $t243_244);
+        $t260_261 = common$jsbridge$dom.RegisterCallback($t259_260);
+        $t261_262 = common$jsbridge$dom.AddEventListener($t258_259, 'click', $t260_261);
+        $t262_263 = profilePage.$get();
+        $t263_264 = $t243_244.$get();
+        $t264_265 = common$jsbridge$dom.AppendChild($t262_263, $t263_264);
         $block = 22; break;
         break;
       }
       case 26: {
-        $t245_246 = selectProfileTab($t0_1, pk);
+        $t265_266 = selectProfileTab($t0_1, pk);
         $block = 27; break;
         break;
       }
       case 27: {
-        $t246_247 = ($t8_9 !== '');
-        if ($t246_247) {
+        $t266_267 = ($t8_9 !== '');
+        if ($t266_267) {
           $block = 31; break;
         }
         else {
@@ -7347,13 +11195,13 @@ export function renderProfilePage(pk) {
         break;
       }
       case 28: {
-        $t247_248 = selectProfileTab('notes', pk);
+        $t267_268 = selectProfileTab('notes', pk);
         $block = 27; break;
         break;
       }
       case 29: {
-        $t248_249 = pageTitleEl.$get();
-        $t249_250 = common$jsbridge$dom.SetTextContent($t248_249, $t8_9);
+        $t268_269 = pageTitleEl.$get();
+        $t269_270 = common$jsbridge$dom.SetTextContent($t268_269, $t8_9);
         $block = 30; break;
         break;
       }
@@ -7362,9 +11210,9 @@ export function renderProfilePage(pk) {
         break;
       }
       case 31: {
-        $t250_251 = activePage.$get();
-        $t251_252 = ($t250_251 === 'profile');
-        if ($t251_252) {
+        $t270_271 = activePage.$get();
+        $t271_272 = ($t270_271 === 'profile');
+        if ($t271_272) {
           $block = 29; break;
         }
         else {
@@ -7376,7 +11224,28 @@ export function renderProfilePage(pk) {
   }
 }
 
-function renderProfilePage$1(peerPK) {
+function renderProfilePage$1(avNpub) {
+  let $t0_1, $t1_2;
+  $t0_1 = avNpub.$get();
+  $t1_2 = showQRModal($t0_1);
+  return;
+}
+
+function renderProfilePage$2(nameNpub) {
+  let $t0_1, $t1_2;
+  $t0_1 = nameNpub.$get();
+  $t1_2 = showQRModal($t0_1);
+  return;
+}
+
+function renderProfilePage$3(npubForQR) {
+  let $t0_1, $t1_2;
+  $t0_1 = npubForQR.$get();
+  $t1_2 = showQRModal($t0_1);
+  return;
+}
+
+function renderProfilePage$4(peerPK) {
   let $t0_1, $t1_2, $t2_3;
   $t0_1 = switchPage('messaging');
   $t1_2 = peerPK.$get();
@@ -7384,7 +11253,7 @@ function renderProfilePage$1(peerPK) {
   return;
 }
 
-function renderProfilePage$2(aboutExpanded, aboutEl, about, more) {
+function renderProfilePage$5(aboutExpanded, aboutEl, about, more) {
   let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17;
   let $block = 0;
   while (true) {
@@ -7432,28 +11301,28 @@ function renderProfilePage$2(aboutExpanded, aboutEl, about, more) {
   }
 }
 
-function renderProfilePage$3(tabNotesPK) {
+function renderProfilePage$6(tabNotesPK) {
   let $t0_1, $t1_2;
   $t0_1 = tabNotesPK.$get();
   $t1_2 = selectProfileTab('notes', $t0_1);
   return;
 }
 
-function renderProfilePage$4(tabFollowsPK) {
+function renderProfilePage$7(tabFollowsPK) {
   let $t0_1, $t1_2;
   $t0_1 = tabFollowsPK.$get();
   $t1_2 = selectProfileTab('follows', $t0_1);
   return;
 }
 
-function renderProfilePage$5(tabRelaysPK) {
+function renderProfilePage$8(tabRelaysPK) {
   let $t0_1, $t1_2;
   $t0_1 = tabRelaysPK.$get();
   $t1_2 = selectProfileTab('relays', $t0_1);
   return;
 }
 
-function renderProfilePage$6(tabMutesPK) {
+function renderProfilePage$9(tabMutesPK) {
   let $t0_1, $t1_2;
   $t0_1 = tabMutesPK.$get();
   $t1_2 = selectProfileTab('mutes', $t0_1);
@@ -12310,6 +16179,91 @@ export function toLower(s) {
       }
     }
   }
+}
+
+export function showQRModal(npubStr) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = logoSVGCache.$get();
+        $t1_2 = qrSVG(npubStr, 280, $t0_1);
+        $t2_3 = ($t1_2 === '');
+        if ($t2_3) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        return;
+        break;
+      }
+      case 2: {
+        $t3_4 = { $value: 0, $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t4_5 = common$jsbridge$dom.CreateElement('div');
+        $t3_4.$set($t4_5);
+        $t5_6 = $t3_4.$get();
+        $t6_7 = common$jsbridge$dom.SetStyle($t5_6, 'position', 'fixed');
+        $t7_8 = $t3_4.$get();
+        $t8_9 = common$jsbridge$dom.SetStyle($t7_8, 'inset', '0');
+        $t9_10 = $t3_4.$get();
+        $t10_11 = common$jsbridge$dom.SetStyle($t9_10, 'background', 'rgba(0,0,0,0.6)');
+        $t11_12 = $t3_4.$get();
+        $t12_13 = common$jsbridge$dom.SetStyle($t11_12, 'display', 'flex');
+        $t13_14 = $t3_4.$get();
+        $t14_15 = common$jsbridge$dom.SetStyle($t13_14, 'alignItems', 'center');
+        $t15_16 = $t3_4.$get();
+        $t16_17 = common$jsbridge$dom.SetStyle($t15_16, 'justifyContent', 'center');
+        $t17_18 = $t3_4.$get();
+        $t18_19 = common$jsbridge$dom.SetStyle($t17_18, 'zIndex', '9999');
+        $t19_20 = $t3_4.$get();
+        $t20_21 = common$jsbridge$dom.SetStyle($t19_20, 'cursor', 'pointer');
+        $t21_22 = $t3_4.$get();
+        $t22_23 = showQRModal$1.bind(null, $t3_4);
+        $t23_24 = common$jsbridge$dom.RegisterCallback($t22_23);
+        $t24_25 = common$jsbridge$dom.AddEventListener($t21_22, 'click', $t23_24);
+        $t25_26 = common$jsbridge$dom.CreateElement('div');
+        $t26_27 = common$jsbridge$dom.SetStyle($t25_26, 'background', 'white');
+        $t27_28 = common$jsbridge$dom.SetStyle($t25_26, 'borderRadius', '16px');
+        $t28_29 = common$jsbridge$dom.SetStyle($t25_26, 'padding', '24px');
+        $t29_30 = common$jsbridge$dom.SetStyle($t25_26, 'display', 'flex');
+        $t30_31 = common$jsbridge$dom.SetStyle($t25_26, 'flexDirection', 'column');
+        $t31_32 = common$jsbridge$dom.SetStyle($t25_26, 'alignItems', 'center');
+        $t32_33 = common$jsbridge$dom.SetStyle($t25_26, 'gap', '12px');
+        $t33_34 = common$jsbridge$dom.SetStyle($t25_26, 'cursor', 'default');
+        $t34_35 = common$jsbridge$dom.SetAttribute($t25_26, 'onclick', 'event.stopPropagation()');
+        $t35_36 = common$jsbridge$dom.SetInnerHTML($t25_26, $t1_2);
+        $t36_37 = common$jsbridge$dom.CreateElement('div');
+        $t37_38 = common$jsbridge$dom.SetStyle($t36_37, 'fontSize', '11px');
+        $t38_39 = common$jsbridge$dom.SetStyle($t36_37, 'color', '#666');
+        $t39_40 = common$jsbridge$dom.SetStyle($t36_37, 'wordBreak', 'break-all');
+        $t40_41 = common$jsbridge$dom.SetStyle($t36_37, 'textAlign', 'center');
+        $t41_42 = common$jsbridge$dom.SetStyle($t36_37, 'maxWidth', '280px');
+        $t42_43 = common$jsbridge$dom.SetStyle($t36_37, 'fontFamily', '\'Fira Code\', monospace');
+        $t43_44 = common$jsbridge$dom.SetTextContent($t36_37, npubStr);
+        $t44_45 = common$jsbridge$dom.AppendChild($t25_26, $t36_37);
+        $t45_46 = $t3_4.$get();
+        $t46_47 = common$jsbridge$dom.AppendChild($t45_46, $t25_26);
+        $t47_48 = common$jsbridge$dom.Body();
+        $t48_49 = $t3_4.$get();
+        $t49_50 = common$jsbridge$dom.AppendChild($t47_48, $t48_49);
+        return;
+        break;
+      }
+    }
+  }
+}
+
+function showQRModal$1(scrim) {
+  let $t0_1, $t1_2, $t2_3;
+  $t0_1 = common$jsbridge$dom.Body();
+  $t1_2 = scrim.$get();
+  $t2_3 = common$jsbridge$dom.RemoveChild($t0_1, $t1_2);
+  return;
 }
 
 export function clearChildren(el) {

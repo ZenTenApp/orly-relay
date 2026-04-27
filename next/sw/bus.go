@@ -22,13 +22,12 @@ var (
 )
 
 func connectBus() {
+	broadcastToClients("[\"SW_LOG\",\"shell\",\"bus connecting v" + version + "\"]")
 	bus = bc.Open("smesh-bus", func(msg string) { onBusMessage(msg) })
-	// Ask satellite SWs to re-announce readiness (shell may have restarted).
 	bc.Send(bus, "{\"from\":\"shell\",\"to\":\"*\",\"msg\":[\"PING\","+jstr(version)+"]}")
 	if myPubkey == "" {
 		broadcastToClients("[\"NEED_IDENTITY\"]")
 	}
-	// Detect relay SW failure — if no READY within 30s, notify page.
 	sw.SetTimeout(30000, func() {
 		if !relayReady {
 			sw.Log("shell: relay SW not responding after 30s")
@@ -54,12 +53,19 @@ func flushQueue(to string) {
 	if to != "relay" {
 		return
 	}
+	hadQueued := len(relayQueue) > 0
 	relayReady = true
 	for _, msg := range relayQueue {
 		bc.Send(bus, msg)
 	}
 	relayQueue = nil
-	broadcastToClients("[\"RESUB\"]")
+	// Only RESUB if queue was empty — means page's subs went to a dead shell
+	// SW instance (thread eviction) and need re-sending. If queue had messages,
+	// the flush already delivered them; RESUB would cause a double-subscribe
+	// race that tears down in-flight subscriptions.
+	if !hadQueued {
+		broadcastToClients("[\"RESUB\"]")
+	}
 }
 
 func onBusMessage(raw string) {
@@ -80,7 +86,8 @@ func onBusMessage(raw string) {
 
 	// READY handshake — satellite SW just connected to bus.
 	if msgType == "READY" {
-		satVer := w.str() // may be empty for old satellites
+		satVer := w.str()
+		broadcastToClients("[\"SW_LOG\",\"shell\",\"READY from " + from + " v=" + satVer + "\"]")
 		if satVer != "" && satVer != version {
 			sw.Log("shell: version mismatch from " + from + ": " + satVer + " != " + version)
 			broadcastToClients("[\"FORCE_UPDATE_SW\"," + jstr(from) + "]")

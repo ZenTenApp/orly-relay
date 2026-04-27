@@ -1,0 +1,175 @@
+version: "2"
+
+#build-tags:
+#  - integrationtest
+
+formatters:
+  enable:
+    - gci
+    - gofumpt
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/nrdcg/bunny-go
+
+linters:
+  default: all
+  disable:
+    - bodyclose
+    - canonicalheader
+    - contextcheck
+    - cyclop
+    - dupl
+    - err113
+    - errchkjson
+    - errname
+    - exhaustive
+    - exhaustruct
+    - forbidigo
+    - forcetypeassert
+    - gosec
+    - gosmopolitan
+    - ireturn
+    - lll
+    - makezero
+    - mnd
+    - musttag
+    - nestif
+    - nilnil
+    - nlreturn
+    - noctx
+    - noinlineerr
+    - nonamedreturns
+    - paralleltest
+    - prealloc
+    - rowserrcheck # not relevant (SQL)
+    - sqlclosecheck # not relevant (SQL)
+    - tagliatelle
+    - testpackage
+    - tparallel
+    - varnamelen
+    - wrapcheck
+    - wsl
+
+  settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: github.com/instana/testify
+              desc: not allowed
+            - pkg: github.com/pkg/errors
+              desc: Should be replaced by standard lib errors package
+    funlen:
+      lines: -1
+      statements: 50
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    gocritic:
+      disabled-checks:
+        - paramTypeCombine # already handle by gofumpt.extra-rules
+        - whyNoLint # already handle by nonolint
+        - unnamedResult
+        - hugeParam
+        - sloppyReassign
+        - rangeValCopy
+        - octalLiteral
+        - ptrToRefParam
+        - appendAssign
+        - ruleguard
+        - httpNoBody
+        - exposedSyncMutex
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+    gocyclo:
+      min-complexity: 12
+    godox:
+      keywords:
+        - FIXME
+    govet:
+      disable:
+        - fieldalignment
+      enable-all: true
+      settings:
+        printf:
+          funcs:
+            - Print
+            - Printf
+            - Warn
+            - Warnf
+            - Fatal
+            - Fatalf
+    misspell:
+      locale: US
+    revive:
+      rules:
+        - name: struct-tag
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+          disabled: true
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: package-comments
+          disabled: true
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+          disabled: true
+        - name: unreachable-code
+        - name: redefines-builtin-id
+    tagalign:
+      align: false
+      order:
+        - xml
+        - json
+        - yaml
+        - yml
+        - toml
+        - mapstructure
+        - url
+    testifylint:
+      disable:
+        - require-error
+        - go-require
+    perfsprint:
+      err-error: true
+      errorf: true
+      sprintf1: true
+      strconcat: false
+
+  exclusions:
+    warn-unused: true
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      - linters:
+          - funlen
+          - goconst
+          - maintidx
+        path: (.+)_test.go
+      - path: client.go
+        text: discardLogF is a global variable
+      - path: client_example_test.go
+        text: missing output for example, go test can't validate it
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

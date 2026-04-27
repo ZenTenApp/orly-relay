@@ -7,10 +7,10 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
-	clusterv1 "next.orly.dev/pkg/proto/orlysync/cluster/v1"
+	commonv1 "git.smesh.lol/orly/pkg/proto/orlysync/common/v1"
+	clusterv1 "git.smesh.lol/orly/pkg/proto/orlysync/cluster/v1"
 )
 
 // Client is a gRPC client for the cluster sync service.

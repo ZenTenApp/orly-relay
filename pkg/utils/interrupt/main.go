@@ -9,9 +9,9 @@ import (
 	"os/signal"
 	"runtime"
 
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/utils/atomic"
-	"next.orly.dev/pkg/utils/qu"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/utils/atomic"
+	"git.smesh.lol/orly/pkg/utils/qu"
 )
 
 // HandlerWithSource is an interrupt handling closure and the source location

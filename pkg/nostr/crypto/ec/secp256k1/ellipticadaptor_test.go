@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 // randBytes returns a byte slice of the required size created from a random

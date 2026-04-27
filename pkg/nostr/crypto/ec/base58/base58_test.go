@@ -8,8 +8,8 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"next.orly.dev/pkg/nostr/crypto/ec/base58"
-	"next.orly.dev/pkg/nostr/utils"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/base58"
+	"git.smesh.lol/orly/pkg/nostr/utils"
 )
 
 var stringTests = []struct {

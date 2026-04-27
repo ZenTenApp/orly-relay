@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/protocol/directory"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/protocol/directory"
 )
 
 // TrustCalculator computes aggregate trust scores from multiple trust acts.

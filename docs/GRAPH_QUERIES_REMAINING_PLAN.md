@@ -107,8 +107,8 @@ import (
     "bytes"
 
     "github.com/dgraph-io/badger/v4"
-    "next.orly.dev/pkg/database/indexes"
-    "next.orly.dev/pkg/database/indexes/types"
+    "git.smesh.lol/orly/pkg/database/indexes"
+    "git.smesh.lol/orly/pkg/database/indexes/types"
 )
 
 // MigrateETagGraph backfills e-tag graph edges for existing events

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 // TestPrivilegedOnlyBug tests the reported bug where privileged flag

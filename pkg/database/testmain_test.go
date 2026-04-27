@@ -10,10 +10,10 @@ import (
 	"sync"
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/event/examples"
-	"next.orly.dev/pkg/lol"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event/examples"
+	"git.smesh.lol/orly/pkg/lol"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // Shared test fixtures - initialized once in TestMain

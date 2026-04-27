@@ -10,10 +10,10 @@ import (
 	"github.com/emersion/go-mls"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 )
 
 // mockRelay is a test relay that routes events between connected clients.
@@ -136,7 +136,7 @@ func TestGroupMarshalRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	// Restore from bytes and verify decryption still works from Bob's side
-	_, err = bobGS.Decrypt(ct)
+	_, _, err = bobGS.Decrypt(ct)
 	require.NoError(t, err)
 
 	// Re-marshal Bob's state after decrypt
@@ -157,7 +157,7 @@ func TestGroupMarshalRoundTrip(t *testing.T) {
 	ct2, err := aliceGS2.Encrypt(msg2)
 	require.NoError(t, err)
 
-	dec2, err := bobGS2.Decrypt(ct2)
+	dec2, _, err := bobGS2.Decrypt(ct2)
 	require.NoError(t, err)
 	assert.Equal(t, msg2, dec2)
 
@@ -166,7 +166,7 @@ func TestGroupMarshalRoundTrip(t *testing.T) {
 	ct3, err := bobGS2.Encrypt(msg3)
 	require.NoError(t, err)
 
-	dec3, err := aliceGS2.Decrypt(ct3)
+	dec3, _, err := aliceGS2.Decrypt(ct3)
 	require.NoError(t, err)
 	assert.Equal(t, msg3, dec3)
 }
@@ -194,7 +194,7 @@ func TestGroupCreateJoinEncryptDecrypt(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, ciphertext)
 
-	decrypted, err := bobGS.Decrypt(ciphertext)
+	decrypted, _, err := bobGS.Decrypt(ciphertext)
 	require.NoError(t, err)
 	assert.Equal(t, plaintext, decrypted)
 
@@ -202,7 +202,7 @@ func TestGroupCreateJoinEncryptDecrypt(t *testing.T) {
 	replyCT, err := bobGS.Encrypt(reply)
 	require.NoError(t, err)
 
-	decryptedReply, err := gs.Decrypt(replyCT)
+	decryptedReply, _, err := gs.Decrypt(replyCT)
 	require.NoError(t, err)
 	assert.Equal(t, reply, decryptedReply)
 }
@@ -361,7 +361,7 @@ func TestNIPEE_NIP44EncryptionWithExporter(t *testing.T) {
 	assert.Equal(t, mlsCT, recoveredCT)
 
 	// MLS decrypt to get original plaintext
-	decrypted, err := bobGS.Decrypt(recoveredCT)
+	decrypted, _, err := bobGS.Decrypt(recoveredCT)
 	require.NoError(t, err)
 	assert.Equal(t, plaintext, decrypted)
 }

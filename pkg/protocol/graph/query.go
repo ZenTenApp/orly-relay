@@ -22,7 +22,7 @@ import (
 	"errors"
 	"fmt"
 
-	"next.orly.dev/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
 )
 
 // Query represents a graph traversal query from a _graph filter extension.

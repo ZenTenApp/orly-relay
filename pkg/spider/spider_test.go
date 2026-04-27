@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 func TestSpiderCreation(t *testing.T) {

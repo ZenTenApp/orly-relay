@@ -79,19 +79,19 @@ func NewDatabaseWithConfig(
 	case "neo4j":
 		// Use the neo4j implementation
 		if newNeo4jDatabase == nil {
-			return nil, fmt.Errorf("neo4j database backend not available (import _ \"next.orly.dev/pkg/neo4j\")")
+			return nil, fmt.Errorf("neo4j database backend not available (import _ \"git.smesh.lol/orly/pkg/neo4j\")")
 		}
 		return newNeo4jDatabase(ctx, cancel, cfg)
 	case "wasmdb", "indexeddb", "wasm":
 		// Use the wasmdb implementation (IndexedDB backend for WebAssembly)
 		if newWasmDBDatabase == nil {
-			return nil, fmt.Errorf("wasmdb database backend not available (import _ \"next.orly.dev/pkg/wasmdb\")")
+			return nil, fmt.Errorf("wasmdb database backend not available (import _ \"git.smesh.lol/orly/pkg/wasmdb\")")
 		}
 		return newWasmDBDatabase(ctx, cancel, cfg)
 	case "grpc":
 		// Use the gRPC client to connect to a remote database server
 		if newGRPCDatabase == nil {
-			return nil, fmt.Errorf("grpc database backend not available (import _ \"next.orly.dev/pkg/database/grpc\")")
+			return nil, fmt.Errorf("grpc database backend not available (import _ \"git.smesh.lol/orly/pkg/database/grpc\")")
 		}
 		return newGRPCDatabase(ctx, cancel, cfg)
 	default:

@@ -142,6 +142,14 @@ ssh orly "chown mleku:mleku /home/mleku/.local/bin/orly.new && mv /home/mleku/.l
 
 Asset-only deploy (no binary change): just rsync, fsnotify triggers reload automatically.
 
+### Post-deploy verification
+
+After every deploy, verify:
+1. `systemctl status orly` — all 4 child processes running (launcher, db, relay, bridge, bridgebot)
+2. Bridge is alive: `journalctl -u orly --since '1min ago' | grep bridge` — look for "bridge started"
+3. MLS is subscribed: bridge logs should show "MLS subscribed"
+4. If binary changed: `ssh orly "systemctl restart orly"` and re-check
+
 ## Version Locations
 
 Two files to bump on every release:
@@ -152,15 +160,18 @@ Both must stay in sync.
 
 ## tinyjs Build
 
-Source: `next/sm3sh/` (app) + `next/common/` (shared libs)
-Compile: `cd next/sm3sh && tinyjs -o ../../app/smesh3 .`
+**ALWAYS use `./build.sh` from the project root. NEVER run individual `tinyjs` commands.**
+
+`build.sh` regenerates `version_gen.go` for ALL THREE targets, wipes stale .mjs, and compiles all targets in one shot. Running `tinyjs` on a single target causes version mismatch between SWs → infinite FORCE_UPDATE_SW loop → app completely dead. This happened on 2026-03-30 and cost hours to diagnose.
+
+Source: `next/sm3sh/` (app) + `next/sw/` (shell SW) + `next/sw-relay/` (relay SW) + `next/common/` (shared libs)
 Output: `app/smesh3/*.mjs` — module name maps to filename (`common/helpers` → `common_helpers.mjs`)
 The .mjs files are gitignored — use `git add -f` when committing.
 sw.js `APP_FILES` list must match actual output filenames after any module rename.
 
 ### Service Worker tinyjs targets
 
-Each SW compiles to its OWN subdirectory — never to the main app dir. Each subdirectory has its own `$runtime/` with SW-specific APIs (`self.clients`, `Origin()`, etc.) that don't exist in the page runtime.
+Each SW compiles to its OWN subdirectory — never to the main app dir. Each subdirectory has its own `$runtime/` with SW-specific APIs (`self.clients`, `Origin()`, etc.) that don't exist in the page runtime. The individual commands are listed here for reference ONLY — always use `build.sh`:
 
 ```sh
 # Shell SW (main hub)

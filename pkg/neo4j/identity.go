@@ -3,7 +3,7 @@ package neo4j
 import (
 	"fmt"
 
-	"next.orly.dev/pkg/nostr/crypto/keys"
+	"git.smesh.lol/orly/pkg/nostr/crypto/keys"
 )
 
 // Relay identity methods

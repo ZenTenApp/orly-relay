@@ -3,7 +3,7 @@ package neo4j
 import (
 	"fmt"
 
-	"next.orly.dev/pkg/protocol/graph"
+	"git.smesh.lol/orly/pkg/protocol/graph"
 )
 
 // GraphAdapter wraps a Neo4j database instance and implements graph.GraphDatabase interface.

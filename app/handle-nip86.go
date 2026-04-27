@@ -5,10 +5,10 @@ import (
 	"io"
 	"net/http"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/nostr/httpauth"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/acl"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/nostr/httpauth"
 )
 
 // NIP86Request represents a NIP-86 JSON-RPC request

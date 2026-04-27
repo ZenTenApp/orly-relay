@@ -5,8 +5,8 @@ package database
 import (
 	"io"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // Import a collection of events in line structured minified JSON format (JSONL).

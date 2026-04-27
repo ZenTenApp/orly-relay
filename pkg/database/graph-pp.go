@@ -3,9 +3,9 @@
 package database
 
 import (
-	"next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 // TraversePubkeyPubkey performs BFS traversal of the pubkey↔pubkey graph using

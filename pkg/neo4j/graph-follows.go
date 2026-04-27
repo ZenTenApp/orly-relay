@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/protocol/graph"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/protocol/graph"
 )
 
 // TraverseFollows performs BFS traversal of the follow graph starting from a seed pubkey.

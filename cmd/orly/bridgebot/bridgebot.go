@@ -11,8 +11,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"next.orly.dev/app"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/app"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // Run executes the bridgebot subcommand.

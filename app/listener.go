@@ -11,16 +11,16 @@ import (
 	"unicode/utf8"
 
 	"github.com/gorilla/websocket"
-	"next.orly.dev/pkg/lol/errorf"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/app/config"
-	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/protocol/publish"
-	"next.orly.dev/pkg/utils"
-	atomicutils "next.orly.dev/pkg/utils/atomic"
+	"git.smesh.lol/orly/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/app/config"
+	"git.smesh.lol/orly/pkg/acl"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/protocol/publish"
+	"git.smesh.lol/orly/pkg/utils"
+	atomicutils "git.smesh.lol/orly/pkg/utils/atomic"
 )
 
 type Listener struct {

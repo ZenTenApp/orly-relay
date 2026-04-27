@@ -3,10 +3,10 @@ package database
 import (
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/utils"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/utils"
 )
 
 func TestFetchEventBySerial(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	gosmtp "github.com/emersion/go-smtp"
-	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
+	bridgesmtp "git.smesh.lol/orly/pkg/bridge/smtp"
 )
 
 func TestOutboundProcessor_NotSubscribed(t *testing.T) {

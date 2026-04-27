@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/emersion/go-mls"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 )
 
 // TestDebug_CompareWireFormat dumps both Go and Rust raw KP bytes for comparison.

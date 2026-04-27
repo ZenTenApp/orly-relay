@@ -311,7 +311,7 @@ func ExampleGroup() {
 		log.Fatalf("CreateWelcome() = %v", err)
 	}
 
-	if _, err := aliceGroup.UnmarshalAndProcessMessage(addMemberMsg); err != nil {
+	if _, _, err := aliceGroup.UnmarshalAndProcessMessage(addMemberMsg); err != nil {
 		log.Fatalf("UnmarshalAndProcessMessage() = %v", err)
 	}
 
@@ -326,7 +326,7 @@ func ExampleGroup() {
 		log.Fatalf("CreateApplicationMessage() = %v", err)
 	}
 
-	plaintext, err := bobGroup.UnmarshalAndProcessMessage(appMsg)
+	plaintext, _, err := bobGroup.UnmarshalAndProcessMessage(appMsg)
 	if err != nil {
 		log.Fatalf("UnmarshalAndProcessMessage() = %v", err)
 	}

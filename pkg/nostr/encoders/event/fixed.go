@@ -1,7 +1,7 @@
 package event
 
 import (
-	"next.orly.dev/pkg/nostr/types"
+	"git.smesh.lol/orly/pkg/nostr/types"
 )
 
 // Fixed-type accessor methods for Event.

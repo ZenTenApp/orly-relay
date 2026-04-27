@@ -3,7 +3,7 @@ package neo4j
 import (
 	"errors"
 
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 // Blob storage methods - Neo4j does not support blob storage

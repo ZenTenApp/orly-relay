@@ -3,7 +3,7 @@ package neo4j
 import (
 	"fmt"
 
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 var errPaidACLNotSupported = fmt.Errorf("paid ACL not supported on Neo4j backend")

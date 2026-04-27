@@ -13,7 +13,7 @@ set -euo pipefail
 
 DURATION="${DURATION:-60}"
 HEALTH_PORT="${HEALTH_PORT:-18081}"
-ROOT_DIR="/home/mleku/src/next.orly.dev"
+ROOT_DIR="/home/mleku/src/git.smesh.lol/orly"
 LISTEN_HOST="${LISTEN_HOST:-10.0.0.2}"
 
 cd "$ROOT_DIR"
@@ -23,7 +23,7 @@ reset || true
 ./scripts/update-embedded-web.sh || true
 
 TMP_DIR="$(mktemp -d -t orly-pprof-XXXXXX)"
-BIN_PATH="$TMP_DIR/next.orly.dev"
+BIN_PATH="$TMP_DIR/git.smesh.lol/orly"
 LOG_FILE="$TMP_DIR/relay.log"
 PPROF_FILE=""
 RELAY_PID=""
@@ -77,7 +77,7 @@ if [[ -z "${READY:-}" ]]; then
   # Attempt to dump recent logs for context
   tail -n 100 "$LOG_FILE" || true
   # Try INT to clean up
-  killall -INT next.orly.dev 2>/dev/null || true
+  killall -INT git.smesh.lol/orly 2>/dev/null || true
   exit 1
 fi
 
@@ -92,40 +92,40 @@ curl -fsS --max-time $((DURATION+10)) \
   -o "$PPROF_DIR/cpu.pprof" || true
 
 echo "[run-relay-pprof] Sending SIGINT (Ctrl+C) for graceful shutdown ..."
-killall -INT next.orly.dev 2>/dev/null || true
+killall -INT git.smesh.lol/orly 2>/dev/null || true
 
 # Wait up to ~60s for graceful shutdown so defers (pprof Stop) can run
 for i in {1..300}; do
-  if ! pgrep -x next.orly.dev >/dev/null 2>&1; then
+  if ! pgrep -x git.smesh.lol/orly >/dev/null 2>&1; then
     break
   fi
   sleep 0.2
 done
 
 # Try HTTP shutdown if still running (ensures defer paths can run)
-if pgrep -x next.orly.dev >/dev/null 2>&1; then
+if pgrep -x git.smesh.lol/orly >/dev/null 2>&1; then
   echo "[run-relay-pprof] Still running, requesting /shutdown ..."
   curl -fsS --max-time 2 "http://10.0.0.2:${HEALTH_PORT}/shutdown" >/dev/null 2>&1 || true
   for i in {1..150}; do
-    if ! pgrep -x next.orly.dev >/dev/null 2>&1; then
+    if ! pgrep -x git.smesh.lol/orly >/dev/null 2>&1; then
       break
     fi
     sleep 0.2
   done
 fi
-if pgrep -x next.orly.dev >/dev/null 2>&1; then
+if pgrep -x git.smesh.lol/orly >/dev/null 2>&1; then
   echo "[run-relay-pprof] Escalating: sending SIGTERM ..."
-  killall -TERM next.orly.dev 2>/dev/null || true
+  killall -TERM git.smesh.lol/orly 2>/dev/null || true
   for i in {1..150}; do
-    if ! pgrep -x next.orly.dev >/dev/null 2>&1; then
+    if ! pgrep -x git.smesh.lol/orly >/dev/null 2>&1; then
       break
     fi
     sleep 0.2
   done
 fi
-if pgrep -x next.orly.dev >/dev/null 2>&1; then
+if pgrep -x git.smesh.lol/orly >/dev/null 2>&1; then
   echo "[run-relay-pprof] Force kill: sending SIGKILL ..."
-  killall -KILL next.orly.dev 2>/dev/null || true
+  killall -KILL git.smesh.lol/orly 2>/dev/null || true
 fi
 
 PPROF_FILE="$PPROF_DIR/cpu.pprof"

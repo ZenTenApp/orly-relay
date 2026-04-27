@@ -9,7 +9,7 @@ import (
 	"io"
 
 	"golang.org/x/exp/constraints"
-	"next.orly.dev/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/lol/errorf"
 )
 
 // run this to regenerate (pointlessly) the base 10 array of 4 places per entry

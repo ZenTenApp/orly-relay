@@ -3,9 +3,9 @@ package policy
 import (
 	"testing"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 )
 
 // TestPolicyPrecedenceRules verifies the correct evaluation order and precedence

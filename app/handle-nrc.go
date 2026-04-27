@@ -5,13 +5,13 @@ import (
 	"net/http"
 	"strings"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/nostr/crypto/keys"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/httpauth"
-	"next.orly.dev/pkg/acl"
+	"git.smesh.lol/orly/pkg/nostr/crypto/keys"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/httpauth"
+	"git.smesh.lol/orly/pkg/acl"
 )
 
 // NRCConnectionResponse is the response structure for NRC connection API.

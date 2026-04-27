@@ -6,7 +6,7 @@ package events
 import (
 	"time"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 )
 
 // DomainEvent is the base interface for all domain events.

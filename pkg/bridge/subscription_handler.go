@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
 
-	"next.orly.dev/pkg/acl"
-	aclgrpc "next.orly.dev/pkg/acl/grpc"
+	"git.smesh.lol/orly/pkg/acl"
+	aclgrpc "git.smesh.lol/orly/pkg/acl/grpc"
 )
 
 // SubscriptionHandler manages the subscription flow:

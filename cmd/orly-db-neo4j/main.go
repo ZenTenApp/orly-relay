@@ -7,15 +7,15 @@ import (
 	"time"
 
 	"go-simpler.org/env"
-	"next.orly.dev/pkg/lol"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/database/server"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/database/server"
 
 	// Import neo4j to register the factory
-	_ "next.orly.dev/pkg/neo4j"
+	_ "git.smesh.lol/orly/pkg/neo4j"
 )
 
 // Config holds the database server configuration.

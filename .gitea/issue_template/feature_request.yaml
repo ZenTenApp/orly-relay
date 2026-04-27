@@ -12,9 +12,9 @@ body:
         Thank you for suggesting a feature. Please provide as much detail as possible to help us understand your proposal.
 
         **Before submitting:**
-        - Search [existing issues](https://git.mleku.dev/mleku/next.orly.dev/issues) to avoid duplicates
+        - Search [existing issues](https://git.smesh.lol/orly/issues) to avoid duplicates
         - Check if this is covered by an existing [NIP](https://github.com/nostr-protocol/nips)
-        - Review the [documentation](https://git.mleku.dev/mleku/next.orly.dev) for current capabilities
+        - Review the [documentation](https://git.smesh.lol/orly) for current capabilities
 
   - type: dropdown
     id: category

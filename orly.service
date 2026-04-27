@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=mleku
 Group=mleku
-WorkingDirectory=/home/mleku/src/next.orly.dev
+WorkingDirectory=/home/mleku/src/git.smesh.lol/orly
 
 # Use orly-launcher which manages orly-db-badger, orly-acl-follows, and the relay
 ExecStart=/home/mleku/.local/bin/orly-launcher

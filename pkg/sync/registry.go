@@ -7,8 +7,8 @@ import (
 	"sort"
 	"sync"
 
-	"next.orly.dev/pkg/lol/errorf"
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 // DriverFactory is the signature for sync driver factory functions.

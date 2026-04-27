@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 // NIP-43 Invite-based ACL methods

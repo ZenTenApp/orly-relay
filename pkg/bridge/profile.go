@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/ws"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/ws"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // bridgeAbout returns the desired about text for the bridge profile.
@@ -33,7 +33,11 @@ func (b *Bridge) publishProfile() error {
 	existing := b.relay.FetchKind0(b.ctx, b.sign.Pub())
 	if existing != nil {
 		currentAbout := extractJSONString(string(existing.Content), "about")
-		if currentAbout == wantAbout {
+		currentPicture := extractJSONString(string(existing.Content), "picture")
+		currentNip05 := extractJSONString(string(existing.Content), "nip05")
+		wantPicture := "https://relay.orly.dev/static/marmot-bridge-avatar.png"
+		wantNip05 := "bridge@" + b.cfg.Domain
+		if currentAbout == wantAbout && currentPicture == wantPicture && currentNip05 == wantNip05 {
 			log.D.F("bridge profile already up to date")
 			return nil
 		}
@@ -52,6 +56,12 @@ func (b *Bridge) publishProfile() error {
 	}
 	if profile["name"] == "" {
 		profile["name"] = "marmot bridge"
+	}
+	if profile["picture"] == "" {
+		profile["picture"] = "https://relay.orly.dev/static/marmot-bridge-avatar.png"
+	}
+	if profile["nip05"] == "" {
+		profile["nip05"] = "bridge@" + b.cfg.Domain
 	}
 	profile["about"] = wantAbout
 
@@ -199,8 +209,10 @@ func (b *Bridge) broadcastIdentity() {
 	// Kind 0 profile
 	{
 		profile := map[string]string{
-			"name":  "marmot bridge",
-			"about": b.bridgeAbout(),
+			"name":    "marmot bridge",
+			"about":   b.bridgeAbout(),
+			"picture": "https://relay.orly.dev/static/marmot-bridge-avatar.png",
+			"nip05":   "bridge@" + b.cfg.Domain,
 		}
 		content, err := json.Marshal(profile)
 		if err == nil {

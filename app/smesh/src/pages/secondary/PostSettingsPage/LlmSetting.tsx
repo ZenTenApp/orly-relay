@@ -148,7 +148,7 @@ export default function LlmSetting() {
       <p className="text-xs text-muted-foreground">
         {t('Only Anthropic Claude is supported.')}{' '}
         <a
-          href="https://git.mleku.dev/mleku/smesh"
+          href="https://git.smesh.lol/orly"
           target="_blank"
           rel="noopener noreferrer"
           className="underline"

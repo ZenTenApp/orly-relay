@@ -6,11 +6,11 @@ package relay
 import (
 	"fmt"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/app/config"
-	relaycore "next.orly.dev/pkg/relay"
-	"next.orly.dev/pkg/version"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/app/config"
+	relaycore "git.smesh.lol/orly/pkg/relay"
+	"git.smesh.lol/orly/pkg/version"
 )
 
 // Run executes the relay subcommand.

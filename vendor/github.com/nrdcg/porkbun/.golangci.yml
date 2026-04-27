@@ -1,0 +1,85 @@
+run:
+  timeout: 5m
+
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+  gocyclo:
+    min-complexity: 15
+  goconst:
+    min-len: 5
+    min-occurrences: 3
+  misspell:
+    locale: US
+  funlen:
+    lines: -1
+    statements: 50
+  godox:
+    keywords:
+      - FIXME
+  gofumpt:
+    extra-rules: true
+  depguard:
+    rules:
+      main:
+        deny:
+          - pkg: "github.com/instana/testify"
+            desc: not allowed
+          - pkg: "github.com/pkg/errors"
+            desc: Should be replaced by standard lib errors package
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - sloppyReassign
+      - rangeValCopy
+      - octalLiteral
+      - hugeParam
+      - paramTypeCombine # already handled by gofumpt.extra-rules
+
+linters:
+  enable-all: true
+  disable:
+    - execinquery # deprecated
+    - sqlclosecheck # not relevant (SQL)
+    - rowserrcheck # not relevant (SQL)
+    - cyclop # duplicate of gocyclo
+    - lll
+    - dupl
+    - wsl
+    - nlreturn
+    - gomnd
+    - mnd
+    - err113
+    - wrapcheck
+    - exhaustive
+    - exhaustruct
+    - testpackage
+    - tparallel
+    - paralleltest
+    - prealloc
+    - forcetypeassert
+    - bodyclose # Too many false positives: https://github.com/timakin/bodyclose/issues/30
+    - varnamelen
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude:
+    - 'ST1000: at least one file in a package should have a package comment'
+#    - 'G204: Subprocess launched with variable'
+#    - 'G304: Potential file inclusion via variable'
+  exclude-rules:
+    - path: .*_test.go
+      linters:
+        - funlen
+    - path: types.go
+      text: 'the type name `Status` should conform to the `XxxError` format'
+
+output:
+  show-stats: true

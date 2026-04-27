@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"next.orly.dev/pkg/protocol/nwc"
-	"next.orly.dev/pkg/nostr/ws"
+	"git.smesh.lol/orly/pkg/protocol/nwc"
+	"git.smesh.lol/orly/pkg/nostr/ws"
 )
 
 func TestNWCClientCreation(t *testing.T) {

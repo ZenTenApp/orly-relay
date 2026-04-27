@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"next.orly.dev/pkg/interfaces/neterr"
+	"git.smesh.lol/orly/pkg/interfaces/neterr"
 )
 
 var (

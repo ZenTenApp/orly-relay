@@ -24,7 +24,7 @@ import { homedir } from "os";
 // ── Defaults ────────────────────────────────────────────────────
 const DEFAULT_DATA = resolve(
   homedir(),
-  "src/git.mleku.dev/mleku/nostr/encoders/event/examples/out.jsonl"
+  "src/git.smesh.lol/orly/pkg/nostr/encoders/event/examples/out.jsonl"
 );
 
 // ── Schema (matches ORLY's pkg/neo4j/schema.go) ────────────────

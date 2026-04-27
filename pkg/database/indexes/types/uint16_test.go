@@ -6,9 +6,9 @@ import (
 	"reflect"
 	"testing"
 
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 	"lukechampine.com/frand"
-	"next.orly.dev/pkg/utils"
+	"git.smesh.lol/orly/pkg/utils"
 )
 
 func TestUint16(t *testing.T) {

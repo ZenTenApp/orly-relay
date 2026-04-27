@@ -17,7 +17,7 @@ type pendingSentDM struct {
 
 var pendingSentDMs []pendingSentDM
 var mlsRelays []string
-var currentMarmotSub string // tracks active marmot proxy subscription for cleanup
+var marmotSubs map[string]bool // tracks active marmot proxy subscriptions for cleanup
 
 // sentDMDedup tracks recently sent DM content to filter self-echoes.
 // MLS handleGroupMessage always attributes messages to PeerPub, so when
@@ -164,11 +164,10 @@ func routeMessage(clientID string, w *mw, msgType string) {
 		}
 		// Pass filters as-is (array or single object) — relay SW's parseFilters handles both.
 		mSubID := "marmot-sub-" + subID
-		// Close previous marmot proxy subscription to prevent leak.
-		if currentMarmotSub != "" && currentMarmotSub != mSubID {
-			busSend("relay", "[\"CLOSE\","+jstr(currentMarmotSub)+"]")
+		if marmotSubs == nil {
+			marmotSubs = make(map[string]bool)
 		}
-		currentMarmotSub = mSubID
+		marmotSubs[mSubID] = true
 		if len(relays) > 0 {
 			busSend("relay", "[\"PROXY\",\"\","+jstr(mSubID)+","+filterRaw+","+strsJSON(relays)+"]")
 		} else {

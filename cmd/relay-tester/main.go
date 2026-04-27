@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"next.orly.dev/pkg/lol/log"
-	relaytester "next.orly.dev/relay-tester"
+	"git.smesh.lol/orly/pkg/lol/log"
+	relaytester "git.smesh.lol/orly/relay-tester"
 )
 
 func main() {

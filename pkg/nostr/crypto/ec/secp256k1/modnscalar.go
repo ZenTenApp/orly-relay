@@ -7,7 +7,7 @@ package secp256k1
 import (
 	"math/big"
 
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 // References:

@@ -313,7 +313,7 @@ Use strfry_websocket_quick_reference.md
 
 ## File Locations in This Repository
 
-All analysis documents are in `/home/mleku/src/next.orly.dev/`:
+All analysis documents are in `/home/mleku/src/git.smesh.lol/orly/`:
 
 ```
 ├── README_STRFRY_ANALYSIS.md              (277 lines) - Start here

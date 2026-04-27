@@ -10,12 +10,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 //go:embed smesh3
@@ -34,10 +35,11 @@ type Smesh3Server struct {
 	deployPub []byte // 32-byte x-only pubkey for /__deploy auth
 	clientTag string // client tag for published events (NIP-89)
 
-	mu       sync.RWMutex
-	version  int64
-	clients  map[chan int64]struct{}
-	cancelFn context.CancelFunc
+	mu           sync.RWMutex
+	version      int64
+	clients      map[chan string]struct{}
+	pendingFiles map[string]struct{}
+	cancelFn     context.CancelFunc
 }
 
 // NewSmesh3Server creates a new smesh HTTP server.
@@ -48,8 +50,9 @@ func NewSmesh3Server(port int, dir, deployPubHex, clientTag string) *Smesh3Serve
 		port:      port,
 		dir:       dir,
 		clientTag: clientTag,
-		version:   time.Now().UnixMilli(),
-		clients:   make(map[chan int64]struct{}),
+		version:      time.Now().UnixMilli(),
+		clients:      make(map[chan string]struct{}),
+		pendingFiles: make(map[string]struct{}),
 	}
 	if len(deployPubHex) == 64 {
 		pub, err := hex.DecodeString(deployPubHex)
@@ -312,7 +315,7 @@ func (s *Smesh3Server) startWatcher(ctx context.Context) error {
 	return nil
 }
 
-// watchLoop debounces fsnotify events and bumps the version.
+// watchLoop debounces fsnotify events, tracks changed files, and notifies clients.
 func (s *Smesh3Server) watchLoop(ctx context.Context) {
 	var debounce *time.Timer
 	for {
@@ -326,12 +329,23 @@ func (s *Smesh3Server) watchLoop(ctx context.Context) {
 			if ev.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename|fsnotify.Chmod) == 0 {
 				continue
 			}
+			// Record the changed file path.
+			rel, err := filepath.Rel(s.dir, ev.Name)
+			if err == nil {
+				path := "/" + filepath.ToSlash(rel)
+				if path == "/index.html" {
+					path = "/"
+				}
+				s.mu.Lock()
+				s.pendingFiles[path] = struct{}{}
+				s.mu.Unlock()
+			}
 			// Debounce: wait 200ms for batch writes (rsync).
 			if debounce != nil {
 				debounce.Stop()
 			}
 			debounce = time.AfterFunc(200*time.Millisecond, func() {
-				s.bumpVersion()
+				s.flushChanges()
 			})
 		case err, ok := <-s.watcher.Errors:
 			if !ok {
@@ -342,23 +356,65 @@ func (s *Smesh3Server) watchLoop(ctx context.Context) {
 	}
 }
 
-// bumpVersion updates the version and notifies all SSE clients.
-func (s *Smesh3Server) bumpVersion() {
+// flushChanges collects pending file changes, bumps version, and notifies SSE clients.
+func (s *Smesh3Server) flushChanges() {
 	s.mu.Lock()
 	s.version = time.Now().UnixMilli()
 	v := s.version
-	clients := make([]chan int64, 0, len(s.clients))
+	files := make([]string, 0, len(s.pendingFiles))
+	for f := range s.pendingFiles {
+		files = append(files, f)
+	}
+	s.pendingFiles = make(map[string]struct{})
+	clients := make([]chan string, 0, len(s.clients))
 	for ch := range s.clients {
 		clients = append(clients, ch)
 	}
 	s.mu.Unlock()
 
-	log.I.F("smesh: files changed, version=%d, notifying %d clients", v, len(clients))
+	// Build JSON: {"v":123,"files":["/smesh3.mjs"]}
+	var sb strings.Builder
+	sb.WriteString(`{"v":`)
+	sb.WriteString(strconv.FormatInt(v, 10))
+	sb.WriteString(`,"files":[`)
+	for i, f := range files {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteByte('"')
+		sb.WriteString(f)
+		sb.WriteByte('"')
+	}
+	sb.WriteString("]}")
+	msg := sb.String()
+
+	log.I.F("smesh: %d files changed, version=%d, notifying %d clients", len(files), v, len(clients))
 	for _, ch := range clients {
 		select {
-		case ch <- v:
+		case ch <- msg:
 		default:
-			// Client channel full, skip.
+		}
+	}
+}
+
+// notifyFullRefresh bumps version and notifies with empty file list (full refresh).
+func (s *Smesh3Server) notifyFullRefresh() {
+	s.mu.Lock()
+	s.version = time.Now().UnixMilli()
+	v := s.version
+	clients := make([]chan string, 0, len(s.clients))
+	for ch := range s.clients {
+		clients = append(clients, ch)
+	}
+	s.mu.Unlock()
+
+	msg := `{"v":` + strconv.FormatInt(v, 10) + `}`
+
+	log.I.F("smesh: full refresh, version=%d, notifying %d clients", v, len(clients))
+	for _, ch := range clients {
+		select {
+		case ch <- msg:
+		default:
 		}
 	}
 }
@@ -387,7 +443,7 @@ func (s *Smesh3Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	ch := make(chan int64, 4)
+	ch := make(chan string, 4)
 
 	// Register client.
 	s.mu.Lock()
@@ -395,8 +451,8 @@ func (s *Smesh3Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	v := s.version
 	s.mu.Unlock()
 
-	// Send current version immediately.
-	fmt.Fprintf(w, "data: %d\n\n", v)
+	// Send current version immediately (no files on connect).
+	fmt.Fprintf(w, "data: {\"v\":%d}\n\n", v)
 	flusher.Flush()
 
 	defer func() {
@@ -414,8 +470,8 @@ func (s *Smesh3Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-ctx.Done():
 			return
-		case newVersion := <-ch:
-			fmt.Fprintf(w, "data: %d\n\n", newVersion)
+		case msg := <-ch:
+			fmt.Fprintf(w, "data: %s\n\n", msg)
 			flusher.Flush()
 		case <-ticker.C:
 			fmt.Fprintf(w, ": heartbeat\n\n")

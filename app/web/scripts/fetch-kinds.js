@@ -11,7 +11,7 @@ import { writeFileSync, existsSync } from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const KINDS_URL = 'https://git.mleku.dev/mleku/nostr/raw/branch/main/encoders/kind/kinds.json';
+const KINDS_URL = 'https://git.smesh.lol/orly/pkg/nostr/raw/branch/main/encoders/kind/kinds.json';
 const OUTPUT_PATH = join(__dirname, '..', 'src', 'eventKinds.js');
 
 async function fetchKinds() {

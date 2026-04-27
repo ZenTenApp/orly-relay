@@ -12,15 +12,15 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
-	"next.orly.dev/pkg/lol"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/app/config"
-	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/database"
-	databasegrpc "next.orly.dev/pkg/database/grpc"
-	orlyaclv1 "next.orly.dev/pkg/proto/orlyacl/v1"
+	"git.smesh.lol/orly/app/config"
+	"git.smesh.lol/orly/pkg/acl"
+	"git.smesh.lol/orly/pkg/database"
+	databasegrpc "git.smesh.lol/orly/pkg/database/grpc"
+	orlyaclv1 "git.smesh.lol/orly/pkg/proto/orlyacl/v1"
 )
 
 func main() {

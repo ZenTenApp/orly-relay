@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // AdminServer provides HTTP endpoints for managing the launcher.
@@ -430,7 +430,7 @@ type ReleaseInfo struct {
 	Message string `json:"message"`
 }
 
-const tagsAPIURL = "https://git.nostrdev.com/api/v1/repos/mleku/next.orly.dev/tags"
+const tagsAPIURL = "https://git.nostrdev.com/api/v1/repos/mleku/git.smesh.lol/orly/tags"
 
 func (s *AdminServer) handleReleases(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

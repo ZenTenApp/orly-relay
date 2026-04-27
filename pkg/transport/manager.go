@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"sync"
 
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	iface "next.orly.dev/pkg/interfaces/transport"
+	iface "git.smesh.lol/orly/pkg/interfaces/transport"
 )
 
 // Manager manages multiple transports and coordinates their lifecycle.

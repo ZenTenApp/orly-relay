@@ -8,12 +8,12 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/database"
-	orlyaclv1 "next.orly.dev/pkg/proto/orlyacl/v1"
-	orlydbv1 "next.orly.dev/pkg/proto/orlydb/v1"
+	"git.smesh.lol/orly/pkg/acl"
+	"git.smesh.lol/orly/pkg/database"
+	orlyaclv1 "git.smesh.lol/orly/pkg/proto/orlyacl/v1"
+	orlydbv1 "git.smesh.lol/orly/pkg/proto/orlydb/v1"
 )
 
 // ACLService implements the orlyaclv1.ACLServiceServer interface.

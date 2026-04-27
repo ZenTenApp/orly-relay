@@ -5,11 +5,11 @@
 # This script clones the ORLY repository and runs the deployment script.
 # It can be executed directly via curl:
 #
-#   curl -sSL https://git.nostrdev.com/mleku/next.orly.dev/raw/branch/main/scripts/bootstrap.sh | bash
+#   curl -sSL https://git.nostrdev.com/mleku/git.smesh.lol/orly/raw/branch/main/scripts/bootstrap.sh | bash
 #
 # Or downloaded and executed:
 #
-#   curl -o bootstrap.sh https://git.nostrdev.com/mleku/next.orly.dev/raw/branch/main/scripts/bootstrap.sh
+#   curl -o bootstrap.sh https://git.nostrdev.com/mleku/git.smesh.lol/orly/raw/branch/main/scripts/bootstrap.sh
 #   chmod +x bootstrap.sh
 #   ./bootstrap.sh
 
@@ -18,8 +18,8 @@ set -u  # Exit on undefined variable
 set -o pipefail  # Exit on pipe failure
 
 # Configuration
-REPO_URL="https://git.nostrdev.com/mleku/next.orly.dev.git"
-REPO_NAME="next.orly.dev"
+REPO_URL="https://git.nostrdev.com/mleku/git.smesh.lol/orly.git"
+REPO_NAME="git.smesh.lol/orly"
 CLONE_DIR="${HOME}/src/${REPO_NAME}"
 
 # Colors for output

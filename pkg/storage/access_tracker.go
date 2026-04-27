@@ -8,9 +8,9 @@ import (
 	"sort"
 	"sync"
 
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
 )
 
 // AccessTrackerDatabase defines the interface for the underlying database

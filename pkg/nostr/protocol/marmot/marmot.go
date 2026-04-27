@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/emersion/go-mls"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/encoders/timestamp"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/encoders/timestamp"
 )
 
 // RelayConnection abstracts the relay interface so the Marmot client can be
@@ -72,9 +72,25 @@ type Client struct {
 // signing, and NIP-44 encryption. The store persists group state.
 // The relay handles event transport.
 func NewClient(crypto CryptoProvider, store GroupStore, relay RelayConnection, relays ...string) (*Client, error) {
-	kpp, err := GenerateKeyPackage(crypto)
-	if err != nil {
-		return nil, fmt.Errorf("generate key package: %w", err)
+	// Try loading persisted key package first. This ensures welcomes
+	// created against the previous key package remain decryptable after restart.
+	var kpp *mls.KeyPairPackage
+	if data, err := store.LoadKeyPackage(); err == nil {
+		if loaded, err := UnmarshalKeyPairPackage(data); err == nil {
+			kpp = loaded
+			log.I.F("loaded persisted MLS key package")
+		}
+	}
+	if kpp == nil {
+		var err error
+		kpp, err = GenerateKeyPackage(crypto)
+		if err != nil {
+			return nil, fmt.Errorf("generate key package: %w", err)
+		}
+		// Persist the fresh key package for next restart.
+		if data, err := MarshalKeyPairPackage(kpp); err == nil {
+			_ = store.SaveKeyPackage(data)
+		}
 	}
 
 	c := &Client{
@@ -88,10 +104,7 @@ func NewClient(crypto CryptoProvider, store GroupStore, relay RelayConnection, r
 		groupsChanged: make(chan struct{}, 1),
 	}
 
-	// Load persisted groups. The fresh kpp means old Welcomes are
-	// undecryptable (handled by "skipping stale welcome" in processWelcome),
-	// but existing group state is valid for send/receive — preserving
-	// groups avoids a full re-establishment on every WASM restart.
+	// Load persisted groups.
 	ids, err := store.ListGroups()
 	if err == nil {
 		for _, id := range ids {
@@ -163,9 +176,9 @@ func (c *Client) PublishKeyPackage(ctx context.Context) error {
 	return c.relay.Publish(ctx, ev)
 }
 
-// rotateKeyPackage generates a fresh KP and publishes it. Called after
-// processing a Welcome — the consumed init_key is destroyed per MLS spec,
-// so the old KP on relays is now useless.
+// rotateKeyPackage generates a fresh KP, persists it, and publishes it.
+// Called after processing a Welcome — the consumed init_key is destroyed
+// per MLS spec, so the old KP on relays is now useless.
 func (c *Client) rotateKeyPackage(ctx context.Context) {
 	kpp, err := GenerateKeyPackage(c.crypto)
 	if err != nil {
@@ -173,6 +186,9 @@ func (c *Client) rotateKeyPackage(ctx context.Context) {
 		return
 	}
 	c.kpp = kpp
+	if data, err := MarshalKeyPairPackage(kpp); err == nil {
+		_ = c.store.SaveKeyPackage(data)
+	}
 	if err := c.PublishKeyPackage(ctx); err != nil {
 		log.W.F("rotate key package: publish: %v", err)
 	}
@@ -433,13 +449,17 @@ func (c *Client) handleGroupMessage(ctx context.Context, ev *event.E) error {
 		return err
 	}
 
-	plaintext, err := gs.Decrypt(mlsCiphertext)
+	plaintext, selfSent, err := gs.Decrypt(mlsCiphertext)
 	if err != nil {
 		return fmt.Errorf("decrypt: %w", err)
 	}
 
 	// Re-persist after decrypt — MLS state may have advanced (epoch ratchet).
 	c.persistGroup(gs)
+
+	if selfSent {
+		return nil
+	}
 
 	if c.onDM != nil {
 		c.onDM(gs.PeerPub, plaintext)

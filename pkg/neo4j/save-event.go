@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"strconv"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	nostrHex "next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	nostrHex "git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
 )
 
 // parseInt64 parses a string to int64

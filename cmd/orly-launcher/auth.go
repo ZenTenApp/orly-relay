@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"next.orly.dev/pkg/nostr/httpauth"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/httpauth"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 // AuthMiddleware provides NIP-98 authentication for the admin API.

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"next.orly.dev/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/lol/errorf"
 )
 
 // TestResult represents the result of a test.

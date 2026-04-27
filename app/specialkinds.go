@@ -3,11 +3,11 @@ package app
 import (
 	"context"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/event/specialkinds"
-	"next.orly.dev/pkg/protocol/nip43"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/acl"
+	"git.smesh.lol/orly/pkg/event/specialkinds"
+	"git.smesh.lol/orly/pkg/protocol/nip43"
 )
 
 // registerSpecialKindHandlers registers handlers for special event kinds

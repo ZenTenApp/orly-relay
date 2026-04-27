@@ -7,18 +7,18 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/nostr/encoders/envelopes/eventenvelope"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	hexenc "next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/encoders/kind"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/nostr/encoders/timestamp"
-	negentropyiface "next.orly.dev/pkg/interfaces/negentropy"
-	"next.orly.dev/pkg/policy"
-	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/eventenvelope"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	hexenc "git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/nostr/encoders/timestamp"
+	negentropyiface "git.smesh.lol/orly/pkg/interfaces/negentropy"
+	"git.smesh.lol/orly/pkg/policy"
+	commonv1 "git.smesh.lol/orly/pkg/proto/orlysync/common/v1"
 )
 
 // NIP-77 Negentropy envelope constants

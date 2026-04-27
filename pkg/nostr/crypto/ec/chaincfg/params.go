@@ -5,8 +5,8 @@ import (
 	"math/big"
 	"time"
 
-	"next.orly.dev/pkg/nostr/crypto/ec/chainhash"
-	"next.orly.dev/pkg/nostr/crypto/ec/wire"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/chainhash"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/wire"
 )
 
 var (

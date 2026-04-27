@@ -21,7 +21,7 @@ export default function AboutInfoDialog({ children }: { children: React.ReactNod
       <div>
         Source code:{' '}
         <a
-          href="https://git.mleku.dev/mleku/smesh"
+          href="https://git.smesh.lol/orly"
           target="_blank"
           rel="noreferrer"
           className="text-primary hover:underline"

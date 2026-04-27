@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 // setupTestPolicy creates a policy manager with a temporary config file.

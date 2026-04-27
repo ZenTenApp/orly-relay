@@ -3792,373 +3792,6 @@ export function skipBracketed(s, i, open, close) {
   }
 }
 
-export function Tag$Key(t) {
-  let $t0_1, $t1_2, $t2_3, $t3_4;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(t);
-        $t1_2 = ($t0_1 > 0);
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t2_3 = t.addr(0);
-        $t3_4 = $t2_3.$get();
-        return $t3_4;
-        break;
-      }
-      case 2: {
-        return '';
-        break;
-      }
-    }
-  }
-}
-
-$rt.types.getType('common/nostr.Tag')?.methods?.set('Key', Tag$Key);
-export function Tag$Marker(t) {
-  let $t0_1, $t1_2, $t2_3, $t3_4;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(t);
-        $t1_2 = ($t0_1 > 3);
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t2_3 = t.addr(3);
-        $t3_4 = $t2_3.$get();
-        return $t3_4;
-        break;
-      }
-      case 2: {
-        return '';
-        break;
-      }
-    }
-  }
-}
-
-$rt.types.getType('common/nostr.Tag')?.methods?.set('Marker', Tag$Marker);
-export function Tag$Relay(t) {
-  let $t0_1, $t1_2, $t2_3, $t3_4;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(t);
-        $t1_2 = ($t0_1 > 2);
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t2_3 = t.addr(2);
-        $t3_4 = $t2_3.$get();
-        return $t3_4;
-        break;
-      }
-      case 2: {
-        return '';
-        break;
-      }
-    }
-  }
-}
-
-$rt.types.getType('common/nostr.Tag')?.methods?.set('Relay', Tag$Relay);
-export function Tag$Value(t) {
-  let $t0_1, $t1_2, $t2_3, $t3_4;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(t);
-        $t1_2 = ($t0_1 > 1);
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t2_3 = t.addr(1);
-        $t3_4 = $t2_3.$get();
-        return $t3_4;
-        break;
-      }
-      case 2: {
-        return '';
-        break;
-      }
-    }
-  }
-}
-
-$rt.types.getType('common/nostr.Tag')?.methods?.set('Value', Tag$Value);
-export function Tags$ContainsValue(ts, key, value) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(ts);
-        $t1_2 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t2_3 = ($t1_2 + 1);
-        $t3_4 = ($t2_3 < $t0_1);
-        if ($t3_4) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t4_5 = ts.addr($t2_3);
-        $t5_6 = $t4_5.$get();
-        $t6_7 = $rt.builtin.len($t5_6);
-        $t7_8 = ($t6_7 > 1);
-        if ($t7_8) {
-          $block = 6; break;
-        }
-        else {
-          $t1_2 = $t2_3;
-          $block = 1; break;
-        }
-        break;
-      }
-      case 3: {
-        return false;
-        break;
-      }
-      case 4: {
-        return true;
-        break;
-      }
-      case 5: {
-        $t8_9 = $t5_6.addr(1);
-        $t9_10 = $t8_9.$get();
-        $t10_11 = ($t9_10 === value);
-        if ($t10_11) {
-          $block = 4; break;
-        }
-        else {
-          $t1_2 = $t2_3;
-          $block = 1; break;
-        }
-        break;
-      }
-      case 6: {
-        $t11_12 = $t5_6.addr(0);
-        $t12_13 = $t11_12.$get();
-        $t13_14 = ($t12_13 === key);
-        if ($t13_14) {
-          $block = 5; break;
-        }
-        else {
-          $t1_2 = $t2_3;
-          $block = 1; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-$rt.types.getType('common/nostr.Tags')?.methods?.set('ContainsValue', Tags$ContainsValue);
-export function Tags$GetAll(ts, key) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(ts);
-        $t1_2 = null;
-        $t2_3 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t3_4 = ($t2_3 + 1);
-        $t4_5 = ($t3_4 < $t0_1);
-        if ($t4_5) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t5_6 = ts.addr($t3_4);
-        $t6_7 = $t5_6.$get();
-        $t7_8 = $rt.builtin.len($t6_7);
-        $t8_9 = ($t7_8 > 0);
-        if ($t8_9) {
-          $block = 5; break;
-        }
-        else {
-          let $phi0 = $t1_2;
-          let $phi1 = $t3_4;
-          $t1_2 = $phi0;
-          $t2_3 = $phi1;
-          $block = 1; break;
-        }
-        break;
-      }
-      case 3: {
-        return $t1_2;
-        break;
-      }
-      case 4: {
-        $t9_10 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
-        $t10_11 = $t9_10.$get().addr(0);
-        $t10_11.$set($t6_7);
-        $t11_12 = $rt.builtin.sliceSlice($t9_10.$get(), undefined, undefined, undefined);
-        $t12_13 = $rt.builtin.appendSlice($t1_2, $t11_12);
-        $t1_2 = $t12_13;
-        $t2_3 = $t3_4;
-        $block = 1; break;
-        break;
-      }
-      case 5: {
-        $t13_14 = $t6_7.addr(0);
-        $t14_15 = $t13_14.$get();
-        $t15_16 = ($t14_15 === key);
-        if ($t15_16) {
-          $block = 4; break;
-        }
-        else {
-          let $phi0 = $t1_2;
-          let $phi1 = $t3_4;
-          $t1_2 = $phi0;
-          $t2_3 = $phi1;
-          $block = 1; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-$rt.types.getType('common/nostr.Tags')?.methods?.set('GetAll', Tags$GetAll);
-export function Tags$GetD(ts) {
-  let $t0_1, $t1_2, $t2_3;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = Tags$GetFirst(ts, 'd');
-        $t1_2 = ($t0_1 !== null);
-        if ($t1_2) {
-          $block = 1; break;
-        }
-        else {
-          $block = 2; break;
-        }
-        break;
-      }
-      case 1: {
-        $t2_3 = Tag$Value($t0_1);
-        return $t2_3;
-        break;
-      }
-      case 2: {
-        return '';
-        break;
-      }
-    }
-  }
-}
-
-$rt.types.getType('common/nostr.Tags')?.methods?.set('GetD', Tags$GetD);
-export function Tags$GetFirst(ts, key) {
-  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11;
-  let $block = 0;
-  while (true) {
-    switch ($block) {
-      case 0: {
-        $t0_1 = $rt.builtin.len(ts);
-        $t1_2 = -1;
-        $block = 1; break;
-        break;
-      }
-      case 1: {
-        $t2_3 = ($t1_2 + 1);
-        $t3_4 = ($t2_3 < $t0_1);
-        if ($t3_4) {
-          $block = 2; break;
-        }
-        else {
-          $block = 3; break;
-        }
-        break;
-      }
-      case 2: {
-        $t4_5 = ts.addr($t2_3);
-        $t5_6 = $t4_5.$get();
-        $t6_7 = $rt.builtin.len($t5_6);
-        $t7_8 = ($t6_7 > 0);
-        if ($t7_8) {
-          $block = 5; break;
-        }
-        else {
-          $t1_2 = $t2_3;
-          $block = 1; break;
-        }
-        break;
-      }
-      case 3: {
-        return null;
-        break;
-      }
-      case 4: {
-        return $t5_6;
-        break;
-      }
-      case 5: {
-        $t8_9 = $t5_6.addr(0);
-        $t9_10 = $t8_9.$get();
-        $t10_11 = ($t9_10 === key);
-        if ($t10_11) {
-          $block = 4; break;
-        }
-        else {
-          $t1_2 = $t2_3;
-          $block = 1; break;
-        }
-        break;
-      }
-    }
-  }
-}
-
-$rt.types.getType('common/nostr.Tags')?.methods?.set('GetFirst', Tags$GetFirst);
 export function Filter$Matches(f, e) {
   let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16, $t16_17, $t17_18, $t18_19, $t19_20, $t20_21, $t21_22, $t22_23, $t23_24, $t24_25, $t25_26, $t26_27, $t27_28, $t28_29, $t29_30, $t30_31, $t31_32, $t32_33, $t33_34, $t34_35, $t35_36, $t36_37, $t37_38, $t38_39, $t39_40, $t40_41, $t41_42, $t42_43, $t43_44, $t44_45, $t45_46, $t46_47, $t47_48, $t48_49, $t49_50, $t50_51, $t51_52, $t52_53, $t53_54, $t54_55, $t55_56, $t56_57, $t57_58, $t58_59;
   let $block = 0;
@@ -4999,3 +4632,370 @@ export function Event$ToJSON(e) {
 }
 
 $rt.types.getType('common/nostr.Event')?.methods?.set('ToJSON', Event$ToJSON);
+export function Tag$Key(t) {
+  let $t0_1, $t1_2, $t2_3, $t3_4;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(t);
+        $t1_2 = ($t0_1 > 0);
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t2_3 = t.addr(0);
+        $t3_4 = $t2_3.$get();
+        return $t3_4;
+        break;
+      }
+      case 2: {
+        return '';
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/nostr.Tag')?.methods?.set('Key', Tag$Key);
+export function Tag$Marker(t) {
+  let $t0_1, $t1_2, $t2_3, $t3_4;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(t);
+        $t1_2 = ($t0_1 > 3);
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t2_3 = t.addr(3);
+        $t3_4 = $t2_3.$get();
+        return $t3_4;
+        break;
+      }
+      case 2: {
+        return '';
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/nostr.Tag')?.methods?.set('Marker', Tag$Marker);
+export function Tag$Relay(t) {
+  let $t0_1, $t1_2, $t2_3, $t3_4;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(t);
+        $t1_2 = ($t0_1 > 2);
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t2_3 = t.addr(2);
+        $t3_4 = $t2_3.$get();
+        return $t3_4;
+        break;
+      }
+      case 2: {
+        return '';
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/nostr.Tag')?.methods?.set('Relay', Tag$Relay);
+export function Tag$Value(t) {
+  let $t0_1, $t1_2, $t2_3, $t3_4;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(t);
+        $t1_2 = ($t0_1 > 1);
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t2_3 = t.addr(1);
+        $t3_4 = $t2_3.$get();
+        return $t3_4;
+        break;
+      }
+      case 2: {
+        return '';
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/nostr.Tag')?.methods?.set('Value', Tag$Value);
+export function Tags$ContainsValue(ts, key, value) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(ts);
+        $t1_2 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t2_3 = ($t1_2 + 1);
+        $t3_4 = ($t2_3 < $t0_1);
+        if ($t3_4) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t4_5 = ts.addr($t2_3);
+        $t5_6 = $t4_5.$get();
+        $t6_7 = $rt.builtin.len($t5_6);
+        $t7_8 = ($t6_7 > 1);
+        if ($t7_8) {
+          $block = 6; break;
+        }
+        else {
+          $t1_2 = $t2_3;
+          $block = 1; break;
+        }
+        break;
+      }
+      case 3: {
+        return false;
+        break;
+      }
+      case 4: {
+        return true;
+        break;
+      }
+      case 5: {
+        $t8_9 = $t5_6.addr(1);
+        $t9_10 = $t8_9.$get();
+        $t10_11 = ($t9_10 === value);
+        if ($t10_11) {
+          $block = 4; break;
+        }
+        else {
+          $t1_2 = $t2_3;
+          $block = 1; break;
+        }
+        break;
+      }
+      case 6: {
+        $t11_12 = $t5_6.addr(0);
+        $t12_13 = $t11_12.$get();
+        $t13_14 = ($t12_13 === key);
+        if ($t13_14) {
+          $block = 5; break;
+        }
+        else {
+          $t1_2 = $t2_3;
+          $block = 1; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/nostr.Tags')?.methods?.set('ContainsValue', Tags$ContainsValue);
+export function Tags$GetAll(ts, key) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11, $t11_12, $t12_13, $t13_14, $t14_15, $t15_16;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(ts);
+        $t1_2 = null;
+        $t2_3 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t3_4 = ($t2_3 + 1);
+        $t4_5 = ($t3_4 < $t0_1);
+        if ($t4_5) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t5_6 = ts.addr($t3_4);
+        $t6_7 = $t5_6.$get();
+        $t7_8 = $rt.builtin.len($t6_7);
+        $t8_9 = ($t7_8 > 0);
+        if ($t8_9) {
+          $block = 5; break;
+        }
+        else {
+          let $phi0 = $t1_2;
+          let $phi1 = $t3_4;
+          $t1_2 = $phi0;
+          $t2_3 = $phi1;
+          $block = 1; break;
+        }
+        break;
+      }
+      case 3: {
+        return $t1_2;
+        break;
+      }
+      case 4: {
+        $t9_10 = { $value: $rt.builtin.makeSlice(1, 1, null), $get() { return this.$value; }, $set(v) { this.$value = v; } };
+        $t10_11 = $t9_10.$get().addr(0);
+        $t10_11.$set($t6_7);
+        $t11_12 = $rt.builtin.sliceSlice($t9_10.$get(), undefined, undefined, undefined);
+        $t12_13 = $rt.builtin.appendSlice($t1_2, $t11_12);
+        $t1_2 = $t12_13;
+        $t2_3 = $t3_4;
+        $block = 1; break;
+        break;
+      }
+      case 5: {
+        $t13_14 = $t6_7.addr(0);
+        $t14_15 = $t13_14.$get();
+        $t15_16 = ($t14_15 === key);
+        if ($t15_16) {
+          $block = 4; break;
+        }
+        else {
+          let $phi0 = $t1_2;
+          let $phi1 = $t3_4;
+          $t1_2 = $phi0;
+          $t2_3 = $phi1;
+          $block = 1; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/nostr.Tags')?.methods?.set('GetAll', Tags$GetAll);
+export function Tags$GetD(ts) {
+  let $t0_1, $t1_2, $t2_3;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = Tags$GetFirst(ts, 'd');
+        $t1_2 = ($t0_1 !== null);
+        if ($t1_2) {
+          $block = 1; break;
+        }
+        else {
+          $block = 2; break;
+        }
+        break;
+      }
+      case 1: {
+        $t2_3 = Tag$Value($t0_1);
+        return $t2_3;
+        break;
+      }
+      case 2: {
+        return '';
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/nostr.Tags')?.methods?.set('GetD', Tags$GetD);
+export function Tags$GetFirst(ts, key) {
+  let $t0_1, $t1_2, $t2_3, $t3_4, $t4_5, $t5_6, $t6_7, $t7_8, $t8_9, $t9_10, $t10_11;
+  let $block = 0;
+  while (true) {
+    switch ($block) {
+      case 0: {
+        $t0_1 = $rt.builtin.len(ts);
+        $t1_2 = -1;
+        $block = 1; break;
+        break;
+      }
+      case 1: {
+        $t2_3 = ($t1_2 + 1);
+        $t3_4 = ($t2_3 < $t0_1);
+        if ($t3_4) {
+          $block = 2; break;
+        }
+        else {
+          $block = 3; break;
+        }
+        break;
+      }
+      case 2: {
+        $t4_5 = ts.addr($t2_3);
+        $t5_6 = $t4_5.$get();
+        $t6_7 = $rt.builtin.len($t5_6);
+        $t7_8 = ($t6_7 > 0);
+        if ($t7_8) {
+          $block = 5; break;
+        }
+        else {
+          $t1_2 = $t2_3;
+          $block = 1; break;
+        }
+        break;
+      }
+      case 3: {
+        return null;
+        break;
+      }
+      case 4: {
+        return $t5_6;
+        break;
+      }
+      case 5: {
+        $t8_9 = $t5_6.addr(0);
+        $t9_10 = $t8_9.$get();
+        $t10_11 = ($t9_10 === key);
+        if ($t10_11) {
+          $block = 4; break;
+        }
+        else {
+          $t1_2 = $t2_3;
+          $block = 1; break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+$rt.types.getType('common/nostr.Tags')?.methods?.set('GetFirst', Tags$GetFirst);

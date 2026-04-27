@@ -8,13 +8,13 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	acliface "next.orly.dev/pkg/interfaces/acl"
-	orlyaclv1 "next.orly.dev/pkg/proto/orlyacl/v1"
-	orlydbv1 "next.orly.dev/pkg/proto/orlydb/v1"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	acliface "git.smesh.lol/orly/pkg/interfaces/acl"
+	orlyaclv1 "git.smesh.lol/orly/pkg/proto/orlyacl/v1"
+	orlydbv1 "git.smesh.lol/orly/pkg/proto/orlydb/v1"
 )
 
 // Client implements the acl.I interface via gRPC.

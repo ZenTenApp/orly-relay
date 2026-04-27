@@ -1,10 +1,10 @@
 package acl
 
 import (
-	"next.orly.dev/app/config"
-	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/utils"
+	"git.smesh.lol/orly/app/config"
+	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/utils"
 )
 
 type None struct {

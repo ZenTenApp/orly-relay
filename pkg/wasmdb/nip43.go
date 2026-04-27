@@ -11,7 +11,7 @@ import (
 	"github.com/aperturerobotics/go-indexeddb/idb"
 	"github.com/hack-pad/safejs"
 
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 const (

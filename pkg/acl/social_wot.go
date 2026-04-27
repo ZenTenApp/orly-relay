@@ -5,9 +5,9 @@ package acl
 import (
 	"sync"
 
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 // WoTDepthMap maintains a mapping from pubkey serial to WoT depth (1-N).

@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"next.orly.dev/pkg/nostr/crypto/keys"
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/crypto/keys"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
 
 // Test keys - generated from known secrets for reproducibility

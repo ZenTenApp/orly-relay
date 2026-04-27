@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"time"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/nostr/httpauth"
-	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/interfaces/store"
+	"git.smesh.lol/orly/pkg/nostr/httpauth"
+	"git.smesh.lol/orly/pkg/acl"
+	"git.smesh.lol/orly/pkg/interfaces/store"
 )
 
 // Neo4jConfigResponse is the public response for GET /api/neo4j/config.

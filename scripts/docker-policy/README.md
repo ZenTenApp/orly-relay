@@ -103,7 +103,7 @@ SUCCESS: All published events were retrieved
 ### 1. Build and Start Container
 
 ```bash
-cd /home/mleku/src/next.orly.dev
+cd /home/mleku/src/git.smesh.lol/orly
 docker-compose -f test-docker-policy/docker-compose.yml up -d
 ```
 

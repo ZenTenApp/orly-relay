@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
-	"next.orly.dev/pkg/nostr/protocol/marmot"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/nostr/protocol/marmot"
 )
 
 func newTestSigner(t *testing.T) *p8k.Signer {
@@ -229,7 +229,7 @@ func TestE2E_MLSGroupMessageRoundTrip(t *testing.T) {
 		t.Fatalf("EventToMessage: %v", err)
 	}
 
-	decrypted, err := bobGS.Decrypt(mlsCiphertext)
+	decrypted, _, err := bobGS.Decrypt(mlsCiphertext)
 	if err != nil {
 		t.Fatalf("decrypt: %v", err)
 	}

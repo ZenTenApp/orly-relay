@@ -22,7 +22,7 @@ package atomic
 
 import (
 	"encoding/json"
-	"next.orly.dev/pkg/utils"
+	"git.smesh.lol/orly/pkg/utils"
 	"runtime"
 	"sync"
 	"testing"

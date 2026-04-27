@@ -5,10 +5,10 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 	"github.com/minio/sha256-simd"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/utils"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/utils"
 )
 
 func TestFromIdHash(t *testing.T) {

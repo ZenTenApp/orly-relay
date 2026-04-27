@@ -13,7 +13,7 @@
       "Bash(tee:*)",
       "Bash(sudo rm:*)",
       "Bash(go mod tidy:*)",
-      "Bash(docker run --rm -v \"/home/mleku/src/next.orly.dev/cmd/benchmark/data:/data\" --user root alpine sh -c \"rm -rf /data/* /data/.[!.]*\")",
+      "Bash(docker run --rm -v \"/home/mleku/src/git.smesh.lol/orly/cmd/benchmark/data:/data\" --user root alpine sh -c \"rm -rf /data/* /data/.[!.]*\")",
       "Bash(head:*)",
       "Bash(cat:*)",
       "Bash(chmod:*)"

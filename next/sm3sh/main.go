@@ -82,6 +82,9 @@ var (
 	fetchQueue   []string // pubkeys queued for batch profile fetch
 	fetchTimer   int      // debounce timer for fetch queue
 
+	// QR modal.
+	logoSVGCache string
+
 	// Profile page tab state.
 	profileTab           string
 	profileTabContent    dom.Element
@@ -124,6 +127,7 @@ func main() {
 		dom.AddClass(dom.Body(), "dark")
 	}
 	root = dom.GetElementById("app-root")
+	dom.SetAttribute(root, "data-version", version)
 	stored := localstorage.GetItem(lsKeyPubkey)
 	if stored != "" {
 		pubhex = stored
@@ -477,6 +481,7 @@ func showApp() {
 	dom.SetStyle(logo, "height", "32px")
 	dom.SetStyle(logo, "flexShrink", "0")
 	dom.FetchText("./smesh-loader.svg", func(svg string) {
+		logoSVGCache = svg
 		dom.SetInnerHTML(logo, svg)
 		svgEl := dom.FirstChild(logo)
 		if svgEl != 0 {
@@ -1848,6 +1853,10 @@ func renderProfilePage(pk string) {
 	dom.SetStyle(topRow, "gap", "16px")
 	dom.SetStyle(topRow, "alignItems", "flex-start")
 
+	// Compute npub early — needed for avatar QR click and npub row.
+	npubBytes := helpers.HexDecode(pk)
+	npubStr := helpers.EncodeNpub(npubBytes)
+
 	if pic != "" {
 		av := dom.CreateElement("img")
 		dom.SetAttribute(av, "src", pic)
@@ -1857,7 +1866,12 @@ func renderProfilePage(pk string) {
 		dom.SetStyle(av, "objectFit", "cover")
 		dom.SetStyle(av, "flexShrink", "0")
 		dom.SetStyle(av, "border", "3px solid var(--bg)")
+		dom.SetStyle(av, "cursor", "pointer")
 		dom.SetAttribute(av, "onerror", "this.style.display='none'")
+		avNpub := npubStr
+		dom.AddEventListener(av, "click", dom.RegisterCallback(func() {
+			showQRModal(avNpub)
+		}))
 		dom.AppendChild(topRow, av)
 	}
 
@@ -1872,6 +1886,11 @@ func renderProfilePage(pk string) {
 		dom.SetStyle(nameSpan, "fontSize", "20px")
 		dom.SetStyle(nameSpan, "fontWeight", "bold")
 		dom.SetStyle(nameSpan, "fontFamily", "system-ui, sans-serif, 'Noto Color Emoji'")
+		dom.SetStyle(nameSpan, "cursor", "pointer")
+		nameNpub := npubStr
+		dom.AddEventListener(nameSpan, "click", dom.RegisterCallback(func() {
+			showQRModal(nameNpub)
+		}))
 		dom.AppendChild(info, nameSpan)
 	}
 
@@ -1894,9 +1913,7 @@ func renderProfilePage(pk string) {
 		verifyNip05(nip05, pk, nip05Badge)
 	}
 
-	// npub (full length) with copy button.
-	npubBytes := helpers.HexDecode(pk)
-	npubStr := helpers.EncodeNpub(npubBytes)
+	// npub (full length) with copy + qr buttons.
 	npubRow := dom.CreateElement("div")
 	dom.SetStyle(npubRow, "display", "flex")
 	dom.SetStyle(npubRow, "alignItems", "flex-start")
@@ -1915,6 +1932,16 @@ func renderProfilePage(pk string) {
 	dom.SetStyle(copyBtn, "cursor", "pointer")
 	dom.SetAttribute(copyBtn, "onclick", "navigator.clipboard.writeText('"+npubStr+"').then(()=>{this.textContent='copied!'});setTimeout(()=>{this.textContent='copy'},1500)")
 	dom.AppendChild(npubRow, copyBtn)
+	qrBtn := dom.CreateElement("span")
+	dom.SetTextContent(qrBtn, "qr")
+	dom.SetStyle(qrBtn, "color", "var(--accent)")
+	dom.SetStyle(qrBtn, "fontSize", "11px")
+	dom.SetStyle(qrBtn, "cursor", "pointer")
+	npubForQR := npubStr
+	dom.AddEventListener(qrBtn, "click", dom.RegisterCallback(func() {
+		showQRModal(npubForQR)
+	}))
+	dom.AppendChild(npubRow, qrBtn)
 	dom.AppendChild(info, npubRow)
 
 	// Website + lightning inline.
@@ -3483,6 +3510,50 @@ func toLower(s string) string {
 		b[i] = c
 	}
 	return string(b)
+}
+
+func showQRModal(npubStr string) {
+	svg := qrSVG(npubStr, 280, logoSVGCache)
+	if svg == "" {
+		return
+	}
+	scrim := dom.CreateElement("div")
+	dom.SetStyle(scrim, "position", "fixed")
+	dom.SetStyle(scrim, "inset", "0")
+	dom.SetStyle(scrim, "background", "rgba(0,0,0,0.6)")
+	dom.SetStyle(scrim, "display", "flex")
+	dom.SetStyle(scrim, "alignItems", "center")
+	dom.SetStyle(scrim, "justifyContent", "center")
+	dom.SetStyle(scrim, "zIndex", "9999")
+	dom.SetStyle(scrim, "cursor", "pointer")
+	dom.AddEventListener(scrim, "click", dom.RegisterCallback(func() {
+		dom.RemoveChild(dom.Body(), scrim)
+	}))
+
+	card := dom.CreateElement("div")
+	dom.SetStyle(card, "background", "white")
+	dom.SetStyle(card, "borderRadius", "16px")
+	dom.SetStyle(card, "padding", "24px")
+	dom.SetStyle(card, "display", "flex")
+	dom.SetStyle(card, "flexDirection", "column")
+	dom.SetStyle(card, "alignItems", "center")
+	dom.SetStyle(card, "gap", "12px")
+	dom.SetStyle(card, "cursor", "default")
+	dom.SetAttribute(card, "onclick", "event.stopPropagation()")
+	dom.SetInnerHTML(card, svg)
+
+	label := dom.CreateElement("div")
+	dom.SetStyle(label, "fontSize", "11px")
+	dom.SetStyle(label, "color", "#666")
+	dom.SetStyle(label, "wordBreak", "break-all")
+	dom.SetStyle(label, "textAlign", "center")
+	dom.SetStyle(label, "maxWidth", "280px")
+	dom.SetStyle(label, "fontFamily", "'Fira Code', monospace")
+	dom.SetTextContent(label, npubStr)
+	dom.AppendChild(card, label)
+
+	dom.AppendChild(scrim, card)
+	dom.AppendChild(dom.Body(), scrim)
 }
 
 func clearChildren(el dom.Element) {

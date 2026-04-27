@@ -8,8 +8,8 @@ package secp256k1
 import (
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/utils"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/utils"
 	"github.com/minio/sha256-simd"
 )
 

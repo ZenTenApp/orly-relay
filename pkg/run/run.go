@@ -10,13 +10,13 @@ import (
 	"sync"
 
 	"github.com/adrg/xdg"
-	"next.orly.dev/pkg/lol/chk"
-	lol "next.orly.dev/pkg/lol"
-	"next.orly.dev/app"
-	"next.orly.dev/app/config"
-	"next.orly.dev/pkg/acl"
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/ratelimit"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	lol "git.smesh.lol/orly/pkg/lol"
+	"git.smesh.lol/orly/app"
+	"git.smesh.lol/orly/app/config"
+	"git.smesh.lol/orly/pkg/acl"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/ratelimit"
 )
 
 // Options configures relay startup behavior.

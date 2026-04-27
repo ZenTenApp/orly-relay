@@ -1,7 +1,7 @@
 package filter
 
 import (
-	"next.orly.dev/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/lol/errorf"
 )
 
 // skipJSONValue skips over an arbitrary JSON value and returns the raw bytes and remainder.

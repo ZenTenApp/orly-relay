@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"sync"
 
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // Config holds TCP transport configuration.

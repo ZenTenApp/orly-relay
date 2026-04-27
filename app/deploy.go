@@ -15,8 +15,8 @@ import (
 	"strings"
 	"sync"
 
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
 )
 
 const (
@@ -247,7 +247,7 @@ func (s *Smesh3Server) extractAndSwap(w http.ResponseWriter, bundle []byte, hash
 		os.RemoveAll(oldTarget)
 	}
 
-	s.bumpVersion()
+	s.notifyFullRefresh()
 
 	log.I.F("smesh deploy: applied %s (%d bytes xz)", hashHex, len(bundle))
 	w.Header().Set("Content-Type", "text/plain")

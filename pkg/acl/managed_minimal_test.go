@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"next.orly.dev/app/config"
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/app/config"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 )
 
 func TestManagedACL_BasicFunctionality(t *testing.T) {

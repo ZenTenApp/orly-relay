@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/url"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/nostr/crypto/encryption"
-	"next.orly.dev/pkg/nostr/interfaces/signer/p8k"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/interfaces/signer"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/crypto/encryption"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer"
 )
 
 type ConnectionParams struct {

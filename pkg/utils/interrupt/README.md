@@ -14,7 +14,7 @@ Graceful shutdown handling for Go applications. This package provides utilities 
 ## Installation
 
 ```bash
-go get next.orly.dev/pkg/utils/interrupt
+go get git.smesh.lol/orly/pkg/utils/interrupt
 ```
 
 ## Usage
@@ -29,7 +29,7 @@ import (
     "log"
     "time"
 
-    "next.orly.dev/pkg/utils/interrupt"
+    "git.smesh.lol/orly/pkg/utils/interrupt"
 )
 
 func main() {
@@ -216,7 +216,7 @@ import (
     "net/http"
     "time"
 
-    "next.orly.dev/pkg/utils/interrupt"
+    "git.smesh.lol/orly/pkg/utils/interrupt"
 )
 
 func main() {
@@ -288,4 +288,4 @@ This package integrates well with:
 
 ## License
 
-Part of the next.orly.dev project. See main LICENSE file.
+Part of the git.smesh.lol/orly project. See main LICENSE file.

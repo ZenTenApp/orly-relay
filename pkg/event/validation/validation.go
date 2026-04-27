@@ -4,7 +4,7 @@
 package validation
 
 import (
-	"next.orly.dev/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 )
 
 // ReasonCode identifies the type of validation failure for response formatting.

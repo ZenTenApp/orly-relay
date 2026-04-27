@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"time"
 
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
 )
 
 // WhitelistUpdater manages automatic whitelist updates based on GrapeVine scores.

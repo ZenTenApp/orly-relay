@@ -1,12 +1,12 @@
 package app
 
 import (
-	"next.orly.dev/pkg/nostr/encoders/envelopes/eventenvelope"
-	"next.orly.dev/pkg/nostr/encoders/envelopes/okenvelope"
-	"next.orly.dev/pkg/nostr/encoders/reason"
-	"next.orly.dev/pkg/event/authorization"
-	"next.orly.dev/pkg/event/routing"
-	"next.orly.dev/pkg/event/validation"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/eventenvelope"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/okenvelope"
+	"git.smesh.lol/orly/pkg/nostr/encoders/reason"
+	"git.smesh.lol/orly/pkg/event/authorization"
+	"git.smesh.lol/orly/pkg/event/routing"
+	"git.smesh.lol/orly/pkg/event/validation"
 )
 
 // sendValidationError sends an appropriate OK response for a validation failure.

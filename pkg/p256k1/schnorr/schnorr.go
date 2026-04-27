@@ -3,7 +3,7 @@ package schnorr
 import (
 	"errors"
 
-	"next.orly.dev/pkg/p256k1"
+	"git.smesh.lol/orly/pkg/p256k1"
 )
 
 // Signature is a 64-byte BIP-340 Schnorr signature.

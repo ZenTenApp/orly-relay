@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 // testDB is the shared database instance for tests

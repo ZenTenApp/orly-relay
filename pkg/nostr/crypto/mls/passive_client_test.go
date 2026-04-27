@@ -128,7 +128,7 @@ func testPassiveClient(t *testing.T, tc *passiveClientTest) {
 		t.Logf("epoch %v", i)
 
 		for i, rawProposal := range epoch.Proposals {
-			if _, err := group.UnmarshalAndProcessMessage(rawProposal); err != nil {
+			if _, _, err := group.UnmarshalAndProcessMessage(rawProposal); err != nil {
 				t.Fatalf("UnmarshalAndProcessMessage(proposal[%v]) = %v", i, err)
 			}
 		}

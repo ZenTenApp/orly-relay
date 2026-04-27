@@ -12,7 +12,7 @@ import (
 	"math/big"
 	"testing"
 
-	"next.orly.dev/pkg/nostr/utils"
+	"git.smesh.lol/orly/pkg/nostr/utils"
 )
 
 // TestGenerateSecretKey ensures the key generation works as expected.

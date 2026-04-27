@@ -3,9 +3,9 @@
 package kind
 
 import (
-	"next.orly.dev/pkg/nostr/encoders/ints"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/nostr/encoders/ints"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/errorf"
 )
 
 // S is an array of kind.K, used in filter.K and filter.S for searches.

@@ -68,9 +68,9 @@ Specific known issues:
 
 ### 0.3 — Repository Setup
 - Create private working repo at /home/mleku/orly.dev (this directory)
-- Source continues to live at /home/mleku/src/next.orly.dev
+- Source continues to live at /home/mleku/src/git.smesh.lol/orly
 - This directory holds planning documents and operational artifacts
-- The go module path remains next.orly.dev until the public pivot
+- The go module path remains git.smesh.lol/orly until the public pivot
 
 ### 0.4 — Symlink Update
 - Update /m/orly symlink if needed
@@ -80,7 +80,7 @@ Specific known issues:
 ## Phase 1: Integrate Smesh Into ORLY
 
 ### 1.1 — Embed Smesh as a Subcommand or Service
-Smesh is a React/Vite SPA at /home/mleku/src/git.mleku.dev/mleku/smesh.
+Smesh is a React/Vite SPA at /home/mleku/src/git.smesh.lol/orly.
 Build output is ~5MB static files.
 
 Approach:
@@ -303,8 +303,8 @@ Phase 5 alone drives adoption. They compound.
 - git.orly.dev — git hosting (Phase 6)
 
 ### Source Code
-- Lives at /home/mleku/src/next.orly.dev (private)
-- Module path: next.orly.dev (unchanged until public pivot)
+- Lives at /home/mleku/src/git.smesh.lol/orly (private)
+- Module path: git.smesh.lol/orly (unchanged until public pivot)
 - Planning docs: /home/mleku/orly.dev/
 
 

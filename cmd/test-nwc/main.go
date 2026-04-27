@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"next.orly.dev/pkg/protocol/nwc"
+	"git.smesh.lol/orly/pkg/protocol/nwc"
 )
 
 func main() {

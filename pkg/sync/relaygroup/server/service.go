@@ -4,10 +4,10 @@ package server
 import (
 	"context"
 
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/sync/relaygroup"
-	commonv1 "next.orly.dev/pkg/proto/orlysync/common/v1"
-	relaygroupv1 "next.orly.dev/pkg/proto/orlysync/relaygroup/v1"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/sync/relaygroup"
+	commonv1 "git.smesh.lol/orly/pkg/proto/orlysync/common/v1"
+	relaygroupv1 "git.smesh.lol/orly/pkg/proto/orlysync/relaygroup/v1"
 )
 
 // Service implements the RelayGroupServiceServer interface.

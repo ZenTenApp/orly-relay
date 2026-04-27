@@ -93,11 +93,9 @@ cmd/benchmark/data
 .idea/
 **/.idea/
 
-# Re-ignore node_modules and vendor everywhere (must come after !*/)
+# Re-ignore node_modules everywhere (must come after !*/)
 node_modules/
 **/node_modules/
-vendor/
-**/vendor/
 /blocklist.json
 /gui/gui/main.wasm
 /gui/gui/index.html

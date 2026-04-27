@@ -3,7 +3,7 @@ package text
 import (
 	"testing"
 
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 	"lukechampine.com/frand"
 	"github.com/minio/sha256-simd"
 )

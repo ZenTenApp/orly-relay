@@ -7,8 +7,8 @@ import (
 
 	"github.com/minio/sha256-simd"
 
-	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
-	nip44 "next.orly.dev/pkg/nostr/crypto/encryption"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/secp256k1"
+	nip44 "git.smesh.lol/orly/pkg/nostr/crypto/encryption"
 	"github.com/stretchr/testify/assert"
 )
 

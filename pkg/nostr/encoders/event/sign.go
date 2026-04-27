@@ -1,8 +1,8 @@
 package event
 
 import (
-	"next.orly.dev/pkg/nostr/interfaces/signer"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 // Sign the event using the signer.I. Uses github.com/bitcoin-core/secp256k1 if

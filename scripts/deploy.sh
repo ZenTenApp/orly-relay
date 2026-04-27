@@ -304,8 +304,8 @@ main() {
     log_info "Starting ORLY relay deployment (port: $port)..."
 
     # Check if we're in the right directory
-    if [[ ! -f "go.mod" ]] || ! grep -q "next.orly.dev" go.mod; then
-        log_error "This script must be run from the next.orly.dev project root directory"
+    if [[ ! -f "go.mod" ]] || ! grep -q "git.smesh.lol/orly" go.mod; then
+        log_error "This script must be run from the git.smesh.lol/orly project root directory"
         exit 1
     fi
 

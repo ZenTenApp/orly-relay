@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 //go:embed smesh2

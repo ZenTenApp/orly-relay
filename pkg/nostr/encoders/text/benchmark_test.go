@@ -3,7 +3,7 @@ package text
 import (
 	"testing"
 
-	"next.orly.dev/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 	"github.com/minio/sha256-simd"
 	"lukechampine.com/frand"
 )

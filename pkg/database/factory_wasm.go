@@ -70,13 +70,13 @@ func NewDatabaseWithConfig(
 		// In WASM builds, default to wasmdb (IndexedDB backend)
 		// "badger" is mapped to wasmdb since Badger is not available
 		if newWasmDBDatabase == nil {
-			return nil, fmt.Errorf("wasmdb database backend not available (import _ \"next.orly.dev/pkg/wasmdb\")")
+			return nil, fmt.Errorf("wasmdb database backend not available (import _ \"git.smesh.lol/orly/pkg/wasmdb\")")
 		}
 		return newWasmDBDatabase(ctx, cancel, cfg)
 	case "neo4j":
 		// Use the neo4j implementation (HTTP-based, works in WASM)
 		if newNeo4jDatabase == nil {
-			return nil, fmt.Errorf("neo4j database backend not available (import _ \"next.orly.dev/pkg/neo4j\")")
+			return nil, fmt.Errorf("neo4j database backend not available (import _ \"git.smesh.lol/orly/pkg/neo4j\")")
 		}
 		return newNeo4jDatabase(ctx, cancel, cfg)
 	default:

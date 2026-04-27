@@ -5,7 +5,7 @@
 package btcec
 
 import (
-	"next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/secp256k1"
 )
 
 // GenerateSharedSecret generates a shared secret based on a secret key and a

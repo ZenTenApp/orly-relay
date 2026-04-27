@@ -1,6 +1,6 @@
 # Policy System Troubleshooting Guide
 
-This guide helps you configure and troubleshoot the ORLY relay policy system based on the requirements from [Issue #5](https://git.nostrdev.com/mleku/next.orly.dev/issues/5).
+This guide helps you configure and troubleshoot the ORLY relay policy system based on the requirements from [Issue #5](https://git.nostrdev.com/mleku/git.smesh.lol/orly/issues/5).
 
 ## Definition of Done Requirements
 
@@ -598,7 +598,7 @@ sudo journalctl -u orly -f
 Use the comprehensive test:
 
 ```bash
-cd /home/mleku/src/next.orly.dev
+cd /home/mleku/src/git.smesh.lol/orly
 CGO_ENABLED=0 go test -v ./pkg/policy -run TestPolicyDefinitionOfDone
 ```
 
@@ -620,7 +620,7 @@ If you're still experiencing issues:
 1. Check logs: `sudo journalctl -u orly -f | grep -i policy`
 2. Verify configuration: `cat ~/.config/ORLY/policy.json | jq .`
 3. Run tests: `go test -v ./pkg/policy`
-4. File an issue: https://git.nostrdev.com/mleku/next.orly.dev/issues
+4. File an issue: https://git.nostrdev.com/mleku/git.smesh.lol/orly/issues
 
 ## Summary
 

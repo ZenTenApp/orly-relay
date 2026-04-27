@@ -5,7 +5,7 @@ package wasmdb
 import (
 	"errors"
 
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 // Blob storage methods - WasmDB does not support blob storage

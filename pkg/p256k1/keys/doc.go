@@ -33,7 +33,7 @@
 //
 // # Usage
 //
-//	import "next.orly.dev/pkg/p256k1/keys"
+//	import "git.smesh.lol/orly/pkg/p256k1/keys"
 //
 //	// Generate a new key pair
 //	keypair, err := keys.Generate()

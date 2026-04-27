@@ -85,7 +85,7 @@ export default function SidebarDrawer({ open, onOpenChange }: SidebarDrawerProps
               <Logo />
             </button>
             <a
-              href="https://git.mleku.dev/mleku/smesh"
+              href="https://git.smesh.lol/orly"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"

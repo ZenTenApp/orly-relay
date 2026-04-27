@@ -5,12 +5,12 @@ package reqenvelope
 import (
 	"io"
 
-	"next.orly.dev/pkg/nostr/encoders/envelopes"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/text"
-	"next.orly.dev/pkg/nostr/interfaces/codec"
-	"next.orly.dev/pkg/nostr/utils/constraints"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/text"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/codec"
+	"git.smesh.lol/orly/pkg/nostr/utils/constraints"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 // L is the label associated with this type of codec.Envelope.

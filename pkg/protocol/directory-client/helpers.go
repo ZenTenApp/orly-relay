@@ -1,8 +1,8 @@
 package directory_client
 
 import (
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/protocol/directory"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/protocol/directory"
 )
 
 // EventCollector provides utility methods for collecting specific types of

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // TestBugReproduction_Kind1AllowedWithWhitelist4678 reproduces the reported bug

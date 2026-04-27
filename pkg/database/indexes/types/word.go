@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"io"
 
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 var zero = []byte{0x00}

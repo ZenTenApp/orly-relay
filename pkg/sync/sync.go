@@ -1,21 +1,21 @@
 // Package sync provides backward compatibility facade for sync services
 // New code should import the specific subpackages directly:
-//   - next.orly.dev/pkg/sync/distributed
-//   - next.orly.dev/pkg/sync/cluster
-//   - next.orly.dev/pkg/sync/relaygroup
-//   - next.orly.dev/pkg/sync/negentropy
+//   - git.smesh.lol/orly/pkg/sync/distributed
+//   - git.smesh.lol/orly/pkg/sync/cluster
+//   - git.smesh.lol/orly/pkg/sync/relaygroup
+//   - git.smesh.lol/orly/pkg/sync/negentropy
 package sync
 
 import (
 	"context"
 	"time"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/sync/cluster"
-	"next.orly.dev/pkg/sync/common"
-	"next.orly.dev/pkg/sync/distributed"
-	"next.orly.dev/pkg/sync/relaygroup"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/sync/cluster"
+	"git.smesh.lol/orly/pkg/sync/common"
+	"git.smesh.lol/orly/pkg/sync/distributed"
+	"git.smesh.lol/orly/pkg/sync/relaygroup"
 )
 
 // Re-export types for backward compatibility

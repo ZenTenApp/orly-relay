@@ -8,12 +8,12 @@ import (
 
 	sqlite "github.com/vertex-lab/nostr-sqlite"
 
-	"next.orly.dev/pkg/database"
-	"next.orly.dev/pkg/database/indexes/types"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/nostr/encoders/filter"
-	"next.orly.dev/pkg/nostr/encoders/tag"
-	"next.orly.dev/pkg/interfaces/store"
+	"git.smesh.lol/orly/pkg/database"
+	"git.smesh.lol/orly/pkg/database/indexes/types"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
+	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
+	"git.smesh.lol/orly/pkg/interfaces/store"
 )
 
 // RelySQLiteWrapper wraps the vertex-lab/nostr-sqlite store to implement

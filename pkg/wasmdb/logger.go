@@ -7,7 +7,7 @@ import (
 	"syscall/js"
 	"time"
 
-	"next.orly.dev/pkg/lol"
+	"git.smesh.lol/orly/pkg/lol"
 )
 
 // logger provides logging functionality for the wasmdb package

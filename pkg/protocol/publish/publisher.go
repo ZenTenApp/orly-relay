@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/interfaces/publisher"
-	"next.orly.dev/pkg/interfaces/typer"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/interfaces/publisher"
+	"git.smesh.lol/orly/pkg/interfaces/typer"
 )
 
 // WriteRequest represents a write operation to be performed by the write worker

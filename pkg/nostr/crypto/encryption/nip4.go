@@ -6,8 +6,8 @@ import (
 	"crypto/cipher"
 	"encoding/base64"
 
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/errorf"
 	"lukechampine.com/frand"
 )
 

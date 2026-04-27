@@ -255,9 +255,11 @@ export function SSEConnect(url, onMessage) {
     let active = true;
     _sseConns.set(id, { close() { active = false; } });
     (async function poll() {
+      let backoff = 3000;
       while (active) {
         try {
           const resp = await fetch(url, { headers: { 'Accept': 'text/event-stream' } });
+          backoff = 3000;
           const reader = resp.body.getReader();
           const decoder = new TextDecoder();
           let buf = '';
@@ -277,7 +279,10 @@ export function SSEConnect(url, onMessage) {
             }
           }
         } catch (e) {
-          if (active) await new Promise(r => setTimeout(r, 3000));
+          if (active) {
+            await new Promise(r => setTimeout(r, backoff));
+            backoff = Math.min(backoff * 2, 60000);
+          }
         }
       }
     })();

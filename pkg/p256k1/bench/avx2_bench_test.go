@@ -6,8 +6,8 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"next.orly.dev/pkg/p256k1"
-	"next.orly.dev/pkg/p256k1/signer"
+	"git.smesh.lol/orly/pkg/p256k1"
+	"git.smesh.lol/orly/pkg/p256k1/signer"
 )
 
 // This file contains benchmarks comparing:

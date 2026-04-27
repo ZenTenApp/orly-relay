@@ -7,10 +7,10 @@ import (
 	"errors"
 	"fmt"
 
-	"next.orly.dev/pkg/nostr/crypto/ec/bech32"
-	"next.orly.dev/pkg/nostr/crypto/ec/chaincfg"
-	"next.orly.dev/pkg/nostr/utils"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/bech32"
+	"git.smesh.lol/orly/pkg/nostr/crypto/ec/chaincfg"
+	"git.smesh.lol/orly/pkg/nostr/utils"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 // AddressSegWit is the base address type for all SegWit addresses.

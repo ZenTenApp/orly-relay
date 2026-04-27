@@ -11,7 +11,7 @@ All contributors should use these terms consistently in code, comments, and docu
 A Nostr event as defined in NIP-01. The fundamental unit of data in the Nostr protocol.
 Contains: id, pubkey, created_at, kind, tags, content, sig.
 
-- **Code location**: `git.mleku.dev/mleku/nostr/encoders/event`
+- **Code location**: `git.smesh.lol/orly/pkg/nostr/encoders/event`
 - **Key type**: `event.E`
 
 ### Serial
@@ -25,7 +25,7 @@ Used for efficient range queries, synchronization, and garbage collection orderi
 A 32-byte secp256k1 public key identifying a Nostr user. Stored as binary internally,
 displayed as 64-character lowercase hex or bech32 npub format externally.
 
-- **Code location**: `git.mleku.dev/mleku/nostr/types.Pubkey`
+- **Code location**: `git.smesh.lol/orly/pkg/nostr/types.Pubkey`
 
 ### Access Level
 The permission tier granted to a pubkey. Determines what operations are allowed.

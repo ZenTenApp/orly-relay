@@ -3,8 +3,8 @@ package filter
 import (
 	"testing"
 
-	"next.orly.dev/pkg/nostr/utils"
-	"next.orly.dev/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/nostr/utils"
+	"git.smesh.lol/orly/pkg/lol/chk"
 )
 
 func TestT_MarshalUnmarshal(t *testing.T) {

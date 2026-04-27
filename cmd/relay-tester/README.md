@@ -18,7 +18,7 @@ A comprehensive command-line tool for testing Nostr relay implementations agains
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd next.orly.dev
+cd git.smesh.lol/orly
 
 # Build the relay-tester
 go build -o relay-tester ./cmd/relay-tester
@@ -291,5 +291,5 @@ go test -cover ./cmd/relay-tester
 
 ## License
 
-This tool is part of the next.orly.dev project and follows the same licensing terms.
+This tool is part of the git.smesh.lol/orly project and follows the same licensing terms.
 

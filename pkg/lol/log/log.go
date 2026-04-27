@@ -2,7 +2,7 @@
 package log
 
 import (
-	"next.orly.dev/pkg/lol"
+	"git.smesh.lol/orly/pkg/lol"
 )
 
 var F, E, W, I, D, T lol.LevelPrinter

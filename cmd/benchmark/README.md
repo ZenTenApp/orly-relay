@@ -2,7 +2,7 @@
 
 A comprehensive benchmarking system for testing and comparing the performance of multiple Nostr relay implementations, including:
 
-- **next.orly.dev** (this repository) - Badger and Neo4j backend variants
+- **git.smesh.lol/orly** (this repository) - Badger and Neo4j backend variants
 - **Khatru** - SQLite and Badger variants
 - **Relayer** - Basic example implementation
 - **Strfry** - C++ LMDB-based relay
@@ -177,7 +177,7 @@ go build -o benchmark main.go
 
 ## Database Backend Comparison
 
-The benchmark suite includes **next.orly.dev** with two different database backends to compare architectural approaches:
+The benchmark suite includes **git.smesh.lol/orly** with two different database backends to compare architectural approaches:
 
 ### Badger Backend (next-orly-badger)
 - **Type**: Embedded key-value store
@@ -403,4 +403,4 @@ To add support for new relay implementations:
 
 ## License
 
-This benchmark suite is part of the next.orly.dev project and follows the same licensing terms.
+This benchmark suite is part of the git.smesh.lol/orly project and follows the same licensing terms.

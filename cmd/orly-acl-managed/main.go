@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"go-simpler.org/env"
-	"next.orly.dev/pkg/lol"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	"next.orly.dev/pkg/acl/server"
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/pkg/acl/server"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 // Config holds the ACL server configuration.

@@ -6,15 +6,15 @@ package okenvelope
 import (
 	"io"
 
-	"next.orly.dev/pkg/nostr/encoders/envelopes"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/encoders/text"
-	"next.orly.dev/pkg/nostr/interfaces/codec"
-	"next.orly.dev/pkg/nostr/utils/constraints"
+	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/text"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/codec"
+	"git.smesh.lol/orly/pkg/nostr/utils/constraints"
 	"github.com/minio/sha256-simd"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/errorf"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/errorf"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
 
 // L is the label associated with this type of codec.Envelope.

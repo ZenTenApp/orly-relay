@@ -12,11 +12,11 @@ import (
 
 	"go-simpler.org/env"
 	"google.golang.org/grpc"
-	"next.orly.dev/pkg/lol"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/lol"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	orlynitsv1 "next.orly.dev/pkg/proto/orlynits/v1"
+	orlynitsv1 "git.smesh.lol/orly/pkg/proto/orlynits/v1"
 )
 
 // Config holds the orly-nits shim configuration.

@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"next.orly.dev/app/config"
-	"next.orly.dev/pkg/database"
+	"git.smesh.lol/orly/app/config"
+	"git.smesh.lol/orly/pkg/database"
 )
 
 func TestHandleNIP86Management_Basic(t *testing.T) {

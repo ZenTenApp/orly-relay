@@ -17,7 +17,7 @@ Wants=network.target
 Type=simple
 User=mleku
 Group=mleku
-WorkingDirectory=/home/mleku/src/next.orly.dev
+WorkingDirectory=/home/mleku/src/git.smesh.lol/orly
 ExecStart=/home/mleku/.local/bin/orly
 Restart=always
 RestartSec=5
@@ -40,7 +40,7 @@ echo "Reloading systemd..."
 sudo systemctl daemon-reload
 
 echo "Building and installing new version..."
-cd /home/mleku/src/next.orly.dev
+cd /home/mleku/src/git.smesh.lol/orly
 CGO_ENABLED=0 go build -o orly
 sudo setcap 'cap_net_bind_service=+ep' ./orly
 cp ./orly ~/.local/bin/

@@ -7,7 +7,7 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"next.orly.dev/pkg/interfaces/loadmonitor"
+	"git.smesh.lol/orly/pkg/interfaces/loadmonitor"
 )
 
 // NewBadgerLimiter creates a rate limiter configured for a Badger database.

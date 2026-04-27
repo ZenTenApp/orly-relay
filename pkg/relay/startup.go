@@ -19,19 +19,19 @@ import (
 	"time"
 
 	"github.com/pkg/profile"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/app"
-	"next.orly.dev/app/config"
-	"next.orly.dev/pkg/acl"
-	aclgrpc "next.orly.dev/pkg/acl/grpc"
-	"next.orly.dev/pkg/database"
-	_ "next.orly.dev/pkg/database/grpc" // Import for grpc factory registration
-	neo4jdb "next.orly.dev/pkg/neo4j"
-	"next.orly.dev/pkg/ratelimit"
-	"next.orly.dev/pkg/sync/negentropy"
-	negentropygrpc "next.orly.dev/pkg/sync/negentropy/grpc"
-	"next.orly.dev/pkg/utils/interrupt"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/app"
+	"git.smesh.lol/orly/app/config"
+	"git.smesh.lol/orly/pkg/acl"
+	aclgrpc "git.smesh.lol/orly/pkg/acl/grpc"
+	"git.smesh.lol/orly/pkg/database"
+	_ "git.smesh.lol/orly/pkg/database/grpc" // Import for grpc factory registration
+	neo4jdb "git.smesh.lol/orly/pkg/neo4j"
+	"git.smesh.lol/orly/pkg/ratelimit"
+	"git.smesh.lol/orly/pkg/sync/negentropy"
+	negentropygrpc "git.smesh.lol/orly/pkg/sync/negentropy/grpc"
+	"git.smesh.lol/orly/pkg/utils/interrupt"
 )
 
 // StartupResult holds the initialized components from Startup.

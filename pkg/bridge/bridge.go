@@ -8,14 +8,14 @@ import (
 	"sync"
 	"time"
 
-	"next.orly.dev/pkg/nostr/encoders/bech32encoding"
-	"next.orly.dev/pkg/nostr/encoders/hex"
-	"next.orly.dev/pkg/nostr/interfaces/signer"
-	"next.orly.dev/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
+	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/interfaces/signer"
+	"git.smesh.lol/orly/pkg/lol/log"
 
-	aclgrpc "next.orly.dev/pkg/acl/grpc"
-	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
-	"next.orly.dev/pkg/nostr/protocol/marmot"
+	aclgrpc "git.smesh.lol/orly/pkg/acl/grpc"
+	bridgesmtp "git.smesh.lol/orly/pkg/bridge/smtp"
+	"git.smesh.lol/orly/pkg/nostr/protocol/marmot"
 )
 
 // Bridge is the Nostr-Email bridge. It manages identity, relay connection,

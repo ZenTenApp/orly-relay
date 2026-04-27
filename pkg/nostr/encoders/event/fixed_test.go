@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"next.orly.dev/pkg/nostr/types"
+	"git.smesh.lol/orly/pkg/nostr/types"
 )
 
 func TestIDFixed(t *testing.T) {

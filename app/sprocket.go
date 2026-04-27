@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
-	"next.orly.dev/pkg/lol/chk"
-	"next.orly.dev/pkg/lol/log"
-	"next.orly.dev/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/lol/chk"
+	"git.smesh.lol/orly/pkg/lol/log"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 )
 
 // SprocketResponse represents a response from the sprocket script

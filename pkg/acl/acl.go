@@ -1,10 +1,10 @@
 package acl
 
 import (
-	"next.orly.dev/pkg/nostr/encoders/event"
-	acliface "next.orly.dev/pkg/interfaces/acl"
-	"next.orly.dev/pkg/mode"
-	"next.orly.dev/pkg/utils/atomic"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	acliface "git.smesh.lol/orly/pkg/interfaces/acl"
+	"git.smesh.lol/orly/pkg/mode"
+	"git.smesh.lol/orly/pkg/utils/atomic"
 )
 
 var Registry = &S{}

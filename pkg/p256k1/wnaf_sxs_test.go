@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"next.orly.dev/pkg/p256k1/wnaf"
+	"git.smesh.lol/orly/pkg/p256k1/wnaf"
 )
 
 // TestWNAFSXS compares the standalone wnaf.Encode against the internal Scalar.wNAF

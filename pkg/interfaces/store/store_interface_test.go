@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	ntypes "next.orly.dev/pkg/nostr/types"
+	ntypes "git.smesh.lol/orly/pkg/nostr/types"
 )
 
 func TestNewIdPkTs(t *testing.T) {

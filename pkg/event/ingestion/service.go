@@ -6,12 +6,12 @@ import (
 	"context"
 	"fmt"
 
-	"next.orly.dev/pkg/nostr/encoders/event"
-	"next.orly.dev/pkg/event/authorization"
-	"next.orly.dev/pkg/event/processing"
-	"next.orly.dev/pkg/event/routing"
-	"next.orly.dev/pkg/event/specialkinds"
-	"next.orly.dev/pkg/event/validation"
+	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/event/authorization"
+	"git.smesh.lol/orly/pkg/event/processing"
+	"git.smesh.lol/orly/pkg/event/routing"
+	"git.smesh.lol/orly/pkg/event/specialkinds"
+	"git.smesh.lol/orly/pkg/event/validation"
 )
 
 // SprocketChecker checks events against the sprocket (external filter).

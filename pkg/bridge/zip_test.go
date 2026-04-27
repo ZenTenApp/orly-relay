@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	bridgesmtp "next.orly.dev/pkg/bridge/smtp"
+	bridgesmtp "git.smesh.lol/orly/pkg/bridge/smtp"
 )
 
 func TestZipParts_HTMLOnly(t *testing.T) {

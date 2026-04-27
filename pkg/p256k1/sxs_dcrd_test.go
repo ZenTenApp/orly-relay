@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	dcrd "next.orly.dev/pkg/nostr/crypto/ec/secp256k1"
+	dcrd "git.smesh.lol/orly/pkg/nostr/crypto/ec/secp256k1"
 )
 
 // TestSxSDcrd compares p256k1 pubkey generation against the vendored Decred
