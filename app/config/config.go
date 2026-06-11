@@ -249,7 +249,7 @@ type C struct {
 	BunkerPort    int  `env:"ORLY_BUNKER_PORT" default:"3335" usage:"internal port for bunker WebSocket (only accessible via WireGuard)"`
 
 	// Tor hidden service configuration (subprocess mode - runs tor binary automatically)
-	TorEnabled  bool   `env:"ORLY_TOR_ENABLED" default:"true" usage:"enable Tor hidden service (spawns tor subprocess; disable with false if tor not installed)"`
+	TorEnabled  bool   `env:"ORLY_TOR_ENABLED" default:"false" usage:"enable Tor hidden service (spawns tor subprocess; requires tor binary in PATH)"`
 	TorPort     int    `env:"ORLY_TOR_PORT" default:"3336" usage:"internal port for Tor hidden service traffic"`
 	TorDataDir  string `env:"ORLY_TOR_DATA_DIR" usage:"Tor data directory (default: $ORLY_DATA_DIR/tor)"`
 	TorBinary   string `env:"ORLY_TOR_BINARY" default:"tor" usage:"path to tor binary (default: search in PATH)"`

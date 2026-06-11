@@ -13,7 +13,8 @@ import (
 // --- Actor request/response types ---
 
 type tmAddReq struct {
-	t iface.Transport
+	t    iface.Transport
+	done chan struct{}
 }
 
 type tmStartAllReq struct {
@@ -44,7 +45,7 @@ type Manager struct {
 // NewManager creates a new transport manager.
 func NewManager() *Manager {
 	m := &Manager{
-		addCh:       make(chan tmAddReq, 16),
+		addCh:       make(chan tmAddReq),
 		startAllCh:  make(chan tmStartAllReq),
 		stopAllCh:   make(chan tmStopAllReq),
 		addressesCh: make(chan tmAddressesReq),
@@ -66,6 +67,7 @@ func (m *Manager) actorLoop() {
 			return
 		case req := <-m.addCh:
 			transports = append(transports, req.t)
+			close(req.done)
 		case req := <-m.startAllCh:
 			started := 0
 			for _, t := range transports {
@@ -114,8 +116,11 @@ func (m *Manager) Shutdown() {
 }
 
 // Add registers a transport with the manager.
+// Synchronous: blocks until the actor has processed the add.
 func (m *Manager) Add(t iface.Transport) {
-	m.addCh <- tmAddReq{t: t}
+	done := make(chan struct{})
+	m.addCh <- tmAddReq{t: t, done: done}
+	<-done
 }
 
 // StartAll starts all registered transports in order.
