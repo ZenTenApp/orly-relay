@@ -36,12 +36,12 @@ func TestE2E_RouterDispatch(t *testing.T) {
 	ctx := context.Background()
 	alice := "aaaa1111"
 
-	// Subscribe command
+	// Subscribe command - free subscriptions are instant
 	router.RouteDM(ctx, alice, "subscribe")
 	waitForMessages(t, sink, alice, 1)
 	msgs := sink.get(alice)
-	if !strings.Contains(msgs[0], "not available") {
-		t.Errorf("subscribe response: want 'not available', got: %s", msgs[0])
+	if !strings.Contains(msgs[0], "Subscription active") {
+		t.Errorf("subscribe response: want 'Subscription active', got: %s", msgs[0])
 	}
 
 	// Status command

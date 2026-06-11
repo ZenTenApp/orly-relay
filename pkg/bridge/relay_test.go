@@ -3,6 +3,7 @@ package bridge
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestNewRelayConn(t *testing.T) {
@@ -52,7 +53,9 @@ func TestRelayConn_CloseWithCancel(t *testing.T) {
 
 func TestRelayConn_ConnectInvalidURL(t *testing.T) {
 	rc := NewRelayConn("not-a-valid-url", nil)
-	err := rc.Connect(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := rc.Connect(ctx)
 	if err == nil {
 		t.Fatal("expected error connecting to invalid URL")
 	}

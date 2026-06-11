@@ -86,6 +86,11 @@ func (op *OutboundProcessor) ProcessOutbound(senderPubkeyHex, content string) er
 	}
 	fromAddr := fromLocal + "@" + op.domain
 
+	if op.smtpClient == nil {
+		op.reply(senderPubkeyHex, "Email sending is not configured. Contact the relay operator.")
+		return nil
+	}
+
 	// Send via SMTP
 	email := &bridgesmtp.OutboundEmail{
 		From:    fromAddr,

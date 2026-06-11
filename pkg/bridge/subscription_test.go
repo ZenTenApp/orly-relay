@@ -206,11 +206,18 @@ func TestFileSubscriptionStore_MultipleSubscriptions(t *testing.T) {
 }
 
 func TestFileSubscriptionStore_FlushToReadOnlyDir(t *testing.T) {
-	// Create a store with a path in a read-only directory
 	store := &FileSubscriptionStore{
-		path: "/dev/null/impossible/subscriptions.json",
-		subs: make(map[string]*Subscription),
+		path:     "/dev/null/impossible/subscriptions.json",
+		subs:     make(map[string]*Subscription),
+		saveCh:   make(chan fileSaveReq),
+		getCh:    make(chan fileGetReq),
+		listCh:   make(chan fileListReq),
+		deleteCh: make(chan fileDeleteReq),
+		stop:     make(chan struct{}),
+		done:     make(chan struct{}),
 	}
+	go store.loop()
+	defer func() { close(store.stop); <-store.done }()
 
 	sub := &Subscription{
 		PubkeyHex: "test",
@@ -230,7 +237,15 @@ func TestFileSubscriptionStore_DeleteFlushError(t *testing.T) {
 		subs: map[string]*Subscription{
 			"test": {PubkeyHex: "test", ExpiresAt: time.Now().Add(time.Hour)},
 		},
+		saveCh:   make(chan fileSaveReq),
+		getCh:    make(chan fileGetReq),
+		listCh:   make(chan fileListReq),
+		deleteCh: make(chan fileDeleteReq),
+		stop:     make(chan struct{}),
+		done:     make(chan struct{}),
 	}
+	go store.loop()
+	defer func() { close(store.stop); <-store.done }()
 
 	err := store.Delete("test")
 	if err == nil {

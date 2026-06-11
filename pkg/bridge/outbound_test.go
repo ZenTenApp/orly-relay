@@ -12,7 +12,7 @@ import (
 	bridgesmtp "git.smesh.lol/orly/pkg/bridge/smtp"
 )
 
-func TestOutboundProcessor_NotSubscribed(t *testing.T) {
+func TestOutboundProcessor_NotSubscribed_NoSMTP(t *testing.T) {
 	var replies []string
 	sendDM := func(pubkey, content string) error {
 		replies = append(replies, content)
@@ -28,10 +28,10 @@ func TestOutboundProcessor_NotSubscribed(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(replies) == 0 {
-		t.Fatal("expected subscription required reply")
+		t.Fatal("expected error reply")
 	}
-	if !strings.Contains(replies[0], "subscription") {
-		t.Errorf("reply = %q, want subscription message", replies[0])
+	if !strings.Contains(replies[0], "not configured") {
+		t.Errorf("reply = %q, want 'not configured' message", replies[0])
 	}
 }
 
@@ -117,16 +117,17 @@ func TestOutboundProcessor_WithSubscription_SMTPNil(t *testing.T) {
 
 	op := NewOutboundProcessor(nil, nil, handler, "bridge.example.com", sendDM, nil)
 
-	// Will panic because smtpClient is nil when calling Send
-	func() {
-		defer func() {
-			r := recover()
-			if r == nil {
-				t.Fatal("expected panic from nil smtpClient")
-			}
-		}()
-		op.ProcessOutbound("user1", "To: alice@example.com\n\nHello")
-	}()
+	// Should return gracefully with "not configured" instead of panicking
+	err := op.ProcessOutbound("user1", "To: alice@example.com\n\nHello")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(replies) == 0 {
+		t.Fatal("expected not-configured reply")
+	}
+	if !strings.Contains(replies[0], "not configured") {
+		t.Errorf("reply = %q, want 'not configured' message", replies[0])
+	}
 }
 
 func TestOutboundProcessor_Reply_NilSendDM(t *testing.T) {

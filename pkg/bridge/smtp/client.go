@@ -201,7 +201,7 @@ func (c *Client) deliverDirect(addr, from string, to []string, msg []byte) error
 	if err != nil {
 		return fmt.Errorf("dial %s: %w", addr, err)
 	}
-	defer cl.Quit()
+	defer cl.Close()
 
 	if err := cl.Hello(c.cfg.FromDomain); err != nil {
 		return fmt.Errorf("HELO: %w", err)
@@ -251,7 +251,7 @@ func (c *Client) deliverViaRelay(from string, to []string, msg []byte) error {
 	if err != nil {
 		return fmt.Errorf("dial relay %s: %w", addr, err)
 	}
-	defer cl.Quit()
+	defer cl.Close()
 
 	if err := cl.Hello(c.cfg.FromDomain); err != nil {
 		return fmt.Errorf("HELO: %w", err)

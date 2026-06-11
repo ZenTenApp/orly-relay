@@ -85,7 +85,7 @@ func TestRouter_WithSubscriptionHandler(t *testing.T) {
 	sink := newMockDMSink()
 	store := NewMemorySubscriptionStore()
 
-	// Create handler with nil payment processor — will get "not available" reply
+	// Free subscribe activates instantly (no payment needed)
 	subHandler := NewSubscriptionHandler(store, nil, sink.send, 2100, nil, 0, "test.example.com")
 	router := NewRouter(subHandler, nil, sink.send)
 
@@ -94,14 +94,12 @@ func TestRouter_WithSubscriptionHandler(t *testing.T) {
 	// HandleSubscribe runs in a goroutine, wait briefly for it to complete
 	time.Sleep(50 * time.Millisecond)
 
-	// Should have been routed to the subscription handler,
-	// which sends a "not available" message because payments=nil
 	msgs := sink.get("user1")
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(msgs))
 	}
-	if !strings.Contains(msgs[0], "not available") {
-		t.Errorf("expected 'not available' from sub handler, got: %s", msgs[0])
+	if !strings.Contains(msgs[0], "Subscription active") {
+		t.Errorf("expected 'Subscription active' from sub handler, got: %s", msgs[0])
 	}
 }
 

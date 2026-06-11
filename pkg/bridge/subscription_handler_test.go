@@ -92,25 +92,21 @@ func TestSubscriptionHandler_HandleSubscribe_NoPaymentProcessor(t *testing.T) {
 	store := NewMemorySubscriptionStore()
 	dms := newTestDMCollector()
 
+	// No payment processor needed - free subscribe doesn't use it
 	sh := NewSubscriptionHandler(store, nil, dms.sendDM, 2100, nil, 0, "test.example.com")
 
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("HandleSubscribe panicked: %v", r)
-		}
-	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
+	ctx := context.Background()
 	sh.HandleSubscribe(ctx, "newuser", "")
 
 	msgs := dms.get("newuser")
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 DM, got %d", len(msgs))
 	}
-	if !strings.Contains(msgs[0], "not available") {
-		t.Errorf("expected 'not available' message, got: %s", msgs[0])
+	if !strings.Contains(msgs[0], "Subscription active") {
+		t.Errorf("expected 'Subscription active' message, got: %s", msgs[0])
+	}
+	if !sh.IsSubscribed("newuser") {
+		t.Error("newuser should be subscribed after free activation")
 	}
 }
 
@@ -122,12 +118,13 @@ func TestSubscriptionHandler_HandleSubscribe_InvoiceCreationFails(t *testing.T) 
 	mock.errors["make_invoice"] = fmt.Errorf("wallet offline")
 	pp := NewPaymentProcessorWithClient(mock, 2100)
 
-	sh := NewSubscriptionHandler(store, pp, dms.sendDM, 2100, nil, 0, "test.example.com")
+	sh := NewSubscriptionHandler(store, pp, dms.sendDM, 2100, nil, 2100, "test.example.com")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	sh.HandleSubscribe(ctx, "user1", "")
+	// Alias subscribe triggers payment flow
+	sh.HandleSubscribe(ctx, "user1", "testalias")
 
 	msgs := dms.get("user1")
 	if len(msgs) != 1 {
@@ -155,30 +152,34 @@ func TestSubscriptionHandler_HandleSubscribe_FullFlow(t *testing.T) {
 	}
 	pp := NewPaymentProcessorWithClient(mock, 2100)
 
-	sh := NewSubscriptionHandler(store, pp, dms.sendDM, 2100, nil, 0, "test.example.com")
+	sh := NewSubscriptionHandler(store, pp, dms.sendDM, 2100, nil, 2100, "test.example.com")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// First activate free subscription (required for alias)
 	sh.HandleSubscribe(ctx, "user1", "")
 
-	msgs := dms.get("user1")
-	if len(msgs) < 2 {
-		t.Fatalf("expected at least 2 DMs (invoice + confirmation), got %d", len(msgs))
-	}
-	// First message: invoice
-	if !strings.Contains(msgs[0], "lnbc21000n1") {
-		t.Errorf("first DM should contain invoice, got: %s", msgs[0])
-	}
-	// Last message: confirmation
-	last := msgs[len(msgs)-1]
-	if !strings.Contains(last, "Payment received") {
-		t.Errorf("last DM should confirm payment, got: %s", last)
-	}
+	// Now subscribe with alias (payment flow)
+	sh.HandleSubscribe(ctx, "user1", "testalias")
 
-	// Verify subscription was saved
-	if !sh.IsSubscribed("user1") {
-		t.Error("user1 should be subscribed after payment")
+	msgs := dms.get("user1")
+	// Should have: free activation + invoice + payment confirmation
+	if len(msgs) < 3 {
+		t.Fatalf("expected at least 3 DMs (free + invoice + confirmation), got %d", len(msgs))
+	}
+	// First message: free activation
+	if !strings.Contains(msgs[0], "Subscription active") {
+		t.Errorf("first DM should be free activation, got: %s", msgs[0])
+	}
+	// Second message: invoice
+	if !strings.Contains(msgs[1], "lnbc21000n1") {
+		t.Errorf("second DM should contain invoice, got: %s", msgs[1])
+	}
+	// Last message: alias confirmation
+	last := msgs[len(msgs)-1]
+	if !strings.Contains(last, "testalias") {
+		t.Errorf("last DM should confirm alias, got: %s", last)
 	}
 }
 
@@ -198,54 +199,46 @@ func TestSubscriptionHandler_HandleSubscribe_PaymentTimeout(t *testing.T) {
 	}
 	pp := NewPaymentProcessorWithClient(mock, 2100)
 
-	sh := NewSubscriptionHandler(store, pp, dms.sendDM, 2100, nil, 0, "test.example.com")
+	sh := NewSubscriptionHandler(store, pp, dms.sendDM, 2100, nil, 2100, "test.example.com")
 
 	// Short timeout so the test doesn't take forever
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	sh.HandleSubscribe(ctx, "user1", "")
+	// Alias subscribe triggers payment flow which should timeout
+	sh.HandleSubscribe(ctx, "user1", "testalias")
 
-	// Should NOT be subscribed — payment timed out
-	if sh.IsSubscribed("user1") {
-		t.Error("user1 should not be subscribed after timeout")
+	// Check no alias was claimed (payment timed out)
+	msgs := dms.get("user1")
+	found := false
+	for _, m := range msgs {
+		if strings.Contains(m, "testalias") && strings.Contains(m, "active") {
+			found = true
+		}
+	}
+	if found {
+		t.Error("alias should not be active after payment timeout")
 	}
 }
 
 func TestSubscriptionHandler_HandleSubscribe_SaveFails(t *testing.T) {
 	dms := newTestDMCollector()
 
-	mock := newMockNWC()
-	mock.responses["make_invoice"] = map[string]any{
-		"invoice":      "lnbc21000n1...",
-		"payment_hash": "abc123",
-	}
-	mock.responses["lookup_invoice"] = map[string]any{
-		"payment_hash": "abc123",
-		"settled_at":   1700000000,
-	}
-	pp := NewPaymentProcessorWithClient(mock, 2100)
-
 	// Use a store that fails on Save
 	failStore := &failingSaveStore{}
 
-	sh := NewSubscriptionHandler(failStore, pp, dms.sendDM, 2100, nil, 0, "test.example.com")
+	// No payment processor needed - free subscribe path hits Save directly
+	sh := NewSubscriptionHandler(failStore, nil, dms.sendDM, 2100, nil, 0, "test.example.com")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
+	ctx := context.Background()
 	sh.HandleSubscribe(ctx, "user1", "")
 
 	msgs := dms.get("user1")
-	// Should get invoice message + failure message
-	found := false
-	for _, m := range msgs {
-		if strings.Contains(m, "failed to activate") {
-			found = true
-		}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 DM, got %d", len(msgs))
 	}
-	if !found {
-		t.Errorf("expected save failure message, got: %v", msgs)
+	if !strings.Contains(msgs[0], "Failed to activate") {
+		t.Errorf("expected save failure message, got: %s", msgs[0])
 	}
 }
 

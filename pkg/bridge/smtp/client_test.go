@@ -602,30 +602,34 @@ func TestClient_DeliverDirect_HelloFails_Rejection(t *testing.T) {
 	defer ln.Close()
 
 	go func() {
-		conn, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-		conn.Write([]byte("220 test ESMTP\r\n"))
-		buf := make([]byte, 1024)
 		for {
-			n, err := conn.Read(buf)
+			conn, err := ln.Accept()
 			if err != nil {
 				return
 			}
-			cmd := strings.ToUpper(strings.TrimSpace(string(buf[:n])))
-			switch {
-			case strings.HasPrefix(cmd, "EHLO"):
-				conn.Write([]byte("550 EHLO rejected\r\n"))
-			case strings.HasPrefix(cmd, "HELO"):
-				conn.Write([]byte("550 HELO rejected\r\n"))
-			case strings.HasPrefix(cmd, "QUIT"):
-				conn.Write([]byte("221 Bye\r\n"))
-				return
-			default:
-				conn.Write([]byte("500 Unknown\r\n"))
-			}
+			go func(c net.Conn) {
+				defer c.Close()
+				c.Write([]byte("220 test ESMTP\r\n"))
+				buf := make([]byte, 1024)
+				for {
+					n, err := c.Read(buf)
+					if err != nil {
+						return
+					}
+					cmd := strings.ToUpper(strings.TrimSpace(string(buf[:n])))
+					switch {
+					case strings.HasPrefix(cmd, "EHLO"):
+						c.Write([]byte("550 EHLO rejected\r\n"))
+					case strings.HasPrefix(cmd, "HELO"):
+						c.Write([]byte("550 HELO rejected\r\n"))
+					case strings.HasPrefix(cmd, "QUIT"):
+						c.Write([]byte("221 Bye\r\n"))
+						return
+					default:
+						c.Write([]byte("500 Unknown\r\n"))
+					}
+				}
+			}(conn)
 		}
 	}()
 
@@ -657,38 +661,41 @@ func TestClient_DeliverDirect_WriteDataFails(t *testing.T) {
 	defer ln.Close()
 
 	go func() {
-		conn, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-		conn.Write([]byte("220 test ESMTP\r\n"))
-		buf := make([]byte, 4096)
 		for {
-			n, err := conn.Read(buf)
+			conn, err := ln.Accept()
 			if err != nil {
 				return
 			}
-			cmd := strings.ToUpper(strings.TrimSpace(string(buf[:n])))
-			switch {
-			case strings.HasPrefix(cmd, "EHLO"), strings.HasPrefix(cmd, "HELO"):
-				conn.Write([]byte("250 OK\r\n"))
-			case strings.HasPrefix(cmd, "MAIL FROM"):
-				conn.Write([]byte("250 OK\r\n"))
-			case strings.HasPrefix(cmd, "RCPT TO"):
-				conn.Write([]byte("250 OK\r\n"))
-			case strings.HasPrefix(cmd, "DATA"):
-				conn.Write([]byte("354 Start mail input\r\n"))
-				// Immediately close connection to cause write error
-				time.Sleep(10 * time.Millisecond)
-				conn.Close()
-				return
-			case strings.HasPrefix(cmd, "QUIT"):
-				conn.Write([]byte("221 Bye\r\n"))
-				return
-			default:
-				conn.Write([]byte("500 Unknown\r\n"))
-			}
+			go func(c net.Conn) {
+				defer c.Close()
+				c.Write([]byte("220 test ESMTP\r\n"))
+				buf := make([]byte, 4096)
+				for {
+					n, err := c.Read(buf)
+					if err != nil {
+						return
+					}
+					cmd := strings.ToUpper(strings.TrimSpace(string(buf[:n])))
+					switch {
+					case strings.HasPrefix(cmd, "EHLO"), strings.HasPrefix(cmd, "HELO"):
+						c.Write([]byte("250 OK\r\n"))
+					case strings.HasPrefix(cmd, "MAIL FROM"):
+						c.Write([]byte("250 OK\r\n"))
+					case strings.HasPrefix(cmd, "RCPT TO"):
+						c.Write([]byte("250 OK\r\n"))
+					case strings.HasPrefix(cmd, "DATA"):
+						c.Write([]byte("354 Start mail input\r\n"))
+						time.Sleep(10 * time.Millisecond)
+						c.Close()
+						return
+					case strings.HasPrefix(cmd, "QUIT"):
+						c.Write([]byte("221 Bye\r\n"))
+						return
+					default:
+						c.Write([]byte("500 Unknown\r\n"))
+					}
+				}
+			}(conn)
 		}
 	}()
 
@@ -720,30 +727,34 @@ func TestClient_DeliverDirect_MailFromFails(t *testing.T) {
 	defer ln.Close()
 
 	go func() {
-		conn, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-		conn.Write([]byte("220 test ESMTP\r\n"))
-		buf := make([]byte, 1024)
 		for {
-			n, err := conn.Read(buf)
+			conn, err := ln.Accept()
 			if err != nil {
 				return
 			}
-			cmd := strings.ToUpper(strings.TrimSpace(string(buf[:n])))
-			switch {
-			case strings.HasPrefix(cmd, "EHLO"), strings.HasPrefix(cmd, "HELO"):
-				conn.Write([]byte("250 OK\r\n"))
-			case strings.HasPrefix(cmd, "MAIL FROM"):
-				conn.Write([]byte("550 Sender rejected\r\n"))
-			case strings.HasPrefix(cmd, "QUIT"):
-				conn.Write([]byte("221 Bye\r\n"))
-				return
-			default:
-				conn.Write([]byte("500 Unknown\r\n"))
-			}
+			go func(c net.Conn) {
+				defer c.Close()
+				c.Write([]byte("220 test ESMTP\r\n"))
+				buf := make([]byte, 1024)
+				for {
+					n, err := c.Read(buf)
+					if err != nil {
+						return
+					}
+					cmd := strings.ToUpper(strings.TrimSpace(string(buf[:n])))
+					switch {
+					case strings.HasPrefix(cmd, "EHLO"), strings.HasPrefix(cmd, "HELO"):
+						c.Write([]byte("250 OK\r\n"))
+					case strings.HasPrefix(cmd, "MAIL FROM"):
+						c.Write([]byte("550 Sender rejected\r\n"))
+					case strings.HasPrefix(cmd, "QUIT"):
+						c.Write([]byte("221 Bye\r\n"))
+						return
+					default:
+						c.Write([]byte("500 Unknown\r\n"))
+					}
+				}
+			}(conn)
 		}
 	}()
 
@@ -778,34 +789,38 @@ func TestClient_DeliverDirect_DataFails(t *testing.T) {
 	defer ln.Close()
 
 	go func() {
-		conn, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-		conn.Write([]byte("220 test ESMTP\r\n"))
-		buf := make([]byte, 1024)
 		for {
-			n, err := conn.Read(buf)
+			conn, err := ln.Accept()
 			if err != nil {
 				return
 			}
-			cmd := strings.ToUpper(strings.TrimSpace(string(buf[:n])))
-			switch {
-			case strings.HasPrefix(cmd, "EHLO"), strings.HasPrefix(cmd, "HELO"):
-				conn.Write([]byte("250 OK\r\n"))
-			case strings.HasPrefix(cmd, "MAIL FROM"):
-				conn.Write([]byte("250 OK\r\n"))
-			case strings.HasPrefix(cmd, "RCPT TO"):
-				conn.Write([]byte("250 OK\r\n"))
-			case strings.HasPrefix(cmd, "DATA"):
-				conn.Write([]byte("554 Transaction failed\r\n"))
-			case strings.HasPrefix(cmd, "QUIT"):
-				conn.Write([]byte("221 Bye\r\n"))
-				return
-			default:
-				conn.Write([]byte("500 Unknown\r\n"))
-			}
+			go func(c net.Conn) {
+				defer c.Close()
+				c.Write([]byte("220 test ESMTP\r\n"))
+				buf := make([]byte, 1024)
+				for {
+					n, err := c.Read(buf)
+					if err != nil {
+						return
+					}
+					cmd := strings.ToUpper(strings.TrimSpace(string(buf[:n])))
+					switch {
+					case strings.HasPrefix(cmd, "EHLO"), strings.HasPrefix(cmd, "HELO"):
+						c.Write([]byte("250 OK\r\n"))
+					case strings.HasPrefix(cmd, "MAIL FROM"):
+						c.Write([]byte("250 OK\r\n"))
+					case strings.HasPrefix(cmd, "RCPT TO"):
+						c.Write([]byte("250 OK\r\n"))
+					case strings.HasPrefix(cmd, "DATA"):
+						c.Write([]byte("554 Transaction failed\r\n"))
+					case strings.HasPrefix(cmd, "QUIT"):
+						c.Write([]byte("221 Bye\r\n"))
+						return
+					default:
+						c.Write([]byte("500 Unknown\r\n"))
+					}
+				}
+			}(conn)
 		}
 	}()
 
@@ -837,46 +852,48 @@ func TestClient_DeliverDirect_CloseFails(t *testing.T) {
 	defer ln.Close()
 
 	go func() {
-		conn, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-		conn.Write([]byte("220 test ESMTP\r\n"))
-		buf := make([]byte, 4096)
 		for {
-			n, err := conn.Read(buf)
+			conn, err := ln.Accept()
 			if err != nil {
 				return
 			}
-			cmd := strings.ToUpper(strings.TrimSpace(string(buf[:n])))
-			switch {
-			case strings.HasPrefix(cmd, "EHLO"), strings.HasPrefix(cmd, "HELO"):
-				conn.Write([]byte("250 OK\r\n"))
-			case strings.HasPrefix(cmd, "MAIL FROM"):
-				conn.Write([]byte("250 OK\r\n"))
-			case strings.HasPrefix(cmd, "RCPT TO"):
-				conn.Write([]byte("250 OK\r\n"))
-			case strings.HasPrefix(cmd, "DATA"):
-				conn.Write([]byte("354 Start mail input\r\n"))
-				// Read until we get \r\n.\r\n (end of data)
+			go func(c net.Conn) {
+				defer c.Close()
+				c.Write([]byte("220 test ESMTP\r\n"))
+				buf := make([]byte, 4096)
 				for {
-					n, err := conn.Read(buf)
+					n, err := c.Read(buf)
 					if err != nil {
 						return
 					}
-					if strings.Contains(string(buf[:n]), "\r\n.\r\n") {
-						break
+					cmd := strings.ToUpper(strings.TrimSpace(string(buf[:n])))
+					switch {
+					case strings.HasPrefix(cmd, "EHLO"), strings.HasPrefix(cmd, "HELO"):
+						c.Write([]byte("250 OK\r\n"))
+					case strings.HasPrefix(cmd, "MAIL FROM"):
+						c.Write([]byte("250 OK\r\n"))
+					case strings.HasPrefix(cmd, "RCPT TO"):
+						c.Write([]byte("250 OK\r\n"))
+					case strings.HasPrefix(cmd, "DATA"):
+						c.Write([]byte("354 Start mail input\r\n"))
+						for {
+							n, err := c.Read(buf)
+							if err != nil {
+								return
+							}
+							if strings.Contains(string(buf[:n]), "\r\n.\r\n") {
+								break
+							}
+						}
+						c.Write([]byte("554 Message rejected\r\n"))
+					case strings.HasPrefix(cmd, "QUIT"):
+						c.Write([]byte("221 Bye\r\n"))
+						return
+					default:
+						c.Write([]byte("500 Unknown\r\n"))
 					}
 				}
-				// Reject at end of data (close error)
-				conn.Write([]byte("554 Message rejected\r\n"))
-			case strings.HasPrefix(cmd, "QUIT"):
-				conn.Write([]byte("221 Bye\r\n"))
-				return
-			default:
-				conn.Write([]byte("500 Unknown\r\n"))
-			}
+			}(conn)
 		}
 	}()
 

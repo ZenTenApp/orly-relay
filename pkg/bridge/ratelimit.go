@@ -39,6 +39,7 @@ type rlCheckReq struct {
 
 type rlRecordReq struct {
 	pubkeyHex string
+	done      chan struct{}
 }
 
 // RateLimiter tracks outbound email sending rates using sliding windows.
@@ -62,7 +63,7 @@ func NewRateLimiter(cfg RateLimitConfig) *RateLimiter {
 		global:      newWindow(),
 		checkFreeCh: make(chan rlCheckFreeReq),
 		checkCh:     make(chan rlCheckReq),
-		recordCh:    make(chan rlRecordReq, 16),
+		recordCh:    make(chan rlRecordReq),
 		stop:        make(chan struct{}),
 		done:        make(chan struct{}),
 	}
@@ -82,6 +83,9 @@ func (rl *RateLimiter) loop() {
 			req.resp <- rl.doCheck(req.pubkeyHex)
 		case req := <-rl.recordCh:
 			rl.doRecord(req.pubkeyHex)
+			if req.done != nil {
+				close(req.done)
+			}
 		}
 	}
 }
@@ -107,7 +111,9 @@ func (rl *RateLimiter) Check(pubkeyHex string) error {
 // Record records a send event for rate limiting purposes.
 // Call this after a successful send.
 func (rl *RateLimiter) Record(pubkeyHex string) {
-	rl.recordCh <- rlRecordReq{pubkeyHex: pubkeyHex}
+	done := make(chan struct{})
+	rl.recordCh <- rlRecordReq{pubkeyHex: pubkeyHex, done: done}
+	<-done
 }
 
 // Stop shuts down the actor goroutine and waits for it to exit.

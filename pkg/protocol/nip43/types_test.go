@@ -22,25 +22,20 @@ func TestInviteManager_GenerateCode(t *testing.T) {
 		t.Fatal("generated code is empty")
 	}
 
-	// Verify the code exists in the manager
-	im.mu.Lock()
-	invite, exists := im.codes[code]
-	im.mu.Unlock()
-
-	if !exists {
-		t.Fatal("generated code not found in manager")
+	// Verify the code is valid and consumable
+	testPubkey := make([]byte, 32)
+	valid, reason := im.ValidateAndConsume(code, testPubkey)
+	if !valid {
+		t.Fatalf("generated code should be valid, rejected with: %s", reason)
 	}
 
-	if invite.Code != code {
-		t.Errorf("code mismatch: got %s, want %s", invite.Code, code)
+	// Verify the code is now consumed (can't use again)
+	valid, reason = im.ValidateAndConsume(code, testPubkey)
+	if valid {
+		t.Error("consumed code should not be valid again")
 	}
-
-	if invite.UsedBy != nil {
-		t.Error("newly generated code should not be used")
-	}
-
-	if time.Until(invite.ExpiresAt) > 24*time.Hour {
-		t.Error("expiry time is too far in the future")
+	if reason != "invite code already used" {
+		t.Errorf("wrong rejection reason: got %s", reason)
 	}
 }
 
@@ -106,13 +101,13 @@ func TestInviteManager_ExpiredCode(t *testing.T) {
 		t.Errorf("wrong rejection reason: got %s, want 'invite code expired'", reason)
 	}
 
-	// Verify code was deleted
-	im.mu.Lock()
-	_, exists := im.codes[code]
-	im.mu.Unlock()
-
-	if exists {
-		t.Error("expired code was not deleted")
+	// Verify code was deleted - attempting again should say "invalid" not "expired"
+	valid2, reason2 := im.ValidateAndConsume(code, testPubkey)
+	if valid2 {
+		t.Error("expired code should not be valid on second attempt")
+	}
+	if reason2 != "invalid invite code" {
+		t.Errorf("second attempt should get 'invalid invite code' (deleted), got: %s", reason2)
 	}
 }
 
@@ -136,13 +131,16 @@ func TestInviteManager_CleanupExpired(t *testing.T) {
 	// Cleanup
 	im.CleanupExpired()
 
-	// Verify all codes were deleted
-	im.mu.Lock()
-	remaining := len(im.codes)
-	im.mu.Unlock()
-
-	if remaining != 0 {
-		t.Errorf("cleanup failed: %d codes remaining", remaining)
+	// Verify all codes were deleted - all should be "invalid invite code"
+	testPubkey := make([]byte, 32)
+	for _, code := range codes {
+		valid, reason := im.ValidateAndConsume(code, testPubkey)
+		if valid {
+			t.Errorf("code %s should be expired and cleaned up", code)
+		}
+		if reason != "invalid invite code" {
+			t.Errorf("code %s: expected 'invalid invite code', got: %s", code, reason)
+		}
 	}
 }
 

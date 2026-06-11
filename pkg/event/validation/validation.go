@@ -110,6 +110,11 @@ func (s *Service) ValidateEvent(ev *event.E) Result {
 		return result
 	}
 
+	// Validate timestamp
+	if result := ValidateTimestamp(ev, s.cfg.MaxFutureSeconds); !result.Valid {
+		return result
+	}
+
 	return OK()
 }
 
