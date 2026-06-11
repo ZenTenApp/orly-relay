@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/adrg/xdg"
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/lol/chk"
 	lol "git.smesh.lol/orly/pkg/lol"
 	"git.smesh.lol/orly/app"
@@ -33,13 +34,6 @@ type Options struct {
 	StderrWriter io.Writer
 }
 
-// logReadReq reads from the log buffers.
-type logReadReq struct {
-	which string // "stdout", "stderr", "stdout_bytes", "stderr_bytes"
-	respS chan string
-	respB chan []byte
-}
-
 // Relay represents a running relay instance that can be started and stopped.
 type Relay struct {
 	ctx            context.Context
@@ -55,9 +49,11 @@ type Relay struct {
 	stdoutWriter io.Writer
 	stderrWriter io.Writer
 
-	logReadCh chan logReadReq
-	stop      chan struct{}
-	done      chan struct{}
+	stdoutStr   actor.Query[string]
+	stderrStr   actor.Query[string]
+	stdoutBytes actor.Query[[]byte]
+	stderrBytes actor.Query[[]byte]
+	logLC       actor.Lifecycle
 }
 
 // Start initializes and starts a relay with the given configuration.
@@ -73,9 +69,11 @@ type Relay struct {
 func Start(cfg *config.C, opts *Options) (relay *Relay, err error) {
 	relay = &Relay{
 		cleanupDataDir: true,
-		logReadCh:      make(chan logReadReq),
-		stop:           make(chan struct{}),
-		done:           make(chan struct{}),
+		stdoutStr:      actor.NewQuery[string](),
+		stderrStr:      actor.NewQuery[string](),
+		stdoutBytes:    actor.NewQuery[[]byte](),
+		stderrBytes:    actor.NewQuery[[]byte](),
+		logLC:          actor.NewLifecycle(),
 	}
 
 	// Apply options
@@ -146,46 +144,41 @@ func Start(cfg *config.C, opts *Options) (relay *Relay, err error) {
 	relay.quit = app.Run(relay.ctx, cfg, relay.db, limiter)
 
 	// Start log reader actor
-	go relay.logActor()
+	actor.Go(relay.logLC, relay.logActorLoop)
 
 	return
 }
 
-// logActor owns the log buffers and services read requests.
-func (r *Relay) logActor() {
-	defer close(r.done)
-
+// logActorLoop owns the log buffers and services read requests.
+func (r *Relay) logActorLoop() {
 	for {
 		select {
-		case <-r.stop:
+		case <-r.logLC.Stopping():
 			return
-		case req := <-r.logReadCh:
-			switch req.which {
-			case "stdout":
-				s := ""
-				if r.stdoutBuf != nil {
-					s = r.stdoutBuf.String()
-				}
-				req.respS <- s
-			case "stderr":
-				s := ""
-				if r.stderrBuf != nil {
-					s = r.stderrBuf.String()
-				}
-				req.respS <- s
-			case "stdout_bytes":
-				var b []byte
-				if r.stdoutBuf != nil {
-					b = r.stdoutBuf.Bytes()
-				}
-				req.respB <- b
-			case "stderr_bytes":
-				var b []byte
-				if r.stderrBuf != nil {
-					b = r.stderrBuf.Bytes()
-				}
-				req.respB <- b
+		case msg := <-r.stdoutStr.Recv():
+			s := ""
+			if r.stdoutBuf != nil {
+				s = r.stdoutBuf.String()
 			}
+			msg.Reply(s)
+		case msg := <-r.stderrStr.Recv():
+			s := ""
+			if r.stderrBuf != nil {
+				s = r.stderrBuf.String()
+			}
+			msg.Reply(s)
+		case msg := <-r.stdoutBytes.Recv():
+			var b []byte
+			if r.stdoutBuf != nil {
+				b = r.stdoutBuf.Bytes()
+			}
+			msg.Reply(b)
+		case msg := <-r.stderrBytes.Recv():
+			var b []byte
+			if r.stderrBuf != nil {
+				b = r.stderrBuf.Bytes()
+			}
+			msg.Reply(b)
 		}
 	}
 }
@@ -206,8 +199,7 @@ func (r *Relay) Stop() (err error) {
 		err = r.db.Close()
 	}
 	// Stop log actor
-	close(r.stop)
-	<-r.done
+	r.logLC.Stop()
 	// Clean up data directory if enabled
 	if r.cleanupDataDir && r.dataDir != "" {
 		if rmErr := os.RemoveAll(r.dataDir); rmErr != nil {
@@ -221,28 +213,20 @@ func (r *Relay) Stop() (err error) {
 
 // Stdout returns the complete stdout log buffer contents.
 func (r *Relay) Stdout() string {
-	resp := make(chan string, 1)
-	r.logReadCh <- logReadReq{which: "stdout", respS: resp}
-	return <-resp
+	return r.stdoutStr.Call()
 }
 
 // Stderr returns the complete stderr log buffer contents.
 func (r *Relay) Stderr() string {
-	resp := make(chan string, 1)
-	r.logReadCh <- logReadReq{which: "stderr", respS: resp}
-	return <-resp
+	return r.stderrStr.Call()
 }
 
 // StdoutBytes returns the complete stdout log buffer as bytes.
 func (r *Relay) StdoutBytes() []byte {
-	resp := make(chan []byte, 1)
-	r.logReadCh <- logReadReq{which: "stdout_bytes", respB: resp}
-	return <-resp
+	return r.stdoutBytes.Call()
 }
 
 // StderrBytes returns the complete stderr log buffer as bytes.
 func (r *Relay) StderrBytes() []byte {
-	resp := make(chan []byte, 1)
-	r.logReadCh <- logReadReq{which: "stderr_bytes", respB: resp}
-	return <-resp
+	return r.stderrBytes.Call()
 }

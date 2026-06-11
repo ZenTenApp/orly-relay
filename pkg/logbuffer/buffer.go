@@ -2,6 +2,8 @@ package logbuffer
 
 import (
 	"time"
+
+	"git.smesh.lol/actor"
 )
 
 // LogEntry represents a single log entry
@@ -14,34 +16,19 @@ type LogEntry struct {
 	Line      int       `json:"line,omitempty"`
 }
 
-// --- Actor request/response types ---
-
-type bufAddReq struct {
-	entry LogEntry
-}
-
-type bufGetReq struct {
-	offset int
-	limit  int
-	resp   chan []LogEntry
-}
-
-type bufClearReq struct{}
-
-type bufCountReq struct {
-	resp chan int
+type bufGetArgs struct {
+	Offset, Limit int
 }
 
 // Buffer is a ring buffer for log entries.
 // All mutable state is owned by the actor goroutine.
 type Buffer struct {
-	addCh   chan bufAddReq
-	getCh   chan bufGetReq
-	clearCh chan bufClearReq
-	countCh chan bufCountReq
-	stop    chan struct{}
-	done    chan struct{}
-	size    int
+	add   actor.Inbox[LogEntry]
+	get   actor.Func[bufGetArgs, []LogEntry]
+	clear actor.Inbox[struct{}]
+	count actor.Query[int]
+	actor.Lifecycle
+	size int
 }
 
 // NewBuffer creates a new ring buffer with the specified size
@@ -50,21 +37,18 @@ func NewBuffer(size int) *Buffer {
 		size = 10000
 	}
 	b := &Buffer{
-		addCh:   make(chan bufAddReq, 128),
-		getCh:   make(chan bufGetReq),
-		clearCh: make(chan bufClearReq, 1),
-		countCh: make(chan bufCountReq),
-		stop:    make(chan struct{}),
-		done:    make(chan struct{}),
-		size:    size,
+		add:       actor.NewInbox[LogEntry](128),
+		get:       actor.NewFunc[bufGetArgs, []LogEntry](),
+		clear:     actor.NewInbox[struct{}](1),
+		count:     actor.NewQuery[int](),
+		Lifecycle: actor.NewLifecycle(),
+		size:      size,
 	}
-	go b.actorLoop()
+	actor.Go(b.Lifecycle, b.actorLoop)
 	return b
 }
 
 func (b *Buffer) actorLoop() {
-	defer close(b.done)
-
 	entries := make([]LogEntry, b.size)
 	head := 0
 	count := 0
@@ -72,72 +56,67 @@ func (b *Buffer) actorLoop() {
 
 	for {
 		select {
-		case <-b.stop:
+		case <-b.Stopping():
 			return
-		case req := <-b.addCh:
+		case entry := <-b.add.Recv():
 			nextID++
-			req.entry.ID = nextID
-			entries[head] = req.entry
+			entry.ID = nextID
+			entries[head] = entry
 			head = (head + 1) % b.size
 			if count < b.size {
 				count++
 			}
-		case req := <-b.getCh:
-			if count == 0 || req.offset >= count {
-				req.resp <- []LogEntry{}
+		case msg := <-b.get.Recv():
+			if count == 0 || msg.Req.Offset >= count {
+				msg.Reply([]LogEntry{})
 				continue
 			}
-			limit := req.limit
+			limit := msg.Req.Limit
 			if limit <= 0 {
 				limit = 100
 			}
-			available := count - req.offset
+			available := count - msg.Req.Offset
 			if limit > available {
 				limit = available
 			}
 			result := make([]LogEntry, limit)
 			for i := 0; i < limit; i++ {
-				idx := (head - 1 - req.offset - i + b.size*2) % b.size
+				idx := (head - 1 - msg.Req.Offset - i + b.size*2) % b.size
 				result[i] = entries[idx]
 			}
-			req.resp <- result
-		case <-b.clearCh:
+			msg.Reply(result)
+		case <-b.clear.Recv():
 			head = 0
 			count = 0
-		case req := <-b.countCh:
-			req.resp <- count
+		case msg := <-b.count.Recv():
+			msg.Reply(count)
 		}
 	}
 }
 
 // Shutdown stops the actor goroutine.
 func (b *Buffer) Shutdown() {
-	close(b.stop)
-	<-b.done
+	b.Stop()
 }
 
 // Add adds a log entry to the buffer
 func (b *Buffer) Add(entry LogEntry) {
-	b.addCh <- bufAddReq{entry: entry}
+	b.add.Send(entry)
 }
 
 // Get returns log entries, newest first
 func (b *Buffer) Get(offset, limit int) []LogEntry {
-	req := bufGetReq{offset: offset, limit: limit, resp: make(chan []LogEntry, 1)}
-	b.getCh <- req
-	return <-req.resp
+	return b.get.Call(bufGetArgs{Offset: offset, Limit: limit})
 }
 
 // Clear removes all entries from the buffer
 func (b *Buffer) Clear() {
-	b.clearCh <- bufClearReq{}
+	b.clear.Send(struct{}{})
 }
 
 // Count returns the number of entries in the buffer
 func (b *Buffer) Count() int {
-	req := bufCountReq{resp: make(chan int, 1)}
-	b.countCh <- req
-	return <-req.resp
+	return b.count.Call()
 }
 
 // Global buffer instance

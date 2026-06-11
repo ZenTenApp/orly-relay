@@ -7,23 +7,17 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"git.smesh.lol/actor"
 )
-
-// --- Actor request/response types ---
-
-type bwWriteReq struct {
-	data []byte
-	resp chan struct{}
-}
 
 // BufferedWriter wraps an io.Writer and captures log entries.
 // The lineBuf state is owned by the actor goroutine.
 type BufferedWriter struct {
 	original io.Writer
 	buffer   *Buffer
-	writeCh  chan bwWriteReq
-	stop     chan struct{}
-	done     chan struct{}
+	write    actor.Proc[[]byte]
+	actor.Lifecycle
 }
 
 // Log format regex patterns
@@ -33,27 +27,24 @@ var simplePattern = regexp.MustCompile(`^(\d{13,16})\s*(.*)$`)
 // NewBufferedWriter creates a new BufferedWriter
 func NewBufferedWriter(original io.Writer, buffer *Buffer) *BufferedWriter {
 	w := &BufferedWriter{
-		original: original,
-		buffer:   buffer,
-		writeCh:  make(chan bwWriteReq, 128),
-		stop:     make(chan struct{}),
-		done:     make(chan struct{}),
+		original:  original,
+		buffer:    buffer,
+		write:     actor.NewProc[[]byte](),
+		Lifecycle: actor.NewLifecycle(),
 	}
-	go w.actorLoop()
+	actor.Go(w.Lifecycle, w.actorLoop)
 	return w
 }
 
 func (w *BufferedWriter) actorLoop() {
-	defer close(w.done)
-
 	var lineBuf bytes.Buffer
 
 	for {
 		select {
-		case <-w.stop:
+		case <-w.Stopping():
 			return
-		case req := <-w.writeCh:
-			lineBuf.Write(req.data)
+		case msg := <-w.write.Recv():
+			lineBuf.Write(msg.Req)
 
 			for {
 				line, lineErr := lineBuf.ReadString('\n')
@@ -69,15 +60,14 @@ func (w *BufferedWriter) actorLoop() {
 					w.buffer.Add(entry)
 				}
 			}
-			req.resp <- struct{}{}
+			msg.Done()
 		}
 	}
 }
 
 // Shutdown stops the actor goroutine.
 func (w *BufferedWriter) Shutdown() {
-	close(w.stop)
-	<-w.done
+	w.Stop()
 }
 
 // Write implements io.Writer
@@ -89,9 +79,7 @@ func (w *BufferedWriter) Write(p []byte) (n int, err error) {
 	if w.buffer != nil {
 		data := make([]byte, len(p))
 		copy(data, p)
-		req := bwWriteReq{data: data, resp: make(chan struct{}, 1)}
-		w.writeCh <- req
-		<-req.resp
+		w.write.Call(data)
 	}
 
 	return

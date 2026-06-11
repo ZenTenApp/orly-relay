@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/app/config"
 	"git.smesh.lol/orly/pkg/database"
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
@@ -31,18 +32,18 @@ func TestManagedACL_BasicFunctionality(t *testing.T) {
 	}
 
 	managed := &Managed{
-		Ctx:        ctx,
-		cfg:        cfg,
-		db:         db,
-		managedACL: database.NewManagedACL(db),
-		owners:     [][]byte{[]byte("owner1")},
-		admins:     [][]byte{[]byte("admin1")},
+		Ctx:              ctx,
+		cfg:              cfg,
+		db:               db,
+		managedACL:       database.NewManagedACL(db),
+		owners:           [][]byte{[]byte("owner1")},
+		admins:           [][]byte{[]byte("admin1")},
+		updatePeerAdmins: actor.NewProc[[][]byte](),
+		getAccessLevel:   actor.NewFunc[managedGetAccessLevelArgs, string](),
+		Lifecycle:        actor.NewLifecycle(),
 	}
-	managed.updatePeerAdminsCh = make(chan managedUpdatePeerAdminsReq)
-	managed.getAccessLevelCh = make(chan managedGetAccessLevelReq)
-	managed.stop = make(chan struct{})
-	managed.done = make(chan struct{})
-	go managed.actor()
+	actor.Go(managed.Lifecycle, managed.actorLoop)
+	defer managed.Stop()
 
 	// Test basic functionality
 	t.Run("owner should get owner access", func(t *testing.T) {

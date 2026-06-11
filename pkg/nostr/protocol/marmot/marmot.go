@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"git.smesh.lol/actor"
 	"github.com/emersion/go-mls"
 	"git.smesh.lol/orly/pkg/lol/log"
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
@@ -36,93 +37,28 @@ type DMHandler func(senderPub []byte, plaintext []byte)
 // GroupJoinedHandler is called when a new DM group is established (Welcome processed).
 type GroupJoinedHandler func(peerPub []byte)
 
-// --- Actor request/response types ---
+// --- Actor arg types for multi-field operations ---
 
-type mcSetLastEventTSReq struct {
-	ts   int64
-	resp chan struct{}
-}
-
-type mcGetLastEventTSReq struct {
-	resp chan int64
-}
-
-type mcGetGroupReq struct {
-	groupID string
-	resp    chan *GroupState
-}
-
-type mcSetGroupReq struct {
+type setGroupArgs struct {
 	groupID string
 	gs      *GroupState
-	resp    chan struct{}
 }
 
-type mcDeleteGroupReq struct {
-	groupID string
-	resp    chan *GroupState // returns old group state if existed
-}
-
-type mcFindByNostrGroupIDReq struct {
-	nostrGroupID []byte
-	resp         chan *GroupState
-}
-
-type mcCheckAndSetSeenReq struct {
+type checkSeenArgs struct {
 	evKey     string
 	createdAt int64
-	resp      chan bool // true if already seen
 }
 
-type mcMarkSeenReq struct {
-	evKey string
-}
-
-type mcActiveGroupIDsReq struct {
-	resp chan []string
-}
-
-type mcGroupMessageFilterReq struct {
-	resp chan *filter.F
-}
-
-type mcWelcomeFilterReq struct {
-	resp chan *filter.F
-}
-
-type mcSubscriptionFiltersReq struct {
-	resp chan *filter.S
-}
-
-type mcBackupSnapshotReq struct {
-	resp chan *mcBackupSnapshot
+type restoreGroupArgs struct {
+	groupID string
+	gs      *GroupState
+	epoch   uint64
 }
 
 type mcBackupSnapshot struct {
 	skip        bool
 	groups      []groupStateBackup
 	lastEventTS int64
-}
-
-type mcSetBackupTimeReq struct {
-	t    time.Time
-	resp chan struct{}
-}
-
-type mcResetBackupTimeReq struct {
-	resp chan struct{}
-}
-
-type mcRestoreGroupReq struct {
-	groupID string
-	gs      *GroupState
-	epoch   uint64
-	resp    chan bool // true if restored (not superseded by local)
-}
-
-type mcRestoreLastEventTSReq struct {
-	ts   int64
-	resp chan struct{}
 }
 
 // Client manages Marmot DM conversations. It holds MLS group state for
@@ -138,35 +74,32 @@ type Client struct {
 	kpp    *mls.KeyPairPackage // our current key pair package
 
 	// Actor channels
-	setLastEventTS     chan mcSetLastEventTSReq
-	getLastEventTS     chan mcGetLastEventTSReq
-	getGroup           chan mcGetGroupReq
-	setGroup           chan mcSetGroupReq
-	deleteGroup        chan mcDeleteGroupReq
-	findByNostrGroupID chan mcFindByNostrGroupIDReq
-	checkAndSetSeen    chan mcCheckAndSetSeenReq
-	markSeen           chan mcMarkSeenReq
-	activeGroupIDs     chan mcActiveGroupIDsReq
-	groupMessageFilter chan mcGroupMessageFilterReq
-	welcomeFilter      chan mcWelcomeFilterReq
-	subscriptionFilter chan mcSubscriptionFiltersReq
-	backupSnapshot     chan mcBackupSnapshotReq
-	setBackupTime      chan mcSetBackupTimeReq
-	resetBackupTime    chan mcResetBackupTimeReq
-	restoreGroup       chan mcRestoreGroupReq
-	restoreLastEventTS chan mcRestoreLastEventTSReq
+	setLastEventTS     actor.Proc[int64]
+	getLastEventTS     actor.Query[int64]
+	getGroup           actor.Func[string, *GroupState]
+	setGroup           actor.Proc[setGroupArgs]
+	deleteGroup        actor.Func[string, *GroupState]
+	findByNostrGroupID actor.Func[string, *GroupState]
+	checkAndSetSeen    actor.Func[checkSeenArgs, bool]
+	markSeen           actor.Inbox[string]
+	activeGroupIDs     actor.Query[[]string]
+	groupMessageFilter actor.Query[*filter.F]
+	welcomeFilter      actor.Query[*filter.F]
+	subscriptionFilter actor.Query[*filter.S]
+	backupSnapshot     actor.Query[*mcBackupSnapshot]
+	setBackupTime      actor.Proc[time.Time]
+	resetBackupTime    actor.Signal
+	restoreGroup       actor.Func[restoreGroupArgs, bool]
+	restoreLastEventTS actor.Proc[int64]
 
 	// groupsChanged is signalled when a new group is added so callers
 	// can refresh subscription filters.
-	groupsChanged chan struct{}
+	groupsChanged actor.Inbox[struct{}]
 
-	stop chan struct{}
-	done chan struct{}
+	lc actor.Lifecycle
 }
 
-func (c *Client) actor(initGroups map[string]*GroupState) {
-	defer close(c.done)
-
+func (c *Client) actorLoop(initGroups map[string]*GroupState) {
 	groups := initGroups
 	seenIDs := make(map[string]struct{})
 	var lastEventTS int64
@@ -174,69 +107,69 @@ func (c *Client) actor(initGroups map[string]*GroupState) {
 
 	for {
 		select {
-		case <-c.stop:
+		case <-c.lc.Stopping():
 			return
 
-		case req := <-c.setLastEventTS:
-			lastEventTS = req.ts
-			req.resp <- struct{}{}
+		case msg := <-c.setLastEventTS.Recv():
+			lastEventTS = msg.Req
+			msg.Done()
 
-		case req := <-c.getLastEventTS:
-			req.resp <- lastEventTS
+		case msg := <-c.getLastEventTS.Recv():
+			msg.Reply(lastEventTS)
 
-		case req := <-c.getGroup:
-			req.resp <- groups[req.groupID]
+		case msg := <-c.getGroup.Recv():
+			msg.Reply(groups[msg.Req])
 
-		case req := <-c.setGroup:
-			groups[req.groupID] = req.gs
-			req.resp <- struct{}{}
+		case msg := <-c.setGroup.Recv():
+			groups[msg.Req.groupID] = msg.Req.gs
+			msg.Done()
 
-		case req := <-c.deleteGroup:
-			old := groups[req.groupID]
-			delete(groups, req.groupID)
-			req.resp <- old
+		case msg := <-c.deleteGroup.Recv():
+			old := groups[msg.Req]
+			delete(groups, msg.Req)
+			msg.Reply(old)
 
-		case req := <-c.findByNostrGroupID:
+		case msg := <-c.findByNostrGroupID.Recv():
 			var found *GroupState
 			for _, gs := range groups {
-				if string(gs.NostrGroupID) == string(req.nostrGroupID) {
+				if string(gs.NostrGroupID) == msg.Req {
 					found = gs
 					break
 				}
 			}
-			req.resp <- found
+			msg.Reply(found)
 
-		case req := <-c.checkAndSetSeen:
-			if _, seen := seenIDs[req.evKey]; seen {
-				req.resp <- true
+		case msg := <-c.checkAndSetSeen.Recv():
+			if _, seen := seenIDs[msg.Req.evKey]; seen {
+				msg.Reply(true)
 				continue
 			}
-			seenIDs[req.evKey] = struct{}{}
-			if req.createdAt > lastEventTS {
-				lastEventTS = req.createdAt
+			seenIDs[msg.Req.evKey] = struct{}{}
+			if msg.Req.createdAt > lastEventTS {
+				lastEventTS = msg.Req.createdAt
 			}
 			// Prune seenIDs to cap memory. 4096 is ~128KB of 32-byte event IDs.
 			if len(seenIDs) > 4096 {
 				seenIDs = make(map[string]struct{})
-				seenIDs[req.evKey] = struct{}{}
+				seenIDs[msg.Req.evKey] = struct{}{}
 			}
-			req.resp <- false
+			msg.Reply(false)
 
-		case req := <-c.markSeen:
-			seenIDs[req.evKey] = struct{}{}
+		case key := <-c.markSeen.Recv():
+			seenIDs[key] = struct{}{}
 
-		case req := <-c.activeGroupIDs:
+		case msg := <-c.activeGroupIDs.Recv():
 			ids := make([]string, 0, len(groups))
 			for _, gs := range groups {
 				if len(gs.NostrGroupID) > 0 {
 					ids = append(ids, hex.Enc(gs.NostrGroupID))
 				}
 			}
-			req.resp <- ids
+			msg.Reply(ids)
 
-		case req := <-c.groupMessageFilter:
+		case msg := <-c.groupMessageFilter.Recv():
 			if len(groups) == 0 {
-				req.resp <- nil
+				msg.Reply(nil)
 				continue
 			}
 			hValues := make([]any, 0, len(groups)+1)
@@ -254,9 +187,9 @@ func (c *Client) actor(initGroups map[string]*GroupState) {
 			} else {
 				f.Since = timestamp.FromUnix(time.Now().Unix() - 172800)
 			}
-			req.resp <- f
+			msg.Reply(f)
 
-		case req := <-c.welcomeFilter:
+		case msg := <-c.welcomeFilter.Recv():
 			f := filter.New()
 			f.Kinds = kind.NewS(kind.New(KindGiftWrap))
 			f.Tags = tag.NewS(tag.NewFromAny("p", hex.Enc(c.crypto.Pub())))
@@ -265,9 +198,9 @@ func (c *Client) actor(initGroups map[string]*GroupState) {
 			} else {
 				f.Since = timestamp.FromUnix(time.Now().Unix() - 172800) // 2-day margin for NIP-59
 			}
-			req.resp <- f
+			msg.Reply(f)
 
-		case req := <-c.subscriptionFilter:
+		case msg := <-c.subscriptionFilter.Recv():
 			// Build welcome filter inline
 			wf := filter.New()
 			wf.Kinds = kind.NewS(kind.New(KindGiftWrap))
@@ -298,11 +231,11 @@ func (c *Client) actor(initGroups map[string]*GroupState) {
 				}
 				filters = append(filters, gmf)
 			}
-			req.resp <- filter.NewS(filters...)
+			msg.Reply(filter.NewS(filters...))
 
-		case req := <-c.backupSnapshot:
+		case msg := <-c.backupSnapshot.Recv():
 			if time.Since(lastBackupTime) < 30*time.Second {
-				req.resp <- &mcBackupSnapshot{skip: true}
+				msg.Reply(&mcBackupSnapshot{skip: true})
 				continue
 			}
 			gs := make([]groupStateBackup, 0, len(groups))
@@ -323,33 +256,33 @@ func (c *Client) actor(initGroups map[string]*GroupState) {
 					Epoch:        epoch,
 				})
 			}
-			req.resp <- &mcBackupSnapshot{
+			msg.Reply(&mcBackupSnapshot{
 				groups:      gs,
 				lastEventTS: lastEventTS,
-			}
+			})
 
-		case req := <-c.setBackupTime:
-			lastBackupTime = req.t
-			req.resp <- struct{}{}
+		case msg := <-c.setBackupTime.Recv():
+			lastBackupTime = msg.Req
+			msg.Done()
 
-		case req := <-c.resetBackupTime:
+		case msg := <-c.resetBackupTime.Recv():
 			lastBackupTime = time.Time{}
-			req.resp <- struct{}{}
+			msg.Done()
 
-		case req := <-c.restoreGroup:
-			existing, hasLocal := groups[req.groupID]
-			if hasLocal && existing.group != nil && existing.group.Epoch() >= req.epoch {
-				req.resp <- false
+		case msg := <-c.restoreGroup.Recv():
+			existing, hasLocal := groups[msg.Req.groupID]
+			if hasLocal && existing.group != nil && existing.group.Epoch() >= msg.Req.epoch {
+				msg.Reply(false)
 				continue
 			}
-			groups[req.groupID] = req.gs
-			req.resp <- true
+			groups[msg.Req.groupID] = msg.Req.gs
+			msg.Reply(true)
 
-		case req := <-c.restoreLastEventTS:
-			if req.ts > lastEventTS {
-				lastEventTS = req.ts
+		case msg := <-c.restoreLastEventTS.Recv():
+			if msg.Req > lastEventTS {
+				lastEventTS = msg.Req
 			}
-			req.resp <- struct{}{}
+			msg.Done()
 		}
 	}
 }
@@ -385,26 +318,25 @@ func NewClient(crypto CryptoProvider, store GroupStore, relay RelayConnection, r
 		relay:              relay,
 		relays:             relays,
 		kpp:                kpp,
-		setLastEventTS:     make(chan mcSetLastEventTSReq),
-		getLastEventTS:     make(chan mcGetLastEventTSReq),
-		getGroup:           make(chan mcGetGroupReq),
-		setGroup:           make(chan mcSetGroupReq),
-		deleteGroup:        make(chan mcDeleteGroupReq),
-		findByNostrGroupID: make(chan mcFindByNostrGroupIDReq),
-		checkAndSetSeen:    make(chan mcCheckAndSetSeenReq),
-		markSeen:           make(chan mcMarkSeenReq, 16),
-		activeGroupIDs:     make(chan mcActiveGroupIDsReq),
-		groupMessageFilter: make(chan mcGroupMessageFilterReq),
-		welcomeFilter:      make(chan mcWelcomeFilterReq),
-		subscriptionFilter: make(chan mcSubscriptionFiltersReq),
-		backupSnapshot:     make(chan mcBackupSnapshotReq),
-		setBackupTime:      make(chan mcSetBackupTimeReq),
-		resetBackupTime:    make(chan mcResetBackupTimeReq),
-		restoreGroup:       make(chan mcRestoreGroupReq),
-		restoreLastEventTS: make(chan mcRestoreLastEventTSReq),
-		groupsChanged:      make(chan struct{}, 1),
-		stop:               make(chan struct{}),
-		done:               make(chan struct{}),
+		setLastEventTS:     actor.NewProc[int64](),
+		getLastEventTS:     actor.NewQuery[int64](),
+		getGroup:           actor.NewFunc[string, *GroupState](),
+		setGroup:           actor.NewProc[setGroupArgs](),
+		deleteGroup:        actor.NewFunc[string, *GroupState](),
+		findByNostrGroupID: actor.NewFunc[string, *GroupState](),
+		checkAndSetSeen:    actor.NewFunc[checkSeenArgs, bool](),
+		markSeen:           actor.NewInbox[string](16),
+		activeGroupIDs:     actor.NewQuery[[]string](),
+		groupMessageFilter: actor.NewQuery[*filter.F](),
+		welcomeFilter:      actor.NewQuery[*filter.F](),
+		subscriptionFilter: actor.NewQuery[*filter.S](),
+		backupSnapshot:     actor.NewQuery[*mcBackupSnapshot](),
+		setBackupTime:      actor.NewProc[time.Time](),
+		resetBackupTime:    actor.NewSignal(),
+		restoreGroup:       actor.NewFunc[restoreGroupArgs, bool](),
+		restoreLastEventTS: actor.NewProc[int64](),
+		groupsChanged:      actor.NewInbox[struct{}](1),
+		lc:                 actor.NewLifecycle(),
 	}
 
 	// Load persisted groups.
@@ -441,14 +373,13 @@ func NewClient(crypto CryptoProvider, store GroupStore, relay RelayConnection, r
 		}
 	}
 
-	go c.actor(initGroups)
+	actor.Go(c.lc, func() { c.actorLoop(initGroups) })
 	return c, nil
 }
 
 // Stop shuts down the actor goroutine.
 func (c *Client) Stop() {
-	close(c.stop)
-	<-c.done
+	c.lc.Stop()
 }
 
 // OnDM registers a handler for incoming decrypted DMs.
@@ -464,17 +395,13 @@ func (c *Client) OnGroupJoined(handler GroupJoinedHandler) {
 // SetLastEventTS sets the high-water mark for processed events.
 // Call this with a persisted value before Subscribe to skip old events.
 func (c *Client) SetLastEventTS(ts int64) {
-	req := mcSetLastEventTSReq{ts: ts, resp: make(chan struct{}, 1)}
-	c.setLastEventTS <- req
-	<-req.resp
+	c.setLastEventTS.Call(ts)
 }
 
 // LastEventTS returns the highest event created_at seen so far.
 // Persist this value to skip old events on next restart.
 func (c *Client) LastEventTS() int64 {
-	req := mcGetLastEventTSReq{resp: make(chan int64, 1)}
-	c.getLastEventTS <- req
-	return <-req.resp
+	return c.getLastEventTS.Call()
 }
 
 // PublishKeyPackage publishes our MLS key package as a kind 443 event so
@@ -511,9 +438,7 @@ func (c *Client) rotateKeyPackage(ctx context.Context) {
 func (c *Client) SendDM(ctx context.Context, recipientPub []byte, plaintext []byte) error {
 	groupID := DMGroupID(c.crypto.Pub(), recipientPub)
 
-	req := mcGetGroupReq{groupID: string(groupID), resp: make(chan *GroupState, 1)}
-	c.getGroup <- req
-	gs := <-req.resp
+	gs := c.getGroup.Call(string(groupID))
 
 	if gs == nil || gs.group == nil {
 		// Need to establish a new group
@@ -543,7 +468,7 @@ func (c *Client) SendDM(ctx context.Context, recipientPub []byte, plaintext []by
 	c.persistGroup(gs)
 
 	// Track this event ID so we skip it when it comes back via subscription.
-	c.markSeen <- mcMarkSeenReq{evKey: string(ev.ID)}
+	c.markSeen.Send(string(ev.ID))
 
 	return c.relay.Publish(ctx, ev)
 }
@@ -596,17 +521,12 @@ func (c *Client) establishGroup(ctx context.Context, peerPub []byte) (*GroupStat
 	}
 
 	// Store the group
-	setReq := mcSetGroupReq{groupID: string(gs.GroupID), gs: gs, resp: make(chan struct{}, 1)}
-	c.setGroup <- setReq
-	<-setReq.resp
+	c.setGroup.Call(setGroupArgs{groupID: string(gs.GroupID), gs: gs})
 
 	c.persistGroup(gs)
 
 	// Signal that filters need refreshing (so subscription includes kind 445 for this group).
-	select {
-	case c.groupsChanged <- struct{}{}:
-	default:
-	}
+	c.groupsChanged.TrySend(struct{}{})
 
 	c.backupAsync()
 	return gs, nil
@@ -615,13 +535,10 @@ func (c *Client) establishGroup(ctx context.Context, peerPub []byte) (*GroupStat
 // HandleEvent processes an incoming event. Call this from the subscription loop.
 func (c *Client) HandleEvent(ctx context.Context, ev *event.E) error {
 	// Atomic check-and-set to avoid TOCTOU
-	req := mcCheckAndSetSeenReq{
+	if c.checkAndSetSeen.Call(checkSeenArgs{
 		evKey:     string(ev.ID),
 		createdAt: ev.CreatedAt,
-		resp:      make(chan bool, 1),
-	}
-	c.checkAndSetSeen <- req
-	if <-req.resp {
+	}) {
 		return nil // already seen
 	}
 
@@ -687,16 +604,11 @@ func (c *Client) processWelcome(ctx context.Context, uw *UnwrappedGiftWrap) erro
 		gs.GroupID = DMGroupID(c.crypto.Pub(), senderPub)
 	}
 
-	setReq := mcSetGroupReq{groupID: string(gs.GroupID), gs: gs, resp: make(chan struct{}, 1)}
-	c.setGroup <- setReq
-	<-setReq.resp
+	c.setGroup.Call(setGroupArgs{groupID: string(gs.GroupID), gs: gs})
 
 	c.persistGroup(gs)
 
-	select {
-	case c.groupsChanged <- struct{}{}:
-	default:
-	}
+	c.groupsChanged.TrySend(struct{}{})
 
 	log.I.F("joined DM group with %s (nostr_group_id: %s)", hex.Enc(senderPub), hex.Enc(gs.NostrGroupID))
 
@@ -714,9 +626,7 @@ func (c *Client) processWelcome(ctx context.Context, uw *UnwrappedGiftWrap) erro
 
 // findGroupByNostrGroupID looks up a group by its nostr_group_id (from "h" tag).
 func (c *Client) findGroupByNostrGroupID(nostrGroupID []byte) *GroupState {
-	req := mcFindByNostrGroupIDReq{nostrGroupID: nostrGroupID, resp: make(chan *GroupState, 1)}
-	c.findByNostrGroupID <- req
-	return <-req.resp
+	return c.findByNostrGroupID.Call(string(nostrGroupID))
 }
 
 func (c *Client) handleGroupMessage(ctx context.Context, ev *event.E) error {
@@ -783,40 +693,32 @@ func (c *Client) persistGroup(gs *GroupState) {
 // WelcomeFilter returns a filter for kind 1059 events addressed to us via
 // "p" tag. These are Welcome messages from peers establishing new groups.
 func (c *Client) WelcomeFilter() *filter.F {
-	req := mcWelcomeFilterReq{resp: make(chan *filter.F, 1)}
-	c.welcomeFilter <- req
-	return <-req.resp
+	return c.welcomeFilter.Call()
 }
 
 // GroupMessageFilter returns a filter for kind 445 events tagged with our
 // active group IDs. Kind 445 events use ephemeral pubkeys (no "p" tag for
 // the real recipient), so we subscribe via "#h" tags.
 func (c *Client) GroupMessageFilter() *filter.F {
-	req := mcGroupMessageFilterReq{resp: make(chan *filter.F, 1)}
-	c.groupMessageFilter <- req
-	return <-req.resp
+	return c.groupMessageFilter.Call()
 }
 
 // SubscriptionFilters returns filters for all events relevant to this client.
 // Returns one or two filters depending on whether active groups exist.
 func (c *Client) SubscriptionFilters() *filter.S {
-	req := mcSubscriptionFiltersReq{resp: make(chan *filter.S, 1)}
-	c.subscriptionFilter <- req
-	return <-req.resp
+	return c.subscriptionFilter.Call()
 }
 
 // GroupsChanged returns a channel that is signalled whenever a new group
 // is added (e.g. after processing a Welcome). Callers should use this to
 // refresh subscription filters that include group-specific "#h" tags.
 func (c *Client) GroupsChanged() <-chan struct{} {
-	return c.groupsChanged
+	return c.groupsChanged.Recv()
 }
 
 // ActiveGroupIDs returns hex-encoded nostr_group_ids of all active groups.
 func (c *Client) ActiveGroupIDs() []string {
-	req := mcActiveGroupIDsReq{resp: make(chan []string, 1)}
-	c.activeGroupIDs <- req
-	return <-req.resp
+	return c.activeGroupIDs.Call()
 }
 
 // KeyPackageEvent returns a signed kind 443 event containing our MLS key
@@ -867,9 +769,7 @@ const KindAppSpecific = 30078
 // and publishes as a kind 30078 event. Enables cross-device sync and
 // recovery from IDB loss without full re-establishment.
 func (c *Client) BackupGroups(ctx context.Context) error {
-	snapReq := mcBackupSnapshotReq{resp: make(chan *mcBackupSnapshot, 1)}
-	c.backupSnapshot <- snapReq
-	snap := <-snapReq.resp
+	snap := c.backupSnapshot.Call()
 	if snap.skip {
 		return nil
 	}
@@ -900,9 +800,7 @@ func (c *Client) BackupGroups(ctx context.Context) error {
 		return fmt.Errorf("publish backup: %w", err)
 	}
 
-	btReq := mcSetBackupTimeReq{t: time.Now(), resp: make(chan struct{}, 1)}
-	c.setBackupTime <- btReq
-	<-btReq.resp
+	c.setBackupTime.Call(time.Now())
 
 	log.I.F("backed up %d MLS groups to relay", len(snap.groups))
 	return nil
@@ -980,25 +878,18 @@ func (c *Client) RestoreGroups(ctx context.Context) (int, error) {
 			mlsBytes:     mlsBytes,
 		}
 
-		rReq := mcRestoreGroupReq{groupID: string(groupID), gs: gs, epoch: gsb.Epoch, resp: make(chan bool, 1)}
-		c.restoreGroup <- rReq
-		if <-rReq.resp {
+		if c.restoreGroup.Call(restoreGroupArgs{groupID: string(groupID), gs: gs, epoch: gsb.Epoch}) {
 			c.persistGroup(gs)
 			restored++
 		}
 	}
 
 	if bp.LastEventTS > 0 {
-		tsReq := mcRestoreLastEventTSReq{ts: bp.LastEventTS, resp: make(chan struct{}, 1)}
-		c.restoreLastEventTS <- tsReq
-		<-tsReq.resp
+		c.restoreLastEventTS.Call(bp.LastEventTS)
 	}
 
 	if restored > 0 {
-		select {
-		case c.groupsChanged <- struct{}{}:
-		default:
-		}
+		c.groupsChanged.TrySend(struct{}{})
 		log.I.F("restored %d MLS groups from relay backup", restored)
 	}
 
@@ -1011,9 +902,7 @@ func (c *Client) RestoreGroups(ctx context.Context) (int, error) {
 func (c *Client) RatchetGroup(ctx context.Context, peerPub []byte) error {
 	groupID := DMGroupID(c.crypto.Pub(), peerPub)
 
-	delReq := mcDeleteGroupReq{groupID: string(groupID), resp: make(chan *GroupState, 1)}
-	c.deleteGroup <- delReq
-	oldGS := <-delReq.resp
+	oldGS := c.deleteGroup.Call(string(groupID))
 
 	_ = c.store.DeleteGroup(groupID)
 
@@ -1041,9 +930,7 @@ func (c *Client) RatchetGroup(ctx context.Context, peerPub []byte) error {
 	}
 
 	// Backup new state to relay.
-	rstReq := mcResetBackupTimeReq{resp: make(chan struct{}, 1)}
-	c.resetBackupTime <- rstReq
-	<-rstReq.resp
+	c.resetBackupTime.Call()
 
 	go func() {
 		if err := c.BackupGroups(context.Background()); err != nil {

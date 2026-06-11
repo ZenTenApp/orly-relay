@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"time"
 
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/lol/chk"
 	"git.smesh.lol/orly/pkg/lol/errorf"
 	"git.smesh.lol/orly/pkg/lol/log"
@@ -16,55 +17,40 @@ import (
 	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
 )
 
-// paid actor request types
-
-type paidGetAccessLevelReq struct {
-	pub     []byte
-	address string
-	resp    chan string
+type paidAccessArgs struct {
+	Pub     []byte
+	Address string
 }
 
-type paidSubscribeReq struct {
-	pubkeyHex string
-	expiresAt time.Time
-	resp      chan struct{}
+type paidSubscribeArgs struct {
+	PubkeyHex string
+	ExpiresAt time.Time
 }
 
-type paidUnsubscribeReq struct {
-	pubkeyHex string
-	resp      chan struct{}
-}
-
-type paidIsSubscribedReq struct {
-	pubkeyHex string
-	resp      chan bool
-}
-
-type paidSetStateReq struct {
-	owners    [][]byte
-	admins    [][]byte
-	ownerSet  map[string]struct{}
-	adminSet  map[string]struct{}
-	activeSet map[string]time.Time
-	resp      chan struct{}
+type paidSetStateArgs struct {
+	Owners    [][]byte
+	Admins    [][]byte
+	OwnerSet  map[string]struct{}
+	AdminSet  map[string]struct{}
+	ActiveSet map[string]time.Time
 }
 
 // Paid implements a Lightning payment-gated ACL.
 // Active subscribers get "write" access to the relay and can send email
 // through the bridge. Owners and admins bypass payment requirements.
+// All mutable state is owned by the actor goroutine.
 type Paid struct {
 	Ctx context.Context
 	cfg *config.C
 	db  database.Database
 
-	getAccessLevelCh chan paidGetAccessLevelReq
-	subscribeCh      chan paidSubscribeReq
-	unsubscribeCh    chan paidUnsubscribeReq
-	isSubscribedCh   chan paidIsSubscribedReq
-	setStateCh       chan paidSetStateReq
-	cleanExpiredCh   chan struct{}
-	stop             chan struct{}
-	done             chan struct{}
+	getAccessLevel actor.Func[paidAccessArgs, string]
+	subscribe      actor.Proc[paidSubscribeArgs]
+	unsubscribe    actor.Proc[string]
+	isSubscribed   actor.Func[string, bool]
+	setState       actor.Proc[paidSetStateArgs]
+	cleanExpired   actor.Inbox[struct{}]
+	actor.Lifecycle
 }
 
 func (p *Paid) Configure(cfg ...any) (err error) {
@@ -120,16 +106,17 @@ func (p *Paid) Configure(cfg ...any) (err error) {
 		}
 	}
 
-	// Start actor goroutine
-	p.getAccessLevelCh = make(chan paidGetAccessLevelReq)
-	p.subscribeCh = make(chan paidSubscribeReq)
-	p.unsubscribeCh = make(chan paidUnsubscribeReq)
-	p.isSubscribedCh = make(chan paidIsSubscribedReq)
-	p.setStateCh = make(chan paidSetStateReq)
-	p.cleanExpiredCh = make(chan struct{}, 16)
-	p.stop = make(chan struct{})
-	p.done = make(chan struct{})
-	go p.actor(newOwners, newAdmins, newOwnerSet, newAdminSet, newActiveSet)
+	// Initialize actor channels
+	p.getAccessLevel = actor.NewFunc[paidAccessArgs, string]()
+	p.subscribe = actor.NewProc[paidSubscribeArgs]()
+	p.unsubscribe = actor.NewProc[string]()
+	p.isSubscribed = actor.NewFunc[string, bool]()
+	p.setState = actor.NewProc[paidSetStateArgs]()
+	p.cleanExpired = actor.NewInbox[struct{}](16)
+	p.Lifecycle = actor.NewLifecycle()
+	actor.Go(p.Lifecycle, func() {
+		p.actorLoop(newOwners, newAdmins, newOwnerSet, newAdminSet, newActiveSet)
+	})
 
 	log.I.F("paid ACL configured: %d owners, %d admins, %d active subscribers",
 		len(newOwners), len(newAdmins), len(newActiveSet))
@@ -137,16 +124,14 @@ func (p *Paid) Configure(cfg ...any) (err error) {
 	return nil
 }
 
-func (p *Paid) actor(owners, admins [][]byte, ownerSet, adminSet map[string]struct{}, activeSet map[string]time.Time) {
-	defer close(p.done)
-
+func (p *Paid) actorLoop(owners, admins [][]byte, ownerSet, adminSet map[string]struct{}, activeSet map[string]time.Time) {
 	for {
 		select {
-		case <-p.stop:
+		case <-p.Stopping():
 			return
 
-		case req := <-p.getAccessLevelCh:
-			pubHex := hex.EncodeToString(req.pub)
+		case msg := <-p.getAccessLevel.Recv():
+			pubHex := hex.EncodeToString(msg.Req.Pub)
 			level := "read"
 			if _, ok := ownerSet[pubHex]; ok {
 				level = "owner"
@@ -157,31 +142,31 @@ func (p *Paid) actor(owners, admins [][]byte, ownerSet, adminSet map[string]stru
 					level = "write"
 				}
 			}
-			req.resp <- level
+			msg.Reply(level)
 
-		case req := <-p.subscribeCh:
-			activeSet[req.pubkeyHex] = req.expiresAt
-			req.resp <- struct{}{}
+		case msg := <-p.subscribe.Recv():
+			activeSet[msg.Req.PubkeyHex] = msg.Req.ExpiresAt
+			msg.Done()
 
-		case req := <-p.unsubscribeCh:
-			delete(activeSet, req.pubkeyHex)
-			req.resp <- struct{}{}
+		case msg := <-p.unsubscribe.Recv():
+			delete(activeSet, msg.Req)
+			msg.Done()
 
-		case req := <-p.isSubscribedCh:
-			expiry, ok := activeSet[req.pubkeyHex]
-			req.resp <- ok && time.Now().Before(expiry)
+		case msg := <-p.isSubscribed.Recv():
+			expiry, ok := activeSet[msg.Req]
+			msg.Reply(ok && time.Now().Before(expiry))
 
-		case req := <-p.setStateCh:
-			owners = req.owners
-			admins = req.admins
-			ownerSet = req.ownerSet
-			adminSet = req.adminSet
-			activeSet = req.activeSet
+		case msg := <-p.setState.Recv():
+			owners = msg.Req.Owners
+			admins = msg.Req.Admins
+			ownerSet = msg.Req.OwnerSet
+			adminSet = msg.Req.AdminSet
+			activeSet = msg.Req.ActiveSet
 			_ = owners
 			_ = admins
-			req.resp <- struct{}{}
+			msg.Done()
 
-		case <-p.cleanExpiredCh:
+		case <-p.cleanExpired.Recv():
 			now := time.Now()
 			for pubkey, expiry := range activeSet {
 				if now.After(expiry) {
@@ -193,9 +178,7 @@ func (p *Paid) actor(owners, admins [][]byte, ownerSet, adminSet map[string]stru
 }
 
 func (p *Paid) GetAccessLevel(pub []byte, address string) (level string) {
-	resp := make(chan string, 1)
-	p.getAccessLevelCh <- paidGetAccessLevelReq{pub: pub, address: address, resp: resp}
-	return <-resp
+	return p.getAccessLevel.Call(paidAccessArgs{Pub: pub, Address: address})
 }
 
 func (p *Paid) GetACLInfo() (name, description, documentation string) {
@@ -223,10 +206,7 @@ func (p *Paid) expiryLoop() {
 		case <-p.Ctx.Done():
 			return
 		case <-ticker.C:
-			select {
-			case p.cleanExpiredCh <- struct{}{}:
-			default:
-			}
+			p.cleanExpired.TrySend(struct{}{})
 		}
 	}
 }
@@ -244,9 +224,7 @@ func (p *Paid) Subscribe(pubkeyHex string, expiresAt time.Time, invoiceHash, ali
 		return err
 	}
 
-	resp := make(chan struct{}, 1)
-	p.subscribeCh <- paidSubscribeReq{pubkeyHex: pubkeyHex, expiresAt: expiresAt, resp: resp}
-	<-resp
+	p.subscribe.Call(paidSubscribeArgs{PubkeyHex: pubkeyHex, ExpiresAt: expiresAt})
 
 	log.I.F("paid ACL: subscription activated for %s (expires %s)", pubkeyHex, expiresAt.Format(time.RFC3339))
 	return nil
@@ -258,18 +236,14 @@ func (p *Paid) Unsubscribe(pubkeyHex string) error {
 		return err
 	}
 
-	resp := make(chan struct{}, 1)
-	p.unsubscribeCh <- paidUnsubscribeReq{pubkeyHex: pubkeyHex, resp: resp}
-	<-resp
+	p.unsubscribe.Call(pubkeyHex)
 
 	return nil
 }
 
 // IsSubscribed returns true if the pubkey has an active (non-expired) subscription.
 func (p *Paid) IsSubscribed(pubkeyHex string) bool {
-	resp := make(chan bool, 1)
-	p.isSubscribedCh <- paidIsSubscribedReq{pubkeyHex: pubkeyHex, resp: resp}
-	return <-resp
+	return p.isSubscribed.Call(pubkeyHex)
 }
 
 // GetSubscription returns the subscription for a pubkey.

@@ -38,6 +38,10 @@ cloud.google.com/go/storage v1.6.0/go.mod h1:N7U0C8pVQ/+NIKOBQyamJIeKQKkZ+mxpohl
 cloud.google.com/go/storage v1.8.0/go.mod h1:Wv1Oy7z6Yz3DshWRJFhqM/UCfaWIRTdp0RXyy7KQOVs=
 cloud.google.com/go/storage v1.10.0/go.mod h1:FLPqc6j+Ki4BU591ie1oL6qBQGu2Bl/tZ9ullr3+Kg0=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
+git.smesh.lol/actor v0.1.0 h1:U/RMFi8adhswVGzirGzZmgPovdPgZMdvaylsWZiX6nQ=
+git.smesh.lol/actor v0.1.0/go.mod h1:VThKHbbrZ/cgTywcU8mPAXxmik19Rw1i0RTYZ7Inc5c=
+git.smesh.lol/actor v0.2.0 h1:7oF7Iw7fKqD2A9q8BAYnEz443LCU2DVI9xsHk1k8VTQ=
+git.smesh.lol/actor v0.2.0/go.mod h1:VThKHbbrZ/cgTywcU8mPAXxmik19Rw1i0RTYZ7Inc5c=
 github.com/AdamSLevy/jsonrpc2/v14 v14.1.0 h1:Dy3M9aegiI7d7PF1LUdjbVigJReo+QOceYsMyFh9qoE=
 github.com/AdamSLevy/jsonrpc2/v14 v14.1.0/go.mod h1:ZakZtbCXxCz82NJvq7MoREtiQesnDfrtF6RFUGzQfLo=
 github.com/Azure/azure-sdk-for-go v68.0.0+incompatible h1:fcYLmCpyNYRnvJbPerq7U0hS+6+I79yEDJBqVNcqUzU=

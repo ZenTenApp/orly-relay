@@ -2,118 +2,103 @@ package app
 
 import (
 	"time"
+
+	"git.smesh.lol/actor"
 )
 
 // -- connPerIP actor types --
 
-type connIPCheckAndIncReq struct {
-	ip   string
-	max  int
-	resp chan connIPCheckResp // buffered 1
+type connIPCheckArgs struct {
+	IP  string
+	Max int
 }
 type connIPCheckResp struct {
 	allowed bool
 	current int
 }
-type connIPDecReq struct {
-	ip string
-}
 
 func (s *Server) startConnPerIPActor() {
-	s.connIPCheckCh = make(chan connIPCheckAndIncReq)
-	s.connIPDecCh = make(chan connIPDecReq, 16)
-	s.connIPDone = make(chan struct{})
-	go func() {
-		defer close(s.connIPDone)
+	s.connIPCheck = actor.NewFunc[connIPCheckArgs, connIPCheckResp]()
+	s.connIPDec = actor.NewInbox[string](16)
+	s.connIPLC = actor.NewLifecycle()
+	actor.Go(s.connIPLC, func() {
 		m := make(map[string]int)
 		for {
 			select {
-			case req := <-s.connIPCheckCh:
-				current := m[req.ip]
-				if current >= req.max {
-					req.resp <- connIPCheckResp{allowed: false, current: current}
+			case msg := <-s.connIPCheck.Recv():
+				current := m[msg.Req.IP]
+				if current >= msg.Req.Max {
+					msg.Reply(connIPCheckResp{allowed: false, current: current})
 				} else {
-					m[req.ip]++
-					req.resp <- connIPCheckResp{allowed: true, current: current + 1}
+					m[msg.Req.IP]++
+					msg.Reply(connIPCheckResp{allowed: true, current: current + 1})
 				}
-			case req := <-s.connIPDecCh:
-				m[req.ip]--
-				if m[req.ip] <= 0 {
-					delete(m, req.ip)
+			case ip := <-s.connIPDec.Recv():
+				m[ip]--
+				if m[ip] <= 0 {
+					delete(m, ip)
 				}
 			case <-s.Ctx.Done():
 				return
 			}
 		}
-	}()
+	})
 }
 
 func (s *Server) ConnIPCheckAndInc(ip string, max int) (allowed bool, current int) {
-	resp := make(chan connIPCheckResp, 1)
-	s.connIPCheckCh <- connIPCheckAndIncReq{ip: ip, max: max, resp: resp}
-	r := <-resp
+	r := s.connIPCheck.Call(connIPCheckArgs{IP: ip, Max: max})
 	return r.allowed, r.current
 }
 
 func (s *Server) ConnIPDec(ip string) {
-	s.connIPDecCh <- connIPDecReq{ip: ip}
+	s.connIPDec.TrySend(ip)
 }
 
 // -- challenge actor types --
 
-type chalSetReq struct {
-	key  string
-	data []byte
-}
-type chalGetReq struct {
-	key  string
-	resp chan chalGetResp // buffered 1
+type chalSetArgs struct {
+	Key  string
+	Data []byte
 }
 type chalGetResp struct {
 	data   []byte
 	exists bool
 }
-type chalDeleteReq struct {
-	key string
-}
 
 func (s *Server) startChallengeActor() {
-	s.chalSetCh = make(chan chalSetReq, 4)
-	s.chalGetCh = make(chan chalGetReq)
-	s.chalDeleteCh = make(chan chalDeleteReq, 4)
-	s.chalDone = make(chan struct{})
-	go func() {
-		defer close(s.chalDone)
+	s.chalSet = actor.NewInbox[chalSetArgs](4)
+	s.chalGet = actor.NewFunc[string, chalGetResp]()
+	s.chalDelete = actor.NewInbox[string](4)
+	s.chalLC = actor.NewLifecycle()
+	actor.Go(s.chalLC, func() {
 		m := make(map[string][]byte)
 		for {
 			select {
-			case req := <-s.chalSetCh:
-				m[req.key] = req.data
-			case req := <-s.chalGetCh:
-				data, exists := m[req.key]
-				req.resp <- chalGetResp{data: data, exists: exists}
-			case req := <-s.chalDeleteCh:
-				delete(m, req.key)
+			case args := <-s.chalSet.Recv():
+				m[args.Key] = args.Data
+			case msg := <-s.chalGet.Recv():
+				data, exists := m[msg.Req]
+				msg.Reply(chalGetResp{data: data, exists: exists})
+			case key := <-s.chalDelete.Recv():
+				delete(m, key)
 			case <-s.Ctx.Done():
 				return
 			}
 		}
-	}()
+	})
 }
 
 func (s *Server) ChallengeSet(key string, data []byte) {
-	s.chalSetCh <- chalSetReq{key: key, data: data}
+	s.chalSet.TrySend(chalSetArgs{Key: key, Data: data})
 }
 
 func (s *Server) ChallengeGet(key string) ([]byte, bool) {
-	resp := make(chan chalGetResp, 1)
-	s.chalGetCh <- chalGetReq{key: key, resp: resp}
-	r := <-resp
+	r := s.chalGet.Call(key)
 	return r.data, r.exists
 }
 
 func (s *Server) ChallengeDelete(key string) {
-	s.chalDeleteCh <- chalDeleteReq{key: key}
+	s.chalDelete.TrySend(key)
 }
 
 func (s *Server) ChallengeSetWithExpiry(key string, data []byte, ttl time.Duration) {

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
 	"git.smesh.lol/orly/pkg/nostr/encoders/tag"
@@ -129,8 +130,8 @@ func TestTriggerNow(t *testing.T) {
 	defer cancel()
 
 	ds := &DirectorySpider{
-		ctx:         ctx,
-		triggerChan: make(chan struct{}, 1),
+		ctx:     ctx,
+		trigger: actor.NewInbox[struct{}](1),
 	}
 
 	// First trigger should succeed
@@ -138,7 +139,7 @@ func TestTriggerNow(t *testing.T) {
 
 	// Verify trigger was sent
 	select {
-	case <-ds.triggerChan:
+	case <-ds.trigger.Recv():
 		// Expected
 	default:
 		t.Error("trigger was not sent")
@@ -148,7 +149,7 @@ func TestTriggerNow(t *testing.T) {
 	ds.TriggerNow()
 
 	// But if we trigger again without draining, it should not block
-	ds.TriggerNow() // Should not block due to select default case
+	ds.TriggerNow() // Should not block due to TrySend
 }
 
 func TestLastRun(t *testing.T) {

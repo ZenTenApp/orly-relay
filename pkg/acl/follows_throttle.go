@@ -2,6 +2,8 @@ package acl
 
 import (
 	"time"
+
+	"git.smesh.lol/actor"
 )
 
 // ThrottleState tracks accumulated delay for an identity (IP or pubkey)
@@ -10,16 +12,9 @@ type ThrottleState struct {
 	LastEventTime    time.Time
 }
 
-// throttleGetDelayReq is sent to the actor to compute delay for an identity.
-type throttleGetDelayReq struct {
-	ip        string
-	pubkeyHex string
-	resp      chan time.Duration
-}
-
-// throttleStatsReq is sent to the actor to retrieve tracking counts.
-type throttleStatsReq struct {
-	resp chan throttleStatsResp
+type throttleGetDelayArgs struct {
+	IP        string
+	PubkeyHex string
 }
 
 type throttleStatsResp struct {
@@ -36,11 +31,10 @@ type ProgressiveThrottle struct {
 	perEvent time.Duration // delay increment per event (default 200ms)
 	maxDelay time.Duration // cap (default 60s)
 
-	getDelayCh chan throttleGetDelayReq
-	cleanupCh  chan struct{}
-	statsCh    chan throttleStatsReq
-	stop       chan struct{}
-	done       chan struct{}
+	getDelay actor.Func[throttleGetDelayArgs, time.Duration]
+	cleanup  actor.Inbox[struct{}]
+	stats    actor.Query[throttleStatsResp]
+	actor.Lifecycle
 }
 
 // NewProgressiveThrottle creates a new throttle with the given parameters.
@@ -48,45 +42,42 @@ type ProgressiveThrottle struct {
 // maxDelay is the maximum accumulated delay cap (e.g., 60s).
 func NewProgressiveThrottle(perEvent, maxDelay time.Duration) *ProgressiveThrottle {
 	pt := &ProgressiveThrottle{
-		perEvent:   perEvent,
-		maxDelay:   maxDelay,
-		getDelayCh: make(chan throttleGetDelayReq),
-		cleanupCh:  make(chan struct{}, 16),
-		statsCh:    make(chan throttleStatsReq),
-		stop:       make(chan struct{}),
-		done:       make(chan struct{}),
+		perEvent:  perEvent,
+		maxDelay:  maxDelay,
+		getDelay:  actor.NewFunc[throttleGetDelayArgs, time.Duration](),
+		cleanup:   actor.NewInbox[struct{}](16),
+		stats:     actor.NewQuery[throttleStatsResp](),
+		Lifecycle: actor.NewLifecycle(),
 	}
-	go pt.actor()
+	actor.Go(pt.Lifecycle, pt.actorLoop)
 	return pt
 }
 
-func (pt *ProgressiveThrottle) actor() {
-	defer close(pt.done)
-
+func (pt *ProgressiveThrottle) actorLoop() {
 	ipStates := make(map[string]*ThrottleState)
 	pubkeyStates := make(map[string]*ThrottleState)
 
 	for {
 		select {
-		case <-pt.stop:
+		case <-pt.Stopping():
 			return
 
-		case req := <-pt.getDelayCh:
+		case msg := <-pt.getDelay.Recv():
 			now := time.Now()
 			var ipDelay, pubkeyDelay time.Duration
-			if req.ip != "" {
-				ipDelay = pt.updateState(ipStates, req.ip, now)
+			if msg.Req.IP != "" {
+				ipDelay = pt.updateState(ipStates, msg.Req.IP, now)
 			}
-			if req.pubkeyHex != "" {
-				pubkeyDelay = pt.updateState(pubkeyStates, req.pubkeyHex, now)
+			if msg.Req.PubkeyHex != "" {
+				pubkeyDelay = pt.updateState(pubkeyStates, msg.Req.PubkeyHex, now)
 			}
 			d := pubkeyDelay
 			if ipDelay > d {
 				d = ipDelay
 			}
-			req.resp <- d
+			msg.Reply(d)
 
-		case <-pt.cleanupCh:
+		case <-pt.cleanup.Recv():
 			now := time.Now()
 			for k, v := range ipStates {
 				elapsed := now.Sub(v.LastEventTime)
@@ -101,11 +92,11 @@ func (pt *ProgressiveThrottle) actor() {
 				}
 			}
 
-		case req := <-pt.statsCh:
-			req.resp <- throttleStatsResp{
+		case msg := <-pt.stats.Recv():
+			msg.Reply(throttleStatsResp{
 				ipCount:     len(ipStates),
 				pubkeyCount: len(pubkeyStates),
-			}
+			})
 		}
 	}
 }
@@ -149,30 +140,22 @@ func (pt *ProgressiveThrottle) updateState(states map[string]*ThrottleState, key
 // It tracks both IP and pubkey independently and returns the maximum of both.
 // This prevents evasion via different pubkeys from same IP or vice versa.
 func (pt *ProgressiveThrottle) GetDelay(ip, pubkeyHex string) time.Duration {
-	resp := make(chan time.Duration, 1)
-	pt.getDelayCh <- throttleGetDelayReq{ip: ip, pubkeyHex: pubkeyHex, resp: resp}
-	return <-resp
+	return pt.getDelay.Call(throttleGetDelayArgs{IP: ip, PubkeyHex: pubkeyHex})
 }
 
 // Cleanup removes entries that have fully decayed (no remaining delay).
 // This should be called periodically to prevent unbounded memory growth.
 func (pt *ProgressiveThrottle) Cleanup() {
-	select {
-	case pt.cleanupCh <- struct{}{}:
-	default:
-	}
+	pt.cleanup.TrySend(struct{}{})
 }
 
 // Stats returns the current number of tracked IPs and pubkeys (for monitoring)
 func (pt *ProgressiveThrottle) Stats() (ipCount, pubkeyCount int) {
-	resp := make(chan throttleStatsResp, 1)
-	pt.statsCh <- throttleStatsReq{resp: resp}
-	r := <-resp
+	r := pt.stats.Call()
 	return r.ipCount, r.pubkeyCount
 }
 
-// Stop shuts down the actor goroutine and waits for it to exit.
-func (pt *ProgressiveThrottle) Stop() {
-	close(pt.stop)
-	<-pt.done
+// Shutdown stops the actor goroutine and waits for it to exit.
+func (pt *ProgressiveThrottle) Shutdown() {
+	pt.Stop()
 }

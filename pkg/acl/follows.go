@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/app/config"
 	"git.smesh.lol/orly/pkg/database"
 	"git.smesh.lol/orly/pkg/lol/chk"
@@ -26,28 +26,17 @@ import (
 	"git.smesh.lol/orly/pkg/nostr/utils/normalize"
 	"git.smesh.lol/orly/pkg/nostr/utils/values"
 	"git.smesh.lol/orly/pkg/protocol/publish"
+	"github.com/gorilla/websocket"
 )
 
-// follows actor request types
-
-type followsGetAccessLevelReq struct {
-	pub     []byte
-	address string
-	resp    chan string
+type followsAccessArgs struct {
+	Pub     []byte
+	Address string
 }
 
-type followsGetThrottleDelayReq struct {
-	pubkey []byte
-	ip     string
-	resp   chan time.Duration
-}
-
-type followsGetAdminsReq struct {
-	resp chan [][]byte
-}
-
-type followsGetAdminsAndFollowsReq struct {
-	resp chan followsAdminsAndFollows
+type followsThrottleArgs struct {
+	Pubkey []byte
+	IP     string
 }
 
 type followsAdminsAndFollows struct {
@@ -55,38 +44,18 @@ type followsAdminsAndFollows struct {
 	follows [][]byte
 }
 
-type followsGetFollowedPubkeysReq struct {
-	resp chan [][]byte
+type followsUpdateWhitelistArgs struct {
+	Follows    [][]byte
+	FollowsSet map[string]struct{}
 }
 
-type followsIsAdminReq struct {
-	pubkeyHex string
-	resp      chan bool
-}
-
-type followsAddFollowReq struct {
-	pub []byte
-}
-
-type followsSetCallbackReq struct {
-	callback func()
-	resp     chan struct{}
-}
-
-type followsUpdateWhitelistReq struct {
-	follows    [][]byte
-	followsSet map[string]struct{}
-	resp       chan int // old count
-}
-
-type followsSetStateReq struct {
-	owners     [][]byte
-	admins     [][]byte
-	follows    [][]byte
-	ownersSet  map[string]struct{}
-	adminsSet  map[string]struct{}
-	followsSet map[string]struct{}
-	resp       chan struct{}
+type followsSetStateArgs struct {
+	Owners     [][]byte
+	Admins     [][]byte
+	Follows    [][]byte
+	OwnersSet  map[string]struct{}
+	AdminsSet  map[string]struct{}
+	FollowsSet map[string]struct{}
 }
 
 type Follows struct {
@@ -101,19 +70,17 @@ type Follows struct {
 	// Progressive throttle for non-followed users (nil if disabled)
 	throttle *ProgressiveThrottle
 
-	// Actor channels
-	getAccessLevelCh      chan followsGetAccessLevelReq
-	getThrottleDelayCh    chan followsGetThrottleDelayReq
-	getAdminsCh           chan followsGetAdminsReq
-	getAdminsAndFollowsCh chan followsGetAdminsAndFollowsReq
-	getFollowedPubkeysCh  chan followsGetFollowedPubkeysReq
-	isAdminCh             chan followsIsAdminReq
-	addFollowCh           chan followsAddFollowReq
-	setCallbackCh         chan followsSetCallbackReq
-	updateWhitelistCh     chan followsUpdateWhitelistReq
-	setStateCh            chan followsSetStateReq
-	stop                  chan struct{}
-	done                  chan struct{}
+	getAccessLevel      actor.Func[followsAccessArgs, string]
+	getThrottleDelay    actor.Func[followsThrottleArgs, time.Duration]
+	getAdmins           actor.Query[[][]byte]
+	getAdminsAndFollows actor.Query[followsAdminsAndFollows]
+	getFollowedPubkeys  actor.Query[[][]byte]
+	isAdmin             actor.Func[string, bool]
+	addFollow           actor.Inbox[[]byte]
+	setCallback         actor.Proc[func()]
+	updateWhitelist     actor.Func[followsUpdateWhitelistArgs, int]
+	setState            actor.Proc[followsSetStateArgs]
+	actor.Lifecycle
 }
 
 // Context returns the ACL context.
@@ -209,20 +176,21 @@ func (f *Follows) Configure(cfg ...any) (err error) {
 		}
 	}
 
-	// Start actor goroutine
-	f.getAccessLevelCh = make(chan followsGetAccessLevelReq)
-	f.getThrottleDelayCh = make(chan followsGetThrottleDelayReq)
-	f.getAdminsCh = make(chan followsGetAdminsReq)
-	f.getAdminsAndFollowsCh = make(chan followsGetAdminsAndFollowsReq)
-	f.getFollowedPubkeysCh = make(chan followsGetFollowedPubkeysReq)
-	f.isAdminCh = make(chan followsIsAdminReq)
-	f.addFollowCh = make(chan followsAddFollowReq, 128)
-	f.setCallbackCh = make(chan followsSetCallbackReq)
-	f.updateWhitelistCh = make(chan followsUpdateWhitelistReq)
-	f.setStateCh = make(chan followsSetStateReq)
-	f.stop = make(chan struct{})
-	f.done = make(chan struct{})
-	go f.actor(newOwners, newAdmins, newFollows, newOwnersSet, newAdminsSet, newFollowsSet)
+	// Initialize actor channels
+	f.getAccessLevel = actor.NewFunc[followsAccessArgs, string]()
+	f.getThrottleDelay = actor.NewFunc[followsThrottleArgs, time.Duration]()
+	f.getAdmins = actor.NewQuery[[][]byte]()
+	f.getAdminsAndFollows = actor.NewQuery[followsAdminsAndFollows]()
+	f.getFollowedPubkeys = actor.NewQuery[[][]byte]()
+	f.isAdmin = actor.NewFunc[string, bool]()
+	f.addFollow = actor.NewInbox[[]byte](128)
+	f.setCallback = actor.NewProc[func()]()
+	f.updateWhitelist = actor.NewFunc[followsUpdateWhitelistArgs, int]()
+	f.setState = actor.NewProc[followsSetStateArgs]()
+	f.Lifecycle = actor.NewLifecycle()
+	actor.Go(f.Lifecycle, func() {
+		f.actorLoop(newOwners, newAdmins, newFollows, newOwnersSet, newAdminsSet, newFollowsSet)
+	})
 
 	log.I.F("follows ACL configured: %d owners, %d admins, %d follows",
 		len(newOwners), len(newAdmins), len(newFollows))
@@ -245,107 +213,106 @@ func (f *Follows) Configure(cfg ...any) (err error) {
 	return
 }
 
-func (f *Follows) actor(owners, admins, follows [][]byte,
+func (f *Follows) actorLoop(owners, admins, follows [][]byte,
 	ownersSet, adminsSet, followsSet map[string]struct{}) {
-	defer close(f.done)
 
 	var onFollowListUpdate func()
 
 	for {
 		select {
-		case <-f.stop:
+		case <-f.Stopping():
 			return
 
-		case req := <-f.getAccessLevelCh:
-			pubHex := hex.EncodeToString(req.pub)
+		case msg := <-f.getAccessLevel.Recv():
+			pubHex := hex.EncodeToString(msg.Req.Pub)
 			level := "read"
 			if ownersSet != nil {
 				if _, ok := ownersSet[pubHex]; ok {
 					level = "owner"
-					req.resp <- level
+					msg.Reply(level)
 					continue
 				}
 			}
 			if adminsSet != nil {
 				if _, ok := adminsSet[pubHex]; ok {
 					level = "admin"
-					req.resp <- level
+					msg.Reply(level)
 					continue
 				}
 			}
 			if followsSet != nil {
 				if _, ok := followsSet[pubHex]; ok {
 					level = "write"
-					req.resp <- level
+					msg.Reply(level)
 					continue
 				}
 			}
 			if f.cfg == nil || f.throttle != nil {
 				level = "write"
 			}
-			req.resp <- level
+			msg.Reply(level)
 
-		case req := <-f.getThrottleDelayCh:
+		case msg := <-f.getThrottleDelay.Recv():
 			if f.throttle == nil {
-				req.resp <- 0
+				msg.Reply(0)
 				continue
 			}
-			pubkeyHex := hex.EncodeToString(req.pubkey)
+			pubkeyHex := hex.EncodeToString(msg.Req.Pubkey)
 			if ownersSet != nil {
 				if _, ok := ownersSet[pubkeyHex]; ok {
-					req.resp <- 0
+					msg.Reply(0)
 					continue
 				}
 			}
 			if adminsSet != nil {
 				if _, ok := adminsSet[pubkeyHex]; ok {
-					req.resp <- 0
+					msg.Reply(0)
 					continue
 				}
 			}
 			if followsSet != nil {
 				if _, ok := followsSet[pubkeyHex]; ok {
-					req.resp <- 0
+					msg.Reply(0)
 					continue
 				}
 			}
-			req.resp <- f.throttle.GetDelay(req.ip, pubkeyHex)
+			msg.Reply(f.throttle.GetDelay(msg.Req.IP, pubkeyHex))
 
-		case req := <-f.getAdminsCh:
+		case msg := <-f.getAdmins.Recv():
 			cp := make([][]byte, len(admins))
 			copy(cp, admins)
-			req.resp <- cp
+			msg.Reply(cp)
 
-		case req := <-f.getAdminsAndFollowsCh:
+		case msg := <-f.getAdminsAndFollows.Recv():
 			cpAdmins := make([][]byte, len(admins))
 			copy(cpAdmins, admins)
 			cpAll := make([][]byte, 0, len(admins)+len(follows))
 			cpAll = append(cpAll, admins...)
 			cpAll = append(cpAll, follows...)
-			req.resp <- followsAdminsAndFollows{admins: cpAdmins, follows: cpAll}
+			msg.Reply(followsAdminsAndFollows{admins: cpAdmins, follows: cpAll})
 
-		case req := <-f.getFollowedPubkeysCh:
+		case msg := <-f.getFollowedPubkeys.Recv():
 			cp := make([][]byte, len(follows))
 			copy(cp, follows)
-			req.resp <- cp
+			msg.Reply(cp)
 
-		case req := <-f.isAdminCh:
-			_, ok := adminsSet[req.pubkeyHex]
-			req.resp <- ok
+		case msg := <-f.isAdmin.Recv():
+			_, ok := adminsSet[msg.Req]
+			msg.Reply(ok)
 
-		case req := <-f.addFollowCh:
-			if len(req.pub) == 0 {
+		case pub := <-f.addFollow.Recv():
+			if len(pub) == 0 {
 				continue
 			}
-			pubHex := hex.EncodeToString(req.pub)
+			pubHex := hex.EncodeToString(pub)
 			if followsSet == nil {
 				followsSet = make(map[string]struct{})
 			}
 			if _, exists := followsSet[pubHex]; exists {
 				continue
 			}
-			b := make([]byte, len(req.pub))
-			copy(b, req.pub)
+			b := make([]byte, len(pub))
+			copy(b, pub)
 			follows = append(follows, b)
 			followsSet[pubHex] = struct{}{}
 			log.D.F("follows syncer: added new followed pubkey: %s", pubHex)
@@ -353,37 +320,35 @@ func (f *Follows) actor(owners, admins, follows [][]byte,
 				go onFollowListUpdate()
 			}
 
-		case req := <-f.setCallbackCh:
-			onFollowListUpdate = req.callback
-			req.resp <- struct{}{}
+		case msg := <-f.setCallback.Recv():
+			onFollowListUpdate = msg.Req
+			msg.Done()
 
-		case req := <-f.updateWhitelistCh:
+		case msg := <-f.updateWhitelist.Recv():
 			oldCount := len(follows)
-			follows = req.follows
-			followsSet = req.followsSet
-			req.resp <- oldCount
-			log.I.F("follows ACL: updated whitelist from %d to %d pubkeys", oldCount, len(req.follows))
+			follows = msg.Req.Follows
+			followsSet = msg.Req.FollowsSet
+			msg.Reply(oldCount)
+			log.I.F("follows ACL: updated whitelist from %d to %d pubkeys", oldCount, len(msg.Req.Follows))
 			if onFollowListUpdate != nil {
 				go onFollowListUpdate()
 			}
 
-		case req := <-f.setStateCh:
-			owners = req.owners
-			admins = req.admins
-			follows = req.follows
-			ownersSet = req.ownersSet
-			adminsSet = req.adminsSet
-			followsSet = req.followsSet
+		case msg := <-f.setState.Recv():
+			owners = msg.Req.Owners
+			admins = msg.Req.Admins
+			follows = msg.Req.Follows
+			ownersSet = msg.Req.OwnersSet
+			adminsSet = msg.Req.AdminsSet
+			followsSet = msg.Req.FollowsSet
 			_ = owners
-			req.resp <- struct{}{}
+			msg.Done()
 		}
 	}
 }
 
 func (f *Follows) GetAccessLevel(pub []byte, address string) (level string) {
-	resp := make(chan string, 1)
-	f.getAccessLevelCh <- followsGetAccessLevelReq{pub: pub, address: address, resp: resp}
-	return <-resp
+	return f.getAccessLevel.Call(followsAccessArgs{Pub: pub, Address: address})
 }
 
 func (f *Follows) GetACLInfo() (name, description, documentation string) {
@@ -399,15 +364,11 @@ func (f *Follows) GetThrottleDelay(pubkey []byte, ip string) time.Duration {
 	if f.throttle == nil {
 		return 0
 	}
-	resp := make(chan time.Duration, 1)
-	f.getThrottleDelayCh <- followsGetThrottleDelayReq{pubkey: pubkey, ip: ip, resp: resp}
-	return <-resp
+	return f.getThrottleDelay.Call(followsThrottleArgs{Pubkey: pubkey, IP: ip})
 }
 
 func (f *Follows) adminRelays() (urls []string) {
-	resp := make(chan [][]byte, 1)
-	f.getAdminsCh <- followsGetAdminsReq{resp: resp}
-	admins := <-resp
+	admins := f.getAdmins.Call()
 	seen := make(map[string]struct{})
 	// Build a set of normalized self relay addresses to avoid self-connections
 	selfSet := make(map[string]struct{})
@@ -648,9 +609,7 @@ func (f *Follows) fetchAdminFollowLists() {
 	}
 
 	// build authors lists: admins for follow lists, all follows for metadata
-	aResp := make(chan followsAdminsAndFollows, 1)
-	f.getAdminsAndFollowsCh <- followsGetAdminsAndFollowsReq{resp: aResp}
-	af := <-aResp
+	af := f.getAdminsAndFollows.Call()
 	admins := af.admins
 	allFollows := af.follows
 
@@ -893,17 +852,12 @@ func (f *Follows) processCollectedEvents(relayURL string, followListEvents, meta
 
 // GetFollowedPubkeys returns a copy of the followed pubkeys list
 func (f *Follows) GetFollowedPubkeys() [][]byte {
-	resp := make(chan [][]byte, 1)
-	f.getFollowedPubkeysCh <- followsGetFollowedPubkeysReq{resp: resp}
-	return <-resp
+	return f.getFollowedPubkeys.Call()
 }
 
 // isAdminPubkey checks if a pubkey belongs to an admin
 func (f *Follows) isAdminPubkey(pubkey []byte) bool {
-	pubkeyHex := hex.EncodeToString(pubkey)
-	resp := make(chan bool, 1)
-	f.isAdminCh <- followsIsAdminReq{pubkeyHex: pubkeyHex, resp: resp}
-	return <-resp
+	return f.isAdmin.Call(hex.EncodeToString(pubkey))
 }
 
 // extractFollowedPubkeys extracts followed pubkeys from 'p' tags in kind 3 events
@@ -934,9 +888,7 @@ func (f *Follows) AdminRelays() []string {
 
 // SetFollowListUpdateCallback sets a callback to be called when the follow list is updated
 func (f *Follows) SetFollowListUpdateCallback(callback func()) {
-	resp := make(chan struct{}, 1)
-	f.setCallbackCh <- followsSetCallbackReq{callback: callback, resp: resp}
-	<-resp
+	f.setCallback.Call(callback)
 }
 
 // AddFollow appends a pubkey to the in-memory follows list if not already present
@@ -947,11 +899,7 @@ func (f *Follows) AddFollow(pub []byte) {
 	}
 	b := make([]byte, len(pub))
 	copy(b, pub)
-	select {
-	case f.addFollowCh <- followsAddFollowReq{pub: b}:
-	default:
-		// Drop if buffer full
-	}
+	f.addFollow.TrySend(b)
 }
 
 // UpdateFollowsFromWhitelist replaces the follows list with a new whitelist (hex strings).
@@ -973,13 +921,10 @@ func (f *Follows) UpdateFollowsFromWhitelist(whitelistHex []string) error {
 		newFollowsSet[hexKey] = struct{}{}
 	}
 
-	resp := make(chan int, 1)
-	f.updateWhitelistCh <- followsUpdateWhitelistReq{
-		follows:    newFollows,
-		followsSet: newFollowsSet,
-		resp:       resp,
-	}
-	<-resp
+	f.updateWhitelist.Call(followsUpdateWhitelistArgs{
+		Follows:    newFollows,
+		FollowsSet: newFollowsSet,
+	})
 
 	return nil
 }

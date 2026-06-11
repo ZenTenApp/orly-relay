@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/nostr/crypto/keys"
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
@@ -34,17 +35,6 @@ const (
 	// DirectorySpiderMaxEventsPerQuery is the limit for each query
 	DirectorySpiderMaxEventsPerQuery = 5000
 )
-
-// setSeedCallbackReq requests setting the seed callback.
-type setSeedCallbackReq struct {
-	fn   func() [][]byte
-	resp chan struct{}
-}
-
-// lastRunReq requests the time of the last completed run.
-type lastRunReq struct {
-	resp chan time.Time
-}
 
 // DirectorySpider manages periodic relay discovery and metadata synchronization.
 // It discovers relays by crawling kind 10002 (relay list) events, expanding outward
@@ -76,14 +66,11 @@ type DirectorySpider struct {
 	// Callback for getting seed pubkeys (owned by actor goroutine)
 	getSeedPubkeys func() [][]byte
 
-	// Trigger channel for manual runs
-	triggerChan chan struct{}
-
 	// Actor channels
-	setSeedCh chan setSeedCallbackReq
-	lastRunCh chan lastRunReq
-	stop      chan struct{}
-	done      chan struct{}
+	setSeed    actor.Proc[func() [][]byte]
+	getLastRun actor.Query[time.Time]
+	trigger    actor.Inbox[struct{}]
+	lc         actor.Lifecycle
 }
 
 // NewDirectorySpider creates a new DirectorySpider instance.
@@ -127,11 +114,10 @@ func NewDirectorySpider(
 		relayIdentityPubkey: relayPubkey,
 		selfURLs:            make(map[string]bool),
 		nip11Cache:          dsync.NewNIP11Cache(30 * time.Minute),
-		triggerChan:         make(chan struct{}, 1),
-		setSeedCh:           make(chan setSeedCallbackReq),
-		lastRunCh:           make(chan lastRunReq),
-		stop:                make(chan struct{}),
-		done:                make(chan struct{}),
+		setSeed:             actor.NewProc[func() [][]byte](),
+		getLastRun:          actor.NewQuery[time.Time](),
+		trigger:             actor.NewInbox[struct{}](1),
+		lc:                  actor.NewLifecycle(),
 	}
 
 	return
@@ -139,14 +125,12 @@ func NewDirectorySpider(
 
 // SetSeedCallback sets the callback function for getting seed pubkeys (whitelisted users).
 func (ds *DirectorySpider) SetSeedCallback(getSeedPubkeys func() [][]byte) {
-	if ds.setSeedCh == nil {
-		// No actor running (pre-start or bare struct), set directly.
+	if !ds.running.Load() {
+		// Actor not running (pre-start), set directly.
 		ds.getSeedPubkeys = getSeedPubkeys
 		return
 	}
-	resp := make(chan struct{}, 1)
-	ds.setSeedCh <- setSeedCallbackReq{fn: getSeedPubkeys, resp: resp}
-	<-resp
+	ds.setSeed.Call(getSeedPubkeys)
 }
 
 // Start begins the directory spider operation.
@@ -162,7 +146,7 @@ func (ds *DirectorySpider) Start() (err error) {
 	}
 
 	ds.running.Store(true)
-	go ds.actorLoop()
+	actor.Go(ds.lc, ds.actorLoop)
 
 	log.I.F("directory spider: started (interval: %v, max hops: %d)", ds.interval, ds.maxHops)
 	return
@@ -182,40 +166,28 @@ func (ds *DirectorySpider) Stop() {
 
 // Shutdown stops the directory spider and waits for the actor to exit.
 func (ds *DirectorySpider) Shutdown() {
-	close(ds.stop)
-	<-ds.done
+	ds.lc.Stop()
 }
 
 // TriggerNow forces an immediate run of the directory spider.
 func (ds *DirectorySpider) TriggerNow() {
-	select {
-	case ds.triggerChan <- struct{}{}:
+	if ds.trigger.TrySend(struct{}{}) {
 		log.D.F("directory spider: manual trigger sent")
-	default:
+	} else {
 		log.D.F("directory spider: trigger already pending")
 	}
 }
 
 // LastRun returns the time of the last completed run.
 func (ds *DirectorySpider) LastRun() time.Time {
-	if ds.lastRunCh == nil {
-		// No actor running (bare struct or pre-start), return field directly.
+	if !ds.running.Load() {
 		return ds.lastRun
 	}
-	resp := make(chan time.Time, 1)
-	select {
-	case ds.lastRunCh <- lastRunReq{resp: resp}:
-		return <-resp
-	default:
-		// Actor not running, return field directly.
-		return ds.lastRun
-	}
+	return ds.getLastRun.Call()
 }
 
 // actorLoop is the actor goroutine that owns all mutable discovery state.
 func (ds *DirectorySpider) actorLoop() {
-	defer close(ds.done)
-
 	// Run immediately on start
 	ds.runOnce()
 
@@ -228,14 +200,14 @@ func (ds *DirectorySpider) actorLoop() {
 		select {
 		case <-ds.ctx.Done():
 			return
-		case <-ds.stop:
+		case <-ds.lc.Stopping():
 			return
-		case req := <-ds.setSeedCh:
-			ds.getSeedPubkeys = req.fn
-			req.resp <- struct{}{}
-		case req := <-ds.lastRunCh:
-			req.resp <- ds.lastRun
-		case <-ds.triggerChan:
+		case msg := <-ds.setSeed.Recv():
+			ds.getSeedPubkeys = msg.Req
+			msg.Done()
+		case msg := <-ds.getLastRun.Recv():
+			msg.Reply(ds.lastRun)
+		case <-ds.trigger.Recv():
 			log.D.F("directory spider: manual trigger received")
 			ds.runOnce()
 		case <-ticker.C:
@@ -296,7 +268,7 @@ func (ds *DirectorySpider) discoverRelays() error {
 		return errorf.W("failed to get relays from local DB: %v", err)
 	}
 
-	// Filter out self-relays WITHOUT holding mu — isSelfRelay takes mu internally
+	// Filter out self-relays WITHOUT holding mu - isSelfRelay takes mu internally
 	var nonSelfRelays []string
 	for _, url := range seedRelays {
 		if !ds.isSelfRelay(url) {

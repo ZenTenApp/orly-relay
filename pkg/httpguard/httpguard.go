@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/lol/log"
 )
 
@@ -42,25 +43,17 @@ type Config struct {
 }
 
 // Guard is the HTTP guard middleware.
+// All mutable state (client map) is owned by the actor goroutine.
 type Guard struct {
-	cfg     Config
-	clients map[string]*clientState
-
-	// Actor channels
-	getOrCreateCh chan getOrCreateReq
-	stop          chan struct{}
-	done          chan struct{}
+	cfg         Config
+	getOrCreate actor.Func[string, *clientState]
+	actor.Lifecycle
 }
 
 type clientState struct {
 	httpTokens atomic.Int64
 	wsTokens   atomic.Int64
 	lastSeen   atomic.Int64 // unix seconds
-}
-
-type getOrCreateReq struct {
-	ip   string
-	resp chan *clientState
 }
 
 const (
@@ -78,20 +71,16 @@ func New(cfg Config) *Guard {
 	}
 
 	g := &Guard{
-		cfg:           cfg,
-		clients:       make(map[string]*clientState),
-		getOrCreateCh: make(chan getOrCreateReq, 128),
-		stop:          make(chan struct{}),
-		done:          make(chan struct{}),
+		cfg:         cfg,
+		getOrCreate: actor.NewFunc[string, *clientState](),
+		Lifecycle:   actor.NewLifecycle(),
 	}
-
-	go g.actor()
-
+	actor.Go(g.Lifecycle, g.actorLoop)
 	return g
 }
 
-func (g *Guard) actor() {
-	defer close(g.done)
+func (g *Guard) actorLoop() {
+	clients := make(map[string]*clientState)
 
 	refillTicker := time.NewTicker(1 * time.Minute)
 	defer refillTicker.Stop()
@@ -101,21 +90,21 @@ func (g *Guard) actor() {
 
 	for {
 		select {
-		case <-g.stop:
+		case <-g.Stopping():
 			return
-		case req := <-g.getOrCreateCh:
-			cs, ok := g.clients[req.ip]
+		case msg := <-g.getOrCreate.Recv():
+			cs, ok := clients[msg.Req]
 			if !ok {
 				cs = &clientState{}
 				cs.httpTokens.Store(int64(g.cfg.RPM))
 				cs.wsTokens.Store(int64(g.cfg.WSPerMin))
-				g.clients[req.ip] = cs
+				clients[msg.Req] = cs
 			}
-			req.resp <- cs
+			msg.Reply(cs)
 		case <-refillTicker.C:
 			httpMax := int64(g.cfg.RPM)
 			wsMax := int64(g.cfg.WSPerMin)
-			for _, cs := range g.clients {
+			for _, cs := range clients {
 				if cs.httpTokens.Load() < httpMax {
 					cs.httpTokens.Store(httpMax)
 				}
@@ -126,9 +115,9 @@ func (g *Guard) actor() {
 		case <-cleanupTicker.C:
 			cutoff := time.Now().Add(-idleEvictTime).Unix()
 			evicted := 0
-			for ip, cs := range g.clients {
+			for ip, cs := range clients {
 				if cs.lastSeen.Load() < cutoff {
-					delete(g.clients, ip)
+					delete(clients, ip)
 					evicted++
 				}
 			}
@@ -139,10 +128,9 @@ func (g *Guard) actor() {
 	}
 }
 
-// Stop shuts down the actor goroutine.
-func (g *Guard) Stop() {
-	close(g.stop)
-	<-g.done
+// Shutdown stops the actor goroutine.
+func (g *Guard) Shutdown() {
+	g.Stop()
 }
 
 // Allow checks whether the request should be allowed. If blocked, it writes
@@ -175,7 +163,7 @@ func (g *Guard) Allow(w http.ResponseWriter, r *http.Request) bool {
 	}
 
 	// Rate limiting
-	cs := g.getOrCreate(ip)
+	cs := g.getOrCreate.Call(ip)
 	now := time.Now().Unix()
 	cs.lastSeen.Store(now)
 
@@ -197,12 +185,6 @@ func (g *Guard) Allow(w http.ResponseWriter, r *http.Request) bool {
 	}
 
 	return true
-}
-
-func (g *Guard) getOrCreate(ip string) *clientState {
-	resp := make(chan *clientState, 1)
-	g.getOrCreateCh <- getOrCreateReq{ip: ip, resp: resp}
-	return <-resp
 }
 
 func extractIP(r *http.Request) string {

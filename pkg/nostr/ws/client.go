@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes"
 	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/authenvelope"
 	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/closedenvelope"
@@ -43,36 +44,16 @@ var subscriptionIDCh = func() chan int64 {
 	return ch
 }()
 
-// --- Actor request types for subscriptions map ---
-
-type subLoadReq struct {
-	key  string
-	resp chan subLoadResp
-}
+// --- Actor arg types ---
 
 type subLoadResp struct {
 	sub *Subscription
 	ok  bool
 }
 
-type subStoreReq struct {
+type subStoreArgs struct {
 	key string
 	sub *Subscription
-}
-
-type subDeleteReq struct {
-	key string
-}
-
-type subRangeReq struct {
-	resp chan []*Subscription
-}
-
-// --- Actor request types for okCallbacks map ---
-
-type okLoadReq struct {
-	key  string
-	resp chan okLoadResp
 }
 
 type okLoadResp struct {
@@ -80,20 +61,9 @@ type okLoadResp struct {
 	ok bool
 }
 
-type okStoreReq struct {
+type okStoreArgs struct {
 	key string
 	fn  func(bool, string)
-}
-
-type okDeleteReq struct {
-	key string
-}
-
-// --- Actor request for close ---
-
-type closeReq struct {
-	reason error
-	resp   chan error
 }
 
 // Client represents a connection to a Nostr relay.
@@ -114,22 +84,21 @@ type Client struct {
 	subscriptionChannelCloseQueue chan []byte
 
 	// Actor channels for subscriptions map
-	subLoad   chan subLoadReq
-	subStore  chan subStoreReq
-	subDelete chan subDeleteReq
-	subRange  chan subRangeReq
+	subLoad   actor.Func[string, subLoadResp]
+	subStore  actor.Inbox[subStoreArgs]
+	subDelete actor.Inbox[string]
+	subRange  actor.Query[[]*Subscription]
 
 	// Actor channels for okCallbacks map
-	okLoad   chan okLoadReq
-	okStore  chan okStoreReq
-	okDelete chan okDeleteReq
+	okLoad   actor.Func[string, okLoadResp]
+	okStore  actor.Inbox[okStoreArgs]
+	okDelete actor.Inbox[string]
 
 	// Actor channel for close
-	closeCh chan closeReq
+	doClose actor.Func[error, error]
 
 	// Actor lifecycle
-	mapStop chan struct{}
-	mapDone chan struct{}
+	lc actor.Lifecycle
 
 	// custom things that aren't often used
 	//
@@ -151,130 +120,121 @@ func NewRelay(ctx context.Context, url string, opts ...RelayOption) *Client {
 		writeQueue:                    make(chan writeRequest),
 		subscriptionChannelCloseQueue: make(chan []byte),
 		requestHeader:                 nil,
-		subLoad:                       make(chan subLoadReq),
-		subStore:                      make(chan subStoreReq, 16),
-		subDelete:                     make(chan subDeleteReq, 16),
-		subRange:                      make(chan subRangeReq),
-		okLoad:                        make(chan okLoadReq),
-		okStore:                       make(chan okStoreReq, 16),
-		okDelete:                      make(chan okDeleteReq, 16),
-		closeCh:                       make(chan closeReq),
-		mapStop:                       make(chan struct{}),
-		mapDone:                       make(chan struct{}),
+		subLoad:                       actor.NewFunc[string, subLoadResp](),
+		subStore:                      actor.NewInbox[subStoreArgs](16),
+		subDelete:                     actor.NewInbox[string](16),
+		subRange:                      actor.NewQuery[[]*Subscription](),
+		okLoad:                        actor.NewFunc[string, okLoadResp](),
+		okStore:                       actor.NewInbox[okStoreArgs](16),
+		okDelete:                      actor.NewInbox[string](16),
+		doClose:                       actor.NewFunc[error, error](),
+		lc:                            actor.NewLifecycle(),
 	}
 
 	for _, opt := range opts {
 		opt.ApplyRelayOption(r)
 	}
 
-	go r.mapActor()
+	actor.Go(r.lc, r.mapActor)
 
 	return r
 }
 
 // mapActor owns the subscriptions map, okCallbacks map, and close state.
 func (r *Client) mapActor() {
-	defer close(r.mapDone)
-
 	subs := make(map[string]*Subscription)
 	okCBs := make(map[string]func(bool, string))
 	closed := false
 
 	for {
 		select {
-		case <-r.mapStop:
+		case <-r.lc.Stopping():
 			return
 
-		case req := <-r.subLoad:
-			sub, ok := subs[req.key]
-			req.resp <- subLoadResp{sub, ok}
+		case msg := <-r.subLoad.Recv():
+			sub, ok := subs[msg.Req]
+			msg.Reply(subLoadResp{sub, ok})
 
-		case req := <-r.subStore:
-			subs[req.key] = req.sub
+		case args := <-r.subStore.Recv():
+			subs[args.key] = args.sub
 
-		case req := <-r.subDelete:
-			delete(subs, req.key)
+		case key := <-r.subDelete.Recv():
+			delete(subs, key)
 
-		case req := <-r.subRange:
+		case msg := <-r.subRange.Recv():
 			all := make([]*Subscription, 0, len(subs))
 			for _, sub := range subs {
 				all = append(all, sub)
 			}
-			req.resp <- all
+			msg.Reply(all)
 
-		case req := <-r.okLoad:
-			fn, ok := okCBs[req.key]
-			req.resp <- okLoadResp{fn, ok}
+		case msg := <-r.okLoad.Recv():
+			fn, ok := okCBs[msg.Req]
+			msg.Reply(okLoadResp{fn, ok})
 
-		case req := <-r.okStore:
-			okCBs[req.key] = req.fn
+		case args := <-r.okStore.Recv():
+			okCBs[args.key] = args.fn
 
-		case req := <-r.okDelete:
-			delete(okCBs, req.key)
+		case key := <-r.okDelete.Recv():
+			delete(okCBs, key)
 
-		case req := <-r.closeCh:
+		case msg := <-r.doClose.Recv():
 			if closed {
-				req.resp <- fmt.Errorf("relay already closed")
+				msg.Reply(fmt.Errorf("relay already closed"))
 				continue
 			}
 			closed = true
 			log.T.F(
 				"WS.Client: closing connection to %s: reason=%v lastErr=%v", r.URL,
-				req.reason, r.ConnectionError,
+				msg.Req, r.ConnectionError,
 			)
-			r.connectionContextCancel(req.reason)
+			r.connectionContextCancel(msg.Req)
 			r.connectionContextCancel = nil
 
 			if r.Connection == nil {
-				req.resp <- fmt.Errorf("relay not connected")
+				msg.Reply(fmt.Errorf("relay not connected"))
 				continue
 			}
-			req.resp <- r.Connection.Close()
+			msg.Reply(r.Connection.Close())
 		}
 	}
 }
 
 // loadSub loads a subscription from the actor-owned map.
 func (r *Client) loadSub(key string) (*Subscription, bool) {
-	req := subLoadReq{key: key, resp: make(chan subLoadResp, 1)}
-	r.subLoad <- req
-	resp := <-req.resp
+	resp := r.subLoad.Call(key)
 	return resp.sub, resp.ok
 }
 
 // storeSub stores a subscription in the actor-owned map.
 func (r *Client) storeSub(key string, sub *Subscription) {
-	r.subStore <- subStoreReq{key: key, sub: sub}
+	r.subStore.Send(subStoreArgs{key: key, sub: sub})
 }
 
 // deleteSub deletes a subscription from the actor-owned map.
 func (r *Client) deleteSub(key string) {
-	r.subDelete <- subDeleteReq{key: key}
+	r.subDelete.Send(key)
 }
 
 // rangeSubs returns all subscriptions.
 func (r *Client) rangeSubs() []*Subscription {
-	req := subRangeReq{resp: make(chan []*Subscription, 1)}
-	r.subRange <- req
-	return <-req.resp
+	return r.subRange.Call()
 }
 
 // loadOkCallback loads an ok callback from the actor-owned map.
 func (r *Client) loadOkCallback(key string) (func(bool, string), bool) {
-	req := okLoadReq{key: key, resp: make(chan okLoadResp, 1)}
-	r.okLoad <- req
-	resp := <-req.resp
+	resp := r.okLoad.Call(key)
 	return resp.fn, resp.ok
 }
 
 // storeOkCallback stores an ok callback in the actor-owned map.
 func (r *Client) storeOkCallback(key string, fn func(bool, string)) {
-	r.okStore <- okStoreReq{key: key, fn: fn}
+	r.okStore.Send(okStoreArgs{key: key, fn: fn})
 }
 
 // deleteOkCallback deletes an ok callback from the actor-owned map.
 func (r *Client) deleteOkCallback(key string) {
-	r.okDelete <- okDeleteReq{key: key}
+	r.okDelete.Send(key)
 }
 
 // RelayConnect returns a relay object connected to url.
@@ -393,7 +353,7 @@ func subIdToSerial(subId string) int64 {
 func (r *Client) ConnectWithTLS(
 	ctx context.Context, tlsConfig *tls.Config,
 ) error {
-	if r.connectionContext == nil || r.subLoad == nil {
+	if r.connectionContext == nil {
 		return fmt.Errorf("relay must be initialized with a call to NewRelay()")
 	}
 
@@ -837,9 +797,7 @@ func (r *Client) Close() error { return r.CloseWithReason(errors.New("Close() ca
 
 // CloseWithReason closes the relay connection with a specific reason that will be stored as the context cancel cause.
 func (r *Client) CloseWithReason(reason error) error {
-	req := closeReq{reason: reason, resp: make(chan error, 1)}
-	r.closeCh <- req
-	return <-req.resp
+	return r.doClose.Call(reason)
 }
 
 var subIdPool = sync.Pool{

@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/database"
 	"git.smesh.lol/orly/pkg/interfaces/publisher"
 	"git.smesh.lol/orly/pkg/lol/log"
@@ -117,11 +118,8 @@ type Stats struct {
 	BlacklistedRelays     int64     `json:"blacklisted_relays"`
 }
 
-// Actor request types
-type frontierMergeReq struct {
-	filtered map[string]int
-	resp     chan frontierMergeResp
-}
+// Actor arg/response types
+
 type frontierMergeResp struct {
 	added        int
 	frontierSize int
@@ -133,52 +131,17 @@ type syncTarget struct {
 	totalSyncs int64
 }
 
-type syncTargetReq struct {
-	interval time.Duration
-	resp     chan []syncTarget
-}
-
-type syncResultReq struct {
+type syncResultArgs struct {
 	url          string
 	success      bool
 	eventsSynced int64
 	lastError    string
 }
 
-type getStatsReq struct {
-	resp chan Stats
-}
-
-type getFrontierSizeReq struct {
-	resp chan int
-}
-
-type saveFrontierReq struct {
-	resp chan saveFrontierResp
-}
-
 type saveFrontierResp struct {
 	frontierData []byte
 	statsData    []byte
 	err          error
-}
-
-type selfURLCheckReq struct {
-	url  string
-	resp chan bool
-}
-
-type selfURLSetReq struct {
-	url string
-}
-
-type setSeedCallbackReq struct {
-	fn   func() [][]byte
-	resp chan struct{}
-}
-
-type getSeedCallbackReq struct {
-	resp chan func() [][]byte
 }
 
 // Crawler orchestrates relay discovery and corpus sync.
@@ -190,7 +153,7 @@ type Crawler struct {
 	pub    publisher.I
 	config *Config
 
-	// State owned by actor
+	// State owned by actor (accessed directly only after actor stops)
 	frontier map[string]*RelayState
 	stats    Stats
 	selfURLs map[string]bool
@@ -204,20 +167,18 @@ type Crawler struct {
 	running atomic.Bool
 
 	// Actor channels
-	frontierMergeCh   chan frontierMergeReq
-	syncTargetCh      chan syncTargetReq
-	syncResultCh      chan syncResultReq
-	getStatsCh        chan getStatsReq
-	getFrontierSizeCh chan getFrontierSizeReq
-	saveFrontierCh    chan saveFrontierReq
-	selfURLCheckCh    chan selfURLCheckReq
-	selfURLSetCh      chan selfURLSetReq
-	setSeedCallbackCh chan setSeedCallbackReq
-	getSeedCallbackCh chan getSeedCallbackReq
-	syncCycleDoneCh   chan struct{}
-
-	stop chan struct{}
-	done chan struct{}
+	frontierMerge  actor.Func[map[string]int, frontierMergeResp]
+	getSyncTargets actor.Func[time.Duration, []syncTarget]
+	syncResult     actor.Inbox[syncResultArgs]
+	getStats       actor.Query[Stats]
+	getFrontierSz  actor.Query[int]
+	doSaveFrontier actor.Query[saveFrontierResp]
+	selfURLCheck   actor.Func[string, bool]
+	selfURLSet     actor.Inbox[string]
+	setSeed        actor.Proc[func() [][]byte]
+	getSeed        actor.Query[func() [][]byte]
+	syncCycleDone  actor.Inbox[struct{}]
+	lc             actor.Lifecycle
 }
 
 // New creates a new Crawler instance.
@@ -247,22 +208,21 @@ func New(ctx context.Context, db database.Database, pub publisher.I, cfg *Config
 		selfURLs:            make(map[string]bool),
 		nip11Cache:          dsync.NewNIP11Cache(30 * time.Minute),
 		relayIdentityPubkey: relayPubkey,
-		frontierMergeCh:     make(chan frontierMergeReq),
-		syncTargetCh:        make(chan syncTargetReq),
-		syncResultCh:        make(chan syncResultReq, 128),
-		getStatsCh:          make(chan getStatsReq),
-		getFrontierSizeCh:   make(chan getFrontierSizeReq),
-		saveFrontierCh:      make(chan saveFrontierReq),
-		selfURLCheckCh:      make(chan selfURLCheckReq),
-		selfURLSetCh:        make(chan selfURLSetReq, 16),
-		setSeedCallbackCh:   make(chan setSeedCallbackReq),
-		getSeedCallbackCh:   make(chan getSeedCallbackReq),
-		syncCycleDoneCh:     make(chan struct{}, 16),
-		stop:                make(chan struct{}),
-		done:                make(chan struct{}),
+		frontierMerge:       actor.NewFunc[map[string]int, frontierMergeResp](),
+		getSyncTargets:      actor.NewFunc[time.Duration, []syncTarget](),
+		syncResult:          actor.NewInbox[syncResultArgs](128),
+		getStats:            actor.NewQuery[Stats](),
+		getFrontierSz:       actor.NewQuery[int](),
+		doSaveFrontier:      actor.NewQuery[saveFrontierResp](),
+		selfURLCheck:        actor.NewFunc[string, bool](),
+		selfURLSet:          actor.NewInbox[string](16),
+		setSeed:             actor.NewProc[func() [][]byte](),
+		getSeed:             actor.NewQuery[func() [][]byte](),
+		syncCycleDone:       actor.NewInbox[struct{}](16),
+		lc:                  actor.NewLifecycle(),
 	}
 
-	go c.actor()
+	actor.Go(c.lc, c.actorLoop)
 
 	if err := c.loadFrontier(); err != nil {
 		log.W.F("crawler: failed to load frontier: %v (starting fresh)", err)
@@ -271,15 +231,14 @@ func New(ctx context.Context, db database.Database, pub publisher.I, cfg *Config
 	return c, nil
 }
 
-func (c *Crawler) actor() {
-	defer close(c.done)
+func (c *Crawler) actorLoop() {
 	for {
 		select {
-		case <-c.stop:
+		case <-c.lc.Stopping():
 			return
-		case req := <-c.frontierMergeCh:
+		case msg := <-c.frontierMerge.Recv():
 			added := 0
-			for normURL, hopDist := range req.filtered {
+			for normURL, hopDist := range msg.Req {
 				if existing, ok := c.frontier[normURL]; ok {
 					existing.LastDiscovery = time.Now()
 					if hopDist < existing.HopDistance {
@@ -297,11 +256,11 @@ func (c *Crawler) actor() {
 			}
 			c.stats.TotalRelaysDiscovered = int64(len(c.frontier))
 			c.stats.LastDiscoveryRun = time.Now()
-			req.resp <- frontierMergeResp{added: added, frontierSize: len(c.frontier)}
-		case req := <-c.syncTargetCh:
+			msg.Reply(frontierMergeResp{added: added, frontierSize: len(c.frontier)})
+		case msg := <-c.getSyncTargets.Recv():
 			var due []syncTarget
 			for _, rs := range c.frontier {
-				if rs.needsSync(req.interval) {
+				if rs.needsSync(msg.Req) {
 					due = append(due, syncTarget{
 						url:        rs.URL,
 						hopDistance: rs.HopDistance,
@@ -309,17 +268,17 @@ func (c *Crawler) actor() {
 					})
 				}
 			}
-			req.resp <- due
-		case req := <-c.syncResultCh:
-			rs, exists := c.frontier[req.url]
+			msg.Reply(due)
+		case args := <-c.syncResult.Recv():
+			rs, exists := c.frontier[args.url]
 			if !exists {
 				continue
 			}
 			rs.LastSync = time.Now()
 			rs.TotalSyncs++
-			if !req.success {
+			if !args.success {
 				rs.ConsecFailures++
-				rs.LastError = req.lastError
+				rs.LastError = args.lastError
 				if rs.ConsecFailures >= c.config.MaxFailures {
 					rs.BlacklistedUntil = time.Now().Add(c.config.BlacklistDuration)
 					c.stats.BlacklistedRelays++
@@ -332,55 +291,51 @@ func (c *Crawler) actor() {
 			} else {
 				rs.ConsecFailures = 0
 				rs.LastError = ""
-				rs.EventsSynced += req.eventsSynced
-				c.stats.TotalEventsSynced += req.eventsSynced
+				rs.EventsSynced += args.eventsSynced
+				c.stats.TotalEventsSynced += args.eventsSynced
 				c.stats.TotalRelaysSynced++
-				if req.eventsSynced > 0 {
-					log.I.F("crawler: synced %d events from %s", req.eventsSynced, rs.URL)
+				if args.eventsSynced > 0 {
+					log.I.F("crawler: synced %d events from %s", args.eventsSynced, rs.URL)
 				}
 			}
-		case <-c.syncCycleDoneCh:
+		case <-c.syncCycleDone.Recv():
 			c.stats.LastSyncRun = time.Now()
-		case req := <-c.getStatsCh:
-			req.resp <- c.stats
-		case req := <-c.getFrontierSizeCh:
-			req.resp <- len(c.frontier)
-		case req := <-c.saveFrontierCh:
+		case msg := <-c.getStats.Recv():
+			msg.Reply(c.stats)
+		case msg := <-c.getFrontierSz.Recv():
+			msg.Reply(len(c.frontier))
+		case msg := <-c.doSaveFrontier.Recv():
 			data, err := json.Marshal(c.frontier)
 			if err != nil {
-				req.resp <- saveFrontierResp{err: fmt.Errorf("marshal frontier: %w", err)}
+				msg.Reply(saveFrontierResp{err: fmt.Errorf("marshal frontier: %w", err)})
 				continue
 			}
 			statsData, err := json.Marshal(c.stats)
 			if err != nil {
-				req.resp <- saveFrontierResp{err: fmt.Errorf("marshal stats: %w", err)}
+				msg.Reply(saveFrontierResp{err: fmt.Errorf("marshal stats: %w", err)})
 				continue
 			}
-			req.resp <- saveFrontierResp{frontierData: data, statsData: statsData}
-		case req := <-c.selfURLCheckCh:
-			req.resp <- c.selfURLs[req.url]
-		case req := <-c.selfURLSetCh:
-			c.selfURLs[req.url] = true
-		case req := <-c.setSeedCallbackCh:
-			c.getSeedPubkeys = req.fn
-			close(req.resp)
-		case req := <-c.getSeedCallbackCh:
-			req.resp <- c.getSeedPubkeys
+			msg.Reply(saveFrontierResp{frontierData: data, statsData: statsData})
+		case msg := <-c.selfURLCheck.Recv():
+			msg.Reply(c.selfURLs[msg.Req])
+		case url := <-c.selfURLSet.Recv():
+			c.selfURLs[url] = true
+		case msg := <-c.setSeed.Recv():
+			c.getSeedPubkeys = msg.Req
+			msg.Done()
+		case msg := <-c.getSeed.Recv():
+			msg.Reply(c.getSeedPubkeys)
 		}
 	}
 }
 
 // SetSeedCallback sets the callback for getting seed pubkeys used in discovery.
 func (c *Crawler) SetSeedCallback(fn func() [][]byte) {
-	resp := make(chan struct{})
-	c.setSeedCallbackCh <- setSeedCallbackReq{fn: fn, resp: resp}
-	<-resp
+	c.setSeed.Call(fn)
 }
 
 func (c *Crawler) callSeedCallback() [][]byte {
-	resp := make(chan func() [][]byte, 1)
-	c.getSeedCallbackCh <- getSeedCallbackReq{resp: resp}
-	fn := <-resp
+	fn := c.getSeed.Call()
 	if fn == nil {
 		return nil
 	}
@@ -393,9 +348,7 @@ func (c *Crawler) Start() error {
 		return fmt.Errorf("crawler already running")
 	}
 
-	resp := make(chan func() [][]byte, 1)
-	c.getSeedCallbackCh <- getSeedCallbackReq{resp: resp}
-	fn := <-resp
+	fn := c.getSeed.Call()
 	if fn == nil {
 		return fmt.Errorf("seed callback must be set before starting")
 	}
@@ -420,8 +373,7 @@ func (c *Crawler) Stop() {
 	c.running.Store(false)
 
 	c.cancel()
-	close(c.stop)
-	<-c.done
+	c.lc.Stop()
 
 	// Save frontier after actor is stopped - frontier data is now uncontested
 	data, _ := json.Marshal(c.frontier)
@@ -443,16 +395,12 @@ func (c *Crawler) Stop() {
 
 // GetStats returns a snapshot of crawler statistics.
 func (c *Crawler) GetStats() Stats {
-	resp := make(chan Stats, 1)
-	c.getStatsCh <- getStatsReq{resp: resp}
-	return <-resp
+	return c.getStats.Call()
 }
 
 // GetFrontierSize returns the number of relays in the frontier.
 func (c *Crawler) GetFrontierSize() int {
-	resp := make(chan int, 1)
-	c.getFrontierSizeCh <- getFrontierSizeReq{resp: resp}
-	return <-resp
+	return c.getFrontierSz.Call()
 }
 
 func (c *Crawler) discoveryLoop() {
@@ -463,7 +411,7 @@ func (c *Crawler) discoveryLoop() {
 
 	for {
 		select {
-		case <-c.stop:
+		case <-c.lc.Stopping():
 			return
 		case <-ticker.C:
 			c.runDiscovery()
@@ -473,7 +421,7 @@ func (c *Crawler) discoveryLoop() {
 
 func (c *Crawler) syncLoop() {
 	select {
-	case <-c.stop:
+	case <-c.lc.Stopping():
 		return
 	case <-time.After(30 * time.Second):
 	}
@@ -485,7 +433,7 @@ func (c *Crawler) syncLoop() {
 
 	for {
 		select {
-		case <-c.stop:
+		case <-c.lc.Stopping():
 			return
 		case <-ticker.C:
 			c.runSyncCycle()
@@ -514,7 +462,7 @@ func (c *Crawler) runDiscovery() {
 
 	for hop := 1; hop <= c.config.MaxHops; hop++ {
 		select {
-		case <-c.stop:
+		case <-c.lc.Stopping():
 			return
 		default:
 		}
@@ -534,7 +482,7 @@ func (c *Crawler) runDiscovery() {
 		newCount := 0
 		for _, relayURL := range prevHopRelays {
 			select {
-			case <-c.stop:
+			case <-c.lc.Stopping():
 				return
 			default:
 			}
@@ -577,9 +525,7 @@ func (c *Crawler) runDiscovery() {
 	}
 
 	// Merge into frontier via actor.
-	resp := make(chan frontierMergeResp, 1)
-	c.frontierMergeCh <- frontierMergeReq{filtered: filtered, resp: resp}
-	result := <-resp
+	result := c.frontierMerge.Call(filtered)
 
 	log.I.F("crawler: discovery complete - %d new relays added, frontier size: %d",
 		result.added, result.frontierSize)
@@ -591,9 +537,7 @@ func (c *Crawler) runDiscovery() {
 
 // runSyncCycle syncs events from relays that are due for a sync.
 func (c *Crawler) runSyncCycle() {
-	resp := make(chan []syncTarget, 1)
-	c.syncTargetCh <- syncTargetReq{interval: c.config.SyncInterval, resp: resp}
-	due := <-resp
+	due := c.getSyncTargets.Call(c.config.SyncInterval)
 
 	if len(due) == 0 {
 		log.D.F("crawler: no relays due for sync")
@@ -607,7 +551,7 @@ func (c *Crawler) runSyncCycle() {
 
 	for _, target := range due {
 		select {
-		case <-c.stop:
+		case <-c.lc.Stopping():
 			for _, d := range doneChans {
 				<-d
 			}
@@ -630,7 +574,7 @@ func (c *Crawler) runSyncCycle() {
 		<-d
 	}
 
-	c.syncCycleDoneCh <- struct{}{}
+	c.syncCycleDone.Send(struct{}{})
 
 	if err := c.saveFrontier(); err != nil {
 		log.W.F("crawler: failed to save frontier: %v", err)
@@ -658,7 +602,7 @@ func (c *Crawler) syncRelay(url string, hopDistance int, totalSyncs int64) {
 	negMgr.TriggerSync(ctx, url)
 	peerState, ok := negMgr.GetPeerState(url)
 
-	result := syncResultReq{url: url}
+	result := syncResultArgs{url: url}
 
 	if !ok || peerState.Status == "error" {
 		var lastError string
@@ -674,7 +618,7 @@ func (c *Crawler) syncRelay(url string, hopDistance int, totalSyncs int64) {
 		result.eventsSynced = peerState.EventsSynced
 	}
 
-	c.syncResultCh <- result
+	c.syncResult.Send(result)
 }
 
 func (c *Crawler) getRelaysFromLocalDB(seeds [][]byte) map[string]bool {
@@ -775,9 +719,7 @@ func (c *Crawler) fetchRelayListsFromRelay(relayURL string) ([]string, error) {
 // isSelfRelay checks if a relay URL belongs to this relay instance by comparing
 // NIP-11 pubkeys. This does network IO and must NOT be called while holding state.
 func (c *Crawler) isSelfRelay(relayURL string) bool {
-	resp := make(chan bool, 1)
-	c.selfURLCheckCh <- selfURLCheckReq{url: relayURL, resp: resp}
-	cached := <-resp
+	cached := c.selfURLCheck.Call(relayURL)
 	if cached {
 		return true
 	}
@@ -791,7 +733,7 @@ func (c *Crawler) isSelfRelay(relayURL string) bool {
 	}
 
 	if pubkey == c.relayIdentityPubkey {
-		c.selfURLSetCh <- selfURLSetReq{url: relayURL}
+		c.selfURLSet.Send(relayURL)
 		return true
 	}
 	return false
@@ -820,9 +762,7 @@ func (c *Crawler) loadFrontier() error {
 	}
 
 	if len(filtered) > 0 {
-		resp := make(chan frontierMergeResp, 1)
-		c.frontierMergeCh <- frontierMergeReq{filtered: filtered, resp: resp}
-		result := <-resp
+		result := c.frontierMerge.Call(filtered)
 		log.I.F("crawler: loaded frontier with %d relays", result.frontierSize)
 	}
 
@@ -837,9 +777,7 @@ func (c *Crawler) loadFrontier() error {
 }
 
 func (c *Crawler) saveFrontier() error {
-	resp := make(chan saveFrontierResp, 1)
-	c.saveFrontierCh <- saveFrontierReq{resp: resp}
-	r := <-resp
+	r := c.doSaveFrontier.Call()
 	if r.err != nil {
 		return r.err
 	}

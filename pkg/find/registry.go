@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/database"
 	"git.smesh.lol/orly/pkg/lol/chk"
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
@@ -12,59 +13,32 @@ import (
 	"git.smesh.lol/orly/pkg/nostr/interfaces/signer"
 )
 
-// RegistryService implements the FIND name registry consensus protocol
-type RegistryService struct {
-	ctx              context.Context
-	cancel           context.CancelFunc
-	db               database.Database
-	signer           signer.I
-	trustGraph       *TrustGraph
-	consensus        *ConsensusEngine
-	config           *RegistryConfig
-	pendingProposals map[string]*ProposalState
-
-	// Actor channels for pendingProposals state
-	onProposalCh      chan onProposalReq
-	getCompetingCh    chan getCompetingReq
-	updateAttestCh    chan updateAttestReq
-	processProposalCh chan processProposalReq
-	cleanupCh         chan cleanupReq
-	getMetricsCh      chan getMetricsReq
-
-	stop chan struct{}
-	done chan struct{}
-}
-
-type onProposalReq struct {
-	proposalID string
-	proposal   *RegistrationProposal
-	resp       chan onProposalResp
+type onProposalArgs struct {
+	ProposalID string
+	Proposal   *RegistrationProposal
 }
 
 type onProposalResp struct {
 	exists bool
 }
 
-type getCompetingReq struct {
-	name string
-	resp chan []*ProposalState
-}
+// RegistryService implements the FIND name registry consensus protocol
+type RegistryService struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	db     database.Database
+	signer signer.I
+	trustGraph  *TrustGraph
+	consensus   *ConsensusEngine
+	config      *RegistryConfig
 
-type updateAttestReq struct {
-	resp chan []string
-}
-
-type processProposalReq struct {
-	proposalID string
-	resp       chan *ProposalState
-}
-
-type cleanupReq struct {
-	name string
-}
-
-type getMetricsReq struct {
-	resp chan int
+	onProposal      actor.Func[onProposalArgs, onProposalResp]
+	getCompeting    actor.Func[string, []*ProposalState]
+	updateAttest    actor.Query[[]string]
+	processProposal actor.Func[string, *ProposalState]
+	cleanup         actor.Inbox[string]
+	getMetrics      actor.Query[int]
+	lc              actor.Lifecycle
 }
 
 // RegistryConfig holds configuration for the registry service
@@ -98,22 +72,20 @@ func NewRegistryService(ctx context.Context, db database.Database, signer signer
 	consensus := NewConsensusEngine(db, trustGraph)
 
 	rs := &RegistryService{
-		ctx:               ctx,
-		cancel:            cancel,
-		db:                db,
-		signer:            signer,
-		trustGraph:        trustGraph,
-		consensus:         consensus,
-		config:            config,
-		pendingProposals:  make(map[string]*ProposalState),
-		onProposalCh:      make(chan onProposalReq),
-		getCompetingCh:    make(chan getCompetingReq),
-		updateAttestCh:    make(chan updateAttestReq),
-		processProposalCh: make(chan processProposalReq),
-		cleanupCh:         make(chan cleanupReq, 16),
-		getMetricsCh:      make(chan getMetricsReq),
-		stop:              make(chan struct{}),
-		done:              make(chan struct{}),
+		ctx:             ctx,
+		cancel:          cancel,
+		db:              db,
+		signer:          signer,
+		trustGraph:      trustGraph,
+		consensus:       consensus,
+		config:          config,
+		onProposal:      actor.NewFunc[onProposalArgs, onProposalResp](),
+		getCompeting:    actor.NewFunc[string, []*ProposalState](),
+		updateAttest:    actor.NewQuery[[]string](),
+		processProposal: actor.NewFunc[string, *ProposalState](),
+		cleanup:         actor.NewInbox[string](16),
+		getMetrics:      actor.NewQuery[int](),
+		lc:              actor.NewLifecycle(),
 	}
 
 	// Bootstrap trust graph if configured
@@ -126,59 +98,60 @@ func NewRegistryService(ctx context.Context, db database.Database, signer signer
 	return rs, nil
 }
 
-// actor owns the pendingProposals map
-func (rs *RegistryService) actor() {
-	defer close(rs.done)
+// actorLoop owns the pendingProposals map
+func (rs *RegistryService) actorLoop() {
+	pendingProposals := make(map[string]*ProposalState)
+
 	for {
 		select {
-		case <-rs.stop:
+		case <-rs.lc.Stopping():
 			return
-		case req := <-rs.onProposalCh:
-			_, exists := rs.pendingProposals[req.proposalID]
+		case msg := <-rs.onProposal.Recv():
+			_, exists := pendingProposals[msg.Req.ProposalID]
 			if !exists {
 				state := &ProposalState{
-					Proposal:     req.proposal,
+					Proposal:     msg.Req.Proposal,
 					Attestations: make([]*Attestation, 0),
 					ReceivedAt:   time.Now(),
 				}
 				state.Timer = time.AfterFunc(rs.config.AttestationDelay, func() {
-					rs.processProposal(req.proposalID)
+					rs.doProcessProposal(msg.Req.ProposalID)
 				})
-				rs.pendingProposals[req.proposalID] = state
+				pendingProposals[msg.Req.ProposalID] = state
 			}
-			req.resp <- onProposalResp{exists: exists}
-		case req := <-rs.getCompetingCh:
+			msg.Reply(onProposalResp{exists: exists})
+		case msg := <-rs.getCompeting.Recv():
 			proposals := make([]*ProposalState, 0)
-			for _, state := range rs.pendingProposals {
-				if state.Proposal.Name == req.name {
+			for _, state := range pendingProposals {
+				if state.Proposal.Name == msg.Req {
 					proposals = append(proposals, state)
 				}
 			}
-			req.resp <- proposals
-		case req := <-rs.updateAttestCh:
-			proposalIDs := make([]string, 0, len(rs.pendingProposals))
-			for id := range rs.pendingProposals {
+			msg.Reply(proposals)
+		case msg := <-rs.updateAttest.Recv():
+			proposalIDs := make([]string, 0, len(pendingProposals))
+			for id := range pendingProposals {
 				proposalIDs = append(proposalIDs, id)
 			}
-			req.resp <- proposalIDs
-		case req := <-rs.processProposalCh:
-			state, exists := rs.pendingProposals[req.proposalID]
+			msg.Reply(proposalIDs)
+		case msg := <-rs.processProposal.Recv():
+			state, exists := pendingProposals[msg.Req]
 			if exists {
 				now := time.Now()
 				state.ProcessedAt = &now
 			}
-			req.resp <- state
-		case req := <-rs.cleanupCh:
-			for id, state := range rs.pendingProposals {
-				if state.Proposal.Name == req.name && state.ProcessedAt != nil {
+			msg.Reply(state)
+		case name := <-rs.cleanup.Recv():
+			for id, state := range pendingProposals {
+				if state.Proposal.Name == name && state.ProcessedAt != nil {
 					if state.Timer != nil {
 						state.Timer.Stop()
 					}
-					delete(rs.pendingProposals, id)
+					delete(pendingProposals, id)
 				}
 			}
-		case req := <-rs.getMetricsCh:
-			req.resp <- len(rs.pendingProposals)
+		case msg := <-rs.getMetrics.Recv():
+			msg.Reply(len(pendingProposals))
 		}
 	}
 }
@@ -187,7 +160,7 @@ func (rs *RegistryService) actor() {
 func (rs *RegistryService) Start() error {
 	fmt.Println("starting FIND registry service")
 
-	go rs.actor()
+	actor.Go(rs.lc, rs.actorLoop)
 	go rs.monitorProposals()
 	go rs.collectAttestations()
 	go rs.refreshTrustGraph()
@@ -199,8 +172,7 @@ func (rs *RegistryService) Start() error {
 func (rs *RegistryService) Stop() error {
 	fmt.Println("stopping FIND registry service")
 	rs.cancel()
-	close(rs.stop)
-	<-rs.done
+	rs.lc.Stop()
 	return nil
 }
 
@@ -211,7 +183,7 @@ func (rs *RegistryService) monitorProposals() {
 
 	for {
 		select {
-		case <-rs.stop:
+		case <-rs.ctx.Done():
 			return
 		case <-ticker.C:
 			rs.checkForNewProposals()
@@ -235,13 +207,10 @@ func (rs *RegistryService) OnProposalReceived(proposal *RegistrationProposal) er
 
 	proposalID := hex.Enc(proposal.Event.ID)
 
-	resp := make(chan onProposalResp, 1)
-	rs.onProposalCh <- onProposalReq{
-		proposalID: proposalID,
-		proposal:   proposal,
-		resp:       resp,
-	}
-	r := <-resp
+	r := rs.onProposal.Call(onProposalArgs{
+		ProposalID: proposalID,
+		Proposal:   proposal,
+	})
 
 	if r.exists {
 		return nil
@@ -293,19 +262,17 @@ func (rs *RegistryService) collectAttestations() {
 
 	for {
 		select {
-		case <-rs.stop:
+		case <-rs.ctx.Done():
 			return
 		case <-ticker.C:
-			rs.updateAttestations()
+			rs.doUpdateAttestations()
 		}
 	}
 }
 
-// updateAttestations fetches new attestations from database
-func (rs *RegistryService) updateAttestations() {
-	resp := make(chan []string, 1)
-	rs.updateAttestCh <- updateAttestReq{resp: resp}
-	proposalIDs := <-resp
+// doUpdateAttestations fetches new attestations from database
+func (rs *RegistryService) doUpdateAttestations() {
+	proposalIDs := rs.updateAttest.Call()
 
 	if len(proposalIDs) == 0 {
 		return
@@ -315,11 +282,9 @@ func (rs *RegistryService) updateAttestations() {
 	// TODO: Add attestations to proposal states
 }
 
-// processProposal processes a proposal after the attestation window expires
-func (rs *RegistryService) processProposal(proposalID string) {
-	resp := make(chan *ProposalState, 1)
-	rs.processProposalCh <- processProposalReq{proposalID: proposalID, resp: resp}
-	state := <-resp
+// doProcessProposal processes a proposal after the attestation window expires
+func (rs *RegistryService) doProcessProposal(proposalID string) {
+	state := rs.processProposal.Call(proposalID)
 
 	if state == nil {
 		return
@@ -327,7 +292,7 @@ func (rs *RegistryService) processProposal(proposalID string) {
 
 	fmt.Printf("processing proposal: %s name: %s\n", proposalID, state.Proposal.Name)
 
-	competingProposals := rs.getCompetingProposals(state.Proposal.Name)
+	competingProposals := rs.getCompeting.Call(state.Proposal.Name)
 
 	allAttestations := make([]*Attestation, 0)
 	for _, p := range competingProposals {
@@ -360,14 +325,7 @@ func (rs *RegistryService) processProposal(proposalID string) {
 		return
 	}
 
-	rs.cleanupProposals(state.Proposal.Name)
-}
-
-// getCompetingProposals returns all pending proposals for the same name
-func (rs *RegistryService) getCompetingProposals(name string) []*ProposalState {
-	resp := make(chan []*ProposalState, 1)
-	rs.getCompetingCh <- getCompetingReq{name: name, resp: resp}
-	return <-resp
+	rs.cleanup.TrySend(state.Proposal.Name)
 }
 
 // publishNameState publishes a name state event after consensus
@@ -381,11 +339,6 @@ func (rs *RegistryService) publishNameState(result *ConsensusResult) error {
 	return nil
 }
 
-// cleanupProposals removes processed proposals from the pending map
-func (rs *RegistryService) cleanupProposals(name string) {
-	rs.cleanupCh <- cleanupReq{name: name}
-}
-
 // refreshTrustGraph periodically refreshes the trust graph from other services
 func (rs *RegistryService) refreshTrustGraph() {
 	ticker := time.NewTicker(1 * time.Hour)
@@ -393,7 +346,7 @@ func (rs *RegistryService) refreshTrustGraph() {
 
 	for {
 		select {
-		case <-rs.stop:
+		case <-rs.ctx.Done():
 			return
 		case <-ticker.C:
 			rs.updateTrustGraph()
@@ -433,9 +386,7 @@ func (rs *RegistryService) GetTrustGraph() *TrustGraph {
 
 // GetMetrics returns registry service metrics
 func (rs *RegistryService) GetMetrics() *RegistryMetrics {
-	resp := make(chan int, 1)
-	rs.getMetricsCh <- getMetricsReq{resp: resp}
-	pending := <-resp
+	pending := rs.getMetrics.Call()
 
 	return &RegistryMetrics{
 		PendingProposals: pending,

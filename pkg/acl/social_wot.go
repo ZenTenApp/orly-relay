@@ -3,10 +3,16 @@
 package acl
 
 import (
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/lol/log"
 	"git.smesh.lol/orly/pkg/database"
 	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
+
+type wotGetDepthResp struct {
+	depth int
+	ok    bool
+}
 
 // WoTDepthMap maintains a mapping from pubkey serial to WoT depth (1-N).
 // It is computed via BFS from anchor pubkeys using the ppg/gpp materialized
@@ -17,36 +23,11 @@ type WoTDepthMap struct {
 	anchors  [][]byte // anchor pubkeys (32-byte raw)
 	maxDepth int
 
-	recomputeCh    chan wotRecomputeReq
-	getDepthCh     chan wotGetDepthReq
-	getDepthHexCh  chan wotGetDepthHexReq
-	sizeCh         chan wotSizeReq
-	stop           chan struct{}
-	done           chan struct{}
-}
-
-type wotRecomputeReq struct {
-	db   *database.D
-	resp chan error
-}
-
-type wotGetDepthReq struct {
-	pubkeySerial uint64
-	resp         chan wotGetDepthResp
-}
-
-type wotGetDepthResp struct {
-	depth int
-	ok    bool
-}
-
-type wotGetDepthHexReq struct {
-	pubkeyHex string
-	resp      chan int
-}
-
-type wotSizeReq struct {
-	resp chan int
+	recompute    actor.Func[*database.D, error]
+	getDepth     actor.Func[uint64, wotGetDepthResp]
+	getDepthHex  actor.Func[string, int]
+	size         actor.Query[int]
+	actor.Lifecycle
 }
 
 // NewWoTDepthMap creates a new WoT depth map.
@@ -60,36 +41,33 @@ func NewWoTDepthMap(anchors [][]byte, maxDepth int) *WoTDepthMap {
 		maxDepth = 16
 	}
 	w := &WoTDepthMap{
-		anchors:       anchors,
-		maxDepth:      maxDepth,
-		recomputeCh:   make(chan wotRecomputeReq),
-		getDepthCh:    make(chan wotGetDepthReq),
-		getDepthHexCh: make(chan wotGetDepthHexReq),
-		sizeCh:        make(chan wotSizeReq),
-		stop:          make(chan struct{}),
-		done:          make(chan struct{}),
+		anchors:     anchors,
+		maxDepth:    maxDepth,
+		recompute:   actor.NewFunc[*database.D, error](),
+		getDepth:    actor.NewFunc[uint64, wotGetDepthResp](),
+		getDepthHex: actor.NewFunc[string, int](),
+		size:        actor.NewQuery[int](),
+		Lifecycle:   actor.NewLifecycle(),
 	}
-	go w.actor()
+	actor.Go(w.Lifecycle, w.actorLoop)
 	return w
 }
 
-func (w *WoTDepthMap) actor() {
-	defer close(w.done)
-
+func (w *WoTDepthMap) actorLoop() {
 	depths := make(map[uint64]int)
 	hexIndex := make(map[string]int)
 
 	for {
 		select {
-		case <-w.stop:
+		case <-w.Stopping():
 			return
 
-		case req := <-w.recomputeCh:
+		case msg := <-w.recompute.Recv():
 			newDepths := make(map[uint64]int)
 			newHex := make(map[string]int)
 
 			for _, anchor := range w.anchors {
-				result, err := req.db.TraversePubkeyPubkey(anchor, w.maxDepth, "out")
+				result, err := msg.Req.TraversePubkeyPubkey(anchor, w.maxDepth, "out")
 				if err != nil {
 					log.W.F("WoTDepthMap: BFS failed for anchor %s: %v", hex.Enc(anchor), err)
 					continue
@@ -101,7 +79,7 @@ func (w *WoTDepthMap) actor() {
 						if err != nil || len(pkBytes) != 32 {
 							continue
 						}
-						serial, err := req.db.GetPubkeySerial(pkBytes)
+						serial, err := msg.Req.GetPubkeySerial(pkBytes)
 						if err != nil {
 							continue
 						}
@@ -116,7 +94,7 @@ func (w *WoTDepthMap) actor() {
 			}
 
 			for _, anchor := range w.anchors {
-				serial, err := req.db.GetPubkeySerial(anchor)
+				serial, err := msg.Req.GetPubkeySerial(anchor)
 				if err != nil {
 					continue
 				}
@@ -130,22 +108,22 @@ func (w *WoTDepthMap) actor() {
 			log.I.F("WoTDepthMap: recomputed with %d pubkeys across %d anchors (max depth %d)",
 				len(newDepths), len(w.anchors), w.maxDepth)
 
-			req.resp <- nil
+			msg.Reply(nil)
 
-		case req := <-w.getDepthCh:
-			d, ok := depths[req.pubkeySerial]
-			req.resp <- wotGetDepthResp{depth: d, ok: ok}
+		case msg := <-w.getDepth.Recv():
+			d, ok := depths[msg.Req]
+			msg.Reply(wotGetDepthResp{depth: d, ok: ok})
 
-		case req := <-w.getDepthHexCh:
-			d, ok := hexIndex[req.pubkeyHex]
+		case msg := <-w.getDepthHex.Recv():
+			d, ok := hexIndex[msg.Req]
 			if !ok {
-				req.resp <- -1
+				msg.Reply(-1)
 			} else {
-				req.resp <- d
+				msg.Reply(d)
 			}
 
-		case req := <-w.sizeCh:
-			req.resp <- len(depths)
+		case msg := <-w.size.Recv():
+			msg.Reply(len(depths))
 		}
 	}
 }
@@ -154,34 +132,26 @@ func (w *WoTDepthMap) actor() {
 // TraversePubkeyPubkey with direction="out" and repopulates the depth map.
 // For multiple anchors, the minimum depth across all anchors is kept.
 func (w *WoTDepthMap) Recompute(db *database.D) error {
-	resp := make(chan error, 1)
-	w.recomputeCh <- wotRecomputeReq{db: db, resp: resp}
-	return <-resp
+	return w.recompute.Call(db)
 }
 
 // GetDepth returns the WoT depth for a pubkey serial.
 // Returns 0 if unknown (not in WoT) - callers must distinguish
 // "depth 0 = anchor" from "not found" using the ok return value.
 func (w *WoTDepthMap) GetDepth(pubkeySerial uint64) (depth int, ok bool) {
-	resp := make(chan wotGetDepthResp, 1)
-	w.getDepthCh <- wotGetDepthReq{pubkeySerial: pubkeySerial, resp: resp}
-	r := <-resp
+	r := w.getDepth.Call(pubkeySerial)
 	return r.depth, r.ok
 }
 
 // GetDepthByHex returns the WoT depth for a hex-encoded pubkey.
 // Returns -1 if not in WoT.
 func (w *WoTDepthMap) GetDepthByHex(pubkeyHex string) int {
-	resp := make(chan int, 1)
-	w.getDepthHexCh <- wotGetDepthHexReq{pubkeyHex: pubkeyHex, resp: resp}
-	return <-resp
+	return w.getDepthHex.Call(pubkeyHex)
 }
 
 // Size returns the number of pubkeys in the depth map.
 func (w *WoTDepthMap) Size() int {
-	resp := make(chan int, 1)
-	w.sizeCh <- wotSizeReq{resp: resp}
-	return <-resp
+	return w.size.Call()
 }
 
 // GetDepthForGC implements the WoTProvider interface used by the GC.
@@ -198,8 +168,7 @@ func (w *WoTDepthMap) GetDepthForGC(pubkeySerial uint64) int {
 	return depth
 }
 
-// Stop shuts down the actor goroutine and waits for it to exit.
-func (w *WoTDepthMap) Stop() {
-	close(w.stop)
-	<-w.done
+// Shutdown stops the actor goroutine and waits for it to exit.
+func (w *WoTDepthMap) Shutdown() {
+	w.Stop()
 }

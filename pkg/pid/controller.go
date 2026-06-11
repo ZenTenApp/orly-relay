@@ -41,95 +41,42 @@ import (
 	"math"
 	"time"
 
+	"git.smesh.lol/actor"
 	pidif "git.smesh.lol/orly/pkg/interfaces/pid"
 )
 
+type gainsArgs struct {
+	Kp, Ki, Kd float64
+}
+
+type limitsArgs struct {
+	Min, Max float64
+}
+
+type pidState struct {
+	Integral          float64
+	PrevError         float64
+	PrevFilteredError float64
+	Initialized       bool
+}
+
 // Controller implements a PID controller with filtered derivative.
-// It is safe for concurrent use via an internal actor goroutine.
+// All mutable state is owned by the actor goroutine.
 type Controller struct {
-	// Actor channels
-	updateCh            chan updateReq
-	updateValueCh       chan updateValueReq
-	resetCh             chan resetReq
-	setSetpointCh       chan setSetpointReq
-	getSetpointCh       chan getSetpointReq
-	setGainsCh          chan setGainsReq
-	getGainsCh          chan getGainsReq
-	setOutputLimitsCh   chan setOutputLimitsReq
-	setIntegralLimitsCh chan setIntegralLimitsReq
-	setDerivFilterCh    chan setDerivFilterReq
-	getTuningCh         chan getTuningReq
-	setTuningCh         chan setTuningReq
-	stateCh             chan stateReq
-	stop                chan struct{}
-	done                chan struct{}
-}
-
-type updateReq struct {
-	pv   pidif.ProcessVariable
-	resp chan pidif.Output
-}
-
-type updateValueReq struct {
-	value float64
-	resp  chan pidif.Output
-}
-
-type resetReq struct {
-	resp chan struct{}
-}
-
-type setSetpointReq struct {
-	setpoint float64
-	done     chan struct{}
-}
-
-type getSetpointReq struct {
-	resp chan float64
-}
-
-type setGainsReq struct {
-	kp, ki, kd float64
-	done       chan struct{}
-}
-
-type getGainsReq struct {
-	resp chan [3]float64
-}
-
-type setOutputLimitsReq struct {
-	min, max float64
-	done     chan struct{}
-}
-
-type setIntegralLimitsReq struct {
-	min, max float64
-	done     chan struct{}
-}
-
-type setDerivFilterReq struct {
-	alpha float64
-	done  chan struct{}
-}
-
-type getTuningReq struct {
-	resp chan pidif.Tuning
-}
-
-type setTuningReq struct {
-	tuning pidif.Tuning
-	done   chan struct{}
-}
-
-type stateReq struct {
-	resp chan stateResp
-}
-
-type stateResp struct {
-	integral          float64
-	prevError         float64
-	prevFilteredError float64
-	initialized       bool
+	update          actor.Func[pidif.ProcessVariable, pidif.Output]
+	updateValue     actor.Func[float64, pidif.Output]
+	reset           actor.Signal
+	setSetpoint     actor.Proc[float64]
+	getSetpoint     actor.Query[float64]
+	setGains        actor.Proc[gainsArgs]
+	getGains        actor.Query[[3]float64]
+	setOutputLimits actor.Proc[limitsArgs]
+	setIntegralLim  actor.Proc[limitsArgs]
+	setDerivFilter  actor.Proc[float64]
+	getTuning       actor.Query[pidif.Tuning]
+	setTuning       actor.Proc[pidif.Tuning]
+	state           actor.Query[pidState]
+	actor.Lifecycle
 }
 
 // Compile-time check that Controller implements pidif.Controller
@@ -151,7 +98,7 @@ func (o output) Components() (p, i, d float64) { return o.pTerm, o.iTerm, o.dTer
 // New creates a new PID controller with the given tuning parameters.
 func New(tuning pidif.Tuning) *Controller {
 	c := newController()
-	go c.actor(tuning)
+	actor.Go(c.Lifecycle, func() { c.actorLoop(tuning) })
 	return c
 }
 
@@ -163,40 +110,37 @@ func NewWithGains(kp, ki, kd, setpoint float64) *Controller {
 	tuning.Kd = kd
 	tuning.Setpoint = setpoint
 	c := newController()
-	go c.actor(tuning)
+	actor.Go(c.Lifecycle, func() { c.actorLoop(tuning) })
 	return c
 }
 
 // NewDefault creates a new PID controller with default tuning.
 func NewDefault() *Controller {
 	c := newController()
-	go c.actor(pidif.DefaultTuning())
+	actor.Go(c.Lifecycle, func() { c.actorLoop(pidif.DefaultTuning()) })
 	return c
 }
 
 func newController() *Controller {
 	return &Controller{
-		updateCh:            make(chan updateReq),
-		updateValueCh:       make(chan updateValueReq),
-		resetCh:             make(chan resetReq),
-		setSetpointCh:       make(chan setSetpointReq),
-		getSetpointCh:       make(chan getSetpointReq),
-		setGainsCh:          make(chan setGainsReq),
-		getGainsCh:          make(chan getGainsReq),
-		setOutputLimitsCh:   make(chan setOutputLimitsReq),
-		setIntegralLimitsCh: make(chan setIntegralLimitsReq),
-		setDerivFilterCh:    make(chan setDerivFilterReq),
-		getTuningCh:         make(chan getTuningReq),
-		setTuningCh:         make(chan setTuningReq),
-		stateCh:             make(chan stateReq),
-		stop:                make(chan struct{}),
-		done:                make(chan struct{}),
+		update:          actor.NewFunc[pidif.ProcessVariable, pidif.Output](),
+		updateValue:     actor.NewFunc[float64, pidif.Output](),
+		reset:           actor.NewSignal(),
+		setSetpoint:     actor.NewProc[float64](),
+		getSetpoint:     actor.NewQuery[float64](),
+		setGains:        actor.NewProc[gainsArgs](),
+		getGains:        actor.NewQuery[[3]float64](),
+		setOutputLimits: actor.NewProc[limitsArgs](),
+		setIntegralLim:  actor.NewProc[limitsArgs](),
+		setDerivFilter:  actor.NewProc[float64](),
+		getTuning:       actor.NewQuery[pidif.Tuning](),
+		setTuning:       actor.NewProc[pidif.Tuning](),
+		state:           actor.NewQuery[pidState](),
+		Lifecycle:       actor.NewLifecycle(),
 	}
 }
 
-func (c *Controller) actor(tuning pidif.Tuning) {
-	defer close(c.done)
-
+func (c *Controller) actorLoop(tuning pidif.Tuning) {
 	var (
 		integral          float64
 		prevError         float64
@@ -259,155 +203,128 @@ func (c *Controller) actor(tuning pidif.Tuning) {
 
 	for {
 		select {
-		case <-c.stop:
+		case <-c.Stopping():
 			return
-		case req := <-c.updateCh:
-			req.resp <- doUpdate(req.pv)
-		case req := <-c.updateValueCh:
-			req.resp <- doUpdate(pidif.NewProcessVariable(req.value))
-		case req := <-c.resetCh:
+		case msg := <-c.update.Recv():
+			msg.Reply(doUpdate(msg.Req))
+		case msg := <-c.updateValue.Recv():
+			msg.Reply(doUpdate(pidif.NewProcessVariable(msg.Req)))
+		case msg := <-c.reset.Recv():
 			integral = 0
 			prevError = 0
 			prevFilteredError = 0
 			initialized = false
-			close(req.resp)
-		case req := <-c.setSetpointCh:
-			tuning.Setpoint = req.setpoint
-			close(req.done)
-		case req := <-c.getSetpointCh:
-			req.resp <- tuning.Setpoint
-		case req := <-c.setGainsCh:
-			tuning.Kp = req.kp
-			tuning.Ki = req.ki
-			tuning.Kd = req.kd
-			close(req.done)
-		case req := <-c.getGainsCh:
-			req.resp <- [3]float64{tuning.Kp, tuning.Ki, tuning.Kd}
-		case req := <-c.setOutputLimitsCh:
-			tuning.OutputMin = req.min
-			tuning.OutputMax = req.max
-			close(req.done)
-		case req := <-c.setIntegralLimitsCh:
-			tuning.IntegralMin = req.min
-			tuning.IntegralMax = req.max
-			close(req.done)
-		case req := <-c.setDerivFilterCh:
-			tuning.DerivativeFilterAlpha = req.alpha
-			close(req.done)
-		case req := <-c.getTuningCh:
-			req.resp <- tuning
-		case req := <-c.setTuningCh:
-			tuning = req.tuning
-			close(req.done)
-		case req := <-c.stateCh:
-			req.resp <- stateResp{
-				integral:          integral,
-				prevError:         prevError,
-				prevFilteredError: prevFilteredError,
-				initialized:       initialized,
-			}
+			msg.Done()
+		case msg := <-c.setSetpoint.Recv():
+			tuning.Setpoint = msg.Req
+			msg.Done()
+		case msg := <-c.getSetpoint.Recv():
+			msg.Reply(tuning.Setpoint)
+		case msg := <-c.setGains.Recv():
+			tuning.Kp = msg.Req.Kp
+			tuning.Ki = msg.Req.Ki
+			tuning.Kd = msg.Req.Kd
+			msg.Done()
+		case msg := <-c.getGains.Recv():
+			msg.Reply([3]float64{tuning.Kp, tuning.Ki, tuning.Kd})
+		case msg := <-c.setOutputLimits.Recv():
+			tuning.OutputMin = msg.Req.Min
+			tuning.OutputMax = msg.Req.Max
+			msg.Done()
+		case msg := <-c.setIntegralLim.Recv():
+			tuning.IntegralMin = msg.Req.Min
+			tuning.IntegralMax = msg.Req.Max
+			msg.Done()
+		case msg := <-c.setDerivFilter.Recv():
+			tuning.DerivativeFilterAlpha = msg.Req
+			msg.Done()
+		case msg := <-c.getTuning.Recv():
+			msg.Reply(tuning)
+		case msg := <-c.setTuning.Recv():
+			tuning = msg.Req
+			msg.Done()
+		case msg := <-c.state.Recv():
+			msg.Reply(pidState{
+				Integral:          integral,
+				PrevError:         prevError,
+				PrevFilteredError: prevFilteredError,
+				Initialized:       initialized,
+			})
 		}
 	}
 }
 
-// Stop shuts down the controller actor.
-func (c *Controller) Stop() {
-	close(c.stop)
-	<-c.done
+// Shutdown stops the controller actor.
+func (c *Controller) Shutdown() {
+	c.Stop()
 }
 
 // Update computes the controller output based on the current process variable.
 func (c *Controller) Update(pv pidif.ProcessVariable) pidif.Output {
-	resp := make(chan pidif.Output, 1)
-	c.updateCh <- updateReq{pv: pv, resp: resp}
-	return <-resp
+	return c.update.Call(pv)
 }
 
 // UpdateValue is a convenience method that takes a raw float64 value.
 func (c *Controller) UpdateValue(value float64) pidif.Output {
-	resp := make(chan pidif.Output, 1)
-	c.updateValueCh <- updateValueReq{value: value, resp: resp}
-	return <-resp
+	return c.updateValue.Call(value)
 }
 
 // Reset clears all internal state.
 func (c *Controller) Reset() {
-	resp := make(chan struct{})
-	c.resetCh <- resetReq{resp: resp}
-	<-resp
+	c.reset.Call()
 }
 
 // SetSetpoint updates the target value.
 func (c *Controller) SetSetpoint(setpoint float64) {
-	done := make(chan struct{})
-	c.setSetpointCh <- setSetpointReq{setpoint: setpoint, done: done}
-	<-done
+	c.setSetpoint.Call(setpoint)
 }
 
 // Setpoint returns the current setpoint.
 func (c *Controller) Setpoint() float64 {
-	resp := make(chan float64, 1)
-	c.getSetpointCh <- getSetpointReq{resp: resp}
-	return <-resp
+	return c.getSetpoint.Call()
 }
 
 // SetGains updates the PID gains.
 func (c *Controller) SetGains(kp, ki, kd float64) {
-	done := make(chan struct{})
-	c.setGainsCh <- setGainsReq{kp: kp, ki: ki, kd: kd, done: done}
-	<-done
+	c.setGains.Call(gainsArgs{Kp: kp, Ki: ki, Kd: kd})
 }
 
 // Gains returns the current PID gains.
 func (c *Controller) Gains() (kp, ki, kd float64) {
-	resp := make(chan [3]float64, 1)
-	c.getGainsCh <- getGainsReq{resp: resp}
-	r := <-resp
+	r := c.getGains.Call()
 	return r[0], r[1], r[2]
 }
 
 // SetOutputLimits updates the output clamping limits.
 func (c *Controller) SetOutputLimits(min, max float64) {
-	done := make(chan struct{})
-	c.setOutputLimitsCh <- setOutputLimitsReq{min: min, max: max, done: done}
-	<-done
+	c.setOutputLimits.Call(limitsArgs{Min: min, Max: max})
 }
 
 // SetIntegralLimits updates the anti-windup limits.
 func (c *Controller) SetIntegralLimits(min, max float64) {
-	done := make(chan struct{})
-	c.setIntegralLimitsCh <- setIntegralLimitsReq{min: min, max: max, done: done}
-	<-done
+	c.setIntegralLim.Call(limitsArgs{Min: min, Max: max})
 }
 
 // SetDerivativeFilter updates the derivative filter coefficient.
 // Lower values provide stronger filtering (0.1-0.3 recommended).
 func (c *Controller) SetDerivativeFilter(alpha float64) {
-	done := make(chan struct{})
-	c.setDerivFilterCh <- setDerivFilterReq{alpha: alpha, done: done}
-	<-done
+	c.setDerivFilter.Call(alpha)
 }
 
 // Tuning returns a copy of the current tuning parameters.
 func (c *Controller) Tuning() pidif.Tuning {
-	resp := make(chan pidif.Tuning, 1)
-	c.getTuningCh <- getTuningReq{resp: resp}
-	return <-resp
+	return c.getTuning.Call()
 }
 
 // SetTuning updates all tuning parameters at once.
 func (c *Controller) SetTuning(tuning pidif.Tuning) {
-	done := make(chan struct{})
-	c.setTuningCh <- setTuningReq{tuning: tuning, done: done}
-	<-done
+	c.setTuning.Call(tuning)
 }
 
 // State returns the current internal state for monitoring/debugging.
 func (c *Controller) State() (integral, prevError, prevFilteredError float64, initialized bool) {
-	resp := make(chan stateResp, 1)
-	c.stateCh <- stateReq{resp: resp}
-	r := <-resp
-	return r.integral, r.prevError, r.prevFilteredError, r.initialized
+	r := c.state.Call()
+	return r.Integral, r.PrevError, r.PrevFilteredError, r.Initialized
 }
 
 // clamp restricts a value to the range [min, max].

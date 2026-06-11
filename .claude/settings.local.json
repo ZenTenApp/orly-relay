@@ -1,6 +1,9 @@
 {
   "permissions": {
-    "allow": [],
+    "allow": [
+      "Read(//tmp/**)",
+      "Bash(python3 test_smesh_final.py)"
+    ],
     "deny": [],
     "ask": [],
     "additionalDirectories": []

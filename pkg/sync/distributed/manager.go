@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
 	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
@@ -29,40 +30,8 @@ type RelayGroupConfigProvider interface {
 	FindAuthoritativeConfig(ctx context.Context) ([]string, error)
 }
 
-// -- actor request/response types --
-
-type updatePeersReq struct {
-	newPeers []string
-}
-
-type getCurrentSerialReq struct {
-	resp chan uint64
-}
-
-type getPeersReq struct {
-	resp chan []string
-}
-
-type updateSerialReq struct{}
-
-type notifyNewEventReq struct {
-	serial uint64
-}
-
-type isSelfURLReq struct {
-	url  string
-	resp chan bool
-}
-
-type markSelfURLReq struct {
-	url string
-}
-
-type getPeerStatusReq struct {
-	resp chan map[string]uint64
-}
-
-type updatePeerSerialReq struct {
+// Actor arg type for peer serial updates
+type peerSerialUpdate struct {
 	peerURL string
 	serial  uint64
 }
@@ -77,18 +46,17 @@ type Manager struct {
 	nip11Cache    *common.NIP11Cache
 	policyManager PolicyChecker
 
-	// actor channels
-	updatePeersCh      chan updatePeersReq      // fire-and-forget
-	getCurrentSerialCh chan getCurrentSerialReq
-	getPeersCh         chan getPeersReq
-	updateSerialCh     chan updateSerialReq      // fire-and-forget
-	notifyNewEventCh   chan notifyNewEventReq    // fire-and-forget
-	isSelfURLCh        chan isSelfURLReq
-	markSelfURLCh      chan markSelfURLReq       // fire-and-forget
-	getPeerStatusCh    chan getPeerStatusReq
-	updatePeerSerialCh chan updatePeerSerialReq  // fire-and-forget
-	stopCh             chan struct{}
-	doneCh             chan struct{}
+	// Actor channels
+	updatePeers   actor.Inbox[[]string]
+	getCurrentSer actor.Query[uint64]
+	getPeers      actor.Query[[]string]
+	updateSerial  actor.Inbox[struct{}]
+	notifyEvent   actor.Inbox[uint64]
+	isSelfURL     actor.Func[string, bool]
+	markSelfURL   actor.Inbox[string]
+	getPeerStatus actor.Query[map[string]uint64]
+	updatePeerSer actor.Inbox[peerSerialUpdate]
+	lc            actor.Lifecycle
 }
 
 // CurrentRequest represents a request for the current serial number
@@ -176,27 +144,26 @@ func NewManager(ctx context.Context, db *database.D, cfg *Config, policyManager 
 	}
 
 	m := &Manager{
-		ctx:                ctx,
-		cancel:             cancel,
-		db:                 db,
-		nodeID:             cfg.NodeID,
-		relayURL:           cfg.RelayURL,
-		nip11Cache:         common.NewNIP11Cache(cfg.NIP11CacheTTL),
-		policyManager:      policyManager,
-		updatePeersCh:      make(chan updatePeersReq, 16),
-		getCurrentSerialCh: make(chan getCurrentSerialReq),
-		getPeersCh:         make(chan getPeersReq),
-		updateSerialCh:     make(chan updateSerialReq, 16),
-		notifyNewEventCh:   make(chan notifyNewEventReq, 16),
-		isSelfURLCh:        make(chan isSelfURLReq),
-		markSelfURLCh:      make(chan markSelfURLReq, 16),
-		getPeerStatusCh:    make(chan getPeerStatusReq),
-		updatePeerSerialCh: make(chan updatePeerSerialReq, 16),
-		stopCh:             make(chan struct{}),
-		doneCh:             make(chan struct{}),
+		ctx:           ctx,
+		cancel:        cancel,
+		db:            db,
+		nodeID:        cfg.NodeID,
+		relayURL:      cfg.RelayURL,
+		nip11Cache:    common.NewNIP11Cache(cfg.NIP11CacheTTL),
+		policyManager: policyManager,
+		updatePeers:   actor.NewInbox[[]string](16),
+		getCurrentSer: actor.NewQuery[uint64](),
+		getPeers:      actor.NewQuery[[]string](),
+		updateSerial:  actor.NewInbox[struct{}](16),
+		notifyEvent:   actor.NewInbox[uint64](16),
+		isSelfURL:     actor.NewFunc[string, bool](),
+		markSelfURL:   actor.NewInbox[string](16),
+		getPeerStatus: actor.NewQuery[map[string]uint64](),
+		updatePeerSer: actor.NewInbox[peerSerialUpdate](16),
+		lc:            actor.NewLifecycle(),
 	}
 
-	go m.actorLoop(filteredPeers, selfURLs)
+	actor.Go(m.lc, func() { m.actorLoop(filteredPeers, selfURLs) })
 
 	// Start sync routine
 	go m.syncRoutine()
@@ -206,8 +173,6 @@ func NewManager(ctx context.Context, db *database.D, cfg *Config, policyManager 
 
 // actorLoop owns all mutable state: peers, selfURLs, currentSerial, peerSerials.
 func (m *Manager) actorLoop(initialPeers []string, initialSelfURLs map[string]bool) {
-	defer close(m.doneCh)
-
 	peers := make([]string, len(initialPeers))
 	copy(peers, initialPeers)
 	selfURLs := initialSelfURLs
@@ -216,47 +181,45 @@ func (m *Manager) actorLoop(initialPeers []string, initialSelfURLs map[string]bo
 
 	for {
 		select {
-		case <-m.stopCh:
+		case <-m.lc.Stopping():
 			return
 
-		case req := <-m.updatePeersCh:
-			peers = make([]string, len(req.newPeers))
-			copy(peers, req.newPeers)
-			log.D.F("updated peer list to %d peers", len(req.newPeers))
+		case newPeers := <-m.updatePeers.Recv():
+			peers = make([]string, len(newPeers))
+			copy(peers, newPeers)
+			log.D.F("updated peer list to %d peers", len(newPeers))
 
-		case req := <-m.getCurrentSerialCh:
-			req.resp <- currentSerial
+		case msg := <-m.getCurrentSer.Recv():
+			msg.Reply(currentSerial)
 
-		case req := <-m.getPeersCh:
+		case msg := <-m.getPeers.Recv():
 			cp := make([]string, len(peers))
 			copy(cp, peers)
-			req.resp <- cp
+			msg.Reply(cp)
 
-		case <-m.updateSerialCh:
-			// getLatestSerial in the original just returned currentSerial,
-			// so this is a no-op in practice, but preserves the interface.
-			// If actual DB query is needed later, do it here.
+		case <-m.updateSerial.Recv():
+			// no-op placeholder for future DB serial query
 
-		case req := <-m.notifyNewEventCh:
-			if req.serial > currentSerial {
-				currentSerial = req.serial
+		case serial := <-m.notifyEvent.Recv():
+			if serial > currentSerial {
+				currentSerial = serial
 			}
 
-		case req := <-m.isSelfURLCh:
-			req.resp <- selfURLs[req.url]
+		case msg := <-m.isSelfURL.Recv():
+			msg.Reply(selfURLs[msg.Req])
 
-		case req := <-m.markSelfURLCh:
-			selfURLs[req.url] = true
+		case url := <-m.markSelfURL.Recv():
+			selfURLs[url] = true
 
-		case req := <-m.getPeerStatusCh:
+		case msg := <-m.getPeerStatus.Recv():
 			result := make(map[string]uint64)
 			for k, v := range peerSerials {
 				result[k] = v
 			}
-			req.resp <- result
+			msg.Reply(result)
 
-		case req := <-m.updatePeerSerialCh:
-			peerSerials[req.peerURL] = req.serial
+		case upd := <-m.updatePeerSer.Recv():
+			peerSerials[upd.peerURL] = upd.serial
 		}
 	}
 }
@@ -264,13 +227,12 @@ func (m *Manager) actorLoop(initialPeers []string, initialSelfURLs map[string]bo
 // Stop stops the sync manager
 func (m *Manager) Stop() {
 	m.cancel()
-	close(m.stopCh)
-	<-m.doneCh
+	m.lc.Stop()
 }
 
 // UpdatePeers updates the peer list from relay group configuration
 func (m *Manager) UpdatePeers(newPeers []string) {
-	m.updatePeersCh <- updatePeersReq{newPeers: newPeers}
+	m.updatePeers.Send(newPeers)
 }
 
 // IsAuthorizedPeer checks if a peer is authorized by validating its NIP-11 pubkey
@@ -297,16 +259,12 @@ func (m *Manager) GetPeerPubkey(peerURL string) (string, error) {
 
 // GetCurrentSerial returns the current serial number
 func (m *Manager) GetCurrentSerial() uint64 {
-	req := getCurrentSerialReq{resp: make(chan uint64, 1)}
-	m.getCurrentSerialCh <- req
-	return <-req.resp
+	return m.getCurrentSer.Call()
 }
 
 // GetPeers returns a copy of the current peer list
 func (m *Manager) GetPeers() []string {
-	req := getPeersReq{resp: make(chan []string, 1)}
-	m.getPeersCh <- req
-	return <-req.resp
+	return m.getPeers.Call()
 }
 
 // GetNodeID returns the node's identity
@@ -321,24 +279,22 @@ func (m *Manager) GetRelayURL() string {
 
 // UpdateSerial updates the current serial number when a new event is stored
 func (m *Manager) UpdateSerial() {
-	m.updateSerialCh <- updateSerialReq{}
+	m.updateSerial.Send(struct{}{})
 }
 
 // NotifyNewEvent notifies the manager of a new event
 func (m *Manager) NotifyNewEvent(eventID []byte, serial uint64) {
-	m.notifyNewEventCh <- notifyNewEventReq{serial: serial}
+	m.notifyEvent.Send(serial)
 }
 
 // IsSelfURL checks if a URL is our own relay
 func (m *Manager) IsSelfURL(url string) bool {
-	req := isSelfURLReq{url: url, resp: make(chan bool, 1)}
-	m.isSelfURLCh <- req
-	return <-req.resp
+	return m.isSelfURL.Call(url)
 }
 
 // MarkSelfURL marks a URL as belonging to us
 func (m *Manager) MarkSelfURL(url string) {
-	m.markSelfURLCh <- markSelfURLReq{url: url}
+	m.markSelfURL.Send(url)
 }
 
 // IsSelfNodeID checks if a node ID matches ours
@@ -403,15 +359,12 @@ func (m *Manager) syncWithPeer(peerURL string) {
 
 	peerSerial := currentResp.Serial
 
-	// Get our last seen serial for this peer
-	statusReq := getPeerStatusReq{resp: make(chan map[string]uint64, 1)}
-	m.getPeerStatusCh <- statusReq
-	peerSerials := <-statusReq.resp
+	peerSerials := m.GetPeerStatus()
 	ourLastSeen := peerSerials[peerURL]
 
 	if peerSerial > ourLastSeen {
 		m.requestEventIDs(peerURL, ourLastSeen+1, peerSerial)
-		m.updatePeerSerialCh <- updatePeerSerialReq{peerURL: peerURL, serial: peerSerial}
+		m.updatePeerSer.Send(peerSerialUpdate{peerURL: peerURL, serial: peerSerial})
 	}
 }
 
@@ -541,9 +494,7 @@ func (m *Manager) GetEventsWithIDs(from, to uint64) (map[string]uint64, error) {
 
 // GetPeerStatus returns the sync status for all peers
 func (m *Manager) GetPeerStatus() map[string]uint64 {
-	req := getPeerStatusReq{resp: make(chan map[string]uint64, 1)}
-	m.getPeerStatusCh <- req
-	return <-req.resp
+	return m.getPeerStatus.Call()
 }
 
 // HandleCurrentRequest handles requests for current serial number

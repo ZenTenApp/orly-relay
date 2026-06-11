@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"git.smesh.lol/actor"
 )
 
 const (
@@ -12,39 +14,6 @@ const (
 	// DefaultMaxSubscriptions is the default maximum subscriptions per session.
 	DefaultMaxSubscriptions = 100
 )
-
-// --- Session actor request types ---
-
-type sessAddSubReq struct {
-	subID string
-	resp  chan error
-}
-
-type sessRemoveSubReq struct {
-	subID string
-}
-
-type sessGetSubReq struct {
-	subID string
-	resp  chan *Subscription
-}
-
-type sessHasSubReq struct {
-	subID string
-	resp  chan bool
-}
-
-type sessSubCountReq struct {
-	resp chan int
-}
-
-type sessMarkEOSEReq struct {
-	subID string
-}
-
-type sessIncrementEventCountReq struct {
-	subID string
-}
 
 // Session represents an NRC client session through the tunnel.
 type Session struct {
@@ -65,13 +34,14 @@ type Session struct {
 	LastActivity time.Time
 
 	// actor channels for subscription state
-	addSubCh          chan sessAddSubReq
-	removeSubCh       chan sessRemoveSubReq
-	getSubCh          chan sessGetSubReq
-	hasSubCh          chan sessHasSubReq
-	subCountCh        chan sessSubCountReq
-	markEOSECh        chan sessMarkEOSEReq
-	incrEventCountCh  chan sessIncrementEventCountReq
+	addSub         actor.Func[string, error]
+	removeSub      actor.Inbox[string]
+	getSub         actor.Func[string, *Subscription]
+	hasSub         actor.Func[string, bool]
+	subCount       actor.Query[int]
+	markEOSE       actor.Inbox[string]
+	incrEventCount actor.Inbox[string]
+	lc             actor.Lifecycle
 
 	// ctx is the session context.
 	ctx    context.Context
@@ -79,9 +49,6 @@ type Session struct {
 
 	// eventCh receives events from the local relay for this session.
 	eventCh chan *SessionEvent
-
-	stop chan struct{}
-	done chan struct{}
 }
 
 // Subscription represents a tunneled subscription.
@@ -119,59 +86,55 @@ func NewSession(id string, clientPubkey, conversationKey []byte, authMode AuthMo
 		CreatedAt:       now,
 		LastActivity:    now,
 
-		addSubCh:         make(chan sessAddSubReq),
-		removeSubCh:      make(chan sessRemoveSubReq, 16),
-		getSubCh:         make(chan sessGetSubReq),
-		hasSubCh:         make(chan sessHasSubReq),
-		subCountCh:       make(chan sessSubCountReq),
-		markEOSECh:       make(chan sessMarkEOSEReq, 16),
-		incrEventCountCh: make(chan sessIncrementEventCountReq, 16),
+		addSub:         actor.NewFunc[string, error](),
+		removeSub:      actor.NewInbox[string](16),
+		getSub:         actor.NewFunc[string, *Subscription](),
+		hasSub:         actor.NewFunc[string, bool](),
+		subCount:       actor.NewQuery[int](),
+		markEOSE:       actor.NewInbox[string](16),
+		incrEventCount: actor.NewInbox[string](16),
+		lc:             actor.NewLifecycle(),
 
 		ctx:     ctx,
 		cancel:  cancel,
 		eventCh: make(chan *SessionEvent, 100),
-
-		stop: make(chan struct{}),
-		done: make(chan struct{}),
 	}
-	go s.run()
+	actor.Go(s.lc, s.run)
 	return s
 }
 
 func (s *Session) run() {
-	defer close(s.done)
-
 	subscriptions := make(map[string]*Subscription)
 
 	for {
 		select {
-		case <-s.stop:
+		case <-s.lc.Stopping():
 			return
-		case req := <-s.addSubCh:
+		case msg := <-s.addSub.Recv():
 			if len(subscriptions) >= DefaultMaxSubscriptions {
-				req.resp <- ErrTooManySubscriptions
+				msg.Reply(ErrTooManySubscriptions)
 			} else {
-				subscriptions[req.subID] = &Subscription{
-					ID:        req.subID,
+				subscriptions[msg.Req] = &Subscription{
+					ID:        msg.Req,
 					CreatedAt: time.Now(),
 				}
-				req.resp <- nil
+				msg.Reply(nil)
 			}
-		case req := <-s.removeSubCh:
-			delete(subscriptions, req.subID)
-		case req := <-s.getSubCh:
-			req.resp <- subscriptions[req.subID]
-		case req := <-s.hasSubCh:
-			_, ok := subscriptions[req.subID]
-			req.resp <- ok
-		case req := <-s.subCountCh:
-			req.resp <- len(subscriptions)
-		case req := <-s.markEOSECh:
-			if sub, ok := subscriptions[req.subID]; ok {
+		case subID := <-s.removeSub.Recv():
+			delete(subscriptions, subID)
+		case msg := <-s.getSub.Recv():
+			msg.Reply(subscriptions[msg.Req])
+		case msg := <-s.hasSub.Recv():
+			_, ok := subscriptions[msg.Req]
+			msg.Reply(ok)
+		case msg := <-s.subCount.Recv():
+			msg.Reply(len(subscriptions))
+		case subID := <-s.markEOSE.Recv():
+			if sub, ok := subscriptions[subID]; ok {
 				sub.EOSESent = true
 			}
-		case req := <-s.incrEventCountCh:
-			if sub, ok := subscriptions[req.subID]; ok {
+		case subID := <-s.incrEventCount.Recv():
+			if sub, ok := subscriptions[subID]; ok {
 				sub.EventCount++
 			}
 		}
@@ -186,8 +149,7 @@ func (s *Session) Context() context.Context {
 // Close closes the session and cleans up resources.
 func (s *Session) Close() {
 	s.cancel()
-	close(s.stop)
-	<-s.done
+	s.lc.Stop()
 	close(s.eventCh)
 }
 
@@ -219,118 +181,45 @@ func (s *Session) IsExpired(timeout time.Duration) bool {
 }
 
 // AddSubscription adds a new subscription to the session.
-func (s *Session) AddSubscription(subID string) error {
-	resp := make(chan error, 1)
-	select {
-	case s.addSubCh <- sessAddSubReq{subID: subID, resp: resp}:
-		return <-resp
-	case <-s.stop:
-		return ErrTooManySubscriptions
-	}
-}
+func (s *Session) AddSubscription(subID string) error { return s.addSub.Call(subID) }
 
 // RemoveSubscription removes a subscription from the session.
-func (s *Session) RemoveSubscription(subID string) {
-	select {
-	case s.removeSubCh <- sessRemoveSubReq{subID: subID}:
-	case <-s.stop:
-	}
-}
+func (s *Session) RemoveSubscription(subID string) { s.removeSub.TrySend(subID) }
 
 // GetSubscription returns a subscription by ID.
-func (s *Session) GetSubscription(subID string) *Subscription {
-	resp := make(chan *Subscription, 1)
-	select {
-	case s.getSubCh <- sessGetSubReq{subID: subID, resp: resp}:
-		return <-resp
-	case <-s.stop:
-		return nil
-	}
-}
+func (s *Session) GetSubscription(subID string) *Subscription { return s.getSub.Call(subID) }
 
 // HasSubscription checks if a subscription exists.
-func (s *Session) HasSubscription(subID string) bool {
-	resp := make(chan bool, 1)
-	select {
-	case s.hasSubCh <- sessHasSubReq{subID: subID, resp: resp}:
-		return <-resp
-	case <-s.stop:
-		return false
-	}
-}
+func (s *Session) HasSubscription(subID string) bool { return s.hasSub.Call(subID) }
 
 // SubscriptionCount returns the number of active subscriptions.
-func (s *Session) SubscriptionCount() int {
-	resp := make(chan int, 1)
-	select {
-	case s.subCountCh <- sessSubCountReq{resp: resp}:
-		return <-resp
-	case <-s.stop:
-		return 0
-	}
-}
+func (s *Session) SubscriptionCount() int { return s.subCount.Call() }
 
 // MarkEOSE marks a subscription as having sent EOSE.
-func (s *Session) MarkEOSE(subID string) {
-	select {
-	case s.markEOSECh <- sessMarkEOSEReq{subID: subID}:
-	case <-s.stop:
-	}
-}
+func (s *Session) MarkEOSE(subID string) { s.markEOSE.TrySend(subID) }
 
 // IncrementEventCount increments the event count for a subscription.
-func (s *Session) IncrementEventCount(subID string) {
-	select {
-	case s.incrEventCountCh <- sessIncrementEventCountReq{subID: subID}:
-	case <-s.stop:
-	}
-}
+func (s *Session) IncrementEventCount(subID string) { s.incrEventCount.TrySend(subID) }
 
-// --- SessionManager actor request types ---
-
-type smGetReq struct {
-	sessionID string
-	resp      chan *Session
-}
-
-type smGetOrCreateReq struct {
+// getOrCreateArgs holds multi-arg parameters for GetOrCreate.
+type getOrCreateArgs struct {
 	sessionID       string
 	clientPubkey    []byte
 	conversationKey []byte
 	authMode        AuthMode
 	deviceName      string
-	resp            chan *Session
-}
-
-type smRemoveReq struct {
-	sessionID string
-}
-
-type smCleanupExpiredReq struct {
-	resp chan int
-}
-
-type smCountReq struct {
-	resp chan int
-}
-
-type smCloseReq struct {
-	resp chan struct{}
 }
 
 // SessionManager manages multiple NRC sessions.
 type SessionManager struct {
 	timeout time.Duration
 
-	getCh             chan smGetReq
-	getOrCreateCh     chan smGetOrCreateReq
-	removeCh          chan smRemoveReq
-	cleanupExpiredCh  chan smCleanupExpiredReq
-	countCh           chan smCountReq
-	closeCh           chan smCloseReq
-
-	stop chan struct{}
-	done chan struct{}
+	get            actor.Func[string, *Session]
+	getOrCreate    actor.Func[getOrCreateArgs, *Session]
+	remove         actor.Inbox[string]
+	cleanupExpired actor.Query[int]
+	count          actor.Query[int]
+	lc             actor.Lifecycle
 }
 
 // NewSessionManager creates a new session manager.
@@ -341,50 +230,44 @@ func NewSessionManager(timeout time.Duration) *SessionManager {
 	m := &SessionManager{
 		timeout: timeout,
 
-		getCh:            make(chan smGetReq),
-		getOrCreateCh:    make(chan smGetOrCreateReq),
-		removeCh:         make(chan smRemoveReq, 16),
-		cleanupExpiredCh: make(chan smCleanupExpiredReq),
-		countCh:          make(chan smCountReq),
-		closeCh:          make(chan smCloseReq),
-
-		stop: make(chan struct{}),
-		done: make(chan struct{}),
+		get:            actor.NewFunc[string, *Session](),
+		getOrCreate:    actor.NewFunc[getOrCreateArgs, *Session](),
+		remove:         actor.NewInbox[string](16),
+		cleanupExpired: actor.NewQuery[int](),
+		count:          actor.NewQuery[int](),
+		lc:             actor.NewLifecycle(),
 	}
-	go m.run()
+	actor.Go(m.lc, m.run)
 	return m
 }
 
 func (m *SessionManager) run() {
-	defer close(m.done)
-
 	sessions := make(map[string]*Session)
 
 	for {
 		select {
-		case <-m.stop:
-			// Close all sessions
+		case <-m.lc.Stopping():
 			for _, session := range sessions {
 				session.Close()
 			}
 			return
-		case req := <-m.getCh:
-			req.resp <- sessions[req.sessionID]
-		case req := <-m.getOrCreateCh:
-			if session, ok := sessions[req.sessionID]; ok {
+		case msg := <-m.get.Recv():
+			msg.Reply(sessions[msg.Req])
+		case msg := <-m.getOrCreate.Recv():
+			if session, ok := sessions[msg.Req.sessionID]; ok {
 				session.Touch()
-				req.resp <- session
+				msg.Reply(session)
 			} else {
-				session := NewSession(req.sessionID, req.clientPubkey, req.conversationKey, req.authMode, req.deviceName)
-				sessions[req.sessionID] = session
-				req.resp <- session
+				session := NewSession(msg.Req.sessionID, msg.Req.clientPubkey, msg.Req.conversationKey, msg.Req.authMode, msg.Req.deviceName)
+				sessions[msg.Req.sessionID] = session
+				msg.Reply(session)
 			}
-		case req := <-m.removeCh:
-			if session, ok := sessions[req.sessionID]; ok {
+		case sessionID := <-m.remove.Recv():
+			if session, ok := sessions[sessionID]; ok {
 				session.Close()
-				delete(sessions, req.sessionID)
+				delete(sessions, sessionID)
 			}
-		case req := <-m.cleanupExpiredCh:
+		case msg := <-m.cleanupExpired.Recv():
 			var removed int
 			for id, session := range sessions {
 				if session.IsExpired(m.timeout) {
@@ -393,89 +276,38 @@ func (m *SessionManager) run() {
 					removed++
 				}
 			}
-			req.resp <- removed
-		case req := <-m.countCh:
-			req.resp <- len(sessions)
-		case req := <-m.closeCh:
-			for _, session := range sessions {
-				session.Close()
-			}
-			sessions = make(map[string]*Session)
-			req.resp <- struct{}{}
+			msg.Reply(removed)
+		case msg := <-m.count.Recv():
+			msg.Reply(len(sessions))
 		}
 	}
 }
 
 // Get returns a session by ID.
-func (m *SessionManager) Get(sessionID string) *Session {
-	resp := make(chan *Session, 1)
-	select {
-	case m.getCh <- smGetReq{sessionID: sessionID, resp: resp}:
-		return <-resp
-	case <-m.stop:
-		return nil
-	}
-}
+func (m *SessionManager) Get(sessionID string) *Session { return m.get.Call(sessionID) }
 
 // GetOrCreate gets an existing session or creates a new one.
 func (m *SessionManager) GetOrCreate(sessionID string, clientPubkey, conversationKey []byte, authMode AuthMode, deviceName string) *Session {
-	resp := make(chan *Session, 1)
-	select {
-	case m.getOrCreateCh <- smGetOrCreateReq{
+	return m.getOrCreate.Call(getOrCreateArgs{
 		sessionID:       sessionID,
 		clientPubkey:    clientPubkey,
 		conversationKey: conversationKey,
 		authMode:        authMode,
 		deviceName:      deviceName,
-		resp:            resp,
-	}:
-		return <-resp
-	case <-m.stop:
-		return nil
-	}
+	})
 }
 
 // Remove removes a session.
-func (m *SessionManager) Remove(sessionID string) {
-	select {
-	case m.removeCh <- smRemoveReq{sessionID: sessionID}:
-	case <-m.stop:
-	}
-}
+func (m *SessionManager) Remove(sessionID string) { m.remove.TrySend(sessionID) }
 
 // CleanupExpired removes expired sessions.
-func (m *SessionManager) CleanupExpired() int {
-	resp := make(chan int, 1)
-	select {
-	case m.cleanupExpiredCh <- smCleanupExpiredReq{resp: resp}:
-		return <-resp
-	case <-m.stop:
-		return 0
-	}
-}
+func (m *SessionManager) CleanupExpired() int { return m.cleanupExpired.Call() }
 
 // Count returns the number of active sessions.
-func (m *SessionManager) Count() int {
-	resp := make(chan int, 1)
-	select {
-	case m.countCh <- smCountReq{resp: resp}:
-		return <-resp
-	case <-m.stop:
-		return 0
-	}
-}
+func (m *SessionManager) Count() int { return m.count.Call() }
 
-// Close closes all sessions.
-func (m *SessionManager) Close() {
-	resp := make(chan struct{}, 1)
-	select {
-	case m.closeCh <- smCloseReq{resp: resp}:
-		<-resp
-	case <-m.stop:
-	}
-	close(m.stop)
-	<-m.done
-}
+// Close closes all sessions and stops the manager.
+func (m *SessionManager) Close() { m.lc.Stop() }
 
 // RequestMessage represents a parsed NRC request message.
 type RequestMessage struct {

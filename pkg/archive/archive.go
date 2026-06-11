@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/lol/log"
 
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
@@ -24,20 +25,10 @@ type EventDeliveryChannel interface {
 	IsConnected() bool
 }
 
-// mgrGetOrCreateReq asks the actor to return or create a connection.
-type mgrGetOrCreateReq struct {
-	url  string
-	resp chan mgrGetOrCreateResp
-}
-
+// mgrGetOrCreateResp wraps the connection + error for getOrCreate.
 type mgrGetOrCreateResp struct {
 	conn *RelayConnection
 	err  error
-}
-
-// mgrStatsReq asks the actor for current stats.
-type mgrStatsReq struct {
-	resp chan ManagerStats
 }
 
 // Manager handles connections to archive relays for query augmentation.
@@ -50,10 +41,9 @@ type Manager struct {
 	db         ArchiveDatabase
 	queryCache *QueryCache
 
-	getOrCreateReq chan mgrGetOrCreateReq
-	statsReq       chan mgrStatsReq
-	stop           chan struct{}
-	done           chan struct{}
+	getOrCreate actor.Func[string, mgrGetOrCreateResp]
+	stats       actor.Query[ManagerStats]
+	lc          actor.Lifecycle
 
 	// Configuration
 	enabled bool
@@ -84,20 +74,19 @@ func New(ctx context.Context, db ArchiveDatabase, cfg Config) *Manager {
 	enabled := cfg.Enabled && len(cfg.Relays) > 0
 
 	m := &Manager{
-		ctx:            mgrCtx,
-		cancel:         cancel,
-		relays:         cfg.Relays,
-		timeout:        timeout,
-		db:             db,
-		queryCache:     NewQueryCache(cacheTTL, 100000), // 100k cached queries
-		getOrCreateReq: make(chan mgrGetOrCreateReq),
-		statsReq:       make(chan mgrStatsReq),
-		stop:           make(chan struct{}),
-		done:           make(chan struct{}),
-		enabled:        enabled,
+		ctx:         mgrCtx,
+		cancel:      cancel,
+		relays:      cfg.Relays,
+		timeout:     timeout,
+		db:          db,
+		queryCache:  NewQueryCache(cacheTTL, 100000), // 100k cached queries
+		getOrCreate: actor.NewFunc[string, mgrGetOrCreateResp](),
+		stats:       actor.NewQuery[ManagerStats](),
+		lc:          actor.NewLifecycle(),
+		enabled:     enabled,
 	}
 
-	go m.actor()
+	actor.Go(m.lc, m.actorLoop)
 
 	if enabled {
 		log.I.F("archive manager initialized with %d relays, %v timeout, %v cache TTL",
@@ -107,51 +96,46 @@ func New(ctx context.Context, db ArchiveDatabase, cfg Config) *Manager {
 	return m
 }
 
-// actor owns the connections map and processes requests sequentially.
-func (m *Manager) actor() {
-	defer close(m.done)
-
+// actorLoop owns the connections map and processes requests sequentially.
+func (m *Manager) actorLoop() {
 	connections := make(map[string]*RelayConnection)
 
 	for {
 		select {
-		case req := <-m.getOrCreateReq:
-			conn, exists := connections[req.url]
+		case <-m.lc.Stopping():
+			for _, conn := range connections {
+				conn.Close()
+			}
+			return
+
+		case msg := <-m.getOrCreate.Recv():
+			conn, exists := connections[msg.Req]
 			if exists && conn.IsConnected() {
-				req.resp <- mgrGetOrCreateResp{conn: conn}
+				msg.Reply(mgrGetOrCreateResp{conn: conn})
 				continue
 			}
-
-			// Create new connection
-			conn = NewRelayConnection(m.ctx, req.url)
+			conn = NewRelayConnection(m.ctx, msg.Req)
 			if err := conn.Connect(); err != nil {
-				req.resp <- mgrGetOrCreateResp{err: err}
+				msg.Reply(mgrGetOrCreateResp{err: err})
 				continue
 			}
-			connections[req.url] = conn
-			req.resp <- mgrGetOrCreateResp{conn: conn}
+			connections[msg.Req] = conn
+			msg.Reply(mgrGetOrCreateResp{conn: conn})
 
-		case req := <-m.statsReq:
+		case msg := <-m.stats.Recv():
 			connected := 0
 			for _, conn := range connections {
 				if conn.IsConnected() {
 					connected++
 				}
 			}
-			req.resp <- ManagerStats{
+			msg.Reply(ManagerStats{
 				Enabled:          m.enabled,
 				TotalRelays:      len(m.relays),
 				ConnectedRelays:  connected,
 				CachedQueries:    m.queryCache.Len(),
 				MaxCachedQueries: m.queryCache.MaxSize(),
-			}
-
-		case <-m.stop:
-			for _, conn := range connections {
-				conn.Close()
-			}
-			connections = make(map[string]*RelayConnection)
-			return
+			})
 		}
 	}
 }
@@ -163,17 +147,8 @@ func (m *Manager) IsEnabled() bool {
 
 // getOrCreateConnection returns an existing connection or creates a new one.
 func (m *Manager) getOrCreateConnection(url string) (*RelayConnection, error) {
-	req := mgrGetOrCreateReq{
-		url:  url,
-		resp: make(chan mgrGetOrCreateResp, 1),
-	}
-	select {
-	case m.getOrCreateReq <- req:
-		r := <-req.resp
-		return r.conn, r.err
-	case <-m.stop:
-		return nil, m.ctx.Err()
-	}
+	r := m.getOrCreate.Call(url)
+	return r.conn, r.err
 }
 
 // QueryArchive queries archive relays asynchronously and stores/streams results.
@@ -363,8 +338,7 @@ func (m *Manager) QueryRelays(
 // Stop stops the archive manager and closes all connections.
 func (m *Manager) Stop() {
 	m.cancel()
-	close(m.stop)
-	<-m.done
+	m.lc.Stop()
 	m.queryCache.Stop()
 
 	if m.enabled {
@@ -377,14 +351,7 @@ func (m *Manager) Stats() ManagerStats {
 	if !m.enabled {
 		return ManagerStats{}
 	}
-
-	req := mgrStatsReq{resp: make(chan ManagerStats, 1)}
-	select {
-	case m.statsReq <- req:
-		return <-req.resp
-	case <-m.stop:
-		return ManagerStats{}
-	}
+	return m.stats.Call()
 }
 
 // ManagerStats holds archive manager statistics.

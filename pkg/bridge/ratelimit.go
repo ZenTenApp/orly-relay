@@ -3,6 +3,8 @@ package bridge
 import (
 	"fmt"
 	"time"
+
+	"git.smesh.lol/actor"
 )
 
 // RateLimitConfig holds rate limit configuration values.
@@ -25,67 +27,46 @@ func DefaultRateLimitConfig() RateLimitConfig {
 	}
 }
 
-// --- actor request types ---
-
-type rlCheckFreeReq struct {
-	pubkeyHex string
-	resp      chan error
-}
-
-type rlCheckReq struct {
-	pubkeyHex string
-	resp      chan error
-}
-
-type rlRecordReq struct {
-	pubkeyHex string
-	done      chan struct{}
-}
-
 // RateLimiter tracks outbound email sending rates using sliding windows.
+// All mutable state is owned by the actor goroutine.
 type RateLimiter struct {
 	cfg    RateLimitConfig
 	users  map[string]*userWindow
 	global *window
 
-	checkFreeCh chan rlCheckFreeReq
-	checkCh     chan rlCheckReq
-	recordCh    chan rlRecordReq
-	stop        chan struct{}
-	done        chan struct{}
+	checkFree actor.Func[string, error]
+	check     actor.Func[string, error]
+	record    actor.Proc[string]
+	actor.Lifecycle
 }
 
 // NewRateLimiter creates a rate limiter with the given config.
 func NewRateLimiter(cfg RateLimitConfig) *RateLimiter {
 	rl := &RateLimiter{
-		cfg:         cfg,
-		users:       make(map[string]*userWindow),
-		global:      newWindow(),
-		checkFreeCh: make(chan rlCheckFreeReq),
-		checkCh:     make(chan rlCheckReq),
-		recordCh:    make(chan rlRecordReq),
-		stop:        make(chan struct{}),
-		done:        make(chan struct{}),
+		cfg:       cfg,
+		users:     make(map[string]*userWindow),
+		global:    newWindow(),
+		checkFree: actor.NewFunc[string, error](),
+		check:     actor.NewFunc[string, error](),
+		record:    actor.NewProc[string](),
+		Lifecycle: actor.NewLifecycle(),
 	}
-	go rl.loop()
+	actor.Go(rl.Lifecycle, rl.actorLoop)
 	return rl
 }
 
-func (rl *RateLimiter) loop() {
-	defer close(rl.done)
+func (rl *RateLimiter) actorLoop() {
 	for {
 		select {
-		case <-rl.stop:
+		case <-rl.Stopping():
 			return
-		case req := <-rl.checkFreeCh:
-			req.resp <- rl.doCheckFree(req.pubkeyHex)
-		case req := <-rl.checkCh:
-			req.resp <- rl.doCheck(req.pubkeyHex)
-		case req := <-rl.recordCh:
-			rl.doRecord(req.pubkeyHex)
-			if req.done != nil {
-				close(req.done)
-			}
+		case msg := <-rl.checkFree.Recv():
+			msg.Reply(rl.doCheckFree(msg.Req))
+		case msg := <-rl.check.Recv():
+			msg.Reply(rl.doCheck(msg.Req))
+		case msg := <-rl.record.Recv():
+			rl.doRecord(msg.Req)
+			msg.Done()
 		}
 	}
 }
@@ -95,31 +76,24 @@ const FreeInterval = 5 * time.Minute
 
 // CheckFree applies the free-tier rate limit: 1 email per 5 minutes.
 func (rl *RateLimiter) CheckFree(pubkeyHex string) error {
-	req := rlCheckFreeReq{pubkeyHex: pubkeyHex, resp: make(chan error, 1)}
-	rl.checkFreeCh <- req
-	return <-req.resp
+	return rl.checkFree.Call(pubkeyHex)
 }
 
 // Check returns nil if the user is allowed to send, or an error describing
 // when they can retry.
 func (rl *RateLimiter) Check(pubkeyHex string) error {
-	req := rlCheckReq{pubkeyHex: pubkeyHex, resp: make(chan error, 1)}
-	rl.checkCh <- req
-	return <-req.resp
+	return rl.check.Call(pubkeyHex)
 }
 
 // Record records a send event for rate limiting purposes.
 // Call this after a successful send.
 func (rl *RateLimiter) Record(pubkeyHex string) {
-	done := make(chan struct{})
-	rl.recordCh <- rlRecordReq{pubkeyHex: pubkeyHex, done: done}
-	<-done
+	rl.record.Call(pubkeyHex)
 }
 
-// Stop shuts down the actor goroutine and waits for it to exit.
-func (rl *RateLimiter) Stop() {
-	close(rl.stop)
-	<-rl.done
+// Shutdown stops the actor goroutine and waits for it to exit.
+func (rl *RateLimiter) Shutdown() {
+	rl.Stop()
 }
 
 // --- internal methods (called only from the actor goroutine) ---

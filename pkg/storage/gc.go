@@ -24,6 +24,7 @@ import (
 	"context"
 	"time"
 
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/lol/log"
 
 	"git.smesh.lol/orly/pkg/database/indexes/types"
@@ -51,11 +52,6 @@ type AuthorLookup interface {
 	GetPubkeySerial(pubkey []byte) (*types.Uint40, error)
 }
 
-// gcStatsReq asks the actor for current stats.
-type gcStatsReq struct {
-	resp chan GCStats
-}
-
 // GarbageCollector manages continuous event eviction based on access patterns.
 // It monitors storage usage and evicts the least accessed events when the
 // storage limit is exceeded.
@@ -81,10 +77,8 @@ type GarbageCollector struct {
 	wotProvider  WoTProvider
 	authorLookup AuthorLookup
 
-	// Actor channels
-	statsCh chan gcStatsReq
-	stop    chan struct{}
-	done    chan struct{}
+	stats actor.Query[GCStats]
+	lc    actor.Lifecycle
 }
 
 // GCConfig holds configuration for the garbage collector.
@@ -138,29 +132,25 @@ func NewGarbageCollector(
 		minAgeSec:    cfg.MinAgeSec,
 		wotProvider:  cfg.WoTProvider,
 		authorLookup: cfg.AuthorLookup,
-		statsCh:      make(chan gcStatsReq),
-		stop:         make(chan struct{}),
-		done:         make(chan struct{}),
+		stats:        actor.NewQuery[GCStats](),
+		lc:           actor.NewLifecycle(),
 	}
 }
 
 // Start begins the garbage collection loop.
 func (gc *GarbageCollector) Start() {
-	go gc.runLoop()
+	actor.Go(gc.lc, gc.runLoop)
 	log.I.F("garbage collector started (interval: %s, batch: %d)", gc.interval, gc.batchSize)
 }
 
 // Stop stops the garbage collector.
 func (gc *GarbageCollector) Stop() {
 	gc.cancel()
-	close(gc.stop)
-	<-gc.done
+	gc.lc.Stop()
 }
 
 // runLoop is the main GC actor loop. It owns running, lastRun, and evictedCount.
 func (gc *GarbageCollector) runLoop() {
-	defer close(gc.done)
-
 	running := true
 	var lastRun time.Time
 	var evictedCount uint64
@@ -170,7 +160,7 @@ func (gc *GarbageCollector) runLoop() {
 
 	for {
 		select {
-		case <-gc.stop:
+		case <-gc.lc.Stopping():
 			running = false
 			log.I.F("garbage collector stopped (total evicted: %d)", evictedCount)
 			return
@@ -190,7 +180,7 @@ func (gc *GarbageCollector) runLoop() {
 			_ = running
 			_ = lastRun
 
-		case req := <-gc.statsCh:
+		case msg := <-gc.stats.Recv():
 			// Get storage info
 			currentBytes, _ := GetCurrentStorageUsage(gc.dataDir)
 			maxBytes, _ := CalculateMaxStorage(gc.dataDir, gc.maxBytes)
@@ -200,14 +190,14 @@ func (gc *GarbageCollector) runLoop() {
 				percentage = float64(currentBytes) / float64(maxBytes) * 100
 			}
 
-			req.resp <- GCStats{
+			msg.Reply(GCStats{
 				Running:             running,
 				LastRunTime:         lastRun,
 				TotalEvicted:        evictedCount,
 				CurrentStorageBytes: currentBytes,
 				MaxStorageBytes:     maxBytes,
 				StoragePercentage:   percentage,
-			}
+			})
 		}
 	}
 }
@@ -326,9 +316,7 @@ func (gc *GarbageCollector) evictEvents(serials []uint64) (int, error) {
 
 // Stats returns current GC statistics.
 func (gc *GarbageCollector) Stats() GCStats {
-	resp := make(chan GCStats, 1)
-	gc.statsCh <- gcStatsReq{resp: resp}
-	return <-resp
+	return gc.stats.Call()
 }
 
 // isImmuneKind returns true for event kinds that must never be evicted.

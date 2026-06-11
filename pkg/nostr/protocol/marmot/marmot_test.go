@@ -487,17 +487,14 @@ func TestSubscriptionFilters(t *testing.T) {
 	assert.Len(t, *ff, 1, "should have welcome filter only when no groups")
 
 	// Manually add a group to simulate an established conversation
-	setReq := mcSetGroupReq{
+	client.setGroup.Call(setGroupArgs{
 		groupID: "test",
 		gs: &GroupState{
 			GroupID:      []byte("test-group-id-32-bytes-long!!!!!"),
 			NostrGroupID: []byte("nostr-group-id-32-bytes-long!!!!"),
 			PeerPub:      []byte("peer-pubkey-32-bytes-long!!!!!!!"),
 		},
-		resp: make(chan struct{}, 1),
-	}
-	client.setGroup <- setReq
-	<-setReq.resp
+	})
 
 	ff = client.SubscriptionFilters()
 	require.NotNil(t, ff)

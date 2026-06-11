@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/lol/chk"
 	"git.smesh.lol/orly/app/branding"
 	"git.smesh.lol/orly/app/config"
@@ -76,20 +77,20 @@ type Server struct {
 	// optional reverse proxy for dev web server
 	devProxy *httputil.ReverseProxy
 
-	// Per-IP connection tracking actor channels
-	connIPCheckCh chan connIPCheckAndIncReq
-	connIPDecCh   chan connIPDecReq
-	connIPDone    chan struct{}
+	// Per-IP connection tracking actor
+	connIPCheck actor.Func[connIPCheckArgs, connIPCheckResp]
+	connIPDec   actor.Inbox[string]
+	connIPLC    actor.Lifecycle
 
 	// Global connection and subscription counters for adaptive rate limiting
 	activeConnCount         atomic.Int64
 	activeSubscriptionCount atomic.Int64
 
-	// Challenge storage actor channels
-	chalSetCh    chan chalSetReq
-	chalGetCh    chan chalGetReq
-	chalDeleteCh chan chalDeleteReq
-	chalDone     chan struct{}
+	// Challenge storage actor
+	chalSet    actor.Inbox[chalSetArgs]
+	chalGet    actor.Func[string, chalGetResp]
+	chalDelete actor.Inbox[string]
+	chalLC     actor.Lifecycle
 
 	// Message gate actor channels (drain-then-pause)
 	msgGateEnterCh  chan msgGateEnterReq

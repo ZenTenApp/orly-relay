@@ -12,10 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adrg/xdg"
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/lol/chk"
 	"git.smesh.lol/orly/pkg/lol/log"
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"github.com/adrg/xdg"
 )
 
 // SprocketResponse represents a response from the sprocket script
@@ -25,11 +26,6 @@ type SprocketResponse struct {
 	Msg    string `json:"msg"`    // NIP-20 response message (only used for reject)
 }
 
-// -- actor request types --
-
-type sprocketGetStatusReq struct {
-	resp chan sprocketStatusResp // buffered 1
-}
 type sprocketStatusResp struct {
 	isRunning bool
 	disabled  bool
@@ -47,10 +43,6 @@ type sprocketSetStateReq struct {
 	clearPipes    bool
 }
 
-type sprocketGetFullStatusReq struct {
-	resp chan map[string]interface{} // buffered 1
-}
-
 // SprocketManager handles sprocket script execution and management
 type SprocketManager struct {
 	ctx           context.Context
@@ -59,11 +51,10 @@ type SprocketManager struct {
 	scriptPath    string
 	enabled       bool
 
-	// Actor channels
-	getStatusCh     chan sprocketGetStatusReq
-	setStateCh      chan sprocketSetStateReq
-	getFullStatusCh chan sprocketGetFullStatusReq
-	actorDone       chan struct{}
+	getStatus     actor.Query[sprocketStatusResp]
+	setState      actor.Inbox[sprocketSetStateReq]
+	getFullStatus actor.Query[map[string]interface{}]
+	lc            actor.Lifecycle
 
 	responseChan  chan SprocketResponse
 }
@@ -76,19 +67,19 @@ func NewSprocketManager(ctx context.Context, appName string, enabled bool) *Spro
 	ctx, cancel := context.WithCancel(ctx)
 
 	sm := &SprocketManager{
-		ctx:             ctx,
-		cancel:          cancel,
-		configDir:       configDir,
-		scriptPath:      scriptPath,
-		enabled:         enabled,
-		getStatusCh:     make(chan sprocketGetStatusReq),
-		setStateCh:      make(chan sprocketSetStateReq, 4),
-		getFullStatusCh: make(chan sprocketGetFullStatusReq),
-		actorDone:       make(chan struct{}),
-		responseChan:    make(chan SprocketResponse, 100),
+		ctx:           ctx,
+		cancel:        cancel,
+		configDir:     configDir,
+		scriptPath:    scriptPath,
+		enabled:       enabled,
+		getStatus:     actor.NewQuery[sprocketStatusResp](),
+		setState:      actor.NewInbox[sprocketSetStateReq](4),
+		getFullStatus: actor.NewQuery[map[string]interface{}](),
+		lc:            actor.NewLifecycle(),
+		responseChan:  make(chan SprocketResponse, 100),
 	}
 
-	go sm.actor()
+	actor.Go(sm.lc, sm.actorLoop)
 
 	// Start the sprocket script if it exists and is enabled
 	if enabled {
@@ -99,9 +90,7 @@ func NewSprocketManager(ctx context.Context, appName string, enabled bool) *Spro
 	return sm
 }
 
-func (sm *SprocketManager) actor() {
-	defer close(sm.actorDone)
-
+func (sm *SprocketManager) actorLoop() {
 	var (
 		isRunning     bool
 		disabled      bool
@@ -114,13 +103,13 @@ func (sm *SprocketManager) actor() {
 
 	for {
 		select {
-		case req := <-sm.getStatusCh:
-			req.resp <- sprocketStatusResp{
+		case msg := <-sm.getStatus.Recv():
+			msg.Reply(sprocketStatusResp{
 				isRunning: isRunning,
 				disabled:  disabled,
 				stdin:     stdin,
-			}
-		case req := <-sm.setStateCh:
+			})
+		case req := <-sm.setState.Recv():
 			if req.isRunning != nil {
 				isRunning = *req.isRunning
 			}
@@ -159,7 +148,7 @@ func (sm *SprocketManager) actor() {
 				currentCmd = nil
 				currentCancel = nil
 			}
-		case req := <-sm.getFullStatusCh:
+		case msg := <-sm.getFullStatus.Recv():
 			status := map[string]interface{}{
 				"is_running":    isRunning,
 				"script_exists": false,
@@ -177,7 +166,19 @@ func (sm *SprocketManager) actor() {
 			if isRunning && currentCmd != nil && currentCmd.Process != nil {
 				status["pid"] = currentCmd.Process.Pid
 			}
-			req.resp <- status
+			msg.Reply(status)
+		case <-sm.lc.Stopping():
+			// Cleanup on shutdown
+			if stdin != nil {
+				stdin.Close()
+			}
+			if currentCancel != nil {
+				currentCancel()
+			}
+			_ = currentCmd
+			_ = stdout
+			_ = stderr
+			return
 		case <-sm.ctx.Done():
 			// Cleanup on shutdown
 			if stdin != nil {
@@ -195,9 +196,7 @@ func (sm *SprocketManager) actor() {
 }
 
 func (sm *SprocketManager) getState() sprocketStatusResp {
-	resp := make(chan sprocketStatusResp, 1)
-	sm.getStatusCh <- sprocketGetStatusReq{resp: resp}
-	return <-resp
+	return sm.getStatus.Call()
 }
 
 func boolPtr(b bool) *bool { return &b }
@@ -206,7 +205,7 @@ func boolPtr(b bool) *bool { return &b }
 func (sm *SprocketManager) disableSprocket() {
 	state := sm.getState()
 	if !state.disabled {
-		sm.setStateCh <- sprocketSetStateReq{disabled: boolPtr(true)}
+		sm.setState.TrySend(sprocketSetStateReq{disabled: boolPtr(true)})
 		log.W.F("sprocket disabled due to failure - all events will be rejected (script location: %s)", sm.scriptPath)
 	}
 }
@@ -215,7 +214,7 @@ func (sm *SprocketManager) disableSprocket() {
 func (sm *SprocketManager) enableSprocket() {
 	state := sm.getState()
 	if state.disabled {
-		sm.setStateCh <- sprocketSetStateReq{disabled: boolPtr(false)}
+		sm.setState.TrySend(sprocketSetStateReq{disabled: boolPtr(false)})
 		log.I.F("sprocket re-enabled, attempting to start")
 
 		go func() {
@@ -328,14 +327,14 @@ func (sm *SprocketManager) StartSprocket() error {
 		return fmt.Errorf("failed to start sprocket: %v", err)
 	}
 
-	sm.setStateCh <- sprocketSetStateReq{
+	sm.setState.TrySend(sprocketSetStateReq{
 		isRunning: boolPtr(true),
 		cmd:       cmd,
 		cmdCancel: cmdCancel,
 		stdin:     stdinPipe,
 		stdout:    stdoutPipe,
 		stderr:    stderrPipe,
-	}
+	})
 
 	go sm.readResponses(stdoutPipe)
 	go sm.logOutput(stdoutPipe, stderrPipe)
@@ -359,7 +358,7 @@ func (sm *SprocketManager) StopSprocket() error {
 
 	// The monitorProcess goroutine will handle cleanup when the process exits
 	// We need to set state to clear pipes
-	sm.setStateCh <- sprocketSetStateReq{clearPipes: true}
+	sm.setState.TrySend(sprocketSetStateReq{clearPipes: true})
 
 	log.I.F("sprocket stopped")
 	return nil
@@ -436,9 +435,7 @@ func (sm *SprocketManager) UpdateSprocket(scriptContent string) error {
 
 // GetSprocketStatus returns the current status of the sprocket
 func (sm *SprocketManager) GetSprocketStatus() map[string]interface{} {
-	resp := make(chan map[string]interface{}, 1)
-	sm.getFullStatusCh <- sprocketGetFullStatusReq{resp: resp}
-	return <-resp
+	return sm.getFullStatus.Call()
 }
 
 // GetSprocketVersions returns a list of all sprocket script versions
@@ -604,11 +601,11 @@ func (sm *SprocketManager) monitorProcess(cmd *exec.Cmd) {
 
 	err := cmd.Wait()
 
-	sm.setStateCh <- sprocketSetStateReq{clearPipes: true}
+	sm.setState.TrySend(sprocketSetStateReq{clearPipes: true})
 
 	if err != nil {
 		log.E.F("sprocket process exited with error: %v", err)
-		sm.setStateCh <- sprocketSetStateReq{disabled: boolPtr(true)}
+		sm.setState.TrySend(sprocketSetStateReq{disabled: boolPtr(true)})
 		log.W.F("sprocket disabled due to process failure - all events will be rejected (script location: %s)", sm.scriptPath)
 	} else {
 		log.I.F("sprocket process exited normally")
@@ -622,4 +619,5 @@ func (sm *SprocketManager) Shutdown() {
 	if state.isRunning {
 		sm.StopSprocket()
 	}
+	sm.lc.Stop()
 }

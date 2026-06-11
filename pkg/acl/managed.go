@@ -6,6 +6,7 @@ import (
 	"net"
 	"reflect"
 
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/lol/errorf"
 	"git.smesh.lol/orly/pkg/lol/log"
 	"git.smesh.lol/orly/app/config"
@@ -15,17 +16,9 @@ import (
 	"git.smesh.lol/orly/pkg/utils"
 )
 
-// managedUpdatePeerAdminsReq updates the peer admin list.
-type managedUpdatePeerAdminsReq struct {
-	peerPubkeys [][]byte
-	resp        chan struct{}
-}
-
-// managedGetAccessLevelReq queries the access level for a pubkey.
-type managedGetAccessLevelReq struct {
-	pub     []byte
-	address string
-	resp    chan string
+type managedGetAccessLevelArgs struct {
+	Pub     []byte
+	Address string
 }
 
 type Managed struct {
@@ -38,10 +31,9 @@ type Managed struct {
 	owners     [][]byte
 	admins     [][]byte
 
-	updatePeerAdminsCh chan managedUpdatePeerAdminsReq
-	getAccessLevelCh   chan managedGetAccessLevelReq
-	stop               chan struct{}
-	done               chan struct{}
+	updatePeerAdmins actor.Proc[[][]byte]
+	getAccessLevel   actor.Func[managedGetAccessLevelArgs, string]
+	actor.Lifecycle
 }
 
 // Context returns the ACL context.
@@ -58,7 +50,6 @@ func (m *Managed) Configure(cfg ...any) (err error) {
 		case database.Database:
 			m.db = c
 			// ManagedACL requires the concrete Badger database type
-			// Type assertion to check if it's a Badger database
 			if d, ok := c.(*database.D); ok {
 				m.managedACL = database.NewManagedACL(d)
 			} else {
@@ -100,38 +91,35 @@ func (m *Managed) Configure(cfg ...any) (err error) {
 	}
 
 	// Start actor goroutine
-	m.updatePeerAdminsCh = make(chan managedUpdatePeerAdminsReq)
-	m.getAccessLevelCh = make(chan managedGetAccessLevelReq)
-	m.stop = make(chan struct{})
-	m.done = make(chan struct{})
-	go m.actor()
+	m.updatePeerAdmins = actor.NewProc[[][]byte]()
+	m.getAccessLevel = actor.NewFunc[managedGetAccessLevelArgs, string]()
+	m.Lifecycle = actor.NewLifecycle()
+	actor.Go(m.Lifecycle, m.actorLoop)
 
 	return
 }
 
-func (m *Managed) actor() {
-	defer close(m.done)
-
+func (m *Managed) actorLoop() {
 	var peerAdmins [][]byte
 
 	for {
 		select {
-		case <-m.stop:
+		case <-m.Stopping():
 			return
 
-		case req := <-m.updatePeerAdminsCh:
-			peerAdmins = make([][]byte, len(req.peerPubkeys))
-			copy(peerAdmins, req.peerPubkeys)
-			log.I.F("updated peer admin list with %d pubkeys", len(req.peerPubkeys))
-			req.resp <- struct{}{}
+		case msg := <-m.updatePeerAdmins.Recv():
+			peerAdmins = make([][]byte, len(msg.Req))
+			copy(peerAdmins, msg.Req)
+			log.I.F("updated peer admin list with %d pubkeys", len(msg.Req))
+			msg.Done()
 
-		case req := <-m.getAccessLevelCh:
-			req.resp <- m.getAccessLevel(req.pub, req.address, peerAdmins)
+		case msg := <-m.getAccessLevel.Recv():
+			msg.Reply(m.computeAccessLevel(msg.Req.Pub, msg.Req.Address, peerAdmins))
 		}
 	}
 }
 
-func (m *Managed) getAccessLevel(pub []byte, address string, peerAdmins [][]byte) string {
+func (m *Managed) computeAccessLevel(pub []byte, address string, peerAdmins [][]byte) string {
 	// If no pubkey provided and auth is required, return "none"
 	if len(pub) == 0 && m.cfg.AuthRequired {
 		return "none"
@@ -189,15 +177,11 @@ func (m *Managed) getAccessLevel(pub []byte, address string, peerAdmins [][]byte
 
 // UpdatePeerAdmins updates the list of peer relay identity pubkeys that have admin access
 func (m *Managed) UpdatePeerAdmins(peerPubkeys [][]byte) {
-	resp := make(chan struct{}, 1)
-	m.updatePeerAdminsCh <- managedUpdatePeerAdminsReq{peerPubkeys: peerPubkeys, resp: resp}
-	<-resp
+	m.updatePeerAdmins.Call(peerPubkeys)
 }
 
 func (m *Managed) GetAccessLevel(pub []byte, address string) (level string) {
-	resp := make(chan string, 1)
-	m.getAccessLevelCh <- managedGetAccessLevelReq{pub: pub, address: address, resp: resp}
-	return <-resp
+	return m.getAccessLevel.Call(managedGetAccessLevelArgs{Pub: pub, Address: address})
 }
 
 func (m *Managed) CheckPolicy(ev *event.E) (allowed bool, err error) {
@@ -249,10 +233,6 @@ func (m *Managed) CheckPolicy(ev *event.E) (allowed bool, err error) {
 			return true, nil
 		}
 	}
-
-	// Check if we should add this event to moderation queue
-	// This could be extended to add events to moderation based on content analysis
-	// For now, we'll just allow the event
 
 	// Default to allowing events in managed mode (can be restricted by explicit bans/allows)
 	return true, nil

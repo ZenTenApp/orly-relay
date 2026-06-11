@@ -8,11 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"git.smesh.lol/actor"
+	"git.smesh.lol/orly/app/config"
+	"git.smesh.lol/orly/pkg/database"
 	"git.smesh.lol/orly/pkg/lol/chk"
 	"git.smesh.lol/orly/pkg/lol/errorf"
 	"git.smesh.lol/orly/pkg/lol/log"
-	"git.smesh.lol/orly/app/config"
-	"git.smesh.lol/orly/pkg/database"
 	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 	"git.smesh.lol/orly/pkg/utils"
@@ -28,63 +29,20 @@ const (
 	CuratingConfigDTag     = "curating-config"
 )
 
-// curating actor request types
-
-type curatingGetAccessLevelReq struct {
-	pub     []byte
-	address string
-	resp    chan string
+type curatingAccessArgs struct {
+	Pub     []byte
+	Address string
 }
 
-type curatingCheckBlacklistedReq struct {
-	pubkeyHex string
-	resp      chan bool
+type curatingSetCacheArgs struct {
+	PubkeyHex string
+	Val       bool
 }
 
-type curatingSetBlacklistedReq struct {
-	pubkeyHex string
-	val       bool
-}
-
-type curatingCheckTrustedReq struct {
-	pubkeyHex string
-	resp      chan bool
-}
-
-type curatingSetTrustedReq struct {
-	pubkeyHex string
-	val       bool
-}
-
-type curatingRefreshCachesReq struct {
-	trusted     []database.TrustedPubkey
-	blacklisted []database.BlacklistedPubkey
-	config      database.CuratingConfig
-	resp        chan struct{}
-}
-
-type curatingGetConfigReq struct {
-	resp chan *database.CuratingConfig
-}
-
-type curatingSetConfigCacheReq struct {
-	config *database.CuratingConfig
-}
-
-type curatingTrustPubkeyReq struct {
-	pubkeyHex string
-}
-
-type curatingBlacklistPubkeyReq struct {
-	pubkeyHex string
-}
-
-type curatingUntrustReq struct {
-	pubkeyHex string
-}
-
-type curatingUnblacklistReq struct {
-	pubkeyHex string
+type curatingRefreshArgs struct {
+	Trusted     []database.TrustedPubkey
+	Blacklisted []database.BlacklistedPubkey
+	Config      database.CuratingConfig
 }
 
 // Curating implements the curating ACL mode with three-tier publisher classification:
@@ -101,21 +59,19 @@ type Curating struct {
 	owners      [][]byte
 	admins      [][]byte
 
-	// Actor channels
-	getAccessLevelCh    chan curatingGetAccessLevelReq
-	checkBlacklistedCh  chan curatingCheckBlacklistedReq
-	setBlacklistedCh    chan curatingSetBlacklistedReq
-	checkTrustedCh      chan curatingCheckTrustedReq
-	setTrustedCh        chan curatingSetTrustedReq
-	refreshCachesCh     chan curatingRefreshCachesReq
-	getConfigCh         chan curatingGetConfigReq
-	setConfigCacheCh    chan curatingSetConfigCacheReq
-	trustPubkeyCh       chan curatingTrustPubkeyReq
-	blacklistPubkeyCh   chan curatingBlacklistPubkeyReq
-	untrustCh           chan curatingUntrustReq
-	unblacklistCh       chan curatingUnblacklistReq
-	stop                chan struct{}
-	done                chan struct{}
+	getAccessLevel  actor.Func[curatingAccessArgs, string]
+	checkBlacklisted actor.Func[string, bool]
+	setBlacklisted  actor.Inbox[curatingSetCacheArgs]
+	checkTrusted    actor.Func[string, bool]
+	setTrusted      actor.Inbox[curatingSetCacheArgs]
+	refreshCaches   actor.Proc[curatingRefreshArgs]
+	getConfig       actor.Query[*database.CuratingConfig]
+	setConfigCache  actor.Inbox[*database.CuratingConfig]
+	trustPubkey     actor.Inbox[string]
+	blacklistPubkey actor.Inbox[string]
+	untrust         actor.Inbox[string]
+	unblacklist     actor.Inbox[string]
+	actor.Lifecycle
 }
 
 // Context returns the ACL context.
@@ -170,22 +126,21 @@ func (c *Curating) Configure(cfg ...any) (err error) {
 		c.admins = append(c.admins, adm)
 	}
 
-	// Start actor goroutine
-	c.getAccessLevelCh = make(chan curatingGetAccessLevelReq)
-	c.checkBlacklistedCh = make(chan curatingCheckBlacklistedReq)
-	c.setBlacklistedCh = make(chan curatingSetBlacklistedReq, 16)
-	c.checkTrustedCh = make(chan curatingCheckTrustedReq)
-	c.setTrustedCh = make(chan curatingSetTrustedReq, 16)
-	c.refreshCachesCh = make(chan curatingRefreshCachesReq)
-	c.getConfigCh = make(chan curatingGetConfigReq)
-	c.setConfigCacheCh = make(chan curatingSetConfigCacheReq, 16)
-	c.trustPubkeyCh = make(chan curatingTrustPubkeyReq, 16)
-	c.blacklistPubkeyCh = make(chan curatingBlacklistPubkeyReq, 16)
-	c.untrustCh = make(chan curatingUntrustReq, 16)
-	c.unblacklistCh = make(chan curatingUnblacklistReq, 16)
-	c.stop = make(chan struct{})
-	c.done = make(chan struct{})
-	go c.actor()
+	// Initialize actor channels
+	c.getAccessLevel = actor.NewFunc[curatingAccessArgs, string]()
+	c.checkBlacklisted = actor.NewFunc[string, bool]()
+	c.setBlacklisted = actor.NewInbox[curatingSetCacheArgs](16)
+	c.checkTrusted = actor.NewFunc[string, bool]()
+	c.setTrusted = actor.NewInbox[curatingSetCacheArgs](16)
+	c.refreshCaches = actor.NewProc[curatingRefreshArgs]()
+	c.getConfig = actor.NewQuery[*database.CuratingConfig]()
+	c.setConfigCache = actor.NewInbox[*database.CuratingConfig](16)
+	c.trustPubkey = actor.NewInbox[string](16)
+	c.blacklistPubkey = actor.NewInbox[string](16)
+	c.untrust = actor.NewInbox[string](16)
+	c.unblacklist = actor.NewInbox[string](16)
+	c.Lifecycle = actor.NewLifecycle()
+	actor.Go(c.Lifecycle, c.actorLoop)
 
 	// Refresh caches from database
 	if err = c.RefreshCaches(); err != nil {
@@ -195,9 +150,7 @@ func (c *Curating) Configure(cfg ...any) (err error) {
 	return nil
 }
 
-func (c *Curating) actor() {
-	defer close(c.done)
-
+func (c *Curating) actorLoop() {
 	trustedCache := make(map[string]bool)
 	blacklistedCache := make(map[string]bool)
 	kindCache := make(map[int]bool)
@@ -205,17 +158,17 @@ func (c *Curating) actor() {
 
 	for {
 		select {
-		case <-c.stop:
+		case <-c.Stopping():
 			return
 
-		case req := <-c.getAccessLevelCh:
-			pubkeyHex := hex.EncodeToString(req.pub)
+		case msg := <-c.getAccessLevel.Recv():
+			pubkeyHex := hex.EncodeToString(msg.Req.Pub)
 			level := "write"
 
 			// Check owners first
 			isOwnerOrAdmin := false
 			for _, v := range c.owners {
-				if utils.FastEqual(v, req.pub) {
+				if utils.FastEqual(v, msg.Req.Pub) {
 					level = "owner"
 					isOwnerOrAdmin = true
 					break
@@ -223,7 +176,7 @@ func (c *Curating) actor() {
 			}
 			if !isOwnerOrAdmin {
 				for _, v := range c.admins {
-					if utils.FastEqual(v, req.pub) {
+					if utils.FastEqual(v, msg.Req.Pub) {
 						level = "admin"
 						isOwnerOrAdmin = true
 						break
@@ -232,8 +185,8 @@ func (c *Curating) actor() {
 			}
 
 			if !isOwnerOrAdmin && c.curatingACL != nil {
-				if req.address != "" {
-					blocked, _, err := c.curatingACL.IsIPBlocked(req.address)
+				if msg.Req.Address != "" {
+					blocked, _, err := c.curatingACL.IsIPBlocked(msg.Req.Address)
 					if err == nil && blocked {
 						level = "blocked"
 					}
@@ -248,78 +201,76 @@ func (c *Curating) actor() {
 					}
 				}
 			}
-			req.resp <- level
+			msg.Reply(level)
 
-		case req := <-c.checkBlacklistedCh:
-			req.resp <- blacklistedCache[req.pubkeyHex]
+		case msg := <-c.checkBlacklisted.Recv():
+			msg.Reply(blacklistedCache[msg.Req])
 
-		case req := <-c.setBlacklistedCh:
-			if req.val {
-				blacklistedCache[req.pubkeyHex] = true
+		case args := <-c.setBlacklisted.Recv():
+			if args.Val {
+				blacklistedCache[args.PubkeyHex] = true
 			} else {
-				delete(blacklistedCache, req.pubkeyHex)
+				delete(blacklistedCache, args.PubkeyHex)
 			}
 
-		case req := <-c.checkTrustedCh:
-			req.resp <- trustedCache[req.pubkeyHex]
+		case msg := <-c.checkTrusted.Recv():
+			msg.Reply(trustedCache[msg.Req])
 
-		case req := <-c.setTrustedCh:
-			if req.val {
-				trustedCache[req.pubkeyHex] = true
+		case args := <-c.setTrusted.Recv():
+			if args.Val {
+				trustedCache[args.PubkeyHex] = true
 			} else {
-				delete(trustedCache, req.pubkeyHex)
+				delete(trustedCache, args.PubkeyHex)
 			}
 
-		case req := <-c.refreshCachesCh:
+		case msg := <-c.refreshCaches.Recv():
 			trustedCache = make(map[string]bool)
-			for _, t := range req.trusted {
+			for _, t := range msg.Req.Trusted {
 				trustedCache[t.Pubkey] = true
 			}
 			blacklistedCache = make(map[string]bool)
-			for _, b := range req.blacklisted {
+			for _, b := range msg.Req.Blacklisted {
 				blacklistedCache[b.Pubkey] = true
 			}
-			configCache = &req.config
+			configCache = &msg.Req.Config
 			kindCache = make(map[int]bool)
-			for _, k := range req.config.AllowedKinds {
+			for _, k := range msg.Req.Config.AllowedKinds {
 				kindCache[k] = true
 			}
 			log.D.F("curating ACL: caches refreshed - %d trusted, %d blacklisted, %d allowed kinds",
 				len(trustedCache), len(blacklistedCache), len(kindCache))
-			req.resp <- struct{}{}
+			msg.Done()
 
-		case req := <-c.getConfigCh:
+		case msg := <-c.getConfig.Recv():
 			if configCache != nil {
 				cp := *configCache
-				req.resp <- &cp
+				msg.Reply(&cp)
 			} else {
-				req.resp <- nil
+				msg.Reply(nil)
 			}
 
-		case req := <-c.setConfigCacheCh:
-			configCache = req.config
+		case cfg := <-c.setConfigCache.Recv():
+			configCache = cfg
 
-		case req := <-c.trustPubkeyCh:
-			trustedCache[req.pubkeyHex] = true
-			delete(blacklistedCache, req.pubkeyHex)
+		case pubkeyHex := <-c.trustPubkey.Recv():
+			trustedCache[pubkeyHex] = true
+			delete(blacklistedCache, pubkeyHex)
 
-		case req := <-c.blacklistPubkeyCh:
-			blacklistedCache[req.pubkeyHex] = true
-			delete(trustedCache, req.pubkeyHex)
+		case pubkeyHex := <-c.blacklistPubkey.Recv():
+			blacklistedCache[pubkeyHex] = true
+			delete(trustedCache, pubkeyHex)
 
-		case req := <-c.untrustCh:
-			delete(trustedCache, req.pubkeyHex)
+		case pubkeyHex := <-c.untrust.Recv():
+			delete(trustedCache, pubkeyHex)
 
-		case req := <-c.unblacklistCh:
-			delete(blacklistedCache, req.pubkeyHex)
+		case pubkeyHex := <-c.unblacklist.Recv():
+			delete(blacklistedCache, pubkeyHex)
 		}
 	}
 }
 
 func (c *Curating) GetAccessLevel(pub []byte, address string) (level string) {
-	resp := make(chan string, 1)
-	c.getAccessLevelCh <- curatingGetAccessLevelReq{pub: pub, address: address, resp: resp}
-	return <-resp
+	return c.getAccessLevel.Call(curatingAccessArgs{Pub: pub, Address: address})
 }
 
 // CheckPolicy implements the PolicyChecker interface for event-level filtering
@@ -352,7 +303,7 @@ func (c *Curating) CheckPolicy(ev *event.E) (allowed bool, err error) {
 	}
 
 	// Check if pubkey is blacklisted
-	isBlacklisted := c.checkBlacklisted(pubkeyHex)
+	isBlacklisted := c.checkBlacklisted.Call(pubkeyHex)
 	if !isBlacklisted {
 		isBlacklisted, _ = c.curatingACL.IsPubkeyBlacklisted(pubkeyHex)
 	}
@@ -361,12 +312,12 @@ func (c *Curating) CheckPolicy(ev *event.E) (allowed bool, err error) {
 	}
 
 	// Check if pubkey is trusted (bypass rate limiting)
-	isTrusted := c.checkTrusted(pubkeyHex)
+	isTrusted := c.checkTrusted.Call(pubkeyHex)
 	if !isTrusted {
 		isTrusted, _ = c.curatingACL.IsPubkeyTrusted(pubkeyHex)
 		if isTrusted {
 			// Update cache
-			c.setTrustedCh <- curatingSetTrustedReq{pubkeyHex: pubkeyHex, val: true}
+			c.setTrusted.TrySend(curatingSetCacheArgs{PubkeyHex: pubkeyHex, Val: true})
 		}
 	}
 	if isTrusted {
@@ -409,20 +360,6 @@ func (c *Curating) CheckPolicy(ev *event.E) (allowed bool, err error) {
 	}
 
 	return true, nil
-}
-
-// checkBlacklisted queries the actor for cached blacklisted status.
-func (c *Curating) checkBlacklisted(pubkeyHex string) bool {
-	resp := make(chan bool, 1)
-	c.checkBlacklistedCh <- curatingCheckBlacklistedReq{pubkeyHex: pubkeyHex, resp: resp}
-	return <-resp
-}
-
-// checkTrusted queries the actor for cached trusted status.
-func (c *Curating) checkTrusted(pubkeyHex string) bool {
-	resp := make(chan bool, 1)
-	c.checkTrustedCh <- curatingCheckTrustedReq{pubkeyHex: pubkeyHex, resp: resp}
-	return <-resp
 }
 
 // RateLimitCheck checks if an unclassified user can publish and handles IP tracking
@@ -547,13 +484,13 @@ func (c *Curating) IsEventVisible(ev *event.E, accessLevel string) bool {
 	pubkeyHex := hex.EncodeToString(ev.Pubkey)
 
 	// Check cache first
-	if c.checkBlacklisted(pubkeyHex) {
+	if c.checkBlacklisted.Call(pubkeyHex) {
 		return false
 	}
 
 	// Check database if not in cache
 	if blacklisted, _ := c.curatingACL.IsPubkeyBlacklisted(pubkeyHex); blacklisted {
-		c.setBlacklistedCh <- curatingSetBlacklistedReq{pubkeyHex: pubkeyHex, val: true}
+		c.setBlacklisted.TrySend(curatingSetCacheArgs{PubkeyHex: pubkeyHex, Val: true})
 		return false
 	}
 
@@ -646,23 +583,18 @@ func (c *Curating) RefreshCaches() error {
 	}
 
 	// Send to actor for atomic swap
-	resp := make(chan struct{}, 1)
-	c.refreshCachesCh <- curatingRefreshCachesReq{
-		trusted:     trusted,
-		blacklisted: blacklisted,
-		config:      config,
-		resp:        resp,
-	}
-	<-resp
+	c.refreshCaches.Call(curatingRefreshArgs{
+		Trusted:     trusted,
+		Blacklisted: blacklisted,
+		Config:      config,
+	})
 
 	return nil
 }
 
 // GetConfig returns the current configuration
 func (c *Curating) GetConfig() (database.CuratingConfig, error) {
-	resp := make(chan *database.CuratingConfig, 1)
-	c.getConfigCh <- curatingGetConfigReq{resp: resp}
-	cached := <-resp
+	cached := c.getConfig.Call()
 	if cached != nil {
 		return *cached, nil
 	}
@@ -760,7 +692,7 @@ func (c *Curating) ProcessConfigEvent(ev *event.E) error {
 
 	// Refresh caches
 	cp := config
-	c.setConfigCacheCh <- curatingSetConfigCacheReq{config: &cp}
+	c.setConfigCache.TrySend(&cp)
 
 	log.I.F("curating ACL: configuration updated from event %s by %s",
 		config.ConfigEventID, config.ConfigPubkey)
@@ -770,7 +702,7 @@ func (c *Curating) ProcessConfigEvent(ev *event.E) error {
 
 // IsTrusted checks if a pubkey is trusted
 func (c *Curating) IsTrusted(pubkeyHex string) bool {
-	if c.checkTrusted(pubkeyHex) {
+	if c.checkTrusted.Call(pubkeyHex) {
 		return true
 	}
 	trusted, _ := c.curatingACL.IsPubkeyTrusted(pubkeyHex)
@@ -779,7 +711,7 @@ func (c *Curating) IsTrusted(pubkeyHex string) bool {
 
 // IsBlacklisted checks if a pubkey is blacklisted
 func (c *Curating) IsBlacklisted(pubkeyHex string) bool {
-	if c.checkBlacklisted(pubkeyHex) {
+	if c.checkBlacklisted.Call(pubkeyHex) {
 		return true
 	}
 	blacklisted, _ := c.curatingACL.IsPubkeyBlacklisted(pubkeyHex)
@@ -793,7 +725,7 @@ func (c *Curating) TrustPubkey(pubkeyHex, note string) error {
 		return err
 	}
 	// Update cache via actor
-	c.trustPubkeyCh <- curatingTrustPubkeyReq{pubkeyHex: pubkeyHex}
+	c.trustPubkey.TrySend(pubkeyHex)
 	// Also remove from blacklist in DB
 	c.curatingACL.RemoveBlacklistedPubkey(pubkeyHex)
 	return nil
@@ -806,7 +738,7 @@ func (c *Curating) UntrustPubkey(pubkeyHex string) error {
 		return err
 	}
 	// Update cache via actor
-	c.untrustCh <- curatingUntrustReq{pubkeyHex: pubkeyHex}
+	c.untrust.TrySend(pubkeyHex)
 	return nil
 }
 
@@ -817,7 +749,7 @@ func (c *Curating) BlacklistPubkey(pubkeyHex, reason string) error {
 		return err
 	}
 	// Update cache via actor
-	c.blacklistPubkeyCh <- curatingBlacklistPubkeyReq{pubkeyHex: pubkeyHex}
+	c.blacklistPubkey.TrySend(pubkeyHex)
 	// Also remove from trusted list in DB
 	c.curatingACL.RemoveTrustedPubkey(pubkeyHex)
 	return nil
@@ -830,7 +762,7 @@ func (c *Curating) UnblacklistPubkey(pubkeyHex string) error {
 		return err
 	}
 	// Update cache via actor
-	c.unblacklistCh <- curatingUnblacklistReq{pubkeyHex: pubkeyHex}
+	c.unblacklist.TrySend(pubkeyHex)
 	return nil
 }
 

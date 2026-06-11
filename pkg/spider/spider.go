@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/nostr/crypto/keys"
 	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
 	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
@@ -71,39 +72,8 @@ type Spider struct {
 	// Notification channel for follow list updates
 	followListUpdated chan struct{}
 
-	// Actor channels
-	stop chan struct{}
-	done chan struct{}
-}
-
-// -- RelayConnection actor request types --
-
-// rcRateLimitMsg signals that a rate limit was detected (fire-and-forget).
-type rcRateLimitMsg struct{}
-
-// rcDisconnectMsg signals that a disconnection occurred (fire-and-forget).
-type rcDisconnectMsg struct{}
-
-// rcCreateSubsReq requests creating subscriptions for a follow list.
-type rcCreateSubsReq struct {
-	followList [][]byte
-	resp       chan struct{}
-}
-
-// rcUpdateSubsReq requests updating subscriptions with a new follow list.
-type rcUpdateSubsReq struct {
-	followList [][]byte
-	resp       chan struct{}
-}
-
-// rcClearSubsReq requests clearing all subscriptions.
-type rcClearSubsReq struct {
-	resp chan struct{}
-}
-
-// rcCloseReq requests closing the relay connection.
-type rcCloseReq struct {
-	resp chan struct{}
+	// Actor lifecycle
+	lc actor.Lifecycle
 }
 
 // RelayConnection manages a single relay connection and its subscriptions
@@ -130,14 +100,12 @@ type RelayConnection struct {
 	rateLimitUntil   time.Time
 
 	// Actor channels
-	rateLimitCh  chan rcRateLimitMsg  // buffered 16
-	disconnectCh chan rcDisconnectMsg // buffered 16
-	createSubsCh chan rcCreateSubsReq
-	updateSubsCh chan rcUpdateSubsReq
-	clearSubsCh  chan rcClearSubsReq
-	closeCh      chan rcCloseReq
-	rcStop       chan struct{}
-	rcDone       chan struct{}
+	rateLimit  actor.Inbox[struct{}]
+	disconnect actor.Inbox[struct{}]
+	createSubs actor.Proc[[][]byte]
+	updateSubs actor.Proc[[][]byte]
+	clearSubs  actor.Signal
+	rcLc       actor.Lifecycle
 }
 
 // BatchSubscription represents a subscription for a batch of pubkeys
@@ -191,10 +159,9 @@ func New(ctx context.Context, db *database.D, pub publisher.I, mode string) (s *
 		mode:                mode,
 		relayIdentityPubkey: relayPubkey,
 		selfURLs:            make(map[string]bool),
-		connections:         make(map[string]*RelayConnection),
-		followListUpdated:   make(chan struct{}, 1),
-		stop: make(chan struct{}),
-		done: make(chan struct{}),
+		connections:       make(map[string]*RelayConnection),
+		followListUpdated: make(chan struct{}, 1),
+		lc:                actor.NewLifecycle(),
 	}
 
 	return
@@ -241,13 +208,13 @@ func (s *Spider) Start() (err error) {
 	s.running.Store(true)
 
 	// Start the actor loop
-	go s.actorLoop()
+	actor.Go(s.lc, s.actorLoop)
 
 	log.I.F("spider: started in '%s' mode", s.mode)
 	return
 }
 
-// Stop stops the spider operation
+// Stop stops the spider operation via context cancellation.
 func (s *Spider) Stop() {
 	if !s.running.Load() {
 		return
@@ -256,29 +223,24 @@ func (s *Spider) Stop() {
 	s.cancel()
 
 	// Wait for actor to finish cleanup
-	<-s.done
+	<-s.lc.Stopped()
 
 	log.I.F("spider: stopped")
 }
 
 // Shutdown stops the spider and waits for the actor to exit.
 func (s *Spider) Shutdown() {
-	close(s.stop)
-	<-s.done
+	s.lc.Stop()
 }
 
 // actorLoop is the actor goroutine that owns connections, selfURLs, and callbacks.
 func (s *Spider) actorLoop() {
 	defer func() {
-		// Cleanup: close all connections and mark as not running
 		for _, conn := range s.connections {
 			conn.close()
 		}
 		s.connections = make(map[string]*RelayConnection)
-
 		s.running.Store(false)
-
-		close(s.done)
 	}()
 
 	ticker := time.NewTicker(MainLoopInterval)
@@ -290,7 +252,7 @@ func (s *Spider) actorLoop() {
 		select {
 		case <-s.ctx.Done():
 			return
-		case <-s.stop:
+		case <-s.lc.Stopping():
 			return
 		case <-s.followListUpdated:
 			log.D.F("spider: follow list updated, refreshing connections")
@@ -360,20 +322,18 @@ func (s *Spider) createConnection(url string, followList [][]byte) {
 		spider:         s,
 		subscriptions:  make(map[string]*BatchSubscription),
 		reconnectDelay: ReconnectDelay,
-		rateLimitCh:    make(chan rcRateLimitMsg, 16),
-		disconnectCh:   make(chan rcDisconnectMsg, 16),
-		createSubsCh:   make(chan rcCreateSubsReq),
-		updateSubsCh:   make(chan rcUpdateSubsReq),
-		clearSubsCh:    make(chan rcClearSubsReq),
-		closeCh:        make(chan rcCloseReq),
-		rcStop:         make(chan struct{}),
-		rcDone:         make(chan struct{}),
+		rateLimit:      actor.NewInbox[struct{}](16),
+		disconnect:     actor.NewInbox[struct{}](16),
+		createSubs:     actor.NewProc[[][]byte](),
+		updateSubs:     actor.NewProc[[][]byte](),
+		clearSubs:      actor.NewSignal(),
+		rcLc:           actor.NewLifecycle(),
 	}
 
 	s.connections[url] = conn
 
 	// Start the RC actor goroutine
-	go conn.rcActor()
+	actor.Go(conn.rcLc, conn.rcActor)
 
 	// Start connection in goroutine
 	go conn.manage(followList)
@@ -382,33 +342,27 @@ func (s *Spider) createConnection(url string, followList [][]byte) {
 // rcActor is the actor goroutine for a RelayConnection.
 // It owns subscriptions, rateLimitBackoff, and rateLimitUntil.
 func (rc *RelayConnection) rcActor() {
-	defer close(rc.rcDone)
-
 	for {
 		select {
 		case <-rc.ctx.Done():
 			rc.clearSubscriptionsInternal()
 			return
-		case <-rc.rcStop:
+		case <-rc.rcLc.Stopping():
 			rc.clearSubscriptionsInternal()
 			return
-		case <-rc.rateLimitCh:
+		case <-rc.rateLimit.Recv():
 			rc.handleRateLimitActor()
-		case <-rc.disconnectCh:
+		case <-rc.disconnect.Recv():
 			rc.handleDisconnectionActor()
-		case req := <-rc.createSubsCh:
-			rc.createSubscriptionsActor(req.followList)
-			req.resp <- struct{}{}
-		case req := <-rc.updateSubsCh:
-			rc.updateSubscriptionsActor(req.followList)
-			req.resp <- struct{}{}
-		case req := <-rc.clearSubsCh:
+		case msg := <-rc.createSubs.Recv():
+			rc.createSubscriptionsActor(msg.Req)
+			msg.Done()
+		case msg := <-rc.updateSubs.Recv():
+			rc.updateSubscriptionsActor(msg.Req)
+			msg.Done()
+		case msg := <-rc.clearSubs.Recv():
 			rc.clearSubscriptionsInternal()
-			req.resp <- struct{}{}
-		case req := <-rc.closeCh:
-			rc.clearSubscriptionsInternal()
-			req.resp <- struct{}{}
-			return
+			msg.Done()
 		}
 	}
 }
@@ -464,9 +418,7 @@ func (rc *RelayConnection) manage(followList [][]byte) {
 		rc.blackoutUntil = time.Time{} // Clear blackout on successful connection
 
 		// Create subscriptions for follow list (via actor)
-		resp := make(chan struct{}, 1)
-		rc.createSubsCh <- rcCreateSubsReq{followList: followList, resp: resp}
-		<-resp
+		rc.createSubs.Call(followList)
 
 		// Wait for disconnection
 		<-rc.client.Context().Done()
@@ -492,18 +444,13 @@ func (rc *RelayConnection) manage(followList [][]byte) {
 		}
 
 		// Signal disconnection to actor (fire-and-forget)
-		select {
-		case rc.disconnectCh <- rcDisconnectMsg{}:
-		default:
-		}
+		rc.disconnect.TrySend(struct{}{})
 
 		// Clean up
 		rc.client = nil
 
 		// Clear subscriptions via actor
-		clearResp := make(chan struct{}, 1)
-		rc.clearSubsCh <- rcClearSubsReq{resp: clearResp}
-		<-clearResp
+		rc.clearSubs.Call()
 	}
 }
 
@@ -530,10 +477,7 @@ func (rc *RelayConnection) handleNotice(notice []byte) {
 	if strings.Contains(noticeStr, "too many concurrent REQs") ||
 		strings.Contains(noticeStr, "rate limit") ||
 		strings.Contains(noticeStr, "slow down") {
-		select {
-		case rc.rateLimitCh <- rcRateLimitMsg{}:
-		default:
-		}
+		rc.rateLimit.TrySend(struct{}{})
 	}
 }
 
@@ -611,9 +555,7 @@ func (rc *RelayConnection) createSubscriptionsActor(followList [][]byte) {
 		// Schedule retry after backoff period
 		go func() {
 			time.Sleep(remaining)
-			resp := make(chan struct{}, 1)
-			rc.createSubsCh <- rcCreateSubsReq{followList: followList, resp: resp}
-			<-resp
+			rc.createSubs.Call(followList)
 		}()
 		return
 	}
@@ -751,13 +693,7 @@ func (rc *RelayConnection) updateSubscriptions(followList [][]byte) {
 	if rc.client == nil || !rc.client.IsConnected() {
 		return // Will be handled on reconnection
 	}
-
-	resp := make(chan struct{}, 1)
-	select {
-	case rc.updateSubsCh <- rcUpdateSubsReq{followList: followList, resp: resp}:
-		<-resp
-	case <-rc.ctx.Done():
-	}
+	rc.updateSubs.Call(followList)
 }
 
 // updateSubscriptionsActor performs the subscription update.
@@ -911,24 +847,13 @@ func (rc *RelayConnection) clearSubscriptionsInternal() {
 
 // close closes the relay connection and stops the RC actor.
 func (rc *RelayConnection) close() {
-	// Send close request to actor
-	resp := make(chan struct{}, 1)
-	select {
-	case rc.closeCh <- rcCloseReq{resp: resp}:
-		<-resp
-	case <-rc.rcDone:
-		// Actor already exited
-	}
+	rc.cancel()
+	rc.rcLc.Stop()
 
 	if rc.client != nil {
 		rc.client.Close()
 		rc.client = nil
 	}
-
-	rc.cancel()
-
-	// Wait for actor to fully exit
-	<-rc.rcDone
 }
 
 // isSelfRelay checks if a relay URL is actually ourselves by comparing NIP-11 pubkeys.

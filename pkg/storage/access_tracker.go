@@ -7,6 +7,7 @@ import (
 	"context"
 	"sort"
 
+	"git.smesh.lol/actor"
 	"git.smesh.lol/orly/pkg/lol/log"
 
 	"git.smesh.lol/orly/pkg/database/indexes/types"
@@ -26,11 +27,9 @@ type accessKey struct {
 	ConnectionID string
 }
 
-// recordAccessReq is sent to the actor to record an access.
-type recordAccessReq struct {
-	serial       uint64
-	connectionID string
-	resp         chan recordAccessResp
+type recordAccessArgs struct {
+	Serial       uint64
+	ConnectionID string
 }
 
 type recordAccessResp struct {
@@ -38,31 +37,18 @@ type recordAccessResp struct {
 	err   error
 }
 
-// clearConnectionReq is sent to the actor to clear all entries for a connection.
-type clearConnectionReq struct {
-	connectionID string
-	resp         chan struct{}
-}
-
-// statsReq is sent to the actor to get statistics.
-type accessTrackerStatsReq struct {
-	resp chan AccessTrackerStats
-}
-
 // AccessTracker tracks event access patterns with session deduplication.
 // It maintains an in-memory cache to deduplicate accesses from the same
 // connection, reducing database writes while ensuring unique session counting.
+// All mutable state is owned by the actor goroutine.
 type AccessTracker struct {
 	db AccessTrackerDatabase
 
-	recordAccessCh    chan recordAccessReq
-	clearConnectionCh chan clearConnectionReq
-	statsCh           chan accessTrackerStatsReq
+	recordAccess    actor.Func[recordAccessArgs, recordAccessResp]
+	clearConnection actor.Proc[string]
+	stats           actor.Query[AccessTrackerStats]
+	lc              actor.Lifecycle
 
-	stop chan struct{}
-	done chan struct{}
-
-	// Flush interval for stats
 	ctx    context.Context
 	cancel context.CancelFunc
 }
@@ -77,42 +63,39 @@ func NewAccessTracker(db AccessTrackerDatabase, maxSeenEntries int) *AccessTrack
 	ctx, cancel := context.WithCancel(context.Background())
 
 	t := &AccessTracker{
-		db:                db,
-		recordAccessCh:    make(chan recordAccessReq),
-		clearConnectionCh: make(chan clearConnectionReq),
-		statsCh:           make(chan accessTrackerStatsReq),
-		stop:              make(chan struct{}),
-		done:              make(chan struct{}),
-		ctx:               ctx,
-		cancel:            cancel,
+		db:              db,
+		recordAccess:    actor.NewFunc[recordAccessArgs, recordAccessResp](),
+		clearConnection: actor.NewProc[string](),
+		stats:           actor.NewQuery[AccessTrackerStats](),
+		lc:              actor.NewLifecycle(),
+		ctx:             ctx,
+		cancel:          cancel,
 	}
 
-	go t.run(maxSeenEntries)
+	actor.Go(t.lc, func() { t.actorLoop(maxSeenEntries) })
 	return t
 }
 
-// run is the actor goroutine that owns all dedup cache state.
-func (t *AccessTracker) run(maxSeen int) {
-	defer close(t.done)
-
+// actorLoop owns all dedup cache state.
+func (t *AccessTracker) actorLoop(maxSeen int) {
 	seen := make(map[accessKey]struct{})
 	seenOrder := list.New()
 	seenElements := make(map[accessKey]*list.Element)
 
 	for {
 		select {
-		case <-t.stop:
+		case <-t.lc.Stopping():
 			return
 
-		case req := <-t.recordAccessCh:
-			key := accessKey{Serial: req.serial, ConnectionID: req.connectionID}
+		case msg := <-t.recordAccess.Recv():
+			key := accessKey{Serial: msg.Req.Serial, ConnectionID: msg.Req.ConnectionID}
 
 			// Check if already seen
 			if _, exists := seen[key]; exists {
 				if elem, ok := seenElements[key]; ok {
 					seenOrder.MoveToFront(elem)
 				}
-				req.resp <- recordAccessResp{isNew: false, err: nil}
+				msg.Reply(recordAccessResp{isNew: false, err: nil})
 				continue
 			}
 
@@ -133,24 +116,24 @@ func (t *AccessTracker) run(maxSeen int) {
 			seenElements[key] = elem
 
 			// Record to database (done inside actor to keep ordering)
-			err := t.db.RecordEventAccess(req.serial, req.connectionID)
-			req.resp <- recordAccessResp{isNew: true, err: err}
+			err := t.db.RecordEventAccess(msg.Req.Serial, msg.Req.ConnectionID)
+			msg.Reply(recordAccessResp{isNew: true, err: err})
 
-		case req := <-t.clearConnectionCh:
+		case msg := <-t.clearConnection.Recv():
 			for key, elem := range seenElements {
-				if key.ConnectionID == req.connectionID {
+				if key.ConnectionID == msg.Req {
 					delete(seen, key)
 					delete(seenElements, key)
 					seenOrder.Remove(elem)
 				}
 			}
-			close(req.resp)
+			msg.Done()
 
-		case req := <-t.statsCh:
-			req.resp <- AccessTrackerStats{
+		case msg := <-t.stats.Recv():
+			msg.Reply(AccessTrackerStats{
 				CachedEntries: len(seen),
 				MaxEntries:    maxSeen,
-			}
+			})
 		}
 	}
 }
@@ -159,13 +142,7 @@ func (t *AccessTracker) run(maxSeen int) {
 // Deduplicates accesses from the same connection within the cache window.
 // Returns true if this was a new access, false if deduplicated.
 func (t *AccessTracker) RecordAccess(serial uint64, connectionID string) (bool, error) {
-	resp := make(chan recordAccessResp, 1)
-	t.recordAccessCh <- recordAccessReq{
-		serial:       serial,
-		connectionID: connectionID,
-		resp:         resp,
-	}
-	r := <-resp
+	r := t.recordAccess.Call(recordAccessArgs{Serial: serial, ConnectionID: connectionID})
 	return r.isNew, r.err
 }
 
@@ -258,19 +235,12 @@ func (t *AccessTracker) GetColdestEventsWithWoT(
 // ClearConnection removes all dedup entries for a specific connection.
 // Call this when a connection closes to free up cache space.
 func (t *AccessTracker) ClearConnection(connectionID string) {
-	resp := make(chan struct{})
-	t.clearConnectionCh <- clearConnectionReq{
-		connectionID: connectionID,
-		resp:         resp,
-	}
-	<-resp
+	t.clearConnection.Call(connectionID)
 }
 
 // Stats returns current cache statistics.
 func (t *AccessTracker) Stats() AccessTrackerStats {
-	resp := make(chan AccessTrackerStats, 1)
-	t.statsCh <- accessTrackerStatsReq{resp: resp}
-	return <-resp
+	return t.stats.Call()
 }
 
 // AccessTrackerStats holds access tracker statistics.
@@ -288,7 +258,6 @@ func (t *AccessTracker) Start() {
 // Stop stops the access tracker and releases resources.
 func (t *AccessTracker) Stop() {
 	t.cancel()
-	close(t.stop)
-	<-t.done
+	t.lc.Stop()
 	log.I.F("access tracker stopped")
 }
