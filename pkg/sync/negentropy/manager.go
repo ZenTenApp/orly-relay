@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	gosync "sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -69,19 +68,132 @@ type Config struct {
 	MemoryTargetMB       int       // Memory target for backpressure (0 = disabled)
 }
 
+// -- actor request/response types --
+
+type startReq struct {
+	resp chan struct{} // signals done
+}
+
+type stopReq struct {
+	resp chan struct{} // signals done
+}
+
+type isActiveReq struct {
+	resp chan bool
+}
+
+type lastSyncReq struct {
+	resp chan time.Time
+}
+
+type getPeersReq struct {
+	resp chan []string
+}
+
+type getPeerStatesReq struct {
+	resp chan []*PeerState
+}
+
+type getPeerStateReq struct {
+	peerURL string
+	resp    chan getPeerStateResp
+}
+type getPeerStateResp struct {
+	state *PeerState
+	ok    bool
+}
+
+type addPeerReq struct {
+	peerURL string
+}
+
+type removePeerReq struct {
+	peerURL string
+}
+
+type syncAllPeersReq struct {
+	resp chan []string // returns snapshot of peer URLs
+}
+
+type updatePeerAfterSyncReq struct {
+	peerURL      string
+	lastSync     time.Time
+	status       string
+	lastError    string
+	consFailures int32
+	eventsDelta  int64
+}
+
+type updateLastSyncReq struct {
+	t time.Time
+}
+
+type openSessionReq struct {
+	connectionID   string
+	subscriptionID string
+	resp           chan *ClientSession
+}
+
+type getSessionReq struct {
+	connectionID   string
+	subscriptionID string
+	resp           chan getSessionResp
+}
+type getSessionResp struct {
+	session *ClientSession
+	ok      bool
+}
+
+type updateSessionActivityReq struct {
+	connectionID   string
+	subscriptionID string
+}
+
+type closeSessionReq struct {
+	connectionID   string
+	subscriptionID string
+}
+
+type closeSessionsByConnReq struct {
+	connectionID string
+}
+
+type listSessionsReq struct {
+	resp chan []*ClientSession
+}
+
+type cleanupExpiredSessionsReq struct {
+	resp chan int
+}
+
 // Manager handles negentropy sync operations.
 type Manager struct {
 	db     database.Database
 	config *Config
 
-	mu             gosync.RWMutex
-	peers          map[string]*PeerState
-	sessions       map[string]*ClientSession // keyed by connectionID:subscriptionID
-	active         bool
-	lastSync       time.Time
-	stopChan       chan struct{}
-	syncWg         gosync.WaitGroup
-	memoryMonitor  *ratelimit.MemoryMonitor // nil if backpressure disabled
+	memoryMonitor *ratelimit.MemoryMonitor // nil if backpressure disabled
+
+	// actor channels
+	startCh                    chan startReq
+	stopCh                     chan stopReq
+	isActiveCh                 chan isActiveReq
+	lastSyncCh                 chan lastSyncReq
+	getPeersCh                 chan getPeersReq
+	getPeerStatesCh            chan getPeerStatesReq
+	getPeerStateCh             chan getPeerStateReq
+	addPeerCh                  chan addPeerReq                  // fire-and-forget
+	removePeerCh               chan removePeerReq               // fire-and-forget
+	syncAllPeersCh             chan syncAllPeersReq
+	updatePeerAfterSyncCh      chan updatePeerAfterSyncReq      // fire-and-forget
+	updateLastSyncCh           chan updateLastSyncReq           // fire-and-forget
+	openSessionCh              chan openSessionReq
+	getSessionCh               chan getSessionReq
+	updateSessionActivityCh    chan updateSessionActivityReq    // fire-and-forget
+	closeSessionCh             chan closeSessionReq             // fire-and-forget
+	closeSessionsByConnCh      chan closeSessionsByConnReq      // fire-and-forget
+	listSessionsCh             chan listSessionsReq
+	cleanupExpiredSessionsCh   chan cleanupExpiredSessionsReq
+	actorDoneCh                chan struct{}
 }
 
 // NewManager creates a new negentropy manager.
@@ -96,10 +208,28 @@ func NewManager(db database.Database, cfg *Config) *Manager {
 	}
 
 	m := &Manager{
-		db:       db,
-		config:   cfg,
-		peers:    make(map[string]*PeerState),
-		sessions: make(map[string]*ClientSession),
+		db:     db,
+		config: cfg,
+		startCh:                  make(chan startReq),
+		stopCh:                   make(chan stopReq),
+		isActiveCh:               make(chan isActiveReq),
+		lastSyncCh:               make(chan lastSyncReq),
+		getPeersCh:               make(chan getPeersReq),
+		getPeerStatesCh:          make(chan getPeerStatesReq),
+		getPeerStateCh:           make(chan getPeerStateReq),
+		addPeerCh:                make(chan addPeerReq, 16),
+		removePeerCh:             make(chan removePeerReq, 16),
+		syncAllPeersCh:           make(chan syncAllPeersReq),
+		updatePeerAfterSyncCh:    make(chan updatePeerAfterSyncReq, 16),
+		updateLastSyncCh:         make(chan updateLastSyncReq, 16),
+		openSessionCh:            make(chan openSessionReq),
+		getSessionCh:             make(chan getSessionReq),
+		updateSessionActivityCh:  make(chan updateSessionActivityReq, 16),
+		closeSessionCh:           make(chan closeSessionReq, 16),
+		closeSessionsByConnCh:    make(chan closeSessionsByConnReq, 16),
+		listSessionsCh:           make(chan listSessionsReq),
+		cleanupExpiredSessionsCh: make(chan cleanupExpiredSessionsReq),
+		actorDoneCh:              make(chan struct{}),
 	}
 
 	// Initialize memory monitor for backpressure if configured
@@ -110,65 +240,227 @@ func NewManager(db database.Database, cfg *Config) *Manager {
 		log.I.F("negentropy: backpressure enabled (target %dMB)", cfg.MemoryTargetMB)
 	}
 
-	// Initialize peers from config
-	for _, peerURL := range cfg.Peers {
-		m.peers[peerURL] = &PeerState{
+	go m.actorLoop(cfg.Peers)
+
+	return m
+}
+
+// actorLoop owns peers, sessions, active, lastSync, stopChan.
+func (m *Manager) actorLoop(initialPeers []string) {
+	defer close(m.actorDoneCh)
+
+	peers := make(map[string]*PeerState)
+	for _, peerURL := range initialPeers {
+		peers[peerURL] = &PeerState{
 			URL:    peerURL,
 			Status: "idle",
 		}
 	}
 
-	return m
+	sessions := make(map[string]*ClientSession)
+	var active bool
+	var lastSync time.Time
+	var syncLoopDone chan struct{} // non-nil when sync loop is running
+
+	for {
+		select {
+		case req := <-m.startCh:
+			if !active {
+				active = true
+				syncLoopDone = make(chan struct{})
+				log.I.F("negentropy manager starting background sync")
+				go m.syncLoop(syncLoopDone)
+			}
+			req.resp <- struct{}{}
+
+		case req := <-m.stopCh:
+			if active {
+				active = false
+				// syncLoop detects inactive via IsActive() and exits
+			}
+			// Wait for sync loop to finish if it was running
+			if syncLoopDone != nil {
+				<-syncLoopDone
+				syncLoopDone = nil
+			}
+			if m.memoryMonitor != nil {
+				m.memoryMonitor.Stop()
+			}
+			log.I.F("negentropy manager stopped")
+			req.resp <- struct{}{}
+
+		case req := <-m.isActiveCh:
+			req.resp <- active
+
+		case req := <-m.lastSyncCh:
+			req.resp <- lastSync
+
+		case req := <-m.getPeersCh:
+			result := make([]string, 0, len(peers))
+			for url := range peers {
+				result = append(result, url)
+			}
+			req.resp <- result
+
+		case req := <-m.getPeerStatesCh:
+			states := make([]*PeerState, 0, len(peers))
+			for _, peer := range peers {
+				states = append(states, &PeerState{
+					URL:                 peer.URL,
+					LastSync:            peer.LastSync,
+					EventsSynced:        peer.EventsSynced,
+					Status:              peer.Status,
+					LastError:           peer.LastError,
+					ConsecutiveFailures: peer.ConsecutiveFailures,
+				})
+			}
+			req.resp <- states
+
+		case req := <-m.getPeerStateCh:
+			peer, ok := peers[req.peerURL]
+			if !ok {
+				req.resp <- getPeerStateResp{nil, false}
+			} else {
+				req.resp <- getPeerStateResp{
+					state: &PeerState{
+						URL:                 peer.URL,
+						LastSync:            peer.LastSync,
+						EventsSynced:        peer.EventsSynced,
+						Status:              peer.Status,
+						LastError:           peer.LastError,
+						ConsecutiveFailures: peer.ConsecutiveFailures,
+					},
+					ok: true,
+				}
+			}
+
+		case req := <-m.addPeerCh:
+			if _, ok := peers[req.peerURL]; !ok {
+				peers[req.peerURL] = &PeerState{
+					URL:    req.peerURL,
+					Status: "idle",
+				}
+			}
+
+		case req := <-m.removePeerCh:
+			delete(peers, req.peerURL)
+
+		case req := <-m.syncAllPeersCh:
+			// Return snapshot of URLs and mark peers as syncing
+			urls := make([]string, 0, len(peers))
+			for url := range peers {
+				urls = append(urls, url)
+			}
+			req.resp <- urls
+
+		case req := <-m.updatePeerAfterSyncCh:
+			if peer, ok := peers[req.peerURL]; ok {
+				peer.LastSync = req.lastSync
+				peer.Status = req.status
+				peer.LastError = req.lastError
+				peer.ConsecutiveFailures = req.consFailures
+				peer.EventsSynced += req.eventsDelta
+			}
+
+		case req := <-m.updateLastSyncCh:
+			lastSync = req.t
+
+		case req := <-m.openSessionCh:
+			key := sessionKey(req.connectionID, req.subscriptionID)
+			session := &ClientSession{
+				SubscriptionID: req.subscriptionID,
+				ConnectionID:   req.connectionID,
+				CreatedAt:      time.Now(),
+				LastActivity:   time.Now(),
+				RoundCount:     0,
+			}
+			sessions[key] = session
+			req.resp <- session
+
+		case req := <-m.getSessionCh:
+			key := sessionKey(req.connectionID, req.subscriptionID)
+			session, ok := sessions[key]
+			req.resp <- getSessionResp{session: session, ok: ok}
+
+		case req := <-m.updateSessionActivityCh:
+			key := sessionKey(req.connectionID, req.subscriptionID)
+			if session, ok := sessions[key]; ok {
+				session.LastActivity = time.Now()
+				session.RoundCount++
+			}
+
+		case req := <-m.closeSessionCh:
+			key := sessionKey(req.connectionID, req.subscriptionID)
+			if session, ok := sessions[key]; ok {
+				if session.neg != nil {
+					session.neg.Close()
+				}
+			}
+			delete(sessions, key)
+
+		case req := <-m.closeSessionsByConnCh:
+			for key, session := range sessions {
+				if session.ConnectionID == req.connectionID {
+					if session.neg != nil {
+						session.neg.Close()
+					}
+					delete(sessions, key)
+				}
+			}
+
+		case req := <-m.listSessionsCh:
+			result := make([]*ClientSession, 0, len(sessions))
+			for _, session := range sessions {
+				result = append(result, &ClientSession{
+					SubscriptionID: session.SubscriptionID,
+					ConnectionID:   session.ConnectionID,
+					CreatedAt:      session.CreatedAt,
+					LastActivity:   session.LastActivity,
+					RoundCount:     session.RoundCount,
+				})
+			}
+			req.resp <- result
+
+		case req := <-m.cleanupExpiredSessionsCh:
+			cutoff := time.Now().Add(-m.config.ClientSessionTimeout)
+			removed := 0
+			for key, session := range sessions {
+				if session.LastActivity.Before(cutoff) {
+					if session.neg != nil {
+						session.neg.Close()
+					}
+					delete(sessions, key)
+					removed++
+				}
+			}
+			req.resp <- removed
+		}
+	}
 }
 
 // Start starts the background sync loop.
 func (m *Manager) Start() {
-	m.mu.Lock()
-	if m.active {
-		m.mu.Unlock()
-		return
-	}
-	m.active = true
-	m.stopChan = make(chan struct{})
-	m.mu.Unlock()
-
-	log.I.F("negentropy manager starting background sync")
-
-	m.syncWg.Add(1)
-	go m.syncLoop()
+	req := startReq{resp: make(chan struct{}, 1)}
+	m.startCh <- req
+	<-req.resp
 }
 
 // Stop stops the background sync loop.
 func (m *Manager) Stop() {
-	m.mu.Lock()
-	if !m.active {
-		m.mu.Unlock()
-		return
-	}
-	m.active = false
-	close(m.stopChan)
-	m.mu.Unlock()
-
-	m.syncWg.Wait()
-
-	if m.memoryMonitor != nil {
-		m.memoryMonitor.Stop()
-	}
-
-	log.I.F("negentropy manager stopped")
+	req := stopReq{resp: make(chan struct{}, 1)}
+	m.stopCh <- req
+	<-req.resp
 }
 
 // checkBackpressure applies progressive delays when memory pressure is high.
-// Returns nil normally, ctx.Err() if the context is cancelled during a pause.
 func (m *Manager) checkBackpressure(ctx context.Context) error {
 	if m.memoryMonitor == nil {
 		return nil
 	}
 	metrics := m.memoryMonitor.GetMetrics()
 
-	// Emergency mode: pause 10s to let the system recover
 	if metrics.InEmergencyMode {
-		log.W.F("negentropy: pausing sync — emergency mode (memory pressure %.1f%%)",
+		log.W.F("negentropy: pausing sync - emergency mode (memory pressure %.1f%%)",
 			metrics.MemoryPressure*100)
 		select {
 		case <-time.After(10 * time.Second):
@@ -178,7 +470,6 @@ func (m *Manager) checkBackpressure(ctx context.Context) error {
 		}
 	}
 
-	// Progressive delay: 0ms at 70% pressure, scaling to 5s at 100%
 	if metrics.MemoryPressure > 0.7 {
 		fraction := (metrics.MemoryPressure - 0.7) / 0.3
 		if fraction > 1.0 {
@@ -197,72 +488,88 @@ func (m *Manager) checkBackpressure(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) syncLoop() {
-	defer m.syncWg.Done()
+func (m *Manager) syncLoop(done chan struct{}) {
+	defer close(done)
 
 	// Do initial sync after a short delay
 	time.Sleep(5 * time.Second)
+
+	// Check if still active before initial sync
+	if !m.IsActive() {
+		return
+	}
 	m.syncAllPeers()
 
 	ticker := time.NewTicker(m.config.SyncInterval)
 	defer ticker.Stop()
 
 	for {
-		select {
-		case <-m.stopChan:
+		if !m.IsActive() {
 			return
+		}
+		select {
 		case <-ticker.C:
+			if !m.IsActive() {
+				return
+			}
 			m.syncAllPeers()
 		}
 	}
 }
 
 func (m *Manager) syncAllPeers() {
-	m.mu.RLock()
-	peers := make([]string, 0, len(m.peers))
-	for url := range m.peers {
-		peers = append(peers, url)
-	}
-	m.mu.RUnlock()
+	req := syncAllPeersReq{resp: make(chan []string, 1)}
+	m.syncAllPeersCh <- req
+	peerURLs := <-req.resp
 
-	for _, peerURL := range peers {
+	for _, peerURL := range peerURLs {
 		m.syncWithPeer(context.Background(), peerURL)
 	}
 
-	m.mu.Lock()
-	m.lastSync = time.Now()
-	m.mu.Unlock()
+	m.updateLastSyncCh <- updateLastSyncReq{t: time.Now()}
 }
 
 func (m *Manager) syncWithPeer(ctx context.Context, peerURL string) {
-	m.mu.Lock()
-	peer, ok := m.peers[peerURL]
-	if !ok {
-		m.mu.Unlock()
-		return
+	// Mark peer as syncing
+	m.updatePeerAfterSyncCh <- updatePeerAfterSyncReq{
+		peerURL:  peerURL,
+		lastSync: time.Time{}, // don't update yet
+		status:   "syncing",
 	}
-	peer.Status = "syncing"
-	m.mu.Unlock()
 
 	log.D.F("negentropy sync starting with %s", peerURL)
 
 	eventsSynced, err := m.performNegentropy(ctx, peerURL)
 
-	m.mu.Lock()
-	peer.LastSync = time.Now()
+	now := time.Now()
 	if err != nil {
-		peer.Status = "error"
-		peer.LastError = err.Error()
-		peer.ConsecutiveFailures++
+		// Get current consecutive failures to increment
+		stateReq := getPeerStateReq{peerURL: peerURL, resp: make(chan getPeerStateResp, 1)}
+		m.getPeerStateCh <- stateReq
+		stateResp := <-stateReq.resp
+		var consFailures int32
+		if stateResp.ok {
+			consFailures = stateResp.state.ConsecutiveFailures
+		}
+		m.updatePeerAfterSyncCh <- updatePeerAfterSyncReq{
+			peerURL:      peerURL,
+			lastSync:     now,
+			status:       "error",
+			lastError:    err.Error(),
+			consFailures: consFailures + 1,
+		}
 		log.E.F("negentropy sync with %s failed: %v", peerURL, err)
 	} else {
-		peer.Status = "idle"
-		peer.LastError = ""
-		peer.ConsecutiveFailures = 0
-		peer.EventsSynced += eventsSynced
+		m.updatePeerAfterSyncCh <- updatePeerAfterSyncReq{
+			peerURL:      peerURL,
+			lastSync:     now,
+			status:       "idle",
+			lastError:    "",
+			consFailures: 0,
+			eventsDelta:  eventsSynced,
+		}
 		log.D.F("negentropy sync with %s complete: %d events synced", peerURL, eventsSynced)
 	}
-	m.mu.Unlock()
 }
 
 // performNegentropy performs the actual NIP-77 negentropy sync with a peer.
@@ -306,7 +613,6 @@ func (m *Manager) performNegentropy(ctx context.Context, peerURL string) (int64,
 	}
 
 	// Send NEG-OPEN: ["NEG-OPEN", subscription_id, filter, initial_message]
-	// Use configured filter or empty filter for all events
 	negFilter := m.filterToMap()
 	negOpen := []any{"NEG-OPEN", subID, negFilter, hex.EncodeToString(initialMsg)}
 	if err := conn.WriteJSON(negOpen); err != nil {
@@ -318,7 +624,7 @@ func (m *Manager) performNegentropy(ctx context.Context, peerURL string) (int64,
 	var haveIDs []string
 
 	// Phase 1: Reconciliation - exchange NEG-MSG until complete
-	for i := 0; i < 20; i++ { // Max 20 reconciliation rounds
+	for i := 0; i < 20; i++ {
 		_, msgBytes, err := conn.ReadMessage()
 		if err != nil {
 			return eventsSynced, fmt.Errorf("failed to read message during reconciliation: %w", err)
@@ -358,12 +664,9 @@ func (m *Manager) performNegentropy(ctx context.Context, peerURL string) (int64,
 				return eventsSynced, fmt.Errorf("reconcile failed: %w", err)
 			}
 
-			// Collect IDs we need and IDs we have
 			needIDs = append(needIDs, neg.CollectHaveNots()...)
 			haveIDs = append(haveIDs, neg.CollectHaves()...)
 
-			// Always send the response to the server, even when complete.
-			// The server needs this to finalize its own reconciliation and send events.
 			if len(response) > 0 {
 				negMsgResp := []any{"NEG-MSG", subID, hex.EncodeToString(response)}
 				if err := conn.WriteJSON(negMsgResp); err != nil {
@@ -391,15 +694,10 @@ fetchAndPush:
 		negClose := []any{"NEG-CLOSE", subID}
 		conn.WriteJSON(negClose)
 	}
-	// Clear any read deadline from the negotiation phase
 	conn.SetReadDeadline(time.Time{})
 
 	log.D.F("negentropy: need %d events, have %d events to send", len(needIDs), len(haveIDs))
 
-	// Phase 2: Fetch events we need from the peer via REQ
-	// The negentropy library only populates haves/haveNots on the initiator (client) side.
-	// The server (responder) does not know which events to push. The client must
-	// actively fetch needed events using standard NIP-01 REQ with ID prefixes.
 	if len(needIDs) > 0 {
 		fetched, err := m.fetchEventsFromPeer(ctx, conn, subID, needIDs)
 		if err != nil {
@@ -410,7 +708,6 @@ fetchAndPush:
 		}
 	}
 
-	// Phase 3: Push events we have to the peer
 	if len(haveIDs) > 0 {
 		pushed, err := m.pushEventsToPeer(ctx, conn, haveIDs)
 		if err != nil {
@@ -428,15 +725,12 @@ fetchAndPush:
 func (m *Manager) buildStorage(ctx context.Context) (*negentropy.Vector, error) {
 	storage := negentropy.NewVector()
 
-	// Build filter - start with configured filter or empty
-	// Use configured MaxEvents or default to 1,000,000
 	limit := m.config.MaxEvents
 	if limit == 0 {
-		limit = 1000000 // Default to 1M events
+		limit = 1000000
 	}
 	var f *filter.F
 	if m.config.Filter != nil {
-		// Use configured filter with our limit
 		f = m.config.Filter
 		f.Limit = &limit
 	} else {
@@ -451,7 +745,6 @@ func (m *Manager) buildStorage(ctx context.Context) (*negentropy.Vector, error) 
 	}
 
 	for _, item := range idPkTs {
-		// IDHex() returns lowercase hex string of the event ID
 		storage.Insert(item.Ts, item.IDHex())
 	}
 
@@ -469,7 +762,6 @@ func (m *Manager) filterToMap() map[string]any {
 
 	f := m.config.Filter
 
-	// Add kinds if present
 	if f.Kinds != nil && f.Kinds.Len() > 0 {
 		kinds := make([]int, 0, f.Kinds.Len())
 		for _, k := range f.Kinds.K {
@@ -478,7 +770,6 @@ func (m *Manager) filterToMap() map[string]any {
 		result["kinds"] = kinds
 	}
 
-	// Add authors if present
 	if f.Authors != nil && f.Authors.Len() > 0 {
 		authors := make([]string, 0, f.Authors.Len())
 		for _, a := range f.Authors.T {
@@ -487,7 +778,6 @@ func (m *Manager) filterToMap() map[string]any {
 		result["authors"] = authors
 	}
 
-	// Add IDs if present
 	if f.Ids != nil && f.Ids.Len() > 0 {
 		ids := make([]string, 0, f.Ids.Len())
 		for _, id := range f.Ids.T {
@@ -496,17 +786,14 @@ func (m *Manager) filterToMap() map[string]any {
 		result["ids"] = ids
 	}
 
-	// Add since if present
 	if f.Since != nil && f.Since.V != 0 {
 		result["since"] = f.Since.V
 	}
 
-	// Add until if present
 	if f.Until != nil && f.Until.V != 0 {
 		result["until"] = f.Until.V
 	}
 
-	// Add limit if present
 	if f.Limit != nil && *f.Limit > 0 {
 		result["limit"] = *f.Limit
 	}
@@ -515,7 +802,6 @@ func (m *Manager) filterToMap() map[string]any {
 }
 
 // pushEventsToPeer sends events we have to the peer.
-// The truncated IDs are 32-char hex prefixes, so we query our local DB and push matching events.
 func (m *Manager) pushEventsToPeer(ctx context.Context, conn *websocket.Conn, truncatedIDs []string) (int, error) {
 	if len(truncatedIDs) == 0 {
 		return 0, nil
@@ -524,13 +810,10 @@ func (m *Manager) pushEventsToPeer(ctx context.Context, conn *websocket.Conn, tr
 
 	pushed := 0
 	for _, truncID := range truncatedIDs {
-		// Apply backpressure before each push
 		if err := m.checkBackpressure(ctx); err != nil {
 			return pushed, err
 		}
 
-		// Query local database for events matching this ID prefix
-		// Use QueryByIDPrefix if available, otherwise fall back to broader query
 		events, err := m.queryEventsByIDPrefix(ctx, truncID)
 		if err != nil {
 			log.D.F("failed to query event with prefix %s: %v", truncID, err)
@@ -538,12 +821,9 @@ func (m *Manager) pushEventsToPeer(ctx context.Context, conn *websocket.Conn, tr
 		}
 
 		for _, ev := range events {
-			// Never push privileged or channel events (DMs, gift wraps, NIRC
-			// messages) to peers. These stay on the hosting relay only.
 			if kind.IsPrivileged(ev.Kind) {
 				continue
 			}
-			// Send event to peer
 			eventMsg := []any{"EVENT", ev}
 			if err := conn.WriteJSON(eventMsg); err != nil {
 				log.W.F("failed to push event %s: %v", truncID, err)
@@ -558,11 +838,8 @@ func (m *Manager) pushEventsToPeer(ctx context.Context, conn *websocket.Conn, tr
 
 // queryEventsByIDPrefix queries local database for events matching an ID prefix.
 func (m *Manager) queryEventsByIDPrefix(ctx context.Context, idPrefix string) ([]*event.E, error) {
-	// For now, query by the prefix - Badger supports prefix iteration
-	// The ID prefix is 32 hex chars = 16 bytes
-	limit := uint(10000) // Get enough events to find our prefix matches
+	limit := uint(10000)
 
-	// Query IDs and filter by prefix
 	f := &filter.F{
 		Limit: &limit,
 	}
@@ -576,14 +853,12 @@ func (m *Manager) queryEventsByIDPrefix(ctx context.Context, idPrefix string) ([
 	for _, item := range idPkTs {
 		fullID := item.IDHex()
 		if len(fullID) >= len(idPrefix) && fullID[:len(idPrefix)] == idPrefix {
-			// Found a match - decode the full ID and fetch the event
 			idBytes, err := hex.DecodeString(fullID)
 			if err != nil {
 				log.D.F("failed to decode ID %s: %v", fullID, err)
 				continue
 			}
 
-			// Create filter with the full ID
 			idTag := tag.NewFromBytesSlice(idBytes)
 			evs, err := m.db.QueryEvents(ctx, &filter.F{
 				Ids: idTag,
@@ -601,20 +876,17 @@ func (m *Manager) queryEventsByIDPrefix(ctx context.Context, idPrefix string) ([
 	return results, nil
 }
 
-// fetchEventsFromPeer fetches specific events from a peer by ID (can be prefixes).
-// NOTE: This is deprecated in favor of push-based sync, but kept for reference.
+// fetchEventsFromPeer fetches specific events from a peer by ID.
 func (m *Manager) fetchEventsFromPeer(ctx context.Context, conn *websocket.Conn, baseSubID string, ids []string) (int, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
 	log.D.F("fetchEventsFromPeer: fetching %d events with IDs (first 3): %v", len(ids), ids[:min(3, len(ids))])
 
-	// Batch IDs into chunks of 100
 	const batchSize = 100
 	fetched := 0
 
 	for i := 0; i < len(ids); i += batchSize {
-		// Apply backpressure between batches
 		if err := m.checkBackpressure(ctx); err != nil {
 			return fetched, err
 		}
@@ -628,11 +900,10 @@ func (m *Manager) fetchEventsFromPeer(ctx context.Context, conn *websocket.Conn,
 		subID := fmt.Sprintf("%s-fetch-%d", baseSubID, i/batchSize)
 		log.D.F("fetchEventsFromPeer: sending REQ %s for batch of %d IDs", subID, len(batch))
 
-		// Send REQ for these IDs
-		filter := map[string]any{
+		filterMap := map[string]any{
 			"ids": batch,
 		}
-		req := []any{"REQ", subID, filter}
+		req := []any{"REQ", subID, filterMap}
 		reqJSON, _ := json.Marshal(req)
 		log.D.F("fetchEventsFromPeer: REQ message: %s", string(reqJSON)[:min(500, len(reqJSON))])
 
@@ -641,7 +912,6 @@ func (m *Manager) fetchEventsFromPeer(ctx context.Context, conn *websocket.Conn,
 			return fetched, fmt.Errorf("failed to send REQ: %w", err)
 		}
 
-		// Read events until EOSE
 		messageCount := 0
 		for {
 			_, msgBytes, err := conn.ReadMessage()
@@ -671,11 +941,9 @@ func (m *Manager) fetchEventsFromPeer(ctx context.Context, conn *websocket.Conn,
 			switch msgType {
 			case "EVENT":
 				if len(msg) >= 3 {
-					// Apply backpressure before writing each event
 					if err := m.checkBackpressure(ctx); err != nil {
 						return fetched, err
 					}
-					// Store the event
 					if err := m.storeEventFromJSON(ctx, msg[2]); err != nil {
 						log.W.F("fetchEventsFromPeer: failed to store event: %v", err)
 					} else {
@@ -706,7 +974,6 @@ func (m *Manager) fetchEventsFromPeer(ctx context.Context, conn *websocket.Conn,
 			}
 		}
 	nextBatch:
-		// Send CLOSE for this subscription
 		closeMsg := []any{"CLOSE", subID}
 		conn.WriteJSON(closeMsg)
 	}
@@ -717,100 +984,63 @@ func (m *Manager) fetchEventsFromPeer(ctx context.Context, conn *websocket.Conn,
 
 // storeEventFromJSON stores an event from raw JSON.
 func (m *Manager) storeEventFromJSON(ctx context.Context, eventJSON json.RawMessage) error {
-	// Parse the event using the nostr event encoder
 	ev := &event.E{}
 	if err := ev.UnmarshalJSON(eventJSON); err != nil {
 		return fmt.Errorf("failed to unmarshal event: %w", err)
 	}
 
-	// Verify the event signature
 	if ok, err := ev.Verify(); err != nil || !ok {
 		return fmt.Errorf("event verification failed")
 	}
 
-	// Store via database using the standard SaveEvent method
 	_, err := m.db.SaveEvent(ctx, ev)
 	return err
 }
 
 // IsActive returns whether background sync is running.
 func (m *Manager) IsActive() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.active
+	req := isActiveReq{resp: make(chan bool, 1)}
+	m.isActiveCh <- req
+	return <-req.resp
 }
 
 // LastSync returns the timestamp of the last sync cycle.
 func (m *Manager) LastSync() time.Time {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.lastSync
+	req := lastSyncReq{resp: make(chan time.Time, 1)}
+	m.lastSyncCh <- req
+	return <-req.resp
 }
 
 // GetPeers returns the list of peer URLs.
 func (m *Manager) GetPeers() []string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	peers := make([]string, 0, len(m.peers))
-	for url := range m.peers {
-		peers = append(peers, url)
-	}
-	return peers
+	req := getPeersReq{resp: make(chan []string, 1)}
+	m.getPeersCh <- req
+	return <-req.resp
 }
 
 // GetPeerStates returns the sync state for all peers.
 func (m *Manager) GetPeerStates() []*PeerState {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	states := make([]*PeerState, 0, len(m.peers))
-	for _, peer := range m.peers {
-		states = append(states, &PeerState{
-			URL:                 peer.URL,
-			LastSync:            peer.LastSync,
-			EventsSynced:        peer.EventsSynced,
-			Status:              peer.Status,
-			LastError:           peer.LastError,
-			ConsecutiveFailures: peer.ConsecutiveFailures,
-		})
-	}
-	return states
+	req := getPeerStatesReq{resp: make(chan []*PeerState, 1)}
+	m.getPeerStatesCh <- req
+	return <-req.resp
 }
 
 // GetPeerState returns the sync state for a specific peer.
 func (m *Manager) GetPeerState(peerURL string) (*PeerState, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	peer, ok := m.peers[peerURL]
-	if !ok {
-		return nil, false
-	}
-	return &PeerState{
-		URL:                 peer.URL,
-		LastSync:            peer.LastSync,
-		EventsSynced:        peer.EventsSynced,
-		Status:              peer.Status,
-		LastError:           peer.LastError,
-		ConsecutiveFailures: peer.ConsecutiveFailures,
-	}, true
+	req := getPeerStateReq{peerURL: peerURL, resp: make(chan getPeerStateResp, 1)}
+	m.getPeerStateCh <- req
+	resp := <-req.resp
+	return resp.state, resp.ok
 }
 
 // AddPeer adds a peer for negentropy sync.
 func (m *Manager) AddPeer(peerURL string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if _, ok := m.peers[peerURL]; !ok {
-		m.peers[peerURL] = &PeerState{
-			URL:    peerURL,
-			Status: "idle",
-		}
-	}
+	m.addPeerCh <- addPeerReq{peerURL: peerURL}
 }
 
 // RemovePeer removes a peer from negentropy sync.
 func (m *Manager) RemovePeer(peerURL string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.peers, peerURL)
+	m.removePeerCh <- removePeerReq{peerURL: peerURL}
 }
 
 // TriggerSync manually triggers sync with a specific peer or all peers.
@@ -829,102 +1059,60 @@ func sessionKey(connectionID, subscriptionID string) string {
 
 // OpenSession opens a new client negentropy session.
 func (m *Manager) OpenSession(connectionID, subscriptionID string) *ClientSession {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	key := sessionKey(connectionID, subscriptionID)
-	session := &ClientSession{
-		SubscriptionID: subscriptionID,
-		ConnectionID:   connectionID,
-		CreatedAt:      time.Now(),
-		LastActivity:   time.Now(),
-		RoundCount:     0,
+	req := openSessionReq{
+		connectionID:   connectionID,
+		subscriptionID: subscriptionID,
+		resp:           make(chan *ClientSession, 1),
 	}
-	m.sessions[key] = session
-	return session
+	m.openSessionCh <- req
+	return <-req.resp
 }
 
 // GetSession retrieves an existing session.
 func (m *Manager) GetSession(connectionID, subscriptionID string) (*ClientSession, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	key := sessionKey(connectionID, subscriptionID)
-	session, ok := m.sessions[key]
-	return session, ok
+	req := getSessionReq{
+		connectionID:   connectionID,
+		subscriptionID: subscriptionID,
+		resp:           make(chan getSessionResp, 1),
+	}
+	m.getSessionCh <- req
+	resp := <-req.resp
+	return resp.session, resp.ok
 }
 
 // UpdateSessionActivity updates the last activity time for a session.
 func (m *Manager) UpdateSessionActivity(connectionID, subscriptionID string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	key := sessionKey(connectionID, subscriptionID)
-	if session, ok := m.sessions[key]; ok {
-		session.LastActivity = time.Now()
-		session.RoundCount++
+	m.updateSessionActivityCh <- updateSessionActivityReq{
+		connectionID:   connectionID,
+		subscriptionID: subscriptionID,
 	}
 }
 
 // CloseSession closes a client session.
 func (m *Manager) CloseSession(connectionID, subscriptionID string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	key := sessionKey(connectionID, subscriptionID)
-	if session, ok := m.sessions[key]; ok {
-		if session.neg != nil {
-			session.neg.Close()
-		}
+	m.closeSessionCh <- closeSessionReq{
+		connectionID:   connectionID,
+		subscriptionID: subscriptionID,
 	}
-	delete(m.sessions, key)
 }
 
 // CloseSessionsByConnection closes all sessions for a connection.
 func (m *Manager) CloseSessionsByConnection(connectionID string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for key, session := range m.sessions {
-		if session.ConnectionID == connectionID {
-			if session.neg != nil {
-				session.neg.Close()
-			}
-			delete(m.sessions, key)
-		}
-	}
+	m.closeSessionsByConnCh <- closeSessionsByConnReq{connectionID: connectionID}
 }
 
 // ListSessions returns all active sessions.
 func (m *Manager) ListSessions() []*ClientSession {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	sessions := make([]*ClientSession, 0, len(m.sessions))
-	for _, session := range m.sessions {
-		sessions = append(sessions, &ClientSession{
-			SubscriptionID: session.SubscriptionID,
-			ConnectionID:   session.ConnectionID,
-			CreatedAt:      session.CreatedAt,
-			LastActivity:   session.LastActivity,
-			RoundCount:     session.RoundCount,
-		})
-	}
-	return sessions
+	req := listSessionsReq{resp: make(chan []*ClientSession, 1)}
+	m.listSessionsCh <- req
+	return <-req.resp
 }
 
 // CleanupExpiredSessions removes sessions that have been inactive beyond timeout.
 func (m *Manager) CleanupExpiredSessions() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	cutoff := time.Now().Add(-m.config.ClientSessionTimeout)
-	removed := 0
-	for key, session := range m.sessions {
-		if session.LastActivity.Before(cutoff) {
-			if session.neg != nil {
-				session.neg.Close()
-			}
-			delete(m.sessions, key)
-			removed++
-		}
-	}
-	return removed
+	req := cleanupExpiredSessionsReq{resp: make(chan int, 1)}
+	m.cleanupExpiredSessionsCh <- req
+	return <-req.resp
 }
 
 // Ensure chk is used

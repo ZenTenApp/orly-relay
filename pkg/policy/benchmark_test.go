@@ -123,6 +123,7 @@ done
 		enabled:    true,
 		runners:    make(map[string]*ScriptRunner),
 	}
+	manager.startPMCallActor()
 
 	// Get or create runner and start it
 	runner := manager.getOrCreateRunner(scriptPath)

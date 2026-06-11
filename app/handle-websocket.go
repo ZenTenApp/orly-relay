@@ -71,16 +71,12 @@ whitelist:
 		maxConnPerIP = 10 // Hard limit
 	}
 
-	s.connPerIPMu.Lock()
-	currentConns := s.connPerIP[ip]
-	if currentConns >= maxConnPerIP {
-		s.connPerIPMu.Unlock()
+	allowed, currentConns := s.ConnIPCheckAndInc(ip, maxConnPerIP)
+	if !allowed {
 		log.W.F("connection limit exceeded for IP %s: %d/%d connections", ip, currentConns, maxConnPerIP)
 		http.Error(w, "too many connections from your IP", http.StatusTooManyRequests)
 		return
 	}
-	s.connPerIP[ip]++
-	s.connPerIPMu.Unlock()
 
 	// Track global connection count
 	s.activeConnCount.Add(1)
@@ -88,12 +84,7 @@ whitelist:
 	// Decrement connection counts when this function returns
 	defer func() {
 		s.activeConnCount.Add(-1)
-		s.connPerIPMu.Lock()
-		s.connPerIP[ip]--
-		if s.connPerIP[ip] <= 0 {
-			delete(s.connPerIP, ip)
-		}
-		s.connPerIPMu.Unlock()
+		s.ConnIPDec(ip)
 	}()
 
 	// Localhost connections are exempt from rate limiting — split-IPC internal
@@ -184,8 +175,10 @@ whitelist:
 		messageQueue:   make(chan messageRequest, 100), // Buffered channel for message processing
 		processingDone: make(chan struct{}),
 		handlerSem:     make(chan struct{}, handlerSemSize), // Limits concurrent handlers
-		subscriptions:  make(map[string]context.CancelFunc),
 	}
+
+	// Initialize actor goroutines (subscription actor, handler tracker, auth gate)
+	listener.initActors()
 
 	// Start write worker goroutine
 	go listener.writeWorker()
@@ -227,14 +220,8 @@ whitelist:
 	defer func() {
 		log.D.F("closing websocket connection from %s", remote)
 
-		// Cancel all active subscriptions first
-		listener.subscriptionsMu.Lock()
-		for subID, cancelFunc := range listener.subscriptions {
-			log.D.F("cancelling subscription %s for %s", subID, remote)
-			cancelFunc()
-		}
-		listener.subscriptions = nil
-		listener.subscriptionsMu.Unlock()
+		// Cancel all active subscriptions first (via actor)
+		listener.SubCancelAll()
 
 		// Cancel context and stop pinger
 		cancel()
@@ -271,7 +258,7 @@ whitelist:
 		// Wait for all spawned message handlers to complete
 		// This is critical to prevent "send on closed channel" panics
 		log.D.F("ws->%s waiting for message handlers to complete", remote)
-		listener.handlerWg.Wait()
+		listener.HandlerWait()
 		log.D.F("ws->%s all message handlers completed", remote)
 
 		// Close write channel to signal worker to exit

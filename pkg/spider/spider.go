@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"git.smesh.lol/orly/pkg/nostr/crypto/keys"
@@ -55,22 +55,55 @@ type Spider struct {
 	mode   string
 
 	// Configuration
-	adminRelays       []string
-	followList        [][]byte
+	adminRelays         []string
+	followList          [][]byte
 	relayIdentityPubkey string          // Our relay's identity pubkey (hex)
-	selfURLs          map[string]bool // URLs discovered to be ourselves (for fast lookups)
+	selfURLs            map[string]bool // URLs discovered to be ourselves (owned by actor goroutine)
 
 	// State management
-	mu          sync.RWMutex
-	connections map[string]*RelayConnection
-	running     bool
+	connections map[string]*RelayConnection // owned by actor goroutine
+	running     atomic.Bool
 
-	// Callbacks for getting updated data
+	// Callbacks for getting updated data (set before Start, read by actor goroutine)
 	getAdminRelays func() []string
 	getFollowList  func() [][]byte
 
 	// Notification channel for follow list updates
 	followListUpdated chan struct{}
+
+	// Actor channels
+	stop chan struct{}
+	done chan struct{}
+}
+
+// -- RelayConnection actor request types --
+
+// rcRateLimitMsg signals that a rate limit was detected (fire-and-forget).
+type rcRateLimitMsg struct{}
+
+// rcDisconnectMsg signals that a disconnection occurred (fire-and-forget).
+type rcDisconnectMsg struct{}
+
+// rcCreateSubsReq requests creating subscriptions for a follow list.
+type rcCreateSubsReq struct {
+	followList [][]byte
+	resp       chan struct{}
+}
+
+// rcUpdateSubsReq requests updating subscriptions with a new follow list.
+type rcUpdateSubsReq struct {
+	followList [][]byte
+	resp       chan struct{}
+}
+
+// rcClearSubsReq requests clearing all subscriptions.
+type rcClearSubsReq struct {
+	resp chan struct{}
+}
+
+// rcCloseReq requests closing the relay connection.
+type rcCloseReq struct {
+	resp chan struct{}
 }
 
 // RelayConnection manages a single relay connection and its subscriptions
@@ -81,8 +114,7 @@ type RelayConnection struct {
 	cancel context.CancelFunc
 	spider *Spider
 
-	// Subscription management
-	mu            sync.RWMutex
+	// Subscription management (owned by rcActor goroutine)
 	subscriptions map[string]*BatchSubscription
 
 	// Disconnection tracking
@@ -93,9 +125,19 @@ type RelayConnection struct {
 	// Blackout tracking for IP filters
 	blackoutUntil time.Time
 
-	// Rate limiting tracking
+	// Rate limiting tracking (owned by rcActor goroutine)
 	rateLimitBackoff time.Duration
 	rateLimitUntil   time.Time
+
+	// Actor channels
+	rateLimitCh  chan rcRateLimitMsg  // buffered 16
+	disconnectCh chan rcDisconnectMsg // buffered 16
+	createSubsCh chan rcCreateSubsReq
+	updateSubsCh chan rcUpdateSubsReq
+	clearSubsCh  chan rcClearSubsReq
+	closeCh      chan rcCloseReq
+	rcStop       chan struct{}
+	rcDone       chan struct{}
 }
 
 // BatchSubscription represents a subscription for a batch of pubkeys
@@ -151,15 +193,16 @@ func New(ctx context.Context, db *database.D, pub publisher.I, mode string) (s *
 		selfURLs:            make(map[string]bool),
 		connections:         make(map[string]*RelayConnection),
 		followListUpdated:   make(chan struct{}, 1),
+		stop: make(chan struct{}),
+		done: make(chan struct{}),
 	}
 
 	return
 }
 
-// SetCallbacks sets the callback functions for getting updated admin relays and follow lists
+// SetCallbacks sets the callback functions for getting updated admin relays and follow lists.
+// Must be called before Start (single-threaded setup phase).
 func (s *Spider) SetCallbacks(getAdminRelays func() []string, getFollowList func() [][]byte) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.getAdminRelays = getAdminRelays
 	s.getFollowList = getFollowList
 }
@@ -179,10 +222,7 @@ func (s *Spider) NotifyFollowListUpdate() {
 
 // Start begins the spider operation
 func (s *Spider) Start() (err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.running {
+	if s.running.Load() {
 		err = errorf.E("spider already running")
 		return
 	}
@@ -198,10 +238,10 @@ func (s *Spider) Start() (err error) {
 		return
 	}
 
-	s.running = true
+	s.running.Store(true)
 
-	// Start the main loop
-	go s.mainLoop()
+	// Start the actor loop
+	go s.actorLoop()
 
 	log.I.F("spider: started in '%s' mode", s.mode)
 	return
@@ -209,35 +249,48 @@ func (s *Spider) Start() (err error) {
 
 // Stop stops the spider operation
 func (s *Spider) Stop() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if !s.running {
+	if !s.running.Load() {
 		return
 	}
 
-	s.running = false
 	s.cancel()
 
-	// Close all connections
-	for _, conn := range s.connections {
-		conn.close()
-	}
-	s.connections = make(map[string]*RelayConnection)
+	// Wait for actor to finish cleanup
+	<-s.done
 
 	log.I.F("spider: stopped")
 }
 
-// mainLoop is the main spider loop that manages connections and subscriptions
-func (s *Spider) mainLoop() {
+// Shutdown stops the spider and waits for the actor to exit.
+func (s *Spider) Shutdown() {
+	close(s.stop)
+	<-s.done
+}
+
+// actorLoop is the actor goroutine that owns connections, selfURLs, and callbacks.
+func (s *Spider) actorLoop() {
+	defer func() {
+		// Cleanup: close all connections and mark as not running
+		for _, conn := range s.connections {
+			conn.close()
+		}
+		s.connections = make(map[string]*RelayConnection)
+
+		s.running.Store(false)
+
+		close(s.done)
+	}()
+
 	ticker := time.NewTicker(MainLoopInterval)
 	defer ticker.Stop()
 
-	log.D.F("spider: main loop started, checking every %v", MainLoopInterval)
+	log.D.F("spider: actor loop started, checking every %v", MainLoopInterval)
 
 	for {
 		select {
 		case <-s.ctx.Done():
+			return
+		case <-s.stop:
 			return
 		case <-s.followListUpdated:
 			log.D.F("spider: follow list updated, refreshing connections")
@@ -249,18 +302,12 @@ func (s *Spider) mainLoop() {
 	}
 }
 
-// updateConnections updates relay connections based on current admin relays and follow lists
+// updateConnections updates relay connections based on current admin relays and follow lists.
+// Must only be called from the actor goroutine.
 func (s *Spider) updateConnections() {
-	s.mu.Lock()
-	if !s.running {
-		s.mu.Unlock()
-		return
-	}
-
-	// Get current admin relays and follow list
+	// Get current admin relays and follow list (actor-owned, no lock needed)
 	adminRelays := s.getAdminRelays()
 	followList := s.getFollowList()
-	s.mu.Unlock()
 
 	if len(adminRelays) == 0 || len(followList) == 0 {
 		log.D.F("spider: no admin relays (%d) or follow list (%d) available",
@@ -268,7 +315,7 @@ func (s *Spider) updateConnections() {
 		return
 	}
 
-	// Filter out self-relays WITHOUT holding mu — isSelfRelay takes mu internally
+	// Filter out self-relays (actor-owned selfURLs, no lock needed)
 	var filteredRelays []string
 	for _, url := range adminRelays {
 		if s.isSelfRelay(url) {
@@ -277,10 +324,6 @@ func (s *Spider) updateConnections() {
 		}
 		filteredRelays = append(filteredRelays, url)
 	}
-
-	// Re-acquire lock for the mutation phase
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	currentRelays := make(map[string]bool)
 	for _, url := range filteredRelays {
@@ -317,12 +360,57 @@ func (s *Spider) createConnection(url string, followList [][]byte) {
 		spider:         s,
 		subscriptions:  make(map[string]*BatchSubscription),
 		reconnectDelay: ReconnectDelay,
+		rateLimitCh:    make(chan rcRateLimitMsg, 16),
+		disconnectCh:   make(chan rcDisconnectMsg, 16),
+		createSubsCh:   make(chan rcCreateSubsReq),
+		updateSubsCh:   make(chan rcUpdateSubsReq),
+		clearSubsCh:    make(chan rcClearSubsReq),
+		closeCh:        make(chan rcCloseReq),
+		rcStop:         make(chan struct{}),
+		rcDone:         make(chan struct{}),
 	}
 
 	s.connections[url] = conn
 
+	// Start the RC actor goroutine
+	go conn.rcActor()
+
 	// Start connection in goroutine
 	go conn.manage(followList)
+}
+
+// rcActor is the actor goroutine for a RelayConnection.
+// It owns subscriptions, rateLimitBackoff, and rateLimitUntil.
+func (rc *RelayConnection) rcActor() {
+	defer close(rc.rcDone)
+
+	for {
+		select {
+		case <-rc.ctx.Done():
+			rc.clearSubscriptionsInternal()
+			return
+		case <-rc.rcStop:
+			rc.clearSubscriptionsInternal()
+			return
+		case <-rc.rateLimitCh:
+			rc.handleRateLimitActor()
+		case <-rc.disconnectCh:
+			rc.handleDisconnectionActor()
+		case req := <-rc.createSubsCh:
+			rc.createSubscriptionsActor(req.followList)
+			req.resp <- struct{}{}
+		case req := <-rc.updateSubsCh:
+			rc.updateSubscriptionsActor(req.followList)
+			req.resp <- struct{}{}
+		case req := <-rc.clearSubsCh:
+			rc.clearSubscriptionsInternal()
+			req.resp <- struct{}{}
+		case req := <-rc.closeCh:
+			rc.clearSubscriptionsInternal()
+			req.resp <- struct{}{}
+			return
+		}
+	}
 }
 
 // manage handles the lifecycle of a relay connection
@@ -375,8 +463,10 @@ func (rc *RelayConnection) manage(followList [][]byte) {
 		}
 		rc.blackoutUntil = time.Time{} // Clear blackout on successful connection
 
-		// Create subscriptions for follow list
-		rc.createSubscriptions(followList)
+		// Create subscriptions for follow list (via actor)
+		resp := make(chan struct{}, 1)
+		rc.createSubsCh <- rcCreateSubsReq{followList: followList, resp: resp}
+		<-resp
 
 		// Wait for disconnection
 		<-rc.client.Context().Done()
@@ -401,11 +491,19 @@ func (rc *RelayConnection) manage(followList [][]byte) {
 			}
 		}
 
-		rc.handleDisconnection()
+		// Signal disconnection to actor (fire-and-forget)
+		select {
+		case rc.disconnectCh <- rcDisconnectMsg{}:
+		default:
+		}
 
 		// Clean up
 		rc.client = nil
-		rc.clearSubscriptions()
+
+		// Clear subscriptions via actor
+		clearResp := make(chan struct{}, 1)
+		rc.clearSubsCh <- rcClearSubsReq{resp: clearResp}
+		<-clearResp
 	}
 }
 
@@ -428,19 +526,20 @@ func (rc *RelayConnection) handleNotice(notice []byte) {
 	noticeStr := string(notice)
 	log.D.F("spider: NOTICE from %s: '%s'", rc.url, noticeStr)
 
-	// Check for rate limiting errors
+	// Check for rate limiting errors - send to actor (fire-and-forget)
 	if strings.Contains(noticeStr, "too many concurrent REQs") ||
 		strings.Contains(noticeStr, "rate limit") ||
 		strings.Contains(noticeStr, "slow down") {
-		rc.handleRateLimit()
+		select {
+		case rc.rateLimitCh <- rcRateLimitMsg{}:
+		default:
+		}
 	}
 }
 
-// handleRateLimit applies backoff when rate limiting is detected
-func (rc *RelayConnection) handleRateLimit() {
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-
+// handleRateLimitActor applies backoff when rate limiting is detected.
+// Must only be called from the rcActor goroutine.
+func (rc *RelayConnection) handleRateLimitActor() {
 	// Initialize backoff if not set
 	if rc.rateLimitBackoff == 0 {
 		rc.rateLimitBackoff = RateLimitBackoffDuration
@@ -457,7 +556,7 @@ func (rc *RelayConnection) handleRateLimit() {
 		rc.url, rc.rateLimitBackoff, rc.rateLimitUntil)
 
 	// Close all current subscriptions to reduce load
-	rc.clearSubscriptionsLocked()
+	rc.clearSubscriptionsInternal()
 }
 
 // waitBeforeReconnect waits before attempting to reconnect with exponential backoff
@@ -487,15 +586,13 @@ func (rc *RelayConnection) isBlackedOut() bool {
 	return !rc.blackoutUntil.IsZero() && time.Now().Before(rc.blackoutUntil)
 }
 
-// handleDisconnection records disconnection time for catch-up logic
-func (rc *RelayConnection) handleDisconnection() {
+// handleDisconnectionActor records disconnection time for catch-up logic.
+// Must only be called from the rcActor goroutine.
+func (rc *RelayConnection) handleDisconnectionActor() {
 	now := time.Now()
 	rc.lastDisconnect = now
 
-	// Mark all subscriptions as disconnected
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-
+	// Mark all subscriptions as disconnected (actor-owned, no lock needed)
 	for _, sub := range rc.subscriptions {
 		if sub.disconnectedAt == nil {
 			sub.disconnectedAt = &now
@@ -503,20 +600,20 @@ func (rc *RelayConnection) handleDisconnection() {
 	}
 }
 
-// createSubscriptions creates batch subscriptions for the follow list
-func (rc *RelayConnection) createSubscriptions(followList [][]byte) {
-	rc.mu.Lock()
-
+// createSubscriptionsActor creates batch subscriptions for the follow list.
+// Must only be called from the rcActor goroutine.
+func (rc *RelayConnection) createSubscriptionsActor(followList [][]byte) {
 	// Check if we're in a rate limit backoff period
 	if time.Now().Before(rc.rateLimitUntil) {
 		remaining := time.Until(rc.rateLimitUntil)
-		rc.mu.Unlock()
 		log.W.F("spider: skipping subscription creation for %s, rate limited for %v more", rc.url, remaining)
 
 		// Schedule retry after backoff period
 		go func() {
 			time.Sleep(remaining)
-			rc.createSubscriptions(followList)
+			resp := make(chan struct{}, 1)
+			rc.createSubsCh <- rcCreateSubsReq{followList: followList, resp: resp}
+			<-resp
 		}()
 		return
 	}
@@ -526,16 +623,13 @@ func (rc *RelayConnection) createSubscriptions(followList [][]byte) {
 	rc.rateLimitUntil = time.Time{}
 
 	// Clear existing subscriptions
-	rc.clearSubscriptionsLocked()
+	rc.clearSubscriptionsInternal()
 
 	// Create batches of pubkeys
 	batches := rc.createBatches(followList)
 
 	log.D.F("spider: creating %d subscription batches for %d pubkeys on %s",
 		len(batches), len(followList), rc.url)
-
-	// Release lock before creating subscriptions to avoid holding it during delays
-	rc.mu.Unlock()
 
 	for i, batch := range batches {
 		// Check context before creating each batch
@@ -546,10 +640,7 @@ func (rc *RelayConnection) createSubscriptions(followList [][]byte) {
 		}
 
 		batchID := fmt.Sprintf("batch-%d", i)
-
-		rc.mu.Lock()
 		rc.createBatchSubscription(batchID, batch)
-		rc.mu.Unlock()
 
 		// Add delay between batches to avoid overwhelming the relay
 		if i < len(batches)-1 { // Don't delay after the last batch
@@ -573,7 +664,8 @@ func (rc *RelayConnection) createBatches(followList [][]byte) (batches [][][]byt
 	return
 }
 
-// createBatchSubscription creates a subscription for a batch of pubkeys
+// createBatchSubscription creates a subscription for a batch of pubkeys.
+// Must only be called from the rcActor goroutine.
 func (rc *RelayConnection) createBatchSubscription(batchID string, pubkeys [][]byte) {
 	if rc.client == nil {
 		return
@@ -654,18 +746,26 @@ func (bs *BatchSubscription) handleEvents() {
 	}
 }
 
-// updateSubscriptions updates subscriptions for a connection with new follow list
+// updateSubscriptions sends an update request to the RC actor and waits for completion.
 func (rc *RelayConnection) updateSubscriptions(followList [][]byte) {
 	if rc.client == nil || !rc.client.IsConnected() {
 		return // Will be handled on reconnection
 	}
 
-	rc.mu.Lock()
+	resp := make(chan struct{}, 1)
+	select {
+	case rc.updateSubsCh <- rcUpdateSubsReq{followList: followList, resp: resp}:
+		<-resp
+	case <-rc.ctx.Done():
+	}
+}
 
+// updateSubscriptionsActor performs the subscription update.
+// Must only be called from the rcActor goroutine.
+func (rc *RelayConnection) updateSubscriptionsActor(followList [][]byte) {
 	// Check if we're in a rate limit backoff period
 	if time.Now().Before(rc.rateLimitUntil) {
 		remaining := time.Until(rc.rateLimitUntil)
-		rc.mu.Unlock()
 		log.D.F("spider: deferring subscription update for %s, rate limited for %v more", rc.url, remaining)
 		return
 	}
@@ -687,12 +787,9 @@ func (rc *RelayConnection) updateSubscriptions(followList [][]byte) {
 	}
 
 	// Recreate subscriptions with updated follow list
-	rc.clearSubscriptionsLocked()
+	rc.clearSubscriptionsInternal()
 
 	batches := rc.createBatches(followList)
-
-	// Release lock before creating subscriptions
-	rc.mu.Unlock()
 
 	for i, batch := range batches {
 		// Check context before creating each batch
@@ -703,10 +800,7 @@ func (rc *RelayConnection) updateSubscriptions(followList [][]byte) {
 		}
 
 		batchID := fmt.Sprintf("batch-%d", i)
-
-		rc.mu.Lock()
 		rc.createBatchSubscription(batchID, batch)
-		rc.mu.Unlock()
 
 		// Add delay between batches
 		if i < len(batches)-1 {
@@ -715,7 +809,8 @@ func (rc *RelayConnection) updateSubscriptions(followList [][]byte) {
 	}
 }
 
-// performCatchup queries for events missed during disconnection
+// performCatchup queries for events missed during disconnection.
+// Must only be called from the rcActor goroutine.
 func (rc *RelayConnection) performCatchup(sub *BatchSubscription, disconnectTime, reconnectTime time.Time, followList [][]byte) {
 	// Expand time window by CatchupWindow on both sides
 	since := disconnectTime.Add(-CatchupWindow)
@@ -803,15 +898,9 @@ func (rc *RelayConnection) performCatchup(sub *BatchSubscription, disconnectTime
 	}
 }
 
-// clearSubscriptions clears all subscriptions (with lock)
-func (rc *RelayConnection) clearSubscriptions() {
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-	rc.clearSubscriptionsLocked()
-}
-
-// clearSubscriptionsLocked clears all subscriptions (without lock)
-func (rc *RelayConnection) clearSubscriptionsLocked() {
+// clearSubscriptionsInternal clears all subscriptions.
+// Must only be called from the rcActor goroutine.
+func (rc *RelayConnection) clearSubscriptionsInternal() {
 	for _, sub := range rc.subscriptions {
 		if sub.sub != nil {
 			sub.sub.Unsub()
@@ -820,9 +909,16 @@ func (rc *RelayConnection) clearSubscriptionsLocked() {
 	rc.subscriptions = make(map[string]*BatchSubscription)
 }
 
-// close closes the relay connection
+// close closes the relay connection and stops the RC actor.
 func (rc *RelayConnection) close() {
-	rc.clearSubscriptions()
+	// Send close request to actor
+	resp := make(chan struct{}, 1)
+	select {
+	case rc.closeCh <- rcCloseReq{resp: resp}:
+		<-resp
+	case <-rc.rcDone:
+		// Actor already exited
+	}
 
 	if rc.client != nil {
 		rc.client.Close()
@@ -830,23 +926,24 @@ func (rc *RelayConnection) close() {
 	}
 
 	rc.cancel()
+
+	// Wait for actor to fully exit
+	<-rc.rcDone
 }
 
-// isSelfRelay checks if a relay URL is actually ourselves by comparing NIP-11 pubkeys
+// isSelfRelay checks if a relay URL is actually ourselves by comparing NIP-11 pubkeys.
+// Must only be called from the actor goroutine (owns selfURLs).
 func (s *Spider) isSelfRelay(relayURL string) bool {
 	// If we don't have a relay identity pubkey, can't compare
 	if s.relayIdentityPubkey == "" {
 		return false
 	}
 
-	s.mu.RLock()
-	// Fast path: check if we already know this URL is ours
+	// Fast path: check if we already know this URL is ours (actor-owned, no lock needed)
 	if s.selfURLs[relayURL] {
-		s.mu.RUnlock()
 		log.D.F("spider: skipping self-relay (known URL): %s", relayURL)
 		return true
 	}
-	s.mu.RUnlock()
 
 	// Slow path: check via NIP-11 pubkey
 	nip11Cache := dsync.NewNIP11Cache(30 * time.Minute)
@@ -861,10 +958,8 @@ func (s *Spider) isSelfRelay(relayURL string) bool {
 
 	if peerPubkey == s.relayIdentityPubkey {
 		log.D.F("spider: discovered self-relay: %s (pubkey: %s)", relayURL, s.relayIdentityPubkey)
-		// Cache this URL as ours for future fast lookups
-		s.mu.Lock()
+		// Cache this URL as ours for future fast lookups (actor-owned, no lock needed)
 		s.selfURLs[relayURL] = true
-		s.mu.Unlock()
 		return true
 	}
 

@@ -13,7 +13,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
@@ -508,7 +507,7 @@ type ScriptRunner struct {
 	scriptPath    string
 	currentCmd    *exec.Cmd
 	currentCancel context.CancelFunc
-	mutex         sync.RWMutex
+	callCh        chan func()
 	isRunning     bool
 	isStarting    bool
 	stdin         io.WriteCloser
@@ -529,8 +528,58 @@ type PolicyManager struct {
 	configPath string // Path to policy.json file
 	scriptPath string // Default script path for backward compatibility
 	enabled    bool
-	mutex      sync.RWMutex
+	callCh     chan func()
 	runners    map[string]*ScriptRunner // Map of script path -> runner
+}
+
+// srCall executes fn on the ScriptRunner actor goroutine and blocks until complete.
+func (sr *ScriptRunner) srCall(fn func()) {
+	done := make(chan struct{})
+	select {
+	case sr.callCh <- func() { fn(); close(done) }:
+		<-done
+	case <-sr.ctx.Done():
+	}
+}
+
+// pmCall executes fn on the PolicyManager actor goroutine and blocks until complete.
+func (pm *PolicyManager) pmCall(fn func()) {
+	done := make(chan struct{})
+	select {
+	case pm.callCh <- func() { fn(); close(done) }:
+		<-done
+	case <-pm.ctx.Done():
+	}
+}
+
+// startSRCallActor launches the actor goroutine for a ScriptRunner.
+func (sr *ScriptRunner) startSRCallActor() {
+	sr.callCh = make(chan func(), 64)
+	go func() {
+		for {
+			select {
+			case fn := <-sr.callCh:
+				fn()
+			case <-sr.ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+// startPMCallActor launches the actor goroutine for a PolicyManager.
+func (pm *PolicyManager) startPMCallActor() {
+	pm.callCh = make(chan func(), 64)
+	go func() {
+		for {
+			select {
+			case fn := <-pm.callCh:
+				fn()
+			case <-pm.ctx.Done():
+				return
+			}
+		}
+	}()
 }
 
 // ConfigPath returns the path to the policy configuration file.
@@ -570,11 +619,10 @@ type P struct {
 	policyFollows   [][]byte // Cached follow list from policy admins (kind 3 events)
 	ownersBin       [][]byte // Binary cache for policy-defined owner pubkeys
 
-	// followsMx protects all follows-related caches from concurrent access.
+	// followsCallCh serializes all access to follows-related caches through an actor goroutine.
 	// This includes policyFollows, Global.readFollowsFollowsBin, Global.writeFollowsFollowsBin,
 	// and rule-specific follows whitelists.
-	// Use RLock for reads (CheckPolicy) and Lock for writes (Update*Follows*).
-	followsMx sync.RWMutex
+	followsCallCh chan func()
 
 	// manager handles policy script execution.
 	// Unexported to enforce use of public API methods (CheckPolicy, IsEnabled).
@@ -590,6 +638,33 @@ type pJSON struct {
 	PolicyAdmins                 []string     `json:"policy_admins,omitempty"`
 	PolicyFollowWhitelistEnabled bool         `json:"policy_follow_whitelist_enabled,omitempty"`
 	Owners                       []string     `json:"owners,omitempty"`
+}
+
+// -- Actor goroutines for channel-based state serialization --
+
+func (p *P) startFollowsActor() {
+	if p.followsCallCh != nil {
+		return
+	}
+	p.followsCallCh = make(chan func(), 64)
+	go func() {
+		for fn := range p.followsCallCh {
+			fn()
+		}
+	}()
+}
+
+func (p *P) followsCall(fn func()) {
+	if p.followsCallCh == nil {
+		fn()
+		return
+	}
+	done := make(chan struct{})
+	p.followsCallCh <- func() {
+		fn()
+		close(done)
+	}
+	<-done
 }
 
 // UnmarshalJSON implements custom JSON unmarshalling to handle unexported fields.
@@ -774,6 +849,7 @@ func NewWithManager(ctx context.Context, appName string, enabled bool, customPol
 		enabled:    enabled,
 		runners:    make(map[string]*ScriptRunner),
 	}
+	manager.startPMCallActor()
 
 	// Load policy configuration from JSON file
 	policy := &P{
@@ -803,30 +879,25 @@ func NewWithManager(ctx context.Context, appName string, enabled bool, customPol
 // getOrCreateRunner gets an existing runner for the script path or creates a new one.
 // This method is thread-safe and ensures only one runner exists per unique script path.
 func (pm *PolicyManager) getOrCreateRunner(scriptPath string) *ScriptRunner {
-	pm.mutex.Lock()
-	defer pm.mutex.Unlock()
-
-	// Check if runner already exists
-	if runner, exists := pm.runners[scriptPath]; exists {
-		return runner
-	}
-
-	// Create new runner
-	runnerCtx, runnerCancel := context.WithCancel(pm.ctx)
-	runner := &ScriptRunner{
-		ctx:          runnerCtx,
-		cancel:       runnerCancel,
-		configDir:    pm.configDir,
-		scriptPath:   scriptPath,
-		responseChan: make(chan PolicyResponse, 100),
-		startupChan:  make(chan error, 1),
-	}
-
-	pm.runners[scriptPath] = runner
-
-	// Start periodic check for this runner
-	go runner.periodicCheck()
-
+	var runner *ScriptRunner
+	pm.pmCall(func() {
+		if existing, exists := pm.runners[scriptPath]; exists {
+			runner = existing
+			return
+		}
+		runnerCtx, runnerCancel := context.WithCancel(pm.ctx)
+		runner = &ScriptRunner{
+			ctx:          runnerCtx,
+			cancel:       runnerCancel,
+			configDir:    pm.configDir,
+			scriptPath:   scriptPath,
+			responseChan: make(chan PolicyResponse, 100),
+			startupChan:  make(chan error, 1),
+		}
+		runner.startSRCallActor()
+		pm.runners[scriptPath] = runner
+		go runner.periodicCheck()
+	})
 	return runner
 }
 
@@ -834,23 +905,39 @@ func (pm *PolicyManager) getOrCreateRunner(scriptPath string) *ScriptRunner {
 
 // IsRunning returns whether the script is currently running.
 func (sr *ScriptRunner) IsRunning() bool {
-	sr.mutex.RLock()
-	defer sr.mutex.RUnlock()
-	return sr.isRunning
+	var running bool
+	sr.srCall(func() {
+		running = sr.isRunning
+	})
+	return running
 }
 
 // ensureRunning ensures the script is running, starting it if necessary.
 func (sr *ScriptRunner) ensureRunning() error {
-	sr.mutex.Lock()
-	// Check if already running
-	if sr.isRunning {
-		sr.mutex.Unlock()
+	// Phase 1: check state through actor
+	type phase1Result struct {
+		alreadyRunning  bool
+		alreadyStarting bool
+	}
+	var p1 phase1Result
+	sr.srCall(func() {
+		if sr.isRunning {
+			p1.alreadyRunning = true
+			return
+		}
+		if sr.isStarting {
+			p1.alreadyStarting = true
+			return
+		}
+		// Mark as starting
+		sr.isStarting = true
+	})
+
+	if p1.alreadyRunning {
 		return nil
 	}
 
-	// Check if already starting
-	if sr.isStarting {
-		sr.mutex.Unlock()
+	if p1.alreadyStarting {
 		// Wait for startup to complete
 		select {
 		case err := <-sr.startupChan:
@@ -858,10 +945,7 @@ func (sr *ScriptRunner) ensureRunning() error {
 				return fmt.Errorf("script startup failed: %v", err)
 			}
 			// Double-check it's actually running after receiving signal
-			sr.mutex.RLock()
-			running := sr.isRunning
-			sr.mutex.RUnlock()
-			if !running {
+			if !sr.IsRunning() {
 				return fmt.Errorf("script startup completed but process is not running")
 			}
 			return nil
@@ -872,16 +956,12 @@ func (sr *ScriptRunner) ensureRunning() error {
 		}
 	}
 
-	// Mark as starting
-	sr.isStarting = true
-	sr.mutex.Unlock()
-
 	// Start the script in a goroutine
 	go func() {
 		err := sr.Start()
-		sr.mutex.Lock()
-		sr.isStarting = false
-		sr.mutex.Unlock()
+		sr.srCall(func() {
+			sr.isStarting = false
+		})
 		// Signal startup completion (non-blocking)
 		// Drain any stale value first, then send
 		select {
@@ -903,138 +983,144 @@ func (sr *ScriptRunner) ensureRunning() error {
 			return fmt.Errorf("script startup failed: %v", err)
 		}
 		// Double-check it's actually running after receiving signal
-		sr.mutex.RLock()
-		running := sr.isRunning
-		sr.mutex.RUnlock()
-		if !running {
+		if !sr.IsRunning() {
 			return fmt.Errorf("script startup completed but process is not running")
 		}
 		return nil
 	case <-time.After(10 * time.Second):
-		sr.mutex.Lock()
-		sr.isStarting = false
-		sr.mutex.Unlock()
+		sr.srCall(func() {
+			sr.isStarting = false
+		})
 		return fmt.Errorf("script startup timeout")
 	case <-sr.ctx.Done():
-		sr.mutex.Lock()
-		sr.isStarting = false
-		sr.mutex.Unlock()
+		sr.srCall(func() {
+			sr.isStarting = false
+		})
 		return fmt.Errorf("script context cancelled")
 	}
 }
 
 // Start starts the script process.
 func (sr *ScriptRunner) Start() error {
-	sr.mutex.Lock()
-	defer sr.mutex.Unlock()
+	var result error
+	sr.srCall(func() {
+		if sr.isRunning {
+			result = fmt.Errorf("script is already running")
+			return
+		}
 
-	if sr.isRunning {
-		return fmt.Errorf("script is already running")
-	}
+		if _, err := os.Stat(sr.scriptPath); os.IsNotExist(err) {
+			result = fmt.Errorf("script does not exist at %s", sr.scriptPath)
+			return
+		}
 
-	if _, err := os.Stat(sr.scriptPath); os.IsNotExist(err) {
-		return fmt.Errorf("script does not exist at %s", sr.scriptPath)
-	}
+		// Create a new context for this command
+		cmdCtx, cmdCancel := context.WithCancel(sr.ctx)
 
-	// Create a new context for this command
-	cmdCtx, cmdCancel := context.WithCancel(sr.ctx)
+		// Make the script executable
+		if err := os.Chmod(sr.scriptPath, 0755); chk.E(err) {
+			cmdCancel()
+			result = fmt.Errorf("failed to make script executable: %v", err)
+			return
+		}
 
-	// Make the script executable
-	if err := os.Chmod(sr.scriptPath, 0755); chk.E(err) {
-		cmdCancel()
-		return fmt.Errorf("failed to make script executable: %v", err)
-	}
+		// Start the script
+		cmd := exec.CommandContext(cmdCtx, sr.scriptPath)
+		cmd.Dir = sr.configDir
 
-	// Start the script
-	cmd := exec.CommandContext(cmdCtx, sr.scriptPath)
-	cmd.Dir = sr.configDir
+		// Set up stdio pipes for communication
+		stdin, err := cmd.StdinPipe()
+		if chk.E(err) {
+			cmdCancel()
+			result = fmt.Errorf("failed to create stdin pipe: %v", err)
+			return
+		}
 
-	// Set up stdio pipes for communication
-	stdin, err := cmd.StdinPipe()
-	if chk.E(err) {
-		cmdCancel()
-		return fmt.Errorf("failed to create stdin pipe: %v", err)
-	}
+		stdout, err := cmd.StdoutPipe()
+		if chk.E(err) {
+			cmdCancel()
+			stdin.Close()
+			result = fmt.Errorf("failed to create stdout pipe: %v", err)
+			return
+		}
 
-	stdout, err := cmd.StdoutPipe()
-	if chk.E(err) {
-		cmdCancel()
-		stdin.Close()
-		return fmt.Errorf("failed to create stdout pipe: %v", err)
-	}
+		stderr, err := cmd.StderrPipe()
+		if chk.E(err) {
+			cmdCancel()
+			stdin.Close()
+			stdout.Close()
+			result = fmt.Errorf("failed to create stderr pipe: %v", err)
+			return
+		}
 
-	stderr, err := cmd.StderrPipe()
-	if chk.E(err) {
-		cmdCancel()
-		stdin.Close()
-		stdout.Close()
-		return fmt.Errorf("failed to create stderr pipe: %v", err)
-	}
+		// Start the command
+		if err := cmd.Start(); chk.E(err) {
+			cmdCancel()
+			stdin.Close()
+			stdout.Close()
+			stderr.Close()
+			result = fmt.Errorf("failed to start script: %v", err)
+			return
+		}
 
-	// Start the command
-	if err := cmd.Start(); chk.E(err) {
-		cmdCancel()
-		stdin.Close()
-		stdout.Close()
-		stderr.Close()
-		return fmt.Errorf("failed to start script: %v", err)
-	}
+		sr.currentCmd = cmd
+		sr.currentCancel = cmdCancel
+		sr.stdin = stdin
+		sr.stdout = stdout
+		sr.stderr = stderr
+		sr.isRunning = true
 
-	sr.currentCmd = cmd
-	sr.currentCancel = cmdCancel
-	sr.stdin = stdin
-	sr.stdout = stdout
-	sr.stderr = stderr
-	sr.isRunning = true
+		// Start response reader in background
+		go sr.readResponses()
 
-	// Start response reader in background
-	go sr.readResponses()
+		// Log stderr output in background
+		go sr.logOutput(stdout, stderr)
 
-	// Log stderr output in background
-	go sr.logOutput(stdout, stderr)
+		// Monitor the process
+		go sr.monitorProcess()
 
-	// Monitor the process
-	go sr.monitorProcess()
-
-	log.I.F(
-		"policy script started: %s (pid=%d)", sr.scriptPath, cmd.Process.Pid,
-	)
-	return nil
+		log.I.F(
+			"policy script started: %s (pid=%d)", sr.scriptPath, cmd.Process.Pid,
+		)
+	})
+	return result
 }
 
 // Stop stops the script gracefully.
 func (sr *ScriptRunner) Stop() error {
-	sr.mutex.Lock()
+	// Phase 1: initiate shutdown through actor, capture process ref
+	var process *os.Process
+	var notRunning bool
+	sr.srCall(func() {
+		if !sr.isRunning || sr.currentCmd == nil {
+			notRunning = true
+			return
+		}
 
-	if !sr.isRunning || sr.currentCmd == nil {
-		sr.mutex.Unlock()
+		// Close stdin first to signal the script to exit
+		if sr.stdin != nil {
+			sr.stdin.Close()
+		}
+
+		// Cancel the context
+		if sr.currentCancel != nil {
+			sr.currentCancel()
+		}
+
+		// Get the process reference
+		process = sr.currentCmd.Process
+	})
+
+	if notRunning {
 		return fmt.Errorf("script is not running")
 	}
 
-	// Close stdin first to signal the script to exit
-	if sr.stdin != nil {
-		sr.stdin.Close()
-	}
-
-	// Cancel the context
-	if sr.currentCancel != nil {
-		sr.currentCancel()
-	}
-
-	// Get the process reference before releasing the lock
-	process := sr.currentCmd.Process
-	sr.mutex.Unlock()
-
-	// Wait for graceful shutdown with timeout
-	// Note: monitorProcess() is the one that calls cmd.Wait() and cleans up
-	// We just wait for it to finish by polling isRunning
+	// Phase 2: Wait for graceful shutdown with timeout (polling outside actor)
+	// monitorProcess() is the one that calls cmd.Wait() and cleans up
 	gracefulShutdown := false
 	for i := 0; i < 50; i++ { // 5 seconds total (50 * 100ms)
 		time.Sleep(100 * time.Millisecond)
-		sr.mutex.RLock()
-		running := sr.isRunning
-		sr.mutex.RUnlock()
-		if !running {
+		if !sr.IsRunning() {
 			gracefulShutdown = true
 			log.I.F("policy script stopped gracefully: %s", sr.scriptPath)
 			break
@@ -1056,10 +1142,7 @@ func (sr *ScriptRunner) Stop() error {
 		// Wait a bit more for monitorProcess to clean up
 		for i := 0; i < 30; i++ { // 3 more seconds
 			time.Sleep(100 * time.Millisecond)
-			sr.mutex.RLock()
-			running := sr.isRunning
-			sr.mutex.RUnlock()
-			if !running {
+			if !sr.IsRunning() {
 				break
 			}
 		}
@@ -1073,14 +1156,22 @@ func (sr *ScriptRunner) ProcessEvent(evt *PolicyEvent) (
 	*PolicyResponse, error,
 ) {
 	log.D.F("processing event: %s", evt.Serialize())
-	sr.mutex.RLock()
-	if !sr.isRunning || sr.stdin == nil {
-		sr.mutex.RUnlock()
+
+	// Phase 1: capture stdin ref through actor
+	var stdin io.WriteCloser
+	var notRunning bool
+	sr.srCall(func() {
+		if !sr.isRunning || sr.stdin == nil {
+			notRunning = true
+			return
+		}
+		stdin = sr.stdin
+	})
+	if notRunning {
 		return nil, fmt.Errorf("script is not running")
 	}
-	stdin := sr.stdin
-	sr.mutex.RUnlock()
 
+	// Phase 2: I/O outside actor
 	// Serialize the event to JSON
 	eventJSON, err := json.Marshal(evt)
 	if chk.E(err) {
@@ -1096,9 +1187,9 @@ func (sr *ScriptRunner) ProcessEvent(evt *PolicyEvent) (
 				sr.scriptPath,
 			)
 			// Mark as not running so it will be restarted on next periodic check
-			sr.mutex.Lock()
-			sr.isRunning = false
-			sr.mutex.Unlock()
+			sr.srCall(func() {
+				sr.isRunning = false
+			})
 		}
 		return nil, fmt.Errorf("failed to write event to script: %v", err)
 	}
@@ -1209,35 +1300,34 @@ func (sr *ScriptRunner) monitorProcess() {
 
 	err := sr.currentCmd.Wait()
 
-	sr.mutex.Lock()
-	defer sr.mutex.Unlock()
+	sr.srCall(func() {
+		// Clean up pipes
+		if sr.stdin != nil {
+			sr.stdin.Close()
+			sr.stdin = nil
+		}
+		if sr.stdout != nil {
+			sr.stdout.Close()
+			sr.stdout = nil
+		}
+		if sr.stderr != nil {
+			sr.stderr.Close()
+			sr.stderr = nil
+		}
 
-	// Clean up pipes
-	if sr.stdin != nil {
-		sr.stdin.Close()
-		sr.stdin = nil
-	}
-	if sr.stdout != nil {
-		sr.stdout.Close()
-		sr.stdout = nil
-	}
-	if sr.stderr != nil {
-		sr.stderr.Close()
-		sr.stderr = nil
-	}
+		sr.isRunning = false
+		sr.currentCmd = nil
+		sr.currentCancel = nil
 
-	sr.isRunning = false
-	sr.currentCmd = nil
-	sr.currentCancel = nil
-
-	if err != nil {
-		log.E.F(
-			"policy script exited with error: %s: %v, will retry periodically",
-			sr.scriptPath, err,
-		)
-	} else {
-		log.I.F("policy script exited normally: %s", sr.scriptPath)
-	}
+		if err != nil {
+			log.E.F(
+				"policy script exited with error: %s: %v, will retry periodically",
+				sr.scriptPath, err,
+			)
+		} else {
+			log.I.F("policy script exited normally: %s", sr.scriptPath)
+		}
+	})
 }
 
 // periodicCheck periodically checks if script becomes available and attempts to restart failed scripts.
@@ -1250,12 +1340,8 @@ func (sr *ScriptRunner) periodicCheck() {
 		case <-sr.ctx.Done():
 			return
 		case <-ticker.C:
-			sr.mutex.RLock()
-			running := sr.isRunning
-			sr.mutex.RUnlock()
-
 			// Check if script is not running and try to start it
-			if !running {
+			if !sr.IsRunning() {
 				if _, err := os.Stat(sr.scriptPath); err == nil {
 					// Script exists but not running, try to start
 					go func() {
@@ -1319,8 +1405,7 @@ func (p *P) LoadFromFile(configPath string) error {
 // 3. Global rule - fallback if no kind-specific rule exists
 // 4. Default policy - fallback if no rules apply
 //
-// Thread-safety: Uses followsMx.RLock to protect reads of follows whitelists during policy checks.
-// Write operations (Update*) acquire the write lock, which blocks concurrent reads.
+// Thread-safety: All follows cache access is serialized through the followsCallCh actor.
 func (p *P) CheckPolicy(
 	access string, ev *event.E, loggedInPubkey []byte, ipAddress string,
 ) (allowed bool, err error) {
@@ -1337,9 +1422,17 @@ func (p *P) CheckPolicy(
 		return false, fmt.Errorf("event cannot be nil")
 	}
 
-	// Acquire read lock to protect follows whitelists during policy check
-	p.followsMx.RLock()
-	defer p.followsMx.RUnlock()
+	// Serialize access to follows whitelists through the actor
+	p.followsCall(func() {
+		allowed, err = p.checkPolicyInner(access, ev, loggedInPubkey, ipAddress)
+	})
+	return
+}
+
+// checkPolicyInner is the inner implementation of CheckPolicy, called within the follows actor.
+func (p *P) checkPolicyInner(
+	access string, ev *event.E, loggedInPubkey []byte, ipAddress string,
+) (allowed bool, err error) {
 
 	// ==========================================================================
 	// STEP 1: Check kinds whitelist/blacklist (applies before any rule checks)
@@ -2032,11 +2125,13 @@ func (pm *PolicyManager) IsEnabled() bool {
 // IsRunning returns whether the default policy script is currently running.
 // Deprecated: Use getOrCreateRunner(scriptPath).IsRunning() for specific scripts.
 func (pm *PolicyManager) IsRunning() bool {
-	pm.mutex.RLock()
-	defer pm.mutex.RUnlock()
-
-	// Check if default script runner exists and is running
-	if runner, exists := pm.runners[pm.scriptPath]; exists {
+	var runner *ScriptRunner
+	pm.pmCall(func() {
+		if r, exists := pm.runners[pm.scriptPath]; exists {
+			runner = r
+		}
+	})
+	if runner != nil {
 		return runner.IsRunning()
 	}
 	return false
@@ -2048,24 +2143,34 @@ func (pm *PolicyManager) GetScriptPath() string {
 }
 
 // Shutdown gracefully shuts down the policy manager and all running scripts.
+// Context cancel is deferred until after all actor calls complete to avoid
+// deadlocking the actor goroutines that also select on ctx.Done().
 func (pm *PolicyManager) Shutdown() {
-	pm.cancel()
+	// Collect runners under the actor, then stop them outside
+	// (Stop() calls IsRunning() which uses srCall - can't nest actor calls)
+	var runners []*ScriptRunner
+	pm.pmCall(func() {
+		for path, runner := range pm.runners {
+			runners = append(runners, runner)
+			_ = path
+		}
+	})
 
-	pm.mutex.Lock()
-	defer pm.mutex.Unlock()
-
-	// Stop all running scripts
-	for path, runner := range pm.runners {
+	// Stop all running scripts outside the PM actor
+	for _, runner := range runners {
 		if runner.IsRunning() {
-			log.I.F("stopping policy script: %s", path)
+			log.I.F("stopping policy script: %s", runner.scriptPath)
 			runner.Stop()
 		}
-		// Cancel the runner's context
-		runner.cancel()
 	}
 
 	// Clear runners map
-	pm.runners = make(map[string]*ScriptRunner)
+	pm.pmCall(func() {
+		pm.runners = make(map[string]*ScriptRunner)
+	})
+
+	// Cancel context last - this kills actor goroutines (PM + all SRs)
+	pm.cancel()
 }
 
 // =============================================================================
@@ -2204,18 +2309,18 @@ func (p *P) Reload(policyJSON []byte, configPath string) error {
 	}
 
 	// Step 4: Apply the new configuration (preserve manager reference)
-	p.followsMx.Lock()
-	p.Kind = tempPolicy.Kind
-	p.rules = tempPolicy.rules
-	p.Global = tempPolicy.Global
-	p.DefaultPolicy = tempPolicy.DefaultPolicy
-	p.PolicyAdmins = tempPolicy.PolicyAdmins
-	p.PolicyFollowWhitelistEnabled = tempPolicy.PolicyFollowWhitelistEnabled
-	p.Owners = tempPolicy.Owners
-	p.policyAdminsBin = tempPolicy.policyAdminsBin
-	p.ownersBin = tempPolicy.ownersBin
-	// Note: policyFollows is NOT reset here - it will be refreshed separately
-	p.followsMx.Unlock()
+	p.followsCall(func() {
+		p.Kind = tempPolicy.Kind
+		p.rules = tempPolicy.rules
+		p.Global = tempPolicy.Global
+		p.DefaultPolicy = tempPolicy.DefaultPolicy
+		p.PolicyAdmins = tempPolicy.PolicyAdmins
+		p.PolicyFollowWhitelistEnabled = tempPolicy.PolicyFollowWhitelistEnabled
+		p.Owners = tempPolicy.Owners
+		p.policyAdminsBin = tempPolicy.policyAdminsBin
+		p.ownersBin = tempPolicy.ownersBin
+		// Note: policyFollows is NOT reset here - it will be refreshed separately
+	})
 
 	// Step 5: Populate binary caches for all rules
 	p.Global.populateBinaryCache()
@@ -2246,15 +2351,20 @@ func (p *P) Pause() error {
 		return fmt.Errorf("policy manager is not initialized")
 	}
 
-	p.manager.mutex.Lock()
-	defer p.manager.mutex.Unlock()
+	// Collect runners under the PM actor
+	var runners []*ScriptRunner
+	p.manager.pmCall(func() {
+		for _, runner := range p.manager.runners {
+			runners = append(runners, runner)
+		}
+	})
 
-	// Stop all running scripts
-	for path, runner := range p.manager.runners {
+	// Stop running scripts outside the PM actor (avoids nested actor calls)
+	for _, runner := range runners {
 		if runner.IsRunning() {
-			log.I.F("pausing policy script: %s", path)
+			log.I.F("pausing policy script: %s", runner.scriptPath)
 			if err := runner.Stop(); err != nil {
-				log.W.F("failed to stop runner %s: %v", path, err)
+				log.W.F("failed to stop runner %s: %v", runner.scriptPath, err)
 			}
 		}
 	}
@@ -2338,15 +2448,16 @@ func (p *P) IsPolicyAdmin(pubkey []byte) bool {
 		return false
 	}
 
-	p.followsMx.RLock()
-	defer p.followsMx.RUnlock()
-
-	for _, admin := range p.policyAdminsBin {
-		if utils.FastEqual(admin, pubkey) {
-			return true
+	var result bool
+	p.followsCall(func() {
+		for _, admin := range p.policyAdminsBin {
+			if utils.FastEqual(admin, pubkey) {
+				result = true
+				return
+			}
 		}
-	}
-	return false
+	})
+	return result
 }
 
 // IsPolicyFollow checks if the given pubkey is in the policy admin follows list.
@@ -2356,41 +2467,41 @@ func (p *P) IsPolicyFollow(pubkey []byte) bool {
 		return false
 	}
 
-	p.followsMx.RLock()
-	defer p.followsMx.RUnlock()
-
-	for _, follow := range p.policyFollows {
-		if utils.FastEqual(pubkey, follow) {
-			return true
+	var result bool
+	p.followsCall(func() {
+		for _, follow := range p.policyFollows {
+			if utils.FastEqual(pubkey, follow) {
+				result = true
+				return
+			}
 		}
-	}
-	return false
+	})
+	return result
 }
 
 // UpdatePolicyFollows replaces the policy follows list with a new set of pubkeys.
 // This is called when policy admins update their follow lists (kind 3 events).
 // The pubkeys should be binary ([]byte), not hex-encoded.
 func (p *P) UpdatePolicyFollows(follows [][]byte) {
-	p.followsMx.Lock()
-	defer p.followsMx.Unlock()
-
-	p.policyFollows = follows
-	log.I.F("policy follows list updated with %d pubkeys", len(follows))
+	p.followsCall(func() {
+		p.policyFollows = follows
+		log.I.F("policy follows list updated with %d pubkeys", len(follows))
+	})
 }
 
 // GetPolicyAdminsBin returns a copy of the binary policy admin pubkeys.
 // Used for checking if an event author is a policy admin.
 func (p *P) GetPolicyAdminsBin() [][]byte {
-	p.followsMx.RLock()
-	defer p.followsMx.RUnlock()
-
-	// Return a copy to prevent external modification
-	result := make([][]byte, len(p.policyAdminsBin))
-	for i, admin := range p.policyAdminsBin {
-		adminCopy := make([]byte, len(admin))
-		copy(adminCopy, admin)
-		result[i] = adminCopy
-	}
+	var result [][]byte
+	p.followsCall(func() {
+		// Return a copy to prevent external modification
+		result = make([][]byte, len(p.policyAdminsBin))
+		for i, admin := range p.policyAdminsBin {
+			adminCopy := make([]byte, len(admin))
+			copy(adminCopy, admin)
+			result[i] = adminCopy
+		}
+	})
 	return result
 }
 
@@ -2402,16 +2513,16 @@ func (p *P) GetOwnersBin() [][]byte {
 		return nil
 	}
 
-	p.followsMx.RLock()
-	defer p.followsMx.RUnlock()
-
-	// Return a copy to prevent external modification
-	result := make([][]byte, len(p.ownersBin))
-	for i, owner := range p.ownersBin {
-		ownerCopy := make([]byte, len(owner))
-		copy(ownerCopy, owner)
-		result[i] = ownerCopy
-	}
+	var result [][]byte
+	p.followsCall(func() {
+		// Return a copy to prevent external modification
+		result = make([][]byte, len(p.ownersBin))
+		for i, owner := range p.ownersBin {
+			ownerCopy := make([]byte, len(owner))
+			copy(ownerCopy, owner)
+			result[i] = ownerCopy
+		}
+	})
 	return result
 }
 
@@ -2483,31 +2594,31 @@ func (p *P) GetRuleForKind(kind int) *Rule {
 
 // UpdateRuleFollowsWhitelist updates the follows whitelist for a specific kind's rule.
 // The follows should be binary pubkeys ([]byte), not hex-encoded.
-// Thread-safe: uses followsMx to protect concurrent access.
+// Thread-safe: serialized through followsCallCh actor.
 func (p *P) UpdateRuleFollowsWhitelist(kind int, follows [][]byte) {
 	if p == nil || p.rules == nil {
 		return
 	}
-	p.followsMx.Lock()
-	defer p.followsMx.Unlock()
-	if rule, exists := p.rules[kind]; exists {
-		rule.UpdateFollowsWhitelist(follows)
-		p.rules[kind] = rule
-	}
+	p.followsCall(func() {
+		if rule, exists := p.rules[kind]; exists {
+			rule.UpdateFollowsWhitelist(follows)
+			p.rules[kind] = rule
+		}
+	})
 }
 
 // UpdateGlobalFollowsWhitelist updates the follows whitelist for the global rule.
 // The follows should be binary pubkeys ([]byte), not hex-encoded.
 // Note: We directly modify p.Global's unexported field because Global is a value type (not *Rule),
 // so calling p.Global.UpdateFollowsWhitelist() would operate on a copy and discard changes.
-// Thread-safe: uses followsMx to protect concurrent access.
+// Thread-safe: serialized through followsCallCh actor.
 func (p *P) UpdateGlobalFollowsWhitelist(follows [][]byte) {
 	if p == nil {
 		return
 	}
-	p.followsMx.Lock()
-	defer p.followsMx.Unlock()
-	p.Global.followsWhitelistFollowsBin = follows
+	p.followsCall(func() {
+		p.Global.followsWhitelistFollowsBin = follows
+	})
 }
 
 // GetGlobalRule returns a pointer to the global rule for modification.
@@ -2633,60 +2744,60 @@ func (p *P) GetAllFollowsWhitelistPubkeys() []string {
 
 // UpdateRuleReadFollowsWhitelist updates the read follows whitelist for a specific kind's rule.
 // The follows should be binary pubkeys ([]byte), not hex-encoded.
-// Thread-safe: uses followsMx to protect concurrent access.
+// Thread-safe: serialized through followsCallCh actor.
 func (p *P) UpdateRuleReadFollowsWhitelist(kind int, follows [][]byte) {
 	if p == nil || p.rules == nil {
 		return
 	}
-	p.followsMx.Lock()
-	defer p.followsMx.Unlock()
-	if rule, exists := p.rules[kind]; exists {
-		rule.UpdateReadFollowsWhitelist(follows)
-		p.rules[kind] = rule
-	}
+	p.followsCall(func() {
+		if rule, exists := p.rules[kind]; exists {
+			rule.UpdateReadFollowsWhitelist(follows)
+			p.rules[kind] = rule
+		}
+	})
 }
 
 // UpdateRuleWriteFollowsWhitelist updates the write follows whitelist for a specific kind's rule.
 // The follows should be binary pubkeys ([]byte), not hex-encoded.
-// Thread-safe: uses followsMx to protect concurrent access.
+// Thread-safe: serialized through followsCallCh actor.
 func (p *P) UpdateRuleWriteFollowsWhitelist(kind int, follows [][]byte) {
 	if p == nil || p.rules == nil {
 		return
 	}
-	p.followsMx.Lock()
-	defer p.followsMx.Unlock()
-	if rule, exists := p.rules[kind]; exists {
-		rule.UpdateWriteFollowsWhitelist(follows)
-		p.rules[kind] = rule
-	}
+	p.followsCall(func() {
+		if rule, exists := p.rules[kind]; exists {
+			rule.UpdateWriteFollowsWhitelist(follows)
+			p.rules[kind] = rule
+		}
+	})
 }
 
 // UpdateGlobalReadFollowsWhitelist updates the read follows whitelist for the global rule.
 // The follows should be binary pubkeys ([]byte), not hex-encoded.
 // Note: We directly modify p.Global's unexported field because Global is a value type (not *Rule),
 // so calling p.Global.UpdateReadFollowsWhitelist() would operate on a copy and discard changes.
-// Thread-safe: uses followsMx to protect concurrent access.
+// Thread-safe: serialized through followsCallCh actor.
 func (p *P) UpdateGlobalReadFollowsWhitelist(follows [][]byte) {
 	if p == nil {
 		return
 	}
-	p.followsMx.Lock()
-	defer p.followsMx.Unlock()
-	p.Global.readFollowsFollowsBin = follows
+	p.followsCall(func() {
+		p.Global.readFollowsFollowsBin = follows
+	})
 }
 
 // UpdateGlobalWriteFollowsWhitelist updates the write follows whitelist for the global rule.
 // The follows should be binary pubkeys ([]byte), not hex-encoded.
 // Note: We directly modify p.Global's unexported field because Global is a value type (not *Rule),
 // so calling p.Global.UpdateWriteFollowsWhitelist() would operate on a copy and discard changes.
-// Thread-safe: uses followsMx to protect concurrent access.
+// Thread-safe: serialized through followsCallCh actor.
 func (p *P) UpdateGlobalWriteFollowsWhitelist(follows [][]byte) {
 	if p == nil {
 		return
 	}
-	p.followsMx.Lock()
-	defer p.followsMx.Unlock()
-	p.Global.writeFollowsFollowsBin = follows
+	p.followsCall(func() {
+		p.Global.writeFollowsFollowsBin = follows
+	})
 }
 
 // =============================================================================

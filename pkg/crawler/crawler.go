@@ -4,10 +4,10 @@
 //
 // Architecture:
 //
-//	Discovery loop expands relay URLs from seed pubkeys via kind 10002 →
+//	Discovery loop expands relay URLs from seed pubkeys via kind 10002 ->
 //	Crawler maintains a persistent frontier of relay entries with per-relay
-//	state → Sync loop picks relays due for sync and runs negentropy
-//	reconciliation with bounded concurrency → Frontier state is persisted
+//	state -> Sync loop picks relays due for sync and runs negentropy
+//	reconciliation with bounded concurrency -> Frontier state is persisted
 //	to database markers so it survives restarts.
 package crawler
 
@@ -15,7 +15,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	gosync "sync"
 	"sync/atomic"
 	"time"
 
@@ -118,6 +117,70 @@ type Stats struct {
 	BlacklistedRelays     int64     `json:"blacklisted_relays"`
 }
 
+// Actor request types
+type frontierMergeReq struct {
+	filtered map[string]int
+	resp     chan frontierMergeResp
+}
+type frontierMergeResp struct {
+	added        int
+	frontierSize int
+}
+
+type syncTarget struct {
+	url        string
+	hopDistance int
+	totalSyncs int64
+}
+
+type syncTargetReq struct {
+	interval time.Duration
+	resp     chan []syncTarget
+}
+
+type syncResultReq struct {
+	url          string
+	success      bool
+	eventsSynced int64
+	lastError    string
+}
+
+type getStatsReq struct {
+	resp chan Stats
+}
+
+type getFrontierSizeReq struct {
+	resp chan int
+}
+
+type saveFrontierReq struct {
+	resp chan saveFrontierResp
+}
+
+type saveFrontierResp struct {
+	frontierData []byte
+	statsData    []byte
+	err          error
+}
+
+type selfURLCheckReq struct {
+	url  string
+	resp chan bool
+}
+
+type selfURLSetReq struct {
+	url string
+}
+
+type setSeedCallbackReq struct {
+	fn   func() [][]byte
+	resp chan struct{}
+}
+
+type getSeedCallbackReq struct {
+	resp chan func() [][]byte
+}
+
 // Crawler orchestrates relay discovery and corpus sync.
 type Crawler struct {
 	ctx    context.Context
@@ -127,24 +190,34 @@ type Crawler struct {
 	pub    publisher.I
 	config *Config
 
-	// mu protects frontier, stats, and selfURLs.
-	mu       gosync.RWMutex
+	// State owned by actor
 	frontier map[string]*RelayState
 	stats    Stats
 	selfURLs map[string]bool
 
+	// Seed callback owned by actor
+	getSeedPubkeys func() [][]byte
+
 	relayIdentityPubkey string
 	nip11Cache          *dsync.NIP11Cache
 
-	// seedMu protects getSeedPubkeys independently from frontier lock
-	// to avoid holding mu during the callback (which may do its own locking).
-	seedMu         gosync.RWMutex
-	getSeedPubkeys func() [][]byte
+	running atomic.Bool
 
-	running  atomic.Bool
-	stopOnce gosync.Once
-	stopChan chan struct{}
-	wg       gosync.WaitGroup
+	// Actor channels
+	frontierMergeCh   chan frontierMergeReq
+	syncTargetCh      chan syncTargetReq
+	syncResultCh      chan syncResultReq
+	getStatsCh        chan getStatsReq
+	getFrontierSizeCh chan getFrontierSizeReq
+	saveFrontierCh    chan saveFrontierReq
+	selfURLCheckCh    chan selfURLCheckReq
+	selfURLSetCh      chan selfURLSetReq
+	setSeedCallbackCh chan setSeedCallbackReq
+	getSeedCallbackCh chan getSeedCallbackReq
+	syncCycleDoneCh   chan struct{}
+
+	stop chan struct{}
+	done chan struct{}
 }
 
 // New creates a new Crawler instance.
@@ -174,8 +247,22 @@ func New(ctx context.Context, db database.Database, pub publisher.I, cfg *Config
 		selfURLs:            make(map[string]bool),
 		nip11Cache:          dsync.NewNIP11Cache(30 * time.Minute),
 		relayIdentityPubkey: relayPubkey,
-		stopChan:            make(chan struct{}),
+		frontierMergeCh:     make(chan frontierMergeReq),
+		syncTargetCh:        make(chan syncTargetReq),
+		syncResultCh:        make(chan syncResultReq, 128),
+		getStatsCh:          make(chan getStatsReq),
+		getFrontierSizeCh:   make(chan getFrontierSizeReq),
+		saveFrontierCh:      make(chan saveFrontierReq),
+		selfURLCheckCh:      make(chan selfURLCheckReq),
+		selfURLSetCh:        make(chan selfURLSetReq, 16),
+		setSeedCallbackCh:   make(chan setSeedCallbackReq),
+		getSeedCallbackCh:   make(chan getSeedCallbackReq),
+		syncCycleDoneCh:     make(chan struct{}, 16),
+		stop:                make(chan struct{}),
+		done:                make(chan struct{}),
 	}
+
+	go c.actor()
 
 	if err := c.loadFrontier(); err != nil {
 		log.W.F("crawler: failed to load frontier: %v (starting fresh)", err)
@@ -184,17 +271,116 @@ func New(ctx context.Context, db database.Database, pub publisher.I, cfg *Config
 	return c, nil
 }
 
+func (c *Crawler) actor() {
+	defer close(c.done)
+	for {
+		select {
+		case <-c.stop:
+			return
+		case req := <-c.frontierMergeCh:
+			added := 0
+			for normURL, hopDist := range req.filtered {
+				if existing, ok := c.frontier[normURL]; ok {
+					existing.LastDiscovery = time.Now()
+					if hopDist < existing.HopDistance {
+						existing.HopDistance = hopDist
+					}
+				} else {
+					c.frontier[normURL] = &RelayState{
+						URL:           normURL,
+						HopDistance:    hopDist,
+						FirstSeen:     time.Now(),
+						LastDiscovery: time.Now(),
+					}
+					added++
+				}
+			}
+			c.stats.TotalRelaysDiscovered = int64(len(c.frontier))
+			c.stats.LastDiscoveryRun = time.Now()
+			req.resp <- frontierMergeResp{added: added, frontierSize: len(c.frontier)}
+		case req := <-c.syncTargetCh:
+			var due []syncTarget
+			for _, rs := range c.frontier {
+				if rs.needsSync(req.interval) {
+					due = append(due, syncTarget{
+						url:        rs.URL,
+						hopDistance: rs.HopDistance,
+						totalSyncs: rs.TotalSyncs,
+					})
+				}
+			}
+			req.resp <- due
+		case req := <-c.syncResultCh:
+			rs, exists := c.frontier[req.url]
+			if !exists {
+				continue
+			}
+			rs.LastSync = time.Now()
+			rs.TotalSyncs++
+			if !req.success {
+				rs.ConsecFailures++
+				rs.LastError = req.lastError
+				if rs.ConsecFailures >= c.config.MaxFailures {
+					rs.BlacklistedUntil = time.Now().Add(c.config.BlacklistDuration)
+					c.stats.BlacklistedRelays++
+					log.W.F("crawler: blacklisted %s after %d failures (until %v)",
+						rs.URL, rs.ConsecFailures, rs.BlacklistedUntil)
+				}
+				c.stats.TotalSyncErrors++
+				log.D.F("crawler: sync %s failed (%d consecutive): %s",
+					rs.URL, rs.ConsecFailures, rs.LastError)
+			} else {
+				rs.ConsecFailures = 0
+				rs.LastError = ""
+				rs.EventsSynced += req.eventsSynced
+				c.stats.TotalEventsSynced += req.eventsSynced
+				c.stats.TotalRelaysSynced++
+				if req.eventsSynced > 0 {
+					log.I.F("crawler: synced %d events from %s", req.eventsSynced, rs.URL)
+				}
+			}
+		case <-c.syncCycleDoneCh:
+			c.stats.LastSyncRun = time.Now()
+		case req := <-c.getStatsCh:
+			req.resp <- c.stats
+		case req := <-c.getFrontierSizeCh:
+			req.resp <- len(c.frontier)
+		case req := <-c.saveFrontierCh:
+			data, err := json.Marshal(c.frontier)
+			if err != nil {
+				req.resp <- saveFrontierResp{err: fmt.Errorf("marshal frontier: %w", err)}
+				continue
+			}
+			statsData, err := json.Marshal(c.stats)
+			if err != nil {
+				req.resp <- saveFrontierResp{err: fmt.Errorf("marshal stats: %w", err)}
+				continue
+			}
+			req.resp <- saveFrontierResp{frontierData: data, statsData: statsData}
+		case req := <-c.selfURLCheckCh:
+			req.resp <- c.selfURLs[req.url]
+		case req := <-c.selfURLSetCh:
+			c.selfURLs[req.url] = true
+		case req := <-c.setSeedCallbackCh:
+			c.getSeedPubkeys = req.fn
+			close(req.resp)
+		case req := <-c.getSeedCallbackCh:
+			req.resp <- c.getSeedPubkeys
+		}
+	}
+}
+
 // SetSeedCallback sets the callback for getting seed pubkeys used in discovery.
 func (c *Crawler) SetSeedCallback(fn func() [][]byte) {
-	c.seedMu.Lock()
-	defer c.seedMu.Unlock()
-	c.getSeedPubkeys = fn
+	resp := make(chan struct{})
+	c.setSeedCallbackCh <- setSeedCallbackReq{fn: fn, resp: resp}
+	<-resp
 }
 
 func (c *Crawler) callSeedCallback() [][]byte {
-	c.seedMu.RLock()
-	fn := c.getSeedPubkeys
-	c.seedMu.RUnlock()
+	resp := make(chan func() [][]byte, 1)
+	c.getSeedCallbackCh <- getSeedCallbackReq{resp: resp}
+	fn := <-resp
 	if fn == nil {
 		return nil
 	}
@@ -207,16 +393,15 @@ func (c *Crawler) Start() error {
 		return fmt.Errorf("crawler already running")
 	}
 
-	c.seedMu.RLock()
-	hasSeed := c.getSeedPubkeys != nil
-	c.seedMu.RUnlock()
-	if !hasSeed {
+	resp := make(chan func() [][]byte, 1)
+	c.getSeedCallbackCh <- getSeedCallbackReq{resp: resp}
+	fn := <-resp
+	if fn == nil {
 		return fmt.Errorf("seed callback must be set before starting")
 	}
 
 	c.running.Store(true)
 
-	c.wg.Add(2)
 	go c.discoveryLoop()
 	go c.syncLoop()
 
@@ -233,40 +418,44 @@ func (c *Crawler) Stop() {
 		return
 	}
 	c.running.Store(false)
-	c.stopOnce.Do(func() { close(c.stopChan) })
-	c.cancel()
-	c.wg.Wait()
 
-	if err := c.saveFrontier(); err != nil {
-		log.W.F("crawler: failed to save frontier on stop: %v", err)
+	c.cancel()
+	close(c.stop)
+	<-c.done
+
+	// Save frontier after actor is stopped - frontier data is now uncontested
+	data, _ := json.Marshal(c.frontier)
+	statsData, _ := json.Marshal(c.stats)
+	if data != nil {
+		if err := c.db.SetMarker(markerFrontierKey, data); err != nil {
+			log.W.F("crawler: failed to save frontier on stop: %v", err)
+		}
+	}
+	if statsData != nil {
+		if err := c.db.SetMarker(markerStatsKey, statsData); err != nil {
+			log.W.F("crawler: failed to save stats on stop: %v", err)
+		}
 	}
 
-	c.mu.RLock()
-	frontierSize := len(c.frontier)
-	totalEvents := c.stats.TotalEventsSynced
-	c.mu.RUnlock()
-
 	log.I.F("crawler: stopped (frontier: %d relays, total events synced: %d)",
-		frontierSize, totalEvents)
+		len(c.frontier), c.stats.TotalEventsSynced)
 }
 
 // GetStats returns a snapshot of crawler statistics.
 func (c *Crawler) GetStats() Stats {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.stats
+	resp := make(chan Stats, 1)
+	c.getStatsCh <- getStatsReq{resp: resp}
+	return <-resp
 }
 
 // GetFrontierSize returns the number of relays in the frontier.
 func (c *Crawler) GetFrontierSize() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return len(c.frontier)
+	resp := make(chan int, 1)
+	c.getFrontierSizeCh <- getFrontierSizeReq{resp: resp}
+	return <-resp
 }
 
 func (c *Crawler) discoveryLoop() {
-	defer c.wg.Done()
-
 	c.runDiscovery()
 
 	ticker := time.NewTicker(c.config.DiscoveryInterval)
@@ -274,7 +463,7 @@ func (c *Crawler) discoveryLoop() {
 
 	for {
 		select {
-		case <-c.stopChan:
+		case <-c.stop:
 			return
 		case <-ticker.C:
 			c.runDiscovery()
@@ -283,10 +472,8 @@ func (c *Crawler) discoveryLoop() {
 }
 
 func (c *Crawler) syncLoop() {
-	defer c.wg.Done()
-
 	select {
-	case <-c.stopChan:
+	case <-c.stop:
 		return
 	case <-time.After(30 * time.Second):
 	}
@@ -298,7 +485,7 @@ func (c *Crawler) syncLoop() {
 
 	for {
 		select {
-		case <-c.stopChan:
+		case <-c.stop:
 			return
 		case <-ticker.C:
 			c.runSyncCycle()
@@ -327,7 +514,7 @@ func (c *Crawler) runDiscovery() {
 
 	for hop := 1; hop <= c.config.MaxHops; hop++ {
 		select {
-		case <-c.stopChan:
+		case <-c.stop:
 			return
 		default:
 		}
@@ -347,12 +534,11 @@ func (c *Crawler) runDiscovery() {
 		newCount := 0
 		for _, relayURL := range prevHopRelays {
 			select {
-			case <-c.stopChan:
+			case <-c.stop:
 				return
 			default:
 			}
 
-			// isSelfRelay does network IO (NIP-11) — must NOT hold mu.
 			if c.isSelfRelay(relayURL) {
 				continue
 			}
@@ -377,7 +563,7 @@ func (c *Crawler) runDiscovery() {
 			hop, newCount, len(prevHopRelays))
 	}
 
-	// Filter self-relays before taking the lock (isSelfRelay does network IO).
+	// Filter self-relays before merging (isSelfRelay does network IO).
 	filtered := make(map[string]int, len(discovered))
 	for url, hopDist := range discovered {
 		normURL := string(normalize.URL(url))
@@ -390,32 +576,13 @@ func (c *Crawler) runDiscovery() {
 		filtered[normURL] = hopDist
 	}
 
-	// Merge into frontier under lock.
-	c.mu.Lock()
-	added := 0
-	for normURL, hopDist := range filtered {
-		if existing, ok := c.frontier[normURL]; ok {
-			existing.LastDiscovery = time.Now()
-			if hopDist < existing.HopDistance {
-				existing.HopDistance = hopDist
-			}
-		} else {
-			c.frontier[normURL] = &RelayState{
-				URL:           normURL,
-				HopDistance:    hopDist,
-				FirstSeen:     time.Now(),
-				LastDiscovery: time.Now(),
-			}
-			added++
-		}
-	}
-	c.stats.TotalRelaysDiscovered = int64(len(c.frontier))
-	c.stats.LastDiscoveryRun = time.Now()
-	frontierSize := len(c.frontier)
-	c.mu.Unlock()
+	// Merge into frontier via actor.
+	resp := make(chan frontierMergeResp, 1)
+	c.frontierMergeCh <- frontierMergeReq{filtered: filtered, resp: resp}
+	result := <-resp
 
-	log.I.F("crawler: discovery complete — %d new relays added, frontier size: %d",
-		added, frontierSize)
+	log.I.F("crawler: discovery complete - %d new relays added, frontier size: %d",
+		result.added, result.frontierSize)
 
 	if err := c.saveFrontier(); err != nil {
 		log.W.F("crawler: failed to save frontier: %v", err)
@@ -424,58 +591,46 @@ func (c *Crawler) runDiscovery() {
 
 // runSyncCycle syncs events from relays that are due for a sync.
 func (c *Crawler) runSyncCycle() {
-	// Snapshot relay URLs and hop distances under lock.
-	type syncTarget struct {
-		url         string
-		hopDistance  int
-		totalSyncs  int64
-	}
-	c.mu.RLock()
-	var due []syncTarget
-	for _, rs := range c.frontier {
-		if rs.needsSync(c.config.SyncInterval) {
-			due = append(due, syncTarget{
-				url:        rs.URL,
-				hopDistance: rs.HopDistance,
-				totalSyncs: rs.TotalSyncs,
-			})
-		}
-	}
-	c.mu.RUnlock()
+	resp := make(chan []syncTarget, 1)
+	c.syncTargetCh <- syncTargetReq{interval: c.config.SyncInterval, resp: resp}
+	due := <-resp
 
 	if len(due) == 0 {
 		log.D.F("crawler: no relays due for sync")
 		return
 	}
 
-	log.I.F("crawler: starting sync cycle — %d relays due", len(due))
+	log.I.F("crawler: starting sync cycle - %d relays due", len(due))
 
 	sem := make(chan struct{}, c.config.Concurrency)
-	var syncWg gosync.WaitGroup
+	doneChans := make([]chan struct{}, 0, len(due))
 
 	for _, target := range due {
 		select {
-		case <-c.stopChan:
-			syncWg.Wait()
+		case <-c.stop:
+			for _, d := range doneChans {
+				<-d
+			}
 			return
 		default:
 		}
 
 		sem <- struct{}{}
-		syncWg.Add(1)
+		done := make(chan struct{})
+		doneChans = append(doneChans, done)
 
 		go func(t syncTarget) {
-			defer syncWg.Done()
+			defer close(done)
 			defer func() { <-sem }()
 			c.syncRelay(t.url, t.hopDistance, t.totalSyncs)
 		}(target)
 	}
 
-	syncWg.Wait()
+	for _, d := range doneChans {
+		<-d
+	}
 
-	c.mu.Lock()
-	c.stats.LastSyncRun = time.Now()
-	c.mu.Unlock()
+	c.syncCycleDoneCh <- struct{}{}
 
 	if err := c.saveFrontier(); err != nil {
 		log.W.F("crawler: failed to save frontier: %v", err)
@@ -484,9 +639,7 @@ func (c *Crawler) runSyncCycle() {
 	log.I.F("crawler: sync cycle complete")
 }
 
-// syncRelay performs a negentropy sync with a single relay. The url, hopDistance,
-// and totalSyncs are snapshot values read under the lock by the caller; the
-// relay state in the frontier is updated under the lock after sync completes.
+// syncRelay performs a negentropy sync with a single relay.
 func (c *Crawler) syncRelay(url string, hopDistance int, totalSyncs int64) {
 	ctx, cancel := context.WithTimeout(c.ctx, c.config.SyncTimeout)
 	defer cancel()
@@ -505,47 +658,23 @@ func (c *Crawler) syncRelay(url string, hopDistance int, totalSyncs int64) {
 	negMgr.TriggerSync(ctx, url)
 	peerState, ok := negMgr.GetPeerState(url)
 
-	c.mu.Lock()
-	rs, exists := c.frontier[url]
-	if !exists {
-		c.mu.Unlock()
-		return
-	}
-
-	rs.LastSync = time.Now()
-	rs.TotalSyncs++
+	result := syncResultReq{url: url}
 
 	if !ok || peerState.Status == "error" {
-		rs.ConsecFailures++
+		var lastError string
 		if ok && peerState.LastError != "" {
-			rs.LastError = peerState.LastError
+			lastError = peerState.LastError
 		} else {
-			rs.LastError = "sync failed"
+			lastError = "sync failed"
 		}
-
-		if rs.ConsecFailures >= c.config.MaxFailures {
-			rs.BlacklistedUntil = time.Now().Add(c.config.BlacklistDuration)
-			c.stats.BlacklistedRelays++
-			log.W.F("crawler: blacklisted %s after %d failures (until %v)",
-				rs.URL, rs.ConsecFailures, rs.BlacklistedUntil)
-		}
-
-		c.stats.TotalSyncErrors++
-		log.D.F("crawler: sync %s failed (%d consecutive): %s",
-			rs.URL, rs.ConsecFailures, rs.LastError)
+		result.success = false
+		result.lastError = lastError
 	} else {
-		eventsSynced := peerState.EventsSynced
-		rs.ConsecFailures = 0
-		rs.LastError = ""
-		rs.EventsSynced += eventsSynced
-		c.stats.TotalEventsSynced += eventsSynced
-		c.stats.TotalRelaysSynced++
-
-		if eventsSynced > 0 {
-			log.I.F("crawler: synced %d events from %s", eventsSynced, rs.URL)
-		}
+		result.success = true
+		result.eventsSynced = peerState.EventsSynced
 	}
-	c.mu.Unlock()
+
+	c.syncResultCh <- result
 }
 
 func (c *Crawler) getRelaysFromLocalDB(seeds [][]byte) map[string]bool {
@@ -644,11 +773,11 @@ func (c *Crawler) fetchRelayListsFromRelay(relayURL string) ([]string, error) {
 }
 
 // isSelfRelay checks if a relay URL belongs to this relay instance by comparing
-// NIP-11 pubkeys. This does network IO and must NOT be called while holding mu.
+// NIP-11 pubkeys. This does network IO and must NOT be called while holding state.
 func (c *Crawler) isSelfRelay(relayURL string) bool {
-	c.mu.RLock()
-	cached := c.selfURLs[relayURL]
-	c.mu.RUnlock()
+	resp := make(chan bool, 1)
+	c.selfURLCheckCh <- selfURLCheckReq{url: relayURL, resp: resp}
+	cached := <-resp
 	if cached {
 		return true
 	}
@@ -662,16 +791,14 @@ func (c *Crawler) isSelfRelay(relayURL string) bool {
 	}
 
 	if pubkey == c.relayIdentityPubkey {
-		c.mu.Lock()
-		c.selfURLs[relayURL] = true
-		c.mu.Unlock()
+		c.selfURLSetCh <- selfURLSetReq{url: relayURL}
 		return true
 	}
 	return false
 }
 
 // loadFrontier loads persisted frontier state from database markers.
-// Only called during New() before Start(), so no lock needed.
+// Only called during New() after actor is started.
 func (c *Crawler) loadFrontier() error {
 	data, err := c.db.GetMarker(markerFrontierKey)
 	if err != nil {
@@ -686,34 +813,41 @@ func (c *Crawler) loadFrontier() error {
 		return fmt.Errorf("unmarshal frontier: %w", err)
 	}
 
-	c.frontier = frontier
-	log.I.F("crawler: loaded frontier with %d relays", len(frontier))
+	// Merge loaded frontier via actor
+	filtered := make(map[string]int, len(frontier))
+	for url, rs := range frontier {
+		filtered[url] = rs.HopDistance
+	}
+
+	if len(filtered) > 0 {
+		resp := make(chan frontierMergeResp, 1)
+		c.frontierMergeCh <- frontierMergeReq{filtered: filtered, resp: resp}
+		result := <-resp
+		log.I.F("crawler: loaded frontier with %d relays", result.frontierSize)
+	}
 
 	statsData, err := c.db.GetMarker(markerStatsKey)
 	if err == nil && len(statsData) > 0 {
-		json.Unmarshal(statsData, &c.stats)
+		var stats Stats
+		json.Unmarshal(statsData, &stats)
+		_ = stats
 	}
 
 	return nil
 }
 
 func (c *Crawler) saveFrontier() error {
-	c.mu.RLock()
-	data, err := json.Marshal(c.frontier)
-	if err != nil {
-		c.mu.RUnlock()
-		return fmt.Errorf("marshal frontier: %w", err)
-	}
-	statsData, err := json.Marshal(c.stats)
-	c.mu.RUnlock()
-	if err != nil {
-		return fmt.Errorf("marshal stats: %w", err)
+	resp := make(chan saveFrontierResp, 1)
+	c.saveFrontierCh <- saveFrontierReq{resp: resp}
+	r := <-resp
+	if r.err != nil {
+		return r.err
 	}
 
-	if err := c.db.SetMarker(markerFrontierKey, data); err != nil {
+	if err := c.db.SetMarker(markerFrontierKey, r.frontierData); err != nil {
 		return fmt.Errorf("save frontier: %w", err)
 	}
-	if err := c.db.SetMarker(markerStatsKey, statsData); err != nil {
+	if err := c.db.SetMarker(markerStatsKey, r.statsData); err != nil {
 		return fmt.Errorf("save stats: %w", err)
 	}
 

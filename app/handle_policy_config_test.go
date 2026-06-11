@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
@@ -84,8 +83,8 @@ func setupPolicyTestListener(t *testing.T, policyAdminHex string) (*Listener, *d
 		policyManager:   policyManager,
 		cfg:             cfg,
 		db:              db,
-		messagePauseMutex: sync.RWMutex{},
 	}
+	server.startMessageGate()
 
 	// Configure ACL registry
 	acl.Registry.SetMode(cfg.ACLMode)
@@ -103,8 +102,8 @@ func setupPolicyTestListener(t *testing.T, policyAdminHex string) (*Listener, *d
 		writeDone:      make(chan struct{}),
 		messageQueue:   make(chan messageRequest, 100),
 		processingDone: make(chan struct{}),
-		subscriptions:  make(map[string]context.CancelFunc),
 	}
+	listener.initActors()
 
 	// Start write worker and message processor
 	go listener.writeWorker()

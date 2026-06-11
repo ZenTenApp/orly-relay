@@ -38,6 +38,11 @@ func TestManagedACL_BasicFunctionality(t *testing.T) {
 		owners:     [][]byte{[]byte("owner1")},
 		admins:     [][]byte{[]byte("admin1")},
 	}
+	managed.updatePeerAdminsCh = make(chan managedUpdatePeerAdminsReq)
+	managed.getAccessLevelCh = make(chan managedGetAccessLevelReq)
+	managed.stop = make(chan struct{})
+	managed.done = make(chan struct{})
+	go managed.actor()
 
 	// Test basic functionality
 	t.Run("owner should get owner access", func(t *testing.T) {

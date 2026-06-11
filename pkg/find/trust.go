@@ -2,7 +2,6 @@ package find
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
@@ -10,16 +9,86 @@ import (
 
 // TrustGraph manages trust relationships between registry services
 type TrustGraph struct {
-	mu           sync.RWMutex
 	entries      map[string][]TrustEntry // pubkey -> trust entries
 	selfPubkey   []byte                  // This registry service's pubkey
 	lastUpdated  map[string]time.Time    // pubkey -> last update time
 	decayFactors map[int]float64         // hop distance -> decay factor
+
+	// Actor channels
+	addGraphCh       chan addGraphReq
+	addEntryCh       chan addEntryReq
+	getTrustLevelCh  chan getTrustLevelReq
+	getDirectCh      chan getDirectReq
+	removeEntryCh    chan removeEntryReq
+	updateEntryCh    chan updateEntryReq
+	getAllEntriesCh   chan getAllEntriesReq
+	getTrustedCh     chan getTrustedReq
+	getInheritedCh   chan getInheritedReq
+	exportCh         chan exportReq
+	calcMetricsCh    chan calcMetricsReq
+	stop             chan struct{}
+	done             chan struct{}
+}
+
+type addGraphReq struct {
+	graph *TrustGraph
+	resp  chan error
+}
+
+type addEntryReq struct {
+	entry TrustEntry
+	resp  chan error
+}
+
+type getTrustLevelReq struct {
+	pubkey []byte
+	resp   chan float64
+}
+
+type getDirectReq struct {
+	resp chan []TrustEntry
+}
+
+type removeEntryReq struct {
+	pubkey string
+}
+
+type updateEntryReq struct {
+	pubkey   string
+	newScore float64
+	resp     chan error
+}
+
+type getAllEntriesReq struct {
+	resp chan map[string][]TrustEntry
+}
+
+type getTrustedReq struct {
+	resp chan []string
+}
+
+type getInheritedReq struct {
+	fromPubkey string
+	toPubkey   string
+	resp       chan getInheritedResp
+}
+
+type getInheritedResp struct {
+	trust float64
+	path  []string
+}
+
+type exportReq struct {
+	resp chan *TrustGraphEvent
+}
+
+type calcMetricsReq struct {
+	resp chan *TrustMetrics
 }
 
 // NewTrustGraph creates a new trust graph
 func NewTrustGraph(selfPubkey []byte) *TrustGraph {
-	return &TrustGraph{
+	tg := &TrustGraph{
 		entries:     make(map[string][]TrustEntry),
 		selfPubkey:  selfPubkey,
 		lastUpdated: make(map[string]time.Time),
@@ -30,14 +99,71 @@ func NewTrustGraph(selfPubkey []byte) *TrustGraph {
 			3: 0.4,  // 3-hop trust
 			4: 0.0,  // 4+ hops not counted
 		},
+		addGraphCh:      make(chan addGraphReq),
+		addEntryCh:      make(chan addEntryReq),
+		getTrustLevelCh: make(chan getTrustLevelReq),
+		getDirectCh:     make(chan getDirectReq),
+		removeEntryCh:   make(chan removeEntryReq, 16),
+		updateEntryCh:   make(chan updateEntryReq),
+		getAllEntriesCh:  make(chan getAllEntriesReq),
+		getTrustedCh:    make(chan getTrustedReq),
+		getInheritedCh:  make(chan getInheritedReq),
+		exportCh:        make(chan exportReq),
+		calcMetricsCh:   make(chan calcMetricsReq),
+		stop:            make(chan struct{}),
+		done:            make(chan struct{}),
+	}
+	go tg.actor()
+	return tg
+}
+
+// Stop shuts down the trust graph actor.
+func (tg *TrustGraph) Stop() {
+	close(tg.stop)
+	<-tg.done
+}
+
+func (tg *TrustGraph) actor() {
+	defer close(tg.done)
+	for {
+		select {
+		case <-tg.stop:
+			return
+		case req := <-tg.addGraphCh:
+			req.resp <- tg.doAddTrustGraph(req.graph)
+		case req := <-tg.addEntryCh:
+			req.resp <- tg.doAddEntry(req.entry)
+		case req := <-tg.getTrustLevelCh:
+			req.resp <- tg.doGetTrustLevel(req.pubkey)
+		case req := <-tg.getDirectCh:
+			req.resp <- tg.doGetDirectTrust()
+		case req := <-tg.removeEntryCh:
+			tg.doRemoveEntry(req.pubkey)
+		case req := <-tg.updateEntryCh:
+			req.resp <- tg.doUpdateEntry(req.pubkey, req.newScore)
+		case req := <-tg.getAllEntriesCh:
+			req.resp <- tg.doGetAllEntries()
+		case req := <-tg.getTrustedCh:
+			req.resp <- tg.doGetTrustedServices()
+		case req := <-tg.getInheritedCh:
+			trust, path := tg.doGetInheritedTrust(req.fromPubkey, req.toPubkey)
+			req.resp <- getInheritedResp{trust: trust, path: path}
+		case req := <-tg.exportCh:
+			req.resp <- tg.doExportTrustGraph()
+		case req := <-tg.calcMetricsCh:
+			req.resp <- tg.doCalculateTrustMetrics()
+		}
 	}
 }
 
 // AddTrustGraph adds a trust graph from another registry service
 func (tg *TrustGraph) AddTrustGraph(graph *TrustGraph) error {
-	tg.mu.Lock()
-	defer tg.mu.Unlock()
+	resp := make(chan error, 1)
+	tg.addGraphCh <- addGraphReq{graph: graph, resp: resp}
+	return <-resp
+}
 
+func (tg *TrustGraph) doAddTrustGraph(graph *TrustGraph) error {
 	sourcePubkey := hex.Enc(graph.selfPubkey)
 
 	// Copy entries from the source graph
@@ -58,23 +184,27 @@ func (tg *TrustGraph) AddEntry(entry TrustEntry) error {
 	if err := ValidateTrustScore(entry.TrustScore); err != nil {
 		return err
 	}
+	resp := make(chan error, 1)
+	tg.addEntryCh <- addEntryReq{entry: entry, resp: resp}
+	return <-resp
+}
 
-	tg.mu.Lock()
-	defer tg.mu.Unlock()
-
+func (tg *TrustGraph) doAddEntry(entry TrustEntry) error {
 	selfPubkey := hex.Enc(tg.selfPubkey)
 	tg.entries[selfPubkey] = append(tg.entries[selfPubkey], entry)
 	tg.lastUpdated[selfPubkey] = time.Now()
-
 	return nil
 }
 
 // GetTrustLevel returns the trust level for a given pubkey (0.0 to 1.0)
 // This computes both direct trust and inherited trust through the web of trust
 func (tg *TrustGraph) GetTrustLevel(pubkey []byte) float64 {
-	tg.mu.RLock()
-	defer tg.mu.RUnlock()
+	resp := make(chan float64, 1)
+	tg.getTrustLevelCh <- getTrustLevelReq{pubkey: pubkey, resp: resp}
+	return <-resp
+}
 
+func (tg *TrustGraph) doGetTrustLevel(pubkey []byte) float64 {
 	pubkeyStr := hex.Enc(pubkey)
 	selfPubkeyStr := hex.Enc(tg.selfPubkey)
 
@@ -138,24 +268,27 @@ type trustPath struct {
 
 // GetDirectTrust returns direct trust relationships (0-hop only)
 func (tg *TrustGraph) GetDirectTrust() []TrustEntry {
-	tg.mu.RLock()
-	defer tg.mu.RUnlock()
+	resp := make(chan []TrustEntry, 1)
+	tg.getDirectCh <- getDirectReq{resp: resp}
+	return <-resp
+}
 
+func (tg *TrustGraph) doGetDirectTrust() []TrustEntry {
 	selfPubkeyStr := hex.Enc(tg.selfPubkey)
 	if entries, ok := tg.entries[selfPubkeyStr]; ok {
 		result := make([]TrustEntry, len(entries))
 		copy(result, entries)
 		return result
 	}
-
 	return []TrustEntry{}
 }
 
 // RemoveEntry removes a trust entry for a given pubkey
 func (tg *TrustGraph) RemoveEntry(pubkey string) {
-	tg.mu.Lock()
-	defer tg.mu.Unlock()
+	tg.removeEntryCh <- removeEntryReq{pubkey: pubkey}
+}
 
+func (tg *TrustGraph) doRemoveEntry(pubkey string) {
 	selfPubkeyStr := hex.Enc(tg.selfPubkey)
 	if entries, ok := tg.entries[selfPubkeyStr]; ok {
 		filtered := make([]TrustEntry, 0, len(entries))
@@ -174,10 +307,12 @@ func (tg *TrustGraph) UpdateEntry(pubkey string, newScore float64) error {
 	if err := ValidateTrustScore(newScore); err != nil {
 		return err
 	}
+	resp := make(chan error, 1)
+	tg.updateEntryCh <- updateEntryReq{pubkey: pubkey, newScore: newScore, resp: resp}
+	return <-resp
+}
 
-	tg.mu.Lock()
-	defer tg.mu.Unlock()
-
+func (tg *TrustGraph) doUpdateEntry(pubkey string, newScore float64) error {
 	selfPubkeyStr := hex.Enc(tg.selfPubkey)
 	if entries, ok := tg.entries[selfPubkeyStr]; ok {
 		for i, entry := range entries {
@@ -194,23 +329,28 @@ func (tg *TrustGraph) UpdateEntry(pubkey string, newScore float64) error {
 
 // GetAllEntries returns all trust entries in the graph (for debugging/export)
 func (tg *TrustGraph) GetAllEntries() map[string][]TrustEntry {
-	tg.mu.RLock()
-	defer tg.mu.RUnlock()
+	resp := make(chan map[string][]TrustEntry, 1)
+	tg.getAllEntriesCh <- getAllEntriesReq{resp: resp}
+	return <-resp
+}
 
+func (tg *TrustGraph) doGetAllEntries() map[string][]TrustEntry {
 	result := make(map[string][]TrustEntry)
 	for pubkey, entries := range tg.entries {
 		result[pubkey] = make([]TrustEntry, len(entries))
 		copy(result[pubkey], entries)
 	}
-
 	return result
 }
 
 // GetTrustedServices returns a list of all directly trusted service pubkeys
 func (tg *TrustGraph) GetTrustedServices() []string {
-	tg.mu.RLock()
-	defer tg.mu.RUnlock()
+	resp := make(chan []string, 1)
+	tg.getTrustedCh <- getTrustedReq{resp: resp}
+	return <-resp
+}
 
+func (tg *TrustGraph) doGetTrustedServices() []string {
 	selfPubkeyStr := hex.Enc(tg.selfPubkey)
 	if entries, ok := tg.entries[selfPubkeyStr]; ok {
 		pubkeys := make([]string, 0, len(entries))
@@ -219,16 +359,19 @@ func (tg *TrustGraph) GetTrustedServices() []string {
 		}
 		return pubkeys
 	}
-
 	return []string{}
 }
 
 // GetInheritedTrust computes inherited trust from one service to another
 // This is useful for debugging and understanding trust propagation
 func (tg *TrustGraph) GetInheritedTrust(fromPubkey, toPubkey string) (float64, []string) {
-	tg.mu.RLock()
-	defer tg.mu.RUnlock()
+	resp := make(chan getInheritedResp, 1)
+	tg.getInheritedCh <- getInheritedReq{fromPubkey: fromPubkey, toPubkey: toPubkey, resp: resp}
+	r := <-resp
+	return r.trust, r.path
+}
 
+func (tg *TrustGraph) doGetInheritedTrust(fromPubkey, toPubkey string) (float64, []string) {
 	// BFS to find shortest path and trust level
 	type pathNode struct {
 		pubkey string
@@ -283,9 +426,12 @@ func (tg *TrustGraph) GetInheritedTrust(fromPubkey, toPubkey string) (float64, [
 
 // ExportTrustGraph exports the trust graph for this service as a TrustGraphEvent
 func (tg *TrustGraph) ExportTrustGraph() *TrustGraphEvent {
-	tg.mu.RLock()
-	defer tg.mu.RUnlock()
+	resp := make(chan *TrustGraphEvent, 1)
+	tg.exportCh <- exportReq{resp: resp}
+	return <-resp
+}
 
+func (tg *TrustGraph) doExportTrustGraph() *TrustGraphEvent {
 	selfPubkeyStr := hex.Enc(tg.selfPubkey)
 	entries := tg.entries[selfPubkeyStr]
 
@@ -302,9 +448,12 @@ func (tg *TrustGraph) ExportTrustGraph() *TrustGraphEvent {
 
 // CalculateTrustMetrics computes metrics about the trust graph
 func (tg *TrustGraph) CalculateTrustMetrics() *TrustMetrics {
-	tg.mu.RLock()
-	defer tg.mu.RUnlock()
+	resp := make(chan *TrustMetrics, 1)
+	tg.calcMetricsCh <- calcMetricsReq{resp: resp}
+	return <-resp
+}
 
+func (tg *TrustGraph) doCalculateTrustMetrics() *TrustMetrics {
 	metrics := &TrustMetrics{
 		TotalServices:  len(tg.entries),
 		DirectTrust:    0,

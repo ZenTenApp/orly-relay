@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 
 	"git.smesh.lol/orly/pkg/lol/log"
 	"git.smesh.lol/orly/pkg/nostr/interfaces/signer/p8k"
@@ -30,10 +29,67 @@ type deploySession struct {
 	total int
 }
 
-var (
-	deploySessions   = map[string]*deploySession{}
-	deploySessionsMu sync.Mutex
-)
+// -- deploy session actor types --
+
+type deployBeginReq struct {
+	hash  string
+	total int
+}
+type deployGetReq struct {
+	hash string
+	resp chan *deploySession // buffered 1
+}
+type deploySetPartReq struct {
+	hash  string
+	index int
+	data  []byte
+	resp  chan int // buffered 1: returns len(parts)
+}
+type deployTakeReq struct {
+	hash string
+	resp chan *deploySession // buffered 1
+}
+
+// startDeployActor starts the deploy session actor goroutine.
+// Called by Smesh3Server.Start.
+func (s *Smesh3Server) startDeployActor() {
+	s.deployBeginCh = make(chan deployBeginReq, 4)
+	s.deployGetCh = make(chan deployGetReq)
+	s.deploySetPartCh = make(chan deploySetPartReq)
+	s.deployTakeCh = make(chan deployTakeReq)
+	s.deployDone = make(chan struct{})
+	go func() {
+		defer close(s.deployDone)
+		sessions := make(map[string]*deploySession)
+		for {
+			select {
+			case req := <-s.deployBeginCh:
+				sessions[req.hash] = &deploySession{
+					parts: make(map[int][]byte),
+					total: req.total,
+				}
+			case req := <-s.deployGetCh:
+				req.resp <- sessions[req.hash]
+			case req := <-s.deploySetPartCh:
+				sess := sessions[req.hash]
+				if sess != nil {
+					sess.parts[req.index] = req.data
+					req.resp <- len(sess.parts)
+				} else {
+					req.resp <- 0
+				}
+			case req := <-s.deployTakeCh:
+				sess := sessions[req.hash]
+				if sess != nil {
+					delete(sessions, req.hash)
+				}
+				req.resp <- sess
+			case <-s.deployStopCh:
+				return
+			}
+		}
+	}()
+}
 
 func (s *Smesh3Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -49,7 +105,7 @@ func (s *Smesh3Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 
 	switch action {
 	case "begin":
-		s.deployBegin(w, r)
+		s.deployBeginHandler(w, r)
 	case "part":
 		s.deployPart(w, r)
 	case "apply":
@@ -59,7 +115,7 @@ func (s *Smesh3Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Smesh3Server) deployBegin(w http.ResponseWriter, r *http.Request) {
+func (s *Smesh3Server) deployBeginHandler(w http.ResponseWriter, r *http.Request) {
 	hash := r.URL.Query().Get("hash")
 	totalStr := r.URL.Query().Get("parts")
 	total, err := strconv.Atoi(totalStr)
@@ -68,12 +124,7 @@ func (s *Smesh3Server) deployBegin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deploySessionsMu.Lock()
-	deploySessions[hash] = &deploySession{
-		parts: make(map[int][]byte),
-		total: total,
-	}
-	deploySessionsMu.Unlock()
+	s.deployBeginCh <- deployBeginReq{hash: hash, total: total}
 
 	log.I.F("smesh deploy: begin hash=%s parts=%d", hash[:16], total)
 	fmt.Fprint(w, "ok")
@@ -88,10 +139,11 @@ func (s *Smesh3Server) deployPart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deploySessionsMu.Lock()
-	sess, ok := deploySessions[hash]
-	deploySessionsMu.Unlock()
-	if !ok {
+	// Check session exists
+	resp := make(chan *deploySession, 1)
+	s.deployGetCh <- deployGetReq{hash: hash, resp: resp}
+	sess := <-resp
+	if sess == nil {
 		http.Error(w, "no session", http.StatusBadRequest)
 		return
 	}
@@ -111,10 +163,9 @@ func (s *Smesh3Server) deployPart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deploySessionsMu.Lock()
-	sess.parts[index] = body
-	got := len(sess.parts)
-	deploySessionsMu.Unlock()
+	partResp := make(chan int, 1)
+	s.deploySetPartCh <- deploySetPartReq{hash: hash, index: index, data: body, resp: partResp}
+	got := <-partResp
 
 	fmt.Fprintf(w, "ok %d/%d", got, sess.total)
 }
@@ -132,13 +183,10 @@ func (s *Smesh3Server) deployApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deploySessionsMu.Lock()
-	sess, ok := deploySessions[hash]
-	if ok {
-		delete(deploySessions, hash)
-	}
-	deploySessionsMu.Unlock()
-	if !ok {
+	takeResp := make(chan *deploySession, 1)
+	s.deployTakeCh <- deployTakeReq{hash: hash, resp: takeResp}
+	sess := <-takeResp
+	if sess == nil {
 		http.Error(w, "no session", http.StatusBadRequest)
 		return
 	}
@@ -227,7 +275,7 @@ func (s *Smesh3Server) extractAndSwap(w http.ResponseWriter, bundle []byte, hash
 		os.RemoveAll(oldDir)
 		if err := os.Rename(s.dir, oldDir); err != nil {
 			os.RemoveAll(newDir)
-			log.E.F("smesh deploy: rename live→old failed: %v", err)
+			log.E.F("smesh deploy: rename live->old failed: %v", err)
 			http.Error(w, "deploy failed", http.StatusInternalServerError)
 			return
 		}

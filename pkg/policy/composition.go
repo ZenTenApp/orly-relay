@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"sync"
 
 	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
 	"git.smesh.lol/orly/pkg/lol/log"
@@ -76,10 +75,33 @@ type ComposedPolicy struct {
 	OwnerPolicy *P
 	// Contributions is a map of event ID -> contribution for deduplication
 	Contributions map[string]*PolicyAdminContribution
-	// contributionsMx protects the contributions map
-	contributionsMx sync.RWMutex
 	// configDir is the directory where policy files are stored
 	configDir string
+
+	// Actor channels
+	addContribCh       chan addContribReq
+	removeContribCh    chan removeContribReq
+	getEffectiveCh     chan getEffectiveReq
+	loadContribsCh     chan loadContribsReq
+	stop               chan struct{}
+	done               chan struct{}
+}
+
+type addContribReq struct {
+	contribution *PolicyAdminContribution
+	resp         chan error
+}
+
+type removeContribReq struct {
+	eventID string
+}
+
+type getEffectiveReq struct {
+	resp chan *P
+}
+
+type loadContribsReq struct {
+	resp chan error
 }
 
 // =============================================================================
@@ -199,47 +221,72 @@ func ValidatePolicyAdminContribution(
 
 // NewComposedPolicy creates a new composed policy from an owner policy.
 func NewComposedPolicy(ownerPolicy *P, configDir string) *ComposedPolicy {
-	return &ComposedPolicy{
-		OwnerPolicy:   ownerPolicy,
-		Contributions: make(map[string]*PolicyAdminContribution),
-		configDir:     configDir,
+	cp := &ComposedPolicy{
+		OwnerPolicy:    ownerPolicy,
+		Contributions:  make(map[string]*PolicyAdminContribution),
+		configDir:      configDir,
+		addContribCh:   make(chan addContribReq),
+		removeContribCh: make(chan removeContribReq, 16),
+		getEffectiveCh: make(chan getEffectiveReq),
+		loadContribsCh: make(chan loadContribsReq),
+		stop:           make(chan struct{}),
+		done:           make(chan struct{}),
+	}
+	go cp.actor()
+	return cp
+}
+
+// Stop shuts down the composed policy actor.
+func (cp *ComposedPolicy) Stop() {
+	close(cp.stop)
+	<-cp.done
+}
+
+func (cp *ComposedPolicy) actor() {
+	defer close(cp.done)
+	for {
+		select {
+		case <-cp.stop:
+			return
+		case req := <-cp.addContribCh:
+			// Validate the contribution
+			if err := ValidatePolicyAdminContribution(cp.OwnerPolicy, req.contribution, cp.Contributions); err != nil {
+				req.resp <- err
+				continue
+			}
+			// Store the contribution
+			cp.Contributions[req.contribution.EventID] = req.contribution
+			// Persist to disk
+			if err := cp.saveContribution(req.contribution); err != nil {
+				log.W.F("failed to persist contribution: %v", err)
+			}
+			req.resp <- nil
+		case req := <-cp.removeContribCh:
+			delete(cp.Contributions, req.eventID)
+			// Remove from disk
+			if cp.configDir != "" {
+				contribPath := filepath.Join(cp.configDir, "policy-contributions", req.eventID+".json")
+				os.Remove(contribPath)
+			}
+		case req := <-cp.getEffectiveCh:
+			req.resp <- cp.doGetEffectivePolicy()
+		case req := <-cp.loadContribsCh:
+			req.resp <- cp.doLoadContributions()
+		}
 	}
 }
 
 // AddContribution adds a policy admin contribution.
 // Returns error if validation fails.
 func (cp *ComposedPolicy) AddContribution(contribution *PolicyAdminContribution) error {
-	cp.contributionsMx.Lock()
-	defer cp.contributionsMx.Unlock()
-
-	// Validate the contribution
-	if err := ValidatePolicyAdminContribution(cp.OwnerPolicy, contribution, cp.Contributions); err != nil {
-		return err
-	}
-
-	// Store the contribution
-	cp.Contributions[contribution.EventID] = contribution
-
-	// Persist to disk
-	if err := cp.saveContribution(contribution); err != nil {
-		log.W.F("failed to persist contribution: %v", err)
-	}
-
-	return nil
+	resp := make(chan error, 1)
+	cp.addContribCh <- addContribReq{contribution: contribution, resp: resp}
+	return <-resp
 }
 
 // RemoveContribution removes a policy admin contribution by event ID.
 func (cp *ComposedPolicy) RemoveContribution(eventID string) {
-	cp.contributionsMx.Lock()
-	defer cp.contributionsMx.Unlock()
-
-	delete(cp.Contributions, eventID)
-
-	// Remove from disk
-	if cp.configDir != "" {
-		contribPath := filepath.Join(cp.configDir, "policy-contributions", eventID+".json")
-		os.Remove(contribPath)
-	}
+	cp.removeContribCh <- removeContribReq{eventID: eventID}
 }
 
 // GetEffectivePolicy computes the merged effective policy.
@@ -249,9 +296,12 @@ func (cp *ComposedPolicy) RemoveContribution(eventID string) {
 // - Limits use the most permissive value
 // - Conflicts between PAs: oldest created_at wins (except deny always wins)
 func (cp *ComposedPolicy) GetEffectivePolicy() *P {
-	cp.contributionsMx.RLock()
-	defer cp.contributionsMx.RUnlock()
+	resp := make(chan *P, 1)
+	cp.getEffectiveCh <- getEffectiveReq{resp: resp}
+	return <-resp
+}
 
+func (cp *ComposedPolicy) doGetEffectivePolicy() *P {
 	// Clone the owner policy as base
 	effective := cp.cloneOwnerPolicy()
 
@@ -426,6 +476,12 @@ func (cp *ComposedPolicy) saveContribution(contrib *PolicyAdminContribution) err
 
 // LoadContributions loads all contributions from disk.
 func (cp *ComposedPolicy) LoadContributions() error {
+	resp := make(chan error, 1)
+	cp.loadContribsCh <- loadContribsReq{resp: resp}
+	return <-resp
+}
+
+func (cp *ComposedPolicy) doLoadContributions() error {
 	if cp.configDir == "" {
 		return nil
 	}
@@ -439,9 +495,6 @@ func (cp *ComposedPolicy) LoadContributions() error {
 	if err != nil {
 		return err
 	}
-
-	cp.contributionsMx.Lock()
-	defer cp.contributionsMx.Unlock()
 
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
@@ -484,16 +537,16 @@ func (p *P) IsOwner(pubkey []byte) bool {
 	if len(pubkey) == 0 {
 		return false
 	}
-
-	p.followsMx.RLock()
-	defer p.followsMx.RUnlock()
-
-	for _, owner := range p.ownersBin {
-		if utils.FastEqual(owner, pubkey) {
-			return true
+	var found bool
+	p.followsCall(func() {
+		for _, owner := range p.ownersBin {
+			if utils.FastEqual(owner, pubkey) {
+				found = true
+				return
+			}
 		}
-	}
-	return false
+	})
+	return found
 }
 
 // IsOwnerOrPolicyAdmin checks if the given pubkey is an owner or policy admin.

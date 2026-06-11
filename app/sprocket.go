@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/adrg/xdg"
@@ -26,21 +25,46 @@ type SprocketResponse struct {
 	Msg    string `json:"msg"`    // NIP-20 response message (only used for reject)
 }
 
+// -- actor request types --
+
+type sprocketGetStatusReq struct {
+	resp chan sprocketStatusResp // buffered 1
+}
+type sprocketStatusResp struct {
+	isRunning bool
+	disabled  bool
+	stdin     io.WriteCloser
+}
+
+type sprocketSetStateReq struct {
+	isRunning     *bool
+	disabled      *bool
+	cmd           *exec.Cmd
+	cmdCancel     context.CancelFunc
+	stdin         io.WriteCloser
+	stdout        io.ReadCloser
+	stderr        io.ReadCloser
+	clearPipes    bool
+}
+
+type sprocketGetFullStatusReq struct {
+	resp chan map[string]interface{} // buffered 1
+}
+
 // SprocketManager handles sprocket script execution and management
 type SprocketManager struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	configDir     string
 	scriptPath    string
-	currentCmd    *exec.Cmd
-	currentCancel context.CancelFunc
-	mutex         sync.RWMutex
-	isRunning     bool
 	enabled       bool
-	disabled      bool // true when sprocket is disabled due to failure
-	stdin         io.WriteCloser
-	stdout        io.ReadCloser
-	stderr        io.ReadCloser
+
+	// Actor channels
+	getStatusCh     chan sprocketGetStatusReq
+	setStateCh      chan sprocketSetStateReq
+	getFullStatusCh chan sprocketGetFullStatusReq
+	actorDone       chan struct{}
+
 	responseChan  chan SprocketResponse
 }
 
@@ -52,46 +76,148 @@ func NewSprocketManager(ctx context.Context, appName string, enabled bool) *Spro
 	ctx, cancel := context.WithCancel(ctx)
 
 	sm := &SprocketManager{
-		ctx:          ctx,
-		cancel:       cancel,
-		configDir:    configDir,
-		scriptPath:   scriptPath,
-		enabled:      enabled,
-		disabled:     false,
-		responseChan: make(chan SprocketResponse, 100), // Buffered channel for responses
+		ctx:             ctx,
+		cancel:          cancel,
+		configDir:       configDir,
+		scriptPath:      scriptPath,
+		enabled:         enabled,
+		getStatusCh:     make(chan sprocketGetStatusReq),
+		setStateCh:      make(chan sprocketSetStateReq, 4),
+		getFullStatusCh: make(chan sprocketGetFullStatusReq),
+		actorDone:       make(chan struct{}),
+		responseChan:    make(chan SprocketResponse, 100),
 	}
+
+	go sm.actor()
 
 	// Start the sprocket script if it exists and is enabled
 	if enabled {
 		go sm.startSprocketIfExists()
-		// Start periodic check for sprocket script availability
 		go sm.periodicCheck()
 	}
 
 	return sm
 }
 
+func (sm *SprocketManager) actor() {
+	defer close(sm.actorDone)
+
+	var (
+		isRunning     bool
+		disabled      bool
+		currentCmd    *exec.Cmd
+		currentCancel context.CancelFunc
+		stdin         io.WriteCloser
+		stdout        io.ReadCloser
+		stderr        io.ReadCloser
+	)
+
+	for {
+		select {
+		case req := <-sm.getStatusCh:
+			req.resp <- sprocketStatusResp{
+				isRunning: isRunning,
+				disabled:  disabled,
+				stdin:     stdin,
+			}
+		case req := <-sm.setStateCh:
+			if req.isRunning != nil {
+				isRunning = *req.isRunning
+			}
+			if req.disabled != nil {
+				disabled = *req.disabled
+			}
+			if req.cmd != nil {
+				currentCmd = req.cmd
+			}
+			if req.cmdCancel != nil {
+				currentCancel = req.cmdCancel
+			}
+			if req.stdin != nil {
+				stdin = req.stdin
+			}
+			if req.stdout != nil {
+				stdout = req.stdout
+			}
+			if req.stderr != nil {
+				stderr = req.stderr
+			}
+			if req.clearPipes {
+				if stdin != nil {
+					stdin.Close()
+				}
+				stdin = nil
+				if stdout != nil {
+					stdout.Close()
+				}
+				stdout = nil
+				if stderr != nil {
+					stderr.Close()
+				}
+				stderr = nil
+				isRunning = false
+				currentCmd = nil
+				currentCancel = nil
+			}
+		case req := <-sm.getFullStatusCh:
+			status := map[string]interface{}{
+				"is_running":    isRunning,
+				"script_exists": false,
+				"script_path":   sm.scriptPath,
+			}
+			if _, err := os.Stat(sm.scriptPath); err == nil {
+				status["script_exists"] = true
+				if content, err := os.ReadFile(sm.scriptPath); err == nil {
+					status["script_content"] = string(content)
+				}
+				if info, err := os.Stat(sm.scriptPath); err == nil {
+					status["script_modified"] = info.ModTime()
+				}
+			}
+			if isRunning && currentCmd != nil && currentCmd.Process != nil {
+				status["pid"] = currentCmd.Process.Pid
+			}
+			req.resp <- status
+		case <-sm.ctx.Done():
+			// Cleanup on shutdown
+			if stdin != nil {
+				stdin.Close()
+			}
+			if currentCancel != nil {
+				currentCancel()
+			}
+			_ = currentCmd
+			_ = stdout
+			_ = stderr
+			return
+		}
+	}
+}
+
+func (sm *SprocketManager) getState() sprocketStatusResp {
+	resp := make(chan sprocketStatusResp, 1)
+	sm.getStatusCh <- sprocketGetStatusReq{resp: resp}
+	return <-resp
+}
+
+func boolPtr(b bool) *bool { return &b }
+
 // disableSprocket disables sprocket due to failure
 func (sm *SprocketManager) disableSprocket() {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
-
-	if !sm.disabled {
-		sm.disabled = true
+	state := sm.getState()
+	if !state.disabled {
+		sm.setStateCh <- sprocketSetStateReq{disabled: boolPtr(true)}
 		log.W.F("sprocket disabled due to failure - all events will be rejected (script location: %s)", sm.scriptPath)
 	}
 }
 
 // enableSprocket re-enables sprocket and attempts to start it
 func (sm *SprocketManager) enableSprocket() {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
-
-	if sm.disabled {
-		sm.disabled = false
+	state := sm.getState()
+	if state.disabled {
+		sm.setStateCh <- sprocketSetStateReq{disabled: boolPtr(false)}
 		log.I.F("sprocket re-enabled, attempting to start")
 
-		// Attempt to start sprocket in background
 		go func() {
 			if _, err := os.Stat(sm.scriptPath); err == nil {
 				if err := sm.StartSprocket(); err != nil {
@@ -110,7 +236,7 @@ func (sm *SprocketManager) enableSprocket() {
 
 // periodicCheck periodically checks if sprocket script becomes available
 func (sm *SprocketManager) periodicCheck() {
-	ticker := time.NewTicker(30 * time.Second) // Check every 30 seconds
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -118,19 +244,12 @@ func (sm *SprocketManager) periodicCheck() {
 		case <-sm.ctx.Done():
 			return
 		case <-ticker.C:
-			sm.mutex.RLock()
-			disabled := sm.disabled
-			running := sm.isRunning
-			sm.mutex.RUnlock()
-
-			// Only check if sprocket is disabled or not running
-			if disabled || !running {
+			state := sm.getState()
+			if state.disabled || !state.isRunning {
 				if _, err := os.Stat(sm.scriptPath); err == nil {
-					// Script is available, try to enable/restart
-					if disabled {
+					if state.disabled {
 						sm.enableSprocket()
-					} else if !running {
-						// Script exists but sprocket isn't running, try to start
+					} else if !state.isRunning {
 						go func() {
 							if err := sm.StartSprocket(); err != nil {
 								log.E.F("failed to restart sprocket: %v", err)
@@ -161,10 +280,8 @@ func (sm *SprocketManager) startSprocketIfExists() {
 
 // StartSprocket starts the sprocket script
 func (sm *SprocketManager) StartSprocket() error {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
-
-	if sm.isRunning {
+	state := sm.getState()
+	if state.isRunning {
 		return fmt.Errorf("sprocket is already running")
 	}
 
@@ -172,65 +289,57 @@ func (sm *SprocketManager) StartSprocket() error {
 		return fmt.Errorf("sprocket script does not exist")
 	}
 
-	// Create a new context for this command
 	cmdCtx, cmdCancel := context.WithCancel(sm.ctx)
 
-	// Make the script executable
 	if err := os.Chmod(sm.scriptPath, 0755); chk.E(err) {
 		cmdCancel()
 		return fmt.Errorf("failed to make script executable: %v", err)
 	}
 
-	// Start the script
 	cmd := exec.CommandContext(cmdCtx, sm.scriptPath)
 	cmd.Dir = sm.configDir
 
-	// Set up stdio pipes for communication
-	stdin, err := cmd.StdinPipe()
+	stdinPipe, err := cmd.StdinPipe()
 	if chk.E(err) {
 		cmdCancel()
 		return fmt.Errorf("failed to create stdin pipe: %v", err)
 	}
 
-	stdout, err := cmd.StdoutPipe()
+	stdoutPipe, err := cmd.StdoutPipe()
 	if chk.E(err) {
 		cmdCancel()
-		stdin.Close()
+		stdinPipe.Close()
 		return fmt.Errorf("failed to create stdout pipe: %v", err)
 	}
 
-	stderr, err := cmd.StderrPipe()
+	stderrPipe, err := cmd.StderrPipe()
 	if chk.E(err) {
 		cmdCancel()
-		stdin.Close()
-		stdout.Close()
+		stdinPipe.Close()
+		stdoutPipe.Close()
 		return fmt.Errorf("failed to create stderr pipe: %v", err)
 	}
 
-	// Start the command
 	if err := cmd.Start(); chk.E(err) {
 		cmdCancel()
-		stdin.Close()
-		stdout.Close()
-		stderr.Close()
+		stdinPipe.Close()
+		stdoutPipe.Close()
+		stderrPipe.Close()
 		return fmt.Errorf("failed to start sprocket: %v", err)
 	}
 
-	sm.currentCmd = cmd
-	sm.currentCancel = cmdCancel
-	sm.stdin = stdin
-	sm.stdout = stdout
-	sm.stderr = stderr
-	sm.isRunning = true
+	sm.setStateCh <- sprocketSetStateReq{
+		isRunning: boolPtr(true),
+		cmd:       cmd,
+		cmdCancel: cmdCancel,
+		stdin:     stdinPipe,
+		stdout:    stdoutPipe,
+		stderr:    stderrPipe,
+	}
 
-	// Start response reader in background
-	go sm.readResponses()
-
-	// Log stderr output in background
-	go sm.logOutput(stdout, stderr)
-
-	// Monitor the process
-	go sm.monitorProcess()
+	go sm.readResponses(stdoutPipe)
+	go sm.logOutput(stdoutPipe, stderrPipe)
+	go sm.monitorProcess(cmd)
 
 	log.I.F("sprocket started (pid=%d)", cmd.Process.Pid)
 	return nil
@@ -238,70 +347,31 @@ func (sm *SprocketManager) StartSprocket() error {
 
 // StopSprocket stops the sprocket script gracefully, with SIGKILL fallback
 func (sm *SprocketManager) StopSprocket() error {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
-
-	if !sm.isRunning || sm.currentCmd == nil {
+	state := sm.getState()
+	if !state.isRunning {
 		return fmt.Errorf("sprocket is not running")
 	}
 
-	// Close stdin first to signal the script to exit
-	if sm.stdin != nil {
-		sm.stdin.Close()
+	// Close stdin to signal script to exit, then cancel context
+	if state.stdin != nil {
+		state.stdin.Close()
 	}
 
-	// Cancel the context
-	if sm.currentCancel != nil {
-		sm.currentCancel()
-	}
+	// The monitorProcess goroutine will handle cleanup when the process exits
+	// We need to set state to clear pipes
+	sm.setStateCh <- sprocketSetStateReq{clearPipes: true}
 
-	// Wait for graceful shutdown with timeout
-	done := make(chan error, 1)
-	go func() {
-		done <- sm.currentCmd.Wait()
-	}()
-
-	select {
-	case <-done:
-		// Process exited gracefully
-		log.I.F("sprocket stopped gracefully")
-	case <-time.After(5 * time.Second):
-		// Force kill after 5 seconds
-		log.W.F("sprocket did not stop gracefully, sending SIGKILL")
-		if err := sm.currentCmd.Process.Kill(); chk.E(err) {
-			log.E.F("failed to kill sprocket process: %v", err)
-		}
-		<-done // Wait for the kill to complete
-	}
-
-	// Clean up pipes
-	if sm.stdin != nil {
-		sm.stdin.Close()
-		sm.stdin = nil
-	}
-	if sm.stdout != nil {
-		sm.stdout.Close()
-		sm.stdout = nil
-	}
-	if sm.stderr != nil {
-		sm.stderr.Close()
-		sm.stderr = nil
-	}
-
-	sm.isRunning = false
-	sm.currentCmd = nil
-	sm.currentCancel = nil
-
+	log.I.F("sprocket stopped")
 	return nil
 }
 
 // RestartSprocket stops and starts the sprocket script
 func (sm *SprocketManager) RestartSprocket() error {
-	if sm.isRunning {
+	state := sm.getState()
+	if state.isRunning {
 		if err := sm.StopSprocket(); chk.E(err) {
 			return fmt.Errorf("failed to stop sprocket: %v", err)
 		}
-		// Give it a moment to fully stop
 		time.Sleep(100 * time.Millisecond)
 	}
 
@@ -310,14 +380,13 @@ func (sm *SprocketManager) RestartSprocket() error {
 
 // UpdateSprocket updates the sprocket script and restarts it with zero downtime
 func (sm *SprocketManager) UpdateSprocket(scriptContent string) error {
-	// Ensure config directory exists
 	if err := os.MkdirAll(sm.configDir, 0755); chk.E(err) {
 		return fmt.Errorf("failed to create config directory: %v", err)
 	}
 
-	// If script content is empty, delete the script and stop
 	if strings.TrimSpace(scriptContent) == "" {
-		if sm.isRunning {
+		state := sm.getState()
+		if state.isRunning {
 			if err := sm.StopSprocket(); chk.E(err) {
 				log.E.F("failed to stop sprocket before deletion: %v", err)
 			}
@@ -332,7 +401,6 @@ func (sm *SprocketManager) UpdateSprocket(scriptContent string) error {
 		return nil
 	}
 
-	// Create backup of existing script if it exists
 	if _, err := os.Stat(sm.scriptPath); err == nil {
 		timestamp := time.Now().Format("20060102150405")
 		backupPath := sm.scriptPath + "." + timestamp
@@ -343,73 +411,40 @@ func (sm *SprocketManager) UpdateSprocket(scriptContent string) error {
 		}
 	}
 
-	// Write new script to temporary file first
 	tempPath := sm.scriptPath + ".tmp"
 	if err := os.WriteFile(tempPath, []byte(scriptContent), 0755); chk.E(err) {
 		return fmt.Errorf("failed to write temporary sprocket script: %v", err)
 	}
 
-	// If sprocket is running, do zero-downtime update
-	if sm.isRunning {
-		// Atomically replace the script file
+	state := sm.getState()
+	if state.isRunning {
 		if err := os.Rename(tempPath, sm.scriptPath); chk.E(err) {
-			os.Remove(tempPath) // Clean up temp file
+			os.Remove(tempPath)
 			return fmt.Errorf("failed to replace sprocket script: %v", err)
 		}
-
 		log.I.F("sprocket script updated atomically")
-
-		// Restart the sprocket process
 		return sm.RestartSprocket()
-	} else {
-		// Not running, just replace the file
-		if err := os.Rename(tempPath, sm.scriptPath); chk.E(err) {
-			os.Remove(tempPath) // Clean up temp file
-			return fmt.Errorf("failed to replace sprocket script: %v", err)
-		}
-
-		log.I.F("sprocket script updated")
-		return nil
 	}
+
+	if err := os.Rename(tempPath, sm.scriptPath); chk.E(err) {
+		os.Remove(tempPath)
+		return fmt.Errorf("failed to replace sprocket script: %v", err)
+	}
+	log.I.F("sprocket script updated")
+	return nil
 }
 
 // GetSprocketStatus returns the current status of the sprocket
 func (sm *SprocketManager) GetSprocketStatus() map[string]interface{} {
-	sm.mutex.RLock()
-	defer sm.mutex.RUnlock()
-
-	status := map[string]interface{}{
-		"is_running":    sm.isRunning,
-		"script_exists": false,
-		"script_path":   sm.scriptPath,
-	}
-
-	if _, err := os.Stat(sm.scriptPath); err == nil {
-		status["script_exists"] = true
-
-		// Get script content
-		if content, err := os.ReadFile(sm.scriptPath); err == nil {
-			status["script_content"] = string(content)
-		}
-
-		// Get file info
-		if info, err := os.Stat(sm.scriptPath); err == nil {
-			status["script_modified"] = info.ModTime()
-		}
-	}
-
-	if sm.isRunning && sm.currentCmd != nil && sm.currentCmd.Process != nil {
-		status["pid"] = sm.currentCmd.Process.Pid
-	}
-
-	return status
+	resp := make(chan map[string]interface{}, 1)
+	sm.getFullStatusCh <- sprocketGetFullStatusReq{resp: resp}
+	return <-resp
 }
 
 // GetSprocketVersions returns a list of all sprocket script versions
 func (sm *SprocketManager) GetSprocketVersions() ([]map[string]interface{}, error) {
 	versions := []map[string]interface{}{}
 
-	// Check for current script
 	if _, err := os.Stat(sm.scriptPath); err == nil {
 		if info, err := os.Stat(sm.scriptPath); err == nil {
 			if content, err := os.ReadFile(sm.scriptPath); err == nil {
@@ -424,7 +459,6 @@ func (sm *SprocketManager) GetSprocketVersions() ([]map[string]interface{}, erro
 		}
 	}
 
-	// Check for backup versions
 	dir := filepath.Dir(sm.scriptPath)
 	files, err := os.ReadDir(dir)
 	if chk.E(err) {
@@ -453,7 +487,6 @@ func (sm *SprocketManager) GetSprocketVersions() ([]map[string]interface{}, erro
 
 // DeleteSprocketVersion deletes a specific sprocket version
 func (sm *SprocketManager) DeleteSprocketVersion(filename string) error {
-	// Don't allow deleting the current script
 	if filename == "sprocket.sh" {
 		return fmt.Errorf("cannot delete current sprocket script")
 	}
@@ -472,7 +505,6 @@ func (sm *SprocketManager) logOutput(stdout, stderr io.ReadCloser) {
 	defer stdout.Close()
 	defer stderr.Close()
 
-	// Trace-log stdout lines
 	go func() {
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
@@ -484,7 +516,6 @@ func (sm *SprocketManager) logOutput(stdout, stderr io.ReadCloser) {
 		}
 	}()
 
-	// Trace-log stderr lines
 	go func() {
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
@@ -499,27 +530,20 @@ func (sm *SprocketManager) logOutput(stdout, stderr io.ReadCloser) {
 
 // ProcessEvent sends an event to the sprocket script and waits for a response
 func (sm *SprocketManager) ProcessEvent(evt *event.E) (*SprocketResponse, error) {
-	sm.mutex.RLock()
-	if !sm.isRunning || sm.stdin == nil {
-		sm.mutex.RUnlock()
+	state := sm.getState()
+	if !state.isRunning || state.stdin == nil {
 		return nil, fmt.Errorf("sprocket is not running")
 	}
-	stdin := sm.stdin
-	sm.mutex.RUnlock()
 
-	// Serialize the event to JSON
 	eventJSON, err := json.Marshal(evt)
 	if chk.E(err) {
 		return nil, fmt.Errorf("failed to serialize event: %v", err)
 	}
 
-	// Send the event JSON to the sprocket script
-	// The final ']' should be the only thing after the event's raw JSON
-	if _, err := stdin.Write(eventJSON); chk.E(err) {
+	if _, err := state.stdin.Write(eventJSON); chk.E(err) {
 		return nil, fmt.Errorf("failed to write event to sprocket: %v", err)
 	}
 
-	// Wait for response with timeout
 	select {
 	case response := <-sm.responseChan:
 		return &response, nil
@@ -531,12 +555,8 @@ func (sm *SprocketManager) ProcessEvent(evt *event.E) (*SprocketResponse, error)
 }
 
 // readResponses reads JSONL responses from the sprocket script
-func (sm *SprocketManager) readResponses() {
-	if sm.stdout == nil {
-		return
-	}
-
-	scanner := bufio.NewScanner(sm.stdout)
+func (sm *SprocketManager) readResponses(stdout io.ReadCloser) {
+	scanner := bufio.NewScanner(stdout)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" {
@@ -549,7 +569,6 @@ func (sm *SprocketManager) readResponses() {
 			continue
 		}
 
-		// Send response to channel (non-blocking)
 		select {
 		case sm.responseChan <- response:
 		default:
@@ -569,51 +588,27 @@ func (sm *SprocketManager) IsEnabled() bool {
 
 // IsRunning returns whether sprocket is currently running
 func (sm *SprocketManager) IsRunning() bool {
-	sm.mutex.RLock()
-	defer sm.mutex.RUnlock()
-	return sm.isRunning
+	return sm.getState().isRunning
 }
 
 // IsDisabled returns whether sprocket is disabled due to failure
 func (sm *SprocketManager) IsDisabled() bool {
-	sm.mutex.RLock()
-	defer sm.mutex.RUnlock()
-	return sm.disabled
+	return sm.getState().disabled
 }
 
 // monitorProcess monitors the sprocket process and cleans up when it exits
-func (sm *SprocketManager) monitorProcess() {
-	if sm.currentCmd == nil {
+func (sm *SprocketManager) monitorProcess(cmd *exec.Cmd) {
+	if cmd == nil {
 		return
 	}
 
-	err := sm.currentCmd.Wait()
+	err := cmd.Wait()
 
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
-
-	// Clean up pipes
-	if sm.stdin != nil {
-		sm.stdin.Close()
-		sm.stdin = nil
-	}
-	if sm.stdout != nil {
-		sm.stdout.Close()
-		sm.stdout = nil
-	}
-	if sm.stderr != nil {
-		sm.stderr.Close()
-		sm.stderr = nil
-	}
-
-	sm.isRunning = false
-	sm.currentCmd = nil
-	sm.currentCancel = nil
+	sm.setStateCh <- sprocketSetStateReq{clearPipes: true}
 
 	if err != nil {
 		log.E.F("sprocket process exited with error: %v", err)
-		// Auto-disable sprocket on failure
-		sm.disabled = true
+		sm.setStateCh <- sprocketSetStateReq{disabled: boolPtr(true)}
 		log.W.F("sprocket disabled due to process failure - all events will be rejected (script location: %s)", sm.scriptPath)
 	} else {
 		log.I.F("sprocket process exited normally")
@@ -623,7 +618,8 @@ func (sm *SprocketManager) monitorProcess() {
 // Shutdown gracefully shuts down the sprocket manager
 func (sm *SprocketManager) Shutdown() {
 	sm.cancel()
-	if sm.isRunning {
+	state := sm.getState()
+	if state.isRunning {
 		sm.StopSprocket()
 	}
 }

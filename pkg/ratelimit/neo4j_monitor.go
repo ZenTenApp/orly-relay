@@ -2,14 +2,18 @@ package ratelimit
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"git.smesh.lol/orly/pkg/lol/log"
 	"git.smesh.lol/orly/pkg/interfaces/loadmonitor"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
+
+// Neo4j actor request types
+type neo4jGetMetricsReq struct {
+	resp chan loadmonitor.Metrics
+}
 
 // Neo4jMonitor implements loadmonitor.Monitor for Neo4j database.
 // Since Neo4j driver doesn't expose detailed metrics, we track:
@@ -48,9 +52,8 @@ type Neo4jMonitor struct {
 	activeWrites   atomic.Int32
 	maxConcurrency int
 
-	// Cached metrics (updated by background goroutine)
-	metricsLock   sync.RWMutex
-	cachedMetrics loadmonitor.Metrics
+	// Actor channel for cached metrics
+	getMetricsCh chan neo4jGetMetricsReq
 
 	// Background collection
 	stopChan chan struct{}
@@ -86,6 +89,7 @@ func NewNeo4jMonitor(
 		querySem:       querySem,
 		maxConcurrency: maxConcurrency,
 		latencyAlpha:   0.1, // 10% new, 90% old for smooth EMA
+		getMetricsCh:   make(chan neo4jGetMetricsReq, 1),
 		stopChan:       make(chan struct{}),
 		stopped:        make(chan struct{}),
 		interval:       updateInterval,
@@ -119,7 +123,7 @@ func (m *Neo4jMonitor) ForceEmergencyMode(duration time.Duration) {
 	m.emergencyModeUntil.Store(time.Now().Add(duration).UnixNano())
 	m.inEmergencyMode.Store(true)
 	m.throttleMultiplier.Store(150) // Start at 1.5x
-	log.W.F("⚠️  Neo4j emergency mode forced for %v", duration)
+	log.W.F("Neo4j emergency mode forced for %v", duration)
 }
 
 // GetThrottleMultiplier returns the current throttle multiplier.
@@ -130,9 +134,9 @@ func (m *Neo4jMonitor) GetThrottleMultiplier() float64 {
 
 // GetMetrics returns the current load metrics.
 func (m *Neo4jMonitor) GetMetrics() loadmonitor.Metrics {
-	m.metricsLock.RLock()
-	defer m.metricsLock.RUnlock()
-	return m.cachedMetrics
+	resp := make(chan loadmonitor.Metrics, 1)
+	m.getMetricsCh <- neo4jGetMetricsReq{resp: resp}
+	return <-resp
 }
 
 // RecordQueryLatency records a query latency sample using exponential moving average.
@@ -190,25 +194,29 @@ func (m *Neo4jMonitor) Stop() {
 	<-m.stopped
 }
 
-// collectLoop periodically collects metrics.
+// collectLoop periodically collects metrics and serves actor requests.
 func (m *Neo4jMonitor) collectLoop() {
 	defer close(m.stopped)
 
 	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()
 
+	var cachedMetrics loadmonitor.Metrics
+
 	for {
 		select {
 		case <-m.stopChan:
 			return
 		case <-ticker.C:
-			m.updateMetrics()
+			cachedMetrics = m.updateMetrics()
+		case req := <-m.getMetricsCh:
+			req.resp <- cachedMetrics
 		}
 	}
 }
 
 // updateMetrics collects current metrics and manages aggressive throttling.
-func (m *Neo4jMonitor) updateMetrics() {
+func (m *Neo4jMonitor) updateMetrics() loadmonitor.Metrics {
 	metrics := loadmonitor.Metrics{
 		Timestamp: time.Now(),
 	}
@@ -284,10 +292,7 @@ func (m *Neo4jMonitor) updateMetrics() {
 	metrics.QueryLatency = time.Duration(queryLatencyNs)
 	metrics.WriteLatency = time.Duration(writeLatencyNs)
 
-	// Update cached metrics
-	m.metricsLock.Lock()
-	m.cachedMetrics = metrics
-	m.metricsLock.Unlock()
+	return metrics
 }
 
 // updateEmergencyMode manages the emergency mode state and throttle multiplier.
@@ -312,7 +317,7 @@ func (m *Neo4jMonitor) updateEmergencyMode(memoryPressure float64) {
 			m.inEmergencyMode.Store(true)
 			m.throttleMultiplier.Store(150)
 			m.lastThrottleCheck.Store(now)
-			log.W.F("⚠️  Neo4j entering emergency mode: memory %.1f%% >= threshold %.1f%%, throttle 1.5x",
+			log.W.F("Neo4j entering emergency mode: memory %.1f%% >= threshold %.1f%%, throttle 1.5x",
 				memoryPressure*100, threshold*100)
 			return
 		}
@@ -330,7 +335,7 @@ func (m *Neo4jMonitor) updateEmergencyMode(memoryPressure float64) {
 			}
 			m.throttleMultiplier.Store(newMult)
 			m.lastThrottleCheck.Store(now)
-			log.W.F("⚠️  Neo4j still over memory limit: %.1f%%, doubling throttle to %.1fx",
+			log.W.F("Neo4j still over memory limit: %.1f%%, doubling throttle to %.1fx",
 				memoryPressure*100, float64(newMult)/100.0)
 		}
 	} else {
@@ -338,7 +343,7 @@ func (m *Neo4jMonitor) updateEmergencyMode(memoryPressure float64) {
 		if m.inEmergencyMode.Load() {
 			m.inEmergencyMode.Store(false)
 			m.throttleMultiplier.Store(100) // Reset to 1.0x
-			log.I.F("✅ Neo4j exiting emergency mode: memory %.1f%% < threshold %.1f%%",
+			log.I.F("Neo4j exiting emergency mode: memory %.1f%% < threshold %.1f%%",
 				memoryPressure*100, threshold*100)
 		}
 	}

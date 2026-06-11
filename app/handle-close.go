@@ -26,16 +26,13 @@ func (l *Listener) HandleClose(req []byte) (err error) {
 
 	subID := string(env.ID)
 
-	// Cancel the subscription goroutine by calling its cancel function
-	l.subscriptionsMu.Lock()
-	if cancelFunc, exists := l.subscriptions[subID]; exists {
+	// Cancel the subscription goroutine via actor
+	if _, exists := l.SubGet(subID); exists {
 		log.D.F("cancelling subscription %s for %s", subID, l.remote)
-		cancelFunc()
-		delete(l.subscriptions, subID)
+		l.SubDelete(subID)
 	} else {
 		log.D.F("subscription %s not found for %s (already closed?)", subID, l.remote)
 	}
-	l.subscriptionsMu.Unlock()
 
 	// Also remove from publisher's tracking
 	l.publishers.Receive(

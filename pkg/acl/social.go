@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"math"
 	"reflect"
-	"sync"
 	"time"
 
 	"git.smesh.lol/orly/pkg/lol/chk"
@@ -19,6 +18,33 @@ import (
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 	nhex "git.smesh.lol/orly/pkg/nostr/encoders/hex"
 )
+
+// social actor request types
+
+type socialGetAccessLevelReq struct {
+	pub     []byte
+	address string
+	resp    chan string
+}
+
+type socialGetThrottleDelayReq struct {
+	pubkey []byte
+	ip     string
+	resp   chan time.Duration
+}
+
+type socialRecordInteractionReq struct {
+	outsiderPubkeyHex string
+}
+
+type socialGetTrustMultiplierReq struct {
+	pubkeyHex string
+	resp      chan float64
+}
+
+type socialDecayAndCleanReq struct {
+	resp chan struct{}
+}
 
 // Social is an ACL driver that uses WoT graph topology with inbound-trust
 // rate limiting. It assigns throttle tiers based on BFS depth from anchor
@@ -32,8 +58,7 @@ type Social struct {
 	// Concrete database for graph traversal (type-asserted from database.Database)
 	badgerDB *database.D
 
-	// Identity sets
-	mu        sync.RWMutex
+	// Identity sets (immutable after Configure, read by actor)
 	owners    [][]byte
 	admins    [][]byte
 	ownersSet map[string]struct{}
@@ -47,9 +72,14 @@ type Social struct {
 	depth3Throttle   *ProgressiveThrottle
 	outsiderThrottle *ProgressiveThrottle
 
-	// Inbound trust signals: outsider pubkey hex → interaction signal
-	trustMu      sync.Mutex
-	trustSignals map[string]*TrustSignal
+	// Actor channels
+	getAccessLevelCh      chan socialGetAccessLevelReq
+	getThrottleDelayCh    chan socialGetThrottleDelayReq
+	recordInteractionCh   chan socialRecordInteractionReq
+	getTrustMultiplierCh  chan socialGetTrustMultiplierReq
+	decayAndCleanCh       chan socialDecayAndCleanReq
+	stop                  chan struct{}
+	done                  chan struct{}
 }
 
 // TrustSignal records the accumulated trust an outsider has earned from
@@ -87,7 +117,6 @@ func (s *Social) Configure(cfg ...any) (err error) {
 	// Parse owner and admin pubkeys
 	s.ownersSet = make(map[string]struct{})
 	s.adminsSet = make(map[string]struct{})
-	s.trustSignals = make(map[string]*TrustSignal)
 
 	for _, owner := range s.cfg.Owners {
 		if own, e := bech32encoding.NpubOrHexToPublicKeyBinary(owner); !chk.E(e) {
@@ -118,6 +147,16 @@ func (s *Social) Configure(cfg ...any) (err error) {
 	s.depth3Throttle = NewProgressiveThrottle(d3Inc, d3Max)
 	s.outsiderThrottle = NewProgressiveThrottle(outInc, outMax)
 
+	// Start actor goroutine
+	s.getAccessLevelCh = make(chan socialGetAccessLevelReq)
+	s.getThrottleDelayCh = make(chan socialGetThrottleDelayReq)
+	s.recordInteractionCh = make(chan socialRecordInteractionReq, 128)
+	s.getTrustMultiplierCh = make(chan socialGetTrustMultiplierReq)
+	s.decayAndCleanCh = make(chan socialDecayAndCleanReq)
+	s.stop = make(chan struct{})
+	s.done = make(chan struct{})
+	go s.actor()
+
 	log.I.F("social ACL configured: %d owners, %d admins, WoT depth %d",
 		len(s.owners), len(s.admins), wotDepth)
 	log.I.F("social ACL throttles: d2=%v/%v d3=%v/%v outsider=%v/%v",
@@ -126,21 +165,96 @@ func (s *Social) Configure(cfg ...any) (err error) {
 	return nil
 }
 
+func (s *Social) actor() {
+	defer close(s.done)
+
+	trustSignals := make(map[string]*TrustSignal)
+
+	for {
+		select {
+		case <-s.stop:
+			return
+
+		case req := <-s.getAccessLevelCh:
+			pubHex := hex.EncodeToString(req.pub)
+			level := "write"
+			if _, ok := s.ownersSet[pubHex]; ok {
+				level = "owner"
+			} else if _, ok := s.adminsSet[pubHex]; ok {
+				level = "admin"
+			}
+			req.resp <- level
+
+		case req := <-s.getThrottleDelayCh:
+			pubkeyHex := hex.EncodeToString(req.pubkey)
+			if _, ok := s.ownersSet[pubkeyHex]; ok {
+				req.resp <- 0
+				continue
+			}
+			if _, ok := s.adminsSet[pubkeyHex]; ok {
+				req.resp <- 0
+				continue
+			}
+			depth := s.wotMap.GetDepthByHex(pubkeyHex)
+			var d time.Duration
+			switch {
+			case depth == 0:
+				d = 0
+			case depth == 1:
+				d = 0
+			case depth == 2:
+				d = s.depth2Throttle.GetDelay(req.ip, pubkeyHex)
+			case depth == 3:
+				d = s.depth3Throttle.GetDelay(req.ip, pubkeyHex)
+			default:
+				baseDelay := s.outsiderThrottle.GetDelay(req.ip, pubkeyHex)
+				trustMult := s.getTrustMultiplierInternal(pubkeyHex, trustSignals)
+				d = time.Duration(float64(baseDelay) * (1.0 - trustMult))
+			}
+			req.resp <- d
+
+		case req := <-s.recordInteractionCh:
+			signal, ok := trustSignals[req.outsiderPubkeyHex]
+			if !ok {
+				signal = &TrustSignal{LastDecay: time.Now()}
+				trustSignals[req.outsiderPubkeyHex] = signal
+			}
+			applyDecay(signal)
+			signal.Count++
+
+		case req := <-s.getTrustMultiplierCh:
+			req.resp <- s.getTrustMultiplierInternal(req.pubkeyHex, trustSignals)
+
+		case req := <-s.decayAndCleanCh:
+			for key, signal := range trustSignals {
+				applyDecay(signal)
+				if signal.Count < 0.01 {
+					delete(trustSignals, key)
+				}
+			}
+			log.T.F("social ACL: trust signals cleanup, %d active", len(trustSignals))
+			req.resp <- struct{}{}
+		}
+	}
+}
+
+// getTrustMultiplierInternal computes trust multiplier from owned state. Must be called from actor.
+func (s *Social) getTrustMultiplierInternal(pubkeyHex string, trustSignals map[string]*TrustSignal) float64 {
+	signal, ok := trustSignals[pubkeyHex]
+	if !ok {
+		return 0.0
+	}
+	applyDecay(signal)
+	if signal.Count < 0.01 {
+		return 0.0
+	}
+	return 1.0 - (1.0 / (1.0 + signal.Count/5.0))
+}
+
 func (s *Social) GetAccessLevel(pub []byte, address string) (level string) {
-	pubHex := hex.EncodeToString(pub)
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if _, ok := s.ownersSet[pubHex]; ok {
-		return "owner"
-	}
-	if _, ok := s.adminsSet[pubHex]; ok {
-		return "admin"
-	}
-
-	// All users get write access; throttling is applied separately via GetThrottleDelay
-	return "write"
+	resp := make(chan string, 1)
+	s.getAccessLevelCh <- socialGetAccessLevelReq{pub: pub, address: address, resp: resp}
+	return <-resp
 }
 
 func (s *Social) GetACLInfo() (name, description, documentation string) {
@@ -158,39 +272,9 @@ func (s *Social) Type() string { return "social" }
 // GetThrottleDelay returns the rate-limit delay for this pubkey/IP based on
 // WoT depth and inbound trust signals.
 func (s *Social) GetThrottleDelay(pubkey []byte, ip string) time.Duration {
-	pubkeyHex := hex.EncodeToString(pubkey)
-
-	s.mu.RLock()
-	// Owners and admins are never throttled
-	if _, ok := s.ownersSet[pubkeyHex]; ok {
-		s.mu.RUnlock()
-		return 0
-	}
-	if _, ok := s.adminsSet[pubkeyHex]; ok {
-		s.mu.RUnlock()
-		return 0
-	}
-	s.mu.RUnlock()
-
-	depth := s.wotMap.GetDepthByHex(pubkeyHex)
-
-	switch {
-	case depth == 0: // anchor (owner/admin already handled above)
-		return 0
-	case depth == 1: // direct follow
-		return 0
-	case depth == 2:
-		return s.depth2Throttle.GetDelay(ip, pubkeyHex)
-	case depth == 3:
-		return s.depth3Throttle.GetDelay(ip, pubkeyHex)
-	default: // outsider (depth == -1 from GetDepthByHex)
-		baseDelay := s.outsiderThrottle.GetDelay(ip, pubkeyHex)
-		trustMult := s.getTrustMultiplier(pubkeyHex)
-		// trustMult of 1.0 = fully trusted by insiders = zero delay
-		// trustMult of 0.0 = no trust signals = full delay
-		adjusted := time.Duration(float64(baseDelay) * (1.0 - trustMult))
-		return adjusted
-	}
+	resp := make(chan time.Duration, 1)
+	s.getThrottleDelayCh <- socialGetThrottleDelayReq{pubkey: pubkey, ip: ip, resp: resp}
+	return <-resp
 }
 
 // CheckPolicy implements PolicyChecker. It inspects events from trusted users
@@ -275,45 +359,17 @@ func (s *Social) recordInteractionsFromPTags(ev *event.E) {
 }
 
 // recordInteraction increments the trust signal count for an outsider pubkey.
+// Fire-and-forget via buffered channel.
 func (s *Social) recordInteraction(outsiderPubkeyHex string) {
-	s.trustMu.Lock()
-	defer s.trustMu.Unlock()
-
-	signal, ok := s.trustSignals[outsiderPubkeyHex]
-	if !ok {
-		signal = &TrustSignal{LastDecay: time.Now()}
-		s.trustSignals[outsiderPubkeyHex] = signal
+	select {
+	case s.recordInteractionCh <- socialRecordInteractionReq{outsiderPubkeyHex: outsiderPubkeyHex}:
+	default:
+		// Drop if buffer full - acceptable for trust signals
 	}
-
-	// Apply pending decay before incrementing
-	s.applyDecay(signal)
-	signal.Count++
-}
-
-// getTrustMultiplier returns a value in [0.0, 1.0) where higher = more trusted.
-// Uses the formula: 1.0 - (1.0 / (1.0 + count/5.0))
-// This gives: 0 interactions → 0.0, 5 → 0.5, 10 → 0.67, 20 → 0.8
-func (s *Social) getTrustMultiplier(pubkeyHex string) float64 {
-	s.trustMu.Lock()
-	defer s.trustMu.Unlock()
-
-	signal, ok := s.trustSignals[pubkeyHex]
-	if !ok {
-		return 0.0
-	}
-
-	s.applyDecay(signal)
-
-	if signal.Count < 0.01 {
-		return 0.0
-	}
-
-	return 1.0 - (1.0 / (1.0 + signal.Count/5.0))
 }
 
 // applyDecay halves the trust signal count for each 24-hour period elapsed.
-// Must be called with trustMu held.
-func (s *Social) applyDecay(signal *TrustSignal) {
+func applyDecay(signal *TrustSignal) {
 	hoursSince := time.Since(signal.LastDecay).Hours()
 	if hoursSince >= 24 {
 		halvings := int(hoursSince / 24)
@@ -402,14 +458,7 @@ func (s *Social) trustCleanupLoop() {
 
 // decayAndCleanTrustSignals applies decay to all signals and removes dead ones.
 func (s *Social) decayAndCleanTrustSignals() {
-	s.trustMu.Lock()
-	defer s.trustMu.Unlock()
-
-	for key, signal := range s.trustSignals {
-		s.applyDecay(signal)
-		if signal.Count < 0.01 {
-			delete(s.trustSignals, key)
-		}
-	}
-	log.T.F("social ACL: trust signals cleanup, %d active", len(s.trustSignals))
+	resp := make(chan struct{}, 1)
+	s.decayAndCleanCh <- socialDecayAndCleanReq{resp: resp}
+	<-resp
 }

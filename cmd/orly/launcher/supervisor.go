@@ -8,7 +8,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -22,6 +22,27 @@ import (
 	orlyaclv1 "git.smesh.lol/orly/pkg/proto/orlyacl/v1"
 	orlydbv1 "git.smesh.lol/orly/pkg/proto/orlydb/v1"
 )
+
+// procReqKind identifies the type of request sent to a process actor.
+type procReqKind int
+
+const (
+	procReqStatus procReqKind = iota
+	procReqCmdInfo
+	procReqIncRestarts
+)
+
+// procRequest is a message sent to a process actor goroutine.
+type procRequest struct {
+	kind procReqKind
+	resp chan procResponse
+}
+
+// procResponse carries data back from the process actor.
+type procResponse struct {
+	cmd      *exec.Cmd
+	restarts int
+}
 
 // Supervisor manages the database, ACL, sync, and relay processes.
 // Uses self-exec pattern: spawns the same binary with different subcommands.
@@ -50,18 +71,53 @@ type Supervisor struct {
 	// Bridge bot process
 	bridgeBotProc *Process
 
-	wg     sync.WaitGroup
-	mu     sync.Mutex
-	closed bool
+	monitorDone []chan struct{} // one per monitor goroutine
+	stopCh      chan struct{}   // closed once to signal shutdown
+	stopped     atomic.Bool
 }
 
 // Process represents a managed subprocess.
+// State is owned by an actor goroutine; all access goes through reqCh.
 type Process struct {
-	name     string
-	cmd      *exec.Cmd
-	restarts int
-	exited   chan struct{} // closed when process exits
-	mu       sync.Mutex
+	name   string
+	exited chan struct{} // closed when process exits
+	reqCh  chan procRequest
+}
+
+// newProcess creates a Process and starts its actor goroutine.
+func newProcess(name string, cmd *exec.Cmd, exited chan struct{}) *Process {
+	p := &Process{
+		name:   name,
+		exited: exited,
+		reqCh:  make(chan procRequest),
+	}
+	go p.actor(cmd, 0)
+	return p
+}
+
+// actor owns cmd and restarts; processes requests sequentially.
+func (p *Process) actor(cmd *exec.Cmd, restarts int) {
+	for req := range p.reqCh {
+		switch req.kind {
+		case procReqStatus, procReqCmdInfo:
+			req.resp <- procResponse{cmd: cmd, restarts: restarts}
+		case procReqIncRestarts:
+			restarts++
+			req.resp <- procResponse{restarts: restarts}
+		}
+	}
+}
+
+// query sends a request and waits for the response.
+func (p *Process) query(kind procReqKind) procResponse {
+	resp := make(chan procResponse, 1)
+	p.reqCh <- procRequest{kind: kind, resp: resp}
+	return <-resp
+}
+
+// closeActor shuts down the actor goroutine.
+func (p *Process) closeActor() {
+	close(p.reqCh)
 }
 
 // ProcessStatus represents the status of a managed process.
@@ -88,19 +144,25 @@ func NewSupervisor(ctx context.Context, cancel context.CancelFunc, cfg *Config) 
 		selfPath: selfPath,
 		ctx:      ctx,
 		cancel:   cancel,
+		stopCh:   make(chan struct{}),
 	}, nil
+}
+
+// isStopped returns true if Stop has been called.
+func (s *Supervisor) isStopped() bool {
+	select {
+	case <-s.stopCh:
+		return true
+	default:
+		return false
+	}
 }
 
 // IsRunning returns true if any managed processes are running.
 func (s *Supervisor) IsRunning() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Check if any process is running
 	if s.dbProc != nil {
 		select {
 		case <-s.dbProc.exited:
-			// Process has exited
 		default:
 			return true
 		}
@@ -108,7 +170,6 @@ func (s *Supervisor) IsRunning() bool {
 	if s.relayProc != nil {
 		select {
 		case <-s.relayProc.exited:
-			// Process has exited
 		default:
 			return true
 		}
@@ -118,9 +179,11 @@ func (s *Supervisor) IsRunning() bool {
 
 // Start starts the database, optional ACL server, sync services, and relay processes.
 func (s *Supervisor) Start() error {
-	s.mu.Lock()
-	s.closed = false
-	s.mu.Unlock()
+	// Reset stop state for fresh start
+	if s.stopped.Load() {
+		s.stopped.Store(false)
+		s.stopCh = make(chan struct{})
+	}
 
 	// 1. Start database server (self-exec: orly db --driver=X)
 	if err := s.startDB(); err != nil {
@@ -205,72 +268,51 @@ func (s *Supervisor) Start() error {
 	}
 
 	// 7. Start monitoring goroutines
-	monitorCount := 2 // db + relay
-	if s.cfg.ACLEnabled {
-		monitorCount++
-	}
-	if s.cfg.DistributedSyncEnabled {
-		monitorCount++
-	}
-	if s.cfg.ClusterSyncEnabled {
-		monitorCount++
-	}
-	if s.cfg.RelayGroupEnabled {
-		monitorCount++
-	}
-	if s.cfg.NegentropyEnabled {
-		monitorCount++
-	}
-	if s.cfg.CertsEnabled {
-		monitorCount++
-	}
-	if s.cfg.BridgeEnabled {
-		monitorCount++
-	}
-	if s.cfg.BridgeBotEnabled && s.bridgeBotProc != nil {
-		monitorCount++
-	}
+	s.monitorDone = nil
 
-	s.wg.Add(monitorCount)
-	go s.monitorProcess(s.dbProc, "db", s.startDB)
+	s.launchMonitor(s.dbProc, "db", s.startDB)
 	if s.cfg.ACLEnabled {
-		go s.monitorProcess(s.aclProc, "acl", s.startACL)
+		s.launchMonitor(s.aclProc, "acl", s.startACL)
 	}
 	if s.cfg.DistributedSyncEnabled {
-		go s.monitorProcess(s.distributedSyncProc, "distributed-sync", s.startDistributedSync)
+		s.launchMonitor(s.distributedSyncProc, "distributed-sync", s.startDistributedSync)
 	}
 	if s.cfg.ClusterSyncEnabled {
-		go s.monitorProcess(s.clusterSyncProc, "cluster-sync", s.startClusterSync)
+		s.launchMonitor(s.clusterSyncProc, "cluster-sync", s.startClusterSync)
 	}
 	if s.cfg.RelayGroupEnabled {
-		go s.monitorProcess(s.relayGroupProc, "relaygroup", s.startRelayGroup)
+		s.launchMonitor(s.relayGroupProc, "relaygroup", s.startRelayGroup)
 	}
 	if s.cfg.NegentropyEnabled {
-		go s.monitorProcess(s.negentropyProc, "negentropy", s.startNegentropy)
+		s.launchMonitor(s.negentropyProc, "negentropy", s.startNegentropy)
 	}
 	if s.cfg.CertsEnabled {
-		go s.monitorProcess(s.certsProc, "certs", s.startCerts)
+		s.launchMonitor(s.certsProc, "certs", s.startCerts)
 	}
 	if s.cfg.BridgeEnabled {
-		go s.monitorProcess(s.bridgeProc, "bridge", s.startBridge)
+		s.launchMonitor(s.bridgeProc, "bridge", s.startBridge)
 	}
 	if s.cfg.BridgeBotEnabled && s.bridgeBotProc != nil {
-		go s.monitorProcess(s.bridgeBotProc, "bridgebot", s.startBridgeBot)
+		s.launchMonitor(s.bridgeBotProc, "bridgebot", s.startBridgeBot)
 	}
-	go s.monitorProcess(s.relayProc, "relay", s.startRelay)
+	s.launchMonitor(s.relayProc, "relay", s.startRelay)
 
 	return nil
 }
 
+// launchMonitor starts a monitor goroutine and tracks its done channel.
+func (s *Supervisor) launchMonitor(p *Process, procType string, restart func() error) {
+	done := make(chan struct{})
+	s.monitorDone = append(s.monitorDone, done)
+	go s.monitorProcess(p, procType, restart, done)
+}
+
 // Stop stops all managed processes gracefully.
 func (s *Supervisor) Stop() error {
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		return nil
+	if !s.stopped.CompareAndSwap(false, true) {
+		return nil // already stopped
 	}
-	s.closed = true
-	s.mu.Unlock()
+	close(s.stopCh)
 
 	// Stop bridge bot first (it connects to relay, must stop before relay)
 	if s.bridgeBotProc != nil {
@@ -308,16 +350,15 @@ func (s *Supervisor) Stop() error {
 	log.I.F("stopping database...")
 	s.stopProcess(s.dbProc, s.cfg.StopTimeout)
 
-	// Wait for monitor goroutines to exit
-	s.wg.Wait()
+	// Wait for all monitor goroutines to exit
+	for _, done := range s.monitorDone {
+		<-done
+	}
 
 	return nil
 }
 
 func (s *Supervisor) startDB() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	// Build environment for database process
 	env := os.Environ()
 	env = append(env, fmt.Sprintf("ORLY_DB_LISTEN=%s", s.cfg.DBListen))
@@ -335,11 +376,7 @@ func (s *Supervisor) startDB() error {
 	}
 
 	exited := make(chan struct{})
-	s.dbProc = &Process{
-		name:   "orly-db",
-		cmd:    cmd,
-		exited: exited,
-	}
+	s.dbProc = newProcess("orly-db", cmd, exited)
 
 	go func() {
 		cmd.Wait()
@@ -352,9 +389,6 @@ func (s *Supervisor) startDB() error {
 }
 
 func (s *Supervisor) startACL() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	// Build environment for ACL process
 	env := os.Environ()
 	env = append(env, fmt.Sprintf("ORLY_ACL_LISTEN=%s", s.cfg.ACLListen))
@@ -373,11 +407,7 @@ func (s *Supervisor) startACL() error {
 	}
 
 	exited := make(chan struct{})
-	s.aclProc = &Process{
-		name:   "orly-acl",
-		cmd:    cmd,
-		exited: exited,
-	}
+	s.aclProc = newProcess("orly-acl", cmd, exited)
 
 	go func() {
 		cmd.Wait()
@@ -448,9 +478,6 @@ func (s *Supervisor) stopACL() {
 }
 
 func (s *Supervisor) startRelay() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	// Build environment for relay process
 	env := os.Environ()
 	env = append(env, "ORLY_DB_TYPE=grpc")
@@ -506,11 +533,7 @@ func (s *Supervisor) startRelay() error {
 	}
 
 	exited := make(chan struct{})
-	s.relayProc = &Process{
-		name:   "orly",
-		cmd:    cmd,
-		exited: exited,
-	}
+	s.relayProc = newProcess("orly", cmd, exited)
 
 	go func() {
 		cmd.Wait()
@@ -554,15 +577,13 @@ func (s *Supervisor) stopProcess(p *Process, timeout time.Duration) {
 		return
 	}
 
-	p.mu.Lock()
-	if p.cmd == nil || p.cmd.Process == nil {
-		p.mu.Unlock()
+	r := p.query(procReqCmdInfo)
+	if r.cmd == nil || r.cmd.Process == nil {
 		return
 	}
-	p.mu.Unlock()
 
 	// Send SIGTERM for graceful shutdown
-	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+	if err := r.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		// Process may have already exited
 		log.D.F("%s already exited: %v", p.name, err)
 		return
@@ -574,21 +595,16 @@ func (s *Supervisor) stopProcess(p *Process, timeout time.Duration) {
 		log.I.F("%s stopped gracefully", p.name)
 	case <-time.After(timeout):
 		log.W.F("%s did not stop in time, killing", p.name)
-		p.cmd.Process.Kill()
+		r.cmd.Process.Kill()
 		<-p.exited // Wait for the kill to complete
 	}
 }
 
-func (s *Supervisor) monitorProcess(p *Process, procType string, restart func() error) {
-	defer s.wg.Done()
+func (s *Supervisor) monitorProcess(p *Process, procType string, restart func() error, done chan struct{}) {
+	defer close(done)
 
 	for {
-		// Check if we're shutting down
-		s.mu.Lock()
-		closed := s.closed
-		s.mu.Unlock()
-
-		if closed {
+		if s.isStopped() {
 			return
 		}
 
@@ -611,20 +627,16 @@ func (s *Supervisor) monitorProcess(p *Process, procType string, restart func() 
 		}
 
 		// Check again if we're shutting down
-		s.mu.Lock()
-		closed = s.closed
-		s.mu.Unlock()
-
-		if closed {
+		if s.isStopped() {
 			return
 		}
 
-		// Process exited unexpectedly
-		p.restarts++
-		log.W.F("%s exited unexpectedly, restart count: %d", p.name, p.restarts)
+		// Process exited unexpectedly - increment restarts via actor
+		r := p.query(procReqIncRestarts)
+		log.W.F("%s exited unexpectedly, restart count: %d", p.name, r.restarts)
 
 		// Backoff before restart
-		backoff := time.Duration(p.restarts) * time.Second
+		backoff := time.Duration(r.restarts) * time.Second
 		if backoff > 30*time.Second {
 			backoff = 30 * time.Second
 		}
@@ -636,11 +648,7 @@ func (s *Supervisor) monitorProcess(p *Process, procType string, restart func() 
 		}
 
 		// Check one more time before restarting
-		s.mu.Lock()
-		closed = s.closed
-		s.mu.Unlock()
-
-		if closed {
+		if s.isStopped() {
 			return
 		}
 
@@ -648,7 +656,6 @@ func (s *Supervisor) monitorProcess(p *Process, procType string, restart func() 
 			log.E.F("failed to restart %s: %v", p.name, err)
 		} else {
 			// Update p to point to the new process
-			s.mu.Lock()
 			switch procType {
 			case "db":
 				p = s.dbProc
@@ -664,146 +671,89 @@ func (s *Supervisor) monitorProcess(p *Process, procType string, restart func() 
 				p = s.negentropyProc
 			case "certs":
 				p = s.certsProc
+			case "bridge":
+				p = s.bridgeProc
+			case "bridgebot":
+				p = s.bridgeBotProc
 			default:
 				p = s.relayProc
 			}
-			s.mu.Unlock()
 		}
 	}
 }
 
 // startSyncServices starts all enabled sync services in parallel.
 func (s *Supervisor) startSyncServices() error {
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var errs []error
+	type result struct {
+		err error
+	}
 
-	// Start each enabled service in a goroutine
+	var chans []chan result
+
+	startOne := func(start func() error, addr string, timeout time.Duration, label string) {
+		ch := make(chan result, 1)
+		chans = append(chans, ch)
+		go func() {
+			if err := start(); err != nil {
+				ch <- result{fmt.Errorf("%s: %w", label, err)}
+				return
+			}
+			if err := s.waitForServiceReady(addr, timeout); err != nil {
+				ch <- result{fmt.Errorf("%s not ready: %w", label, err)}
+				return
+			}
+			log.I.F("%s service is ready", label)
+			ch <- result{}
+		}()
+	}
+
 	if s.cfg.DistributedSyncEnabled {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := s.startDistributedSync(); err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("distributed sync: %w", err))
-				mu.Unlock()
-				return
-			}
-			if err := s.waitForServiceReady(s.cfg.DistributedSyncListen, s.cfg.SyncReadyTimeout); err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("distributed sync not ready: %w", err))
-				mu.Unlock()
-				return
-			}
-			log.I.F("distributed sync service is ready")
-		}()
+		startOne(s.startDistributedSync, s.cfg.DistributedSyncListen, s.cfg.SyncReadyTimeout, "distributed sync")
 	}
-
 	if s.cfg.ClusterSyncEnabled {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := s.startClusterSync(); err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("cluster sync: %w", err))
-				mu.Unlock()
-				return
-			}
-			if err := s.waitForServiceReady(s.cfg.ClusterSyncListen, s.cfg.SyncReadyTimeout); err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("cluster sync not ready: %w", err))
-				mu.Unlock()
-				return
-			}
-			log.I.F("cluster sync service is ready")
-		}()
+		startOne(s.startClusterSync, s.cfg.ClusterSyncListen, s.cfg.SyncReadyTimeout, "cluster sync")
 	}
-
 	if s.cfg.RelayGroupEnabled {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := s.startRelayGroup(); err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("relaygroup: %w", err))
-				mu.Unlock()
-				return
-			}
-			if err := s.waitForServiceReady(s.cfg.RelayGroupListen, s.cfg.SyncReadyTimeout); err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("relaygroup not ready: %w", err))
-				mu.Unlock()
-				return
-			}
-			log.I.F("relaygroup service is ready")
-		}()
+		startOne(s.startRelayGroup, s.cfg.RelayGroupListen, s.cfg.SyncReadyTimeout, "relaygroup")
 	}
-
 	if s.cfg.NegentropyEnabled {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := s.startNegentropy(); err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("negentropy: %w", err))
-				mu.Unlock()
-				return
-			}
-			if err := s.waitForServiceReady(s.cfg.NegentropyListen, s.cfg.SyncReadyTimeout); err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("negentropy not ready: %w", err))
-				mu.Unlock()
-				return
-			}
-			log.I.F("negentropy service is ready")
-		}()
+		startOne(s.startNegentropy, s.cfg.NegentropyListen, s.cfg.SyncReadyTimeout, "negentropy")
 	}
 
-	wg.Wait()
-
-	if len(errs) > 0 {
-		return errs[0]
+	// Wait for all
+	for _, ch := range chans {
+		r := <-ch
+		if r.err != nil {
+			return r.err
+		}
 	}
 	return nil
 }
 
 // stopSyncServices stops all sync services.
 func (s *Supervisor) stopSyncServices() {
-	var wg sync.WaitGroup
+	var doneChans []chan struct{}
 
-	if s.distributedSyncProc != nil {
-		wg.Add(1)
+	stopOne := func(p *Process) {
+		if p == nil {
+			return
+		}
+		ch := make(chan struct{})
+		doneChans = append(doneChans, ch)
 		go func() {
-			defer wg.Done()
-			s.stopProcess(s.distributedSyncProc, 5*time.Second)
+			s.stopProcess(p, 5*time.Second)
+			close(ch)
 		}()
 	}
 
-	if s.clusterSyncProc != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			s.stopProcess(s.clusterSyncProc, 5*time.Second)
-		}()
-	}
+	stopOne(s.distributedSyncProc)
+	stopOne(s.clusterSyncProc)
+	stopOne(s.relayGroupProc)
+	stopOne(s.negentropyProc)
 
-	if s.relayGroupProc != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			s.stopProcess(s.relayGroupProc, 5*time.Second)
-		}()
+	for _, ch := range doneChans {
+		<-ch
 	}
-
-	if s.negentropyProc != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			s.stopProcess(s.negentropyProc, 5*time.Second)
-		}()
-	}
-
-	wg.Wait()
 }
 
 // waitForServiceReady waits for a gRPC service to be accepting connections.
@@ -831,9 +781,6 @@ func (s *Supervisor) waitForServiceReady(address string, timeout time.Duration) 
 }
 
 func (s *Supervisor) startDistributedSync() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	env := os.Environ()
 	env = append(env, fmt.Sprintf("ORLY_SYNC_DISTRIBUTED_LISTEN=%s", s.cfg.DistributedSyncListen))
 	env = append(env, "ORLY_SYNC_DISTRIBUTED_DB_TYPE=grpc")
@@ -851,11 +798,7 @@ func (s *Supervisor) startDistributedSync() error {
 	}
 
 	exited := make(chan struct{})
-	s.distributedSyncProc = &Process{
-		name:   "orly-sync-distributed",
-		cmd:    cmd,
-		exited: exited,
-	}
+	s.distributedSyncProc = newProcess("orly-sync-distributed", cmd, exited)
 
 	go func() {
 		cmd.Wait()
@@ -867,9 +810,6 @@ func (s *Supervisor) startDistributedSync() error {
 }
 
 func (s *Supervisor) startClusterSync() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	env := os.Environ()
 	env = append(env, fmt.Sprintf("ORLY_SYNC_CLUSTER_LISTEN=%s", s.cfg.ClusterSyncListen))
 	env = append(env, "ORLY_SYNC_CLUSTER_DB_TYPE=grpc")
@@ -887,11 +827,7 @@ func (s *Supervisor) startClusterSync() error {
 	}
 
 	exited := make(chan struct{})
-	s.clusterSyncProc = &Process{
-		name:   "orly-sync-cluster",
-		cmd:    cmd,
-		exited: exited,
-	}
+	s.clusterSyncProc = newProcess("orly-sync-cluster", cmd, exited)
 
 	go func() {
 		cmd.Wait()
@@ -903,9 +839,6 @@ func (s *Supervisor) startClusterSync() error {
 }
 
 func (s *Supervisor) startRelayGroup() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	env := os.Environ()
 	env = append(env, fmt.Sprintf("ORLY_SYNC_RELAYGROUP_LISTEN=%s", s.cfg.RelayGroupListen))
 	env = append(env, "ORLY_SYNC_RELAYGROUP_DB_TYPE=grpc")
@@ -923,11 +856,7 @@ func (s *Supervisor) startRelayGroup() error {
 	}
 
 	exited := make(chan struct{})
-	s.relayGroupProc = &Process{
-		name:   "orly-sync-relaygroup",
-		cmd:    cmd,
-		exited: exited,
-	}
+	s.relayGroupProc = newProcess("orly-sync-relaygroup", cmd, exited)
 
 	go func() {
 		cmd.Wait()
@@ -939,9 +868,6 @@ func (s *Supervisor) startRelayGroup() error {
 }
 
 func (s *Supervisor) startNegentropy() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	env := os.Environ()
 	env = append(env, fmt.Sprintf("ORLY_SYNC_NEGENTROPY_LISTEN=%s", s.cfg.NegentropyListen))
 	env = append(env, "ORLY_SYNC_NEGENTROPY_DB_TYPE=grpc")
@@ -959,11 +885,7 @@ func (s *Supervisor) startNegentropy() error {
 	}
 
 	exited := make(chan struct{})
-	s.negentropyProc = &Process{
-		name:   "orly-sync-negentropy",
-		cmd:    cmd,
-		exited: exited,
-	}
+	s.negentropyProc = newProcess("orly-sync-negentropy", cmd, exited)
 
 	go func() {
 		cmd.Wait()
@@ -975,9 +897,6 @@ func (s *Supervisor) startNegentropy() error {
 }
 
 func (s *Supervisor) startCerts() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	// Certificate service uses its own environment variables
 	env := os.Environ()
 	env = append(env, fmt.Sprintf("ORLY_CERTS_LOG_LEVEL=%s", s.cfg.LogLevel))
@@ -993,11 +912,7 @@ func (s *Supervisor) startCerts() error {
 	}
 
 	exited := make(chan struct{})
-	s.certsProc = &Process{
-		name:   "orly-certs",
-		cmd:    cmd,
-		exited: exited,
-	}
+	s.certsProc = newProcess("orly-certs", cmd, exited)
 
 	go func() {
 		cmd.Wait()
@@ -1010,9 +925,6 @@ func (s *Supervisor) startCerts() error {
 
 // GetProcessStatuses returns the status of all available modules with categories.
 func (s *Supervisor) GetProcessStatuses() []ProcessStatus {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	var statuses []ProcessStatus
 
 	// Database (using unified binary self-exec)
@@ -1077,19 +989,18 @@ func (s *Supervisor) getProcessStatusFull(p *Process, name string, enabled bool,
 	}
 
 	if p != nil {
-		p.mu.Lock()
-		defer p.mu.Unlock()
+		r := p.query(procReqStatus)
 
-		if p.cmd != nil && p.cmd.Process != nil {
+		if r.cmd != nil && r.cmd.Process != nil {
 			select {
 			case <-p.exited:
 				status = "stopped"
 			default:
 				status = "running"
-				pid = p.cmd.Process.Pid
+				pid = r.cmd.Process.Pid
 			}
 		}
-		restarts = p.restarts
+		restarts = r.restarts
 	}
 
 	return ProcessStatus{
@@ -1104,9 +1015,6 @@ func (s *Supervisor) getProcessStatusFull(p *Process, name string, enabled bool,
 }
 
 func (s *Supervisor) startBridge() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	// Build environment for bridge process
 	env := os.Environ()
 	env = append(env, fmt.Sprintf("ORLY_LOG_LEVEL=%s", s.cfg.LogLevel))
@@ -1144,11 +1052,7 @@ func (s *Supervisor) startBridge() error {
 	}
 
 	exited := make(chan struct{})
-	s.bridgeProc = &Process{
-		name:   "orly-bridge",
-		cmd:    cmd,
-		exited: exited,
-	}
+	s.bridgeProc = newProcess("orly-bridge", cmd, exited)
 
 	go func() {
 		cmd.Wait()
@@ -1161,9 +1065,6 @@ func (s *Supervisor) startBridge() error {
 }
 
 func (s *Supervisor) startBridgeBot() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	env := os.Environ()
 	env = append(env, fmt.Sprintf("ORLY_LOG_LEVEL=%s", s.cfg.LogLevel))
 	env = append(env, fmt.Sprintf("ORLY_BRIDGE_BOT_RELAY=%s", s.cfg.BridgeBotRelay))
@@ -1182,11 +1083,7 @@ func (s *Supervisor) startBridgeBot() error {
 	}
 
 	exited := make(chan struct{})
-	s.bridgeBotProc = &Process{
-		name:   "orly-bridgebot",
-		cmd:    cmd,
-		exited: exited,
-	}
+	s.bridgeBotProc = newProcess("orly-bridgebot", cmd, exited)
 
 	go func() {
 		cmd.Wait()

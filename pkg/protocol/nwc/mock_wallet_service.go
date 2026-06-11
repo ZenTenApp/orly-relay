@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	"git.smesh.lol/orly/pkg/lol/chk"
@@ -21,25 +20,60 @@ import (
 	"git.smesh.lol/orly/pkg/nostr/ws"
 )
 
+// --- actor request types ---
+
+type mwsGetBalanceReq struct {
+	resp chan int64
+}
+
+type mwsDebitBalanceReq struct {
+	amount int64
+	resp   chan bool // true if sufficient
+}
+
+type mwsCreditBalanceReq struct {
+	amount int64
+}
+
+type mwsGetOrCreateConvKeyReq struct {
+	clientPubkeyHex string
+	clientPubkey    []byte
+	resp            chan mwsGetOrCreateConvKeyResp
+}
+
+type mwsGetOrCreateConvKeyResp struct {
+	key []byte
+	err error
+}
+
+type mwsGetAllClientsReq struct {
+	resp chan map[string][]byte
+}
+
 // MockWalletService implements a mock NIP-47 wallet service for testing
 type MockWalletService struct {
-	relay            string
-	walletSecretKey  signer.I
-	walletPublicKey  []byte
-	client           *ws.Client
-	ctx              context.Context
-	cancel           context.CancelFunc
-	balance          int64 // in satoshis
-	balanceMutex     sync.RWMutex
-	connectedClients map[string][]byte // pubkey -> conversation key
-	clientsMutex     sync.RWMutex
+	relay           string
+	walletSecretKey signer.I
+	walletPublicKey []byte
+	client          *ws.Client
+	ctx             context.Context
+	cancel          context.CancelFunc
+
+	// actor channels
+	getBalanceCh          chan mwsGetBalanceReq
+	debitBalanceCh        chan mwsDebitBalanceReq
+	creditBalanceCh       chan mwsCreditBalanceReq
+	getOrCreateConvKeyCh  chan mwsGetOrCreateConvKeyReq
+	getAllClientsCh       chan mwsGetAllClientsReq
+
+	stop chan struct{}
+	done chan struct{}
 }
 
 // NewMockWalletService creates a new mock wallet service
 func NewMockWalletService(
 	relay string, initialBalance int64,
 ) (service *MockWalletService, err error) {
-	// Generate wallet keypair
 	var walletKey *p8k.Signer
 	if walletKey, err = p8k.New(); chk.E(err) {
 		return
@@ -51,30 +85,80 @@ func NewMockWalletService(
 	ctx, cancel := context.WithCancel(context.Background())
 
 	service = &MockWalletService{
-		relay:            relay,
-		walletSecretKey:  walletKey,
-		walletPublicKey:  walletKey.Pub(),
-		ctx:              ctx,
-		cancel:           cancel,
-		balance:          initialBalance,
-		connectedClients: make(map[string][]byte),
+		relay:           relay,
+		walletSecretKey: walletKey,
+		walletPublicKey: walletKey.Pub(),
+		ctx:             ctx,
+		cancel:          cancel,
+
+		getBalanceCh:         make(chan mwsGetBalanceReq),
+		debitBalanceCh:       make(chan mwsDebitBalanceReq),
+		creditBalanceCh:      make(chan mwsCreditBalanceReq, 16),
+		getOrCreateConvKeyCh: make(chan mwsGetOrCreateConvKeyReq),
+		getAllClientsCh:      make(chan mwsGetAllClientsReq),
+
+		stop: make(chan struct{}),
+		done: make(chan struct{}),
 	}
+	go service.runActor(initialBalance)
 	return
+}
+
+func (m *MockWalletService) runActor(initialBalance int64) {
+	defer close(m.done)
+
+	balance := initialBalance
+	connectedClients := make(map[string][]byte) // pubkey hex -> conversation key
+
+	for {
+		select {
+		case <-m.stop:
+			return
+		case req := <-m.getBalanceCh:
+			req.resp <- balance
+		case req := <-m.debitBalanceCh:
+			if balance*1000 < req.amount {
+				req.resp <- false
+			} else {
+				balance -= req.amount / 1000
+				req.resp <- true
+			}
+		case req := <-m.creditBalanceCh:
+			balance += req.amount / 1000
+		case req := <-m.getOrCreateConvKeyCh:
+			if existingKey, exists := connectedClients[req.clientPubkeyHex]; exists {
+				req.resp <- mwsGetOrCreateConvKeyResp{key: existingKey}
+			} else {
+				conversationKey, err := encryption.GenerateConversationKey(
+					m.walletSecretKey.Sec(), req.clientPubkey,
+				)
+				if err != nil {
+					req.resp <- mwsGetOrCreateConvKeyResp{err: err}
+				} else {
+					connectedClients[req.clientPubkeyHex] = conversationKey
+					req.resp <- mwsGetOrCreateConvKeyResp{key: conversationKey}
+				}
+			}
+		case req := <-m.getAllClientsCh:
+			result := make(map[string][]byte, len(connectedClients))
+			for k, v := range connectedClients {
+				result[k] = v
+			}
+			req.resp <- result
+		}
+	}
 }
 
 // Start begins the mock wallet service
 func (m *MockWalletService) Start() (err error) {
-	// Connect to relay
 	if m.client, err = ws.RelayConnect(m.ctx, m.relay); chk.E(err) {
 		return fmt.Errorf("failed to connect to relay: %w", err)
 	}
 
-	// Publish wallet info event
 	if err = m.publishWalletInfo(); chk.E(err) {
 		return fmt.Errorf("failed to publish wallet info: %w", err)
 	}
 
-	// Subscribe to request events
 	if err = m.subscribeToRequests(); chk.E(err) {
 		return fmt.Errorf("failed to subscribe to requests: %w", err)
 	}
@@ -90,6 +174,8 @@ func (m *MockWalletService) Stop() {
 	if m.client != nil {
 		m.client.Close()
 	}
+	close(m.stop)
+	<-m.done
 }
 
 // GetWalletPublicKey returns the wallet's public key
@@ -147,7 +233,6 @@ func (m *MockWalletService) subscribeToRequests() (err error) {
 		return
 	}
 
-	// Handle incoming request events
 	go m.handleRequestEvents(sub)
 	return
 }
@@ -171,28 +256,27 @@ func (m *MockWalletService) handleRequestEvents(sub *ws.Subscription) {
 
 // processRequestEvent processes a single NWC request event
 func (m *MockWalletService) processRequestEvent(ev *event.E) (err error) {
-	// Get client pubkey from event
 	clientPubkey := ev.Pubkey
 	clientPubkeyHex := hex.Enc(clientPubkey)
 
-	// Generate or get conversation key
-	var conversationKey []byte
-	m.clientsMutex.Lock()
-	if existingKey, exists := m.connectedClients[clientPubkeyHex]; exists {
-		conversationKey = existingKey
-	} else {
-		// Generate conversation key using the wallet's secret key and client's public key
-		if conversationKey, err = encryption.GenerateConversationKey(
-			m.walletSecretKey.Sec(), clientPubkey,
-		); chk.E(err) {
-			m.clientsMutex.Unlock()
-			return
-		}
-		m.connectedClients[clientPubkeyHex] = conversationKey
+	// Get or create conversation key via actor
+	resp := make(chan mwsGetOrCreateConvKeyResp, 1)
+	select {
+	case m.getOrCreateConvKeyCh <- mwsGetOrCreateConvKeyReq{
+		clientPubkeyHex: clientPubkeyHex,
+		clientPubkey:    clientPubkey,
+		resp:            resp,
+	}:
+	case <-m.stop:
+		return fmt.Errorf("service stopped")
 	}
-	m.clientsMutex.Unlock()
 
-	// Decrypt request content
+	r := <-resp
+	if r.err != nil {
+		return r.err
+	}
+	conversationKey := r.key
+
 	var decrypted string
 	if decrypted, err = encryption.Decrypt(
 		conversationKey, string(ev.Content),
@@ -212,16 +296,13 @@ func (m *MockWalletService) processRequestEvent(ev *event.E) (err error) {
 
 	params := request["params"]
 
-	// Process the method
 	var result any
 	if result, err = m.processMethod(method, params); chk.E(err) {
-		// Send error response
 		return m.sendErrorResponse(
 			clientPubkey, conversationKey, "INTERNAL", err.Error(),
 		)
 	}
 
-	// Send success response
 	return m.sendSuccessResponse(clientPubkey, conversationKey, result)
 }
 
@@ -262,12 +343,15 @@ func (m *MockWalletService) getInfo() (result map[string]any, err error) {
 
 // getBalance returns the current wallet balance
 func (m *MockWalletService) getBalance() (result map[string]any, err error) {
-	m.balanceMutex.RLock()
-	balance := m.balance
-	m.balanceMutex.RUnlock()
-
-	result = map[string]any{
-		"balance": balance * 1000, // convert to msats
+	resp := make(chan int64, 1)
+	select {
+	case m.getBalanceCh <- mwsGetBalanceReq{resp: resp}:
+		balance := <-resp
+		result = map[string]any{
+			"balance": balance * 1000, // convert to msats
+		}
+	case <-m.stop:
+		err = fmt.Errorf("service stopped")
 	}
 	return
 }
@@ -296,7 +380,6 @@ func (m *MockWalletService) makeInvoice(params any) (
 	paymentHash := make([]byte, 32)
 	rand.Read(paymentHash)
 
-	// Generate a fake bolt11 invoice
 	bolt11 := fmt.Sprintf("lnbc%dm1pwxxxxxxx", int64(amount/1000))
 
 	result = map[string]any{
@@ -327,18 +410,20 @@ func (m *MockWalletService) payInvoice(params any) (
 		return
 	}
 
-	// Mock payment amount (would parse from invoice in real implementation)
 	amount := int64(1000) // 1000 msats
 
-	// Check balance
-	m.balanceMutex.Lock()
-	if m.balance*1000 < amount {
-		m.balanceMutex.Unlock()
-		err = fmt.Errorf("insufficient balance")
+	// Check and debit balance via actor
+	resp := make(chan bool, 1)
+	select {
+	case m.debitBalanceCh <- mwsDebitBalanceReq{amount: amount, resp: resp}:
+		if !<-resp {
+			err = fmt.Errorf("insufficient balance")
+			return
+		}
+	case <-m.stop:
+		err = fmt.Errorf("service stopped")
 		return
 	}
-	m.balance -= amount / 1000
-	m.balanceMutex.Unlock()
 
 	preimage := make([]byte, 32)
 	rand.Read(preimage)
@@ -433,11 +518,16 @@ func (m *MockWalletService) emitPaymentNotification(
 		return
 	}
 
-	// Send notification to all connected clients
-	m.clientsMutex.RLock()
-	defer m.clientsMutex.RUnlock()
+	// Get all connected clients via actor
+	resp := make(chan map[string][]byte, 1)
+	select {
+	case m.getAllClientsCh <- mwsGetAllClientsReq{resp: resp}:
+	case <-m.stop:
+		return
+	}
+	clients := <-resp
 
-	for clientPubkeyHex, conversationKey := range m.connectedClients {
+	for clientPubkeyHex, conversationKey := range clients {
 		var clientPubkey []byte
 		if clientPubkey, err = hex.Dec(clientPubkeyHex); chk.E(err) {
 			continue
@@ -473,10 +563,12 @@ func (m *MockWalletService) emitPaymentNotification(
 func (m *MockWalletService) SimulateIncomingPayment(
 	pubkey []byte, amount int64, description string,
 ) (err error) {
-	// Add to balance
-	m.balanceMutex.Lock()
-	m.balance += amount / 1000 // convert msats to sats
-	m.balanceMutex.Unlock()
+	// Credit balance via actor
+	select {
+	case m.creditBalanceCh <- mwsCreditBalanceReq{amount: amount}:
+	case <-m.stop:
+		return fmt.Errorf("service stopped")
+	}
 
 	paymentHash := make([]byte, 32)
 	rand.Read(paymentHash)
@@ -494,6 +586,5 @@ func (m *MockWalletService) SimulateIncomingPayment(
 		"created_at":   time.Now().Unix(),
 	}
 
-	// Emit payment_received notification
 	return m.emitPaymentNotification("payment_received", paymentData)
 }

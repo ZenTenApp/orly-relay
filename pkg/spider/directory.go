@@ -2,7 +2,6 @@ package spider
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -36,6 +35,17 @@ const (
 	DirectorySpiderMaxEventsPerQuery = 5000
 )
 
+// setSeedCallbackReq requests setting the seed callback.
+type setSeedCallbackReq struct {
+	fn   func() [][]byte
+	resp chan struct{}
+}
+
+// lastRunReq requests the time of the last completed run.
+type lastRunReq struct {
+	resp chan time.Time
+}
+
 // DirectorySpider manages periodic relay discovery and metadata synchronization.
 // It discovers relays by crawling kind 10002 (relay list) events, expanding outward
 // in hops from seed pubkeys (whitelisted users), then fetches essential metadata
@@ -54,21 +64,26 @@ type DirectorySpider struct {
 	running atomic.Bool
 	lastRun time.Time
 
-	// Relay discovery state (reset each run)
-	mu               sync.Mutex
+	// Relay discovery state (reset each run, owned by actor goroutine)
 	discoveredRelays map[string]int  // URL -> hop distance
 	processedRelays  map[string]bool // Already fetched metadata from
 
-	// Self-detection
+	// Self-detection (owned by actor goroutine)
 	relayIdentityPubkey string
 	selfURLs            map[string]bool
 	nip11Cache          *dsync.NIP11Cache
 
-	// Callback for getting seed pubkeys (whitelisted users)
+	// Callback for getting seed pubkeys (owned by actor goroutine)
 	getSeedPubkeys func() [][]byte
 
 	// Trigger channel for manual runs
 	triggerChan chan struct{}
+
+	// Actor channels
+	setSeedCh chan setSeedCallbackReq
+	lastRunCh chan lastRunReq
+	stop      chan struct{}
+	done      chan struct{}
 }
 
 // NewDirectorySpider creates a new DirectorySpider instance.
@@ -113,6 +128,10 @@ func NewDirectorySpider(
 		selfURLs:            make(map[string]bool),
 		nip11Cache:          dsync.NewNIP11Cache(30 * time.Minute),
 		triggerChan:         make(chan struct{}, 1),
+		setSeedCh:           make(chan setSeedCallbackReq),
+		lastRunCh:           make(chan lastRunReq),
+		stop:                make(chan struct{}),
+		done:                make(chan struct{}),
 	}
 
 	return
@@ -120,9 +139,14 @@ func NewDirectorySpider(
 
 // SetSeedCallback sets the callback function for getting seed pubkeys (whitelisted users).
 func (ds *DirectorySpider) SetSeedCallback(getSeedPubkeys func() [][]byte) {
-	ds.mu.Lock()
-	defer ds.mu.Unlock()
-	ds.getSeedPubkeys = getSeedPubkeys
+	if ds.setSeedCh == nil {
+		// No actor running (pre-start or bare struct), set directly.
+		ds.getSeedPubkeys = getSeedPubkeys
+		return
+	}
+	resp := make(chan struct{}, 1)
+	ds.setSeedCh <- setSeedCallbackReq{fn: getSeedPubkeys, resp: resp}
+	<-resp
 }
 
 // Start begins the directory spider operation.
@@ -138,7 +162,7 @@ func (ds *DirectorySpider) Start() (err error) {
 	}
 
 	ds.running.Store(true)
-	go ds.mainLoop()
+	go ds.actorLoop()
 
 	log.I.F("directory spider: started (interval: %v, max hops: %d)", ds.interval, ds.maxHops)
 	return
@@ -156,6 +180,12 @@ func (ds *DirectorySpider) Stop() {
 	log.I.F("directory spider: stopped")
 }
 
+// Shutdown stops the directory spider and waits for the actor to exit.
+func (ds *DirectorySpider) Shutdown() {
+	close(ds.stop)
+	<-ds.done
+}
+
 // TriggerNow forces an immediate run of the directory spider.
 func (ds *DirectorySpider) TriggerNow() {
 	select {
@@ -168,25 +198,43 @@ func (ds *DirectorySpider) TriggerNow() {
 
 // LastRun returns the time of the last completed run.
 func (ds *DirectorySpider) LastRun() time.Time {
-	ds.mu.Lock()
-	defer ds.mu.Unlock()
-	return ds.lastRun
+	if ds.lastRunCh == nil {
+		// No actor running (bare struct or pre-start), return field directly.
+		return ds.lastRun
+	}
+	resp := make(chan time.Time, 1)
+	select {
+	case ds.lastRunCh <- lastRunReq{resp: resp}:
+		return <-resp
+	default:
+		// Actor not running, return field directly.
+		return ds.lastRun
+	}
 }
 
-// mainLoop is the main spider loop that runs periodically.
-func (ds *DirectorySpider) mainLoop() {
+// actorLoop is the actor goroutine that owns all mutable discovery state.
+func (ds *DirectorySpider) actorLoop() {
+	defer close(ds.done)
+
 	// Run immediately on start
 	ds.runOnce()
 
 	ticker := time.NewTicker(ds.interval)
 	defer ticker.Stop()
 
-	log.D.F("directory spider: main loop started, running every %v", ds.interval)
+	log.D.F("directory spider: actor loop started, running every %v", ds.interval)
 
 	for {
 		select {
 		case <-ds.ctx.Done():
 			return
+		case <-ds.stop:
+			return
+		case req := <-ds.setSeedCh:
+			ds.getSeedPubkeys = req.fn
+			req.resp <- struct{}{}
+		case req := <-ds.lastRunCh:
+			req.resp <- ds.lastRun
 		case <-ds.triggerChan:
 			log.D.F("directory spider: manual trigger received")
 			ds.runOnce()
@@ -206,11 +254,9 @@ func (ds *DirectorySpider) runOnce() {
 	log.D.F("directory spider: starting run")
 	start := time.Now()
 
-	// Reset state for this run
-	ds.mu.Lock()
+	// Reset state for this run (actor-owned, no lock needed)
 	ds.discoveredRelays = make(map[string]int)
 	ds.processedRelays = make(map[string]bool)
-	ds.mu.Unlock()
 
 	// Phase 1: Discover relays via hop expansion
 	if err := ds.discoverRelays(); err != nil {
@@ -218,9 +264,7 @@ func (ds *DirectorySpider) runOnce() {
 		return
 	}
 
-	ds.mu.Lock()
 	relayCount := len(ds.discoveredRelays)
-	ds.mu.Unlock()
 
 	log.D.F("directory spider: discovered %d relays", relayCount)
 
@@ -230,9 +274,7 @@ func (ds *DirectorySpider) runOnce() {
 		return
 	}
 
-	ds.mu.Lock()
 	ds.lastRun = time.Now()
-	ds.mu.Unlock()
 
 	log.D.F("directory spider: completed run in %v", time.Since(start))
 }
@@ -262,12 +304,10 @@ func (ds *DirectorySpider) discoverRelays() error {
 		}
 	}
 
-	// Add seed relays at hop 0
-	ds.mu.Lock()
+	// Add seed relays at hop 0 (actor-owned, no lock needed)
 	for _, url := range nonSelfRelays {
 		ds.discoveredRelays[url] = 0
 	}
-	ds.mu.Unlock()
 
 	log.D.F("directory spider: found %d seed relays from local database", len(seedRelays))
 
@@ -280,14 +320,12 @@ func (ds *DirectorySpider) discoverRelays() error {
 		}
 
 		// Get relays at previous hop level that haven't been processed
-		ds.mu.Lock()
 		var relaysToProcess []string
 		for url, hopLevel := range ds.discoveredRelays {
 			if hopLevel == hop-1 && !ds.processedRelays[url] {
 				relaysToProcess = append(relaysToProcess, url)
 			}
 		}
-		ds.mu.Unlock()
 
 		if len(relaysToProcess) == 0 {
 			log.D.F("directory spider: no relays to process at hop %d", hop)
@@ -311,18 +349,14 @@ func (ds *DirectorySpider) discoverRelays() error {
 			if err != nil {
 				log.W.F("directory spider: failed to fetch from %s: %v", relayURL, err)
 				// Mark as processed even on failure to avoid retrying
-				ds.mu.Lock()
 				ds.processedRelays[relayURL] = true
-				ds.mu.Unlock()
 				continue
 			}
 
 			// Extract new relay URLs
 			newRelays := ds.extractRelaysFromEvents(events)
 
-			// Filter self-relays outside the lock to avoid deadlock
-			// (isSelfRelay takes ds.mu internally)
-			ds.mu.Lock()
+			// Filter unknown relays (actor-owned, no lock needed)
 			var unknownRelays []string
 			for _, newURL := range newRelays {
 				if _, exists := ds.discoveredRelays[newURL]; !exists {
@@ -330,7 +364,6 @@ func (ds *DirectorySpider) discoverRelays() error {
 				}
 			}
 			ds.processedRelays[relayURL] = true
-			ds.mu.Unlock()
 
 			var nonSelfNew []string
 			for _, newURL := range unknownRelays {
@@ -339,14 +372,12 @@ func (ds *DirectorySpider) discoverRelays() error {
 				}
 			}
 
-			ds.mu.Lock()
 			for _, newURL := range nonSelfNew {
 				if _, exists := ds.discoveredRelays[newURL]; !exists {
 					ds.discoveredRelays[newURL] = hop
 					newRelaysThisHop++
 				}
 			}
-			ds.mu.Unlock()
 
 			// Rate limiting delay between relays
 			time.Sleep(DirectorySpiderRelayDelay)
@@ -460,13 +491,11 @@ func (ds *DirectorySpider) extractRelaysFromEvents(events []*event.E) []string {
 
 // fetchMetadataFromRelays iterates through all discovered relays and fetches metadata.
 func (ds *DirectorySpider) fetchMetadataFromRelays() error {
-	ds.mu.Lock()
-	// Copy relay list to avoid holding lock during network operations
+	// Copy relay list (actor-owned, no lock needed)
 	var relays []string
 	for url := range ds.discoveredRelays {
 		relays = append(relays, url)
 	}
-	ds.mu.Unlock()
 
 	log.D.F("directory spider: fetching metadata from %d relays", len(relays))
 
@@ -488,9 +517,7 @@ func (ds *DirectorySpider) fetchMetadataFromRelays() error {
 		default:
 		}
 
-		ds.mu.Lock()
 		alreadyProcessed := ds.processedRelays[relayURL]
-		ds.mu.Unlock()
 
 		if alreadyProcessed {
 			continue
@@ -519,9 +546,7 @@ func (ds *DirectorySpider) fetchMetadataFromRelays() error {
 				k, relayURL, saved, duplicates)
 		}
 
-		ds.mu.Lock()
 		ds.processedRelays[relayURL] = true
-		ds.mu.Unlock()
 
 		// Rate limiting delay between relays
 		time.Sleep(DirectorySpiderRelayDelay)
@@ -604,13 +629,10 @@ func (ds *DirectorySpider) isSelfRelay(relayURL string) bool {
 		return false
 	}
 
-	ds.mu.Lock()
-	// Fast path: check if we already know this URL is ours
+	// Fast path: check if we already know this URL is ours (actor-owned, no lock needed)
 	if ds.selfURLs[relayURL] {
-		ds.mu.Unlock()
 		return true
 	}
-	ds.mu.Unlock()
 
 	// Slow path: check via NIP-11 pubkey
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -624,9 +646,7 @@ func (ds *DirectorySpider) isSelfRelay(relayURL string) bool {
 
 	if peerPubkey == ds.relayIdentityPubkey {
 		log.D.F("directory spider: discovered self-relay: %s", relayURL)
-		ds.mu.Lock()
 		ds.selfURLs[relayURL] = true
-		ds.mu.Unlock()
 		return true
 	}
 

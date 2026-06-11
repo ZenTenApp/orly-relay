@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"net"
 	"reflect"
-	"sync"
 
 	"git.smesh.lol/orly/pkg/lol/errorf"
 	"git.smesh.lol/orly/pkg/lol/log"
@@ -16,6 +15,19 @@ import (
 	"git.smesh.lol/orly/pkg/utils"
 )
 
+// managedUpdatePeerAdminsReq updates the peer admin list.
+type managedUpdatePeerAdminsReq struct {
+	peerPubkeys [][]byte
+	resp        chan struct{}
+}
+
+// managedGetAccessLevelReq queries the access level for a pubkey.
+type managedGetAccessLevelReq struct {
+	pub     []byte
+	address string
+	resp    chan string
+}
+
 type Managed struct {
 	// Ctx holds the context for the ACL.
 	// Deprecated: Use Context() method instead of accessing directly.
@@ -25,8 +37,11 @@ type Managed struct {
 	managedACL *database.ManagedACL
 	owners     [][]byte
 	admins     [][]byte
-	peerAdmins [][]byte // peer relay identity pubkeys with admin access
-	mx         sync.RWMutex
+
+	updatePeerAdminsCh chan managedUpdatePeerAdminsReq
+	getAccessLevelCh   chan managedGetAccessLevelReq
+	stop               chan struct{}
+	done               chan struct{}
 }
 
 // Context returns the ACL context.
@@ -84,22 +99,39 @@ func (m *Managed) Configure(cfg ...any) (err error) {
 		m.admins = append(m.admins, pk)
 	}
 
+	// Start actor goroutine
+	m.updatePeerAdminsCh = make(chan managedUpdatePeerAdminsReq)
+	m.getAccessLevelCh = make(chan managedGetAccessLevelReq)
+	m.stop = make(chan struct{})
+	m.done = make(chan struct{})
+	go m.actor()
+
 	return
 }
 
-// UpdatePeerAdmins updates the list of peer relay identity pubkeys that have admin access
-func (m *Managed) UpdatePeerAdmins(peerPubkeys [][]byte) {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	m.peerAdmins = make([][]byte, len(peerPubkeys))
-	copy(m.peerAdmins, peerPubkeys)
-	log.I.F("updated peer admin list with %d pubkeys", len(peerPubkeys))
+func (m *Managed) actor() {
+	defer close(m.done)
+
+	var peerAdmins [][]byte
+
+	for {
+		select {
+		case <-m.stop:
+			return
+
+		case req := <-m.updatePeerAdminsCh:
+			peerAdmins = make([][]byte, len(req.peerPubkeys))
+			copy(peerAdmins, req.peerPubkeys)
+			log.I.F("updated peer admin list with %d pubkeys", len(req.peerPubkeys))
+			req.resp <- struct{}{}
+
+		case req := <-m.getAccessLevelCh:
+			req.resp <- m.getAccessLevel(req.pub, req.address, peerAdmins)
+		}
+	}
 }
 
-func (m *Managed) GetAccessLevel(pub []byte, address string) (level string) {
-	m.mx.RLock()
-	defer m.mx.RUnlock()
-
+func (m *Managed) getAccessLevel(pub []byte, address string, peerAdmins [][]byte) string {
 	// If no pubkey provided and auth is required, return "none"
 	if len(pub) == 0 && m.cfg.AuthRequired {
 		return "none"
@@ -120,7 +152,7 @@ func (m *Managed) GetAccessLevel(pub []byte, address string) (level string) {
 	}
 
 	// Check peer relay identity pubkeys (they get admin access)
-	for _, v := range m.peerAdmins {
+	for _, v := range peerAdmins {
 		if utils.FastEqual(v, pub) {
 			return "admin"
 		}
@@ -153,6 +185,19 @@ func (m *Managed) GetAccessLevel(pub []byte, address string) (level string) {
 
 	// Default to read-only for managed mode
 	return "read"
+}
+
+// UpdatePeerAdmins updates the list of peer relay identity pubkeys that have admin access
+func (m *Managed) UpdatePeerAdmins(peerPubkeys [][]byte) {
+	resp := make(chan struct{}, 1)
+	m.updatePeerAdminsCh <- managedUpdatePeerAdminsReq{peerPubkeys: peerPubkeys, resp: resp}
+	<-resp
+}
+
+func (m *Managed) GetAccessLevel(pub []byte, address string) (level string) {
+	resp := make(chan string, 1)
+	m.getAccessLevelCh <- managedGetAccessLevelReq{pub: pub, address: address, resp: resp}
+	return <-resp
 }
 
 func (m *Managed) CheckPolicy(ev *event.E) (allowed bool, err error) {

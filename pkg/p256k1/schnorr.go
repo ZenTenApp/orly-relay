@@ -4,7 +4,6 @@ package p256k1
 
 import (
 	"errors"
-	"sync"
 	"unsafe"
 )
 
@@ -25,15 +24,11 @@ var zeroMask = [32]byte{
 	170, 247, 175, 105, 39, 10, 165, 20,
 }
 
-// Global precomputed context for Schnorr verification
-// This eliminates the overhead of context creation per verification call
-var (
-	schnorrVerifyContext     *secp256k1_context
-	schnorrVerifyContextOnce sync.Once
-)
+// schnorrVerifyContext is the global precomputed context for Schnorr verification.
+// Initialized once at package load, eliminating per-call context creation overhead.
+var schnorrVerifyContext *secp256k1_context
 
-// initSchnorrVerifyContext initializes the global Schnorr verification context
-func initSchnorrVerifyContext() {
+func init() {
 	schnorrVerifyContext = &secp256k1_context{
 		ecmult_gen_ctx: secp256k1_ecmult_gen_context{built: 1},
 		declassify:     0,
@@ -42,7 +37,6 @@ func initSchnorrVerifyContext() {
 
 // getSchnorrVerifyContext returns the precomputed Schnorr verification context
 func getSchnorrVerifyContext() *secp256k1_context {
-	schnorrVerifyContextOnce.Do(initSchnorrVerifyContext)
 	return schnorrVerifyContext
 }
 

@@ -340,6 +340,7 @@ done
 			enabled:    true,
 			runners:    make(map[string]*ScriptRunner),
 		}
+		policy.manager.startPMCallActor()
 
 		// Test: Event with "accept" content should be accepted
 		eventAccept := createTestEvent(t, allowedSigner, "accept", 40)

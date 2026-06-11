@@ -70,7 +70,7 @@ func (b *Bridge) initMLS() error {
 	}
 
 	// Start MLS subscription loop in background
-	b.wg.Add(1)
+	b.mlsDone = make(chan struct{})
 	go b.mlsWatchLoop()
 
 	return nil
@@ -128,7 +128,7 @@ func (b *Bridge) mlsKeyPackageRelaysEvent(relayURL string) (*event.E, error) {
 // messages) and dispatches them to the MLS client. Reconnects with updated
 // filters as new groups are established.
 func (b *Bridge) mlsWatchLoop() {
-	defer b.wg.Done()
+	defer close(b.mlsDone)
 
 	delay := time.Second
 	for {

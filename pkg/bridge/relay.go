@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
@@ -16,6 +15,49 @@ import (
 	"git.smesh.lol/orly/pkg/lol/log"
 )
 
+// --- actor request types ---
+
+type rcGetConnReq struct {
+	resp chan *ws.Client
+}
+
+type rcSetConnReq struct {
+	conn   *ws.Client
+	authed bool
+	resp   chan struct{}
+}
+
+type rcSetAuthedReq struct {
+	resp chan struct{}
+}
+
+type rcPublishReq struct {
+	ctx context.Context
+	ev  *event.E
+	resp chan error
+}
+
+type rcSubscribeReq struct {
+	ctx  context.Context
+	ff   *filter.S
+	resp chan rcSubscribeResp
+}
+
+type rcSubscribeResp struct {
+	stream *WsEventStream
+	err    error
+}
+
+type rcFetchKind0Req struct {
+	ctx    context.Context
+	pubkey []byte
+	resp   chan *event.E
+}
+
+type rcCloseReq struct {
+	resp chan struct{}
+}
+
 // RelayConn wraps a WebSocket relay connection with auto-reconnect.
 // It satisfies the RelayConnection interface used by the bridge's Marmot
 // client for standalone mode (connecting to an external relay).
@@ -23,16 +65,89 @@ type RelayConn struct {
 	url    string
 	sign   signer.I
 	conn   *ws.Client
-	mu     sync.RWMutex
 	ctx    context.Context
 	cancel context.CancelFunc
 	authed bool
+
+	getConnCh  chan rcGetConnReq
+	setConnCh  chan rcSetConnReq
+	setAuthedCh chan rcSetAuthedReq
+	publishCh  chan rcPublishReq
+	subscribeCh chan rcSubscribeReq
+	fetchK0Ch  chan rcFetchKind0Req
+	closeCh    chan rcCloseReq
+	stop       chan struct{}
+	done       chan struct{}
 }
 
 // NewRelayConn creates a new relay connection wrapper.
 // The signer is used for NIP-42 authentication when the relay requires it.
 func NewRelayConn(url string, sign signer.I) *RelayConn {
-	return &RelayConn{url: url, sign: sign}
+	rc := &RelayConn{
+		url:         url,
+		sign:        sign,
+		getConnCh:   make(chan rcGetConnReq),
+		setConnCh:   make(chan rcSetConnReq),
+		setAuthedCh: make(chan rcSetAuthedReq),
+		publishCh:   make(chan rcPublishReq),
+		subscribeCh: make(chan rcSubscribeReq),
+		fetchK0Ch:   make(chan rcFetchKind0Req),
+		closeCh:     make(chan rcCloseReq),
+		stop:        make(chan struct{}),
+		done:        make(chan struct{}),
+	}
+	go rc.loop()
+	return rc
+}
+
+func (rc *RelayConn) loop() {
+	defer close(rc.done)
+	for {
+		select {
+		case <-rc.stop:
+			return
+		case req := <-rc.getConnCh:
+			req.resp <- rc.conn
+		case req := <-rc.setConnCh:
+			rc.conn = req.conn
+			rc.authed = req.authed
+			req.resp <- struct{}{}
+		case req := <-rc.setAuthedCh:
+			rc.authed = true
+			req.resp <- struct{}{}
+		case req := <-rc.publishCh:
+			req.resp <- rc.doPublish(req.ctx, req.ev)
+		case req := <-rc.subscribeCh:
+			s, err := rc.doSubscribe(req.ctx, req.ff)
+			req.resp <- rcSubscribeResp{s, err}
+		case req := <-rc.fetchK0Ch:
+			req.resp <- rc.doFetchKind0(req.ctx, req.pubkey)
+		case req := <-rc.closeCh:
+			rc.doClose()
+			req.resp <- struct{}{}
+		}
+	}
+}
+
+// getConn retrieves the current connection from the actor.
+func (rc *RelayConn) getConn() *ws.Client {
+	req := rcGetConnReq{resp: make(chan *ws.Client, 1)}
+	rc.getConnCh <- req
+	return <-req.resp
+}
+
+// setConn sets the connection and authed state via the actor.
+func (rc *RelayConn) setConn(conn *ws.Client, authed bool) {
+	req := rcSetConnReq{conn: conn, authed: authed, resp: make(chan struct{}, 1)}
+	rc.setConnCh <- req
+	<-req.resp
+}
+
+// setAuthed marks the connection as authenticated via the actor.
+func (rc *RelayConn) setAuthed() {
+	req := rcSetAuthedReq{resp: make(chan struct{}, 1)}
+	rc.setAuthedCh <- req
+	<-req.resp
 }
 
 // Connect establishes the WebSocket connection to the relay and
@@ -74,10 +189,7 @@ func (rc *RelayConn) Connect(ctx context.Context) error {
 
 	conn.AssumeValid = true // trust our own relay's signature validation
 
-	rc.mu.Lock()
-	rc.conn = conn
-	rc.authed = false
-	rc.mu.Unlock()
+	rc.setConn(conn, false)
 
 	log.I.F("bridge connected to relay: %s", rc.url)
 
@@ -100,9 +212,7 @@ func (rc *RelayConn) preAuth(conn *ws.Client) error {
 		return fmt.Errorf("auth: %w", err)
 	}
 
-	rc.mu.Lock()
-	rc.authed = true
-	rc.mu.Unlock()
+	rc.setAuthed()
 
 	log.I.F("bridge pre-authenticated with relay")
 	return nil
@@ -122,10 +232,7 @@ func (rc *RelayConn) Reconnect() error {
 
 		conn, err := ws.RelayConnect(rc.ctx, rc.url)
 		if err == nil {
-			rc.mu.Lock()
-			rc.conn = conn
-			rc.authed = false
-			rc.mu.Unlock()
+			rc.setConn(conn, false)
 			log.I.F("bridge reconnected to relay: %s", rc.url)
 
 			// Pre-authenticate after reconnect
@@ -153,15 +260,17 @@ func (rc *RelayConn) Reconnect() error {
 // Publish sends an event to the relay. If the relay responds with
 // auth-required, the bridge authenticates via NIP-42 and retries once.
 func (rc *RelayConn) Publish(ctx context.Context, ev *event.E) error {
-	rc.mu.RLock()
-	conn := rc.conn
-	rc.mu.RUnlock()
+	req := rcPublishReq{ctx: ctx, ev: ev, resp: make(chan error, 1)}
+	rc.publishCh <- req
+	return <-req.resp
+}
 
-	if conn == nil {
+func (rc *RelayConn) doPublish(ctx context.Context, ev *event.E) error {
+	if rc.conn == nil {
 		return fmt.Errorf("not connected to relay")
 	}
 
-	err := conn.Publish(ctx, ev)
+	err := rc.conn.Publish(ctx, ev)
 	if err == nil {
 		return nil
 	}
@@ -181,31 +290,32 @@ func (rc *RelayConn) Publish(ctx context.Context, ev *event.E) error {
 	// Give the relay a moment to send the challenge
 	time.Sleep(100 * time.Millisecond)
 
-	if authErr := conn.Auth(ctx, rc.sign); authErr != nil {
+	if authErr := rc.conn.Auth(ctx, rc.sign); authErr != nil {
 		return fmt.Errorf("auth failed: %w", authErr)
 	}
 
-	rc.mu.Lock()
 	rc.authed = true
-	rc.mu.Unlock()
 
 	log.I.F("bridge authenticated with relay")
 
 	// Retry the publish
-	return conn.Publish(ctx, ev)
+	return rc.conn.Publish(ctx, ev)
 }
 
 // Subscribe creates a subscription on the relay and returns a stream of events.
 func (rc *RelayConn) Subscribe(ctx context.Context, ff *filter.S) (*WsEventStream, error) {
-	rc.mu.RLock()
-	conn := rc.conn
-	rc.mu.RUnlock()
+	req := rcSubscribeReq{ctx: ctx, ff: ff, resp: make(chan rcSubscribeResp, 1)}
+	rc.subscribeCh <- req
+	r := <-req.resp
+	return r.stream, r.err
+}
 
-	if conn == nil {
+func (rc *RelayConn) doSubscribe(ctx context.Context, ff *filter.S) (*WsEventStream, error) {
+	if rc.conn == nil {
 		return nil, fmt.Errorf("not connected to relay")
 	}
 
-	sub, err := conn.Subscribe(ctx, ff)
+	sub, err := rc.conn.Subscribe(ctx, ff)
 	if err != nil {
 		return nil, err
 	}
@@ -218,21 +328,31 @@ func (rc *RelayConn) Close() {
 	if rc.cancel != nil {
 		rc.cancel()
 	}
-	rc.mu.Lock()
+	req := rcCloseReq{resp: make(chan struct{}, 1)}
+	rc.closeCh <- req
+	<-req.resp
+	// Now stop the actor
+	close(rc.stop)
+	<-rc.done
+}
+
+func (rc *RelayConn) doClose() {
 	if rc.conn != nil {
 		rc.conn.Close()
 		rc.conn = nil
 	}
-	rc.mu.Unlock()
 }
 
 // FetchKind0 fetches the latest kind 0 profile event for a pubkey.
 // Returns nil if not found or on error.
 func (rc *RelayConn) FetchKind0(ctx context.Context, pubkey []byte) *event.E {
-	rc.mu.RLock()
-	conn := rc.conn
-	rc.mu.RUnlock()
-	if conn == nil {
+	req := rcFetchKind0Req{ctx: ctx, pubkey: pubkey, resp: make(chan *event.E, 1)}
+	rc.fetchK0Ch <- req
+	return <-req.resp
+}
+
+func (rc *RelayConn) doFetchKind0(ctx context.Context, pubkey []byte) *event.E {
+	if rc.conn == nil {
 		return nil
 	}
 
@@ -245,7 +365,7 @@ func (rc *RelayConn) FetchKind0(ctx context.Context, pubkey []byte) *event.E {
 	one := uint(1)
 	f.Limit = &one
 
-	events, err := conn.QuerySync(ctx, f)
+	events, err := rc.conn.QuerySync(ctx, f)
 	if err != nil || len(events) == 0 {
 		return nil
 	}

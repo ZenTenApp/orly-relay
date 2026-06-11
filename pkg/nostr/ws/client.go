@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes"
@@ -28,22 +27,81 @@ import (
 	"git.smesh.lol/orly/pkg/nostr/interfaces/codec"
 	"git.smesh.lol/orly/pkg/nostr/interfaces/signer"
 	"git.smesh.lol/orly/pkg/nostr/utils/normalize"
-	"github.com/puzpuzpuz/xsync/v3"
 	"git.smesh.lol/orly/pkg/lol/chk"
 	"git.smesh.lol/orly/pkg/lol/log"
 )
 
-var subscriptionIDCounter atomic.Int64
+var subscriptionIDCh = func() chan int64 {
+	ch := make(chan int64, 1)
+	go func() {
+		var counter int64
+		for {
+			counter++
+			ch <- counter
+		}
+	}()
+	return ch
+}()
+
+// --- Actor request types for subscriptions map ---
+
+type subLoadReq struct {
+	key  string
+	resp chan subLoadResp
+}
+
+type subLoadResp struct {
+	sub *Subscription
+	ok  bool
+}
+
+type subStoreReq struct {
+	key string
+	sub *Subscription
+}
+
+type subDeleteReq struct {
+	key string
+}
+
+type subRangeReq struct {
+	resp chan []*Subscription
+}
+
+// --- Actor request types for okCallbacks map ---
+
+type okLoadReq struct {
+	key  string
+	resp chan okLoadResp
+}
+
+type okLoadResp struct {
+	fn func(bool, string)
+	ok bool
+}
+
+type okStoreReq struct {
+	key string
+	fn  func(bool, string)
+}
+
+type okDeleteReq struct {
+	key string
+}
+
+// --- Actor request for close ---
+
+type closeReq struct {
+	reason error
+	resp   chan error
+}
 
 // Client represents a connection to a Nostr relay.
 type Client struct {
-	closeMutex sync.Mutex
-
 	URL           string
 	requestHeader http.Header // e.g. for origin header
 
 	Connection    *Connection
-	Subscriptions *xsync.MapOf[string, *Subscription]
 
 	ConnectionError         error
 	connectionContext       context.Context // will be canceled when the connection closes
@@ -52,9 +110,26 @@ type Client struct {
 	challenge                     []byte       // NIP-42 challenge, we only keep the last
 	notices                       chan []byte  // NIP-01 NOTICEs
 	customHandler                 func(string) // nonstandard unparseable messages
-	okCallbacks                   *xsync.MapOf[string, func(bool, string)]
 	writeQueue                    chan writeRequest
 	subscriptionChannelCloseQueue chan []byte
+
+	// Actor channels for subscriptions map
+	subLoad   chan subLoadReq
+	subStore  chan subStoreReq
+	subDelete chan subDeleteReq
+	subRange  chan subRangeReq
+
+	// Actor channels for okCallbacks map
+	okLoad   chan okLoadReq
+	okStore  chan okStoreReq
+	okDelete chan okDeleteReq
+
+	// Actor channel for close
+	closeCh chan closeReq
+
+	// Actor lifecycle
+	mapStop chan struct{}
+	mapDone chan struct{}
 
 	// custom things that aren't often used
 	//
@@ -73,20 +148,133 @@ func NewRelay(ctx context.Context, url string, opts ...RelayOption) *Client {
 		URL:                     string(normalize.URL(url)),
 		connectionContext:       ctx,
 		connectionContextCancel: cancel,
-		Subscriptions:           xsync.NewMapOf[string, *Subscription](),
-		okCallbacks: xsync.NewMapOf[string, func(
-			bool, string,
-		)](),
 		writeQueue:                    make(chan writeRequest),
 		subscriptionChannelCloseQueue: make(chan []byte),
 		requestHeader:                 nil,
+		subLoad:                       make(chan subLoadReq),
+		subStore:                      make(chan subStoreReq, 16),
+		subDelete:                     make(chan subDeleteReq, 16),
+		subRange:                      make(chan subRangeReq),
+		okLoad:                        make(chan okLoadReq),
+		okStore:                       make(chan okStoreReq, 16),
+		okDelete:                      make(chan okDeleteReq, 16),
+		closeCh:                       make(chan closeReq),
+		mapStop:                       make(chan struct{}),
+		mapDone:                       make(chan struct{}),
 	}
 
 	for _, opt := range opts {
 		opt.ApplyRelayOption(r)
 	}
 
+	go r.mapActor()
+
 	return r
+}
+
+// mapActor owns the subscriptions map, okCallbacks map, and close state.
+func (r *Client) mapActor() {
+	defer close(r.mapDone)
+
+	subs := make(map[string]*Subscription)
+	okCBs := make(map[string]func(bool, string))
+	closed := false
+
+	for {
+		select {
+		case <-r.mapStop:
+			return
+
+		case req := <-r.subLoad:
+			sub, ok := subs[req.key]
+			req.resp <- subLoadResp{sub, ok}
+
+		case req := <-r.subStore:
+			subs[req.key] = req.sub
+
+		case req := <-r.subDelete:
+			delete(subs, req.key)
+
+		case req := <-r.subRange:
+			all := make([]*Subscription, 0, len(subs))
+			for _, sub := range subs {
+				all = append(all, sub)
+			}
+			req.resp <- all
+
+		case req := <-r.okLoad:
+			fn, ok := okCBs[req.key]
+			req.resp <- okLoadResp{fn, ok}
+
+		case req := <-r.okStore:
+			okCBs[req.key] = req.fn
+
+		case req := <-r.okDelete:
+			delete(okCBs, req.key)
+
+		case req := <-r.closeCh:
+			if closed {
+				req.resp <- fmt.Errorf("relay already closed")
+				continue
+			}
+			closed = true
+			log.T.F(
+				"WS.Client: closing connection to %s: reason=%v lastErr=%v", r.URL,
+				req.reason, r.ConnectionError,
+			)
+			r.connectionContextCancel(req.reason)
+			r.connectionContextCancel = nil
+
+			if r.Connection == nil {
+				req.resp <- fmt.Errorf("relay not connected")
+				continue
+			}
+			req.resp <- r.Connection.Close()
+		}
+	}
+}
+
+// loadSub loads a subscription from the actor-owned map.
+func (r *Client) loadSub(key string) (*Subscription, bool) {
+	req := subLoadReq{key: key, resp: make(chan subLoadResp, 1)}
+	r.subLoad <- req
+	resp := <-req.resp
+	return resp.sub, resp.ok
+}
+
+// storeSub stores a subscription in the actor-owned map.
+func (r *Client) storeSub(key string, sub *Subscription) {
+	r.subStore <- subStoreReq{key: key, sub: sub}
+}
+
+// deleteSub deletes a subscription from the actor-owned map.
+func (r *Client) deleteSub(key string) {
+	r.subDelete <- subDeleteReq{key: key}
+}
+
+// rangeSubs returns all subscriptions.
+func (r *Client) rangeSubs() []*Subscription {
+	req := subRangeReq{resp: make(chan []*Subscription, 1)}
+	r.subRange <- req
+	return <-req.resp
+}
+
+// loadOkCallback loads an ok callback from the actor-owned map.
+func (r *Client) loadOkCallback(key string) (func(bool, string), bool) {
+	req := okLoadReq{key: key, resp: make(chan okLoadResp, 1)}
+	r.okLoad <- req
+	resp := <-req.resp
+	return resp.fn, resp.ok
+}
+
+// storeOkCallback stores an ok callback in the actor-owned map.
+func (r *Client) storeOkCallback(key string, fn func(bool, string)) {
+	r.okStore <- okStoreReq{key: key, fn: fn}
+}
+
+// deleteOkCallback deletes an ok callback from the actor-owned map.
+func (r *Client) deleteOkCallback(key string) {
+	r.okDelete <- okDeleteReq{key: key}
 }
 
 // RelayConnect returns a relay object connected to url.
@@ -205,7 +393,7 @@ func subIdToSerial(subId string) int64 {
 func (r *Client) ConnectWithTLS(
 	ctx context.Context, tlsConfig *tls.Config,
 ) error {
-	if r.connectionContext == nil || r.Subscriptions == nil {
+	if r.connectionContext == nil || r.subLoad == nil {
 		return fmt.Errorf("relay must be initialized with a call to NewRelay()")
 	}
 
@@ -245,7 +433,7 @@ func (r *Client) ConnectWithTLS(
 				ticker.Stop()
 				r.Connection = nil
 
-				for _, sub := range r.Subscriptions.Range {
+				for _, sub := range r.rangeSubs() {
 					sub.unsub(
 						fmt.Errorf(
 							"relay connection closed: %w / %w",
@@ -342,7 +530,7 @@ func (r *Client) ConnectWithTLS(
 					if len(env.Subscription) == 0 {
 						continue
 					}
-					if sub, ok := r.Subscriptions.Load(string(env.Subscription)); !ok {
+					if sub, ok := r.loadSub(string(env.Subscription)); !ok {
 						log.D.F(
 							"{%s} no subscription with id '%s'\n", r.URL,
 							env.Subscription,
@@ -351,10 +539,6 @@ func (r *Client) ConnectWithTLS(
 					} else {
 						// check if the event matches the desired filter, ignore otherwise
 						if !sub.Filters.Match(env.Event) {
-							// log.D.F(
-							// 	"{%s} filter does not match: %v ~ %v\n", r.URL,
-							// 	sub.Filters, env.Event,
-							// )
 							continue
 						}
 						// check signature, ignore invalid, except from trusted (AssumeValid) relays
@@ -375,7 +559,7 @@ func (r *Client) ConnectWithTLS(
 					if env, message, err = eoseenvelope.Parse(message); chk.E(err) {
 						continue
 					}
-					if subscription, ok := r.Subscriptions.Load(string(env.Subscription)); ok {
+					if subscription, ok := r.loadSub(string(env.Subscription)); ok {
 						subscription.dispatchEose()
 					}
 				case closedenvelope.L:
@@ -383,7 +567,7 @@ func (r *Client) ConnectWithTLS(
 					if env, message, err = closedenvelope.Parse(message); chk.E(err) {
 						continue
 					}
-					if subscription, ok := r.Subscriptions.Load(string(env.Subscription)); ok {
+					if subscription, ok := r.loadSub(string(env.Subscription)); ok {
 						subscription.handleClosed(env.ReasonString())
 					}
 				case okenvelope.L:
@@ -392,7 +576,7 @@ func (r *Client) ConnectWithTLS(
 						continue
 					}
 					eventIDHex := hex.Enc(env.EventID)
-					if okCallback, exist := r.okCallbacks.Load(eventIDHex); exist {
+					if okCallback, exist := r.loadOkCallback(eventIDHex); exist {
 						okCallback(env.OK, env.ReasonString())
 					}
 				}
@@ -466,7 +650,7 @@ func (r *Client) publish(
 
 	// listen for an OK callback
 	gotOk := false
-	r.okCallbacks.Store(
+	r.storeOkCallback(
 		id, func(ok bool, reason string) {
 			gotOk = true
 			if !ok {
@@ -475,7 +659,7 @@ func (r *Client) publish(
 			cancel()
 		},
 	)
-	defer r.okCallbacks.Delete(id)
+	defer r.deleteOkCallback(id)
 
 	// publish event
 	envb := env.Marshal(nil)
@@ -542,7 +726,7 @@ func (r *Client) Subscribe(
 func (r *Client) PrepareSubscription(
 	ctx context.Context, ff *filter.S, opts ...SubscriptionOption,
 ) (sub *Subscription) {
-	current := subscriptionIDCounter.Add(1)
+	current := <-subscriptionIDCh
 	ctx, cancel := context.WithCancelCause(ctx)
 	sub = &Subscription{
 		Client:            r,
@@ -554,6 +738,12 @@ func (r *Client) PrepareSubscription(
 		ClosedReason:      make(chan string, 1),
 		Filters:           ff,
 		match:             ff.Match,
+		dispatchEventCh:   make(chan subDispatchEventReq, 128),
+		dispatchEoseCh:    make(chan subDispatchEoseReq, 1),
+		handleClosedCh:    make(chan subHandleClosedReq, 1),
+		unsubCh:           make(chan subUnsubReq, 1),
+		fireCh:            make(chan subFireReq),
+		done:              make(chan struct{}),
 	}
 	label := ""
 	for _, opt := range opts {
@@ -566,7 +756,7 @@ func (r *Client) PrepareSubscription(
 			sub.checkDuplicateReplaceable = o
 		}
 	}
-	// subscription id computation — must copy since sub.id outlives this function
+	// subscription id computation - must copy since sub.id outlives this function
 	buf := subIdPool.Get().([]byte)[:0]
 	buf = strconv.AppendInt(buf, sub.counter, 10)
 	buf = append(buf, ':')
@@ -574,7 +764,7 @@ func (r *Client) PrepareSubscription(
 	sub.id = make([]byte, len(buf))
 	copy(sub.id, buf)
 	subIdPool.Put(buf)
-	r.Subscriptions.Store(string(buf), sub)
+	r.storeSub(string(buf), sub)
 	// start handling events, eose, unsub etc:
 	go sub.start()
 	return sub
@@ -646,32 +836,10 @@ func (r *Client) QuerySync(
 func (r *Client) Close() error { return r.CloseWithReason(errors.New("Close() called")) }
 
 // CloseWithReason closes the relay connection with a specific reason that will be stored as the context cancel cause.
-func (r *Client) CloseWithReason(reason error) error { return r.close(reason) }
-
-func (r *Client) close(reason error) error {
-	r.closeMutex.Lock()
-	defer r.closeMutex.Unlock()
-
-	if r.connectionContextCancel == nil {
-		return fmt.Errorf("relay already closed")
-	}
-	log.T.F(
-		"WS.Client: closing connection to %s: reason=%v lastErr=%v", r.URL,
-		reason, r.ConnectionError,
-	)
-	r.connectionContextCancel(reason)
-	r.connectionContextCancel = nil
-
-	if r.Connection == nil {
-		return fmt.Errorf("relay not connected")
-	}
-
-	err := r.Connection.Close()
-	if err != nil {
-		return err
-	}
-
-	return nil
+func (r *Client) CloseWithReason(reason error) error {
+	req := closeReq{reason: reason, resp: make(chan error, 1)}
+	r.closeCh <- req
+	return <-req.resp
 }
 
 var subIdPool = sync.Pool{

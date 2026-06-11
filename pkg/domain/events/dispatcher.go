@@ -1,8 +1,6 @@
 package events
 
 import (
-	"context"
-	"sync"
 	"sync/atomic"
 
 	"git.smesh.lol/orly/pkg/lol/log"
@@ -63,17 +61,39 @@ func NewSubscriberForAll(handle func(DomainEvent)) *SubscriberFunc {
 	}
 }
 
+// --- Actor request/response types ---
+
+type dispSubscribeReq struct {
+	s    Subscriber
+	done chan struct{}
+}
+
+type dispUnsubscribeReq struct {
+	s    Subscriber
+	done chan struct{}
+}
+
+type dispPublishReq struct {
+	event DomainEvent
+	done  chan struct{}
+}
+
+type dispStatsReq struct {
+	resp chan DispatcherStats
+}
+
 // Dispatcher publishes domain events to subscribers.
+// All mutable state is owned by the actor goroutine.
 type Dispatcher struct {
-	subscribers []Subscriber
-	mu          sync.RWMutex
+	subscribeCh   chan dispSubscribeReq
+	unsubscribeCh chan dispUnsubscribeReq
+	publishCh     chan dispPublishReq
+	asyncChan     chan DomainEvent
+	statsCh       chan dispStatsReq
+	stop          chan struct{}
+	done          chan struct{}
 
-	asyncChan chan DomainEvent
-	ctx       context.Context
-	cancel    context.CancelFunc
-	wg        sync.WaitGroup
-
-	// Metrics
+	// Metrics (atomics are safe for concurrent reads from Stats while actor updates)
 	eventsPublished atomic.Int64
 	eventsDropped   atomic.Int64
 	asyncQueueSize  int
@@ -99,57 +119,99 @@ func NewDispatcher(cfg DispatcherConfig) *Dispatcher {
 		cfg.AsyncBufferSize = 1000
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	d := &Dispatcher{
-		asyncChan:      make(chan DomainEvent, cfg.AsyncBufferSize),
-		ctx:            ctx,
-		cancel:         cancel,
+		subscribeCh:   make(chan dispSubscribeReq),
+		unsubscribeCh: make(chan dispUnsubscribeReq),
+		publishCh:     make(chan dispPublishReq),
+		asyncChan:     make(chan DomainEvent, cfg.AsyncBufferSize),
+		statsCh:       make(chan dispStatsReq),
+		stop:          make(chan struct{}),
+		done:          make(chan struct{}),
 		asyncQueueSize: cfg.AsyncBufferSize,
 	}
 
-	// Start async processor
-	d.wg.Add(1)
-	go d.processAsync()
+	go d.actorLoop()
 
 	return d
 }
 
+// actorLoop owns the subscribers list and processes all requests.
+func (d *Dispatcher) actorLoop() {
+	defer close(d.done)
+
+	var subscribers []Subscriber
+
+	deliver := func(event DomainEvent) {
+		for _, s := range subscribers {
+			if s.Supports(event.EventType()) {
+				s.Handle(event)
+			}
+		}
+		d.eventsPublished.Add(1)
+	}
+
+	for {
+		select {
+		case <-d.stop:
+			// Drain remaining async events before exiting
+			for {
+				select {
+				case event := <-d.asyncChan:
+					deliver(event)
+				default:
+					return
+				}
+			}
+		case req := <-d.subscribeCh:
+			subscribers = append(subscribers, req.s)
+			close(req.done)
+		case req := <-d.unsubscribeCh:
+			for i, sub := range subscribers {
+				if sub == req.s {
+					subscribers = append(subscribers[:i], subscribers[i+1:]...)
+					break
+				}
+			}
+			close(req.done)
+		case req := <-d.publishCh:
+			deliver(req.event)
+			close(req.done)
+		case event := <-d.asyncChan:
+			deliver(event)
+		case req := <-d.statsCh:
+			req.resp <- DispatcherStats{
+				EventsPublished: d.eventsPublished.Load(),
+				EventsDropped:   d.eventsDropped.Load(),
+				SubscriberCount: len(subscribers),
+				QueueSize:       len(d.asyncChan),
+				QueueCapacity:   d.asyncQueueSize,
+			}
+		}
+	}
+}
+
 // Subscribe adds a subscriber to receive events.
 func (d *Dispatcher) Subscribe(s Subscriber) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.subscribers = append(d.subscribers, s)
+	done := make(chan struct{})
+	d.subscribeCh <- dispSubscribeReq{s: s, done: done}
+	<-done
 }
 
 // Unsubscribe removes a subscriber.
 func (d *Dispatcher) Unsubscribe(s Subscriber) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	for i, sub := range d.subscribers {
-		if sub == s {
-			d.subscribers = append(d.subscribers[:i], d.subscribers[i+1:]...)
-			return
-		}
-	}
+	done := make(chan struct{})
+	d.unsubscribeCh <- dispUnsubscribeReq{s: s, done: done}
+	<-done
 }
 
 // Publish sends an event to all matching subscribers synchronously.
-// This blocks until all subscribers have processed the event.
 func (d *Dispatcher) Publish(event DomainEvent) {
-	d.mu.RLock()
-	subscribers := d.subscribers
-	d.mu.RUnlock()
-
-	for _, s := range subscribers {
-		if s.Supports(event.EventType()) {
-			s.Handle(event)
-		}
-	}
-	d.eventsPublished.Add(1)
+	done := make(chan struct{})
+	d.publishCh <- dispPublishReq{event: event, done: done}
+	<-done
 }
 
 // PublishAsync sends an event to be processed asynchronously.
-// This returns immediately and the event is processed in a background goroutine.
 // Returns true if the event was queued, false if the queue is full.
 func (d *Dispatcher) PublishAsync(event DomainEvent) bool {
 	select {
@@ -162,47 +224,17 @@ func (d *Dispatcher) PublishAsync(event DomainEvent) bool {
 	}
 }
 
-// processAsync handles async event delivery.
-func (d *Dispatcher) processAsync() {
-	defer d.wg.Done()
-
-	for {
-		select {
-		case <-d.ctx.Done():
-			// Drain remaining events before exiting
-			for {
-				select {
-				case event := <-d.asyncChan:
-					d.Publish(event)
-				default:
-					return
-				}
-			}
-		case event := <-d.asyncChan:
-			d.Publish(event)
-		}
-	}
-}
-
 // Stop stops the dispatcher and waits for pending events to be processed.
 func (d *Dispatcher) Stop() {
-	d.cancel()
-	d.wg.Wait()
+	close(d.stop)
+	<-d.done
 }
 
 // Stats returns dispatcher statistics.
 func (d *Dispatcher) Stats() DispatcherStats {
-	d.mu.RLock()
-	subscriberCount := len(d.subscribers)
-	d.mu.RUnlock()
-
-	return DispatcherStats{
-		EventsPublished: d.eventsPublished.Load(),
-		EventsDropped:   d.eventsDropped.Load(),
-		SubscriberCount: subscriberCount,
-		QueueSize:       len(d.asyncChan),
-		QueueCapacity:   d.asyncQueueSize,
-	}
+	req := dispStatsReq{resp: make(chan DispatcherStats, 1)}
+	d.statsCh <- req
+	return <-req.resp
 }
 
 // DispatcherStats contains dispatcher statistics.
@@ -215,20 +247,17 @@ type DispatcherStats struct {
 }
 
 // =============================================================================
-// Global Dispatcher (Optional Convenience)
+// Global Dispatcher
 // =============================================================================
 
-var (
-	globalDispatcher     *Dispatcher
-	globalDispatcherOnce sync.Once
-)
+var globalDispatcher *Dispatcher
+
+func init() {
+	globalDispatcher = NewDispatcher(DefaultDispatcherConfig())
+}
 
 // Global returns the global dispatcher instance.
-// Creates one with default config if not already created.
 func Global() *Dispatcher {
-	globalDispatcherOnce.Do(func() {
-		globalDispatcher = NewDispatcher(DefaultDispatcherConfig())
-	})
 	return globalDispatcher
 }
 

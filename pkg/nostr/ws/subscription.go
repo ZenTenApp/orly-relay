@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
-	"sync/atomic"
 
 	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/closeenvelope"
 	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/reqenvelope"
@@ -21,6 +19,26 @@ type ReplaceableKey struct {
 	D      string
 }
 
+// --- Subscription actor message types ---
+
+type subDispatchEventReq struct {
+	evt *event.E
+}
+
+type subDispatchEoseReq struct{}
+
+type subHandleClosedReq struct {
+	reason string
+}
+
+type subUnsubReq struct {
+	err error
+}
+
+type subFireReq struct {
+	resp chan error
+}
+
 // Subscription represents a subscription to a relay.
 type Subscription struct {
 	counter int64
@@ -32,7 +50,6 @@ type Subscription struct {
 	// the Events channel emits all EVENTs that come in a Subscription
 	// will be closed when the subscription ends
 	Events chan *event.E
-	mu     sync.Mutex
 
 	// the EndOfStoredEvents channel gets closed when an EOSE comes for that subscription
 	EndOfStoredEvents chan struct{}
@@ -52,13 +69,15 @@ type Subscription struct {
 	checkDuplicateReplaceable func(rk ReplaceableKey, ts *timestamp.T) bool
 
 	match  func(*event.E) bool // this will be either Filters.Match or Filters.MatchIgnoringTimestampConstraints
-	live   atomic.Bool
-	eosed  atomic.Bool
 	cancel context.CancelCauseFunc
 
-	// this keeps track of the events we've received before the EOSE that we must dispatch before
-	// closing the EndOfStoredEvents channel
-	storedwg sync.WaitGroup
+	// Actor channels
+	dispatchEventCh  chan subDispatchEventReq
+	dispatchEoseCh   chan subDispatchEoseReq
+	handleClosedCh   chan subHandleClosedReq
+	unsubCh          chan subUnsubReq
+	fireCh           chan subFireReq
+	done             chan struct{}
 }
 
 // SubscriptionOption is the type of the argument passed when instantiating relay connections.
@@ -89,88 +108,117 @@ var (
 )
 
 func (sub *Subscription) start() {
-	// Wait for the context to be done instead of blocking immediately
-	// This allows the subscription to receive events before terminating
-	sub.live.Store(true)
-	// debug: log start of subscription goroutine
+	defer close(sub.done)
+
+	live := true
+	eosed := false
+	storedPending := 0
+	// storedDone is used to count down in-flight stored event dispatches
+	storedDone := make(chan struct{}, 128)
+	// eoseWaiting: when EOSE arrives before all stored events are dispatched,
+	// we track that we need to signal EndOfStoredEvents once storedPending hits 0.
+	eoseWaiting := false
+
 	log.T.F("WS.Subscription.start: started id=%s", sub.GetID())
-	<-sub.Context.Done()
-	// the subscription ends once the context is canceled (if not already)
-	log.T.F("WS.Subscription.start: context done for id=%s", sub.GetID())
-	sub.unsub(errors.New("context done on start()")) // this will set sub.live to false
-	// do this so we don't have the possibility of closing the Events channel and then trying to send to it
-	sub.mu.Lock()
-	close(sub.Events)
-	sub.mu.Unlock()
-}
 
-// GetID returns the subscription ID.
-func (sub *Subscription) GetID() string { return string(sub.id) }
+	for {
+		select {
+		case <-sub.Context.Done():
+			log.T.F("WS.Subscription.start: context done for id=%s", sub.GetID())
+			if live {
+				live = false
+				sub.sendClose()
+			}
+			sub.Client.deleteSub(string(sub.id))
+			close(sub.Events)
+			return
 
-func (sub *Subscription) dispatchEvent(evt *event.E) {
-	added := false
-	if !sub.eosed.Load() {
-		sub.storedwg.Add(1)
-		added = true
-	}
-	go func() {
-		sub.mu.Lock()
-		defer sub.mu.Unlock()
+		case req := <-sub.dispatchEventCh:
+			if !live {
+				continue
+			}
+			isStored := !eosed
+			if isStored {
+				storedPending++
+			}
+			// Send to Events channel in a goroutine to avoid blocking
+			// the actor on a slow consumer.
+			go func() {
+				select {
+				case sub.Events <- req.evt:
+				case <-sub.Context.Done():
+				}
+				if isStored {
+					storedDone <- struct{}{}
+				}
+			}()
 
-		if sub.live.Load() {
+		case <-storedDone:
+			storedPending--
+			if eoseWaiting && storedPending == 0 {
+				eoseWaiting = false
+				sub.EndOfStoredEvents <- struct{}{}
+			}
+
+		case <-sub.dispatchEoseCh:
+			if eosed {
+				continue
+			}
+			eosed = true
+			sub.match = sub.Filters.MatchIgnoringTimestampConstraints
+			if storedPending == 0 {
+				sub.EndOfStoredEvents <- struct{}{}
+			} else {
+				eoseWaiting = true
+			}
+
+		case req := <-sub.handleClosedCh:
+			live = false // relay already closed it - don't send CLOSE back
+			sub.cancel(fmt.Errorf("CLOSED received: %s", req.reason))
+			// Non-blocking send so callers who read ClosedReason still get notified,
+			// but we don't block on a channel nobody may be reading.
 			select {
-			case sub.Events <- evt:
-			case <-sub.Context.Done():
+			case sub.ClosedReason <- req.reason:
+			default:
+			}
+
+		case req := <-sub.unsubCh:
+			sub.cancel(req.err)
+			if live {
+				live = false
+				sub.sendClose()
+			}
+			sub.Client.deleteSub(string(sub.id))
+
+		case req := <-sub.fireCh:
+			var reqb []byte
+			reqb = reqenvelope.NewFrom(sub.id, sub.Filters).Marshal(nil)
+			live = true
+			log.T.F(
+				"WS.Subscription.Fire: sending REQ id=%s filters=%d bytes=%d",
+				sub.GetID(), len(*sub.Filters), len(reqb),
+			)
+			log.T.F(
+				"WS.Subscription.Fire: outbound REQ to %s: %s", sub.Client.URL,
+				string(reqb),
+			)
+			if err := <-sub.Client.Write(reqb); err != nil {
+				err = fmt.Errorf("failed to write: %w", err)
+				log.T.F(
+					"WS.Subscription.Fire: write failed id=%s: %v", sub.GetID(), err,
+				)
+				sub.cancel(err)
+				req.resp <- err
+			} else {
+				log.T.F("WS.Subscription.Fire: write ok id=%s", sub.GetID())
+				req.resp <- nil
 			}
 		}
-		if added {
-			sub.storedwg.Done()
-		}
-	}()
-}
-
-func (sub *Subscription) dispatchEose() {
-	if sub.eosed.CompareAndSwap(false, true) {
-		sub.match = sub.Filters.MatchIgnoringTimestampConstraints
-		go func() {
-			sub.storedwg.Wait()
-			sub.EndOfStoredEvents <- struct{}{}
-		}()
 	}
 }
 
-// handleClosed handles the CLOSED message from a relay.
-func (sub *Subscription) handleClosed(reason string) {
-	sub.live.Store(false) // relay already closed it — don't send CLOSE back
-	sub.cancel(fmt.Errorf("CLOSED received: %s", reason))
-	// Non-blocking send so callers who read ClosedReason still get notified,
-	// but we don't block unsub on a channel nobody may be reading.
-	select {
-	case sub.ClosedReason <- reason:
-	default:
-	}
-}
-
-// Unsub closes the subscription, sending "CLOSE" to relay as in NIP-01.
-// Unsub() also closes the channel sub.Events and makes a new one.
-func (sub *Subscription) Unsub() {
-	sub.unsub(errors.New("Unsub() called"))
-}
-
-// unsub is the internal implementation of Unsub.
-func (sub *Subscription) unsub(err error) {
-	// cancel the context (if it's not canceled already)
-	sub.cancel(err)
-	// mark subscription as closed and send a CLOSE to the relay (naïve sync.Once implementation)
-	if sub.live.CompareAndSwap(true, false) {
-		sub.Close()
-	}
-	// remove subscription from our map
-	sub.Client.Subscriptions.Delete(string(sub.id))
-}
-
-// Close just sends a CLOSE message. You probably want Unsub() instead.
-func (sub *Subscription) Close() {
+// sendClose sends a CLOSE message to the relay.
+func (sub *Subscription) sendClose() {
 	if sub.Client.IsConnected() {
 		closeMsg := closeenvelope.NewFrom(sub.id)
 		closeb := closeMsg.Marshal(nil)
@@ -182,6 +230,38 @@ func (sub *Subscription) Close() {
 	}
 }
 
+// GetID returns the subscription ID.
+func (sub *Subscription) GetID() string { return string(sub.id) }
+
+func (sub *Subscription) dispatchEvent(evt *event.E) {
+	sub.dispatchEventCh <- subDispatchEventReq{evt: evt}
+}
+
+func (sub *Subscription) dispatchEose() {
+	sub.dispatchEoseCh <- subDispatchEoseReq{}
+}
+
+// handleClosed handles the CLOSED message from a relay.
+func (sub *Subscription) handleClosed(reason string) {
+	sub.handleClosedCh <- subHandleClosedReq{reason: reason}
+}
+
+// Unsub closes the subscription, sending "CLOSE" to relay as in NIP-01.
+// Unsub() also closes the channel sub.Events and makes a new one.
+func (sub *Subscription) Unsub() {
+	sub.unsub(errors.New("Unsub() called"))
+}
+
+// unsub is the internal implementation of Unsub.
+func (sub *Subscription) unsub(err error) {
+	sub.unsubCh <- subUnsubReq{err: err}
+}
+
+// Close just sends a CLOSE message. You probably want Unsub() instead.
+func (sub *Subscription) Close() {
+	sub.sendClose()
+}
+
 // Sub sets sub.Filters and then calls sub.Fire(ctx).
 // The subscription will be closed if the context expires.
 func (sub *Subscription) Sub(_ context.Context, ff *filter.S) {
@@ -191,25 +271,7 @@ func (sub *Subscription) Sub(_ context.Context, ff *filter.S) {
 
 // Fire sends the "REQ" command to the relay.
 func (sub *Subscription) Fire() (err error) {
-	var reqb []byte
-	reqb = reqenvelope.NewFrom(sub.id, sub.Filters).Marshal(nil)
-	sub.live.Store(true)
-	log.T.F(
-		"WS.Subscription.Fire: sending REQ id=%s filters=%d bytes=%d",
-		sub.GetID(), len(*sub.Filters), len(reqb),
-	)
-	log.T.F(
-		"WS.Subscription.Fire: outbound REQ to %s: %s", sub.Client.URL,
-		string(reqb),
-	)
-	if err = <-sub.Client.Write(reqb); err != nil {
-		err = fmt.Errorf("failed to write: %w", err)
-		log.T.F(
-			"WS.Subscription.Fire: write failed id=%s: %v", sub.GetID(), err,
-		)
-		sub.cancel(err)
-		return
-	}
-	log.T.F("WS.Subscription.Fire: write ok id=%s", sub.GetID())
-	return
+	req := subFireReq{resp: make(chan error, 1)}
+	sub.fireCh <- req
+	return <-req.resp
 }

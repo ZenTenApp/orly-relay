@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -21,6 +20,37 @@ import (
 
 //go:embed smesh3
 var smesh3FS embed.FS
+
+// -- smesh3 actor request types --
+
+type smesh3GetVersionReq struct {
+	resp chan int64 // buffered 1
+}
+type smesh3RegisterClientReq struct {
+	ch   chan string
+	resp chan int64 // buffered 1: returns current version
+}
+type smesh3UnregisterClientReq struct {
+	ch chan string
+}
+type smesh3RecordPendingFileReq struct {
+	path string
+}
+type smesh3FlushReq struct {
+	resp chan smesh3FlushResp // buffered 1
+}
+type smesh3FlushResp struct {
+	version int64
+	files   []string
+	clients []chan string
+}
+type smesh3FullRefreshReq struct {
+	resp chan smesh3FullRefreshResp // buffered 1
+}
+type smesh3FullRefreshResp struct {
+	version int64
+	clients []chan string
+}
 
 // Smesh3Server serves the smesh web client with optional hot-reload.
 // When dir is set, serves from disk and watches for changes via fsnotify.
@@ -35,24 +65,35 @@ type Smesh3Server struct {
 	deployPub []byte // 32-byte x-only pubkey for /__deploy auth
 	clientTag string // client tag for published events (NIP-89)
 
-	mu           sync.RWMutex
-	version      int64
-	clients      map[chan string]struct{}
-	pendingFiles map[string]struct{}
-	cancelFn     context.CancelFunc
+	// Actor channels for state management (version, clients, pendingFiles)
+	getVersionCh     chan smesh3GetVersionReq
+	registerCh       chan smesh3RegisterClientReq
+	unregisterCh     chan smesh3UnregisterClientReq
+	recordPendingCh  chan smesh3RecordPendingFileReq
+	flushCh          chan smesh3FlushReq
+	fullRefreshCh    chan smesh3FullRefreshReq
+	actorStop        chan struct{}
+	actorDone        chan struct{}
+
+	// Deploy actor channels
+	deployBeginCh   chan deployBeginReq
+	deployGetCh     chan deployGetReq
+	deploySetPartCh chan deploySetPartReq
+	deployTakeCh    chan deployTakeReq
+	deployStopCh    chan struct{}
+	deployDone      chan struct{}
+
+	version  int64 // only read in extractAndSwap after actor response
+	cancelFn context.CancelFunc
 }
 
 // NewSmesh3Server creates a new smesh HTTP server.
-// If dir is non-empty, files are served from disk with hot-reload.
-// deployPubHex is the hex-encoded pubkey authorized for /__deploy (empty disables).
 func NewSmesh3Server(port int, dir, deployPubHex, clientTag string) *Smesh3Server {
 	s := &Smesh3Server{
 		port:      port,
 		dir:       dir,
 		clientTag: clientTag,
-		version:      time.Now().UnixMilli(),
-		clients:      make(map[chan string]struct{}),
-		pendingFiles: make(map[string]struct{}),
+		version:   time.Now().UnixMilli(),
 	}
 	if len(deployPubHex) == 64 {
 		pub, err := hex.DecodeString(deployPubHex)
@@ -63,9 +104,75 @@ func NewSmesh3Server(port int, dir, deployPubHex, clientTag string) *Smesh3Serve
 	return s
 }
 
+func (s *Smesh3Server) startActor(ctx context.Context) {
+	s.getVersionCh = make(chan smesh3GetVersionReq)
+	s.registerCh = make(chan smesh3RegisterClientReq)
+	s.unregisterCh = make(chan smesh3UnregisterClientReq, 16)
+	s.recordPendingCh = make(chan smesh3RecordPendingFileReq, 16)
+	s.flushCh = make(chan smesh3FlushReq)
+	s.fullRefreshCh = make(chan smesh3FullRefreshReq)
+	s.actorStop = make(chan struct{})
+	s.actorDone = make(chan struct{})
+	s.deployStopCh = make(chan struct{})
+
+	go func() {
+		defer close(s.actorDone)
+		version := s.version
+		clients := make(map[chan string]struct{})
+		pendingFiles := make(map[string]struct{})
+
+		for {
+			select {
+			case req := <-s.getVersionCh:
+				req.resp <- version
+			case req := <-s.registerCh:
+				clients[req.ch] = struct{}{}
+				req.resp <- version
+			case req := <-s.unregisterCh:
+				delete(clients, req.ch)
+			case req := <-s.recordPendingCh:
+				pendingFiles[req.path] = struct{}{}
+			case req := <-s.flushCh:
+				version = time.Now().UnixMilli()
+				s.version = version
+				files := make([]string, 0, len(pendingFiles))
+				for f := range pendingFiles {
+					files = append(files, f)
+				}
+				pendingFiles = make(map[string]struct{})
+				chs := make([]chan string, 0, len(clients))
+				for ch := range clients {
+					chs = append(chs, ch)
+				}
+				req.resp <- smesh3FlushResp{version: version, files: files, clients: chs}
+			case req := <-s.fullRefreshCh:
+				version = time.Now().UnixMilli()
+				s.version = version
+				chs := make([]chan string, 0, len(clients))
+				for ch := range clients {
+					chs = append(chs, ch)
+				}
+				req.resp <- smesh3FullRefreshResp{version: version, clients: chs}
+			case <-s.actorStop:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
 // Start begins serving the smesh client.
 func (s *Smesh3Server) Start(ctx context.Context) error {
 	ctx, s.cancelFn = context.WithCancel(ctx)
+
+	// Start actor goroutine
+	s.startActor(ctx)
+
+	// Start deploy actor if deploy is enabled
+	if len(s.deployPub) == 32 {
+		s.startDeployActor()
+	}
 
 	var fileHandler http.Handler
 	if s.dir != "" {
@@ -102,15 +209,12 @@ func (s *Smesh3Server) Start(ctx context.Context) error {
 		log.I.F("smesh: /__deploy enabled for pubkey %x", s.deployPub)
 	}
 
-	// Satellite SW loader pages — serve minimal HTML that registers the SW
-	// and periodically posts a keepalive message to prevent browser from
-	// terminating the SW. Without this, BroadcastChannel messages are lost.
+	// Satellite SW loader pages
 	for _, swDir := range []string{"$sw-relay"} {
 		dir := swDir
 		mux.HandleFunc("/"+dir+"/loader.html", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-			_ = s.version
 			fmt.Fprintf(w, `<!DOCTYPE html><html><body>
 <script>
 if('serviceWorker' in navigator){
@@ -238,7 +342,7 @@ if('serviceWorker' in navigator){
 		}
 	}()
 
-	// Extra listeners for SW origin isolation (127.0.0.2=marmot, 127.0.0.3=relay, 127.0.0.4=crypto)
+	// Extra listeners for SW origin isolation
 	for _, ip := range []string{"127.0.0.2", "127.0.0.3", "127.0.0.4"} {
 		swAddr := fmt.Sprintf("%s:%d", ip, s.port)
 		ln, err := net.Listen("tcp", swAddr)
@@ -281,6 +385,18 @@ func (s *Smesh3Server) Stop() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		s.server.Shutdown(ctx)
+	}
+	// Stop deploy actor if it was started
+	if s.deployStopCh != nil {
+		select {
+		case <-s.deployStopCh:
+			// already closed
+		default:
+			close(s.deployStopCh)
+		}
+	}
+	if s.deployDone != nil {
+		<-s.deployDone
 	}
 }
 
@@ -336,9 +452,7 @@ func (s *Smesh3Server) watchLoop(ctx context.Context) {
 				if path == "/index.html" {
 					path = "/"
 				}
-				s.mu.Lock()
-				s.pendingFiles[path] = struct{}{}
-				s.mu.Unlock()
+				s.recordPendingCh <- smesh3RecordPendingFileReq{path: path}
 			}
 			// Debounce: wait 200ms for batch writes (rsync).
 			if debounce != nil {
@@ -358,26 +472,16 @@ func (s *Smesh3Server) watchLoop(ctx context.Context) {
 
 // flushChanges collects pending file changes, bumps version, and notifies SSE clients.
 func (s *Smesh3Server) flushChanges() {
-	s.mu.Lock()
-	s.version = time.Now().UnixMilli()
-	v := s.version
-	files := make([]string, 0, len(s.pendingFiles))
-	for f := range s.pendingFiles {
-		files = append(files, f)
-	}
-	s.pendingFiles = make(map[string]struct{})
-	clients := make([]chan string, 0, len(s.clients))
-	for ch := range s.clients {
-		clients = append(clients, ch)
-	}
-	s.mu.Unlock()
+	resp := make(chan smesh3FlushResp, 1)
+	s.flushCh <- smesh3FlushReq{resp: resp}
+	r := <-resp
 
 	// Build JSON: {"v":123,"files":["/smesh3.mjs"]}
 	var sb strings.Builder
 	sb.WriteString(`{"v":`)
-	sb.WriteString(strconv.FormatInt(v, 10))
+	sb.WriteString(strconv.FormatInt(r.version, 10))
 	sb.WriteString(`,"files":[`)
-	for i, f := range files {
+	for i, f := range r.files {
 		if i > 0 {
 			sb.WriteByte(',')
 		}
@@ -388,8 +492,8 @@ func (s *Smesh3Server) flushChanges() {
 	sb.WriteString("]}")
 	msg := sb.String()
 
-	log.I.F("smesh: %d files changed, version=%d, notifying %d clients", len(files), v, len(clients))
-	for _, ch := range clients {
+	log.I.F("smesh: %d files changed, version=%d, notifying %d clients", len(r.files), r.version, len(r.clients))
+	for _, ch := range r.clients {
 		select {
 		case ch <- msg:
 		default:
@@ -399,19 +503,14 @@ func (s *Smesh3Server) flushChanges() {
 
 // notifyFullRefresh bumps version and notifies with empty file list (full refresh).
 func (s *Smesh3Server) notifyFullRefresh() {
-	s.mu.Lock()
-	s.version = time.Now().UnixMilli()
-	v := s.version
-	clients := make([]chan string, 0, len(s.clients))
-	for ch := range s.clients {
-		clients = append(clients, ch)
-	}
-	s.mu.Unlock()
+	resp := make(chan smesh3FullRefreshResp, 1)
+	s.fullRefreshCh <- smesh3FullRefreshReq{resp: resp}
+	r := <-resp
 
-	msg := `{"v":` + strconv.FormatInt(v, 10) + `}`
+	msg := `{"v":` + strconv.FormatInt(r.version, 10) + `}`
 
-	log.I.F("smesh: full refresh, version=%d, notifying %d clients", v, len(clients))
-	for _, ch := range clients {
+	log.I.F("smesh: full refresh, version=%d, notifying %d clients", r.version, len(r.clients))
+	for _, ch := range r.clients {
 		select {
 		case ch <- msg:
 		default:
@@ -421,16 +520,15 @@ func (s *Smesh3Server) notifyFullRefresh() {
 
 // handleVersion returns the current version as plain text.
 func (s *Smesh3Server) handleVersion(w http.ResponseWriter, r *http.Request) {
-	s.mu.RLock()
-	v := s.version
-	s.mu.RUnlock()
+	resp := make(chan int64, 1)
+	s.getVersionCh <- smesh3GetVersionReq{resp: resp}
+	v := <-resp
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Cache-Control", "no-cache")
 	fmt.Fprintf(w, "%d", v)
 }
 
 // handleSSE maintains a Server-Sent Events connection.
-// Sends the current version on connect, then pushes on each change.
 func (s *Smesh3Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -446,19 +544,16 @@ func (s *Smesh3Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	ch := make(chan string, 4)
 
 	// Register client.
-	s.mu.Lock()
-	s.clients[ch] = struct{}{}
-	v := s.version
-	s.mu.Unlock()
+	resp := make(chan int64, 1)
+	s.registerCh <- smesh3RegisterClientReq{ch: ch, resp: resp}
+	v := <-resp
 
-	// Send current version immediately (no files on connect).
+	// Send current version immediately.
 	fmt.Fprintf(w, "data: {\"v\":%d}\n\n", v)
 	flusher.Flush()
 
 	defer func() {
-		s.mu.Lock()
-		delete(s.clients, ch)
-		s.mu.Unlock()
+		s.unregisterCh <- smesh3UnregisterClientReq{ch: ch}
 	}()
 
 	ctx := r.Context()
@@ -479,4 +574,3 @@ func (s *Smesh3Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
-

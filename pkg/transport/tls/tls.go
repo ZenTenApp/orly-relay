@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"golang.org/x/crypto/acme/autocert"
 	"git.smesh.lol/orly/pkg/lol/chk"
@@ -22,7 +21,6 @@ type Config struct {
 	// Domains is the list of domains for ACME auto-cert.
 	Domains []string
 	// Certs is a list of manual certificate paths (without extension).
-	// For each path, .pem and .key files are loaded.
 	Certs []string
 	// DataDir is the base data directory for the autocert cache.
 	DataDir string
@@ -31,12 +29,11 @@ type Config struct {
 }
 
 // Transport serves HTTPS with automatic or manual TLS certificates.
-// It runs two servers: HTTPS on :443 and HTTP on :80 for ACME challenges.
+// Start/Stop are called exclusively by the transport.Manager actor.
 type Transport struct {
 	cfg        *Config
 	tlsServer  *http.Server
 	httpServer *http.Server
-	mu         sync.Mutex
 }
 
 // New creates a new TLS transport.
@@ -47,34 +44,27 @@ func New(cfg *Config) *Transport {
 func (t *Transport) Name() string { return "tls" }
 
 func (t *Transport) Start(ctx context.Context) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	if err := ValidateConfig(t.cfg.Domains, t.cfg.Certs); err != nil {
 		return fmt.Errorf("invalid TLS configuration: %w", err)
 	}
 
-	// Create cache directory for autocert
 	cacheDir := filepath.Join(t.cfg.DataDir, "autocert")
 	if err := os.MkdirAll(cacheDir, 0700); err != nil {
 		return fmt.Errorf("failed to create autocert cache directory: %w", err)
 	}
 
-	// Set up autocert manager
 	m := &autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
 		Cache:      autocert.DirCache(cacheDir),
 		HostPolicy: autocert.HostWhitelist(t.cfg.Domains...),
 	}
 
-	// Create TLS server on port 443
 	t.tlsServer = &http.Server{
 		Addr:      ":443",
 		Handler:   t.cfg.Handler,
 		TLSConfig: tlsConfig(m, t.cfg.Certs...),
 	}
 
-	// Create HTTP server for ACME challenges and redirects on port 80
 	t.httpServer = &http.Server{
 		Addr:    ":80",
 		Handler: m.HTTPHandler(nil),
@@ -82,7 +72,6 @@ func (t *Transport) Start(ctx context.Context) error {
 
 	log.I.F("TLS enabled for domains: %v", t.cfg.Domains)
 
-	// Start TLS server
 	go func() {
 		log.I.F("starting TLS listener on https://:443")
 		if err := t.tlsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
@@ -90,7 +79,6 @@ func (t *Transport) Start(ctx context.Context) error {
 		}
 	}()
 
-	// Start HTTP server for ACME challenges
 	go func() {
 		log.I.F("starting HTTP listener on http://:80 for ACME challenges")
 		if err := t.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -102,9 +90,6 @@ func (t *Transport) Start(ctx context.Context) error {
 }
 
 func (t *Transport) Stop(ctx context.Context) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	var firstErr error
 
 	if t.tlsServer != nil {
@@ -158,11 +143,9 @@ func ValidateConfig(domains []string, certs []string) error {
 
 // tlsConfig returns a TLS configuration that works with LetsEncrypt automatic
 // SSL cert issuer as well as any provided certificate files.
-//
-// Certs are provided as paths where .pem and .key files exist.
+// certMap is populated once during construction and only read by closures.
 func tlsConfig(m *autocert.Manager, certs ...string) *tls.Config {
 	certMap := make(map[string]*tls.Certificate)
-	var mx sync.Mutex
 
 	for _, certPath := range certs {
 		if certPath == "" {
@@ -198,9 +181,6 @@ func tlsConfig(m *autocert.Manager, certs ...string) *tls.Config {
 	if m == nil {
 		return &tls.Config{
 			GetCertificate: func(helo *tls.ClientHelloInfo) (*tls.Certificate, error) {
-				mx.Lock()
-				defer mx.Unlock()
-
 				if cert, exists := certMap[helo.ServerName]; exists {
 					return cert, nil
 				}
@@ -221,10 +201,7 @@ func tlsConfig(m *autocert.Manager, certs ...string) *tls.Config {
 
 	tc := m.TLSConfig()
 	tc.GetCertificate = func(helo *tls.ClientHelloInfo) (*tls.Certificate, error) {
-		mx.Lock()
-
 		if cert, exists := certMap[helo.ServerName]; exists {
-			mx.Unlock()
 			return cert, nil
 		}
 
@@ -232,13 +209,10 @@ func tlsConfig(m *autocert.Manager, certs ...string) *tls.Config {
 			if strings.HasPrefix(domain, "*.") {
 				baseDomain := domain[2:]
 				if strings.HasSuffix(helo.ServerName, baseDomain) {
-					mx.Unlock()
 					return cert, nil
 				}
 			}
 		}
-
-		mx.Unlock()
 
 		return m.GetCertificate(helo)
 	}

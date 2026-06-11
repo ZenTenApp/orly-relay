@@ -936,6 +936,7 @@ func TestNewWithManager(t *testing.T) {
 			enabled:    true,
 			runners:    make(map[string]*ScriptRunner),
 		}
+		manager.startPMCallActor()
 
 		policy := &P{
 			DefaultPolicy: "allow",
@@ -982,6 +983,7 @@ func TestPolicyManagerLifecycle(t *testing.T) {
 		enabled:    true,
 		runners:    make(map[string]*ScriptRunner),
 	}
+	manager.startPMCallActor()
 
 	// Test manager state
 	if !manager.IsEnabled() {
@@ -1024,6 +1026,7 @@ func TestPolicyManagerProcessEvent(t *testing.T) {
 		enabled:    true,
 		runners:    make(map[string]*ScriptRunner),
 	}
+	manager.startPMCallActor()
 
 	// Generate real keypair for testing
 	eventSigner, eventPubkey := generateTestKeypair(t)
@@ -1168,6 +1171,7 @@ func TestEdgeCasesManagerWithInvalidScript(t *testing.T) {
 		enabled:    true,
 		runners:    make(map[string]*ScriptRunner),
 	}
+	manager.startPMCallActor()
 
 	// Get runner and try to start with invalid script
 	runner := manager.getOrCreateRunner(scriptPath)
@@ -1190,6 +1194,7 @@ func TestEdgeCasesManagerDoubleStart(t *testing.T) {
 		enabled:    true,
 		runners:    make(map[string]*ScriptRunner),
 	}
+	manager.startPMCallActor()
 
 	// Get runner
 	runner := manager.getOrCreateRunner("/tmp/policy.sh")
@@ -1843,6 +1848,7 @@ done
 		enabled:    true,
 		runners:    make(map[string]*ScriptRunner),
 	}
+	manager.startPMCallActor()
 
 	// Create policy with a rule that uses the script
 	policy := &P{
@@ -1915,9 +1921,11 @@ done
 		}
 
 		// Verify the script runner was created and is running
-		manager.mutex.RLock()
-		runner, exists := manager.runners[scriptPath]
-		manager.mutex.RUnlock()
+		var runner *ScriptRunner
+		var exists bool
+		manager.pmCall(func() {
+			runner, exists = manager.runners[scriptPath]
+		})
 
 		if !exists {
 			t.Fatal("Expected script runner to be created for rule script path")
@@ -1942,10 +1950,12 @@ done
 
 	// Test 3: Verify script path is correct (rule-specific, not default)
 	t.Run("script_path_is_rule_specific", func(t *testing.T) {
-		manager.mutex.RLock()
-		runner, exists := manager.runners[scriptPath]
-		_, defaultExists := manager.runners[manager.scriptPath]
-		manager.mutex.RUnlock()
+		var runner *ScriptRunner
+		var exists, defaultExists bool
+		manager.pmCall(func() {
+			runner, exists = manager.runners[scriptPath]
+			_, defaultExists = manager.runners[manager.scriptPath]
+		})
 
 		if !exists {
 			t.Fatal("Expected rule-specific script runner to exist")
@@ -1963,10 +1973,12 @@ done
 	// Test 4: Multiple events should use the same script instance
 	t.Run("script_reused_for_multiple_events", func(t *testing.T) {
 		// Get initial runner
-		manager.mutex.RLock()
-		initialRunner, _ := manager.runners[scriptPath]
-		initialRunnerCount := len(manager.runners)
-		manager.mutex.RUnlock()
+		var initialRunner *ScriptRunner
+		var initialRunnerCount int
+		manager.pmCall(func() {
+			initialRunner, _ = manager.runners[scriptPath]
+			initialRunnerCount = len(manager.runners)
+		})
 
 		// Process multiple events
 		for i := 0; i < 5; i++ {
@@ -1979,10 +1991,12 @@ done
 		}
 
 		// Verify same runner is used
-		manager.mutex.RLock()
-		currentRunner, _ := manager.runners[scriptPath]
-		currentRunnerCount := len(manager.runners)
-		manager.mutex.RUnlock()
+		var currentRunner *ScriptRunner
+		var currentRunnerCount int
+		manager.pmCall(func() {
+			currentRunner, _ = manager.runners[scriptPath]
+			currentRunnerCount = len(manager.runners)
+		})
 
 		if currentRunner != initialRunner {
 			t.Error("Expected same runner instance to be reused for multiple events")
@@ -2007,9 +2021,10 @@ done
 	})
 
 	// Cleanup: Stop the script
-	manager.mutex.RLock()
-	runner, exists := manager.runners[scriptPath]
-	manager.mutex.RUnlock()
+	var exists bool
+	manager.pmCall(func() {
+		runner, exists = manager.runners[scriptPath]
+	})
 	if exists && runner.IsRunning() {
 		runner.Stop()
 	}

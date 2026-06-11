@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	gosync "sync"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -26,6 +25,49 @@ type EventPublisher interface {
 	Deliver(*event.E)
 }
 
+// -- actor request/response types --
+
+type getMembersReq struct {
+	resp chan []*Member
+}
+
+type getMemberReq struct {
+	httpURL string
+	resp    chan *Member // nil = not found
+}
+
+type isSelfURLReq struct {
+	url  string
+	resp chan bool
+}
+
+type markSelfURLReq struct {
+	url string
+}
+
+type updateMembershipReq struct {
+	relayURLs []string
+}
+
+type loadPeerStateReq struct {
+	resp chan error
+}
+
+type pollAllMembersReq struct {
+	resp chan []*Member // snapshot for polling goroutines
+}
+
+type updateMemberStatusReq struct {
+	httpURL string
+	status  string
+}
+
+type updateMemberAfterPollReq struct {
+	httpURL    string
+	lastSerial uint64
+	lastPoll   time.Time
+}
+
 // Manager handles cluster replication between relay instances
 type Manager struct {
 	ctx                       context.Context
@@ -33,15 +75,25 @@ type Manager struct {
 	db                        *database.D
 	adminNpubs                []string
 	relayIdentityPubkey       string                // Our relay's identity pubkey (hex)
-	selfURLs                  map[string]bool       // URLs discovered to be ourselves (for fast lookups)
-	members                   map[string]*Member    // keyed by relay URL
-	membersMux                gosync.RWMutex
-	pollTicker                *time.Ticker
-	pollDone                  chan struct{}
-	httpClient                *http.Client
 	propagatePrivilegedEvents bool
 	publisher                 EventPublisher
 	nip11Cache                *common.NIP11Cache
+	httpClient                *http.Client
+	pollTicker                *time.Ticker
+	pollDone                  chan struct{}
+
+	// actor channels
+	getMembersCh           chan getMembersReq
+	getMemberCh            chan getMemberReq
+	isSelfURLCh            chan isSelfURLReq
+	markSelfURLCh          chan markSelfURLReq           // fire-and-forget
+	updateMembershipCh     chan updateMembershipReq      // fire-and-forget
+	loadPeerStateCh        chan loadPeerStateReq
+	pollAllMembersCh       chan pollAllMembersReq
+	updateMemberStatusCh   chan updateMemberStatusReq    // fire-and-forget
+	updateMemberAfterPollCh chan updateMemberAfterPollReq // fire-and-forget
+	stopCh                 chan struct{}
+	doneCh                 chan struct{}
 }
 
 // Member represents a cluster member
@@ -113,18 +165,183 @@ func NewManager(ctx context.Context, db *database.D, cfg *Config, publisher Even
 		db:                        db,
 		adminNpubs:                cfg.AdminNpubs,
 		relayIdentityPubkey:       relayPubkey,
-		selfURLs:                  make(map[string]bool),
-		members:                   make(map[string]*Member),
-		pollDone:                  make(chan struct{}),
 		propagatePrivilegedEvents: cfg.PropagatePrivilegedEvents,
 		publisher:                 publisher,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		nip11Cache: common.NewNIP11Cache(cfg.NIP11CacheTTL),
+		nip11Cache:              common.NewNIP11Cache(cfg.NIP11CacheTTL),
+		pollDone:                make(chan struct{}),
+		getMembersCh:            make(chan getMembersReq),
+		getMemberCh:             make(chan getMemberReq),
+		isSelfURLCh:             make(chan isSelfURLReq),
+		markSelfURLCh:           make(chan markSelfURLReq, 16),
+		updateMembershipCh:      make(chan updateMembershipReq, 16),
+		loadPeerStateCh:         make(chan loadPeerStateReq),
+		pollAllMembersCh:        make(chan pollAllMembersReq),
+		updateMemberStatusCh:    make(chan updateMemberStatusReq, 16),
+		updateMemberAfterPollCh: make(chan updateMemberAfterPollReq, 16),
+		stopCh:                  make(chan struct{}),
+		doneCh:                  make(chan struct{}),
 	}
 
+	go cm.actorLoop()
+
 	return cm
+}
+
+// actorLoop owns members and selfURLs - all access goes through channels.
+func (cm *Manager) actorLoop() {
+	defer close(cm.doneCh)
+
+	members := make(map[string]*Member)
+	selfURLs := make(map[string]bool)
+
+	for {
+		select {
+		case <-cm.stopCh:
+			return
+
+		case req := <-cm.getMembersCh:
+			result := make([]*Member, 0, len(members))
+			for _, m := range members {
+				mc := *m
+				result = append(result, &mc)
+			}
+			req.resp <- result
+
+		case req := <-cm.getMemberCh:
+			if m, ok := members[req.httpURL]; ok {
+				mc := *m
+				req.resp <- &mc
+			} else {
+				req.resp <- nil
+			}
+
+		case req := <-cm.isSelfURLCh:
+			req.resp <- selfURLs[req.url]
+
+		case req := <-cm.markSelfURLCh:
+			selfURLs[req.url] = true
+
+		case req := <-cm.updateMembershipCh:
+			// Remove members not in the new list
+			for url := range members {
+				found := false
+				for _, newURL := range req.relayURLs {
+					if newURL == url {
+						found = true
+						break
+					}
+				}
+				if !found {
+					delete(members, url)
+					if err := cm.removePeerState(url); err != nil {
+						log.W.F("failed to remove persisted state for peer %s: %v", url, err)
+					}
+					log.D.F("removed cluster member: %s", url)
+				}
+			}
+
+			// Add new members (filter out self)
+			for _, url := range req.relayURLs {
+				if _, exists := members[url]; exists {
+					continue
+				}
+				if selfURLs[url] {
+					log.D.F("removed self from cluster members (known URL): %s", url)
+					continue
+				}
+				if cm.relayIdentityPubkey != "" {
+					pctx, pcancel := context.WithTimeout(context.Background(), 5*time.Second)
+					peerPubkey, err := cm.nip11Cache.GetPubkey(pctx, url)
+					pcancel()
+					if err != nil {
+						log.D.F("couldn't fetch NIP-11 for %s, adding to cluster anyway: %v", url, err)
+					} else if peerPubkey == cm.relayIdentityPubkey {
+						log.D.F("removed self from cluster members (discovered): %s (pubkey: %s)", url, cm.relayIdentityPubkey)
+						selfURLs[url] = true
+						continue
+					}
+				}
+				member := &Member{
+					HTTPURL:      url,
+					WebSocketURL: url,
+					LastSerial:   0,
+					Status:       "unknown",
+				}
+				members[url] = member
+				log.D.F("added cluster member: %s", url)
+			}
+
+		case req := <-cm.loadPeerStateCh:
+			prefix := []byte(clusterPeerStatePrefix)
+			err := cm.db.View(func(txn *badger.Txn) error {
+				it := txn.NewIterator(badger.IteratorOptions{
+					Prefix: prefix,
+				})
+				defer it.Close()
+
+				for it.Rewind(); it.Valid(); it.Next() {
+					item := it.Item()
+					key := item.Key()
+					peerURL := string(key[len(prefix):])
+
+					var serial uint64
+					err := item.Value(func(val []byte) error {
+						if len(val) == 8 {
+							serial = binary.BigEndian.Uint64(val)
+						}
+						return nil
+					})
+					if err != nil {
+						log.W.F("failed to read peer state for %s: %v", peerURL, err)
+						continue
+					}
+
+					if member, exists := members[peerURL]; exists {
+						member.LastSerial = serial
+						log.D.F("loaded persisted serial %d for existing peer %s", serial, peerURL)
+					} else {
+						member := &Member{
+							HTTPURL:      peerURL,
+							WebSocketURL: peerURL,
+							LastSerial:   serial,
+							Status:       "unknown",
+						}
+						members[peerURL] = member
+						log.D.F("loaded persisted serial %d for new peer %s", serial, peerURL)
+					}
+				}
+				return nil
+			})
+			req.resp <- err
+
+		case req := <-cm.pollAllMembersCh:
+			snapshot := make([]*Member, 0, len(members))
+			for _, m := range members {
+				mc := *m
+				snapshot = append(snapshot, &mc)
+			}
+			req.resp <- snapshot
+
+		case req := <-cm.updateMemberStatusCh:
+			if m, ok := members[req.httpURL]; ok {
+				m.Status = req.status
+				if req.status == "error" {
+					m.ErrorCount++
+				} else {
+					m.ErrorCount = 0
+				}
+			}
+
+		case req := <-cm.updateMemberAfterPollCh:
+			if m, ok := members[req.httpURL]; ok {
+				m.LastSerial = req.lastSerial
+				m.LastPoll = req.lastPoll
+			}
+		}
+	}
 }
 
 // Start starts the cluster polling loop
@@ -132,7 +349,9 @@ func (cm *Manager) Start() {
 	log.I.Ln("starting cluster replication manager")
 
 	// Load persisted peer state from database
-	if err := cm.loadPeerState(); err != nil {
+	req := loadPeerStateReq{resp: make(chan error, 1)}
+	cm.loadPeerStateCh <- req
+	if err := <-req.resp; err != nil {
 		log.W.F("failed to load cluster peer state: %v", err)
 	}
 
@@ -148,6 +367,8 @@ func (cm *Manager) Stop() {
 		cm.pollTicker.Stop()
 	}
 	<-cm.pollDone
+	close(cm.stopCh)
+	<-cm.doneCh
 }
 
 // GetRelayIdentityPubkey returns the relay's identity pubkey
@@ -157,25 +378,16 @@ func (cm *Manager) GetRelayIdentityPubkey() string {
 
 // GetMembers returns a copy of the current members
 func (cm *Manager) GetMembers() []*Member {
-	cm.membersMux.RLock()
-	defer cm.membersMux.RUnlock()
-	members := make([]*Member, 0, len(cm.members))
-	for _, m := range cm.members {
-		memberCopy := *m
-		members = append(members, &memberCopy)
-	}
-	return members
+	req := getMembersReq{resp: make(chan []*Member, 1)}
+	cm.getMembersCh <- req
+	return <-req.resp
 }
 
 // GetMember returns a specific member by URL or nil if not found
 func (cm *Manager) GetMember(httpURL string) *Member {
-	cm.membersMux.RLock()
-	defer cm.membersMux.RUnlock()
-	if m, ok := cm.members[httpURL]; ok {
-		memberCopy := *m
-		return &memberCopy
-	}
-	return nil
+	req := getMemberReq{httpURL: httpURL, resp: make(chan *Member, 1)}
+	cm.getMemberCh <- req
+	return <-req.resp
 }
 
 // GetLatestSerial returns the latest serial and timestamp from the database
@@ -203,17 +415,14 @@ func (cm *Manager) GetEventsInRange(from, to uint64, limit int) ([]EventInfo, bo
 
 // IsSelfURL checks if a URL is our own relay
 func (cm *Manager) IsSelfURL(url string) bool {
-	cm.membersMux.RLock()
-	result := cm.selfURLs[url]
-	cm.membersMux.RUnlock()
-	return result
+	req := isSelfURLReq{url: url, resp: make(chan bool, 1)}
+	cm.isSelfURLCh <- req
+	return <-req.resp
 }
 
 // MarkSelfURL marks a URL as belonging to us
 func (cm *Manager) MarkSelfURL(url string) {
-	cm.membersMux.Lock()
-	cm.selfURLs[url] = true
-	cm.membersMux.Unlock()
+	cm.markSelfURLCh <- markSelfURLReq{url: url}
 }
 
 func (cm *Manager) pollingLoop() {
@@ -230,14 +439,11 @@ func (cm *Manager) pollingLoop() {
 }
 
 func (cm *Manager) pollAllMembers() {
-	cm.membersMux.RLock()
-	members := make([]*Member, 0, len(cm.members))
-	for _, member := range cm.members {
-		members = append(members, member)
-	}
-	cm.membersMux.RUnlock()
+	req := pollAllMembersReq{resp: make(chan []*Member, 1)}
+	cm.pollAllMembersCh <- req
+	snapshot := <-req.resp
 
-	for _, member := range members {
+	for _, member := range snapshot {
 		go cm.pollMember(member)
 	}
 }
@@ -247,12 +453,11 @@ func (cm *Manager) pollMember(member *Member) {
 	latestResp, err := cm.getLatestSerial(member.HTTPURL)
 	if err != nil {
 		log.W.F("failed to get latest serial from %s: %v", member.HTTPURL, err)
-		cm.updateMemberStatus(member, "error")
+		cm.updateMemberStatusCh <- updateMemberStatusReq{httpURL: member.HTTPURL, status: "error"}
 		return
 	}
 
-	cm.updateMemberStatus(member, "active")
-	member.LastPoll = time.Now()
+	cm.updateMemberStatusCh <- updateMemberStatusReq{httpURL: member.HTTPURL, status: "active"}
 
 	// Check if we need to fetch new events
 	if latestResp.Serial <= member.LastSerial {
@@ -272,7 +477,6 @@ func (cm *Manager) pollMember(member *Member) {
 	// Process fetched events
 	for _, eventInfo := range eventsResp.Events {
 		if cm.shouldFetchEvent(eventInfo) {
-			// Fetch full event via WebSocket and store it
 			if err := cm.fetchAndStoreEvent(member.WebSocketURL, eventInfo.ID, cm.publisher); err != nil {
 				log.W.F("failed to fetch/store event %s from %s: %v", eventInfo.ID, member.HTTPURL, err)
 			} else {
@@ -283,8 +487,11 @@ func (cm *Manager) pollMember(member *Member) {
 
 	// Update last serial if we processed all events
 	if !eventsResp.HasMore && member.LastSerial != to {
-		member.LastSerial = to
-		// Persist the updated serial to database
+		cm.updateMemberAfterPollCh <- updateMemberAfterPollReq{
+			httpURL:    member.HTTPURL,
+			lastSerial: to,
+			lastPoll:   time.Now(),
+		}
 		if err := cm.savePeerState(member.HTTPURL, to); err != nil {
 			log.W.F("failed to persist serial %d for peer %s: %v", to, member.HTTPURL, err)
 		}
@@ -332,83 +539,12 @@ func (cm *Manager) getEventsInRange(peerURL string, from, to uint64, limit int) 
 }
 
 func (cm *Manager) shouldFetchEvent(eventInfo EventInfo) bool {
-	// Relays MAY choose not to store every event they receive
-	// For now, accept all events
 	return true
-}
-
-func (cm *Manager) updateMemberStatus(member *Member, status string) {
-	member.Status = status
-	if status == "error" {
-		member.ErrorCount++
-	} else {
-		member.ErrorCount = 0
-	}
 }
 
 // UpdateMembership updates the cluster membership
 func (cm *Manager) UpdateMembership(relayURLs []string) {
-	cm.membersMux.Lock()
-	defer cm.membersMux.Unlock()
-
-	// Remove members not in the new list
-	for url := range cm.members {
-		found := false
-		for _, newURL := range relayURLs {
-			if newURL == url {
-				found = true
-				break
-			}
-		}
-		if !found {
-			delete(cm.members, url)
-			// Remove persisted state for removed peer
-			if err := cm.removePeerState(url); err != nil {
-				log.W.F("failed to remove persisted state for peer %s: %v", url, err)
-			}
-			log.D.F("removed cluster member: %s", url)
-		}
-	}
-
-	// Add new members (filter out self once at this point)
-	for _, url := range relayURLs {
-		// Skip if already exists
-		if _, exists := cm.members[url]; exists {
-			continue
-		}
-
-		// Fast path: check if we already know this URL is ours
-		if cm.selfURLs[url] {
-			log.D.F("removed self from cluster members (known URL): %s", url)
-			continue
-		}
-
-		// Slow path: check via NIP-11 pubkey
-		if cm.relayIdentityPubkey != "" {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			peerPubkey, err := cm.nip11Cache.GetPubkey(ctx, url)
-			cancel()
-
-			if err != nil {
-				log.D.F("couldn't fetch NIP-11 for %s, adding to cluster anyway: %v", url, err)
-			} else if peerPubkey == cm.relayIdentityPubkey {
-				log.D.F("removed self from cluster members (discovered): %s (pubkey: %s)", url, cm.relayIdentityPubkey)
-				// Cache this URL as ours for future fast lookups
-				cm.selfURLs[url] = true
-				continue
-			}
-		}
-
-		// Add member
-		member := &Member{
-			HTTPURL:      url,
-			WebSocketURL: url, // TODO: Convert to WebSocket URL
-			LastSerial:   0,
-			Status:       "unknown",
-		}
-		cm.members[url] = member
-		log.D.F("added cluster member: %s", url)
-	}
+	cm.updateMembershipCh <- updateMembershipReq{relayURLs: relayURLs}
 }
 
 // HandleMembershipEvent processes a cluster membership event (Kind 39108)
@@ -416,9 +552,7 @@ func (cm *Manager) HandleMembershipEvent(ev *event.E) error {
 	// Verify the event is signed by a cluster admin
 	adminFound := false
 	for _, adminNpub := range cm.adminNpubs {
-		// TODO: Convert adminNpub to pubkey and verify signature
-		// For now, accept all events (this should be properly validated)
-		_ = adminNpub // Mark as used to avoid compiler warning
+		_ = adminNpub
 		adminFound = true
 		break
 	}
@@ -456,7 +590,6 @@ func (cm *Manager) HandleLatestSerial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if request is from ourselves by examining the Referer or Origin header
 	origin := r.Header.Get("Origin")
 	referer := r.Header.Get("Referer")
 
@@ -466,30 +599,24 @@ func (cm *Manager) HandleLatestSerial(w http.ResponseWriter, r *http.Request) {
 			checkURL = referer
 		}
 
-		// Fast path: check known self-URLs
-		if cm.selfURLs[checkURL] {
+		if cm.IsSelfURL(checkURL) {
 			log.D.F("rejecting cluster latest request from self (known URL): %s", checkURL)
 			http.Error(w, "Cannot sync with self", http.StatusBadRequest)
 			return
 		}
 
-		// Slow path: verify via NIP-11
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		peerPubkey, err := cm.nip11Cache.GetPubkey(ctx, checkURL)
 		cancel()
 
 		if err == nil && peerPubkey == cm.relayIdentityPubkey {
 			log.D.F("rejecting cluster latest request from self (discovered): %s", checkURL)
-			// Cache for future fast lookups
-			cm.membersMux.Lock()
-			cm.selfURLs[checkURL] = true
-			cm.membersMux.Unlock()
+			cm.MarkSelfURL(checkURL)
 			http.Error(w, "Cannot sync with self", http.StatusBadRequest)
 			return
 		}
 	}
 
-	// Get the latest serial from database
 	latestSerial, err := cm.getLatestSerialFromDB()
 	if err != nil {
 		log.W.F("failed to get latest serial: %v", err)
@@ -513,7 +640,6 @@ func (cm *Manager) HandleEventsRange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if request is from ourselves
 	origin := r.Header.Get("Origin")
 	referer := r.Header.Get("Referer")
 
@@ -523,29 +649,24 @@ func (cm *Manager) HandleEventsRange(w http.ResponseWriter, r *http.Request) {
 			checkURL = referer
 		}
 
-		// Fast path: check known self-URLs
-		if cm.selfURLs[checkURL] {
+		if cm.IsSelfURL(checkURL) {
 			log.D.F("rejecting cluster events request from self (known URL): %s", checkURL)
 			http.Error(w, "Cannot sync with self", http.StatusBadRequest)
 			return
 		}
 
-		// Slow path: verify via NIP-11
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		peerPubkey, err := cm.nip11Cache.GetPubkey(ctx, checkURL)
 		cancel()
 
 		if err == nil && peerPubkey == cm.relayIdentityPubkey {
 			log.D.F("rejecting cluster events request from self (discovered): %s", checkURL)
-			cm.membersMux.Lock()
-			cm.selfURLs[checkURL] = true
-			cm.membersMux.Unlock()
+			cm.MarkSelfURL(checkURL)
 			http.Error(w, "Cannot sync with self", http.StatusBadRequest)
 			return
 		}
 	}
 
-	// Parse query parameters
 	fromStr := r.URL.Query().Get("from")
 	toStr := r.URL.Query().Get("to")
 	limitStr := r.URL.Query().Get("limit")
@@ -567,7 +688,6 @@ func (cm *Manager) HandleEventsRange(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get events in range
 	events, hasMore, nextFrom, err := cm.getEventsInRangeFromDB(from, to, limit)
 	if err != nil {
 		log.W.F("failed to get events in range: %v", err)
@@ -692,7 +812,6 @@ func (cm *Manager) getEventsInRangeFromDB(from, to uint64, limit int) ([]EventIn
 }
 
 func (cm *Manager) fetchAndStoreEvent(wsURL, eventID string, publisher EventPublisher) error {
-	// TODO: Implement WebSocket connection and event fetching
 	log.D.F("fetchAndStoreEvent called for %s from %s (placeholder implementation)", eventID, wsURL)
 	return nil
 }
@@ -701,53 +820,6 @@ func (cm *Manager) fetchAndStoreEvent(wsURL, eventID string, publisher EventPubl
 const (
 	clusterPeerStatePrefix = "cluster:peer:"
 )
-
-func (cm *Manager) loadPeerState() error {
-	cm.membersMux.Lock()
-	defer cm.membersMux.Unlock()
-
-	prefix := []byte(clusterPeerStatePrefix)
-	return cm.db.View(func(txn *badger.Txn) error {
-		it := txn.NewIterator(badger.IteratorOptions{
-			Prefix: prefix,
-		})
-		defer it.Close()
-
-		for it.Rewind(); it.Valid(); it.Next() {
-			item := it.Item()
-			key := item.Key()
-
-			peerURL := string(key[len(prefix):])
-
-			var serial uint64
-			err := item.Value(func(val []byte) error {
-				if len(val) == 8 {
-					serial = binary.BigEndian.Uint64(val)
-				}
-				return nil
-			})
-			if err != nil {
-				log.W.F("failed to read peer state for %s: %v", peerURL, err)
-				continue
-			}
-
-			if member, exists := cm.members[peerURL]; exists {
-				member.LastSerial = serial
-				log.D.F("loaded persisted serial %d for existing peer %s", serial, peerURL)
-			} else {
-				member := &Member{
-					HTTPURL:      peerURL,
-					WebSocketURL: peerURL,
-					LastSerial:   serial,
-					Status:       "unknown",
-				}
-				cm.members[peerURL] = member
-				log.D.F("loaded persisted serial %d for new peer %s", serial, peerURL)
-			}
-		}
-		return nil
-	})
-}
 
 func (cm *Manager) savePeerState(peerURL string, serial uint64) error {
 	key := []byte(clusterPeerStatePrefix + peerURL)

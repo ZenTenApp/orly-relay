@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
@@ -34,14 +33,17 @@ type Bridge struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
+
+	// mlsDone is closed when the mlsWatchLoop goroutine exits.
+	// nil when no MLS loop is running.
+	mlsDone chan struct{}
 
 	// dbGetter is a function that returns the relay identity secret key
 	// from the database. Non-nil in monolithic mode, nil in standalone.
 	dbGetter func() ([]byte, error)
 }
 
-// New creates a new Bridge. The dbGetter is optional — pass nil for standalone
+// New creates a new Bridge. The dbGetter is optional - pass nil for standalone
 // mode (the bridge will fall back to file-based identity).
 func New(cfg *Config, dbGetter func() ([]byte, error)) *Bridge {
 	return &Bridge{
@@ -125,7 +127,7 @@ func (b *Bridge) Start(ctx context.Context) error {
 		// Broadcast identity to popular relays in background
 		go b.broadcastIdentity()
 
-		// Initialize MLS (mandatory — the only DM protocol)
+		// Initialize MLS (mandatory - the only DM protocol)
 		if err := b.initMLS(); err != nil {
 			return fmt.Errorf("MLS init: %w", err)
 		}
@@ -238,7 +240,10 @@ func (b *Bridge) Stop() {
 	if b.aclClient != nil {
 		b.aclClient.Close()
 	}
-	b.wg.Wait()
+	// Wait for MLS watch loop to exit
+	if b.mlsDone != nil {
+		<-b.mlsDone
+	}
 	log.I.F("bridge stopped")
 }
 

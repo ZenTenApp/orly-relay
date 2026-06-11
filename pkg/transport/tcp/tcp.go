@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sync"
 
 	"git.smesh.lol/orly/pkg/lol/log"
 )
@@ -19,10 +18,10 @@ type Config struct {
 }
 
 // Transport serves HTTP over plain TCP.
+// Start/Stop are called exclusively by the transport.Manager actor.
 type Transport struct {
 	cfg    *Config
 	server *http.Server
-	mu     sync.Mutex
 }
 
 // New creates a new TCP transport.
@@ -33,9 +32,6 @@ func New(cfg *Config) *Transport {
 func (t *Transport) Name() string { return "tcp" }
 
 func (t *Transport) Start(ctx context.Context) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	t.server = &http.Server{
 		Addr:    t.cfg.Addr,
 		Handler: t.cfg.Handler,
@@ -64,9 +60,6 @@ func (t *Transport) Start(ctx context.Context) error {
 }
 
 func (t *Transport) Stop(ctx context.Context) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	if t.server == nil {
 		return nil
 	}

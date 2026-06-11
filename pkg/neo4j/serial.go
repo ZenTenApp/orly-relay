@@ -3,7 +3,6 @@ package neo4j
 import (
 	"context"
 	"fmt"
-	"sync"
 )
 
 // Serial number management
@@ -11,15 +10,44 @@ import (
 
 const serialCounterKey = "serial_counter"
 
-var (
-	serialMutex sync.Mutex
-)
+// --- Actor request/response types ---
+
+type serialNextReq struct {
+	n    *N
+	resp chan serialNextResp
+}
+
+type serialNextResp struct {
+	serial uint64
+	err    error
+}
+
+// serialActor serializes serial number generation.
+// All serial requests go through this channel.
+var serialCh = make(chan serialNextReq)
+
+func init() {
+	go serialActorLoop()
+}
+
+func serialActorLoop() {
+	for req := range serialCh {
+		serial, err := req.n.getNextSerialInternal()
+		req.resp <- serialNextResp{serial: serial, err: err}
+	}
+}
 
 // getNextSerial atomically increments and returns the next serial number
 func (n *N) getNextSerial() (uint64, error) {
-	serialMutex.Lock()
-	defer serialMutex.Unlock()
+	req := serialNextReq{n: n, resp: make(chan serialNextResp, 1)}
+	serialCh <- req
+	r := <-req.resp
+	return r.serial, r.err
+}
 
+// getNextSerialInternal performs the actual serial generation.
+// Must only be called from the serialActorLoop.
+func (n *N) getNextSerialInternal() (uint64, error) {
 	ctx := context.Background()
 
 	// Query current serial value
@@ -65,12 +93,9 @@ SET m.value = $value`
 }
 
 // initSerialCounter initializes the serial counter if it doesn't exist
-// Uses MERGE to be idempotent - safe to call multiple times
 func (n *N) initSerialCounter() error {
 	ctx := context.Background()
 
-	// Use MERGE with ON CREATE to initialize only if it doesn't exist
-	// This is idempotent and avoids race conditions
 	initCypher := `
 MERGE (m:Marker {key: $key})
 ON CREATE SET m.value = $value`

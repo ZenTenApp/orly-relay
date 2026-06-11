@@ -6,20 +6,42 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"sort"
-	"sync"
 	"time"
 
 	"git.smesh.lol/orly/pkg/nostr/encoders/filter"
 )
 
+// queryHasQueriedReq is a request to check if a filter was recently queried.
+type queryHasQueriedReq struct {
+	fingerprint string
+	resp        chan bool
+}
+
+// queryMarkQueriedReq is a request to mark a filter as queried.
+type queryMarkQueriedReq struct {
+	fingerprint string
+}
+
+// queryLenReq is a request for the current cache size.
+type queryLenReq struct {
+	resp chan int
+}
+
+// queryClearReq is a request to clear the cache.
+type queryClearReq struct{}
+
 // QueryCache tracks which filters have been queried recently to avoid
 // repeated requests to archive relays for the same filter.
 type QueryCache struct {
-	mu       sync.RWMutex
-	entries  map[string]*list.Element
-	order    *list.List
-	maxSize  int
-	ttl      time.Duration
+	hasQueried chan queryHasQueriedReq
+	markQueried chan queryMarkQueriedReq
+	lenReq      chan queryLenReq
+	clearReq    chan queryClearReq
+	stop        chan struct{}
+	done        chan struct{}
+
+	maxSize int
+	ttl     time.Duration
 }
 
 // queryCacheEntry holds a cached query fingerprint and timestamp.
@@ -37,74 +59,105 @@ func NewQueryCache(ttl time.Duration, maxSize int) *QueryCache {
 		ttl = 24 * time.Hour
 	}
 
-	return &QueryCache{
-		entries: make(map[string]*list.Element),
-		order:   list.New(),
-		maxSize: maxSize,
-		ttl:     ttl,
+	qc := &QueryCache{
+		hasQueried:  make(chan queryHasQueriedReq),
+		markQueried: make(chan queryMarkQueriedReq, 16),
+		lenReq:      make(chan queryLenReq),
+		clearReq:    make(chan queryClearReq),
+		stop:        make(chan struct{}),
+		done:        make(chan struct{}),
+		maxSize:     maxSize,
+		ttl:         ttl,
+	}
+
+	go qc.actor()
+	return qc
+}
+
+// actor owns the cache state and processes requests sequentially.
+func (qc *QueryCache) actor() {
+	defer close(qc.done)
+
+	entries := make(map[string]*list.Element)
+	order := list.New()
+
+	for {
+		select {
+		case <-qc.stop:
+			return
+
+		case req := <-qc.hasQueried:
+			elem, exists := entries[req.fingerprint]
+			if !exists {
+				req.resp <- false
+				continue
+			}
+			entry := elem.Value.(*queryCacheEntry)
+			if time.Since(entry.queriedAt) > qc.ttl {
+				// Expired - remove it
+				delete(entries, req.fingerprint)
+				order.Remove(elem)
+				req.resp <- false
+				continue
+			}
+			req.resp <- true
+
+		case req := <-qc.markQueried:
+			// Update existing entry
+			if elem, exists := entries[req.fingerprint]; exists {
+				order.MoveToFront(elem)
+				elem.Value.(*queryCacheEntry).queriedAt = time.Now()
+				continue
+			}
+			// Evict oldest if at capacity
+			if len(entries) >= qc.maxSize {
+				oldest := order.Back()
+				if oldest != nil {
+					entry := oldest.Value.(*queryCacheEntry)
+					delete(entries, entry.fingerprint)
+					order.Remove(oldest)
+				}
+			}
+			// Add new entry
+			entry := &queryCacheEntry{
+				fingerprint: req.fingerprint,
+				queriedAt:   time.Now(),
+			}
+			elem := order.PushFront(entry)
+			entries[req.fingerprint] = elem
+
+		case req := <-qc.lenReq:
+			req.resp <- len(entries)
+
+		case <-qc.clearReq:
+			entries = make(map[string]*list.Element)
+			order.Init()
+		}
 	}
 }
 
 // HasQueried returns true if the filter was queried within the TTL.
 func (qc *QueryCache) HasQueried(f *filter.F) bool {
 	fingerprint := qc.normalizeAndHash(f)
-
-	qc.mu.RLock()
-	elem, exists := qc.entries[fingerprint]
-	qc.mu.RUnlock()
-
-	if !exists {
+	req := queryHasQueriedReq{
+		fingerprint: fingerprint,
+		resp:        make(chan bool, 1),
+	}
+	select {
+	case qc.hasQueried <- req:
+		return <-req.resp
+	case <-qc.stop:
 		return false
 	}
-
-	entry := elem.Value.(*queryCacheEntry)
-
-	// Check if still within TTL
-	if time.Since(entry.queriedAt) > qc.ttl {
-		// Expired - remove it
-		qc.mu.Lock()
-		if elem, exists := qc.entries[fingerprint]; exists {
-			delete(qc.entries, fingerprint)
-			qc.order.Remove(elem)
-		}
-		qc.mu.Unlock()
-		return false
-	}
-
-	return true
 }
 
 // MarkQueried marks a filter as having been queried.
 func (qc *QueryCache) MarkQueried(f *filter.F) {
 	fingerprint := qc.normalizeAndHash(f)
-
-	qc.mu.Lock()
-	defer qc.mu.Unlock()
-
-	// Update existing entry
-	if elem, exists := qc.entries[fingerprint]; exists {
-		qc.order.MoveToFront(elem)
-		elem.Value.(*queryCacheEntry).queriedAt = time.Now()
-		return
+	select {
+	case qc.markQueried <- queryMarkQueriedReq{fingerprint: fingerprint}:
+	case <-qc.stop:
 	}
-
-	// Evict oldest if at capacity
-	if len(qc.entries) >= qc.maxSize {
-		oldest := qc.order.Back()
-		if oldest != nil {
-			entry := oldest.Value.(*queryCacheEntry)
-			delete(qc.entries, entry.fingerprint)
-			qc.order.Remove(oldest)
-		}
-	}
-
-	// Add new entry
-	entry := &queryCacheEntry{
-		fingerprint: fingerprint,
-		queriedAt:   time.Now(),
-	}
-	elem := qc.order.PushFront(entry)
-	qc.entries[fingerprint] = elem
 }
 
 // normalizeAndHash creates a canonical fingerprint for a filter.
@@ -219,9 +272,13 @@ func (qc *QueryCache) normalizeAndHash(f *filter.F) string {
 
 // Len returns the number of cached queries.
 func (qc *QueryCache) Len() int {
-	qc.mu.RLock()
-	defer qc.mu.RUnlock()
-	return len(qc.entries)
+	req := queryLenReq{resp: make(chan int, 1)}
+	select {
+	case qc.lenReq <- req:
+		return <-req.resp
+	case <-qc.stop:
+		return 0
+	}
 }
 
 // MaxSize returns the maximum cache size.
@@ -231,8 +288,14 @@ func (qc *QueryCache) MaxSize() int {
 
 // Clear removes all entries from the cache.
 func (qc *QueryCache) Clear() {
-	qc.mu.Lock()
-	defer qc.mu.Unlock()
-	qc.entries = make(map[string]*list.Element)
-	qc.order.Init()
+	select {
+	case qc.clearReq <- queryClearReq{}:
+	case <-qc.stop:
+	}
+}
+
+// Stop stops the query cache actor.
+func (qc *QueryCache) Stop() {
+	close(qc.stop)
+	<-qc.done
 }

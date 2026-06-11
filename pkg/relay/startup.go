@@ -14,7 +14,6 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/debug"
-	"sync"
 	"syscall"
 	"time"
 
@@ -96,10 +95,17 @@ func Startup(cfg *config.C) (*StartupResult, error) {
 		Quit:    quit,
 	}
 
-	// Register profile stop handler
+	// Register profile stop handler using close-once channel pattern
+	profileStopCh := make(chan struct{})
 	interrupt.AddHandler(func() {
 		log.I.F("interrupt received: stopping profiling")
-		profileStop()
+		select {
+		case <-profileStopCh:
+			// already stopped
+		default:
+			close(profileStopCh)
+			profileStop()
+		}
 	})
 
 	return result, nil
@@ -137,8 +143,8 @@ func RunWithSignals(cfg *config.C) error {
 }
 
 // setupProfiling configures profiling based on config and returns a stop function.
+// The returned function is safe to call at most once (guarded by caller via close-once channel).
 func setupProfiling(cfg *config.C) func() {
-	var profileStopOnce sync.Once
 	profileStop := func() {}
 
 	switch cfg.Pprof {
@@ -150,10 +156,8 @@ func setupProfiling(cfg *config.C) func() {
 			prof = profile.Start(profile.CPUProfile)
 		}
 		profileStop = func() {
-			profileStopOnce.Do(func() {
-				prof.Stop()
-				log.I.F("cpu profiling stopped and flushed")
-			})
+			prof.Stop()
+			log.I.F("cpu profiling stopped and flushed")
 		}
 
 	case "memory":
@@ -164,10 +168,8 @@ func setupProfiling(cfg *config.C) func() {
 			prof = profile.Start(profile.MemProfile)
 		}
 		profileStop = func() {
-			profileStopOnce.Do(func() {
-				prof.Stop()
-				log.I.F("memory profiling stopped and flushed")
-			})
+			prof.Stop()
+			log.I.F("memory profiling stopped and flushed")
 		}
 
 	case "allocation":
@@ -178,10 +180,8 @@ func setupProfiling(cfg *config.C) func() {
 			prof = profile.Start(profile.MemProfileAllocs)
 		}
 		profileStop = func() {
-			profileStopOnce.Do(func() {
-				prof.Stop()
-				log.I.F("allocation profiling stopped and flushed")
-			})
+			prof.Stop()
+			log.I.F("allocation profiling stopped and flushed")
 		}
 
 	case "heap":
@@ -192,10 +192,8 @@ func setupProfiling(cfg *config.C) func() {
 			prof = profile.Start(profile.MemProfileHeap)
 		}
 		profileStop = func() {
-			profileStopOnce.Do(func() {
-				prof.Stop()
-				log.I.F("heap profiling stopped and flushed")
-			})
+			prof.Stop()
+			log.I.F("heap profiling stopped and flushed")
 		}
 
 	case "mutex":
@@ -206,10 +204,8 @@ func setupProfiling(cfg *config.C) func() {
 			prof = profile.Start(profile.MutexProfile)
 		}
 		profileStop = func() {
-			profileStopOnce.Do(func() {
-				prof.Stop()
-				log.I.F("mutex profiling stopped and flushed")
-			})
+			prof.Stop()
+			log.I.F("mutex profiling stopped and flushed")
 		}
 
 	case "threadcreate":
@@ -220,10 +216,8 @@ func setupProfiling(cfg *config.C) func() {
 			prof = profile.Start(profile.ThreadcreationProfile)
 		}
 		profileStop = func() {
-			profileStopOnce.Do(func() {
-				prof.Stop()
-				log.I.F("threadcreate profiling stopped and flushed")
-			})
+			prof.Stop()
+			log.I.F("threadcreate profiling stopped and flushed")
 		}
 
 	case "goroutine":
@@ -234,10 +228,8 @@ func setupProfiling(cfg *config.C) func() {
 			prof = profile.Start(profile.GoroutineProfile)
 		}
 		profileStop = func() {
-			profileStopOnce.Do(func() {
-				prof.Stop()
-				log.I.F("goroutine profiling stopped and flushed")
-			})
+			prof.Stop()
+			log.I.F("goroutine profiling stopped and flushed")
 		}
 
 	case "block":
@@ -248,10 +240,8 @@ func setupProfiling(cfg *config.C) func() {
 			prof = profile.Start(profile.BlockProfile)
 		}
 		profileStop = func() {
-			profileStopOnce.Do(func() {
-				prof.Stop()
-				log.I.F("block profiling stopped and flushed")
-			})
+			prof.Stop()
+			log.I.F("block profiling stopped and flushed")
 		}
 	}
 
@@ -312,7 +302,7 @@ func initializeNegentropy(ctx context.Context, cfg *config.C, db database.Databa
 			ConnectTimeout: syncTimeout,
 		})
 		if err != nil {
-			log.W.F("failed to connect to gRPC negentropy server at %s: %v — falling back to embedded handler", negentropyAddr, err)
+			log.W.F("failed to connect to gRPC negentropy server at %s: %v - falling back to embedded handler", negentropyAddr, err)
 		} else {
 			// Wait for negentropy server to be ready
 			select {
@@ -321,13 +311,13 @@ func initializeNegentropy(ctx context.Context, cfg *config.C, db database.Databa
 				app.SetNegentropyHandler(negClient)
 				return
 			case <-time.After(30 * time.Second):
-				log.W.F("timeout waiting for gRPC negentropy server at %s — falling back to embedded handler", negentropyAddr)
+				log.W.F("timeout waiting for gRPC negentropy server at %s - falling back to embedded handler", negentropyAddr)
 				negClient.Close()
 			}
 		}
 	}
 
-	// Embedded negentropy handler — used in standalone mode or as fallback
+	// Embedded negentropy handler - used in standalone mode or as fallback
 	// when gRPC connection fails, so NIP-77 is never silently disabled.
 	log.I.F("initializing embedded negentropy handler")
 	negHandler := negentropy.NewEmbeddedHandler(db, &negentropy.Config{

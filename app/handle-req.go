@@ -921,12 +921,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 
 		// Track this subscription so we can cancel it on CLOSE or connection close
 		subID := string(env.Subscription)
-		l.subscriptionsMu.Lock()
-		if l.subscriptions == nil {
-			l.subscriptions = make(map[string]context.CancelFunc)
-		}
-		l.subscriptions[subID] = subCancel
-		l.subscriptionsMu.Unlock()
+		l.SubSet(subID, subCancel)
 
 		// Register subscription with publisher BEFORE EOSE so events arriving
 		// between query completion and EOSE are buffered in the receiver channel
@@ -963,9 +958,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		go func() {
 			defer func() {
 				l.activeSubscriptionCount.Add(-1)
-				l.subscriptionsMu.Lock()
-				delete(l.subscriptions, subID)
-				l.subscriptionsMu.Unlock()
+				l.SubDelete(subID)
 				log.D.F("subscription goroutine exiting for %s @ %s", subID, l.remote)
 			}()
 

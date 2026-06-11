@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -54,32 +53,61 @@ type W struct {
 	Receiver event.C
 
 	// Filters holds a collection of filters used to match or process events
-	// associated with this WebSocket connection. It is used to determine which
-	// notifications or data should be received by the subscriber.
+	// associated with this WebSocket connection.
 	Filters *filter.S
 
 	// AuthedPubkey is the authenticated pubkey associated with the listener (if any).
 	AuthedPubkey []byte
 
-	// AuthRequired indicates whether the ACL in operation requires auth. If
-	// this is set to true, the publisher will not publish privileged or other
-	// restricted events to non-authed listeners, otherwise, it will.
+	// AuthRequired indicates whether the ACL in operation requires auth.
 	AuthRequired bool
 }
 
 func (w *W) Type() (typeName string) { return Type }
 
+// -- actor request types for publisher --
+
+type pubReceiveReq struct {
+	msg *W
+}
+
+type pubDeliverReq struct {
+	ev *event.E
+}
+
+type pubSetWriteChanReq struct {
+	conn      *websocket.Conn
+	writeChan chan publish.WriteRequest // nil to remove
+}
+
+type pubGetWriteChanReq struct {
+	conn *websocket.Conn
+	resp chan pubGetWriteChanResp // buffered 1
+}
+type pubGetWriteChanResp struct {
+	ch chan publish.WriteRequest
+	ok bool
+}
+
+type pubHasNIP46Req struct {
+	signerPubkey []byte
+	resp         chan bool // buffered 1
+}
+
 // P is a structure that manages subscriptions and associated filters for
-// websocket listeners. It uses a mutex to synchronize access to a map storing
-// subscriber connections and their filter configurations.
+// websocket listeners. It uses an actor goroutine to synchronize access
+// to a map storing subscriber connections and their filter configurations.
 type P struct {
 	c context.Context
-	// Mx is the mutex for the Map.
-	Mx sync.RWMutex
-	// Map is the map of subscribers and subscriptions from the websocket api.
-	Map
-	// WriteChans maps websocket connections to their write channels
-	WriteChans WriteChanMap
+
+	receiveCh    chan pubReceiveReq
+	deliverCh    chan pubDeliverReq
+	setWriteCh   chan pubSetWriteChanReq
+	getWriteCh   chan pubGetWriteChanReq
+	hasNIP46Ch   chan pubHasNIP46Req
+	stop         chan struct{}
+	done         chan struct{}
+
 	// ChannelMembership is used for NIRC channel access control (kinds 40-44)
 	ChannelMembership *ChannelMembership
 	// PrivilegedOpen disables all privileged-kind auth checks in delivery
@@ -88,82 +116,107 @@ type P struct {
 
 var _ publisher.I = &P{}
 
-func NewPublisher(c context.Context) (publisher *P) {
-	return &P{
+func NewPublisher(c context.Context) (pub *P) {
+	pub = &P{
 		c:          c,
-		Map:        make(Map),
-		WriteChans: make(WriteChanMap, 100),
+		receiveCh:  make(chan pubReceiveReq, 128),
+		deliverCh:  make(chan pubDeliverReq, 128),
+		setWriteCh: make(chan pubSetWriteChanReq, 16),
+		getWriteCh: make(chan pubGetWriteChanReq),
+		hasNIP46Ch: make(chan pubHasNIP46Req),
+		stop:       make(chan struct{}),
+		done:       make(chan struct{}),
+	}
+	go pub.actor()
+	return pub
+}
+
+func (p *P) actor() {
+	defer close(p.done)
+	m := make(Map)
+	writeChans := make(WriteChanMap, 100)
+
+	for {
+		select {
+		case req := <-p.receiveCh:
+			p.doReceive(req.msg, m, writeChans)
+		case req := <-p.deliverCh:
+			p.doDeliver(req.ev, m, writeChans)
+		case req := <-p.setWriteCh:
+			if req.writeChan == nil {
+				delete(writeChans, req.conn)
+			} else {
+				writeChans[req.conn] = req.writeChan
+			}
+		case req := <-p.getWriteCh:
+			ch, ok := writeChans[req.conn]
+			req.resp <- pubGetWriteChanResp{ch: ch, ok: ok}
+		case req := <-p.hasNIP46Ch:
+			req.resp <- p.doHasNIP46(req.signerPubkey, m)
+		case <-p.stop:
+			return
+		case <-p.c.Done():
+			return
+		}
 	}
 }
 
 func (p *P) Type() (typeName string) { return Type }
 
-// Receive handles incoming messages to manage websocket listener subscriptions
-// and associated filters.
-//
-// # Parameters
-//
-// - msg (publisher.Message): The incoming message to process; expected to be of
-// type *W to trigger subscription management actions.
-//
-// # Expected behaviour
-//
-// - Checks if the message is of type *W.
-//
-// - If Cancel is true, removes a subscriber by ID or the entire listener.
-//
-// - Otherwise, adds the subscription to the map under a mutex lock.
-//
-// - Logs actions related to subscription creation or removal.
+// Receive handles incoming messages to manage websocket listener subscriptions.
 func (p *P) Receive(msg typer.T) {
 	if m, ok := msg.(*W); ok {
-		if m.Cancel {
-			if m.Id == "" {
-				p.removeSubscriber(m.Conn)
-			} else {
-				p.removeSubscriberId(m.Conn, m.Id)
-			}
-			return
-		}
-		p.Mx.Lock()
-		defer p.Mx.Unlock()
-		if subs, ok := p.Map[m.Conn]; !ok {
-			subs = make(map[string]Subscription)
-			subs[m.Id] = Subscription{
-				S: m.Filters, remote: m.remote, AuthedPubkey: m.AuthedPubkey,
-				Receiver: m.Receiver, AuthRequired: m.AuthRequired,
-			}
-			p.Map[m.Conn] = subs
+		p.receiveCh <- pubReceiveReq{msg: m}
+	}
+}
+
+func (p *P) doReceive(m *W, subMap Map, writeChans WriteChanMap) {
+	if m.Cancel {
+		if m.Id == "" {
+			// removeSubscriber
+			clear(subMap[m.Conn])
+			delete(subMap, m.Conn)
+			delete(writeChans, m.Conn)
 		} else {
-			subs[m.Id] = Subscription{
-				S: m.Filters, remote: m.remote, AuthedPubkey: m.AuthedPubkey,
-				Receiver: m.Receiver, AuthRequired: m.AuthRequired,
+			// removeSubscriberId
+			if subs, ok := subMap[m.Conn]; ok {
+				delete(subs, m.Id)
+				if len(subMap[m.Conn]) == 0 {
+					delete(subMap, m.Conn)
+				}
 			}
+		}
+		return
+	}
+	if subs, ok := subMap[m.Conn]; !ok {
+		subs = make(map[string]Subscription)
+		subs[m.Id] = Subscription{
+			S: m.Filters, remote: m.remote, AuthedPubkey: m.AuthedPubkey,
+			Receiver: m.Receiver, AuthRequired: m.AuthRequired,
+		}
+		subMap[m.Conn] = subs
+	} else {
+		subs[m.Id] = Subscription{
+			S: m.Filters, remote: m.remote, AuthedPubkey: m.AuthedPubkey,
+			Receiver: m.Receiver, AuthRequired: m.AuthRequired,
 		}
 	}
 }
 
-// Deliver processes and distributes an event to all matching subscribers based on their filter configurations.
-//
-// # Parameters
-//
-// - ev (*event.E): The event to be delivered to subscribed clients.
-//
-// # Expected behaviour
-//
-// Delivers the event to all subscribers whose filters match the event. It
-// applies authentication checks if required by the server and skips delivery
-// for unauthenticated users when events are privileged.
+// Deliver processes and distributes an event to all matching subscribers.
 func (p *P) Deliver(ev *event.E) {
-	// Snapshot the deliveries under read lock to avoid holding locks during I/O
-	p.Mx.RLock()
+	p.deliverCh <- pubDeliverReq{ev: ev}
+}
+
+func (p *P) doDeliver(ev *event.E, subMap Map, writeChans WriteChanMap) {
+	// Build deliveries list
 	type delivery struct {
 		w   *websocket.Conn
 		id  string
 		sub Subscription
 	}
 	var deliveries []delivery
-	for w, subs := range p.Map {
+	for w, subs := range subMap {
 		for id, subscriber := range subs {
 			if subscriber.Match(ev) {
 				deliveries = append(
@@ -172,7 +225,6 @@ func (p *P) Deliver(ev *event.E) {
 			}
 		}
 	}
-	p.Mx.RUnlock()
 	if len(deliveries) > 0 {
 		log.D.C(
 			func() string {
@@ -191,21 +243,15 @@ func (p *P) Deliver(ev *event.E) {
 	var stuckSubs []stuckSub
 
 	for _, d := range deliveries {
-		// If the event is privileged, enforce that the subscriber's authed pubkey matches
-		// either the event pubkey or appears in any 'p' tag of the event.
-		// Channel kinds always require auth check; other privileged kinds only when ACL is active.
-		// PrivilegedOpen bypasses all of this (for relays without NIP-42 support).
 		isChannel := kind.IsChannelKind(ev.Kind)
 		if !p.PrivilegedOpen && kind.IsPrivileged(ev.Kind) && (d.sub.AuthRequired || isChannel) {
 			pk := d.sub.AuthedPubkey
 
-			// Channel kinds (40-44) use channel membership instead of p-tag involvement
 			var allowed bool
 			if kind.IsChannelKind(ev.Kind) && p.ChannelMembership != nil {
 				channelID := ExtractChannelIDFromEvent(ev)
 				allowed = p.ChannelMembership.IsChannelMemberByID(channelID, ev.Kind, pk, p.c)
 			} else {
-				// Use centralized IsPartyInvolved function for consistent privilege checking
 				allowed = policy.IsPartyInvolved(ev, pk)
 			}
 
@@ -214,14 +260,10 @@ func (p *P) Deliver(ev *event.E) {
 					"subscription delivery DENIED for privileged event %s to %s (not authenticated or not a party involved)",
 					hex.Enc(ev.ID), d.sub.remote,
 				)
-				// Skip delivery for this subscriber
 				continue
 			}
 		}
 
-		// For non-channel, non-privileged events: check if they reference channel
-		// events via e-tags. Reactions, reposts, zaps, reports, deletions that
-		// target channel messages must only be delivered to channel members.
 		if !kind.IsChannelKind(ev.Kind) && !kind.IsPrivileged(ev.Kind) && p.ChannelMembership != nil {
 			if channelIDHex, isChannel := p.ChannelMembership.ReferencesChannelEvent(ev, p.c); isChannel {
 				pk := d.sub.AuthedPubkey
@@ -235,7 +277,7 @@ func (p *P) Deliver(ev *event.E) {
 			}
 		}
 
-		// Check for private tags - only deliver to authorized users
+		// Check for private tags
 		if ev.Tags != nil && ev.Tags.Len() > 0 {
 			hasPrivateTag := false
 			var privatePubkey []byte
@@ -269,15 +311,11 @@ func (p *P) Deliver(ev *event.E) {
 			}
 		}
 
-		// Send event to the subscription's receiver channel
-		// The consumer goroutine (in handle-req.go) will read from this channel
-		// and forward it to the client via the write channel
 		log.D.F(
 			"attempting delivery of event %s (kind=%d) to subscription %s @ %s",
 			hex.Enc(ev.ID), ev.Kind, d.id, d.sub.remote,
 		)
 
-		// Check if receiver channel exists
 		if d.sub.Receiver == nil {
 			log.E.F(
 				"subscription %s has nil receiver channel for %s", d.id,
@@ -297,89 +335,52 @@ func (p *P) Deliver(ev *event.E) {
 			)
 		case <-time.After(DefaultWriteTimeout):
 			log.W.F(
-				"subscription delivery TIMEOUT: event=%s to=%s sub=%s — removing stuck subscription",
+				"subscription delivery TIMEOUT: event=%s to=%s sub=%s - removing stuck subscription",
 				hex.Enc(ev.ID), d.sub.remote, d.id,
 			)
 			stuckSubs = append(stuckSubs, stuckSub{w: d.w, id: d.id})
 		}
 	}
 
-	// Remove stuck subscriptions to prevent repeated timeouts
-	if len(stuckSubs) > 0 {
-		p.Mx.Lock()
-		for _, s := range stuckSubs {
-			if subs, ok := p.Map[s.w]; ok {
-				delete(subs, s.id)
-				if len(subs) == 0 {
-					delete(p.Map, s.w)
-				}
+	// Remove stuck subscriptions
+	for _, s := range stuckSubs {
+		if subs, ok := subMap[s.w]; ok {
+			delete(subs, s.id)
+			if len(subs) == 0 {
+				delete(subMap, s.w)
 			}
-		}
-		p.Mx.Unlock()
-	}
-}
-
-// removeSubscriberId removes a specific subscription from a subscriber
-// websocket.
-func (p *P) removeSubscriberId(ws *websocket.Conn, id string) {
-	p.Mx.Lock()
-	defer p.Mx.Unlock()
-	var subs map[string]Subscription
-	var ok bool
-	if subs, ok = p.Map[ws]; ok {
-		delete(subs, id)
-		// Check the actual map after deletion, not the original reference
-		if len(p.Map[ws]) == 0 {
-			delete(p.Map, ws)
-			// Don't remove write channel here - it's tied to the connection, not subscriptions
-			// The write channel will be removed when the connection closes (in handle-websocket.go defer)
-			// This allows new subscriptions to be created on the same connection
 		}
 	}
 }
 
 // SetWriteChan stores the write channel for a websocket connection
-// If writeChan is nil, the entry is removed from the map
 func (p *P) SetWriteChan(
 	conn *websocket.Conn, writeChan chan publish.WriteRequest,
 ) {
-	p.Mx.Lock()
-	defer p.Mx.Unlock()
-	if writeChan == nil {
-		delete(p.WriteChans, conn)
-	} else {
-		p.WriteChans[conn] = writeChan
-	}
+	p.setWriteCh <- pubSetWriteChanReq{conn: conn, writeChan: writeChan}
 }
 
 // GetWriteChan returns the write channel for a websocket connection
 func (p *P) GetWriteChan(conn *websocket.Conn) (
 	chan publish.WriteRequest, bool,
 ) {
-	p.Mx.RLock()
-	defer p.Mx.RUnlock()
-	ch, ok := p.WriteChans[conn]
-	return ch, ok
-}
-
-// removeSubscriber removes a websocket from the P collection.
-func (p *P) removeSubscriber(ws *websocket.Conn) {
-	p.Mx.Lock()
-	defer p.Mx.Unlock()
-	clear(p.Map[ws])
-	delete(p.Map, ws)
-	delete(p.WriteChans, ws)
+	resp := make(chan pubGetWriteChanResp, 1)
+	p.getWriteCh <- pubGetWriteChanReq{conn: conn, resp: resp}
+	r := <-resp
+	return r.ch, r.ok
 }
 
 // HasActiveNIP46Signer checks if there's an active subscription for kind 24133
-// where the given pubkey is involved (either as author filter or in #p tag filter).
-// This is used to authenticate clients by proving a signer is connected for that pubkey.
 func (p *P) HasActiveNIP46Signer(signerPubkey []byte) bool {
-	const kindNIP46 = 24133
-	p.Mx.RLock()
-	defer p.Mx.RUnlock()
+	resp := make(chan bool, 1)
+	p.hasNIP46Ch <- pubHasNIP46Req{signerPubkey: signerPubkey, resp: resp}
+	return <-resp
+}
 
-	for _, subs := range p.Map {
+func (p *P) doHasNIP46(signerPubkey []byte, subMap Map) bool {
+	const kindNIP46 = 24133
+
+	for _, subs := range subMap {
 		for _, sub := range subs {
 			if sub.S == nil {
 				continue
@@ -388,7 +389,6 @@ func (p *P) HasActiveNIP46Signer(signerPubkey []byte) bool {
 				if f == nil || f.Kinds == nil {
 					continue
 				}
-				// Check if filter is for kind 24133
 				hasNIP46Kind := false
 				for _, k := range f.Kinds.K {
 					if k.K == kindNIP46 {
@@ -399,24 +399,20 @@ func (p *P) HasActiveNIP46Signer(signerPubkey []byte) bool {
 				if !hasNIP46Kind {
 					continue
 				}
-				// Check if the signer pubkey matches the #p tag filter
 				if f.Tags != nil {
 					pTag := f.Tags.GetFirst([]byte("p"))
 					if pTag != nil && pTag.Len() >= 2 {
 						for i := 1; i < pTag.Len(); i++ {
 							tagValue := pTag.T[i]
-							// Compare - handle both binary and hex formats
 							if len(tagValue) == 32 && len(signerPubkey) == 32 {
 								if utils.FastEqual(tagValue, signerPubkey) {
 									return true
 								}
 							} else if len(tagValue) == 64 && len(signerPubkey) == 32 {
-								// tagValue is hex, signerPubkey is binary
 								if string(tagValue) == hex.Enc(signerPubkey) {
 									return true
 								}
 							} else if len(tagValue) == 32 && len(signerPubkey) == 64 {
-								// tagValue is binary, signerPubkey is hex
 								if hex.Enc(tagValue) == string(signerPubkey) {
 									return true
 								}
@@ -436,22 +432,15 @@ func (p *P) HasActiveNIP46Signer(signerPubkey []byte) bool {
 func (p *P) canSeePrivateEvent(
 	authedPubkey, privatePubkey []byte, remote string,
 ) (canSee bool) {
-	// If no authenticated user, deny access
 	if len(authedPubkey) == 0 {
 		return false
 	}
-
-	// If the authenticated user matches the private tag pubkey, allow access
 	if len(privatePubkey) > 0 && utils.FastEqual(authedPubkey, privatePubkey) {
 		return true
 	}
-
-	// Check if user is an admin or owner (they can see all private events)
 	accessLevel := acl.Registry.GetAccessLevel(authedPubkey, remote)
 	if accessLevel == "admin" || accessLevel == "owner" {
 		return true
 	}
-
-	// Default deny
 	return false
 }

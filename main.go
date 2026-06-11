@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/adrg/xdg"
@@ -176,12 +175,12 @@ func main() {
 			os.Exit(1)
 		}
 
-		var wg sync.WaitGroup
-		wg.Add(2)
+		exportDone := make(chan struct{})
+		importDone := make(chan struct{})
 
 		// Export goroutine
 		go func() {
-			defer wg.Done()
+			defer close(exportDone)
 			defer pw.Close()
 			srcDB.Export(ctx, pw)
 			log.I.F("migrate: export complete")
@@ -189,14 +188,15 @@ func main() {
 
 		// Import goroutine
 		go func() {
-			defer wg.Done()
+			defer close(importDone)
 			if importErr := dstDB.ImportEventsFromReader(ctx, pr); importErr != nil {
 				log.E.F("migrate: import error: %v", importErr)
 			}
 			log.I.F("migrate: import complete")
 		}()
 
-		wg.Wait()
+		<-exportDone
+		<-importDone
 
 		// Sync and close databases
 		if err = dstDB.Sync(); chk.E(err) {

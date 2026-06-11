@@ -8,16 +8,30 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"git.smesh.lol/orly/pkg/nostr/relayinfo"
 )
 
-// NIP11Cache caches relay information documents with TTL
+// --- Actor request/response types ---
+
+type nip11GetReq struct {
+	ctx      context.Context
+	relayURL string
+	resp     chan nip11GetResp
+}
+
+type nip11GetResp struct {
+	info *relayinfo.T
+	err  error
+}
+
+// NIP11Cache caches relay information documents with TTL.
+// All mutable state is owned by an actor goroutine.
 type NIP11Cache struct {
-	cache map[string]*cachedRelayInfo
-	mutex sync.RWMutex
+	getCh chan nip11GetReq
+	stop  chan struct{}
+	done  chan struct{}
 	ttl   time.Duration
 }
 
@@ -29,48 +43,71 @@ type cachedRelayInfo struct {
 
 // NewNIP11Cache creates a new NIP-11 cache with the specified TTL
 func NewNIP11Cache(ttl time.Duration) *NIP11Cache {
-	return &NIP11Cache{
-		cache: make(map[string]*cachedRelayInfo),
+	c := &NIP11Cache{
+		getCh: make(chan nip11GetReq),
+		stop:  make(chan struct{}),
+		done:  make(chan struct{}),
 		ttl:   ttl,
 	}
+	go c.actorLoop()
+	return c
+}
+
+func (c *NIP11Cache) actorLoop() {
+	defer close(c.done)
+
+	cache := make(map[string]*cachedRelayInfo)
+
+	for {
+		select {
+		case <-c.stop:
+			return
+		case req := <-c.getCh:
+			// Normalize URL
+			normalizedURL := strings.TrimPrefix(req.relayURL, "https://")
+			normalizedURL = strings.TrimPrefix(normalizedURL, "http://")
+			normalizedURL = strings.TrimSuffix(normalizedURL, "/")
+
+			// Check cache
+			if cached, exists := cache[normalizedURL]; exists && time.Now().Before(cached.expiresAt) {
+				req.resp <- nip11GetResp{info: cached.info}
+				continue
+			}
+
+			// Fetch fresh data (blocking but with context timeout)
+			info, err := fetchNIP11(req.ctx, req.relayURL)
+			if err != nil {
+				req.resp <- nip11GetResp{err: err}
+				continue
+			}
+
+			// Cache the result
+			cache[normalizedURL] = &cachedRelayInfo{
+				info:      info,
+				expiresAt: time.Now().Add(c.ttl),
+			}
+			req.resp <- nip11GetResp{info: info}
+		}
+	}
+}
+
+// Shutdown stops the actor goroutine.
+func (c *NIP11Cache) Shutdown() {
+	close(c.stop)
+	<-c.done
 }
 
 // Get fetches relay information for a given URL, using cache if available
 func (c *NIP11Cache) Get(ctx context.Context, relayURL string) (*relayinfo.T, error) {
-	// Normalize URL - remove protocol and trailing slash
-	normalizedURL := strings.TrimPrefix(relayURL, "https://")
-	normalizedURL = strings.TrimPrefix(normalizedURL, "http://")
-	normalizedURL = strings.TrimSuffix(normalizedURL, "/")
-
-	// Check cache first
-	c.mutex.RLock()
-	if cached, exists := c.cache[normalizedURL]; exists && time.Now().Before(cached.expiresAt) {
-		c.mutex.RUnlock()
-		return cached.info, nil
-	}
-	c.mutex.RUnlock()
-
-	// Fetch fresh data
-	info, err := c.fetchNIP11(ctx, relayURL)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache the result
-	c.mutex.Lock()
-	c.cache[normalizedURL] = &cachedRelayInfo{
-		info:      info,
-		expiresAt: time.Now().Add(c.ttl),
-	}
-	c.mutex.Unlock()
-
-	return info, nil
+	resp := make(chan nip11GetResp, 1)
+	c.getCh <- nip11GetReq{ctx: ctx, relayURL: relayURL, resp: resp}
+	r := <-resp
+	return r.info, r.err
 }
 
 // fetchNIP11 fetches relay information document from a given URL
-func (c *NIP11Cache) fetchNIP11(ctx context.Context, relayURL string) (*relayinfo.T, error) {
+func fetchNIP11(ctx context.Context, relayURL string) (*relayinfo.T, error) {
 	// Convert WebSocket URL to HTTP URL for NIP-11 fetch
-	// wss:// -> https://, ws:// -> http://
 	nip11URL := relayURL
 	nip11URL = strings.Replace(nip11URL, "wss://", "https://", 1)
 	nip11URL = strings.Replace(nip11URL, "ws://", "http://", 1)
@@ -79,7 +116,6 @@ func (c *NIP11Cache) fetchNIP11(ctx context.Context, relayURL string) (*relayinf
 	}
 	nip11URL += ".well-known/nostr.json"
 
-	// Create HTTP client with timeout
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{

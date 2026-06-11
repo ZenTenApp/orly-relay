@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"git.smesh.lol/orly/pkg/bridge"
@@ -28,7 +27,7 @@ type BridgeBot struct {
 	adapter *marmot.WSRelayAdapter
 	sign    *p8k.Signer
 	cancel  context.CancelFunc
-	wg      sync.WaitGroup
+	eventLoopDone chan struct{}
 }
 
 // NewBridgeBot creates a bridge bot that connects to the given relay.
@@ -125,13 +124,13 @@ func (b *BridgeBot) Start(ctx context.Context) error {
 		}
 	})
 
-	b.wg.Add(1)
+	b.eventLoopDone = make(chan struct{})
 	go b.eventLoop(ctx)
 	return nil
 }
 
 func (b *BridgeBot) eventLoop(ctx context.Context) {
-	defer b.wg.Done()
+	defer close(b.eventLoopDone)
 	for {
 		filters := b.client.SubscriptionFilters()
 		stream, err := b.adapter.Subscribe(ctx, filters)
@@ -167,7 +166,9 @@ func (b *BridgeBot) Stop() {
 	if b.cancel != nil {
 		b.cancel()
 	}
-	b.wg.Wait()
+	if b.eventLoopDone != nil {
+		<-b.eventLoopDone
+	}
 	if b.relay != nil {
 		b.relay.Close()
 	}

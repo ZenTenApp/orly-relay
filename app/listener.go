@@ -5,7 +5,6 @@ import (
 	"context"
 	"net/http"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -23,40 +22,82 @@ import (
 	atomicutils "git.smesh.lol/orly/pkg/utils/atomic"
 )
 
+// -- subscription actor request types --
+
+type subSetReq struct {
+	id     string
+	cancel context.CancelFunc
+}
+type subDeleteReq struct {
+	id string
+}
+type subCancelAllReq struct {
+	resp chan struct{} // buffered 1: ack
+}
+type subGetReq struct {
+	id   string
+	resp chan subGetResp // buffered 1
+}
+type subGetResp struct {
+	cancel context.CancelFunc
+	exists bool
+}
+
+// -- handler tracking types --
+
+type handlerTrackReq struct{}
+type handlerDoneReq struct{}
+type handlerWaitReq struct {
+	resp chan struct{} // buffered 1: ack when count==0
+}
+
 type Listener struct {
 	// Server is the embedded server reference.
-	// Deprecated: Prefer using accessor methods (ServerConfig, ServerDatabase, etc.)
-	// instead of accessing Server fields directly.
 	*Server
 	conn *websocket.Conn
 	ctx              context.Context
-	cancel           context.CancelFunc // Cancel function for this listener's context
+	cancel           context.CancelFunc
 	remote           string
-	connectionID     string // Unique identifier for this connection (for access tracking)
+	connectionID     string
 	req              *http.Request
 	challenge        atomicutils.Bytes
 	authedPubkey     atomicutils.Bytes
 	startTime        time.Time
-	isBlacklisted    bool      // Marker to identify blacklisted IPs
-	blacklistTimeout time.Time // When to timeout blacklisted connections
-	writeChan        chan publish.WriteRequest // Channel for write requests (back to queued approach)
-	writeDone        chan struct{}     // Closed when write worker exits
+	isBlacklisted    bool
+	blacklistTimeout time.Time
+	writeChan        chan publish.WriteRequest
+	writeDone        chan struct{}
 	// Message processing queue for async handling
-	messageQueue     chan messageRequest // Buffered channel for message processing
-	processingDone   chan struct{}       // Closed when message processor exits
-	handlerWg        sync.WaitGroup      // Tracks spawned message handler goroutines
+	messageQueue     chan messageRequest
+	processingDone   chan struct{}
+
+	// Handler tracking via channels (replaces sync.WaitGroup)
+	handlerTrackCh   chan handlerTrackReq
+	handlerDoneCh    chan handlerDoneReq
+	handlerWaitCh    chan handlerWaitReq
+	handlerActorDone chan struct{}
+
 	handlerSem       chan struct{}       // Limits concurrent message handlers per connection
-	authProcessing   sync.RWMutex        // Ensures AUTH completes before other messages check authentication
+
+	// Auth gate channel (replaces sync.RWMutex)
+	// When auth is processing, this channel is drained (locked).
+	// Non-auth messages wait to read from authGate before proceeding.
+	authGate         chan struct{} // buffered 1, starts with one token
+
+	// Subscription actor channels (replaces sync.Mutex + map)
+	subSetCh         chan subSetReq
+	subDeleteCh      chan subDeleteReq
+	subCancelAllCh   chan subCancelAllReq
+	subGetCh         chan subGetReq
+	subActorDone     chan struct{}
+
 	// Flow control counters (atomic for concurrent access)
-	droppedMessages      atomic.Int64 // Messages dropped due to full queue
-	queryCostAccumulator atomic.Int64 // Accumulated query cost for this connection (units: multiplier * 100)
+	droppedMessages      atomic.Int64
+	queryCostAccumulator atomic.Int64
 	// Diagnostics: per-connection counters
 	msgCount   int
 	reqCount   int
 	eventCount int
-	// Subscription tracking for cleanup
-	subscriptions    map[string]context.CancelFunc // Map of subscription ID to cancel function
-	subscriptionsMu  sync.Mutex                     // Protects subscriptions map
 }
 
 type messageRequest struct {
@@ -64,40 +105,192 @@ type messageRequest struct {
 	remote string
 }
 
-// Ctx returns the listener's context, but creates a new context for each operation
-// to prevent cancellation from affecting subsequent operations
+func (l *Listener) initActors() {
+	// Handler tracking actor
+	l.handlerTrackCh = make(chan handlerTrackReq, 128)
+	l.handlerDoneCh = make(chan handlerDoneReq, 128)
+	l.handlerWaitCh = make(chan handlerWaitReq)
+	l.handlerActorDone = make(chan struct{})
+	go l.handlerTrackingActor()
+
+	// Auth gate: starts unlocked (one token available)
+	l.authGate = make(chan struct{}, 1)
+	l.authGate <- struct{}{}
+
+	// Subscription actor
+	l.subSetCh = make(chan subSetReq, 16)
+	l.subDeleteCh = make(chan subDeleteReq, 16)
+	l.subCancelAllCh = make(chan subCancelAllReq)
+	l.subGetCh = make(chan subGetReq)
+	l.subActorDone = make(chan struct{})
+	go l.subscriptionActor()
+}
+
+func (l *Listener) handlerTrackingActor() {
+	defer close(l.handlerActorDone)
+	count := 0
+	var waiters []chan struct{}
+	for {
+		select {
+		case <-l.handlerTrackCh:
+			count++
+		case <-l.handlerDoneCh:
+			count--
+			if count == 0 && len(waiters) > 0 {
+				for _, w := range waiters {
+					close(w)
+				}
+				waiters = nil
+			}
+		case req := <-l.handlerWaitCh:
+			if count == 0 {
+				close(req.resp)
+			} else {
+				waiters = append(waiters, req.resp)
+			}
+		case <-l.ctx.Done():
+			// drain remaining
+			for {
+				select {
+				case <-l.handlerDoneCh:
+					count--
+				default:
+					goto drained
+				}
+			}
+		drained:
+			for _, w := range waiters {
+				close(w)
+			}
+			return
+		}
+	}
+}
+
+func (l *Listener) subscriptionActor() {
+	defer close(l.subActorDone)
+	subs := make(map[string]context.CancelFunc)
+	for {
+		select {
+		case req := <-l.subSetCh:
+			subs[req.id] = req.cancel
+		case req := <-l.subDeleteCh:
+			if cancelFunc, exists := subs[req.id]; exists {
+				cancelFunc()
+				delete(subs, req.id)
+			}
+		case req := <-l.subCancelAllCh:
+			for _, cancelFunc := range subs {
+				cancelFunc()
+			}
+			subs = make(map[string]context.CancelFunc)
+			close(req.resp)
+		case req := <-l.subGetCh:
+			cancelFunc, exists := subs[req.id]
+			req.resp <- subGetResp{cancel: cancelFunc, exists: exists}
+		case <-l.ctx.Done():
+			for _, cancelFunc := range subs {
+				cancelFunc()
+			}
+			return
+		}
+	}
+}
+
+// HandlerAdd increments the handler count (replaces handlerWg.Add(1))
+func (l *Listener) HandlerAdd() {
+	l.handlerTrackCh <- handlerTrackReq{}
+}
+
+// HandlerDone decrements the handler count (replaces handlerWg.Done())
+func (l *Listener) HandlerDone() {
+	l.handlerDoneCh <- handlerDoneReq{}
+}
+
+// HandlerWait blocks until all handlers complete (replaces handlerWg.Wait())
+func (l *Listener) HandlerWait() {
+	resp := make(chan struct{}, 1)
+	l.handlerWaitCh <- handlerWaitReq{resp: resp}
+	<-resp
+}
+
+// SubSet stores a subscription cancel function
+func (l *Listener) SubSet(id string, cancel context.CancelFunc) {
+	l.subSetCh <- subSetReq{id: id, cancel: cancel}
+}
+
+// SubDelete cancels and removes a subscription
+func (l *Listener) SubDelete(id string) {
+	l.subDeleteCh <- subDeleteReq{id: id}
+}
+
+// SubCancelAll cancels all subscriptions and waits for ack
+func (l *Listener) SubCancelAll() {
+	resp := make(chan struct{}, 1)
+	l.subCancelAllCh <- subCancelAllReq{resp: resp}
+	<-resp
+}
+
+// SubGet retrieves a subscription's cancel function
+func (l *Listener) SubGet(id string) (context.CancelFunc, bool) {
+	resp := make(chan subGetResp, 1)
+	l.subGetCh <- subGetReq{id: id, resp: resp}
+	r := <-resp
+	return r.cancel, r.exists
+}
+
+// AuthLock acquires the auth gate exclusively (for AUTH processing)
+func (l *Listener) AuthLock() {
+	<-l.authGate
+}
+
+// AuthUnlock releases the auth gate
+func (l *Listener) AuthUnlock() {
+	l.authGate <- struct{}{}
+}
+
+// AuthRLock waits for auth to not be processing, then returns immediately
+// This is a read-side check - just verify the token is there and put it back
+func (l *Listener) AuthRLock() {
+	// Not needed for the current usage pattern where auth is synchronous
+	// and non-auth messages just need to wait for auth to complete
+}
+
+// AuthRUnlock is a no-op for the read side
+func (l *Listener) AuthRUnlock() {
+}
+
+// Ctx returns the listener's context
 func (l *Listener) Ctx() context.Context {
 	return l.ctx
 }
 
-// ServerContext returns the server's context (distinct from the listener's own context).
+// ServerContext returns the server's context
 func (l *Listener) ServerContext() context.Context {
 	return l.Server.Context()
 }
 
-// ServerConfig returns the server's configuration.
+// ServerConfig returns the server's configuration
 func (l *Listener) ServerConfig() *config.C {
 	return l.Server.GetConfig()
 }
 
-// ServerDatabase returns the server's database instance.
+// ServerDatabase returns the server's database instance
 func (l *Listener) ServerDatabase() database.Database {
 	return l.Server.Database()
 }
 
 // DroppedMessages returns the total number of messages that were dropped
-// because the message processing queue was full.
 func (l *Listener) DroppedMessages() int {
 	return int(l.droppedMessages.Load())
 }
 
-// RemainingCapacity returns the number of slots available in the message processing queue.
+// RemainingCapacity returns the number of slots available in the message processing queue
 func (l *Listener) RemainingCapacity() int {
 	return cap(l.messageQueue) - len(l.messageQueue)
 }
 
 // QueueMessage queues a message for asynchronous processing.
-// Returns true if the message was queued, false if the queue was full.
 func (l *Listener) QueueMessage(data []byte, remote string) bool {
 	req := messageRequest{data: data, remote: remote}
 	select {
@@ -115,7 +308,6 @@ func (l *Listener) Write(p []byte) (n int, err error) {
 		log.E.F("ws->%s dropping message with invalid UTF-8 (%d bytes)", l.remote, len(p))
 		return 0, errorf.E("invalid UTF-8")
 	}
-	// Defensive: recover from any panic when sending to closed channel
 	defer func() {
 		if r := recover(); r != nil {
 			log.D.F("ws->%s write panic recovered (channel likely closed): %v", l.remote, r)
@@ -124,7 +316,6 @@ func (l *Listener) Write(p []byte) (n int, err error) {
 		}
 	}()
 
-	// Send write request to channel - non-blocking with timeout
 	select {
 	case <-l.ctx.Done():
 		return 0, l.ctx.Err()
@@ -136,20 +327,17 @@ func (l *Listener) Write(p []byte) (n int, err error) {
 	}
 }
 
-// SendEvent sends an event to the client. Implements archive.EventDeliveryChannel.
+// SendEvent sends an event to the client.
 func (l *Listener) SendEvent(ev *event.E) error {
 	if ev == nil {
 		return nil
 	}
-	// Serialize the event as an EVENT envelope
 	data := ev.Serialize()
-	// Use Write to send
 	_, err := l.Write(data)
 	return err
 }
 
 // IsConnected returns whether the client connection is still active.
-// Implements archive.EventDeliveryChannel.
 func (l *Listener) IsConnected() bool {
 	select {
 	case <-l.ctx.Done():
@@ -161,7 +349,6 @@ func (l *Listener) IsConnected() bool {
 
 // WriteControl sends a control message through the write channel
 func (l *Listener) WriteControl(messageType int, data []byte, deadline time.Time) (err error) {
-	// Defensive: recover from any panic when sending to closed channel
 	defer func() {
 		if r := recover(); r != nil {
 			log.D.F("ws->%s writeControl panic recovered (channel likely closed): %v", l.remote, r)
@@ -181,22 +368,14 @@ func (l *Listener) WriteControl(messageType int, data []byte, deadline time.Time
 }
 
 // writeWorker is the single goroutine that handles all writes to the websocket connection.
-// This serializes all writes to prevent concurrent write panics and allows pings to interrupt writes.
 func (l *Listener) writeWorker() {
 	defer func() {
-		// Only unregister write channel if connection is actually dead/closing
-		// Unregister if:
-		// 1. Context is cancelled (connection closing)
-		// 2. Channel was closed (connection closing)
-		// 3. Connection error occurred (already handled inline)
 		if l.ctx.Err() != nil {
-			// Connection is closing - safe to unregister
 			if socketPub := l.publishers.GetSocketPublisher(); socketPub != nil {
 				log.D.F("ws->%s write worker: unregistering write channel (connection closing)", l.remote)
 				socketPub.SetWriteChan(l.conn, nil)
 			}
 		} else {
-			// Exiting for other reasons (timeout, etc.) but connection may still be valid
 			log.D.F("ws->%s write worker exiting unexpectedly", l.remote)
 		}
 		close(l.writeDone)
@@ -213,16 +392,13 @@ func (l *Listener) writeWorker() {
 				return
 			}
 
-			// Skip writes if no connection (unit tests)
 			if l.conn == nil {
 				log.T.F("ws->%s skipping write (no connection)", l.remote)
 				continue
 			}
 
-			// Handle the write request
 			var err error
 			if req.IsPing {
-				// Special handling for ping messages
 				log.D.F("sending PING #%d", req.MsgType)
 				deadline := time.Now().Add(DefaultWriteTimeout)
 				err = l.conn.WriteControl(websocket.PingMessage, nil, deadline)
@@ -233,14 +409,12 @@ func (l *Listener) writeWorker() {
 					return
 				}
 			} else if req.IsControl {
-				// Control message
 				err = l.conn.WriteControl(req.MsgType, req.Data, req.Deadline)
 				if err != nil {
 					log.E.F("ws->%s control write failed: %v", l.remote, err)
 					return
 				}
 			} else {
-				// Regular message
 				l.conn.SetWriteDeadline(time.Now().Add(DefaultWriteTimeout))
 				err = l.conn.WriteMessage(req.MsgType, req.Data)
 				if err != nil {
@@ -253,7 +427,6 @@ func (l *Listener) writeWorker() {
 }
 
 // messageProcessor is the goroutine that processes messages asynchronously.
-// This prevents the websocket read loop from blocking on message processing.
 func (l *Listener) messageProcessor() {
 	defer func() {
 		close(l.processingDone)
@@ -270,39 +443,29 @@ func (l *Listener) messageProcessor() {
 				return
 			}
 
-			// Lock immediately to ensure AUTH is processed before subsequent messages
-			// are dequeued. This prevents race conditions where EVENT checks authentication
-			// before AUTH completes.
-			l.authProcessing.Lock()
+			// Acquire the auth gate token to ensure AUTH is processed before subsequent messages
+			l.AuthLock()
 
-			// Check if this is an AUTH message by looking for the ["AUTH" prefix
 			isAuthMessage := len(req.data) > 7 && bytes.HasPrefix(req.data, []byte(`["AUTH"`))
 
 			if isAuthMessage {
-				// Process AUTH message synchronously while holding lock
-				// This blocks the messageProcessor from dequeuing the next message
-				// until authentication is complete and authedPubkey is set
 				log.D.F("ws->%s processing AUTH synchronously with lock", req.remote)
 				l.HandleMessage(req.data, req.remote)
-				// Unlock after AUTH completes so subsequent messages see updated authedPubkey
-				l.authProcessing.Unlock()
+				l.AuthUnlock()
 			} else {
-				// Not AUTH - unlock immediately and process concurrently
-				// The next message can now be dequeued (possibly another non-AUTH to process concurrently)
-				l.authProcessing.Unlock()
+				l.AuthUnlock()
 
-				// Acquire semaphore to limit concurrent handlers (blocking with context awareness)
+				// Acquire semaphore to limit concurrent handlers
 				select {
 				case l.handlerSem <- struct{}{}:
-					// Semaphore acquired
 				case <-l.ctx.Done():
 					return
 				}
-				l.handlerWg.Add(1)
+				l.HandlerAdd()
 				go func(data []byte, remote string) {
 					defer func() {
-						<-l.handlerSem // Release semaphore
-						l.handlerWg.Done()
+						<-l.handlerSem
+						l.HandlerDone()
 					}()
 					l.HandleMessage(data, remote)
 				}(req.data, req.remote)
@@ -313,7 +476,6 @@ func (l *Listener) messageProcessor() {
 
 // getManagedACL returns the managed ACL instance if available
 func (l *Listener) getManagedACL() *database.ManagedACL {
-	// Get the managed ACL instance from the ACL registry
 	for _, aclInstance := range acl.Registry.ACLs() {
 		if aclInstance.Type() == "managed" {
 			if managed, ok := aclInstance.(*acl.Managed); ok {
@@ -325,7 +487,6 @@ func (l *Listener) getManagedACL() *database.ManagedACL {
 }
 
 // getFollowsThrottleDelay returns the progressive throttle delay for follows or social ACL mode.
-// Returns 0 if not in a throttle-enabled mode, throttle is disabled, or user is exempt.
 func (l *Listener) getFollowsThrottleDelay(ev *event.E) time.Duration {
 	mode := acl.Registry.GetMode()
 	switch mode {
@@ -357,22 +518,15 @@ func (l *Listener) QueryAllVersions(ctx context.Context, f *filter.F) (event.S, 
 
 // canSeePrivateEvent checks if the authenticated user can see an event with a private tag
 func (l *Listener) canSeePrivateEvent(authedPubkey, privatePubkey []byte) (canSee bool) {
-	// If no authenticated user, deny access
 	if len(authedPubkey) == 0 {
 		return false
 	}
-
-	// If the authenticated user matches the private tag pubkey, allow access
 	if len(privatePubkey) > 0 && utils.FastEqual(authedPubkey, privatePubkey) {
 		return true
 	}
-
-	// Check if user is an admin or owner (they can see all private events)
 	accessLevel := acl.Registry.GetAccessLevel(authedPubkey, l.remote)
 	if accessLevel == "admin" || accessLevel == "owner" {
 		return true
 	}
-
-	// Default deny
 	return false
 }

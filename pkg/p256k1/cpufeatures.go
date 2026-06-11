@@ -3,7 +3,6 @@
 package p256k1
 
 import (
-	"sync"
 	"sync/atomic"
 
 	"github.com/klauspost/cpuid/v2"
@@ -24,18 +23,14 @@ var (
 	hasADXCPU bool
 
 	// avx2Disabled allows runtime disabling of AVX2 for testing/debugging.
-	// Uses atomic operations for thread-safety without locks on the fast path.
 	avx2Disabled atomic.Bool
 
 	// bmi2Disabled allows runtime disabling of BMI2 for testing/debugging.
 	bmi2Disabled atomic.Bool
-
-	// initOnce ensures CPU detection runs exactly once
-	initOnce sync.Once
 )
 
 func init() {
-	initOnce.Do(detectCPUFeatures)
+	detectCPUFeatures()
 }
 
 // detectCPUFeatures detects CPU capabilities at startup

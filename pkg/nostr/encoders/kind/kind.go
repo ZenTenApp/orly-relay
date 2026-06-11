@@ -4,8 +4,6 @@
 package kind
 
 import (
-	"sync"
-
 	"git.smesh.lol/orly/pkg/nostr/encoders/ints"
 	"golang.org/x/exp/constraints"
 	"git.smesh.lol/orly/pkg/lol/chk"
@@ -125,8 +123,6 @@ func (k *K) Unmarshal(b []byte) (r []byte, err error) {
 
 // GetString returns a human-readable identifier for a kind.K.
 func GetString(t uint16) string {
-	MapMx.RLock()
-	defer MapMx.RUnlock()
 	return Map[t]
 }
 
@@ -386,7 +382,6 @@ var (
 	ParameterizedReplaceableEnd = &K{40000}
 )
 
-var MapMx sync.RWMutex
-
-// Map is populated from the embedded kinds.json during init()
+// Map is populated from the embedded kinds.json during init().
+// Safe for concurrent reads after init() completes.
 var Map = make(map[uint16]string)

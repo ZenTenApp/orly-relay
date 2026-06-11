@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"sort"
-	"sync"
 
 	"git.smesh.lol/orly/pkg/nostr/encoders/kind"
 	"git.smesh.lol/orly/pkg/nostr/encoders/timestamp"
@@ -347,6 +346,17 @@ type Pub struct {
 	Payment
 }
 
+// actor request types for T
+type riAddNIPsReq struct {
+	nips []int
+	resp chan struct{}
+}
+
+type riHasNIPReq struct {
+	n    int
+	resp chan bool
+}
+
 // T is the relay information document.
 type T struct {
 	Name           string      `json:"name"`
@@ -365,7 +375,11 @@ type T struct {
 	PaymentsURL    string      `json:"payments_url,omitempty"`
 	Fees           *Fees       `json:"fees,omitempty"`
 	Icon           string      `json:"icon"`
-	sync.Mutex
+
+	addNIPs chan riAddNIPsReq
+	hasNIP  chan riHasNIPReq
+	stop    chan struct{}
+	done    chan struct{}
 }
 
 // NewInfo populates the nips map, and if an Info structure is provided, it is
@@ -380,7 +394,42 @@ func NewInfo(inf *T) (info *T) {
 			},
 		}
 	}
+	info.addNIPs = make(chan riAddNIPsReq)
+	info.hasNIP = make(chan riHasNIPReq)
+	info.stop = make(chan struct{})
+	info.done = make(chan struct{})
+	go info.actor()
 	return
+}
+
+func (ri *T) actor() {
+	defer close(ri.done)
+	for {
+		select {
+		case <-ri.stop:
+			return
+		case req := <-ri.addNIPs:
+			for _, num := range req.nips {
+				ri.Nips = append(ri.Nips, num)
+			}
+			req.resp <- struct{}{}
+		case req := <-ri.hasNIP:
+			found := false
+			for i := range ri.Nips {
+				if ri.Nips[i] == req.n {
+					found = true
+					break
+				}
+			}
+			req.resp <- found
+		}
+	}
+}
+
+// Stop shuts down the actor goroutine.
+func (ri *T) Stop() {
+	close(ri.stop)
+	<-ri.done
 }
 
 // Clone replicates a relayinfo.T.
@@ -401,24 +450,16 @@ func (ri *T) Clone() (r2 *T, err error) {
 
 // AddNIPs adds one or more numbers to the list of NIPs.
 func (ri *T) AddNIPs(n ...int) {
-	ri.Lock()
-	for _, num := range n {
-		ri.Nips = append(ri.Nips, num)
-	}
-	ri.Unlock()
+	req := riAddNIPsReq{nips: n, resp: make(chan struct{}, 1)}
+	ri.addNIPs <- req
+	<-req.resp
 }
 
 // HasNIP returns true if the given number is found in the list.
 func (ri *T) HasNIP(n int) (ok bool) {
-	ri.Lock()
-	for i := range ri.Nips {
-		if ri.Nips[i] == n {
-			ok = true
-			break
-		}
-	}
-	ri.Unlock()
-	return
+	req := riHasNIPReq{n: n, resp: make(chan bool, 1)}
+	ri.hasNIP <- req
+	return <-req.resp
 }
 
 // Save the relayinfo.T to a given file as JSON.

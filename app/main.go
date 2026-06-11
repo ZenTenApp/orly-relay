@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/adrg/xdg"
@@ -48,13 +47,22 @@ func Run(
 	ctx context.Context, cfg *config.C, db database.Database, limiter *ratelimit.Limiter,
 ) (quit chan struct{}) {
 	quit = make(chan struct{})
-	var once sync.Once
+	// closeQuit is a buffered channel used as a close-once guard.
+	// Sending to the buffer succeeds exactly once; subsequent sends fail the select default.
+	closeQuit := make(chan struct{}, 1)
+	doCloseQuit := func() {
+		select {
+		case closeQuit <- struct{}{}:
+			close(quit)
+		default:
+		}
+	}
 
 	// shutdown handler
 	go func() {
 		<-ctx.Done()
 		log.I.F("shutting down")
-		once.Do(func() { close(quit) })
+		doCloseQuit()
 	}()
 	// get the admins
 	var err error
@@ -99,7 +107,6 @@ func Run(
 		rateLimiter:       limiter,
 		cfg:               cfg,
 		db:                db,
-		connPerIP:         make(map[string]int),
 		aclRegistry:       acl.Registry, // Inject ACL registry (transitional from global)
 		channelMembership:         channelMembership,
 		dmRateLimiter:             nil,
@@ -1039,7 +1046,7 @@ func Run(
 			}
 		}
 
-		once.Do(func() { close(quit) })
+		doCloseQuit()
 	}()
 
 	return

@@ -5,7 +5,6 @@ package archive
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"git.smesh.lol/orly/pkg/lol/log"
@@ -25,6 +24,22 @@ type EventDeliveryChannel interface {
 	IsConnected() bool
 }
 
+// mgrGetOrCreateReq asks the actor to return or create a connection.
+type mgrGetOrCreateReq struct {
+	url  string
+	resp chan mgrGetOrCreateResp
+}
+
+type mgrGetOrCreateResp struct {
+	conn *RelayConnection
+	err  error
+}
+
+// mgrStatsReq asks the actor for current stats.
+type mgrStatsReq struct {
+	resp chan ManagerStats
+}
+
 // Manager handles connections to archive relays for query augmentation.
 type Manager struct {
 	ctx    context.Context
@@ -35,9 +50,10 @@ type Manager struct {
 	db         ArchiveDatabase
 	queryCache *QueryCache
 
-	// Connection pool
-	mu          sync.RWMutex
-	connections map[string]*RelayConnection
+	getOrCreateReq chan mgrGetOrCreateReq
+	statsReq       chan mgrStatsReq
+	stop           chan struct{}
+	done           chan struct{}
 
 	// Configuration
 	enabled bool
@@ -68,15 +84,20 @@ func New(ctx context.Context, db ArchiveDatabase, cfg Config) *Manager {
 	enabled := cfg.Enabled && len(cfg.Relays) > 0
 
 	m := &Manager{
-		ctx:         mgrCtx,
-		cancel:      cancel,
-		relays:      cfg.Relays,
-		timeout:     timeout,
-		db:          db,
-		queryCache:  NewQueryCache(cacheTTL, 100000), // 100k cached queries
-		connections: make(map[string]*RelayConnection),
-		enabled:     enabled,
+		ctx:            mgrCtx,
+		cancel:         cancel,
+		relays:         cfg.Relays,
+		timeout:        timeout,
+		db:             db,
+		queryCache:     NewQueryCache(cacheTTL, 100000), // 100k cached queries
+		getOrCreateReq: make(chan mgrGetOrCreateReq),
+		statsReq:       make(chan mgrStatsReq),
+		stop:           make(chan struct{}),
+		done:           make(chan struct{}),
+		enabled:        enabled,
 	}
+
+	go m.actor()
 
 	if enabled {
 		log.I.F("archive manager initialized with %d relays, %v timeout, %v cache TTL",
@@ -86,9 +107,73 @@ func New(ctx context.Context, db ArchiveDatabase, cfg Config) *Manager {
 	return m
 }
 
+// actor owns the connections map and processes requests sequentially.
+func (m *Manager) actor() {
+	defer close(m.done)
+
+	connections := make(map[string]*RelayConnection)
+
+	for {
+		select {
+		case req := <-m.getOrCreateReq:
+			conn, exists := connections[req.url]
+			if exists && conn.IsConnected() {
+				req.resp <- mgrGetOrCreateResp{conn: conn}
+				continue
+			}
+
+			// Create new connection
+			conn = NewRelayConnection(m.ctx, req.url)
+			if err := conn.Connect(); err != nil {
+				req.resp <- mgrGetOrCreateResp{err: err}
+				continue
+			}
+			connections[req.url] = conn
+			req.resp <- mgrGetOrCreateResp{conn: conn}
+
+		case req := <-m.statsReq:
+			connected := 0
+			for _, conn := range connections {
+				if conn.IsConnected() {
+					connected++
+				}
+			}
+			req.resp <- ManagerStats{
+				Enabled:          m.enabled,
+				TotalRelays:      len(m.relays),
+				ConnectedRelays:  connected,
+				CachedQueries:    m.queryCache.Len(),
+				MaxCachedQueries: m.queryCache.MaxSize(),
+			}
+
+		case <-m.stop:
+			for _, conn := range connections {
+				conn.Close()
+			}
+			connections = make(map[string]*RelayConnection)
+			return
+		}
+	}
+}
+
 // IsEnabled returns whether the archive manager is enabled.
 func (m *Manager) IsEnabled() bool {
 	return m.enabled
+}
+
+// getOrCreateConnection returns an existing connection or creates a new one.
+func (m *Manager) getOrCreateConnection(url string) (*RelayConnection, error) {
+	req := mgrGetOrCreateReq{
+		url:  url,
+		resp: make(chan mgrGetOrCreateResp, 1),
+	}
+	select {
+	case m.getOrCreateReq <- req:
+		r := <-req.resp
+		return r.conn, r.err
+	case <-m.stop:
+		return nil, m.ctx.Err()
+	}
 }
 
 // QueryArchive queries archive relays asynchronously and stores/streams results.
@@ -125,20 +210,22 @@ func (m *Manager) QueryArchive(
 	defer cancel()
 
 	// Query all relays in parallel
-	var wg sync.WaitGroup
 	results := make(chan *event.E, 1000)
+	done := make([]chan struct{}, len(m.relays))
 
-	for _, relayURL := range m.relays {
-		wg.Add(1)
-		go func(url string) {
-			defer wg.Done()
+	for i, relayURL := range m.relays {
+		done[i] = make(chan struct{})
+		go func(d chan struct{}, url string) {
+			defer close(d)
 			m.queryRelay(queryCtx, url, f, results)
-		}(relayURL)
+		}(done[i], relayURL)
 	}
 
 	// Close results channel when all relays are done
 	go func() {
-		wg.Wait()
+		for _, d := range done {
+			<-d
+		}
 		close(results)
 	}()
 
@@ -200,38 +287,9 @@ func (m *Manager) queryRelay(ctx context.Context, url string, f *filter.F, resul
 	}
 }
 
-// getOrCreateConnection returns an existing connection or creates a new one.
-func (m *Manager) getOrCreateConnection(url string) (*RelayConnection, error) {
-	m.mu.RLock()
-	conn, exists := m.connections[url]
-	m.mu.RUnlock()
-
-	if exists && conn.IsConnected() {
-		return conn, nil
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// Double-check after acquiring write lock
-	conn, exists = m.connections[url]
-	if exists && conn.IsConnected() {
-		return conn, nil
-	}
-
-	// Create new connection
-	conn = NewRelayConnection(m.ctx, url)
-	if err := conn.Connect(); err != nil {
-		return nil, err
-	}
-
-	m.connections[url] = conn
-	return conn, nil
-}
-
 // QueryRelays queries explicit relay URLs and stores/streams results.
 // Unlike QueryArchive, this uses client-provided relay URLs and skips the query cache.
-// Works even when archive mode is disabled — only needs a valid context and database.
+// Works even when archive mode is disabled - only needs a valid context and database.
 func (m *Manager) QueryRelays(
 	subID string,
 	connID string,
@@ -252,19 +310,21 @@ func (m *Manager) QueryRelays(
 	queryCtx, cancel := context.WithTimeout(m.ctx, timeout)
 	defer cancel()
 
-	var wg sync.WaitGroup
 	results := make(chan *event.E, 1000)
+	done := make([]chan struct{}, len(relayURLs))
 
-	for _, relayURL := range relayURLs {
-		wg.Add(1)
-		go func(url string) {
-			defer wg.Done()
+	for i, relayURL := range relayURLs {
+		done[i] = make(chan struct{})
+		go func(d chan struct{}, url string) {
+			defer close(d)
 			m.queryRelay(queryCtx, url, f, results)
-		}(relayURL)
+		}(done[i], relayURL)
 	}
 
 	go func() {
-		wg.Wait()
+		for _, d := range done {
+			<-d
+		}
 		close(results)
 	}()
 
@@ -295,28 +355,21 @@ func (m *Manager) QueryRelays(
 	}
 
 	if stored > 0 || streamed > 0 {
-		log.I.F("proxy: query %s completed — stored: %d, streamed: %d from %d relays",
+		log.I.F("proxy: query %s completed - stored: %d, streamed: %d from %d relays",
 			subID, stored, streamed, len(relayURLs))
 	}
 }
 
 // Stop stops the archive manager and closes all connections.
 func (m *Manager) Stop() {
-	if !m.enabled {
-		return
-	}
-
 	m.cancel()
+	close(m.stop)
+	<-m.done
+	m.queryCache.Stop()
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for _, conn := range m.connections {
-		conn.Close()
+	if m.enabled {
+		log.I.F("archive manager stopped")
 	}
-	m.connections = make(map[string]*RelayConnection)
-
-	log.I.F("archive manager stopped")
 }
 
 // Stats returns current archive manager statistics.
@@ -325,22 +378,12 @@ func (m *Manager) Stats() ManagerStats {
 		return ManagerStats{}
 	}
 
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	connected := 0
-	for _, conn := range m.connections {
-		if conn.IsConnected() {
-			connected++
-		}
-	}
-
-	return ManagerStats{
-		Enabled:          m.enabled,
-		TotalRelays:      len(m.relays),
-		ConnectedRelays:  connected,
-		CachedQueries:    m.queryCache.Len(),
-		MaxCachedQueries: m.queryCache.MaxSize(),
+	req := mgrStatsReq{resp: make(chan ManagerStats, 1)}
+	select {
+	case m.statsReq <- req:
+		return <-req.resp
+	case <-m.stop:
+		return ManagerStats{}
 	}
 }
 

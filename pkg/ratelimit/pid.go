@@ -5,9 +5,36 @@ package ratelimit
 
 import (
 	"math"
-	"sync"
 	"time"
 )
+
+// PID actor request types
+type (
+	pidUpdateReq struct {
+		pv   float64
+		resp chan float64
+	}
+	pidResetReq struct {
+		done chan struct{}
+	}
+	pidSetSetpointReq struct {
+		setpoint float64
+		done     chan struct{}
+	}
+	pidSetGainsReq struct {
+		kp, ki, kd float64
+		done       chan struct{}
+	}
+	pidGetStateReq struct {
+		resp chan pidStateSnapshot
+	}
+)
+
+type pidStateSnapshot struct {
+	integral          float64
+	prevError         float64
+	prevFilteredError float64
+}
 
 // PIDController implements a PID controller with filtered derivative.
 // It is designed for rate limiting database operations based on load metrics.
@@ -20,7 +47,7 @@ import (
 // The filtered derivative uses a low-pass filter to attenuate high-frequency
 // noise that would otherwise cause erratic control behavior.
 type PIDController struct {
-	// Gains
+	// Gains (read by tests directly, but mutations go through actor)
 	Kp float64 // Proportional gain
 	Ki float64 // Integral gain
 	Kd float64 // Derivative gain
@@ -42,19 +69,19 @@ type PIDController struct {
 	OutputMin float64 // Minimum output (typically 0 = no delay)
 	OutputMax float64 // Maximum output (max delay in seconds)
 
-	// Internal state (protected by mutex)
-	mu                sync.Mutex
-	integral          float64
-	prevError         float64
-	prevFilteredError float64
-	lastUpdate        time.Time
-	initialized       bool
+	// Actor channels
+	updateCh      chan pidUpdateReq
+	resetCh       chan pidResetReq
+	setSetpointCh chan pidSetSetpointReq
+	setGainsCh    chan pidSetGainsReq
+	getStateCh    chan pidGetStateReq
+	stopCh        chan struct{}
 }
 
 // DefaultPIDControllerForWrites creates a PID controller tuned for write operations.
 // Writes benefit from aggressive integral and moderate proportional response.
 func DefaultPIDControllerForWrites() *PIDController {
-	return &PIDController{
+	p := &PIDController{
 		Kp:                    0.5,    // Moderate proportional response
 		Ki:                    0.1,    // Steady integral to eliminate offset
 		Kd:                    0.05,   // Small derivative for prediction
@@ -65,12 +92,14 @@ func DefaultPIDControllerForWrites() *PIDController {
 		OutputMin:             0.0,    // No delay minimum
 		OutputMax:             1.0,    // Max 1 second delay per write
 	}
+	p.startActor()
+	return p
 }
 
 // DefaultPIDControllerForReads creates a PID controller tuned for read operations.
 // Reads should be more responsive but with less aggressive throttling.
 func DefaultPIDControllerForReads() *PIDController {
-	return &PIDController{
+	p := &PIDController{
 		Kp:                    0.3,    // Lower proportional (reads are more important)
 		Ki:                    0.05,   // Lower integral (don't accumulate as aggressively)
 		Kd:                    0.02,   // Very small derivative
@@ -81,6 +110,8 @@ func DefaultPIDControllerForReads() *PIDController {
 		OutputMin:             0.0,    // No delay minimum
 		OutputMax:             0.5,    // Max 500ms delay per read
 	}
+	p.startActor()
+	return p
 }
 
 // NewPIDController creates a new PID controller with custom parameters.
@@ -91,7 +122,7 @@ func NewPIDController(
 	integralMin, integralMax float64,
 	outputMin, outputMax float64,
 ) *PIDController {
-	return &PIDController{
+	p := &PIDController{
 		Kp:                    kp,
 		Ki:                    ki,
 		Kd:                    kd,
@@ -102,6 +133,121 @@ func NewPIDController(
 		OutputMin:             outputMin,
 		OutputMax:             outputMax,
 	}
+	p.startActor()
+	return p
+}
+
+func (p *PIDController) startActor() {
+	p.updateCh = make(chan pidUpdateReq, 1)
+	p.resetCh = make(chan pidResetReq, 1)
+	p.setSetpointCh = make(chan pidSetSetpointReq, 1)
+	p.setGainsCh = make(chan pidSetGainsReq, 1)
+	p.getStateCh = make(chan pidGetStateReq, 1)
+	p.stopCh = make(chan struct{})
+
+	go p.actorLoop()
+}
+
+func (p *PIDController) actorLoop() {
+	var (
+		integral          float64
+		prevError         float64
+		prevFilteredError float64
+		lastUpdate        time.Time
+		initialized       bool
+	)
+
+	// Local copies of config that the actor owns
+	kp := p.Kp
+	ki := p.Ki
+	kd := p.Kd
+	setpoint := p.Setpoint
+	filterAlpha := p.DerivativeFilterAlpha
+	integralMin := p.IntegralMin
+	integralMax := p.IntegralMax
+	outputMin := p.OutputMin
+	outputMax := p.OutputMax
+
+	for {
+		select {
+		case req := <-p.updateCh:
+			now := time.Now()
+			processVariable := req.pv
+
+			if !initialized {
+				lastUpdate = now
+				prevError = processVariable - setpoint
+				prevFilteredError = prevError
+				initialized = true
+				req.resp <- 0
+				continue
+			}
+
+			dt := now.Sub(lastUpdate).Seconds()
+			if dt <= 0 {
+				dt = 0.001
+			}
+			lastUpdate = now
+
+			err := processVariable - setpoint
+
+			pTerm := kp * err
+
+			integral += err * dt
+			integral = clamp(integral, integralMin, integralMax)
+			iTerm := ki * integral
+
+			filteredError := filterAlpha*err + (1-filterAlpha)*prevFilteredError
+			var dTerm float64
+			if dt > 0 {
+				dTerm = kd * (filteredError - prevFilteredError) / dt
+			}
+
+			prevError = err
+			prevFilteredError = filteredError
+
+			output := pTerm + iTerm + dTerm
+			output = clamp(output, outputMin, outputMax)
+
+			if output < 0 {
+				output = 0
+			}
+			req.resp <- output
+
+		case req := <-p.resetCh:
+			integral = 0
+			prevError = 0
+			prevFilteredError = 0
+			initialized = false
+			close(req.done)
+
+		case req := <-p.setSetpointCh:
+			setpoint = req.setpoint
+			// Update exported field for test compatibility
+			p.Setpoint = req.setpoint
+			close(req.done)
+
+		case req := <-p.setGainsCh:
+			kp = req.kp
+			ki = req.ki
+			kd = req.kd
+			// Update exported fields for test compatibility
+			p.Kp = req.kp
+			p.Ki = req.ki
+			p.Kd = req.kd
+			close(req.done)
+
+		case req := <-p.getStateCh:
+			req.resp <- pidStateSnapshot{
+				integral:          integral,
+				prevError:         prevError,
+				prevFilteredError: prevFilteredError,
+			}
+
+		case <-p.stopCh:
+			return
+		}
+	}
 }
 
 // Update computes the PID output based on the current process variable.
@@ -109,98 +255,38 @@ func NewPIDController(
 //
 // Returns the recommended delay in seconds. A value of 0 means no delay needed.
 func (p *PIDController) Update(processVariable float64) float64 {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	now := time.Now()
-
-	// Initialize on first call
-	if !p.initialized {
-		p.lastUpdate = now
-		p.prevError = processVariable - p.Setpoint
-		p.prevFilteredError = p.prevError
-		p.initialized = true
-		return 0 // No delay on first call
-	}
-
-	// Calculate time delta
-	dt := now.Sub(p.lastUpdate).Seconds()
-	if dt <= 0 {
-		dt = 0.001 // Minimum 1ms to avoid division by zero
-	}
-	p.lastUpdate = now
-
-	// Calculate current error (positive when above setpoint = need to throttle)
-	error := processVariable - p.Setpoint
-
-	// Proportional term: immediate response to current error
-	pTerm := p.Kp * error
-
-	// Integral term: accumulate error over time
-	// Apply anti-windup by clamping the integral
-	p.integral += error * dt
-	p.integral = clamp(p.integral, p.IntegralMin, p.IntegralMax)
-	iTerm := p.Ki * p.integral
-
-	// Derivative term with low-pass filter
-	// Apply exponential moving average to filter high-frequency noise:
-	//   filtered = alpha * new + (1 - alpha) * old
-	// This is equivalent to a first-order low-pass filter
-	filteredError := p.DerivativeFilterAlpha*error + (1-p.DerivativeFilterAlpha)*p.prevFilteredError
-
-	// Derivative of the filtered error
-	var dTerm float64
-	if dt > 0 {
-		dTerm = p.Kd * (filteredError - p.prevFilteredError) / dt
-	}
-
-	// Update previous values for next iteration
-	p.prevError = error
-	p.prevFilteredError = filteredError
-
-	// Compute total output and clamp to limits
-	output := pTerm + iTerm + dTerm
-	output = clamp(output, p.OutputMin, p.OutputMax)
-
-	// Only return positive delays (throttle when above setpoint)
-	if output < 0 {
-		return 0
-	}
-	return output
+	resp := make(chan float64, 1)
+	p.updateCh <- pidUpdateReq{pv: processVariable, resp: resp}
+	return <-resp
 }
 
 // Reset clears the controller state, useful when conditions change significantly.
 func (p *PIDController) Reset() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	p.integral = 0
-	p.prevError = 0
-	p.prevFilteredError = 0
-	p.initialized = false
+	done := make(chan struct{})
+	p.resetCh <- pidResetReq{done: done}
+	<-done
 }
 
 // SetSetpoint updates the target setpoint.
 func (p *PIDController) SetSetpoint(setpoint float64) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.Setpoint = setpoint
+	done := make(chan struct{})
+	p.setSetpointCh <- pidSetSetpointReq{setpoint: setpoint, done: done}
+	<-done
 }
 
 // SetGains updates the PID gains.
 func (p *PIDController) SetGains(kp, ki, kd float64) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.Kp = kp
-	p.Ki = ki
-	p.Kd = kd
+	done := make(chan struct{})
+	p.setGainsCh <- pidSetGainsReq{kp: kp, ki: ki, kd: kd, done: done}
+	<-done
 }
 
 // GetState returns the current internal state for monitoring/debugging.
 func (p *PIDController) GetState() (integral, prevError, prevFilteredError float64) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.integral, p.prevError, p.prevFilteredError
+	resp := make(chan pidStateSnapshot, 1)
+	p.getStateCh <- pidGetStateReq{resp: resp}
+	s := <-resp
+	return s.integral, s.prevError, s.prevFilteredError
 }
 
 // clamp restricts a value to the range [min, max].

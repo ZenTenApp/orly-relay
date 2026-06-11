@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"git.smesh.lol/orly/pkg/database"
@@ -25,40 +24,75 @@ const (
 	dmBidirectionalCacheTTL = 5 * time.Minute
 )
 
-// dmPairKey identifies a sender→recipient DM direction.
+// dmPairKey identifies a sender->recipient DM direction.
 type dmPairKey struct {
 	sender    string // hex pubkey
 	recipient string // hex pubkey
 }
 
-// dmPairState tracks the state of a sender→recipient DM pair.
+// dmPairState tracks the state of a sender->recipient DM pair.
 type dmPairState struct {
-	count        int       // messages sent in this direction
-	bidirectional bool     // true if recipient has replied (cached)
-	checkedAt    time.Time // when bidirectional was last checked
+	count         int       // messages sent in this direction
+	bidirectional bool      // true if recipient has replied (cached)
+	checkedAt     time.Time // when bidirectional was last checked
+}
+
+// -- actor request types --
+
+type dmCheckReq struct {
+	ctx context.Context
+	ev  *event.E
+	resp chan dmCheckResp // buffered 1
+}
+type dmCheckResp struct {
+	allowed bool
+	reason  string
+}
+type dmIngestedReq struct {
+	ev *event.E
 }
 
 // DMRateLimiter enforces a per-pair message limit for DMs to strangers.
 // Once the recipient replies (bidirectional traffic), the limit is lifted.
+// All state is owned by an actor goroutine.
 type DMRateLimiter struct {
-	db    database.Database
-	mu    sync.Mutex
-	pairs map[dmPairKey]*dmPairState
+	db         database.Database
+	checkCh    chan dmCheckReq
+	ingestedCh chan dmIngestedReq
+	stop       chan struct{}
+	done       chan struct{}
 }
 
 // NewDMRateLimiter creates a new DM rate limiter.
 func NewDMRateLimiter(db database.Database) *DMRateLimiter {
-	return &DMRateLimiter{
-		db:    db,
-		pairs: make(map[dmPairKey]*dmPairState),
+	r := &DMRateLimiter{
+		db:         db,
+		checkCh:    make(chan dmCheckReq),
+		ingestedCh: make(chan dmIngestedReq, 16),
+		stop:       make(chan struct{}),
+		done:       make(chan struct{}),
+	}
+	go r.actor()
+	return r
+}
+
+func (r *DMRateLimiter) actor() {
+	defer close(r.done)
+	pairs := make(map[dmPairKey]*dmPairState)
+	for {
+		select {
+		case req := <-r.checkCh:
+			allowed, reason := r.doCheck(req.ctx, req.ev, pairs)
+			req.resp <- dmCheckResp{allowed: allowed, reason: reason}
+		case req := <-r.ingestedCh:
+			r.doIngested(req.ev, pairs)
+		case <-r.stop:
+			return
+		}
 	}
 }
 
-// CheckDM checks whether a DM event should be allowed. Returns true if allowed,
-// false with a reason message if rejected.
-//
-// DM kinds: 4 (EncryptedDirectMessage), 1059 (GiftWrap)
-func (r *DMRateLimiter) CheckDM(ctx context.Context, ev *event.E) (allowed bool, reason string) {
+func (r *DMRateLimiter) doCheck(ctx context.Context, ev *event.E, pairs map[dmPairKey]*dmPairState) (bool, string) {
 	// Only apply to DM kinds
 	if ev.Kind != kind.EncryptedDirectMessage.K && ev.Kind != kind.GiftWrap.K {
 		return true, ""
@@ -69,39 +103,33 @@ func (r *DMRateLimiter) CheckDM(ctx context.Context, ev *event.E) (allowed bool,
 	// Extract recipient from #p tag
 	recipientHex := extractRecipient(ev)
 	if recipientHex == "" {
-		// No recipient found — allow (might be malformed)
 		return true, ""
 	}
 
-	// Same person — allow
+	// Same person - allow
 	if senderHex == recipientHex {
 		return true, ""
 	}
 
 	key := dmPairKey{sender: senderHex, recipient: recipientHex}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	state, exists := r.pairs[key]
+	state, exists := pairs[key]
 	if !exists {
 		state = &dmPairState{}
-		r.pairs[key] = state
+		pairs[key] = state
 	}
 
 	// Check if this pair is bidirectional (recipient has replied)
 	if state.bidirectional && time.Since(state.checkedAt) < dmBidirectionalCacheTTL {
-		// Cached bidirectional — allow unlimited
 		return true, ""
 	}
 
-	// Check DB for bidirectional traffic (does recipient→sender exist?)
+	// Check DB for bidirectional traffic
 	if r.checkBidirectional(ctx, recipientHex, senderHex) {
 		state.bidirectional = true
 		state.checkedAt = time.Now()
-		// Also mark the reverse direction as bidirectional
 		reverseKey := dmPairKey{sender: recipientHex, recipient: senderHex}
-		if reverseState, ok := r.pairs[reverseKey]; ok {
+		if reverseState, ok := pairs[reverseKey]; ok {
 			reverseState.bidirectional = true
 			reverseState.checkedAt = time.Now()
 		}
@@ -113,7 +141,7 @@ func (r *DMRateLimiter) CheckDM(ctx context.Context, ev *event.E) (allowed bool,
 	// Enforce stranger limit
 	state.count++
 	if state.count > dmStrangerLimit {
-		log.D.F("DM rate limit: %s → %s rejected (count=%d, limit=%d)",
+		log.D.F("DM rate limit: %s -> %s rejected (count=%d, limit=%d)",
 			senderHex[:12], recipientHex[:12], state.count, dmStrangerLimit)
 		return false, "restricted: DM limit reached, recipient has not accepted your messages"
 	}
@@ -121,9 +149,7 @@ func (r *DMRateLimiter) CheckDM(ctx context.Context, ev *event.E) (allowed bool,
 	return true, ""
 }
 
-// OnDMIngested should be called after a DM is successfully saved.
-// It updates the bidirectional cache if the DM was from a tracked recipient.
-func (r *DMRateLimiter) OnDMIngested(ev *event.E) {
+func (r *DMRateLimiter) doIngested(ev *event.E, pairs map[dmPairKey]*dmPairState) {
 	if ev.Kind != kind.EncryptedDirectMessage.K && ev.Kind != kind.GiftWrap.K {
 		return
 	}
@@ -134,26 +160,37 @@ func (r *DMRateLimiter) OnDMIngested(ev *event.E) {
 		return
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	// If someone sends a reply, mark the reverse direction as bidirectional
 	reverseKey := dmPairKey{sender: recipientHex, recipient: senderHex}
-	if reverseState, ok := r.pairs[reverseKey]; ok {
+	if reverseState, ok := pairs[reverseKey]; ok {
 		reverseState.bidirectional = true
 		reverseState.checkedAt = time.Now()
 	}
 
 	// Also mark the forward direction
 	forwardKey := dmPairKey{sender: senderHex, recipient: recipientHex}
-	if forwardState, ok := r.pairs[forwardKey]; ok {
+	if forwardState, ok := pairs[forwardKey]; ok {
 		forwardState.bidirectional = true
 		forwardState.checkedAt = time.Now()
 	}
 }
 
+// CheckDM checks whether a DM event should be allowed. Returns true if allowed,
+// false with a reason message if rejected.
+func (r *DMRateLimiter) CheckDM(ctx context.Context, ev *event.E) (allowed bool, reason string) {
+	resp := make(chan dmCheckResp, 1)
+	r.checkCh <- dmCheckReq{ctx: ctx, ev: ev, resp: resp}
+	result := <-resp
+	return result.allowed, result.reason
+}
+
+// OnDMIngested should be called after a DM is successfully saved.
+func (r *DMRateLimiter) OnDMIngested(ev *event.E) {
+	r.ingestedCh <- dmIngestedReq{ev: ev}
+}
+
 // checkBidirectional queries the DB to see if the recipient has ever sent a DM
-// to the sender (i.e., a kind 4 or 1059 event from recipient with #p tag containing sender).
+// to the sender.
 func (r *DMRateLimiter) checkBidirectional(ctx context.Context, recipientHex, senderHex string) bool {
 	recipientBytes, err := hexenc.Dec(recipientHex)
 	if err != nil {

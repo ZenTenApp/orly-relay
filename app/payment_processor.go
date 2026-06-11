@@ -5,7 +5,6 @@ import (
 	// std hex not used; use project hex encoder instead
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"encoding/json"
@@ -33,7 +32,7 @@ type PaymentProcessor struct {
 	config       *config.C
 	ctx          context.Context
 	cancel       context.CancelFunc
-	wg           sync.WaitGroup
+	workerDone   []chan struct{} // one per spawned goroutine
 	dashboardURL string
 }
 
@@ -66,24 +65,27 @@ func NewPaymentProcessor(
 // Start begins listening for payment notifications
 func (pp *PaymentProcessor) Start() error {
 	// start NWC notifications listener
-	pp.wg.Add(1)
+	d1 := make(chan struct{})
+	pp.workerDone = append(pp.workerDone, d1)
 	go func() {
-		defer pp.wg.Done()
+		defer close(d1)
 		if err := pp.listenForPayments(); err != nil {
 			log.E.F("payment processor error: %v", err)
 		}
 	}()
 	// start periodic follow-list sync if subscriptions are enabled
 	if pp.config != nil && pp.config.SubscriptionEnabled {
-		pp.wg.Add(1)
+		d2 := make(chan struct{})
+		pp.workerDone = append(pp.workerDone, d2)
 		go func() {
-			defer pp.wg.Done()
+			defer close(d2)
 			pp.runFollowSyncLoop()
 		}()
 		// start daily subscription checker
-		pp.wg.Add(1)
+		d3 := make(chan struct{})
+		pp.workerDone = append(pp.workerDone, d3)
 		go func() {
-			defer pp.wg.Done()
+			defer close(d3)
 			pp.runDailySubscriptionChecker()
 		}()
 	}
@@ -95,7 +97,9 @@ func (pp *PaymentProcessor) Stop() {
 	if pp.cancel != nil {
 		pp.cancel()
 	}
-	pp.wg.Wait()
+	for _, d := range pp.workerDone {
+		<-d
+	}
 }
 
 // listenForPayments subscribes to NWC notifications and processes payments

@@ -68,8 +68,8 @@ func setupTestListener(t *testing.T) (*Listener, *database.D, func()) {
 		writeDone:      make(chan struct{}),
 		messageQueue:   make(chan messageRequest, 100),
 		processingDone: make(chan struct{}),
-		subscriptions:  make(map[string]context.CancelFunc),
 	}
+	listener.initActors()
 
 	// Start write worker and message processor
 	go listener.writeWorker()

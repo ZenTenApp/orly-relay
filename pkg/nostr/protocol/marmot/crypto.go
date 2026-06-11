@@ -3,7 +3,6 @@ package marmot
 import (
 	"crypto/sha256"
 	"errors"
-	"sync"
 	"time"
 
 	"golang.org/x/crypto/hkdf"
@@ -55,26 +54,115 @@ func (c *LocalCrypto) Nip44Decrypt(peerPub []byte, ciphertext string) (string, e
 	return encryption.Decrypt(convKey, ciphertext)
 }
 
-// ProxyCrypto delegates crypto operations to the browser extension via WebSocket.
-// Used for NIP-07 and pubkey+sig authenticated sessions.
-type ProxyCrypto struct {
-	pubkey  []byte
-	mu      sync.Mutex
-	nextID  int
-	pending map[int]chan proxyResult
-	sendFn  func(op, peerHex, data string, id int)
-}
+// --- ProxyCrypto actor request types ---
 
 type proxyResult struct {
 	Result string
 	Err    string
 }
 
+type pcRequestReq struct {
+	op      string
+	peerHex string
+	data    string
+	resp    chan pcRequestResp
+}
+
+type pcRequestResp struct {
+	result string
+	err    error
+}
+
+type pcResolveReq struct {
+	id     int
+	result string
+	errMsg string
+}
+
+type pcCloseReq struct {
+	resp chan struct{}
+}
+
+// ProxyCrypto delegates crypto operations to the browser extension via WebSocket.
+// Used for NIP-07 and pubkey+sig authenticated sessions.
+type ProxyCrypto struct {
+	pubkey    []byte
+	requestCh chan pcRequestReq
+	resolveCh chan pcResolveReq
+	closeCh   chan pcCloseReq
+	stop      chan struct{}
+	done      chan struct{}
+}
+
 func NewProxyCrypto(pubkey []byte, sendFn func(op, peerHex, data string, id int)) *ProxyCrypto {
-	return &ProxyCrypto{
-		pubkey:  pubkey,
-		pending: make(map[int]chan proxyResult),
-		sendFn:  sendFn,
+	c := &ProxyCrypto{
+		pubkey:    pubkey,
+		requestCh: make(chan pcRequestReq),
+		resolveCh: make(chan pcResolveReq, 16),
+		closeCh:   make(chan pcCloseReq),
+		stop:      make(chan struct{}),
+		done:      make(chan struct{}),
+	}
+	go c.actor(sendFn)
+	return c
+}
+
+func (c *ProxyCrypto) actor(sendFn func(op, peerHex, data string, id int)) {
+	defer close(c.done)
+
+	nextID := 0
+	pending := make(map[int]chan proxyResult)
+
+	for {
+		select {
+		case <-c.stop:
+			// Unblock all pending with error
+			for id, ch := range pending {
+				ch <- proxyResult{Err: "connection closed"}
+				delete(pending, id)
+			}
+			return
+
+		case req := <-c.requestCh:
+			id := nextID
+			nextID++
+			ch := make(chan proxyResult, 1)
+			pending[id] = ch
+
+			// Send to browser extension (non-blocking from actor's perspective,
+			// sendFn is expected to be fast/non-blocking)
+			sendFn(req.op, req.peerHex, req.data, id)
+
+			// Wait for result in a separate goroutine to not block the actor
+			go func() {
+				select {
+				case res := <-ch:
+					if res.Err != "" {
+						req.resp <- pcRequestResp{"", errors.New(res.Err)}
+					} else {
+						req.resp <- pcRequestResp{res.Result, nil}
+					}
+				case <-time.After(15 * time.Second):
+					// Timeout - tell actor to clean up
+					c.resolveCh <- pcResolveReq{id: id, errMsg: "crypto proxy timeout"}
+					req.resp <- pcRequestResp{"", errors.New("crypto proxy timeout")}
+				}
+			}()
+
+		case req := <-c.resolveCh:
+			ch, ok := pending[req.id]
+			if ok {
+				delete(pending, req.id)
+				ch <- proxyResult{req.result, req.errMsg}
+			}
+
+		case req := <-c.closeCh:
+			for id, ch := range pending {
+				ch <- proxyResult{Err: "connection closed"}
+				delete(pending, id)
+			}
+			req.resp <- struct{}{}
+		}
 	}
 }
 
@@ -106,48 +194,25 @@ func (c *ProxyCrypto) Nip44Decrypt(peerPub []byte, ciphertext string) (string, e
 }
 
 func (c *ProxyCrypto) request(op, peerHex, data string) (string, error) {
-	c.mu.Lock()
-	id := c.nextID
-	c.nextID++
-	ch := make(chan proxyResult, 1)
-	c.pending[id] = ch
-	c.mu.Unlock()
-
-	c.sendFn(op, peerHex, data, id)
-
-	select {
-	case res := <-ch:
-		if res.Err != "" {
-			return "", errors.New(res.Err)
-		}
-		return res.Result, nil
-	case <-time.After(15 * time.Second):
-		c.mu.Lock()
-		delete(c.pending, id)
-		c.mu.Unlock()
-		return "", errors.New("crypto proxy timeout")
+	req := pcRequestReq{
+		op:      op,
+		peerHex: peerHex,
+		data:    data,
+		resp:    make(chan pcRequestResp, 1),
 	}
+	c.requestCh <- req
+	r := <-req.resp
+	return r.result, r.err
 }
 
 // Resolve routes a crypto_resp from the browser to the waiting goroutine.
 func (c *ProxyCrypto) Resolve(id int, result, errMsg string) {
-	c.mu.Lock()
-	ch, ok := c.pending[id]
-	if ok {
-		delete(c.pending, id)
-	}
-	c.mu.Unlock()
-	if ok {
-		ch <- proxyResult{result, errMsg}
-	}
+	c.resolveCh <- pcResolveReq{id: id, result: result, errMsg: errMsg}
 }
 
 // Close unblocks all pending requests with an error (called on WS disconnect).
 func (c *ProxyCrypto) Close() {
-	c.mu.Lock()
-	for id, ch := range c.pending {
-		ch <- proxyResult{Err: "connection closed"}
-		delete(c.pending, id)
-	}
-	c.mu.Unlock()
+	req := pcCloseReq{resp: make(chan struct{}, 1)}
+	c.closeCh <- req
+	<-req.resp
 }

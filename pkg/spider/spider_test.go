@@ -37,11 +37,7 @@ func TestSpiderCreation(t *testing.T) {
 	}
 
 	// Test that spider is not running initially
-	spider.mu.RLock()
-	running := spider.running
-	spider.mu.RUnlock()
-
-	if running {
+	if spider.running.Load() {
 		t.Error("Spider should not be running initially")
 	}
 }
@@ -77,12 +73,8 @@ func TestSpiderCallbacks(t *testing.T) {
 		func() [][]byte { return testPubkeys },
 	)
 
-	// Verify callbacks are set
-	spider.mu.RLock()
-	hasCallbacks := spider.getAdminRelays != nil && spider.getFollowList != nil
-	spider.mu.RUnlock()
-
-	if !hasCallbacks {
+	// Verify callbacks are set (single-threaded setup phase, no lock needed)
+	if spider.getAdminRelays == nil || spider.getFollowList == nil {
 		t.Error("Callbacks should be set")
 	}
 
@@ -219,11 +211,7 @@ func TestSpiderStartStop(t *testing.T) {
 	}
 
 	// Verify spider is running
-	spider.mu.RLock()
-	running := spider.running
-	spider.mu.RUnlock()
-
-	if !running {
+	if !spider.running.Load() {
 		t.Error("Spider should be running after start")
 	}
 
@@ -234,11 +222,7 @@ func TestSpiderStartStop(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify spider is stopped
-	spider.mu.RLock()
-	running = spider.running
-	spider.mu.RUnlock()
-
-	if running {
+	if spider.running.Load() {
 		t.Error("Spider should not be running after stop")
 	}
 }

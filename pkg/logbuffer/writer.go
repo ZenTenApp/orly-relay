@@ -6,35 +6,78 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
-// BufferedWriter wraps an io.Writer and captures log entries
+// --- Actor request/response types ---
+
+type bwWriteReq struct {
+	data []byte
+	resp chan struct{}
+}
+
+// BufferedWriter wraps an io.Writer and captures log entries.
+// The lineBuf state is owned by the actor goroutine.
 type BufferedWriter struct {
 	original io.Writer
 	buffer   *Buffer
-	lineBuf  bytes.Buffer
-	mu       sync.Mutex
+	writeCh  chan bwWriteReq
+	stop     chan struct{}
+	done     chan struct{}
 }
 
 // Log format regex patterns
-// lol library format: "1703500000000000ℹ️ message /path/to/file.go:123"
-// - Unix microseconds timestamp
-// - Level emoji (☠️, 🚨, ⚠️, ℹ️, 🔎, 👻)
-// - Message
-// - File:line location
 var lolPattern = regexp.MustCompile(`^(\d{16})([☠️🚨⚠️ℹ️🔎👻]+)\s*(.*?)\s+([^\s]+:\d+)$`)
-
-// Simpler pattern for when emoji detection fails - just capture timestamp and rest
 var simplePattern = regexp.MustCompile(`^(\d{13,16})\s*(.*)$`)
 
 // NewBufferedWriter creates a new BufferedWriter
 func NewBufferedWriter(original io.Writer, buffer *Buffer) *BufferedWriter {
-	return &BufferedWriter{
+	w := &BufferedWriter{
 		original: original,
 		buffer:   buffer,
+		writeCh:  make(chan bwWriteReq, 128),
+		stop:     make(chan struct{}),
+		done:     make(chan struct{}),
 	}
+	go w.actorLoop()
+	return w
+}
+
+func (w *BufferedWriter) actorLoop() {
+	defer close(w.done)
+
+	var lineBuf bytes.Buffer
+
+	for {
+		select {
+		case <-w.stop:
+			return
+		case req := <-w.writeCh:
+			lineBuf.Write(req.data)
+
+			for {
+				line, lineErr := lineBuf.ReadString('\n')
+				if lineErr != nil {
+					if len(line) > 0 {
+						lineBuf.WriteString(line)
+					}
+					break
+				}
+
+				entry := parseLine(strings.TrimSuffix(line, "\n"))
+				if entry.Message != "" && w.buffer != nil {
+					w.buffer.Add(entry)
+				}
+			}
+			req.resp <- struct{}{}
+		}
+	}
+}
+
+// Shutdown stops the actor goroutine.
+func (w *BufferedWriter) Shutdown() {
+	close(w.stop)
+	<-w.done
 }
 
 // Write implements io.Writer
@@ -44,34 +87,11 @@ func (w *BufferedWriter) Write(p []byte) (n int, err error) {
 
 	// Store in buffer if we have one
 	if w.buffer != nil {
-		w.mu.Lock()
-		// Accumulate data in line buffer
-		w.lineBuf.Write(p)
-
-		// Process complete lines
-		var entries []LogEntry
-		for {
-			line, lineErr := w.lineBuf.ReadString('\n')
-			if lineErr != nil {
-				// Put back incomplete line
-				if len(line) > 0 {
-					w.lineBuf.WriteString(line)
-				}
-				break
-			}
-
-			// Parse the complete line
-			entry := w.parseLine(strings.TrimSuffix(line, "\n"))
-			if entry.Message != "" {
-				entries = append(entries, entry)
-			}
-		}
-		w.mu.Unlock()
-
-		// Add entries outside the lock to avoid holding it during buffer.Add
-		for _, entry := range entries {
-			w.buffer.Add(entry)
-		}
+		data := make([]byte, len(p))
+		copy(data, p)
+		req := bwWriteReq{data: data, resp: make(chan struct{}, 1)}
+		w.writeCh <- req
+		<-req.resp
 	}
 
 	return
@@ -88,7 +108,7 @@ var emojiToLevel = map[string]string{
 }
 
 // parseLine parses a log line into a LogEntry
-func (w *BufferedWriter) parseLine(line string) LogEntry {
+func parseLine(line string) LogEntry {
 	entry := LogEntry{
 		Timestamp: time.Now(),
 		Message:   line,
@@ -100,21 +120,14 @@ func (w *BufferedWriter) parseLine(line string) LogEntry {
 		return entry
 	}
 
-	// Try lol pattern first: "1703500000000000ℹ️ message /path/to/file.go:123"
 	if matches := lolPattern.FindStringSubmatch(line); matches != nil {
-		// Parse Unix microseconds timestamp
 		if usec, err := strconv.ParseInt(matches[1], 10, 64); err == nil {
 			entry.Timestamp = time.UnixMicro(usec)
 		}
-
-		// Map emoji to level
 		if level, ok := emojiToLevel[matches[2]]; ok {
 			entry.Level = level
 		}
-
 		entry.Message = strings.TrimSpace(matches[3])
-
-		// Parse file:line
 		loc := matches[4]
 		if idx := strings.LastIndex(loc, ":"); idx > 0 {
 			entry.File = loc[:idx]
@@ -125,10 +138,8 @@ func (w *BufferedWriter) parseLine(line string) LogEntry {
 		return entry
 	}
 
-	// Try simple pattern - just grab timestamp and rest as message
 	if matches := simplePattern.FindStringSubmatch(line); matches != nil {
 		if usec, err := strconv.ParseInt(matches[1], 10, 64); err == nil {
-			// Could be microseconds or milliseconds
 			if len(matches[1]) >= 16 {
 				entry.Timestamp = time.UnixMicro(usec)
 			} else {
@@ -136,8 +147,6 @@ func (w *BufferedWriter) parseLine(line string) LogEntry {
 			}
 		}
 		rest := strings.TrimSpace(matches[2])
-
-		// Try to detect level from emoji in the rest
 		for emoji, level := range emojiToLevel {
 			if strings.HasPrefix(rest, emoji) {
 				entry.Level = level
@@ -146,12 +155,10 @@ func (w *BufferedWriter) parseLine(line string) LogEntry {
 				break
 			}
 		}
-
 		entry.Message = rest
 		return entry
 	}
 
-	// Fallback: just store the whole line as message
 	entry.Message = line
 	return entry
 }
@@ -167,7 +174,6 @@ func GetCurrentLevel() string {
 // SetCurrentLevel sets the current log level and returns it
 func SetCurrentLevel(level string) string {
 	level = strings.ToLower(level)
-	// Validate level
 	switch level {
 	case "off", "fatal", "error", "warn", "info", "debug", "trace":
 		currentLevel = level
@@ -176,4 +182,3 @@ func SetCurrentLevel(level string) string {
 	}
 	return currentLevel
 }
-

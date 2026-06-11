@@ -3,14 +3,28 @@
 package ratelimit
 
 import (
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
-	"git.smesh.lol/orly/pkg/lol/log"
 	"git.smesh.lol/orly/pkg/interfaces/loadmonitor"
+	"git.smesh.lol/orly/pkg/lol/log"
 )
+
+// BadgerMonitor actor request types
+type (
+	badgerGetMetricsReq struct {
+		resp chan loadmonitor.Metrics
+	}
+	badgerGetL0StatsReq struct {
+		resp chan badgerL0Stats
+	}
+)
+
+type badgerL0Stats struct {
+	tables int
+	score  float64
+}
 
 // BadgerMonitor implements loadmonitor.Monitor for the Badger database.
 // It collects metrics from Badger's LSM tree, caches, and actual process memory.
@@ -34,11 +48,9 @@ type BadgerMonitor struct {
 	writeLatencyNs atomic.Int64
 	latencyAlpha   float64 // EMA coefficient (default 0.1)
 
-	// Cached metrics (updated by background goroutine)
-	metricsLock    sync.RWMutex
-	cachedMetrics  loadmonitor.Metrics
-	lastL0Tables   int
-	lastL0Score    float64
+	// Actor channels for cached metrics + L0 state
+	getMetricsCh  chan badgerGetMetricsReq
+	getL0StatsCh  chan badgerGetL0StatsReq
 
 	// Background collection
 	stopChan chan struct{}
@@ -61,6 +73,8 @@ func NewBadgerMonitor(db *badger.DB, updateInterval time.Duration) *BadgerMonito
 	m := &BadgerMonitor{
 		db:           db,
 		latencyAlpha: 0.1, // 10% new, 90% old for smooth EMA
+		getMetricsCh: make(chan badgerGetMetricsReq, 1),
+		getL0StatsCh: make(chan badgerGetL0StatsReq, 1),
 		stopChan:     make(chan struct{}),
 		stopped:      make(chan struct{}),
 		interval:     updateInterval,
@@ -90,11 +104,11 @@ func (m *BadgerMonitor) GetEmergencyThreshold() float64 {
 func (m *BadgerMonitor) ForceEmergencyMode(duration time.Duration) {
 	m.emergencyModeUntil.Store(time.Now().Add(duration).UnixNano())
 	m.inEmergencyMode.Store(true)
-	log.W.F("⚠️  emergency mode forced for %v", duration)
+	log.W.F("emergency mode forced for %v", duration)
 }
 
 // TriggerCompaction initiates a Badger Flatten operation to compact all levels.
-// Runs synchronously — caller is responsible for setting STW flags before calling.
+// Runs synchronously - caller is responsible for setting STW flags before calling.
 func (m *BadgerMonitor) TriggerCompaction() error {
 	if m.db == nil || m.db.IsClosed() {
 		return nil
@@ -145,9 +159,9 @@ func (m *BadgerMonitor) IsCompacting() bool {
 
 // GetMetrics returns the current load metrics.
 func (m *BadgerMonitor) GetMetrics() loadmonitor.Metrics {
-	m.metricsLock.RLock()
-	defer m.metricsLock.RUnlock()
-	return m.cachedMetrics
+	resp := make(chan loadmonitor.Metrics, 1)
+	m.getMetricsCh <- badgerGetMetricsReq{resp: resp}
+	return <-resp
 }
 
 // RecordQueryLatency records a query latency sample using exponential moving average.
@@ -205,27 +219,35 @@ func (m *BadgerMonitor) Stop() {
 	<-m.stopped
 }
 
-// collectLoop periodically collects metrics from Badger.
+// collectLoop periodically collects metrics from Badger and serves actor requests.
 func (m *BadgerMonitor) collectLoop() {
 	defer close(m.stopped)
 
 	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()
 
+	var cachedMetrics loadmonitor.Metrics
+	var lastL0Tables int
+	var lastL0Score float64
+
 	for {
 		select {
 		case <-m.stopChan:
 			return
 		case <-ticker.C:
-			m.updateMetrics()
+			cachedMetrics, lastL0Tables, lastL0Score = m.updateMetrics()
+		case req := <-m.getMetricsCh:
+			req.resp <- cachedMetrics
+		case req := <-m.getL0StatsCh:
+			req.resp <- badgerL0Stats{tables: lastL0Tables, score: lastL0Score}
 		}
 	}
 }
 
 // updateMetrics collects current metrics from Badger and actual process memory.
-func (m *BadgerMonitor) updateMetrics() {
+func (m *BadgerMonitor) updateMetrics() (loadmonitor.Metrics, int, float64) {
 	if m.db == nil || m.db.IsClosed() {
-		return
+		return loadmonitor.Metrics{}, 0, 0
 	}
 
 	metrics := loadmonitor.Metrics{
@@ -255,12 +277,12 @@ func (m *BadgerMonitor) updateMetrics() {
 		// Memory pressure exceeds emergency threshold
 		metrics.InEmergencyMode = true
 		if !m.inEmergencyMode.Load() {
-			log.W.F("⚠️  entering emergency mode: memory pressure %.1f%% >= threshold %.1f%%",
+			log.W.F("entering emergency mode: memory pressure %.1f%% >= threshold %.1f%%",
 				metrics.MemoryPressure*100, emergencyThreshold*100)
 		}
 	} else {
 		if m.inEmergencyMode.Load() {
-			log.I.F("✅ exiting emergency mode: memory pressure %.1f%% < threshold %.1f%%",
+			log.I.F("exiting emergency mode: memory pressure %.1f%% < threshold %.1f%%",
 				metrics.MemoryPressure*100, emergencyThreshold*100)
 		}
 	}
@@ -329,17 +351,13 @@ func (m *BadgerMonitor) updateMetrics() {
 	metrics.QueryLatency = time.Duration(m.queryLatencyNs.Load())
 	metrics.WriteLatency = time.Duration(m.writeLatencyNs.Load())
 
-	// Update cached metrics
-	m.metricsLock.Lock()
-	m.cachedMetrics = metrics
-	m.lastL0Tables = l0Tables
-	m.lastL0Score = maxScore
-	m.metricsLock.Unlock()
+	return metrics, l0Tables, maxScore
 }
 
 // GetL0Stats returns L0-specific statistics for debugging.
 func (m *BadgerMonitor) GetL0Stats() (tables int, score float64) {
-	m.metricsLock.RLock()
-	defer m.metricsLock.RUnlock()
-	return m.lastL0Tables, m.lastL0Score
+	resp := make(chan badgerL0Stats, 1)
+	m.getL0StatsCh <- badgerGetL0StatsReq{resp: resp}
+	s := <-resp
+	return s.tables, s.score
 }

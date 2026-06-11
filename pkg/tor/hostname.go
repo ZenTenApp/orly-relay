@@ -4,110 +4,130 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"git.smesh.lol/orly/pkg/lol/chk"
 	"git.smesh.lol/orly/pkg/lol/log"
 )
 
+// onChangeReq sets the onChange callback.
+type onChangeReq struct {
+	fn   func(string)
+	resp chan struct{}
+}
+
+// addressReq queries the current address.
+type addressReq struct {
+	resp chan string
+}
+
 // HostnameWatcher watches the Tor hidden service hostname file for changes.
 // When Tor creates or updates a hidden service, it writes the .onion address
 // to a file called "hostname" in the HiddenServiceDir.
 type HostnameWatcher struct {
-	hsDir    string
-	address  string
-	onChange func(string)
+	hsDir string
 
-	stopCh chan struct{}
-	mu     sync.RWMutex
+	onChangeCh chan onChangeReq
+	addressCh  chan addressReq
+
+	stop chan struct{}
+	done chan struct{}
 }
 
 // NewHostnameWatcher creates a new hostname watcher for the given HiddenServiceDir.
 func NewHostnameWatcher(hsDir string) *HostnameWatcher {
 	return &HostnameWatcher{
-		hsDir:  hsDir,
-		stopCh: make(chan struct{}),
+		hsDir:      hsDir,
+		onChangeCh: make(chan onChangeReq),
+		addressCh:  make(chan addressReq),
+		stop:       make(chan struct{}),
+		done:       make(chan struct{}),
 	}
 }
 
 // OnChange sets a callback function to be called when the hostname changes.
 func (w *HostnameWatcher) OnChange(fn func(string)) {
-	w.mu.Lock()
-	w.onChange = fn
-	w.mu.Unlock()
+	resp := make(chan struct{}, 1)
+	w.onChangeCh <- onChangeReq{fn: fn, resp: resp}
+	<-resp
 }
 
 // Start begins watching the hostname file.
 func (w *HostnameWatcher) Start() error {
-	// Try to read immediately
-	if err := w.readHostname(); err != nil {
-		log.D.F("hostname file not yet available: %v", err)
-	}
-
-	// Start polling goroutine
-	go w.poll()
-
+	go w.run()
 	return nil
 }
 
 // Stop stops the hostname watcher.
 func (w *HostnameWatcher) Stop() {
-	close(w.stopCh)
+	close(w.stop)
+	<-w.done
 }
 
 // Address returns the current .onion address.
 func (w *HostnameWatcher) Address() string {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	return w.address
+	resp := make(chan string, 1)
+	w.addressCh <- addressReq{resp: resp}
+	return <-resp
 }
 
-// poll periodically checks the hostname file for changes.
-func (w *HostnameWatcher) poll() {
+// run is the actor goroutine that owns address and onChange state.
+func (w *HostnameWatcher) run() {
+	defer close(w.done)
+
+	var address string
+	var onChange func(string)
+
+	// Try initial read
+	if addr, err := w.readHostnameFile(); err != nil {
+		log.D.F("hostname file not yet available: %v", err)
+	} else if addr != "" {
+		address = addr
+	}
+
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-w.stopCh:
+		case <-w.stop:
 			return
+
+		case req := <-w.onChangeCh:
+			onChange = req.fn
+			close(req.resp)
+
+		case req := <-w.addressCh:
+			req.resp <- address
+
 		case <-ticker.C:
-			if err := w.readHostname(); err != nil {
-				// Only log at trace level to avoid spam
+			addr, err := w.readHostnameFile()
+			if err != nil {
 				log.T.F("hostname read: %v", err)
+				continue
+			}
+			if addr != "" && addr != address {
+				oldAddr := address
+				address = addr
+				if onChange != nil && addr != oldAddr {
+					onChange(addr)
+				}
 			}
 		}
 	}
 }
 
-// readHostname reads the hostname file and updates the address if changed.
-func (w *HostnameWatcher) readHostname() error {
+// readHostnameFile reads the hostname file and returns the address.
+func (w *HostnameWatcher) readHostnameFile() (string, error) {
 	path := filepath.Join(w.hsDir, "hostname")
 
 	data, err := os.ReadFile(path)
 	if chk.T(err) {
-		return err
+		return "", err
 	}
 
-	// Parse the address (file contains "xyz.onion\n")
 	addr := strings.TrimSpace(string(data))
-	if addr == "" {
-		return nil
-	}
-
-	w.mu.Lock()
-	oldAddr := w.address
-	w.address = addr
-	onChange := w.onChange
-	w.mu.Unlock()
-
-	// Call callback if address changed
-	if addr != oldAddr && onChange != nil {
-		onChange(addr)
-	}
-
-	return nil
+	return addr, nil
 }
 
 // HostnameFilePath returns the path to the hostname file.

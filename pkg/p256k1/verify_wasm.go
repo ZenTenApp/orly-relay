@@ -3,7 +3,6 @@
 package p256k1
 
 import (
-	"sync"
 	"unsafe"
 )
 
@@ -250,14 +249,10 @@ func secp256k1_schnorrsig_challenge(e *secp256k1_scalar, r32 []byte, msg []byte,
 // SCHNORR VERIFICATION
 // ============================================================================
 
-// Global precomputed context for Schnorr verification
-var (
-	schnorrVerifyContext     *secp256k1_context
-	schnorrVerifyContextOnce sync.Once
-)
+// schnorrVerifyContext is the global precomputed context for Schnorr verification.
+var schnorrVerifyContext *secp256k1_context
 
-// initSchnorrVerifyContext initializes the global Schnorr verification context
-func initSchnorrVerifyContext() {
+func init() {
 	schnorrVerifyContext = &secp256k1_context{
 		ecmult_gen_ctx: secp256k1_ecmult_gen_context{built: 1},
 		declassify:     0,
@@ -266,7 +261,6 @@ func initSchnorrVerifyContext() {
 
 // getSchnorrVerifyContext returns the precomputed Schnorr verification context
 func getSchnorrVerifyContext() *secp256k1_context {
-	schnorrVerifyContextOnce.Do(initSchnorrVerifyContext)
 	return schnorrVerifyContext
 }
 

@@ -3,7 +3,6 @@ package nrc
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"time"
 )
 
@@ -13,6 +12,39 @@ const (
 	// DefaultMaxSubscriptions is the default maximum subscriptions per session.
 	DefaultMaxSubscriptions = 100
 )
+
+// --- Session actor request types ---
+
+type sessAddSubReq struct {
+	subID string
+	resp  chan error
+}
+
+type sessRemoveSubReq struct {
+	subID string
+}
+
+type sessGetSubReq struct {
+	subID string
+	resp  chan *Subscription
+}
+
+type sessHasSubReq struct {
+	subID string
+	resp  chan bool
+}
+
+type sessSubCountReq struct {
+	resp chan int
+}
+
+type sessMarkEOSEReq struct {
+	subID string
+}
+
+type sessIncrementEventCountReq struct {
+	subID string
+}
 
 // Session represents an NRC client session through the tunnel.
 type Session struct {
@@ -32,18 +64,24 @@ type Session struct {
 	// LastActivity is the timestamp of the last activity.
 	LastActivity time.Time
 
-	// subscriptions maps client subscription IDs to internal subscription state.
-	subscriptions map[string]*Subscription
-	// subMu protects the subscriptions map.
-	subMu sync.RWMutex
+	// actor channels for subscription state
+	addSubCh          chan sessAddSubReq
+	removeSubCh       chan sessRemoveSubReq
+	getSubCh          chan sessGetSubReq
+	hasSubCh          chan sessHasSubReq
+	subCountCh        chan sessSubCountReq
+	markEOSECh        chan sessMarkEOSEReq
+	incrEventCountCh  chan sessIncrementEventCountReq
 
 	// ctx is the session context.
-	ctx context.Context
-	// cancel cancels the session context.
+	ctx    context.Context
 	cancel context.CancelFunc
 
 	// eventCh receives events from the local relay for this session.
 	eventCh chan *SessionEvent
+
+	stop chan struct{}
+	done chan struct{}
 }
 
 // Subscription represents a tunneled subscription.
@@ -72,7 +110,7 @@ type SessionEvent struct {
 func NewSession(id string, clientPubkey, conversationKey []byte, authMode AuthMode, deviceName string) *Session {
 	ctx, cancel := context.WithCancel(context.Background())
 	now := time.Now()
-	return &Session{
+	s := &Session{
 		ID:              id,
 		ClientPubkey:    clientPubkey,
 		ConversationKey: conversationKey,
@@ -80,10 +118,63 @@ func NewSession(id string, clientPubkey, conversationKey []byte, authMode AuthMo
 		AuthMode:        authMode,
 		CreatedAt:       now,
 		LastActivity:    now,
-		subscriptions:   make(map[string]*Subscription),
-		ctx:             ctx,
-		cancel:          cancel,
-		eventCh:         make(chan *SessionEvent, 100),
+
+		addSubCh:         make(chan sessAddSubReq),
+		removeSubCh:      make(chan sessRemoveSubReq, 16),
+		getSubCh:         make(chan sessGetSubReq),
+		hasSubCh:         make(chan sessHasSubReq),
+		subCountCh:       make(chan sessSubCountReq),
+		markEOSECh:       make(chan sessMarkEOSEReq, 16),
+		incrEventCountCh: make(chan sessIncrementEventCountReq, 16),
+
+		ctx:     ctx,
+		cancel:  cancel,
+		eventCh: make(chan *SessionEvent, 100),
+
+		stop: make(chan struct{}),
+		done: make(chan struct{}),
+	}
+	go s.run()
+	return s
+}
+
+func (s *Session) run() {
+	defer close(s.done)
+
+	subscriptions := make(map[string]*Subscription)
+
+	for {
+		select {
+		case <-s.stop:
+			return
+		case req := <-s.addSubCh:
+			if len(subscriptions) >= DefaultMaxSubscriptions {
+				req.resp <- ErrTooManySubscriptions
+			} else {
+				subscriptions[req.subID] = &Subscription{
+					ID:        req.subID,
+					CreatedAt: time.Now(),
+				}
+				req.resp <- nil
+			}
+		case req := <-s.removeSubCh:
+			delete(subscriptions, req.subID)
+		case req := <-s.getSubCh:
+			req.resp <- subscriptions[req.subID]
+		case req := <-s.hasSubCh:
+			_, ok := subscriptions[req.subID]
+			req.resp <- ok
+		case req := <-s.subCountCh:
+			req.resp <- len(subscriptions)
+		case req := <-s.markEOSECh:
+			if sub, ok := subscriptions[req.subID]; ok {
+				sub.EOSESent = true
+			}
+		case req := <-s.incrEventCountCh:
+			if sub, ok := subscriptions[req.subID]; ok {
+				sub.EventCount++
+			}
+		}
 	}
 }
 
@@ -95,6 +186,8 @@ func (s *Session) Context() context.Context {
 // Close closes the session and cleans up resources.
 func (s *Session) Close() {
 	s.cancel()
+	close(s.stop)
+	<-s.done
 	close(s.eventCh)
 }
 
@@ -111,7 +204,6 @@ func (s *Session) SendEvent(ev *SessionEvent) bool {
 	case <-s.ctx.Done():
 		return false
 	default:
-		// Channel full, drop event
 		return false
 	}
 }
@@ -128,72 +220,117 @@ func (s *Session) IsExpired(timeout time.Duration) bool {
 
 // AddSubscription adds a new subscription to the session.
 func (s *Session) AddSubscription(subID string) error {
-	s.subMu.Lock()
-	defer s.subMu.Unlock()
-
-	if len(s.subscriptions) >= DefaultMaxSubscriptions {
+	resp := make(chan error, 1)
+	select {
+	case s.addSubCh <- sessAddSubReq{subID: subID, resp: resp}:
+		return <-resp
+	case <-s.stop:
 		return ErrTooManySubscriptions
 	}
-
-	s.subscriptions[subID] = &Subscription{
-		ID:        subID,
-		CreatedAt: time.Now(),
-	}
-	return nil
 }
 
 // RemoveSubscription removes a subscription from the session.
 func (s *Session) RemoveSubscription(subID string) {
-	s.subMu.Lock()
-	defer s.subMu.Unlock()
-	delete(s.subscriptions, subID)
+	select {
+	case s.removeSubCh <- sessRemoveSubReq{subID: subID}:
+	case <-s.stop:
+	}
 }
 
 // GetSubscription returns a subscription by ID.
 func (s *Session) GetSubscription(subID string) *Subscription {
-	s.subMu.RLock()
-	defer s.subMu.RUnlock()
-	return s.subscriptions[subID]
+	resp := make(chan *Subscription, 1)
+	select {
+	case s.getSubCh <- sessGetSubReq{subID: subID, resp: resp}:
+		return <-resp
+	case <-s.stop:
+		return nil
+	}
 }
 
 // HasSubscription checks if a subscription exists.
 func (s *Session) HasSubscription(subID string) bool {
-	s.subMu.RLock()
-	defer s.subMu.RUnlock()
-	_, ok := s.subscriptions[subID]
-	return ok
+	resp := make(chan bool, 1)
+	select {
+	case s.hasSubCh <- sessHasSubReq{subID: subID, resp: resp}:
+		return <-resp
+	case <-s.stop:
+		return false
+	}
 }
 
 // SubscriptionCount returns the number of active subscriptions.
 func (s *Session) SubscriptionCount() int {
-	s.subMu.RLock()
-	defer s.subMu.RUnlock()
-	return len(s.subscriptions)
+	resp := make(chan int, 1)
+	select {
+	case s.subCountCh <- sessSubCountReq{resp: resp}:
+		return <-resp
+	case <-s.stop:
+		return 0
+	}
 }
 
 // MarkEOSE marks a subscription as having sent EOSE.
 func (s *Session) MarkEOSE(subID string) {
-	s.subMu.Lock()
-	defer s.subMu.Unlock()
-	if sub, ok := s.subscriptions[subID]; ok {
-		sub.EOSESent = true
+	select {
+	case s.markEOSECh <- sessMarkEOSEReq{subID: subID}:
+	case <-s.stop:
 	}
 }
 
 // IncrementEventCount increments the event count for a subscription.
 func (s *Session) IncrementEventCount(subID string) {
-	s.subMu.Lock()
-	defer s.subMu.Unlock()
-	if sub, ok := s.subscriptions[subID]; ok {
-		sub.EventCount++
+	select {
+	case s.incrEventCountCh <- sessIncrementEventCountReq{subID: subID}:
+	case <-s.stop:
 	}
+}
+
+// --- SessionManager actor request types ---
+
+type smGetReq struct {
+	sessionID string
+	resp      chan *Session
+}
+
+type smGetOrCreateReq struct {
+	sessionID       string
+	clientPubkey    []byte
+	conversationKey []byte
+	authMode        AuthMode
+	deviceName      string
+	resp            chan *Session
+}
+
+type smRemoveReq struct {
+	sessionID string
+}
+
+type smCleanupExpiredReq struct {
+	resp chan int
+}
+
+type smCountReq struct {
+	resp chan int
+}
+
+type smCloseReq struct {
+	resp chan struct{}
 }
 
 // SessionManager manages multiple NRC sessions.
 type SessionManager struct {
-	sessions map[string]*Session
-	mu       sync.RWMutex
-	timeout  time.Duration
+	timeout time.Duration
+
+	getCh             chan smGetReq
+	getOrCreateCh     chan smGetOrCreateReq
+	removeCh          chan smRemoveReq
+	cleanupExpiredCh  chan smCleanupExpiredReq
+	countCh           chan smCountReq
+	closeCh           chan smCloseReq
+
+	stop chan struct{}
+	done chan struct{}
 }
 
 // NewSessionManager creates a new session manager.
@@ -201,77 +338,143 @@ func NewSessionManager(timeout time.Duration) *SessionManager {
 	if timeout == 0 {
 		timeout = DefaultSessionTimeout
 	}
-	return &SessionManager{
-		sessions: make(map[string]*Session),
-		timeout:  timeout,
+	m := &SessionManager{
+		timeout: timeout,
+
+		getCh:            make(chan smGetReq),
+		getOrCreateCh:    make(chan smGetOrCreateReq),
+		removeCh:         make(chan smRemoveReq, 16),
+		cleanupExpiredCh: make(chan smCleanupExpiredReq),
+		countCh:          make(chan smCountReq),
+		closeCh:          make(chan smCloseReq),
+
+		stop: make(chan struct{}),
+		done: make(chan struct{}),
+	}
+	go m.run()
+	return m
+}
+
+func (m *SessionManager) run() {
+	defer close(m.done)
+
+	sessions := make(map[string]*Session)
+
+	for {
+		select {
+		case <-m.stop:
+			// Close all sessions
+			for _, session := range sessions {
+				session.Close()
+			}
+			return
+		case req := <-m.getCh:
+			req.resp <- sessions[req.sessionID]
+		case req := <-m.getOrCreateCh:
+			if session, ok := sessions[req.sessionID]; ok {
+				session.Touch()
+				req.resp <- session
+			} else {
+				session := NewSession(req.sessionID, req.clientPubkey, req.conversationKey, req.authMode, req.deviceName)
+				sessions[req.sessionID] = session
+				req.resp <- session
+			}
+		case req := <-m.removeCh:
+			if session, ok := sessions[req.sessionID]; ok {
+				session.Close()
+				delete(sessions, req.sessionID)
+			}
+		case req := <-m.cleanupExpiredCh:
+			var removed int
+			for id, session := range sessions {
+				if session.IsExpired(m.timeout) {
+					session.Close()
+					delete(sessions, id)
+					removed++
+				}
+			}
+			req.resp <- removed
+		case req := <-m.countCh:
+			req.resp <- len(sessions)
+		case req := <-m.closeCh:
+			for _, session := range sessions {
+				session.Close()
+			}
+			sessions = make(map[string]*Session)
+			req.resp <- struct{}{}
+		}
 	}
 }
 
 // Get returns a session by ID.
 func (m *SessionManager) Get(sessionID string) *Session {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.sessions[sessionID]
+	resp := make(chan *Session, 1)
+	select {
+	case m.getCh <- smGetReq{sessionID: sessionID, resp: resp}:
+		return <-resp
+	case <-m.stop:
+		return nil
+	}
 }
 
 // GetOrCreate gets an existing session or creates a new one.
 func (m *SessionManager) GetOrCreate(sessionID string, clientPubkey, conversationKey []byte, authMode AuthMode, deviceName string) *Session {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if session, ok := m.sessions[sessionID]; ok {
-		session.Touch()
-		return session
+	resp := make(chan *Session, 1)
+	select {
+	case m.getOrCreateCh <- smGetOrCreateReq{
+		sessionID:       sessionID,
+		clientPubkey:    clientPubkey,
+		conversationKey: conversationKey,
+		authMode:        authMode,
+		deviceName:      deviceName,
+		resp:            resp,
+	}:
+		return <-resp
+	case <-m.stop:
+		return nil
 	}
-
-	session := NewSession(sessionID, clientPubkey, conversationKey, authMode, deviceName)
-	m.sessions[sessionID] = session
-	return session
 }
 
 // Remove removes a session.
 func (m *SessionManager) Remove(sessionID string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if session, ok := m.sessions[sessionID]; ok {
-		session.Close()
-		delete(m.sessions, sessionID)
+	select {
+	case m.removeCh <- smRemoveReq{sessionID: sessionID}:
+	case <-m.stop:
 	}
 }
 
 // CleanupExpired removes expired sessions.
 func (m *SessionManager) CleanupExpired() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	var removed int
-	for id, session := range m.sessions {
-		if session.IsExpired(m.timeout) {
-			session.Close()
-			delete(m.sessions, id)
-			removed++
-		}
+	resp := make(chan int, 1)
+	select {
+	case m.cleanupExpiredCh <- smCleanupExpiredReq{resp: resp}:
+		return <-resp
+	case <-m.stop:
+		return 0
 	}
-	return removed
 }
 
 // Count returns the number of active sessions.
 func (m *SessionManager) Count() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.sessions)
+	resp := make(chan int, 1)
+	select {
+	case m.countCh <- smCountReq{resp: resp}:
+		return <-resp
+	case <-m.stop:
+		return 0
+	}
 }
 
 // Close closes all sessions.
 func (m *SessionManager) Close() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for _, session := range m.sessions {
-		session.Close()
+	resp := make(chan struct{}, 1)
+	select {
+	case m.closeCh <- smCloseReq{resp: resp}:
+		<-resp
+	case <-m.stop:
 	}
-	m.sessions = make(map[string]*Session)
+	close(m.stop)
+	<-m.done
 }
 
 // RequestMessage represents a parsed NRC request message.
@@ -305,8 +508,6 @@ type ChunkMessage struct {
 
 // ParseRequestContent parses the decrypted content of an NRC request.
 func ParseRequestContent(content []byte) (*RequestMessage, error) {
-	// Content format: {"type": "EVENT|REQ|...", "payload": [...]}
-	// Parse as generic JSON
 	var msg struct {
 		Type    string `json:"type"`
 		Payload []any  `json:"payload"`

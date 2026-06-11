@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"time"
 
 	"git.smesh.lol/orly/pkg/database"
@@ -37,33 +36,95 @@ type channelRefCacheEntry struct {
 	cachedAt     time.Time
 }
 
+// -- actor request types --
+
+type cmCacheLoadReq struct {
+	key  string
+	resp chan cmCacheLoadResp
+}
+type cmCacheLoadResp struct {
+	info *channelAccessInfo
+	ok   bool
+}
+type cmCacheStoreReq struct {
+	key  string
+	info *channelAccessInfo
+}
+type cmCacheDeleteReq struct {
+	key string
+}
+type cmRefLoadReq struct {
+	key  string
+	resp chan cmRefLoadResp
+}
+type cmRefLoadResp struct {
+	entry *channelRefCacheEntry
+	ok    bool
+}
+type cmRefStoreReq struct {
+	key   string
+	entry *channelRefCacheEntry
+}
+
 // ChannelMembership manages channel access control lookups with caching.
 type ChannelMembership struct {
-	db       database.Database
-	cache    sync.Map // map[string]*channelAccessInfo (channel ID hex → info)
-	refCache sync.Map // map[string]*channelRefCacheEntry (event ID hex → channel ref info)
+	db database.Database
+
+	// Actor channels for cache and refCache
+	cacheLoadCh   chan cmCacheLoadReq
+	cacheStoreCh  chan cmCacheStoreReq
+	cacheDeleteCh chan cmCacheDeleteReq
+	refLoadCh     chan cmRefLoadReq
+	refStoreCh    chan cmRefStoreReq
+	done          chan struct{}
 }
 
 // NewChannelMembership creates a new channel membership checker.
 func NewChannelMembership(db database.Database) *ChannelMembership {
-	return &ChannelMembership{db: db}
+	cm := &ChannelMembership{
+		db:            db,
+		cacheLoadCh:   make(chan cmCacheLoadReq),
+		cacheStoreCh:  make(chan cmCacheStoreReq, 16),
+		cacheDeleteCh: make(chan cmCacheDeleteReq, 16),
+		refLoadCh:     make(chan cmRefLoadReq),
+		refStoreCh:    make(chan cmRefStoreReq, 16),
+		done:          make(chan struct{}),
+	}
+	go cm.actor()
+	return cm
+}
+
+func (cm *ChannelMembership) actor() {
+	defer close(cm.done)
+	cache := make(map[string]*channelAccessInfo)
+	refCache := make(map[string]*channelRefCacheEntry)
+
+	for {
+		select {
+		case req := <-cm.cacheLoadCh:
+			info, ok := cache[req.key]
+			req.resp <- cmCacheLoadResp{info: info, ok: ok}
+		case req := <-cm.cacheStoreCh:
+			cache[req.key] = req.info
+		case req := <-cm.cacheDeleteCh:
+			delete(cache, req.key)
+		case req := <-cm.refLoadCh:
+			entry, ok := refCache[req.key]
+			req.resp <- cmRefLoadResp{entry: entry, ok: ok}
+		case req := <-cm.refStoreCh:
+			refCache[req.key] = req.entry
+		}
+	}
 }
 
 // InvalidateChannel removes a channel's cached access info, forcing a re-fetch
 // on the next check. Call this when a new kind 41 event is ingested.
 func (cm *ChannelMembership) InvalidateChannel(channelIDHex string) {
-	cm.cache.Delete(channelIDHex)
+	cm.cacheDeleteCh <- cmCacheDeleteReq{key: channelIDHex}
 }
 
 // IsChannelMember checks whether the given pubkey (binary) is allowed to access
 // channel events of the given kind. Returns true if access is granted.
-//
-// Access rules:
-//   - Kinds 40, 41 (create, metadata): always allowed for any authenticated user (discovery)
-//   - Kinds 42-44 (message, hide, mute): depends on channel access mode
-//   - "open": all authenticated users allowed
-//   - "whitelist": only creator, mods, members, and invited users
-//   - "blacklist": everyone except blocked and rejected users
 func (cm *ChannelMembership) IsChannelMember(
 	ev *event.E,
 	userPubkey []byte,
@@ -81,7 +142,6 @@ func (cm *ChannelMembership) IsChannelMember(
 	// For kinds 42-44, extract channel ID from #e tag
 	channelIDHex := extractChannelID(ev)
 	if channelIDHex == "" {
-		// No channel reference — allow (might be malformed, let other checks handle)
 		return true
 	}
 
@@ -89,17 +149,13 @@ func (cm *ChannelMembership) IsChannelMember(
 
 	info, err := cm.getChannelInfo(ctx, channelIDHex)
 	if err != nil || info == nil {
-		// If we can't determine channel info, allow access (fail open for now)
 		log.D.F("channel membership check: no info for channel %s, allowing", channelIDHex)
 		return true
 	}
 
-	// Creator always has access
 	if info.creator == userHex {
 		return true
 	}
-
-	// Mods always have access
 	if info.mods[userHex] {
 		return true
 	}
@@ -115,7 +171,6 @@ func (cm *ChannelMembership) IsChannelMember(
 }
 
 // IsChannelMemberByID checks membership using a channel ID directly (not from an event).
-// Used by the publisher when delivering events.
 func (cm *ChannelMembership) IsChannelMemberByID(
 	channelIDHex string,
 	eventKind uint16,
@@ -125,11 +180,9 @@ func (cm *ChannelMembership) IsChannelMemberByID(
 	if len(userPubkey) == 0 {
 		return false
 	}
-
 	if kind.IsDiscoverableChannelKind(eventKind) {
 		return true
 	}
-
 	if channelIDHex == "" {
 		return true
 	}
@@ -144,7 +197,6 @@ func (cm *ChannelMembership) IsChannelMemberByID(
 	if info.creator == userHex {
 		return true
 	}
-
 	if info.mods[userHex] {
 		return true
 	}
@@ -160,9 +212,7 @@ func (cm *ChannelMembership) IsChannelMemberByID(
 }
 
 // ReferencesChannelEvent checks whether any e-tag in the event references a
-// restricted channel event (kind 42-44). If so, returns the channel ID and true.
-// Used to enforce channel membership for non-channel kinds (reactions, reposts,
-// reports, zaps, deletions) that reference channel events.
+// restricted channel event (kind 42-44).
 func (cm *ChannelMembership) ReferencesChannelEvent(
 	ev *event.E,
 	ctx context.Context,
@@ -185,8 +235,11 @@ func (cm *ChannelMembership) ReferencesChannelEvent(
 		}
 
 		// Check reference cache first
-		if cached, ok := cm.refCache.Load(refIDHex); ok {
-			entry := cached.(*channelRefCacheEntry)
+		resp := make(chan cmRefLoadResp, 1)
+		cm.refLoadCh <- cmRefLoadReq{key: refIDHex, resp: resp}
+		r := <-resp
+		if r.ok {
+			entry := r.entry
 			if time.Since(entry.cachedAt) < channelCacheTTL {
 				if entry.isChannel {
 					return entry.channelIDHex, true
@@ -202,35 +255,32 @@ func (cm *ChannelMembership) ReferencesChannelEvent(
 		}
 		ser, err := cm.db.GetSerialById(refIDBytes)
 		if err != nil || ser == nil {
-			// Cache negative result
-			cm.refCache.Store(refIDHex, &channelRefCacheEntry{
+			cm.refStoreCh <- cmRefStoreReq{key: refIDHex, entry: &channelRefCacheEntry{
 				cachedAt: time.Now(),
-			})
+			}}
 			continue
 		}
 		refEv, err := cm.db.FetchEventBySerial(ser)
 		if err != nil || refEv == nil {
-			cm.refCache.Store(refIDHex, &channelRefCacheEntry{
+			cm.refStoreCh <- cmRefStoreReq{key: refIDHex, entry: &channelRefCacheEntry{
 				cachedAt: time.Now(),
-			})
+			}}
 			continue
 		}
 
 		if kind.IsChannelKind(refEv.Kind) && !kind.IsDiscoverableChannelKind(refEv.Kind) {
-			// It's a restricted channel event (42-44). Extract the channel ID.
 			chID := extractChannelID(refEv)
-			cm.refCache.Store(refIDHex, &channelRefCacheEntry{
+			cm.refStoreCh <- cmRefStoreReq{key: refIDHex, entry: &channelRefCacheEntry{
 				channelIDHex: chID,
 				isChannel:    true,
 				cachedAt:     time.Now(),
-			})
+			}}
 			return chID, true
 		}
 
-		// Not a channel event — cache that too
-		cm.refCache.Store(refIDHex, &channelRefCacheEntry{
+		cm.refStoreCh <- cmRefStoreReq{key: refIDHex, entry: &channelRefCacheEntry{
 			cachedAt: time.Now(),
-		})
+		}}
 	}
 	return "", false
 }
@@ -241,19 +291,20 @@ func (cm *ChannelMembership) getChannelInfo(
 	channelIDHex string,
 ) (*channelAccessInfo, error) {
 	// Check cache
-	if cached, ok := cm.cache.Load(channelIDHex); ok {
-		info := cached.(*channelAccessInfo)
+	resp := make(chan cmCacheLoadResp, 1)
+	cm.cacheLoadCh <- cmCacheLoadReq{key: channelIDHex, resp: resp}
+	r := <-resp
+	if r.ok {
+		info := r.info
 		if time.Since(info.cachedAt) < channelCacheTTL {
 			return info, nil
 		}
-		// Expired, fall through to re-fetch
 	}
 
 	// Query for latest kind 41 metadata event for this channel
 	f := filter.New()
 	f.Kinds = kind.NewS(kind.ChannelMetadata)
 
-	// Build #e tag filter for the channel ID
 	channelIDBytes, err := hexenc.Dec(channelIDHex)
 	if err != nil {
 		return nil, err
@@ -278,7 +329,6 @@ func (cm *ChannelMembership) getChannelInfo(
 	if len(events) > 0 {
 		info = parseChannelMetadata(events[0])
 	} else {
-		// No kind 41 found. Try kind 40 (channel creation) to get creator.
 		f2 := filter.New()
 		f2.Ids = tag.NewFromBytesSlice(channelIDBytes)
 		f2.Kinds = kind.NewS(kind.ChannelCreation)
@@ -290,7 +340,6 @@ func (cm *ChannelMembership) getChannelInfo(
 			return nil, err2
 		}
 
-		// Default to open if no metadata exists
 		info = &channelAccessInfo{
 			creator:    hexenc.Enc(events2[0].Pubkey),
 			accessMode: "open",
@@ -303,7 +352,7 @@ func (cm *ChannelMembership) getChannelInfo(
 	}
 
 	info.cachedAt = time.Now()
-	cm.cache.Store(channelIDHex, info)
+	cm.cacheStoreCh <- cmCacheStoreReq{key: channelIDHex, info: info}
 	return info, nil
 }
 
@@ -319,11 +368,10 @@ func parseChannelMetadata(ev *event.E) *channelAccessInfo {
 		rejected:   make(map[string]bool),
 	}
 
-	// Parse content JSON for access_mode
 	if len(ev.Content) > 0 {
 		var content struct {
 			AccessMode string `json:"access_mode"`
-			InviteOnly bool   `json:"invite_only"` // backward compat
+			InviteOnly bool   `json:"invite_only"`
 		}
 		if err := json.Unmarshal(ev.Content, &content); err == nil {
 			if content.AccessMode != "" {
@@ -334,7 +382,6 @@ func parseChannelMetadata(ev *event.E) *channelAccessInfo {
 		}
 	}
 
-	// Parse p-tags for roles
 	pTags := ev.Tags.GetAll([]byte("p"))
 	for _, pt := range pTags {
 		if pt.Len() < 3 {
@@ -363,7 +410,6 @@ func parseChannelMetadata(ev *event.E) *channelAccessInfo {
 }
 
 // extractChannelID gets the channel ID (hex) from an event's #e tag.
-// For kinds 42-44, the channel reference is in the first #e tag.
 func extractChannelID(ev *event.E) string {
 	if ev.Tags == nil {
 		return ""
@@ -387,8 +433,6 @@ func ExtractChannelIDFromEvent(ev *event.E) string {
 }
 
 // IsChannelEvent returns true if the event is a channel kind (40-44).
-// Convenience wrapper around kind.IsChannelKind.
 func IsChannelEvent(ev *event.E) bool {
 	return kind.IsChannelKind(ev.Kind)
 }
-

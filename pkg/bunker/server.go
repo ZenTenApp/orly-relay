@@ -8,15 +8,13 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
-	"golang.zx2c4.com/wireguard/tun/netstack"
 	"git.smesh.lol/orly/pkg/lol/chk"
 	"git.smesh.lol/orly/pkg/lol/log"
-
 	"git.smesh.lol/orly/pkg/nostr/interfaces/signer"
+	"github.com/gorilla/websocket"
+	"golang.zx2c4.com/wireguard/tun/netstack"
 )
 
 var upgrader = websocket.Upgrader{
@@ -32,13 +30,31 @@ type Server struct {
 	netstack    *netstack.Net // WireGuard netstack for listening
 	listenAddr  string        // e.g., "10.73.0.1:3335"
 
-	sessions   map[string]*Session // Connection ID -> Session
-	sessionsMu sync.RWMutex
+	sessions map[string]*Session // Connection ID -> Session
+
+	// Actor channels for sessions state
+	registerCh   chan registerReq
+	unregisterCh chan unregisterReq
+	countCh      chan countReq
 
 	server *http.Server
 	ctx    context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	stop   chan struct{}
+	done   chan struct{}
+}
+
+type registerReq struct {
+	id      string
+	session *Session
+}
+
+type unregisterReq struct {
+	id string
+}
+
+type countReq struct {
+	resp chan int
 }
 
 // Config holds bunker server configuration.
@@ -53,14 +69,39 @@ type Config struct {
 func New(cfg *Config) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return &Server{
-		relaySigner: cfg.RelaySigner,
-		relayPubkey: cfg.RelayPubkey,
-		netstack:    cfg.Netstack,
-		listenAddr:  cfg.ListenAddr,
-		sessions:    make(map[string]*Session),
-		ctx:         ctx,
-		cancel:      cancel,
+	s := &Server{
+		relaySigner:  cfg.RelaySigner,
+		relayPubkey:  cfg.RelayPubkey,
+		netstack:     cfg.Netstack,
+		listenAddr:   cfg.ListenAddr,
+		sessions:     make(map[string]*Session),
+		registerCh:   make(chan registerReq, 16),
+		unregisterCh: make(chan unregisterReq, 16),
+		countCh:      make(chan countReq),
+		ctx:          ctx,
+		cancel:       cancel,
+		stop:         make(chan struct{}),
+		done:         make(chan struct{}),
+	}
+
+	go s.actor()
+
+	return s
+}
+
+func (s *Server) actor() {
+	defer close(s.done)
+	for {
+		select {
+		case <-s.stop:
+			return
+		case req := <-s.registerCh:
+			s.sessions[req.id] = req.session
+		case req := <-s.unregisterCh:
+			delete(s.sessions, req.id)
+		case req := <-s.countCh:
+			req.resp <- len(s.sessions)
+		}
 	}
 }
 
@@ -102,9 +143,7 @@ func (s *Server) Start() error {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	s.wg.Add(1)
 	go func() {
-		defer s.wg.Done()
 		if err := s.server.Serve(listener); err != nil && err != http.ErrServerClosed {
 			log.E.F("bunker server error: %v", err)
 		}
@@ -126,7 +165,8 @@ func (s *Server) Stop() error {
 		}
 	}
 
-	s.wg.Wait()
+	close(s.stop)
+	<-s.done
 	log.I.F("NIP-46 bunker server stopped")
 	return nil
 }
@@ -142,24 +182,20 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	session := NewSession(s.ctx, conn, s.relaySigner, s.relayPubkey)
 
 	// Register session
-	s.sessionsMu.Lock()
-	s.sessions[session.ID] = session
-	s.sessionsMu.Unlock()
+	s.registerCh <- registerReq{id: session.ID, session: session}
 
 	// Handle session
 	session.Handle()
 
 	// Unregister session
-	s.sessionsMu.Lock()
-	delete(s.sessions, session.ID)
-	s.sessionsMu.Unlock()
+	s.unregisterCh <- unregisterReq{id: session.ID}
 }
 
 // SessionCount returns the number of active sessions.
 func (s *Server) SessionCount() int {
-	s.sessionsMu.RLock()
-	defer s.sessionsMu.RUnlock()
-	return len(s.sessions)
+	resp := make(chan int, 1)
+	s.countCh <- countReq{resp: resp}
+	return <-resp
 }
 
 // RelayPubkeyHex returns the relay's public key as hex.

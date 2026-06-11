@@ -4,10 +4,15 @@ package p256k1
 
 import (
 	"errors"
-	"sync"
 
 	"github.com/ebitengine/purego"
 )
+
+// request types for LibSecp256k1 actor
+type libSecpCallReq struct {
+	fn   func(*LibSecp256k1) interface{}
+	resp chan interface{}
+}
 
 // LibSecp256k1 wraps the native libsecp256k1.so library using purego for CGO-free operation.
 // This provides a way to benchmark against the C implementation without CGO.
@@ -15,7 +20,9 @@ type LibSecp256k1 struct {
 	lib    uintptr
 	ctx    uintptr
 	loaded bool
-	mu     sync.RWMutex
+	callCh chan libSecpCallReq
+	stop   chan struct{}
+	done   chan struct{}
 
 	// Function pointers
 	contextCreate        func(uint) uintptr
@@ -53,19 +60,17 @@ const (
 	libContextNone = 1
 )
 
-// Global instance
+// Global instance - initialized once via init-once gate channel.
 var (
 	libSecp        *LibSecp256k1
-	libSecpOnce    sync.Once
 	libSecpInitErr error
+	libSecpInitGate = make(chan struct{})
 )
 
-// GetLibSecp256k1 returns the global LibSecp256k1 instance, loading it if necessary.
-// Returns nil and an error if the library cannot be loaded.
-func GetLibSecp256k1() (*LibSecp256k1, error) {
-	libSecpOnce.Do(func() {
-		libSecp = &LibSecp256k1{}
-		// Try multiple paths to find the library
+func init() {
+	go func() {
+		defer close(libSecpInitGate)
+		libSecp = newLibSecp256k1()
 		paths := []string{
 			"./libsecp256k1.so",
 			"../libsecp256k1.so",
@@ -73,25 +78,69 @@ func GetLibSecp256k1() (*LibSecp256k1, error) {
 			"libsecp256k1.so",
 		}
 		for _, path := range paths {
-			err := libSecp.Load(path)
+			err := libSecp.loadInternal(path)
 			if err == nil {
 				libSecpInitErr = nil
 				return
 			}
 			libSecpInitErr = err
 		}
-	})
+	}()
+}
+
+// GetLibSecp256k1 returns the global LibSecp256k1 instance, loading it if necessary.
+// Returns nil and an error if the library cannot be loaded.
+func GetLibSecp256k1() (*LibSecp256k1, error) {
+	<-libSecpInitGate
 	if libSecpInitErr != nil {
 		return nil, libSecpInitErr
 	}
 	return libSecp, nil
 }
 
-// Load loads the libsecp256k1.so library from the given path.
-func (l *LibSecp256k1) Load(path string) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+// newLibSecp256k1 creates a new LibSecp256k1 with its actor goroutine.
+func newLibSecp256k1() *LibSecp256k1 {
+	l := &LibSecp256k1{
+		callCh: make(chan libSecpCallReq),
+		stop:   make(chan struct{}),
+		done:   make(chan struct{}),
+	}
+	go l.run()
+	return l
+}
 
+func (l *LibSecp256k1) run() {
+	defer close(l.done)
+	for {
+		select {
+		case req := <-l.callCh:
+			req.resp <- req.fn(l)
+		case <-l.stop:
+			return
+		}
+	}
+}
+
+// call sends a function to the actor and returns the result.
+func (l *LibSecp256k1) call(fn func(*LibSecp256k1) interface{}) interface{} {
+	resp := make(chan interface{}, 1)
+	l.callCh <- libSecpCallReq{fn: fn, resp: resp}
+	return <-resp
+}
+
+// Load loads the libsecp256k1.so library from the given path (through actor).
+func (l *LibSecp256k1) Load(path string) error {
+	result := l.call(func(ll *LibSecp256k1) interface{} {
+		return ll.loadInternal(path)
+	})
+	if result == nil {
+		return nil
+	}
+	return result.(error)
+}
+
+// loadInternal loads the library (must be called from actor or during init).
+func (l *LibSecp256k1) loadInternal(path string) error {
 	if l.loaded {
 		return nil
 	}
@@ -155,248 +204,230 @@ func (l *LibSecp256k1) Load(path string) error {
 
 // Close releases the library resources.
 func (l *LibSecp256k1) Close() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if !l.loaded {
-		return
-	}
-
-	if l.ctx != 0 {
-		l.contextDestroy(l.ctx)
-		l.ctx = 0
-	}
-
-	if l.lib != 0 {
-		purego.Dlclose(l.lib)
-		l.lib = 0
-	}
-
-	l.loaded = false
+	l.call(func(ll *LibSecp256k1) interface{} {
+		if !ll.loaded {
+			return nil
+		}
+		if ll.ctx != 0 {
+			ll.contextDestroy(ll.ctx)
+			ll.ctx = 0
+		}
+		if ll.lib != 0 {
+			purego.Dlclose(ll.lib)
+			ll.lib = 0
+		}
+		ll.loaded = false
+		return nil
+	})
 }
 
 // IsLoaded returns true if the library is loaded.
 func (l *LibSecp256k1) IsLoaded() bool {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	return l.loaded
+	result := l.call(func(ll *LibSecp256k1) interface{} {
+		return ll.loaded
+	})
+	return result.(bool)
 }
 
 // SchnorrSign signs a 32-byte message using a 32-byte secret key.
 // Returns a 64-byte signature.
 func (l *LibSecp256k1) SchnorrSign(msg32, seckey32 []byte) ([]byte, error) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	if !l.loaded {
-		return nil, errors.New("library not loaded")
+	type result struct {
+		sig []byte
+		err error
 	}
-	if len(msg32) != 32 {
-		return nil, errors.New("message must be 32 bytes")
-	}
-	if len(seckey32) != 32 {
-		return nil, errors.New("secret key must be 32 bytes")
-	}
-
-	// Create keypair from secret key
-	keypair := make([]byte, 96) // secp256k1_keypair is 96 bytes
-	if l.keypairCreate(l.ctx, &keypair[0], &seckey32[0]) != 1 {
-		return nil, errors.New("failed to create keypair")
-	}
-
-	// Sign
-	sig := make([]byte, 64)
-	if l.schnorrsigSign32(l.ctx, &sig[0], &msg32[0], &keypair[0], nil) != 1 {
-		return nil, errors.New("signing failed")
-	}
-
-	return sig, nil
+	r := l.call(func(ll *LibSecp256k1) interface{} {
+		if !ll.loaded {
+			return result{nil, errors.New("library not loaded")}
+		}
+		if len(msg32) != 32 {
+			return result{nil, errors.New("message must be 32 bytes")}
+		}
+		if len(seckey32) != 32 {
+			return result{nil, errors.New("secret key must be 32 bytes")}
+		}
+		keypair := make([]byte, 96)
+		if ll.keypairCreate(ll.ctx, &keypair[0], &seckey32[0]) != 1 {
+			return result{nil, errors.New("failed to create keypair")}
+		}
+		sig := make([]byte, 64)
+		if ll.schnorrsigSign32(ll.ctx, &sig[0], &msg32[0], &keypair[0], nil) != 1 {
+			return result{nil, errors.New("signing failed")}
+		}
+		return result{sig, nil}
+	}).(result)
+	return r.sig, r.err
 }
 
 // SchnorrVerify verifies a Schnorr signature.
 func (l *LibSecp256k1) SchnorrVerify(sig64, msg32, pubkey32 []byte) bool {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	if !l.loaded {
-		return false
-	}
-	if len(sig64) != 64 || len(msg32) != 32 || len(pubkey32) != 32 {
-		return false
-	}
-
-	// Parse x-only pubkey using secp256k1_xonly_pubkey_parse
-	xonlyPubkey := make([]byte, 64) // secp256k1_xonly_pubkey is 64 bytes
-	if l.xonlyPubkeyParse(l.ctx, &xonlyPubkey[0], &pubkey32[0]) != 1 {
-		return false
-	}
-
-	result := l.schnorrsigVerify(l.ctx, &sig64[0], &msg32[0], 32, &xonlyPubkey[0])
-	return result == 1
+	return l.call(func(ll *LibSecp256k1) interface{} {
+		if !ll.loaded {
+			return false
+		}
+		if len(sig64) != 64 || len(msg32) != 32 || len(pubkey32) != 32 {
+			return false
+		}
+		xonlyPubkey := make([]byte, 64)
+		if ll.xonlyPubkeyParse(ll.ctx, &xonlyPubkey[0], &pubkey32[0]) != 1 {
+			return false
+		}
+		return ll.schnorrsigVerify(ll.ctx, &sig64[0], &msg32[0], 32, &xonlyPubkey[0]) == 1
+	}).(bool)
 }
 
 // CreatePubkey derives a public key from a secret key.
 // Returns the 32-byte x-only public key.
 func (l *LibSecp256k1) CreatePubkey(seckey32 []byte) ([]byte, error) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	if !l.loaded {
-		return nil, errors.New("library not loaded")
+	type result struct {
+		pub []byte
+		err error
 	}
-	if len(seckey32) != 32 {
-		return nil, errors.New("secret key must be 32 bytes")
-	}
-
-	// Create keypair
-	keypair := make([]byte, 96)
-	if l.keypairCreate(l.ctx, &keypair[0], &seckey32[0]) != 1 {
-		return nil, errors.New("failed to create keypair")
-	}
-
-	// Extract x-only pubkey (internal representation is 64 bytes)
-	xonlyPubkey := make([]byte, 64)
-	var parity int
-	if l.keypairXonlyPub(l.ctx, &xonlyPubkey[0], &parity, &keypair[0]) != 1 {
-		return nil, errors.New("failed to extract x-only pubkey")
-	}
-
-	// Serialize to get the 32-byte x-coordinate
-	pubkey32 := make([]byte, 32)
-	if l.xonlyPubkeySerialize(l.ctx, &pubkey32[0], &xonlyPubkey[0]) != 1 {
-		return nil, errors.New("failed to serialize x-only pubkey")
-	}
-
-	return pubkey32, nil
+	r := l.call(func(ll *LibSecp256k1) interface{} {
+		if !ll.loaded {
+			return result{nil, errors.New("library not loaded")}
+		}
+		if len(seckey32) != 32 {
+			return result{nil, errors.New("secret key must be 32 bytes")}
+		}
+		keypair := make([]byte, 96)
+		if ll.keypairCreate(ll.ctx, &keypair[0], &seckey32[0]) != 1 {
+			return result{nil, errors.New("failed to create keypair")}
+		}
+		xonlyPubkey := make([]byte, 64)
+		var parity int
+		if ll.keypairXonlyPub(ll.ctx, &xonlyPubkey[0], &parity, &keypair[0]) != 1 {
+			return result{nil, errors.New("failed to extract x-only pubkey")}
+		}
+		pubkey32 := make([]byte, 32)
+		if ll.xonlyPubkeySerialize(ll.ctx, &pubkey32[0], &xonlyPubkey[0]) != 1 {
+			return result{nil, errors.New("failed to serialize x-only pubkey")}
+		}
+		return result{pubkey32, nil}
+	}).(result)
+	return r.pub, r.err
 }
 
 // CreatePubkeyCompressed derives a compressed public key (33 bytes) from a secret key.
 // Returns (compressed_pubkey, parity) where parity is 0 for even Y, 1 for odd Y.
 func (l *LibSecp256k1) CreatePubkeyCompressed(seckey32 []byte) ([]byte, int, error) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	if !l.loaded {
-		return nil, 0, errors.New("library not loaded")
+	type result struct {
+		pub    []byte
+		parity int
+		err    error
 	}
-	if len(seckey32) != 32 {
-		return nil, 0, errors.New("secret key must be 32 bytes")
-	}
-
-	// Create pubkey using ec_pubkey_create
-	pubkey := make([]byte, 64) // secp256k1_pubkey internal format
-	if l.ecPubkeyCreate(l.ctx, &pubkey[0], &seckey32[0]) != 1 {
-		return nil, 0, errors.New("failed to create pubkey")
-	}
-
-	// Serialize as compressed (33 bytes)
-	compressed := make([]byte, 33)
-	var outputLen uint = 33
-	const SECP256K1_EC_COMPRESSED = 258
-	if l.ecPubkeySerialize(l.ctx, &compressed[0], &outputLen, &pubkey[0], SECP256K1_EC_COMPRESSED) != 1 {
-		return nil, 0, errors.New("failed to serialize pubkey")
-	}
-
-	// Parity from prefix: 0x02 = even (0), 0x03 = odd (1)
-	parity := 0
-	if compressed[0] == 0x03 {
-		parity = 1
-	}
-
-	return compressed, parity, nil
+	r := l.call(func(ll *LibSecp256k1) interface{} {
+		if !ll.loaded {
+			return result{nil, 0, errors.New("library not loaded")}
+		}
+		if len(seckey32) != 32 {
+			return result{nil, 0, errors.New("secret key must be 32 bytes")}
+		}
+		pubkey := make([]byte, 64)
+		if ll.ecPubkeyCreate(ll.ctx, &pubkey[0], &seckey32[0]) != 1 {
+			return result{nil, 0, errors.New("failed to create pubkey")}
+		}
+		compressed := make([]byte, 33)
+		var outputLen uint = 33
+		const SECP256K1_EC_COMPRESSED = 258
+		if ll.ecPubkeySerialize(ll.ctx, &compressed[0], &outputLen, &pubkey[0], SECP256K1_EC_COMPRESSED) != 1 {
+			return result{nil, 0, errors.New("failed to serialize pubkey")}
+		}
+		parity := 0
+		if compressed[0] == 0x03 {
+			parity = 1
+		}
+		return result{compressed, parity, nil}
+	}).(result)
+	return r.pub, r.parity, r.err
 }
 
 // CreatePubkeyUncompressed derives an uncompressed public key (65 bytes) from a secret key.
 func (l *LibSecp256k1) CreatePubkeyUncompressed(seckey32 []byte) ([]byte, error) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	if !l.loaded {
-		return nil, errors.New("library not loaded")
+	type result struct {
+		pub []byte
+		err error
 	}
-	if len(seckey32) != 32 {
-		return nil, errors.New("secret key must be 32 bytes")
-	}
-
-	// Create pubkey using ec_pubkey_create
-	pubkey := make([]byte, 64) // secp256k1_pubkey internal format
-	if l.ecPubkeyCreate(l.ctx, &pubkey[0], &seckey32[0]) != 1 {
-		return nil, errors.New("failed to create pubkey")
-	}
-
-	// Serialize as uncompressed (65 bytes)
-	uncompressed := make([]byte, 65)
-	var outputLen uint = 65
-	const SECP256K1_EC_UNCOMPRESSED = 2
-	if l.ecPubkeySerialize(l.ctx, &uncompressed[0], &outputLen, &pubkey[0], SECP256K1_EC_UNCOMPRESSED) != 1 {
-		return nil, errors.New("failed to serialize pubkey")
-	}
-
-	return uncompressed, nil
+	r := l.call(func(ll *LibSecp256k1) interface{} {
+		if !ll.loaded {
+			return result{nil, errors.New("library not loaded")}
+		}
+		if len(seckey32) != 32 {
+			return result{nil, errors.New("secret key must be 32 bytes")}
+		}
+		pubkey := make([]byte, 64)
+		if ll.ecPubkeyCreate(ll.ctx, &pubkey[0], &seckey32[0]) != 1 {
+			return result{nil, errors.New("failed to create pubkey")}
+		}
+		uncompressed := make([]byte, 65)
+		var outputLen uint = 65
+		const SECP256K1_EC_UNCOMPRESSED = 2
+		if ll.ecPubkeySerialize(ll.ctx, &uncompressed[0], &outputLen, &pubkey[0], SECP256K1_EC_UNCOMPRESSED) != 1 {
+			return result{nil, errors.New("failed to serialize pubkey")}
+		}
+		return result{uncompressed, nil}
+	}).(result)
+	return r.pub, r.err
 }
 
 // ECDH computes the shared secret using ECDH.
 func (l *LibSecp256k1) ECDH(seckey32, pubkey33 []byte) ([]byte, error) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	if !l.loaded {
-		return nil, errors.New("library not loaded")
+	type result struct {
+		secret []byte
+		err    error
 	}
-	if len(seckey32) != 32 {
-		return nil, errors.New("secret key must be 32 bytes")
-	}
-	if len(pubkey33) != 33 && len(pubkey33) != 65 {
-		return nil, errors.New("public key must be 33 or 65 bytes")
-	}
-
-	// Parse pubkey
-	pubkey := make([]byte, 64) // secp256k1_pubkey is 64 bytes
-	if l.ecPubkeyParse(l.ctx, &pubkey[0], &pubkey33[0], uint(len(pubkey33))) != 1 {
-		return nil, errors.New("failed to parse public key")
-	}
-
-	// Compute ECDH
-	output := make([]byte, 32)
-	if l.ecdh(l.ctx, &output[0], &pubkey[0], &seckey32[0], 0, 0) != 1 {
-		return nil, errors.New("ECDH failed")
-	}
-
-	return output, nil
+	r := l.call(func(ll *LibSecp256k1) interface{} {
+		if !ll.loaded {
+			return result{nil, errors.New("library not loaded")}
+		}
+		if len(seckey32) != 32 {
+			return result{nil, errors.New("secret key must be 32 bytes")}
+		}
+		if len(pubkey33) != 33 && len(pubkey33) != 65 {
+			return result{nil, errors.New("public key must be 33 or 65 bytes")}
+		}
+		pubkey := make([]byte, 64)
+		if ll.ecPubkeyParse(ll.ctx, &pubkey[0], &pubkey33[0], uint(len(pubkey33))) != 1 {
+			return result{nil, errors.New("failed to parse public key")}
+		}
+		output := make([]byte, 32)
+		if ll.ecdh(ll.ctx, &output[0], &pubkey[0], &seckey32[0], 0, 0) != 1 {
+			return result{nil, errors.New("ECDH failed")}
+		}
+		return result{output, nil}
+	}).(result)
+	return r.secret, r.err
 }
 
 // ECDSASign signs a 32-byte message hash with a secret key.
 // Returns a 64-byte compact signature (r || s).
 func (l *LibSecp256k1) ECDSASign(msghash32, seckey32 []byte) ([]byte, error) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	if !l.loaded {
-		return nil, errors.New("library not loaded")
+	type result struct {
+		sig []byte
+		err error
 	}
-	if len(msghash32) != 32 {
-		return nil, errors.New("message hash must be 32 bytes")
-	}
-	if len(seckey32) != 32 {
-		return nil, errors.New("secret key must be 32 bytes")
-	}
-
-	// Sign (internal signature format is 64 bytes)
-	sig := make([]byte, 64)
-	if l.ecdsaSign(l.ctx, &sig[0], &msghash32[0], &seckey32[0], 0, 0) != 1 {
-		return nil, errors.New("ECDSA signing failed")
-	}
-
-	// Normalize to low-S
-	l.ecdsaSignatureNormalize(l.ctx, &sig[0], &sig[0])
-
-	// Serialize to compact format
-	compact := make([]byte, 64)
-	if l.ecdsaSignatureSerializeCompact(l.ctx, &compact[0], &sig[0]) != 1 {
-		return nil, errors.New("failed to serialize signature")
-	}
-
-	return compact, nil
+	r := l.call(func(ll *LibSecp256k1) interface{} {
+		if !ll.loaded {
+			return result{nil, errors.New("library not loaded")}
+		}
+		if len(msghash32) != 32 {
+			return result{nil, errors.New("message hash must be 32 bytes")}
+		}
+		if len(seckey32) != 32 {
+			return result{nil, errors.New("secret key must be 32 bytes")}
+		}
+		sig := make([]byte, 64)
+		if ll.ecdsaSign(ll.ctx, &sig[0], &msghash32[0], &seckey32[0], 0, 0) != 1 {
+			return result{nil, errors.New("ECDSA signing failed")}
+		}
+		ll.ecdsaSignatureNormalize(ll.ctx, &sig[0], &sig[0])
+		compact := make([]byte, 64)
+		if ll.ecdsaSignatureSerializeCompact(ll.ctx, &compact[0], &sig[0]) != 1 {
+			return result{nil, errors.New("failed to serialize signature")}
+		}
+		return result{compact, nil}
+	}).(result)
+	return r.sig, r.err
 }
 
 // ECDSAVerify verifies an ECDSA signature.
@@ -404,168 +435,150 @@ func (l *LibSecp256k1) ECDSASign(msghash32, seckey32 []byte) ([]byte, error) {
 // msghash32 is a 32-byte message hash.
 // pubkey33 is a 33-byte compressed public key (or 65-byte uncompressed).
 func (l *LibSecp256k1) ECDSAVerify(sig64, msghash32, pubkey33 []byte) bool {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	if !l.loaded {
-		return false
-	}
-	if len(sig64) != 64 || len(msghash32) != 32 {
-		return false
-	}
-	if len(pubkey33) != 33 && len(pubkey33) != 65 {
-		return false
-	}
-
-	// Parse compact signature
-	sig := make([]byte, 64)
-	if l.ecdsaSignatureParseCompact(l.ctx, &sig[0], &sig64[0]) != 1 {
-		return false
-	}
-
-	// Parse public key
-	pubkey := make([]byte, 64)
-	if l.ecPubkeyParse(l.ctx, &pubkey[0], &pubkey33[0], uint(len(pubkey33))) != 1 {
-		return false
-	}
-
-	return l.ecdsaVerify(l.ctx, &sig[0], &msghash32[0], &pubkey[0]) == 1
+	return l.call(func(ll *LibSecp256k1) interface{} {
+		if !ll.loaded {
+			return false
+		}
+		if len(sig64) != 64 || len(msghash32) != 32 {
+			return false
+		}
+		if len(pubkey33) != 33 && len(pubkey33) != 65 {
+			return false
+		}
+		sig := make([]byte, 64)
+		if ll.ecdsaSignatureParseCompact(ll.ctx, &sig[0], &sig64[0]) != 1 {
+			return false
+		}
+		pubkey := make([]byte, 64)
+		if ll.ecPubkeyParse(ll.ctx, &pubkey[0], &pubkey33[0], uint(len(pubkey33))) != 1 {
+			return false
+		}
+		return ll.ecdsaVerify(ll.ctx, &sig[0], &msghash32[0], &pubkey[0]) == 1
+	}).(bool)
 }
 
 // ECDSASignDER signs and returns a DER-encoded signature.
 func (l *LibSecp256k1) ECDSASignDER(msghash32, seckey32 []byte) ([]byte, error) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	if !l.loaded {
-		return nil, errors.New("library not loaded")
+	type result struct {
+		der []byte
+		err error
 	}
-	if len(msghash32) != 32 {
-		return nil, errors.New("message hash must be 32 bytes")
-	}
-	if len(seckey32) != 32 {
-		return nil, errors.New("secret key must be 32 bytes")
-	}
-
-	// Sign
-	sig := make([]byte, 64)
-	if l.ecdsaSign(l.ctx, &sig[0], &msghash32[0], &seckey32[0], 0, 0) != 1 {
-		return nil, errors.New("ECDSA signing failed")
-	}
-
-	// Normalize to low-S
-	l.ecdsaSignatureNormalize(l.ctx, &sig[0], &sig[0])
-
-	// Serialize to DER format (max 72 bytes)
-	der := make([]byte, 72)
-	var derLen uint = 72
-	if l.ecdsaSignatureSerializeDER(l.ctx, &der[0], &derLen, &sig[0]) != 1 {
-		return nil, errors.New("failed to serialize DER signature")
-	}
-
-	return der[:derLen], nil
+	r := l.call(func(ll *LibSecp256k1) interface{} {
+		if !ll.loaded {
+			return result{nil, errors.New("library not loaded")}
+		}
+		if len(msghash32) != 32 {
+			return result{nil, errors.New("message hash must be 32 bytes")}
+		}
+		if len(seckey32) != 32 {
+			return result{nil, errors.New("secret key must be 32 bytes")}
+		}
+		sig := make([]byte, 64)
+		if ll.ecdsaSign(ll.ctx, &sig[0], &msghash32[0], &seckey32[0], 0, 0) != 1 {
+			return result{nil, errors.New("ECDSA signing failed")}
+		}
+		ll.ecdsaSignatureNormalize(ll.ctx, &sig[0], &sig[0])
+		der := make([]byte, 72)
+		var derLen uint = 72
+		if ll.ecdsaSignatureSerializeDER(ll.ctx, &der[0], &derLen, &sig[0]) != 1 {
+			return result{nil, errors.New("failed to serialize DER signature")}
+		}
+		return result{der[:derLen], nil}
+	}).(result)
+	return r.der, r.err
 }
 
 // ECDSAVerifyDER verifies a DER-encoded ECDSA signature.
 func (l *LibSecp256k1) ECDSAVerifyDER(sigDER, msghash32, pubkey33 []byte) bool {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	if !l.loaded {
-		return false
-	}
-	if len(msghash32) != 32 {
-		return false
-	}
-	if len(pubkey33) != 33 && len(pubkey33) != 65 {
-		return false
-	}
-
-	// Parse DER signature
-	sig := make([]byte, 64)
-	if l.ecdsaSignatureParseDER(l.ctx, &sig[0], &sigDER[0], uint(len(sigDER))) != 1 {
-		return false
-	}
-
-	// Parse public key
-	pubkey := make([]byte, 64)
-	if l.ecPubkeyParse(l.ctx, &pubkey[0], &pubkey33[0], uint(len(pubkey33))) != 1 {
-		return false
-	}
-
-	return l.ecdsaVerify(l.ctx, &sig[0], &msghash32[0], &pubkey[0]) == 1
+	return l.call(func(ll *LibSecp256k1) interface{} {
+		if !ll.loaded {
+			return false
+		}
+		if len(msghash32) != 32 {
+			return false
+		}
+		if len(pubkey33) != 33 && len(pubkey33) != 65 {
+			return false
+		}
+		sig := make([]byte, 64)
+		if ll.ecdsaSignatureParseDER(ll.ctx, &sig[0], &sigDER[0], uint(len(sigDER))) != 1 {
+			return false
+		}
+		pubkey := make([]byte, 64)
+		if ll.ecPubkeyParse(ll.ctx, &pubkey[0], &pubkey33[0], uint(len(pubkey33))) != 1 {
+			return false
+		}
+		return ll.ecdsaVerify(ll.ctx, &sig[0], &msghash32[0], &pubkey[0]) == 1
+	}).(bool)
 }
 
 // ECDSASignRecoverable signs and returns a recoverable signature (65 bytes: 64 + recid).
 func (l *LibSecp256k1) ECDSASignRecoverable(msghash32, seckey32 []byte) ([]byte, int, error) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	if !l.loaded {
-		return nil, 0, errors.New("library not loaded")
+	type result struct {
+		sig   []byte
+		recid int
+		err   error
 	}
-	if len(msghash32) != 32 {
-		return nil, 0, errors.New("message hash must be 32 bytes")
-	}
-	if len(seckey32) != 32 {
-		return nil, 0, errors.New("secret key must be 32 bytes")
-	}
-
-	// Sign recoverable (internal format is 65 bytes)
-	sig := make([]byte, 65)
-	if l.ecdsaSignRecoverable(l.ctx, &sig[0], &msghash32[0], &seckey32[0], 0, 0) != 1 {
-		return nil, 0, errors.New("ECDSA recoverable signing failed")
-	}
-
-	// Serialize to compact format with recovery id
-	compact := make([]byte, 64)
-	var recid int
-	if l.ecdsaRecoverableSignatureSerializeCompact(l.ctx, &compact[0], &recid, &sig[0]) != 1 {
-		return nil, 0, errors.New("failed to serialize recoverable signature")
-	}
-
-	return compact, recid, nil
+	r := l.call(func(ll *LibSecp256k1) interface{} {
+		if !ll.loaded {
+			return result{nil, 0, errors.New("library not loaded")}
+		}
+		if len(msghash32) != 32 {
+			return result{nil, 0, errors.New("message hash must be 32 bytes")}
+		}
+		if len(seckey32) != 32 {
+			return result{nil, 0, errors.New("secret key must be 32 bytes")}
+		}
+		sig := make([]byte, 65)
+		if ll.ecdsaSignRecoverable(ll.ctx, &sig[0], &msghash32[0], &seckey32[0], 0, 0) != 1 {
+			return result{nil, 0, errors.New("ECDSA recoverable signing failed")}
+		}
+		compact := make([]byte, 64)
+		var recid int
+		if ll.ecdsaRecoverableSignatureSerializeCompact(ll.ctx, &compact[0], &recid, &sig[0]) != 1 {
+			return result{nil, 0, errors.New("failed to serialize recoverable signature")}
+		}
+		return result{compact, recid, nil}
+	}).(result)
+	return r.sig, r.recid, r.err
 }
 
 // ECDSARecover recovers a public key from a signature.
 // sig64 is a 64-byte compact signature, recid is the recovery id (0-3).
 // Returns a 33-byte compressed public key.
 func (l *LibSecp256k1) ECDSARecover(sig64, msghash32 []byte, recid int) ([]byte, error) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	if !l.loaded {
-		return nil, errors.New("library not loaded")
+	type result struct {
+		pub []byte
+		err error
 	}
-	if len(sig64) != 64 {
-		return nil, errors.New("signature must be 64 bytes")
-	}
-	if len(msghash32) != 32 {
-		return nil, errors.New("message hash must be 32 bytes")
-	}
-	if recid < 0 || recid > 3 {
-		return nil, errors.New("recovery id must be 0-3")
-	}
-
-	// Parse recoverable signature
-	sig := make([]byte, 65)
-	if l.ecdsaRecoverableSignatureParseCompact(l.ctx, &sig[0], &sig64[0], recid) != 1 {
-		return nil, errors.New("failed to parse recoverable signature")
-	}
-
-	// Recover public key
-	pubkey := make([]byte, 64)
-	if l.ecdsaRecover(l.ctx, &pubkey[0], &sig[0], &msghash32[0], recid) != 1 {
-		return nil, errors.New("public key recovery failed")
-	}
-
-	// Serialize as compressed
-	compressed := make([]byte, 33)
-	var outputLen uint = 33
-	const SECP256K1_EC_COMPRESSED = 258
-	if l.ecPubkeySerialize(l.ctx, &compressed[0], &outputLen, &pubkey[0], SECP256K1_EC_COMPRESSED) != 1 {
-		return nil, errors.New("failed to serialize recovered pubkey")
-	}
-
-	return compressed, nil
+	r := l.call(func(ll *LibSecp256k1) interface{} {
+		if !ll.loaded {
+			return result{nil, errors.New("library not loaded")}
+		}
+		if len(sig64) != 64 {
+			return result{nil, errors.New("signature must be 64 bytes")}
+		}
+		if len(msghash32) != 32 {
+			return result{nil, errors.New("message hash must be 32 bytes")}
+		}
+		if recid < 0 || recid > 3 {
+			return result{nil, errors.New("recovery id must be 0-3")}
+		}
+		sig := make([]byte, 65)
+		if ll.ecdsaRecoverableSignatureParseCompact(ll.ctx, &sig[0], &sig64[0], recid) != 1 {
+			return result{nil, errors.New("failed to parse recoverable signature")}
+		}
+		pubkey := make([]byte, 64)
+		if ll.ecdsaRecover(ll.ctx, &pubkey[0], &sig[0], &msghash32[0], recid) != 1 {
+			return result{nil, errors.New("public key recovery failed")}
+		}
+		compressed := make([]byte, 33)
+		var outputLen uint = 33
+		const SECP256K1_EC_COMPRESSED = 258
+		if ll.ecPubkeySerialize(ll.ctx, &compressed[0], &outputLen, &pubkey[0], SECP256K1_EC_COMPRESSED) != 1 {
+			return result{nil, errors.New("failed to serialize recovered pubkey")}
+		}
+		return result{compressed, nil}
+	}).(result)
+	return r.pub, r.err
 }

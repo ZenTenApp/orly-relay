@@ -55,8 +55,6 @@ func init() {
 	}
 
 	// Populate the Map from JSON data for backward compatibility
-	MapMx.Lock()
-	defer MapMx.Unlock()
 	for kStr, info := range kindData.Kinds {
 		var k int
 		if err := json.Unmarshal([]byte(kStr), &k); err == nil {

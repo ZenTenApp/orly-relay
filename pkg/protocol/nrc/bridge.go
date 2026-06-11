@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	"git.smesh.lol/orly/pkg/nostr/crypto/encryption"
@@ -32,32 +31,47 @@ const (
 )
 
 // NRCAuthorizer defines the interface for NRC authorization lookups.
-// This allows the bridge to look up authorized clients dynamically from the database.
 type NRCAuthorizer interface {
-	// GetNRCClientByPubkey looks up an authorized client by their derived pubkey.
-	// Returns the client ID, label, and whether the client was found.
-	// If not found, returns empty strings and false.
 	GetNRCClientByPubkey(derivedPubkey []byte) (id string, label string, found bool, err error)
-	// UpdateNRCClientLastUsed updates the last used timestamp for tracking.
 	UpdateNRCClientLastUsed(id string) error
 }
 
 // BridgeConfig holds configuration for the NRC bridge.
 type BridgeConfig struct {
-	// RendezvousURL is the WebSocket URL of the public relay.
-	RendezvousURL string
-	// LocalRelayURL is the WebSocket URL of the local private relay.
-	LocalRelayURL string
-	// Signer is the relay's signer for signing response events.
-	Signer signer.I
-	// AuthorizedSecrets maps derived pubkeys to device names (secret-based auth).
-	// Used when Authorizer is nil.
+	RendezvousURL     string
+	LocalRelayURL     string
+	Signer            signer.I
 	AuthorizedSecrets map[string]string
-	// Authorizer provides dynamic NRC authorization lookups from database.
-	// If set, this takes precedence over AuthorizedSecrets.
-	Authorizer NRCAuthorizer
-	// SessionTimeout is the inactivity timeout for sessions.
-	SessionTimeout time.Duration
+	Authorizer        NRCAuthorizer
+	SessionTimeout    time.Duration
+}
+
+// --- actor request types for Bridge connection state ---
+
+type bridgeGetConnReq struct {
+	resp chan *ws.Client
+}
+
+type bridgeSetConnReq struct {
+	conn *ws.Client
+}
+
+type bridgeUpdateSecretsReq struct {
+	secrets map[string]string
+	resp    chan struct{}
+}
+
+type bridgeAddSecretReq struct {
+	pubkeyHex  string
+	deviceName string
+}
+
+type bridgeRemoveSecretReq struct {
+	pubkeyHex string
+}
+
+type bridgeListSecretsReq struct {
+	resp chan map[string]string
 }
 
 // Bridge connects a private relay to a public rendezvous relay.
@@ -65,16 +79,20 @@ type Bridge struct {
 	config   *BridgeConfig
 	sessions *SessionManager
 
-	// rendezvousConn is the connection to the rendezvous relay.
-	rendezvousConn *ws.Client
-
-	// mu protects connection state.
-	mu sync.RWMutex
+	// actor channels for connection state
+	getConnCh       chan bridgeGetConnReq
+	setConnCh       chan bridgeSetConnReq
+	updateSecretsCh chan bridgeUpdateSecretsReq
+	addSecretCh     chan bridgeAddSecretReq
+	removeSecretCh  chan bridgeRemoveSecretReq
+	listSecretsCh   chan bridgeListSecretsReq
 
 	// ctx is the bridge context.
-	ctx context.Context
-	// cancel cancels the bridge context.
+	ctx    context.Context
 	cancel context.CancelFunc
+
+	stop chan struct{}
+	done chan struct{}
 }
 
 // NewBridge creates a new NRC bridge.
@@ -84,11 +102,71 @@ func NewBridge(config *BridgeConfig) *Bridge {
 	if timeout == 0 {
 		timeout = DefaultSessionTimeout
 	}
-	return &Bridge{
+	b := &Bridge{
 		config:   config,
 		sessions: NewSessionManager(timeout),
-		ctx:      ctx,
-		cancel:   cancel,
+
+		getConnCh:       make(chan bridgeGetConnReq),
+		setConnCh:       make(chan bridgeSetConnReq, 16),
+		updateSecretsCh: make(chan bridgeUpdateSecretsReq),
+		addSecretCh:     make(chan bridgeAddSecretReq, 16),
+		removeSecretCh:  make(chan bridgeRemoveSecretReq, 16),
+		listSecretsCh:   make(chan bridgeListSecretsReq),
+
+		ctx:    ctx,
+		cancel: cancel,
+
+		stop: make(chan struct{}),
+		done: make(chan struct{}),
+	}
+	go b.runActor()
+	return b
+}
+
+func (b *Bridge) runActor() {
+	defer close(b.done)
+
+	var rendezvousConn *ws.Client
+
+	for {
+		select {
+		case <-b.stop:
+			return
+		case req := <-b.getConnCh:
+			req.resp <- rendezvousConn
+		case req := <-b.setConnCh:
+			rendezvousConn = req.conn
+		case req := <-b.updateSecretsCh:
+			b.config.AuthorizedSecrets = req.secrets
+			req.resp <- struct{}{}
+		case req := <-b.addSecretCh:
+			b.config.AuthorizedSecrets[req.pubkeyHex] = req.deviceName
+		case req := <-b.removeSecretCh:
+			delete(b.config.AuthorizedSecrets, req.pubkeyHex)
+		case req := <-b.listSecretsCh:
+			result := make(map[string]string)
+			for k, v := range b.config.AuthorizedSecrets {
+				result[k] = v
+			}
+			req.resp <- result
+		}
+	}
+}
+
+func (b *Bridge) getConn() *ws.Client {
+	resp := make(chan *ws.Client, 1)
+	select {
+	case b.getConnCh <- bridgeGetConnReq{resp: resp}:
+		return <-resp
+	case <-b.stop:
+		return nil
+	}
+}
+
+func (b *Bridge) setConn(conn *ws.Client) {
+	select {
+	case b.setConnCh <- bridgeSetConnReq{conn: conn}:
+	case <-b.stop:
 	}
 }
 
@@ -112,19 +190,22 @@ func (b *Bridge) Stop() {
 	b.cancel()
 	b.sessions.Close()
 
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.rendezvousConn != nil {
-		b.rendezvousConn.Close()
+	conn := b.getConn()
+	if conn != nil {
+		conn.Close()
 	}
+	close(b.stop)
+	<-b.done
 }
 
 // UpdateAuthorizedSecrets updates the map of authorized secrets.
-// This allows dynamic management of authorized connections through the UI.
 func (b *Bridge) UpdateAuthorizedSecrets(secrets map[string]string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.config.AuthorizedSecrets = secrets
+	resp := make(chan struct{}, 1)
+	select {
+	case b.updateSecretsCh <- bridgeUpdateSecretsReq{secrets: secrets, resp: resp}:
+		<-resp
+	case <-b.stop:
+	}
 }
 
 // cleanupLoop periodically cleans up expired sessions.
@@ -185,9 +266,7 @@ func (b *Bridge) runOnce() error {
 	}
 	defer rendezvousConn.Close()
 
-	b.mu.Lock()
-	b.rendezvousConn = rendezvousConn
-	b.mu.Unlock()
+	b.setConn(rendezvousConn)
 
 	// Subscribe to NRC request events
 	relayPubkeyHex := hex.Enc(b.config.Signer.Pub())
@@ -285,7 +364,6 @@ func (b *Bridge) authorize(ctx context.Context, ev *event.E) (conversationKey []
 	if b.config.Authorizer != nil {
 		clientID, clientLabel, found, authErr := b.config.Authorizer.GetNRCClientByPubkey(clientPubkey)
 		if authErr == nil && found {
-			// Client is authorized via database
 			conversationKey, err = encryption.GenerateConversationKey(
 				b.config.Signer.Sec(),
 				clientPubkey,
@@ -296,7 +374,6 @@ func (b *Bridge) authorize(ctx context.Context, ev *event.E) (conversationKey []
 			authMode = AuthModeSecret
 			deviceName = clientLabel
 
-			// Update last used timestamp in background
 			go func() {
 				if updateErr := b.config.Authorizer.UpdateNRCClientLastUsed(clientID); updateErr != nil {
 					log.W.F("failed to update NRC client last used: %v", updateErr)
@@ -306,9 +383,9 @@ func (b *Bridge) authorize(ctx context.Context, ev *event.E) (conversationKey []
 		}
 	}
 
-	// Fallback to static map (for backwards compatibility)
-	if name, ok := b.config.AuthorizedSecrets[clientPubkeyHex]; ok {
-		// Secret auth uses ECDH between relay key and client's derived key
+	// Fallback to static map - read via actor
+	secrets := b.ListAuthorizedSecrets()
+	if name, ok := secrets[clientPubkeyHex]; ok {
 		conversationKey, err = encryption.GenerateConversationKey(
 			b.config.Signer.Sec(),
 			clientPubkey,
@@ -327,14 +404,12 @@ func (b *Bridge) authorize(ctx context.Context, ev *event.E) (conversationKey []
 
 // forwardToLocalRelay forwards a request to the local relay and handles responses.
 func (b *Bridge) forwardToLocalRelay(ctx context.Context, session *Session, reqEvent *event.E, reqMsg *RequestMessage) error {
-	// Connect to local relay
 	localConn, err := ws.RelayConnect(ctx, b.config.LocalRelayURL)
 	if chk.E(err) {
 		return fmt.Errorf("%w: %v", ErrRelayConnectionFailed, err)
 	}
 	defer localConn.Close()
 
-	// Handle different message types
 	switch reqMsg.Type {
 	case "REQ":
 		return b.handleREQ(ctx, session, reqEvent, reqMsg, localConn)
@@ -353,8 +428,6 @@ func (b *Bridge) forwardToLocalRelay(ctx context.Context, session *Session, reqE
 
 // handleREQ handles a REQ message and forwards responses.
 func (b *Bridge) handleREQ(ctx context.Context, session *Session, reqEvent *event.E, reqMsg *RequestMessage, conn *ws.Client) error {
-	// Extract subscription ID and filters from payload
-	// Payload: ["REQ", "<sub_id>", filter1, filter2, ...]
 	if len(reqMsg.Payload) < 3 {
 		return fmt.Errorf("invalid REQ payload")
 	}
@@ -363,7 +436,6 @@ func (b *Bridge) handleREQ(ctx context.Context, session *Session, reqEvent *even
 		return fmt.Errorf("invalid subscription ID")
 	}
 
-	// Parse filters from payload
 	var filters []*filter.F
 	for i := 2; i < len(reqMsg.Payload); i++ {
 		filterMap, ok := reqMsg.Payload[i].(map[string]any)
@@ -385,15 +457,11 @@ func (b *Bridge) handleREQ(ctx context.Context, session *Session, reqEvent *even
 		return fmt.Errorf("no valid filters in REQ")
 	}
 
-	// Add subscription to session
 	if err := session.AddSubscription(subID); err != nil {
 		return err
 	}
 
-	// Create filter set
 	filterSet := filter.NewS(filters...)
-
-	// Subscribe to local relay
 	sub, err := conn.Subscribe(ctx, filterSet)
 	if chk.E(err) {
 		session.RemoveSubscription(subID)
@@ -401,14 +469,12 @@ func (b *Bridge) handleREQ(ctx context.Context, session *Session, reqEvent *even
 	}
 	defer sub.Unsub()
 
-	// Forward events until EOSE or timeout
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case ev := <-sub.Events:
 			if ev == nil {
-				// Subscription closed, send EOSE
 				resp := &ResponseMessage{
 					Type:    "EOSE",
 					Payload: []any{"EOSE", subID},
@@ -416,7 +482,6 @@ func (b *Bridge) handleREQ(ctx context.Context, session *Session, reqEvent *even
 				return b.sendResponse(ctx, reqEvent, session, resp)
 			}
 
-			// Convert event to JSON-compatible map
 			eventBytes, err := json.Marshal(ev)
 			if err != nil {
 				continue
@@ -426,7 +491,6 @@ func (b *Bridge) handleREQ(ctx context.Context, session *Session, reqEvent *even
 				continue
 			}
 
-			// Send EVENT response
 			resp := &ResponseMessage{
 				Type:    "EVENT",
 				Payload: []any{"EVENT", subID, eventMap},
@@ -436,7 +500,6 @@ func (b *Bridge) handleREQ(ctx context.Context, session *Session, reqEvent *even
 			}
 			session.IncrementEventCount(subID)
 		case <-sub.EndOfStoredEvents:
-			// Send EOSE
 			session.MarkEOSE(subID)
 			resp := &ResponseMessage{
 				Type:    "EOSE",
@@ -449,7 +512,6 @@ func (b *Bridge) handleREQ(ctx context.Context, session *Session, reqEvent *even
 
 // handleEVENT handles an EVENT message and forwards the OK response.
 func (b *Bridge) handleEVENT(ctx context.Context, session *Session, reqEvent *event.E, reqMsg *RequestMessage, conn *ws.Client) error {
-	// Extract event from payload: ["EVENT", {...event...}]
 	if len(reqMsg.Payload) < 2 {
 		return fmt.Errorf("invalid EVENT payload")
 	}
@@ -459,7 +521,6 @@ func (b *Bridge) handleEVENT(ctx context.Context, session *Session, reqEvent *ev
 		return fmt.Errorf("invalid event data")
 	}
 
-	// Parse event
 	eventBytes, err := json.Marshal(eventMap)
 	if err != nil {
 		return fmt.Errorf("failed to marshal event: %w", err)
@@ -470,7 +531,6 @@ func (b *Bridge) handleEVENT(ctx context.Context, session *Session, reqEvent *ev
 		return fmt.Errorf("failed to unmarshal event: %w", err)
 	}
 
-	// Publish to local relay
 	err = conn.Publish(ctx, &ev)
 	success := err == nil
 	message := ""
@@ -478,7 +538,6 @@ func (b *Bridge) handleEVENT(ctx context.Context, session *Session, reqEvent *ev
 		message = err.Error()
 	}
 
-	// Send OK response
 	resp := &ResponseMessage{
 		Type:    "OK",
 		Payload: []any{"OK", string(hex.Enc(ev.ID[:])), success, message},
@@ -488,19 +547,16 @@ func (b *Bridge) handleEVENT(ctx context.Context, session *Session, reqEvent *ev
 
 // handleCLOSE handles a CLOSE message.
 func (b *Bridge) handleCLOSE(ctx context.Context, session *Session, reqEvent *event.E, reqMsg *RequestMessage) error {
-	// Extract subscription ID: ["CLOSE", "<sub_id>"]
 	if len(reqMsg.Payload) >= 2 {
 		if subID, ok := reqMsg.Payload[1].(string); ok {
 			session.RemoveSubscription(subID)
 		}
 	}
-	// CLOSE doesn't have a response
 	return nil
 }
 
 // handleCOUNT handles a COUNT message.
 func (b *Bridge) handleCOUNT(ctx context.Context, session *Session, reqEvent *event.E, reqMsg *RequestMessage, conn *ws.Client) error {
-	// COUNT is not supported via ws.Client directly, return error
 	resp := &ResponseMessage{
 		Type:    "NOTICE",
 		Payload: []any{"NOTICE", "COUNT not supported through NRC tunnel"},
@@ -510,8 +566,6 @@ func (b *Bridge) handleCOUNT(ctx context.Context, session *Session, reqEvent *ev
 
 // handleIDS handles an IDS message - returns event manifests for diffing.
 func (b *Bridge) handleIDS(ctx context.Context, session *Session, reqEvent *event.E, reqMsg *RequestMessage, conn *ws.Client) error {
-	// Extract subscription ID and filters from payload
-	// Payload: ["IDS", "<sub_id>", filter1, filter2, ...]
 	if len(reqMsg.Payload) < 3 {
 		return fmt.Errorf("invalid IDS payload")
 	}
@@ -520,7 +574,6 @@ func (b *Bridge) handleIDS(ctx context.Context, session *Session, reqEvent *even
 		return fmt.Errorf("invalid subscription ID")
 	}
 
-	// Parse filters from payload
 	var filters []*filter.F
 	for i := 2; i < len(reqMsg.Payload); i++ {
 		filterMap, ok := reqMsg.Payload[i].(map[string]any)
@@ -542,23 +595,18 @@ func (b *Bridge) handleIDS(ctx context.Context, session *Session, reqEvent *even
 		return fmt.Errorf("no valid filters in IDS")
 	}
 
-	// Add subscription to session
 	if err := session.AddSubscription(subID); err != nil {
 		return err
 	}
 	defer session.RemoveSubscription(subID)
 
-	// Create filter set
 	filterSet := filter.NewS(filters...)
-
-	// Subscribe to local relay
 	sub, err := conn.Subscribe(ctx, filterSet)
 	if chk.E(err) {
 		return fmt.Errorf("local subscribe failed: %w", err)
 	}
 	defer sub.Unsub()
 
-	// Collect events and build manifest
 	var manifest []EventManifestEntry
 	for {
 		select {
@@ -566,18 +614,15 @@ func (b *Bridge) handleIDS(ctx context.Context, session *Session, reqEvent *even
 			return ctx.Err()
 		case ev := <-sub.Events:
 			if ev == nil {
-				// Subscription closed, send IDS response
 				return b.sendIDSResponse(ctx, reqEvent, session, subID, manifest)
 			}
 
-			// Build manifest entry
 			entry := EventManifestEntry{
 				Kind:      int(ev.Kind),
 				ID:        string(hex.Enc(ev.ID[:])),
 				CreatedAt: ev.CreatedAt,
 			}
 
-			// Check for d tag (parameterized replaceable events)
 			dTag := ev.Tags.GetFirst([]byte("d"))
 			if dTag != nil && dTag.Len() >= 2 {
 				entry.D = string(dTag.Value())
@@ -585,7 +630,6 @@ func (b *Bridge) handleIDS(ctx context.Context, session *Session, reqEvent *even
 
 			manifest = append(manifest, entry)
 		case <-sub.EndOfStoredEvents:
-			// Send IDS response with manifest
 			return b.sendIDSResponse(ctx, reqEvent, session, subID, manifest)
 		}
 	}
@@ -602,22 +646,18 @@ func (b *Bridge) sendIDSResponse(ctx context.Context, reqEvent *event.E, session
 
 // sendResponseChunked sends a response, chunking if necessary for large payloads.
 func (b *Bridge) sendResponseChunked(ctx context.Context, reqEvent *event.E, session *Session, resp *ResponseMessage) error {
-	// Marshal response content
 	content, err := MarshalResponseContent(resp)
 	if err != nil {
 		return fmt.Errorf("marshal failed: %w", err)
 	}
 
-	// If small enough, send directly
 	if len(content) <= MaxChunkSize {
 		return b.sendResponse(ctx, reqEvent, session, resp)
 	}
 
-	// Need to chunk - encode to base64 for safe transmission
 	encoded := base64.StdEncoding.EncodeToString(content)
 	var chunks []string
 
-	// Split into chunks
 	for i := 0; i < len(encoded); i += MaxChunkSize {
 		end := i + MaxChunkSize
 		if end > len(encoded) {
@@ -626,11 +666,9 @@ func (b *Bridge) sendResponseChunked(ctx context.Context, reqEvent *event.E, ses
 		chunks = append(chunks, encoded[i:end])
 	}
 
-	// Generate message ID
 	messageID := generateMessageID()
 	log.D.F("NRC: chunking large message (%d bytes) into %d chunks", len(content), len(chunks))
 
-	// Send each chunk
 	for i, chunkData := range chunks {
 		chunkMsg := ChunkMessage{
 			Type:      "CHUNK",
@@ -662,19 +700,16 @@ func generateMessageID() string {
 
 // sendResponse encrypts and sends a response to the client.
 func (b *Bridge) sendResponse(ctx context.Context, reqEvent *event.E, session *Session, resp *ResponseMessage) error {
-	// Marshal response content
 	content, err := MarshalResponseContent(resp)
 	if err != nil {
 		return fmt.Errorf("marshal failed: %w", err)
 	}
 
-	// Encrypt content
 	encrypted, err := encryption.Encrypt(session.ConversationKey, content, nil)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrEncryptionFailed, err)
 	}
 
-	// Build response event
 	respEvent := &event.E{
 		Content:   []byte(encrypted),
 		CreatedAt: time.Now().Unix(),
@@ -687,16 +722,11 @@ func (b *Bridge) sendResponse(ctx context.Context, reqEvent *event.E, session *S
 		),
 	}
 
-	// Sign with relay key
 	if err := respEvent.Sign(b.config.Signer); chk.E(err) {
 		return fmt.Errorf("signing failed: %w", err)
 	}
 
-	// Publish to rendezvous relay
-	b.mu.RLock()
-	conn := b.rendezvousConn
-	b.mu.RUnlock()
-
+	conn := b.getConn()
 	if conn == nil {
 		return fmt.Errorf("not connected to rendezvous relay")
 	}
@@ -710,8 +740,6 @@ func (b *Bridge) sendResponse(ctx context.Context, reqEvent *event.E, session *S
 
 // sendError sends an error response to the client.
 func (b *Bridge) sendError(ctx context.Context, reqEvent *event.E, sessionID string, errMsg string) {
-	// For errors, we need to get or create a conversation key
-	// This is best-effort since we may not be able to authenticate
 	conversationKey, err := encryption.GenerateConversationKey(
 		b.config.Signer.Sec(),
 		reqEvent.Pubkey[:],
@@ -752,10 +780,7 @@ func (b *Bridge) sendError(ctx context.Context, reqEvent *event.E, sessionID str
 		return
 	}
 
-	b.mu.RLock()
-	conn := b.rendezvousConn
-	b.mu.RUnlock()
-
+	conn := b.getConn()
 	if conn != nil {
 		conn.Publish(ctx, respEvent)
 	}
@@ -763,21 +788,29 @@ func (b *Bridge) sendError(ctx context.Context, reqEvent *event.E, sessionID str
 
 // AddAuthorizedSecret adds an authorized secret (derived pubkey).
 func (b *Bridge) AddAuthorizedSecret(pubkeyHex, deviceName string) {
-	b.config.AuthorizedSecrets[pubkeyHex] = deviceName
+	select {
+	case b.addSecretCh <- bridgeAddSecretReq{pubkeyHex: pubkeyHex, deviceName: deviceName}:
+	case <-b.stop:
+	}
 }
 
 // RemoveAuthorizedSecret removes an authorized secret.
 func (b *Bridge) RemoveAuthorizedSecret(pubkeyHex string) {
-	delete(b.config.AuthorizedSecrets, pubkeyHex)
+	select {
+	case b.removeSecretCh <- bridgeRemoveSecretReq{pubkeyHex: pubkeyHex}:
+	case <-b.stop:
+	}
 }
 
 // ListAuthorizedSecrets returns a copy of the authorized secrets map.
 func (b *Bridge) ListAuthorizedSecrets() map[string]string {
-	result := make(map[string]string)
-	for k, v := range b.config.AuthorizedSecrets {
-		result[k] = v
+	resp := make(chan map[string]string, 1)
+	select {
+	case b.listSecretsCh <- bridgeListSecretsReq{resp: resp}:
+		return <-resp
+	case <-b.stop:
+		return nil
 	}
-	return result
 }
 
 // SessionCount returns the number of active sessions.

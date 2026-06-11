@@ -11,13 +11,16 @@ import (
 )
 
 // Precomputed TaggedHash prefixes for common BIP-340 tags
-// These are computed once at init time to avoid repeated hash operations
+// Computed once at init time to avoid repeated hash operations.
 var (
 	bip340AuxTagHash       [32]byte
 	bip340NonceTagHash     [32]byte
 	bip340ChallengeTagHash [32]byte
-	taggedHashInitOnce     sync.Once
 )
+
+func init() {
+	initTaggedHashPrefixes()
+}
 
 // sha256Pool provides a pool of SHA256 hash contexts to reduce allocations
 var sha256Pool = sync.Pool{
@@ -71,8 +74,6 @@ func initTaggedHashPrefixes() {
 
 // getTaggedHashPrefix returns the precomputed SHA256(tag) for common tags
 func getTaggedHashPrefix(tag []byte) [32]byte {
-	taggedHashInitOnce.Do(initTaggedHashPrefixes)
-
 	// Fast path for common BIP-340 tags
 	if len(tag) == 13 {
 		switch string(tag) {

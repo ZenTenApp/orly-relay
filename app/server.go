@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -77,21 +76,27 @@ type Server struct {
 	// optional reverse proxy for dev web server
 	devProxy *httputil.ReverseProxy
 
-	// Per-IP connection tracking to prevent resource exhaustion
-	connPerIPMu sync.RWMutex
-	connPerIP   map[string]int
+	// Per-IP connection tracking actor channels
+	connIPCheckCh chan connIPCheckAndIncReq
+	connIPDecCh   chan connIPDecReq
+	connIPDone    chan struct{}
 
 	// Global connection and subscription counters for adaptive rate limiting
 	activeConnCount         atomic.Int64
 	activeSubscriptionCount atomic.Int64
 
-	// Challenge storage for HTTP UI authentication
-	challengeMutex sync.RWMutex
-	challenges     map[string][]byte
+	// Challenge storage actor channels
+	chalSetCh    chan chalSetReq
+	chalGetCh    chan chalGetReq
+	chalDeleteCh chan chalDeleteReq
+	chalDone     chan struct{}
 
-	// Message processing pause mutex for policy/follow list updates
-	// Use RLock() for normal message processing, Lock() for updates
-	messagePauseMutex sync.RWMutex
+	// Message gate actor channels (drain-then-pause)
+	msgGateEnterCh  chan msgGateEnterReq
+	msgGateExitCh   chan msgGateExitReq
+	msgGatePauseCh  chan msgGatePauseReq
+	msgGateResumeCh chan msgGateResumeReq
+	msgGateDone     chan struct{}
 
 	paymentProcessor  *PaymentProcessor
 	sprocketManager   *SprocketManager
@@ -456,11 +461,11 @@ func (s *Server) UserInterface() {
 		}
 	}
 
-	// Initialize challenge storage if not already done
-	if s.challenges == nil {
-		s.challengeMutex.Lock()
-		s.challenges = make(map[string][]byte)
-		s.challengeMutex.Unlock()
+	// Start actor goroutines
+	s.startConnPerIPActor()
+	s.startChallengeActor()
+	s.startMessageGate()
+	if true {
 	}
 
 	// Serve favicon.ico by serving favicon.png
@@ -783,20 +788,7 @@ func (s *Server) handleAuthChallenge(w http.ResponseWriter, r *http.Request) {
 	challengeHex := hex.Enc(challenge)
 
 	// Store the challenge with expiration (5 minutes)
-	s.challengeMutex.Lock()
-	if s.challenges == nil {
-		s.challenges = make(map[string][]byte)
-	}
-	s.challenges[challengeHex] = challenge
-	s.challengeMutex.Unlock()
-
-	// Clean up expired challenges
-	go func() {
-		time.Sleep(5 * time.Minute)
-		s.challengeMutex.Lock()
-		delete(s.challenges, challengeHex)
-		s.challengeMutex.Unlock()
-	}()
+	s.ChallengeSetWithExpiry(challengeHex, challenge, 5*time.Minute)
 
 	// Return the challenge
 	response := struct {
@@ -849,9 +841,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	challengeHex := string(challengeTag.Value())
 
 	// Retrieve the stored challenge
-	s.challengeMutex.RLock()
-	_, exists := s.challenges[challengeHex]
-	s.challengeMutex.RUnlock()
+	_, exists := s.ChallengeGet(challengeHex)
 
 	if !exists {
 		w.Write([]byte(`{"success": false, "error": "Invalid or expired challenge"}`))
@@ -859,9 +849,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Clean up the used challenge
-	s.challengeMutex.Lock()
-	delete(s.challenges, challengeHex)
-	s.challengeMutex.Unlock()
+	s.ChallengeDelete(challengeHex)
 
 	relayURL := s.WebSocketURL(r)
 
@@ -1932,30 +1920,4 @@ func (w *authSyncManagerWrapper) IsAuthorizedPeer(url, pubkey string) bool {
 }
 
 // =============================================================================
-// Message Processing Pause/Resume for Policy and Follow List Updates
-// =============================================================================
-
-// PauseMessageProcessing acquires an exclusive lock to pause all message processing.
-// This should be called before updating policy configuration or follow lists.
-// Call ResumeMessageProcessing to release the lock after updates are complete.
-func (s *Server) PauseMessageProcessing() {
-	s.messagePauseMutex.Lock()
-}
-
-// ResumeMessageProcessing releases the exclusive lock to resume message processing.
-// This should be called after policy configuration or follow list updates are complete.
-func (s *Server) ResumeMessageProcessing() {
-	s.messagePauseMutex.Unlock()
-}
-
-// AcquireMessageProcessingLock acquires a read lock for normal message processing.
-// This allows concurrent message processing while blocking during policy updates.
-// Call ReleaseMessageProcessingLock when message processing is complete.
-func (s *Server) AcquireMessageProcessingLock() {
-	s.messagePauseMutex.RLock()
-}
-
-// ReleaseMessageProcessingLock releases the read lock after message processing.
-func (s *Server) ReleaseMessageProcessingLock() {
-	s.messagePauseMutex.RUnlock()
-}
+// Message Processing Pause/Resume and Challenge/ConnPerIP actors are in server_actors.go

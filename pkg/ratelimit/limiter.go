@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"runtime"
-	"sync"
 	"sync/atomic"
 	"time"
 
-	"git.smesh.lol/orly/pkg/lol/log"
 	"git.smesh.lol/orly/pkg/interfaces/loadmonitor"
 	pidif "git.smesh.lol/orly/pkg/interfaces/pid"
+	"git.smesh.lol/orly/pkg/lol/log"
 	"git.smesh.lol/orly/pkg/pid"
 )
 
@@ -183,6 +182,16 @@ func NewConfigFromValues(
 	}
 }
 
+// Limiter actor request types
+type (
+	limiterGetMetricsReq struct {
+		resp chan loadmonitor.Metrics
+	}
+	limiterSetMetricsReq struct {
+		metrics loadmonitor.Metrics
+	}
+)
+
 // Limiter implements adaptive rate limiting using PID control.
 // It monitors database load metrics and computes appropriate delays
 // to keep the system within its target operating range.
@@ -194,9 +203,9 @@ type Limiter struct {
 	writePID pidif.Controller
 	readPID  pidif.Controller
 
-	// Cached metrics (updated periodically)
-	metricsLock    sync.RWMutex
-	currentMetrics loadmonitor.Metrics
+	// Actor channels for metrics state
+	getMetricsCh chan limiterGetMetricsReq
+	setMetricsCh chan limiterSetMetricsReq
 
 	// Emergency mode tracking with hysteresis
 	inEmergencyMode    atomic.Bool
@@ -213,10 +222,10 @@ type Limiter struct {
 	goroutineCount    atomic.Int64
 
 	// Connection storm config (set via SetConnectionLimits)
-	maxGlobalConns    int
-	connDelayMaxMs    int
-	goroutineWarning  int
-	goroutineMax      int
+	maxGlobalConns   int
+	connDelayMaxMs   int
+	goroutineWarning int
+	goroutineMax     int
 
 	// Statistics
 	totalWriteDelayMs atomic.Int64
@@ -227,11 +236,12 @@ type Limiter struct {
 	droppedConns      atomic.Int64
 
 	// Lifecycle
-	ctx       context.Context
-	cancel    context.CancelFunc
-	stopOnce  sync.Once
-	stopped   chan struct{}
-	wg        sync.WaitGroup
+	ctx     context.Context
+	cancel  context.CancelFunc
+	stopped chan struct{}
+	// done channels replace sync.WaitGroup - one per background goroutine
+	updateLoopDone chan struct{}
+	metricsActorDone chan struct{}
 }
 
 // NewLimiter creates a new adaptive rate limiter.
@@ -260,11 +270,15 @@ func NewLimiter(config Config, monitor loadmonitor.Monitor) *Limiter {
 	}
 
 	l := &Limiter{
-		config:  config,
-		monitor: monitor,
-		ctx:     ctx,
-		cancel:  cancel,
-		stopped: make(chan struct{}),
+		config:           config,
+		monitor:          monitor,
+		ctx:              ctx,
+		cancel:           cancel,
+		stopped:          make(chan struct{}),
+		getMetricsCh:     make(chan limiterGetMetricsReq, 1),
+		setMetricsCh:     make(chan limiterSetMetricsReq, 16),
+		updateLoopDone:   make(chan struct{}),
+		metricsActorDone: make(chan struct{}),
 	}
 
 	// Create PID controllers with configured gains using the generic pid package
@@ -302,7 +316,52 @@ func NewLimiter(config Config, monitor loadmonitor.Monitor) *Limiter {
 		emMon.SetEmergencyThreshold(config.EmergencyThreshold)
 	}
 
+	// Start the metrics actor goroutine
+	go l.metricsActor()
+
 	return l
+}
+
+// metricsActor owns the currentMetrics state. All reads/writes go through channels.
+func (l *Limiter) metricsActor() {
+	defer close(l.metricsActorDone)
+
+	var currentMetrics loadmonitor.Metrics
+
+	for {
+		select {
+		case req := <-l.getMetricsCh:
+			req.resp <- currentMetrics
+		case req := <-l.setMetricsCh:
+			currentMetrics = req.metrics
+		case <-l.ctx.Done():
+			// Drain any pending gets before exit
+			for {
+				select {
+				case req := <-l.getMetricsCh:
+					req.resp <- currentMetrics
+				default:
+					return
+				}
+			}
+		}
+	}
+}
+
+// getMetrics retrieves the current metrics from the actor.
+func (l *Limiter) getMetrics() loadmonitor.Metrics {
+	resp := make(chan loadmonitor.Metrics, 1)
+	l.getMetricsCh <- limiterGetMetricsReq{resp: resp}
+	return <-resp
+}
+
+// setMetrics sends updated metrics to the actor.
+func (l *Limiter) setMetrics(m loadmonitor.Metrics) {
+	select {
+	case l.setMetricsCh <- limiterSetMetricsReq{metrics: m}:
+	default:
+		// Drop if buffer full - next tick will update
+	}
 }
 
 // Start begins the rate limiter's background metric collection.
@@ -315,13 +374,12 @@ func (l *Limiter) Start() {
 	l.monitor.Start()
 
 	// Start metric update loop
-	l.wg.Add(1)
 	go l.updateLoop()
 }
 
 // updateLoop periodically fetches metrics from the monitor and checks STW triggers.
 func (l *Limiter) updateLoop() {
-	defer l.wg.Done()
+	defer close(l.updateLoopDone)
 
 	ticker := time.NewTicker(l.config.MetricUpdateInterval)
 	defer ticker.Stop()
@@ -336,15 +394,13 @@ func (l *Limiter) updateLoop() {
 		case <-ticker.C:
 			if l.monitor != nil {
 				metrics := l.monitor.GetMetrics()
-				l.metricsLock.Lock()
-				l.currentMetrics = metrics
-				l.metricsLock.Unlock()
+				l.setMetrics(metrics)
 
 				// Re-evaluate emergency mode on every tick, not just during
 				// event processing. Without this, ShouldAcceptConnection()
 				// refuses connections during emergency, which means no events
 				// arrive, which means checkEmergencyMode() never runs to
-				// clear the flag — permanent lockup.
+				// clear the flag - permanent lockup.
 				l.checkEmergencyMode(metrics.MemoryPressure)
 			}
 			// Sample goroutine count for connection storm detection
@@ -385,14 +441,22 @@ func (l *Limiter) checkSTWCompaction() {
 
 // Stop halts the rate limiter.
 func (l *Limiter) Stop() {
-	l.stopOnce.Do(func() {
-		l.cancel()
-		if l.monitor != nil {
-			l.monitor.Stop()
-		}
-		l.wg.Wait()
-		close(l.stopped)
-	})
+	// CAS pattern replaces sync.Once: try to close stopCh; if already closed, return
+	select {
+	case <-l.stopped:
+		// Already stopped
+		return
+	default:
+	}
+
+	l.cancel()
+	if l.monitor != nil {
+		l.monitor.Stop()
+	}
+	// Wait for background goroutines (replaces sync.WaitGroup)
+	<-l.updateLoopDone
+	<-l.metricsActorDone
+	close(l.stopped)
 }
 
 // Stopped returns a channel that closes when the limiter has stopped.
@@ -409,7 +473,7 @@ func (l *Limiter) Wait(ctx context.Context, opType int) (time.Duration, error) {
 		return 0, nil
 	}
 
-	// STW check — reject writes immediately during compaction
+	// STW check - reject writes immediately during compaction
 	if OperationType(opType) == Write && l.compacting.Load() {
 		return 0, ErrCompactionPause
 	}
@@ -436,9 +500,7 @@ func (l *Limiter) ComputeDelay(opType OperationType) time.Duration {
 	}
 
 	// Get current metrics
-	l.metricsLock.RLock()
-	metrics := l.currentMetrics
-	l.metricsLock.RUnlock()
+	metrics := l.getMetrics()
 
 	// Check emergency mode with hysteresis
 	inEmergency := l.checkEmergencyMode(metrics.MemoryPressure)
@@ -517,7 +579,7 @@ func (l *Limiter) checkEmergencyMode(memoryPressure float64) bool {
 		// To exit, must drop below recovery threshold
 		if memoryPressure <= l.config.RecoveryThreshold {
 			l.inEmergencyMode.Store(false)
-			log.I.F("✅ exiting emergency mode: memory %.1f%% <= recovery threshold %.1f%%",
+			log.I.F("exiting emergency mode: memory %.1f%% <= recovery threshold %.1f%%",
 				memoryPressure*100, l.config.RecoveryThreshold*100)
 			return false
 		}
@@ -528,7 +590,7 @@ func (l *Limiter) checkEmergencyMode(memoryPressure float64) bool {
 	if memoryPressure >= l.config.EmergencyThreshold {
 		l.inEmergencyMode.Store(true)
 		l.emergencyEvents.Add(1)
-		log.W.F("⚠️  entering emergency mode: memory %.1f%% >= threshold %.1f%%",
+		log.W.F("entering emergency mode: memory %.1f%% >= threshold %.1f%%",
 			memoryPressure*100, l.config.EmergencyThreshold*100)
 
 		return true
@@ -609,9 +671,7 @@ type PIDState struct {
 
 // GetStats returns current rate limiter statistics.
 func (l *Limiter) GetStats() Stats {
-	l.metricsLock.RLock()
-	metrics := l.currentMetrics
-	l.metricsLock.RUnlock()
+	metrics := l.getMetrics()
 
 	stats := Stats{
 		WriteThrottles:    l.writeThrottles.Load(),
@@ -686,9 +746,10 @@ func (l *Limiter) DroppedConnections() int64 {
 // systemLoadScore computes a composite load score from 0.0 (idle) to 1.0+ (overloaded).
 // It combines memory pressure, goroutine count, and connection count.
 func (l *Limiter) systemLoadScore() float64 {
-	l.metricsLock.RLock()
-	memPressure := l.currentMetrics.MemoryPressure
-	l.metricsLock.RUnlock()
+	resp := make(chan loadmonitor.Metrics, 1)
+	l.getMetricsCh <- limiterGetMetricsReq{resp: resp}
+	m := <-resp
+	memPressure := m.MemoryPressure
 
 	goroutines := l.goroutineCount.Load()
 	conns := l.activeConnections.Load()

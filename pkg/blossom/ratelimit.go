@@ -1,25 +1,52 @@
 package blossom
 
 import (
-	"sync"
 	"time"
 )
 
 // BandwidthState tracks upload bandwidth for an identity
 type BandwidthState struct {
-	BucketBytes   int64     // Current token bucket level (bytes available)
-	LastUpdate    time.Time // Last time bucket was updated
+	BucketBytes int64     // Current token bucket level (bytes available)
+	LastUpdate  time.Time // Last time bucket was updated
+}
+
+// checkAndConsumeReq is sent to the actor to check and consume bandwidth.
+type checkAndConsumeReq struct {
+	identity  string
+	sizeBytes int64
+	resp      chan bool
+}
+
+// getAvailableReq is sent to the actor to query available bandwidth.
+type getAvailableReq struct {
+	identity string
+	resp     chan int64
+}
+
+// cleanupReq signals the actor to run cleanup.
+type cleanupReq struct {
+	resp chan struct{}
+}
+
+// statsReq asks the actor for the count of tracked identities.
+type statsReq struct {
+	resp chan int
 }
 
 // BandwidthLimiter implements token bucket rate limiting for uploads.
 // Each identity gets a bucket that replenishes at dailyLimit/day rate.
 // Uploads consume tokens from the bucket.
 type BandwidthLimiter struct {
-	mu           sync.Mutex
-	states       map[string]*BandwidthState // keyed by pubkey hex or IP
-	dailyLimit   int64                      // bytes per day
-	burstLimit   int64                      // max bucket size (burst capacity)
-	refillRate   float64                    // bytes per second refill rate
+	checkAndConsumeCh chan checkAndConsumeReq
+	getAvailableCh    chan getAvailableReq
+	cleanupCh         chan cleanupReq
+	statsCh           chan statsReq
+
+	stop chan struct{}
+	done chan struct{}
+
+	burstLimit int64   // exposed for GetTimeUntilAvailable
+	refillRate float64 // exposed for GetTimeUntilAvailable
 }
 
 // NewBandwidthLimiter creates a new bandwidth limiter.
@@ -29,71 +56,116 @@ func NewBandwidthLimiter(dailyLimitMB, burstLimitMB int64) *BandwidthLimiter {
 	dailyBytes := dailyLimitMB * 1024 * 1024
 	burstBytes := burstLimitMB * 1024 * 1024
 
-	return &BandwidthLimiter{
-		states:     make(map[string]*BandwidthState),
-		dailyLimit: dailyBytes,
-		burstLimit: burstBytes,
-		refillRate: float64(dailyBytes) / 86400.0, // bytes per second
+	bl := &BandwidthLimiter{
+		checkAndConsumeCh: make(chan checkAndConsumeReq),
+		getAvailableCh:    make(chan getAvailableReq),
+		cleanupCh:         make(chan cleanupReq),
+		statsCh:           make(chan statsReq),
+		stop:              make(chan struct{}),
+		done:              make(chan struct{}),
+		burstLimit:        burstBytes,
+		refillRate:        float64(dailyBytes) / 86400.0,
 	}
+
+	go bl.run(burstBytes, float64(dailyBytes)/86400.0)
+	return bl
+}
+
+// run is the actor goroutine that owns all mutable state.
+func (bl *BandwidthLimiter) run(burstLimit int64, refillRate float64) {
+	defer close(bl.done)
+
+	states := make(map[string]*BandwidthState)
+
+	for {
+		select {
+		case <-bl.stop:
+			return
+
+		case req := <-bl.checkAndConsumeCh:
+			now := time.Now()
+			state, exists := states[req.identity]
+			if !exists {
+				state = &BandwidthState{
+					BucketBytes: burstLimit,
+					LastUpdate:  now,
+				}
+				states[req.identity] = state
+			} else {
+				elapsed := now.Sub(state.LastUpdate).Seconds()
+				refill := int64(elapsed * refillRate)
+				state.BucketBytes += refill
+				if state.BucketBytes > burstLimit {
+					state.BucketBytes = burstLimit
+				}
+				state.LastUpdate = now
+			}
+			if state.BucketBytes >= req.sizeBytes {
+				state.BucketBytes -= req.sizeBytes
+				req.resp <- true
+			} else {
+				req.resp <- false
+			}
+
+		case req := <-bl.getAvailableCh:
+			state, exists := states[req.identity]
+			if !exists {
+				req.resp <- burstLimit
+			} else {
+				now := time.Now()
+				elapsed := now.Sub(state.LastUpdate).Seconds()
+				refill := int64(elapsed * refillRate)
+				available := state.BucketBytes + refill
+				if available > burstLimit {
+					available = burstLimit
+				}
+				req.resp <- available
+			}
+
+		case req := <-bl.cleanupCh:
+			now := time.Now()
+			for key, state := range states {
+				elapsed := now.Sub(state.LastUpdate).Seconds()
+				refill := int64(elapsed * refillRate)
+				if state.BucketBytes+refill >= burstLimit {
+					delete(states, key)
+				}
+			}
+			close(req.resp)
+
+		case req := <-bl.statsCh:
+			req.resp <- len(states)
+		}
+	}
+}
+
+// Stop shuts down the actor goroutine.
+func (bl *BandwidthLimiter) Stop() {
+	close(bl.stop)
+	<-bl.done
 }
 
 // CheckAndConsume checks if an upload of the given size is allowed for the identity,
 // and if so, consumes the tokens. Returns true if allowed, false if rate limited.
 // The identity should be pubkey hex for authenticated users, or IP for anonymous.
 func (bl *BandwidthLimiter) CheckAndConsume(identity string, sizeBytes int64) bool {
-	bl.mu.Lock()
-	defer bl.mu.Unlock()
-
-	now := time.Now()
-	state, exists := bl.states[identity]
-
-	if !exists {
-		// New identity starts with full burst capacity
-		state = &BandwidthState{
-			BucketBytes: bl.burstLimit,
-			LastUpdate:  now,
-		}
-		bl.states[identity] = state
-	} else {
-		// Refill bucket based on elapsed time
-		elapsed := now.Sub(state.LastUpdate).Seconds()
-		refill := int64(elapsed * bl.refillRate)
-		state.BucketBytes += refill
-		if state.BucketBytes > bl.burstLimit {
-			state.BucketBytes = bl.burstLimit
-		}
-		state.LastUpdate = now
+	resp := make(chan bool, 1)
+	bl.checkAndConsumeCh <- checkAndConsumeReq{
+		identity:  identity,
+		sizeBytes: sizeBytes,
+		resp:      resp,
 	}
-
-	// Check if upload fits in bucket
-	if state.BucketBytes >= sizeBytes {
-		state.BucketBytes -= sizeBytes
-		return true
-	}
-
-	return false
+	return <-resp
 }
 
 // GetAvailable returns the currently available bytes for an identity.
 func (bl *BandwidthLimiter) GetAvailable(identity string) int64 {
-	bl.mu.Lock()
-	defer bl.mu.Unlock()
-
-	state, exists := bl.states[identity]
-	if !exists {
-		return bl.burstLimit // New users have full capacity
+	resp := make(chan int64, 1)
+	bl.getAvailableCh <- getAvailableReq{
+		identity: identity,
+		resp:     resp,
 	}
-
-	// Calculate current level with refill
-	now := time.Now()
-	elapsed := now.Sub(state.LastUpdate).Seconds()
-	refill := int64(elapsed * bl.refillRate)
-	available := state.BucketBytes + refill
-	if available > bl.burstLimit {
-		available = bl.burstLimit
-	}
-
-	return available
+	return <-resp
 }
 
 // GetTimeUntilAvailable returns how long until the given bytes will be available.
@@ -110,22 +182,14 @@ func (bl *BandwidthLimiter) GetTimeUntilAvailable(identity string, sizeBytes int
 
 // Cleanup removes entries that have fully replenished (at burst limit).
 func (bl *BandwidthLimiter) Cleanup() {
-	bl.mu.Lock()
-	defer bl.mu.Unlock()
-
-	now := time.Now()
-	for key, state := range bl.states {
-		elapsed := now.Sub(state.LastUpdate).Seconds()
-		refill := int64(elapsed * bl.refillRate)
-		if state.BucketBytes+refill >= bl.burstLimit {
-			delete(bl.states, key)
-		}
-	}
+	resp := make(chan struct{})
+	bl.cleanupCh <- cleanupReq{resp: resp}
+	<-resp
 }
 
 // Stats returns the number of tracked identities.
 func (bl *BandwidthLimiter) Stats() int {
-	bl.mu.Lock()
-	defer bl.mu.Unlock()
-	return len(bl.states)
+	resp := make(chan int, 1)
+	bl.statsCh <- statsReq{resp: resp}
+	return <-resp
 }

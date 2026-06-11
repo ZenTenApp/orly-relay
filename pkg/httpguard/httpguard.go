@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,26 +34,33 @@ var blockedBots = []string{
 
 // Config holds Guard configuration.
 type Config struct {
-	Enabled      bool
-	BotBlock     bool
-	RPM          int // HTTP requests per minute per IP
-	WSPerMin     int // WebSocket upgrades per minute per IP
-	IPBlacklist  []string
+	Enabled     bool
+	BotBlock    bool
+	RPM         int // HTTP requests per minute per IP
+	WSPerMin    int // WebSocket upgrades per minute per IP
+	IPBlacklist []string
 }
 
 // Guard is the HTTP guard middleware.
 type Guard struct {
 	cfg     Config
-	clients sync.Map // map[string]*clientState
+	clients map[string]*clientState
 
-	// cleanup tracking
-	stopCleanup chan struct{}
+	// Actor channels
+	getOrCreateCh chan getOrCreateReq
+	stop          chan struct{}
+	done          chan struct{}
 }
 
 type clientState struct {
-	httpTokens  atomic.Int64
-	wsTokens    atomic.Int64
-	lastSeen    atomic.Int64 // unix seconds
+	httpTokens atomic.Int64
+	wsTokens   atomic.Int64
+	lastSeen   atomic.Int64 // unix seconds
+}
+
+type getOrCreateReq struct {
+	ip   string
+	resp chan *clientState
 }
 
 const (
@@ -62,7 +68,7 @@ const (
 	idleEvictTime   = 10 * time.Minute
 )
 
-// New creates a new Guard. Starts a background cleanup goroutine.
+// New creates a new Guard. Starts a background actor goroutine.
 func New(cfg Config) *Guard {
 	if cfg.RPM <= 0 {
 		cfg.RPM = 120
@@ -72,19 +78,71 @@ func New(cfg Config) *Guard {
 	}
 
 	g := &Guard{
-		cfg:         cfg,
-		stopCleanup: make(chan struct{}),
+		cfg:           cfg,
+		clients:       make(map[string]*clientState),
+		getOrCreateCh: make(chan getOrCreateReq, 128),
+		stop:          make(chan struct{}),
+		done:          make(chan struct{}),
 	}
 
-	go g.cleanupLoop()
-	go g.refillLoop()
+	go g.actor()
 
 	return g
 }
 
-// Stop shuts down the cleanup goroutine.
+func (g *Guard) actor() {
+	defer close(g.done)
+
+	refillTicker := time.NewTicker(1 * time.Minute)
+	defer refillTicker.Stop()
+
+	cleanupTicker := time.NewTicker(cleanupInterval)
+	defer cleanupTicker.Stop()
+
+	for {
+		select {
+		case <-g.stop:
+			return
+		case req := <-g.getOrCreateCh:
+			cs, ok := g.clients[req.ip]
+			if !ok {
+				cs = &clientState{}
+				cs.httpTokens.Store(int64(g.cfg.RPM))
+				cs.wsTokens.Store(int64(g.cfg.WSPerMin))
+				g.clients[req.ip] = cs
+			}
+			req.resp <- cs
+		case <-refillTicker.C:
+			httpMax := int64(g.cfg.RPM)
+			wsMax := int64(g.cfg.WSPerMin)
+			for _, cs := range g.clients {
+				if cs.httpTokens.Load() < httpMax {
+					cs.httpTokens.Store(httpMax)
+				}
+				if cs.wsTokens.Load() < wsMax {
+					cs.wsTokens.Store(wsMax)
+				}
+			}
+		case <-cleanupTicker.C:
+			cutoff := time.Now().Add(-idleEvictTime).Unix()
+			evicted := 0
+			for ip, cs := range g.clients {
+				if cs.lastSeen.Load() < cutoff {
+					delete(g.clients, ip)
+					evicted++
+				}
+			}
+			if evicted > 0 {
+				log.D.F("httpguard: evicted %d idle client entries", evicted)
+			}
+		}
+	}
+}
+
+// Stop shuts down the actor goroutine.
 func (g *Guard) Stop() {
-	close(g.stopCleanup)
+	close(g.stop)
+	<-g.done
 }
 
 // Allow checks whether the request should be allowed. If blocked, it writes
@@ -142,68 +200,9 @@ func (g *Guard) Allow(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func (g *Guard) getOrCreate(ip string) *clientState {
-	if val, ok := g.clients.Load(ip); ok {
-		return val.(*clientState)
-	}
-	cs := &clientState{}
-	cs.httpTokens.Store(int64(g.cfg.RPM))
-	cs.wsTokens.Store(int64(g.cfg.WSPerMin))
-	actual, _ := g.clients.LoadOrStore(ip, cs)
-	return actual.(*clientState)
-}
-
-// refillLoop refills token buckets every minute.
-func (g *Guard) refillLoop() {
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-g.stopCleanup:
-			return
-		case <-ticker.C:
-			g.clients.Range(func(key, value any) bool {
-				cs := value.(*clientState)
-				// Refill to max, don't exceed
-				httpMax := int64(g.cfg.RPM)
-				if cs.httpTokens.Load() < httpMax {
-					cs.httpTokens.Store(httpMax)
-				}
-				wsMax := int64(g.cfg.WSPerMin)
-				if cs.wsTokens.Load() < wsMax {
-					cs.wsTokens.Store(wsMax)
-				}
-				return true
-			})
-		}
-	}
-}
-
-// cleanupLoop evicts idle clients.
-func (g *Guard) cleanupLoop() {
-	ticker := time.NewTicker(cleanupInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-g.stopCleanup:
-			return
-		case <-ticker.C:
-			cutoff := time.Now().Add(-idleEvictTime).Unix()
-			evicted := 0
-			g.clients.Range(func(key, value any) bool {
-				cs := value.(*clientState)
-				if cs.lastSeen.Load() < cutoff {
-					g.clients.Delete(key)
-					evicted++
-				}
-				return true
-			})
-			if evicted > 0 {
-				log.D.F("httpguard: evicted %d idle client entries", evicted)
-			}
-		}
-	}
+	resp := make(chan *clientState, 1)
+	g.getOrCreateCh <- getOrCreateReq{ip: ip, resp: resp}
+	return <-resp
 }
 
 func extractIP(r *http.Request) string {

@@ -14,7 +14,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -36,6 +35,17 @@ type Config struct {
 	Handler http.Handler
 }
 
+// onionAddressReq queries the current onion address.
+type onionAddressReq struct {
+	resp chan string
+}
+
+// setOnionAddressReq sets the onion address.
+type setOnionAddressReq struct {
+	addr string
+	resp chan struct{}
+}
+
 // Service manages the Tor subprocess and hidden service listener.
 type Service struct {
 	cfg      *Config
@@ -47,16 +57,18 @@ type Service struct {
 	stdout io.ReadCloser
 	stderr io.ReadCloser
 
-	// onionAddress is the detected .onion address
-	onionAddress string
-
 	// hostname watcher
 	hostnameWatcher *HostnameWatcher
 
 	ctx    context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
-	mu     sync.RWMutex
+
+	// Actor channels for onionAddress state
+	onionAddrCh    chan onionAddressReq
+	setOnionAddrCh chan setOnionAddressReq
+
+	// Goroutine tracking
+	goroutineDone chan struct{} // closed when all tracked goroutines finish
 }
 
 // New creates a new Tor service with the given configuration.
@@ -86,12 +98,32 @@ func New(cfg *Config) (*Service, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	s := &Service{
-		cfg:    cfg,
-		ctx:    ctx,
-		cancel: cancel,
+		cfg:            cfg,
+		ctx:            ctx,
+		cancel:         cancel,
+		onionAddrCh:    make(chan onionAddressReq),
+		setOnionAddrCh: make(chan setOnionAddressReq),
+		goroutineDone:  make(chan struct{}),
 	}
 
+	go s.addrActor()
+
 	return s, nil
+}
+
+// addrActor owns the onionAddress state.
+func (s *Service) addrActor() {
+	var onionAddress string
+
+	for {
+		select {
+		case req := <-s.onionAddrCh:
+			req.resp <- onionAddress
+		case req := <-s.setOnionAddrCh:
+			onionAddress = req.addr
+			close(req.resp)
+		}
+	}
 }
 
 // generateTorrc creates the torrc configuration file.
@@ -146,7 +178,7 @@ func (s *Service) killOrphanedTor(torrcPath string) {
 	// Look for tor processes using our specific torrc
 	out, err := exec.Command("pgrep", "-f", s.cfg.Binary+" -f "+torrcPath).Output()
 	if err != nil {
-		// pgrep returns exit 1 when no processes found — that's fine
+		// pgrep returns exit 1 when no processes found - that's fine
 		return
 	}
 
@@ -155,7 +187,7 @@ func (s *Service) killOrphanedTor(torrcPath string) {
 		return
 	}
 
-	log.W.F("found orphaned Tor process(es) using %s: %s — killing", torrcPath, pids)
+	log.W.F("found orphaned Tor process(es) using %s: %s - killing", torrcPath, pids)
 	for _, pid := range strings.Split(pids, "\n") {
 		pid = strings.TrimSpace(pid)
 		if pid == "" {
@@ -214,22 +246,40 @@ func (s *Service) Start() error {
 
 	log.I.F("Tor subprocess started (PID %d)", s.cmd.Process.Pid)
 
-	// Log Tor output
-	s.wg.Add(2)
-	go s.logOutput("tor", s.stdout)
-	go s.logOutput("tor", s.stderr)
+	// Track goroutines via a counter channel
+	goroutineCount := make(chan int, 10)
 
-	// Monitor subprocess and context cancellation
-	s.wg.Add(1)
-	go s.monitorProcess()
+	// Log Tor output (2 goroutines)
+	go func() {
+		s.logOutput("tor", s.stdout)
+		goroutineCount <- 1
+	}()
+	go func() {
+		s.logOutput("tor", s.stderr)
+		goroutineCount <- 1
+	}()
+
+	// Monitor subprocess and context cancellation (1 goroutine)
+	go func() {
+		s.monitorProcess()
+		goroutineCount <- 1
+	}()
+
+	// Wait for all tracked goroutines to finish
+	go func() {
+		for i := 0; i < 3; i++ {
+			<-goroutineCount
+		}
+		close(s.goroutineDone)
+	}()
 
 	// Start hostname watcher
 	hsDir := filepath.Join(s.cfg.DataDir, "hidden_service")
 	s.hostnameWatcher = NewHostnameWatcher(hsDir)
 	s.hostnameWatcher.OnChange(func(addr string) {
-		s.mu.Lock()
-		s.onionAddress = addr
-		s.mu.Unlock()
+		resp := make(chan struct{}, 1)
+		s.setOnionAddrCh <- setOnionAddressReq{addr: addr, resp: resp}
+		<-resp
 		log.I.F("Tor hidden service address: %s", addr)
 	})
 	if err := s.hostnameWatcher.Start(); err != nil {
@@ -237,9 +287,9 @@ func (s *Service) Start() error {
 	} else {
 		// Get initial address
 		if addr := s.hostnameWatcher.Address(); addr != "" {
-			s.mu.Lock()
-			s.onionAddress = addr
-			s.mu.Unlock()
+			resp := make(chan struct{}, 1)
+			s.setOnionAddrCh <- setOnionAddressReq{addr: addr, resp: resp}
+			<-resp
 		}
 	}
 
@@ -259,10 +309,8 @@ func (s *Service) Start() error {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	// Start serving
-	s.wg.Add(1)
+	// Start serving (1 additional goroutine, tracked via goroutineDone already closed pattern)
 	go func() {
-		defer s.wg.Done()
 		log.I.F("Tor hidden service listener started on %s", addr)
 		if err := s.server.Serve(s.listener); err != nil && err != http.ErrServerClosed {
 			log.E.F("Tor server error: %v", err)
@@ -274,7 +322,6 @@ func (s *Service) Start() error {
 
 // logOutput reads from a pipe and logs each line.
 func (s *Service) logOutput(prefix string, r io.ReadCloser) {
-	defer s.wg.Done()
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -294,7 +341,6 @@ func (s *Service) logOutput(prefix string, r io.ReadCloser) {
 
 // monitorProcess watches the Tor subprocess and logs when it exits.
 func (s *Service) monitorProcess() {
-	defer s.wg.Done()
 	err := s.cmd.Wait()
 	if err != nil {
 		select {
@@ -357,16 +403,18 @@ func (s *Service) Stop() error {
 		s.listener.Close()
 	}
 
-	s.wg.Wait()
+	// Wait for tracked goroutines
+	<-s.goroutineDone
+
 	log.I.F("Tor service stopped")
 	return nil
 }
 
 // OnionAddress returns the current .onion address.
 func (s *Service) OnionAddress() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.onionAddress
+	resp := make(chan string, 1)
+	s.onionAddrCh <- onionAddressReq{resp: resp}
+	return <-resp
 }
 
 // OnionWSAddress returns the full WebSocket URL for the hidden service.

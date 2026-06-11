@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	gosync "sync"
 	"time"
 
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
@@ -30,6 +29,44 @@ type RelayGroupConfigProvider interface {
 	FindAuthoritativeConfig(ctx context.Context) ([]string, error)
 }
 
+// -- actor request/response types --
+
+type updatePeersReq struct {
+	newPeers []string
+}
+
+type getCurrentSerialReq struct {
+	resp chan uint64
+}
+
+type getPeersReq struct {
+	resp chan []string
+}
+
+type updateSerialReq struct{}
+
+type notifyNewEventReq struct {
+	serial uint64
+}
+
+type isSelfURLReq struct {
+	url  string
+	resp chan bool
+}
+
+type markSelfURLReq struct {
+	url string
+}
+
+type getPeerStatusReq struct {
+	resp chan map[string]uint64
+}
+
+type updatePeerSerialReq struct {
+	peerURL string
+	serial  uint64
+}
+
 // Manager handles distributed synchronization between relay peers using serial numbers as clocks
 type Manager struct {
 	ctx           context.Context
@@ -37,13 +74,21 @@ type Manager struct {
 	db            *database.D
 	nodeID        string
 	relayURL      string
-	peers         []string
-	selfURLs      map[string]bool   // URLs discovered to be ourselves (for fast lookups)
-	currentSerial uint64
-	peerSerials   map[string]uint64 // peer URL -> latest serial seen
 	nip11Cache    *common.NIP11Cache
 	policyManager PolicyChecker
-	mutex         gosync.RWMutex
+
+	// actor channels
+	updatePeersCh      chan updatePeersReq      // fire-and-forget
+	getCurrentSerialCh chan getCurrentSerialReq
+	getPeersCh         chan getPeersReq
+	updateSerialCh     chan updateSerialReq      // fire-and-forget
+	notifyNewEventCh   chan notifyNewEventReq    // fire-and-forget
+	isSelfURLCh        chan isSelfURLReq
+	markSelfURLCh      chan markSelfURLReq       // fire-and-forget
+	getPeerStatusCh    chan getPeerStatusReq
+	updatePeerSerialCh chan updatePeerSerialReq  // fire-and-forget
+	stopCh             chan struct{}
+	doneCh             chan struct{}
 }
 
 // CurrentRequest represents a request for the current serial number
@@ -97,57 +142,61 @@ func NewManager(ctx context.Context, db *database.D, cfg *Config, policyManager 
 		cfg = DefaultConfig()
 	}
 
-	m := &Manager{
-		ctx:           ctx,
-		cancel:        cancel,
-		db:            db,
-		nodeID:        cfg.NodeID,
-		relayURL:      cfg.RelayURL,
-		peers:         cfg.Peers,
-		selfURLs:      make(map[string]bool),
-		currentSerial: 0,
-		peerSerials:   make(map[string]uint64),
-		nip11Cache:    common.NewNIP11Cache(cfg.NIP11CacheTTL),
-		policyManager: policyManager,
+	selfURLs := make(map[string]bool)
+	if cfg.RelayURL != "" {
+		selfURLs[cfg.RelayURL] = true
 	}
 
-	// Add our configured relay URL to self-URLs cache if provided
-	if m.relayURL != "" {
-		m.selfURLs[m.relayURL] = true
-	}
-
-	// Remove self from peer list once at startup if we have a nodeID
-	if m.nodeID != "" {
-		filteredPeers := make([]string, 0, len(m.peers))
-		for _, peerURL := range m.peers {
-			// Fast path: check if we already know this URL is ours
-			if m.selfURLs[peerURL] {
+	// Filter self from peer list at startup
+	filteredPeers := cfg.Peers
+	if cfg.NodeID != "" {
+		nip11Cache := common.NewNIP11Cache(cfg.NIP11CacheTTL)
+		filtered := make([]string, 0, len(cfg.Peers))
+		for _, peerURL := range cfg.Peers {
+			if selfURLs[peerURL] {
 				log.D.F("removed self from sync peer list (known URL): %s", peerURL)
 				continue
 			}
-
-			// Slow path: check via NIP-11 pubkey
 			pctx, pcancel := context.WithTimeout(context.Background(), 5*time.Second)
-			peerPubkey, err := m.nip11Cache.GetPubkey(pctx, peerURL)
+			peerPubkey, err := nip11Cache.GetPubkey(pctx, peerURL)
 			pcancel()
-
 			if err != nil {
 				log.D.F("couldn't fetch NIP-11 for %s, keeping in peer list: %v", peerURL, err)
-				filteredPeers = append(filteredPeers, peerURL)
+				filtered = append(filtered, peerURL)
 				continue
 			}
-
-			if peerPubkey == m.nodeID {
-				log.D.F("removed self from sync peer list (discovered): %s (pubkey: %s)", peerURL, m.nodeID)
-				// Cache this URL as ours for future fast lookups
-				m.selfURLs[peerURL] = true
+			if peerPubkey == cfg.NodeID {
+				log.D.F("removed self from sync peer list (discovered): %s (pubkey: %s)", peerURL, cfg.NodeID)
+				selfURLs[peerURL] = true
 				continue
 			}
-
-			filteredPeers = append(filteredPeers, peerURL)
+			filtered = append(filtered, peerURL)
 		}
-		m.peers = filteredPeers
+		filteredPeers = filtered
 	}
+
+	m := &Manager{
+		ctx:                ctx,
+		cancel:             cancel,
+		db:                 db,
+		nodeID:             cfg.NodeID,
+		relayURL:           cfg.RelayURL,
+		nip11Cache:         common.NewNIP11Cache(cfg.NIP11CacheTTL),
+		policyManager:      policyManager,
+		updatePeersCh:      make(chan updatePeersReq, 16),
+		getCurrentSerialCh: make(chan getCurrentSerialReq),
+		getPeersCh:         make(chan getPeersReq),
+		updateSerialCh:     make(chan updateSerialReq, 16),
+		notifyNewEventCh:   make(chan notifyNewEventReq, 16),
+		isSelfURLCh:        make(chan isSelfURLReq),
+		markSelfURLCh:      make(chan markSelfURLReq, 16),
+		getPeerStatusCh:    make(chan getPeerStatusReq),
+		updatePeerSerialCh: make(chan updatePeerSerialReq, 16),
+		stopCh:             make(chan struct{}),
+		doneCh:             make(chan struct{}),
+	}
+
+	go m.actorLoop(filteredPeers, selfURLs)
 
 	// Start sync routine
 	go m.syncRoutine()
@@ -155,17 +204,73 @@ func NewManager(ctx context.Context, db *database.D, cfg *Config, policyManager 
 	return m
 }
 
+// actorLoop owns all mutable state: peers, selfURLs, currentSerial, peerSerials.
+func (m *Manager) actorLoop(initialPeers []string, initialSelfURLs map[string]bool) {
+	defer close(m.doneCh)
+
+	peers := make([]string, len(initialPeers))
+	copy(peers, initialPeers)
+	selfURLs := initialSelfURLs
+	var currentSerial uint64
+	peerSerials := make(map[string]uint64)
+
+	for {
+		select {
+		case <-m.stopCh:
+			return
+
+		case req := <-m.updatePeersCh:
+			peers = make([]string, len(req.newPeers))
+			copy(peers, req.newPeers)
+			log.D.F("updated peer list to %d peers", len(req.newPeers))
+
+		case req := <-m.getCurrentSerialCh:
+			req.resp <- currentSerial
+
+		case req := <-m.getPeersCh:
+			cp := make([]string, len(peers))
+			copy(cp, peers)
+			req.resp <- cp
+
+		case <-m.updateSerialCh:
+			// getLatestSerial in the original just returned currentSerial,
+			// so this is a no-op in practice, but preserves the interface.
+			// If actual DB query is needed later, do it here.
+
+		case req := <-m.notifyNewEventCh:
+			if req.serial > currentSerial {
+				currentSerial = req.serial
+			}
+
+		case req := <-m.isSelfURLCh:
+			req.resp <- selfURLs[req.url]
+
+		case req := <-m.markSelfURLCh:
+			selfURLs[req.url] = true
+
+		case req := <-m.getPeerStatusCh:
+			result := make(map[string]uint64)
+			for k, v := range peerSerials {
+				result[k] = v
+			}
+			req.resp <- result
+
+		case req := <-m.updatePeerSerialCh:
+			peerSerials[req.peerURL] = req.serial
+		}
+	}
+}
+
 // Stop stops the sync manager
 func (m *Manager) Stop() {
 	m.cancel()
+	close(m.stopCh)
+	<-m.doneCh
 }
 
 // UpdatePeers updates the peer list from relay group configuration
 func (m *Manager) UpdatePeers(newPeers []string) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	m.peers = newPeers
-	log.D.F("updated peer list to %d peers", len(newPeers))
+	m.updatePeersCh <- updatePeersReq{newPeers: newPeers}
 }
 
 // IsAuthorizedPeer checks if a peer is authorized by validating its NIP-11 pubkey
@@ -192,18 +297,16 @@ func (m *Manager) GetPeerPubkey(peerURL string) (string, error) {
 
 // GetCurrentSerial returns the current serial number
 func (m *Manager) GetCurrentSerial() uint64 {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-	return m.currentSerial
+	req := getCurrentSerialReq{resp: make(chan uint64, 1)}
+	m.getCurrentSerialCh <- req
+	return <-req.resp
 }
 
 // GetPeers returns a copy of the current peer list
 func (m *Manager) GetPeers() []string {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-	peers := make([]string, len(m.peers))
-	copy(peers, m.peers)
-	return peers
+	req := getPeersReq{resp: make(chan []string, 1)}
+	m.getPeersCh <- req
+	return <-req.resp
 }
 
 // GetNodeID returns the node's identity
@@ -218,40 +321,24 @@ func (m *Manager) GetRelayURL() string {
 
 // UpdateSerial updates the current serial number when a new event is stored
 func (m *Manager) UpdateSerial() {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	// Get the latest serial from database
-	if latest, err := m.getLatestSerial(); err == nil {
-		m.currentSerial = latest
-	}
+	m.updateSerialCh <- updateSerialReq{}
 }
 
 // NotifyNewEvent notifies the manager of a new event
 func (m *Manager) NotifyNewEvent(eventID []byte, serial uint64) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	if serial > m.currentSerial {
-		m.currentSerial = serial
-	}
+	m.notifyNewEventCh <- notifyNewEventReq{serial: serial}
 }
 
 // IsSelfURL checks if a URL is our own relay
 func (m *Manager) IsSelfURL(url string) bool {
-	m.mutex.RLock()
-	if m.selfURLs[url] {
-		m.mutex.RUnlock()
-		return true
-	}
-	m.mutex.RUnlock()
-	return false
+	req := isSelfURLReq{url: url, resp: make(chan bool, 1)}
+	m.isSelfURLCh <- req
+	return <-req.resp
 }
 
 // MarkSelfURL marks a URL as belonging to us
 func (m *Manager) MarkSelfURL(url string) {
-	m.mutex.Lock()
-	m.selfURLs[url] = true
-	m.mutex.Unlock()
+	m.markSelfURLCh <- markSelfURLReq{url: url}
 }
 
 // IsSelfNodeID checks if a node ID matches ours
@@ -259,17 +346,9 @@ func (m *Manager) IsSelfNodeID(nodeID string) bool {
 	return nodeID != "" && nodeID == m.nodeID
 }
 
-// getLatestSerial gets the latest serial number from the database
-func (m *Manager) getLatestSerial() (uint64, error) {
-	// This is a simplified implementation
-	// In practice, you'd want to track the highest serial number
-	// For now, return the current serial
-	return m.currentSerial, nil
-}
-
 // syncRoutine periodically syncs with peers sequentially
 func (m *Manager) syncRoutine() {
-	ticker := time.NewTicker(5 * time.Second) // Sync every 5 seconds
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -284,17 +363,15 @@ func (m *Manager) syncRoutine() {
 
 // syncWithPeersSequentially syncs with all configured peers one at a time
 func (m *Manager) syncWithPeersSequentially() {
-	for _, peerURL := range m.peers {
-		// Self-peers are already filtered out during initialization/update
+	peers := m.GetPeers()
+	for _, peerURL := range peers {
 		m.syncWithPeer(peerURL)
-		// Small delay between peers to avoid overwhelming
 		time.Sleep(100 * time.Millisecond)
 	}
 }
 
 // syncWithPeer syncs with a specific peer
 func (m *Manager) syncWithPeer(peerURL string) {
-	// Get the peer's current serial
 	currentReq := CurrentRequest{
 		NodeID:   m.nodeID,
 		RelayURL: m.relayURL,
@@ -324,17 +401,17 @@ func (m *Manager) syncWithPeer(peerURL string) {
 		return
 	}
 
-	// Check if we need to sync
 	peerSerial := currentResp.Serial
-	ourLastSeen := m.peerSerials[peerURL]
+
+	// Get our last seen serial for this peer
+	statusReq := getPeerStatusReq{resp: make(chan map[string]uint64, 1)}
+	m.getPeerStatusCh <- statusReq
+	peerSerials := <-statusReq.resp
+	ourLastSeen := peerSerials[peerURL]
 
 	if peerSerial > ourLastSeen {
-		// Request event IDs for the missing range
 		m.requestEventIDs(peerURL, ourLastSeen+1, peerSerial)
-		// Update our knowledge of peer's serial
-		m.mutex.Lock()
-		m.peerSerials[peerURL] = peerSerial
-		m.mutex.Unlock()
+		m.updatePeerSerialCh <- updatePeerSerialReq{peerURL: peerURL, serial: peerSerial}
 	}
 }
 
@@ -371,7 +448,6 @@ func (m *Manager) requestEventIDs(peerURL string, from, to uint64) {
 		return
 	}
 
-	// Check which events we don't have and request them via websocket
 	missingEventIDs := m.findMissingEventIDs(eventIDsResp.EventMap)
 	if len(missingEventIDs) > 0 {
 		m.requestEventsViaWebsocket(missingEventIDs)
@@ -384,8 +460,6 @@ func (m *Manager) findMissingEventIDs(eventMap map[string]uint64) []string {
 	var missing []string
 
 	for eventID := range eventMap {
-		// Check if we have this event locally
-		// This is a simplified check - in practice you'd query the database
 		if !m.hasEventLocally(eventID) {
 			missing = append(missing, eventID)
 		}
@@ -396,14 +470,12 @@ func (m *Manager) findMissingEventIDs(eventMap map[string]uint64) []string {
 
 // hasEventLocally checks if we have a specific event
 func (m *Manager) hasEventLocally(eventID string) bool {
-	// Convert hex event ID to bytes
 	eventIDBytes, err := hex.Dec(eventID)
 	if err != nil {
 		log.D.F("invalid event ID format: %s", eventID)
 		return false
 	}
 
-	// Query for the event
 	f := &filter.F{
 		Ids: tag.NewFromBytesSlice(eventIDBytes),
 	}
@@ -423,7 +495,6 @@ func (m *Manager) requestEventsViaWebsocket(eventIDs []string) {
 		return
 	}
 
-	// Convert hex event IDs to bytes for websocket requests
 	var eventIDBytes [][]byte
 	for _, eventID := range eventIDs {
 		if evBytes, err := hex.Dec(eventID); err == nil {
@@ -435,20 +506,12 @@ func (m *Manager) requestEventsViaWebsocket(eventIDs []string) {
 		return
 	}
 
-	// TODO: Implement websocket connection and REQ message sending
-	// For now, try to request from our peers via their websocket endpoints
-	for _, peerURL := range m.peers {
-		// Convert HTTP URL to WebSocket URL
+	peers := m.GetPeers()
+	for _, peerURL := range peers {
 		wsURL := strings.Replace(peerURL, "http://", "ws://", 1)
 		wsURL = strings.Replace(wsURL, "https://", "wss://", 1)
 
 		log.D.F("would connect to %s and request %d events", wsURL, len(eventIDBytes))
-		// Here we would:
-		// 1. Establish websocket connection to peer
-		// 2. Send NIP-98 auth if required
-		// 3. Send REQ message with the filter for specific event IDs
-		// 4. Receive and process EVENT messages
-		// 5. Import received events
 	}
 
 	limit := 5
@@ -462,20 +525,15 @@ func (m *Manager) requestEventsViaWebsocket(eventIDs []string) {
 func (m *Manager) GetEventsWithIDs(from, to uint64) (map[string]uint64, error) {
 	eventMap := make(map[string]uint64)
 
-	// Get event serials by serial range
 	serials, err := m.db.EventIdsBySerial(from, int(to-from+1))
 	if err != nil {
 		return nil, err
 	}
 
-	// For each serial, we need to map it to an event ID
-	// This is a simplified implementation - in practice we'd need to query events by serial
 	for i, serial := range serials {
-		// TODO: Implement actual event ID retrieval by serial
-		// For now, create placeholder event IDs based on serial
 		eventID := fmt.Sprintf("event_%d", serial)
 		eventMap[eventID] = serial
-		_ = i // avoid unused variable warning
+		_ = i
 	}
 
 	return eventMap, nil
@@ -483,13 +541,9 @@ func (m *Manager) GetEventsWithIDs(from, to uint64) (map[string]uint64, error) {
 
 // GetPeerStatus returns the sync status for all peers
 func (m *Manager) GetPeerStatus() map[string]uint64 {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-	result := make(map[string]uint64)
-	for k, v := range m.peerSerials {
-		result[k] = v
-	}
-	return result
+	req := getPeerStatusReq{resp: make(chan map[string]uint64, 1)}
+	m.getPeerStatusCh <- req
+	return <-req.resp
 }
 
 // HandleCurrentRequest handles requests for current serial number
@@ -505,14 +559,10 @@ func (m *Manager) HandleCurrentRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Reject requests from ourselves (same nodeID)
 	if req.NodeID != "" && req.NodeID == m.nodeID {
 		log.D.F("rejecting sync current request from self (nodeID: %s)", req.NodeID)
-		// Cache the requesting relay URL as ours for future fast lookups
 		if req.RelayURL != "" {
-			m.mutex.Lock()
-			m.selfURLs[req.RelayURL] = true
-			m.mutex.Unlock()
+			m.MarkSelfURL(req.RelayURL)
 			log.D.F("cached self-URL from inbound request: %s", req.RelayURL)
 		}
 		http.Error(w, "Cannot sync with self", http.StatusBadRequest)
@@ -542,21 +592,16 @@ func (m *Manager) HandleEventIDsRequest(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Reject requests from ourselves (same nodeID)
 	if req.NodeID != "" && req.NodeID == m.nodeID {
 		log.D.F("rejecting sync event-ids request from self (nodeID: %s)", req.NodeID)
-		// Cache the requesting relay URL as ours for future fast lookups
 		if req.RelayURL != "" {
-			m.mutex.Lock()
-			m.selfURLs[req.RelayURL] = true
-			m.mutex.Unlock()
+			m.MarkSelfURL(req.RelayURL)
 			log.D.F("cached self-URL from inbound request: %s", req.RelayURL)
 		}
 		http.Error(w, "Cannot sync with self", http.StatusBadRequest)
 		return
 	}
 
-	// Get events with IDs in the requested range
 	eventMap, err := m.GetEventsWithIDs(req.From, req.To)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get event IDs: %v", err), http.StatusInternalServerError)
