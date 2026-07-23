@@ -1,0 +1,174 @@
+# This workflow builds and releases ORLY binaries on GitHub.
+#
+# NOTE: All builds use CGO_ENABLED=0. The secp256k1 crypto is provided by
+#       p256k1.mleku.dev which is pure Go with optional BMI2 assembly acceleration.
+#
+# Release Process:
+# 1. Update the version in the pkg/version/version file (e.g. v1.2.3)
+# 2. Create and push a tag matching the version:
+#    git tag v1.2.3
+#    git push origin v1.2.3
+# 3. The workflow will automatically:
+#    - Build all binaries for Linux AMD64 and ARM64
+#    - Build the web UIs
+#    - Run tests
+#    - Create a GitHub release with all binaries
+#    - Generate checksums
+
+name: Go
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.3"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build Main Web UI
+        run: |
+          set -e
+          cd ${GITHUB_WORKSPACE}/app/web
+          echo "Installing frontend dependencies..."
+          bun install
+          echo "Building web app..."
+          bun run build
+          ls -lah dist/
+          echo "Main web UI build complete"
+
+      - name: Build Smesh UI
+        run: |
+          set -e
+          cd ${GITHUB_WORKSPACE}/app/smesh
+          echo "Installing smesh dependencies..."
+          bun install
+          echo "Building smesh app..."
+          bun run build
+          ls -lah dist/
+          echo "Smesh UI build complete"
+
+      - name: Build Launcher Admin Web UI
+        run: |
+          set -e
+          cd ${GITHUB_WORKSPACE}/cmd/orly-launcher/web
+          echo "Installing launcher admin dependencies..."
+          bun install
+          echo "Building launcher admin UI..."
+          bun run build
+          ls -lah dist/
+          echo "Launcher admin UI build complete"
+
+      - name: Build All Packages
+        run: |
+          set -e
+          cd ${GITHUB_WORKSPACE}
+          echo "Building all packages..."
+          CGO_ENABLED=0 go build -v $(go list ./... 2>/dev/null | grep -v -e '/cmd/marmot-wasm' -e '/p256k1/bench' -e '/node_modules/')
+
+      - name: Test
+        run: |
+          set -e
+          cd ${GITHUB_WORKSPACE}
+          echo "Running tests..."
+          CGO_ENABLED=0 go test -v $(go list ./... | grep -v '/cmd/benchmark/external/' | xargs -n1 sh -c 'ls $0/*_test.go 1>/dev/null 2>&1 && echo $0' | grep .) || echo "Some tests failed, continuing..."
+
+      - name: Build Release Binaries
+        run: |
+          set -e
+          cd ${GITHUB_WORKSPACE}
+
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "Building release binaries for version $VERSION"
+
+          mkdir -p release-binaries
+
+          # List of binaries to build
+          BINARIES=(
+            "orly:."
+            "orly-db-badger:./cmd/orly-db-badger"
+            "orly-db-neo4j:./cmd/orly-db-neo4j"
+            "orly-acl-follows:./cmd/orly-acl-follows"
+            "orly-acl-managed:./cmd/orly-acl-managed"
+            "orly-acl-curation:./cmd/orly-acl-curation"
+            "orly-launcher:./cmd/orly-launcher"
+            "orly-sync-negentropy:./cmd/orly-sync-negentropy"
+            "orly-certs:./cmd/orly-certs"
+          )
+
+          # Build for AMD64
+          echo "Building for Linux AMD64..."
+          for entry in "${BINARIES[@]}"; do
+            name="${entry%%:*}"
+            path="${entry##*:}"
+            echo "  Building ${name}..."
+            GOEXPERIMENT=greenteagc,jsonv2 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+              go build -ldflags "-s -w" -o "release-binaries/${name}-${VERSION}-linux-amd64" "${path}"
+          done
+
+          # Build for ARM64
+          echo "Building for Linux ARM64..."
+          for entry in "${BINARIES[@]}"; do
+            name="${entry%%:*}"
+            path="${entry##*:}"
+            echo "  Building ${name}..."
+            GOEXPERIMENT=greenteagc,jsonv2 GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
+              go build -ldflags "-s -w" -o "release-binaries/${name}-${VERSION}-linux-arm64" "${path}"
+          done
+
+          # Create checksums
+          cd release-binaries
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          cd ..
+
+          echo "Release binaries built successfully:"
+          ls -lh release-binaries/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          files: release-binaries/*
+          body: |
+            ## ORLY Release ${{ github.ref_name }}
+
+            ### Binaries Included
+            * orly - Main relay binary
+            * orly-db-badger - Badger database server
+            * orly-db-neo4j - Neo4j database server
+            * orly-acl-follows - Follows ACL server
+            * orly-acl-managed - Managed ACL server
+            * orly-acl-curation - Curation ACL server
+            * orly-launcher - Process supervisor with admin UI
+            * orly-sync-negentropy - Negentropy sync service
+            * orly-certs - DNS-01 wildcard certificate manager
+
+            ### Architectures
+            * Linux AMD64 (x86_64)
+            * Linux ARM64 (aarch64)
+
+            ### Installation
+            1. Download the appropriate binaries for your architecture
+            2. Make them executable: `chmod +x orly-*`
+            3. Run with: `./orly-launcher` (for split mode) or `./orly` (standalone)

@@ -12,8 +12,8 @@ body:
         Thank you for taking the time to report a bug. Please fill out the form below to help us understand and reproduce the issue.
 
         **Before submitting:**
-        - Search [existing issues](https://git.smesh.lol/orly/issues) to avoid duplicates
-        - Check the [documentation](https://git.smesh.lol/orly) for configuration guidance
+        - Search [existing issues](https://github.com/ZenTenApp/orly-relay/issues) to avoid duplicates
+        - Check the [documentation](https://github.com/ZenTenApp/orly-relay) for configuration guidance
         - Ensure you're running a recent version of ORLY
 
   - type: input

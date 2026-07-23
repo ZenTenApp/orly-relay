@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Documentation
-    url: https://git.smesh.lol/orly
+    url: https://github.com/ZenTenApp/orly-relay
     about: Check the repository documentation before opening an issue
   - name: Nostr Protocol (NIPs)
     url: https://github.com/nostr-protocol/nips
