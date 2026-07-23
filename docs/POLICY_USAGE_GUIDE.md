@@ -382,6 +382,58 @@ A regex pattern that `d` tag identifiers must conform to. This is useful for enf
 
 **Note:** If `identifier_regex` is set, events MUST have at least one `d` tag, and ALL `d` tags must match the pattern.
 
+#### allowed_tags
+
+An exclusive whitelist of tag key letters. When set, ONLY tags whose key is in
+the list may appear on the event; any event carrying a tag key outside the set is
+rejected on write. This is the inverse of `must_have_tags`:
+
+- `must_have_tags` requires certain tags to be **present** (extras still allowed)
+- `allowed_tags` forbids any tag **outside** the set (does not require them)
+
+```json
+{
+  "allowed_tags": ["d", "p"]
+}
+```
+
+**Example - restrict a custom kind to only d and p tags:**
+```json
+{
+  "rules": {
+    "37801": {
+      "description": "Only d and p tags permitted",
+      "allowed_tags": ["d", "p"]
+    }
+  }
+}
+```
+
+An event of kind 37801 with a `d` tag and/or `p` tag is accepted; adding any other
+tag (e.g. `e`, `t`) causes the write to be rejected.
+
+**Combine with `must_have_tags` for exact-tag control:**
+```json
+{
+  "rules": {
+    "37801": {
+      "must_have_tags": ["d"],
+      "allowed_tags": ["d", "p"]
+    }
+  }
+}
+```
+
+This requires a `d` tag to be present and permits only `d` and `p` tags.
+
+**Notes:**
+- An empty array or omitted field means no restriction (all tags allowed).
+- If you also enable `protected_required` (`-` tag), `max_expiry_duration`
+  (`expiration` tag), or `identifier_regex` (`d` tag) on the same kind, be sure to
+  include those tag keys in `allowed_tags` or events will always be rejected.
+- This is a write-only validation and never filters reads (REQ).
+- Policy admins cannot introduce or narrow `allowed_tags` via kind 12345 updates.
+
 #### follows_whitelist_admins
 
 Specifies admin pubkeys (hex-encoded) whose follows are whitelisted for this specific rule. Unlike `WriteAllowFollows` which uses the global `PolicyAdmins`, this allows per-rule admin configuration.

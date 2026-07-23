@@ -12,6 +12,7 @@ This document provides a definitive reference for all policy configuration optio
 | `max_age_event_in_future` | ✅ | ❌ | Prevents future-dated events |
 | `max_expiry_duration` | ✅ | ❌ | Requires expiration tag |
 | `must_have_tags` | ✅ | ❌ | Validates required tags |
+| `allowed_tags` | ✅ | ❌ | Exclusive tag key whitelist |
 | `protected_required` | ✅ | ❌ | Requires NIP-70 "-" tag |
 | `identifier_regex` | ✅ | ❌ | Validates "d" tag format |
 | `tag_validation` | ✅ | ❌ | Validates tag values with regex |
@@ -362,6 +363,39 @@ Required tags that must be present on the event.
   }
 }
 ```
+
+#### `allowed_tags`
+**Type**: `[]string` (tag key letters)
+**Applies to**: Write only
+**Behavior**: Exclusive tag key whitelist
+
+When present with entries, ONLY tags whose key is in this list may appear on the
+event. Any event containing a tag key **not** in the list is rejected. This is the
+inverse of `must_have_tags`:
+
+- `must_have_tags` requires certain tags to be **present** (but allows extras)
+- `allowed_tags` forbids any tag **outside** the set (but does not require them)
+
+Combine both to express "exactly these tags" semantics.
+
+```json
+{
+  "rules": {
+    "37801": {
+      "description": "Only d and p tags permitted",
+      "allowed_tags": ["d", "p"]
+    }
+  }
+}
+```
+
+> **Important gotchas**:
+> - An empty array or omitted field means **no restriction** (all tags allowed).
+> - If you also set `protected_required`, `max_expiry_duration`, or
+>   `identifier_regex` on the same kind, you must include the required tag keys
+>   (`-`, `expiration`, `d`) in `allowed_tags`, or every event will be rejected.
+> - Policy admins cannot introduce or narrow an `allowed_tags` whitelist via kind
+>   12345 updates (it is a restriction only owners may add); they may widen it.
 
 #### `protected_required`
 **Type**: `boolean`

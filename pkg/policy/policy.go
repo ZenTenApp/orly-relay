@@ -153,9 +153,15 @@ type TagValidationConfig struct {
 	TagValidation map[string]string `json:"tag_validation,omitempty"`
 	// IdentifierRegex is a regex pattern for "d" tag identifiers.
 	IdentifierRegex string `json:"identifier_regex,omitempty"`
+	// AllowedTags, if non-empty, is an exclusive whitelist of tag key letters.
+	// Any event containing a tag key NOT in this list is rejected on write.
+	// This is the inverse of MustHaveTags: MustHaveTags requires presence,
+	// AllowedTags forbids anything outside the set.
+	AllowedTags []string `json:"allowed_tags,omitempty"`
 
 	// Compiled cache (internal, not serialized)
 	identifierRegexCache *regexp.Regexp
+	allowedTagsSet       map[string]struct{}
 }
 
 // =============================================================================
@@ -186,7 +192,7 @@ func (r *Rule) hasAnyRules() bool {
 		r.SizeLimit != nil || r.ContentLimit != nil ||
 		r.MaxAgeOfEvent != nil || r.MaxAgeEventInFuture != nil ||
 		r.MaxExpiry != nil || r.MaxExpiryDuration != "" || r.maxExpirySeconds != nil || //nolint:staticcheck // Backward compat
-		len(r.MustHaveTags) > 0 ||
+		len(r.MustHaveTags) > 0 || len(r.AllowedTags) > 0 ||
 		r.Script != "" || r.Privileged ||
 		r.WriteAllowFollows || len(r.FollowsWhitelistAdmins) > 0 ||
 		len(r.ReadFollowsWhitelist) > 0 || len(r.WriteFollowsWhitelist) > 0 ||
@@ -276,6 +282,16 @@ func (r *Rule) populateBinaryCache() error {
 		} else {
 			r.identifierRegexCache = compiled
 		}
+	}
+
+	// Build AllowedTags set for O(1) lookups
+	if len(r.AllowedTags) > 0 {
+		r.allowedTagsSet = make(map[string]struct{}, len(r.AllowedTags))
+		for _, tagKey := range r.AllowedTags {
+			r.allowedTagsSet[tagKey] = struct{}{}
+		}
+	} else {
+		r.allowedTagsSet = nil
 	}
 
 	// Convert FollowsWhitelistAdmins hex strings to binary (DEPRECATED)
@@ -1697,6 +1713,21 @@ func (p *P) checkRulePolicy(
 			}
 		}
 
+		// Check allowed tags (exclusive whitelist of tag keys).
+		// If AllowedTags is set, any tag whose key is NOT in the set causes rejection.
+		if len(rule.allowedTagsSet) > 0 && ev.Tags != nil {
+			for _, t := range *ev.Tags {
+				if t.Len() == 0 {
+					continue
+				}
+				key := string(t.T[0])
+				if _, ok := rule.allowedTagsSet[key]; !ok {
+					log.D.F("allowed_tags: tag key %q not in allowed set", key)
+					return false, nil
+				}
+			}
+		}
+
 		// Check expiry time (uses maxExpirySeconds which is parsed from MaxExpiryDuration or MaxExpiry)
 		if rule.maxExpirySeconds != nil && *rule.maxExpirySeconds > 0 {
 			expiryTag := ev.Tags.GetFirst([]byte("expiration"))
@@ -2965,6 +2996,21 @@ func (p *P) validateNoPermissionReduction(newPolicy *P) error {
 			}
 			if !found {
 				return fmt.Errorf("cannot add required tag %q for kind %d (only owners can add restrictions)", tag, kind)
+			}
+		}
+
+		// Check allowed_tags - restricting the permitted tag set is a restriction.
+		// Policy admins may not introduce or narrow an allowed_tags whitelist.
+		if len(currentRule.AllowedTags) == 0 {
+			if len(newRule.AllowedTags) > 0 {
+				return fmt.Errorf("cannot add allowed_tags whitelist for kind %d (only owners can add restrictions)", kind)
+			}
+		} else {
+			// An owner allowlist exists; admins cannot remove any allowed tag.
+			for _, tag := range currentRule.AllowedTags {
+				if !containsString(newRule.AllowedTags, tag) {
+					return fmt.Errorf("cannot remove tag %q from allowed_tags for kind %d (only owners can add restrictions)", tag, kind)
+				}
 			}
 		}
 	}
