@@ -134,6 +134,20 @@ func NewWithConfig(
 
 	queryCacheSize := int64(queryCacheSizeMB * 1024 * 1024)
 
+	// NIP-40 expired-event cleanup sweep interval: from explicit config, else the
+	// ORLY_EXPIRATION_CLEANUP_INTERVAL env var, else the 10-minute default. This lets
+	// operators tune how quickly expired events are physically purged (and lets local
+	// tests verify deletion without waiting 10 minutes).
+	expirationCleanupInterval := cfg.ExpirationCleanupInterval
+	if expirationCleanupInterval <= 0 {
+		expirationCleanupInterval = 10 * time.Minute
+		if s := os.Getenv("ORLY_EXPIRATION_CLEANUP_INTERVAL"); s != "" {
+			if v, perr := time.ParseDuration(s); perr == nil && v > 0 {
+				expirationCleanupInterval = v
+			}
+		}
+	}
+
 	// Create query cache only if not disabled
 	var qc *querycache.EventCache
 	if !cfg.QueryCacheDisabled {
@@ -232,7 +246,7 @@ func NewWithConfig(
 	// start up the expiration tag processing and shut down and clean up the
 	// database after the context is canceled.
 	go func() {
-		expirationTicker := time.NewTicker(time.Minute * 10)
+		expirationTicker := time.NewTicker(expirationCleanupInterval)
 		defer expirationTicker.Stop()
 		for {
 			select {

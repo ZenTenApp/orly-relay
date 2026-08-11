@@ -28,6 +28,10 @@ type DatabaseConfig struct {
 	SerialCachePubkeys  int // ORLY_SERIAL_CACHE_PUBKEYS - max pubkeys to cache (default: 100000)
 	SerialCacheEventIds int // ORLY_SERIAL_CACHE_EVENT_IDS - max event IDs to cache (default: 500000)
 
+	// NIP-40 expired-event cleanup sweep interval.
+	// Overridable via ORLY_EXPIRATION_CLEANUP_INTERVAL (e.g. "10m"). Default 10m.
+	ExpirationCleanupInterval time.Duration
+
 	// Compression settings
 	ZSTDLevel int // ORLY_DB_ZSTD_LEVEL - ZSTD compression level (0=none, 1=fast, 3=default, 9=best)
 
