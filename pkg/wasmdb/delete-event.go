@@ -223,7 +223,12 @@ func (w *W) DeleteExpired() {
 			return cursor.Continue()
 		}
 
-		expiredSerials = append(expiredSerials, ser)
+		// ser is a reused codec instance; the slice stores pointers, so copy
+		// the value before appending — otherwise every entry aliases the same
+		// object and only the last decoded serial is ever seen.
+		s := new(types.Uint40)
+		s.Set(ser.Get())
+		expiredSerials = append(expiredSerials, s)
 		return cursor.Continue()
 	})
 

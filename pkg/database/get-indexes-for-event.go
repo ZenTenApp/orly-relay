@@ -2,6 +2,7 @@ package database
 
 import (
 	"bytes"
+	"strconv"
 
 	"git.smesh.lol/orly/pkg/lol/chk"
 	"git.smesh.lol/orly/pkg/database/bufpool"
@@ -157,6 +158,25 @@ func GetIndexesForEvent(ev *event.E, serial uint64) (
 	)
 	if err = appendIndexBytes(&idxs, kindPubkeyIndex, buf); chk.E(err) {
 		return
+	}
+
+	// Expiration index (NIP-40). This lets the background DeleteExpired
+	// sweeper find events whose expiration timestamp has passed without
+	// scanning every stored event. Index is only written for a positive
+	// (real) expiration; a zero value means "no expiration" and must not be
+	// indexed, otherwise DeleteExpired would treat it as already past.
+	if ev.Tags != nil {
+		if expTag := ev.Tags.GetFirst([]byte("expiration")); expTag != nil && expTag.Len() >= 2 {
+			expVal, perr := strconv.ParseInt(string(expTag.Value()), 10, 64)
+			if perr == nil && expVal > 0 {
+				exp := new(Uint64)
+				exp.Set(uint64(expVal))
+				expirationIndex := indexes.ExpirationEnc(exp, ser)
+				if err = appendIndexBytes(&idxs, expirationIndex, buf); chk.E(err) {
+					return
+				}
+			}
+		}
 	}
 
 	// NOTE: AddressableEvent index for parameterized replaceable events (kinds 30000-39999)

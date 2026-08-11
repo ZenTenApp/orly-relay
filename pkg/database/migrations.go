@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	currentVersion uint32 = 10
+	currentVersion uint32 = 11
 )
 
 func (d *D) RunMigrations() {
@@ -141,6 +141,16 @@ func (d *D) RunMigrations() {
 		d.BackfillPubkeyPubkeyGraph()
 		// bump to version 10
 		_ = d.writeVersionTag(10)
+	}
+	if dbVersion < 11 {
+		log.I.F("migrating to version 11...")
+		// Backfill NIP-40 expiration indexes for events stored before the
+		// expiration index was written at save time. Without this, the
+		// background DeleteExpired sweeper has nothing to scan and expired
+		// events are never physically removed.
+		d.BackfillExpirationIndex()
+		// bump to version 11
+		_ = d.writeVersionTag(11)
 	}
 }
 
@@ -1724,4 +1734,88 @@ func (d *D) BackfillPubkeyPubkeyGraph() {
 	}
 
 	log.I.F("pubkey-pubkey graph backfill complete: created %d bidirectional edges", createdEdges)
+}
+
+// BackfillExpirationIndex writes NIP-40 expiration index entries for all
+// existing events that carry an "expiration" tag. New events already get this
+// index written at save time (GetIndexesForEvent); this migration backfills
+// events stored before that fix so the background DeleteExpired sweeper (which
+// scans the expiration index) can find and remove them.
+func (d *D) BackfillExpirationIndex() {
+	log.I.F("backfilling NIP-40 expiration indexes for existing events...")
+	var err error
+	var serials []uint64
+
+	// First pass: collect every serial from the canonical compact event table.
+	if err = d.View(func(txn *badger.Txn) error {
+		prf := new(bytes.Buffer)
+		if err = indexes.CompactEventEnc(nil).MarshalWrite(prf); chk.E(err) {
+			return err
+		}
+		it := txn.NewIterator(badger.IteratorOptions{Prefix: prf.Bytes()})
+		defer it.Close()
+		for it.Rewind(); it.Valid(); it.Next() {
+			key := it.Item().KeyCopy(nil)
+			ser := indexes.CompactEventVars()
+			if err = indexes.CompactEventDec(ser).UnmarshalRead(bytes.NewBuffer(key)); chk.E(err) {
+				continue
+			}
+			serials = append(serials, ser.Get())
+		}
+		return nil
+	}); chk.E(err) {
+		return
+	}
+
+	if len(serials) == 0 {
+		log.I.F("no events to backfill expiration indexes for")
+		return
+	}
+
+	// Second pass: decode each event, extract the expiration tag, and build
+	// the expiration index keys.
+	var expIndexes [][]byte
+	for _, s := range serials {
+		ser := new(types.Uint40)
+		if err = ser.Set(s); chk.E(err) {
+			continue
+		}
+		ev, ferr := d.FetchEventBySerial(ser)
+		if ferr != nil || ev == nil {
+			continue
+		}
+		expTag := ev.Tags.GetFirst([]byte("expiration"))
+		if expTag == nil || expTag.Len() < 2 {
+			continue
+		}
+		expTS := ints.New(0)
+		if _, err = expTS.Unmarshal(expTag.Value()); err != nil {
+			continue
+		}
+		if expTS.N == 0 {
+			continue
+		}
+		exp, _ := indexes.ExpirationVars()
+		exp.Set(expTS.N)
+		expBuf := new(bytes.Buffer)
+		if err = indexes.ExpirationEnc(exp, ser).MarshalWrite(expBuf); chk.E(err) {
+			continue
+		}
+		expIndexes = append(expIndexes, expBuf.Bytes())
+	}
+
+	sort.Slice(expIndexes, func(i, j int) bool {
+		return bytes.Compare(expIndexes[i], expIndexes[j]) < 0
+	})
+
+	batch := d.NewWriteBatch()
+	for _, v := range expIndexes {
+		if err = batch.Set(v, nil); chk.E(err) {
+			continue
+		}
+	}
+	if err = batch.Flush(); chk.E(err) {
+		return
+	}
+	log.I.F("backfilled %d NIP-40 expiration indexes", len(expIndexes))
 }
