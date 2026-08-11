@@ -89,8 +89,8 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 						return // Return empty result
 					}
 				}
-				// Check expiration
-				if !mode.IsOpen() && CheckExpiration(ev) {
+				// Check expiration (NIP-40) - always enforced regardless of ACL mode
+				if CheckExpiration(ev) {
 					log.T.F("QueryEvents: addressable event fast path - event expired")
 					return // Return empty result
 				}
@@ -155,8 +155,7 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 			}
 
 			// check for an expiration tag and delete after returning the result
-			// Skip expiration check when ACL is "none" (open relay mode)
-			if !mode.IsOpen() && CheckExpiration(ev) {
+			if CheckExpiration(ev) {
 				log.T.F(
 					"QueryEvents: id=%s filtered out due to expiration", idHex,
 				)
@@ -267,8 +266,7 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 			}
 
 			// check for an expiration tag and delete after returning the result
-			// Skip expiration check when ACL is "none" (open relay mode)
-			if !mode.IsOpen() && CheckExpiration(ev) {
+			if CheckExpiration(ev) {
 				expDeletes = append(expDeletes, ser)
 				expEvs = append(expEvs, ev)
 				continue
@@ -384,6 +382,12 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 		}
 		// Second pass: process all events, filtering out deleted ones
 		for _, ev := range allEvents {
+			// Skip NIP-40 expired events. The first pass already flagged them,
+			// but this second pass rebuilds the result set from allEvents without
+			// the expiration filter, so re-check here to keep them out of results.
+			if CheckExpiration(ev) {
+				continue
+			}
 			// Add logging for tag filter debugging
 			if f.Tags != nil && f.Tags.Len() > 0 {
 				// var eventTags []string
