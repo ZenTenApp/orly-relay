@@ -1,0 +1,201 @@
+# Deploy ORLY to production — build on GitHub Actions, never on the server.
+#
+# The VPS is intentionally kept small; compiling Go + frontends there is slow
+# and can OOM. Instead:
+#
+#   1. The `build` job compiles the unified binary (./cmd/orly) for
+#      linux/amd64 on a GitHub runner (same flags as scripts/upgrade.sh,
+#      including GOEXPERIMENT=greenteagc,jsonv2).
+#   2. The `deploy` job ships the prebuilt binary to the server via SSH,
+#      backs up the previous binary, restarts systemd `orly`, and verifies.
+#
+# Triggers:
+#   - push to main        -> build + test only (continuous verification)
+#   - manual dispatch     -> build + deploy to production
+#
+# Required repository secrets:
+#   DEPLOY_SSH_KEY   private ed25519 key whose public half is in the
+#                    deploy user's ~/.ssh/authorized_keys on the server
+#   DEPLOY_USER      ssh user (root, or a dedicated deploy user with
+#                    passwordless: systemctl restart orly)
+#
+# Optional secrets:
+#   DEPLOY_IP        IP to ssh-keyscan if hostname has no public DNS
+#
+# Manual run:  Actions -> "Deploy" -> Run workflow -> choose target.
+# Auto-deploy on every main push: add `main` to on.push.branches and
+# set the deploy job's `if:` to always run (not recommended without
+# staging + rollback tooling).
+
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Server(s) to deploy to
+        type: choice
+        options:
+          - relay.orly.dev
+          - new.orly.dev
+          - both
+        default: relay.orly.dev
+      restart:
+        description: Restart the orly service after deploying
+        type: boolean
+        default: true
+      rebuild_frontends:
+        description: Rebuild embedded web UIs before compiling (slower, fresher assets)
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-orly-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.25.3"
+  CGO_ENABLED: "0"
+  GOOS: linux
+  GOARCH: amd64
+  GOEXPERIMENT: greenteagc,jsonv2
+  REMOTE_BIN: /home/mleku/.local/bin/orly
+  SERVICE: orly
+
+jobs:
+  build:
+    name: Build unified binary (linux/amd64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # No recursive submodules: the unified build and embedded assets
+          # (app/smesh/dist, app/smesh2, app/smesh3) do not need them.
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go.sum
+
+      - name: Rebuild embedded web UIs (optional)
+        if: github.event_name == 'workflow_dispatch' && inputs.rebuild_frontends
+        run: |
+          set -e
+          for ui in app/web app/smesh; do
+            echo "Building $ui..."
+            (cd "$ui" && bun install --frozen-lockfile && bun run build)
+          done
+          git diff --stat app/
+
+      - name: Build unified binary
+        run: |
+          set -e
+          VERSION=$(cat pkg/version/version | tr -d '[:space:]')
+          go build -ldflags "-s -w" -o orly ./cmd/orly
+          echo "Built: $(file orly)"
+          ls -lh orly
+
+      - name: Smoke test binary
+        run: ./orly version || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: orly-linux-amd64
+          path: orly
+          retention-days: 7
+
+  deploy:
+    name: Deploy to ${{ inputs.target || 'relay.orly.dev' }}
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: orly-linux-amd64
+          path: .
+
+      - name: Deploy prebuilt binary over SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_IP: ${{ secrets.DEPLOY_IP }}
+          TARGET: ${{ inputs.target }}
+          RESTART: ${{ inputs.restart }}
+          REMOTE_BIN: ${{ env.REMOTE_BIN }}
+          SERVICE: ${{ env.SERVICE }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$DEPLOY_SSH_KEY" || -z "$DEPLOY_USER" ]]; then
+            echo "::error::Missing secrets: DEPLOY_SSH_KEY and DEPLOY_USER are required."
+            exit 1
+          fi
+
+          # Hosts to deploy to
+          if [[ "$TARGET" == "both" ]]; then
+            HOSTS=(relay.orly.dev new.orly.dev)
+          else
+            HOSTS=("$TARGET")
+          fi
+
+          # Prepare SSH
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Fingerprint the target: prefer explicit IP secret, else hostname.
+          for host in "${HOSTS[@]}"; do
+            ssh-keyscan -H "${DEPLOY_IP:-$host}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          done
+          chmod 644 ~/.ssh/known_hosts
+
+          SSH="ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+
+          for host in "${HOSTS[@]}"; do
+            echo "==> Deploying to $host"
+
+            echo "  Backing up current binary..."
+            $SSH "${DEPLOY_USER}@$host" \
+              "cp -f $REMOTE_BIN ${REMOTE_BIN}.prev 2>/dev/null || true"
+
+            if [[ "$RESTART" == "true" ]]; then
+              echo "  Stopping service..."
+              $SSH "${DEPLOY_USER}@$host" "systemctl stop $SERVICE" || true
+            fi
+
+            echo "  Installing new binary..."
+            scp -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+              ./orly "${DEPLOY_USER}@$host:$REMOTE_BIN"
+            $SSH "${DEPLOY_USER}@$host" \
+              "chown mleku:mleku $REMOTE_BIN && chmod +x $REMOTE_BIN"
+
+            if [[ "$RESTART" == "true" ]]; then
+              echo "  Starting service..."
+              $SSH "${DEPLOY_USER}@$host" "systemctl start $SERVICE"
+              sleep 3
+              if $SSH "${DEPLOY_USER}@$host" "systemctl is-active $SERVICE" | grep -q active; then
+                echo "  ✔ $SERVICE active on $host"
+              else
+                echo "::error::Service failed to start on $host — journalctl -u $SERVICE -n 50"
+                echo "::error::Rollback: ssh $DEPLOY_USER@$host 'cp ${REMOTE_BIN}.prev ${REMOTE_BIN} && systemctl restart $SERVICE'"
+                exit 1
+              fi
+            else
+              echo "  Skipping restart (restart=false)."
+            fi
+
+            REMOTE_VER=$($SSH "${DEPLOY_USER}@$host" "$REMOTE_BIN version" 2>/dev/null || echo "unknown")
+            echo "  Remote version: $REMOTE_VER"
+          done
