@@ -132,6 +132,7 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_IP: ${{ secrets.DEPLOY_IP }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
           TARGET: ${{ inputs.target || 'dm1.zentext.me' }}
           RESTART: ${{ inputs.restart || 'true' }}
           REMOTE_BIN: ${{ env.REMOTE_BIN }}
@@ -155,13 +156,13 @@ jobs:
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           echo "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          # Fingerprint the target: prefer explicit IP secret, else hostname.
+          # Fingerprint the target(s): prefer explicit IP secret, else hostname.
           for host in "${HOSTS[@]}"; do
-            ssh-keyscan -H "${DEPLOY_IP:-$host}" >> ~/.ssh/known_hosts 2>/dev/null || true
+            ssh-keyscan -p "$DEPLOY_PORT" -H "${DEPLOY_IP:-$host}" >> ~/.ssh/known_hosts 2>/dev/null || true
           done
           chmod 644 ~/.ssh/known_hosts
 
-          SSH="ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+          SSH="ssh -p $DEPLOY_PORT -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
 
           for host in "${HOSTS[@]}"; do
             echo "==> Deploying to $host"
@@ -176,7 +177,7 @@ jobs:
             fi
 
             echo "  Installing new binary..."
-            scp -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+            scp -P "$DEPLOY_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
               ./orly "${DEPLOY_USER}@$host:$REMOTE_BIN"
             $SSH "${DEPLOY_USER}@$host" \
               "chown mleku:mleku $REMOTE_BIN && chmod +x $REMOTE_BIN"
@@ -189,7 +190,7 @@ jobs:
                 echo "  ✔ $SERVICE active on $host"
               else
                 echo "::error::Service failed to start on $host — journalctl -u $SERVICE -n 50"
-                echo "::error::Rollback: ssh $DEPLOY_USER@$host 'cp ${REMOTE_BIN}.prev ${REMOTE_BIN} && systemctl restart $SERVICE'"
+                echo "::error::Rollback: ssh -p $DEPLOY_PORT $DEPLOY_USER@$host 'cp ${REMOTE_BIN}.prev ${REMOTE_BIN} && systemctl restart $SERVICE'"
                 exit 1
               fi
             else
