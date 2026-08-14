@@ -43,6 +43,7 @@ cmd/benchmark/data
 !bundleData
 !*.item
 !*.bin
+!*.binpb
 !*.yml
 !*.yaml
 !*.tmpl
