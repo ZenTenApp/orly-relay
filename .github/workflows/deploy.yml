@@ -10,8 +10,8 @@
 #      backs up the previous binary, restarts systemd `orly`, and verifies.
 #
 # Triggers:
-#   - push to main        -> build + test only (continuous verification)
-#   - manual dispatch     -> build + deploy to production
+#   - push to main        -> build, then auto-deploy to the default target
+#   - manual dispatch     -> build + deploy to a chosen target
 #
 # Required repository secrets:
 #   DEPLOY_SSH_KEY   private ed25519 key whose public half is in the
@@ -39,10 +39,11 @@ on:
         description: Server(s) to deploy to
         type: choice
         options:
+          - dm1.zentext.me
           - relay.orly.dev
           - new.orly.dev
           - both
-        default: relay.orly.dev
+        default: dm1.zentext.me
       restart:
         description: Restart the orly service after deploying
         type: boolean
@@ -115,11 +116,10 @@ jobs:
           retention-days: 7
 
   deploy:
-    name: Deploy to ${{ inputs.target || 'relay.orly.dev' }}
+    name: Deploy to ${{ inputs.target || 'dm1.zentext.me' }}
     needs: build
     runs-on: ubuntu-latest
     environment: production
-    if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
@@ -132,8 +132,8 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_IP: ${{ secrets.DEPLOY_IP }}
-          TARGET: ${{ inputs.target }}
-          RESTART: ${{ inputs.restart }}
+          TARGET: ${{ inputs.target || 'dm1.zentext.me' }}
+          RESTART: ${{ inputs.restart || 'true' }}
           REMOTE_BIN: ${{ env.REMOTE_BIN }}
           SERVICE: ${{ env.SERVICE }}
         run: |
