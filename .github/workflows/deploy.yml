@@ -14,13 +14,11 @@
 #   - manual dispatch     -> build + deploy to a chosen target
 #
 # Required repository secrets:
-#   DEPLOY_SSH_KEY   private ed25519 key whose public half is in the
-#                    deploy user's ~/.ssh/authorized_keys on the server
-#   DEPLOY_USER      ssh user (root, or a dedicated deploy user with
-#                    passwordless: systemctl restart orly)
+#   DEPLOY_SSH_KEY   private ed25519 key whose public half is in root's
+#                    ~/.ssh/authorized_keys on the server (root only)
+#   DEPLOY_IP        ssh host/IP to keyscan
 #
-# Optional secrets:
-#   DEPLOY_IP        IP to ssh-keyscan if hostname has no public DNS
+# The deploy runs ONLY as 'root' — the SSH user is not configurable.
 #
 # Manual run:  Actions -> "Deploy" -> Run workflow -> choose target.
 # Auto-deploy on every main push: add `main` to on.push.branches and
@@ -66,7 +64,7 @@ env:
   GOOS: linux
   GOARCH: amd64
   GOEXPERIMENT: greenteagc,jsonv2
-  REMOTE_BIN: /home/mleku/.local/bin/orly
+  REMOTE_BIN: /root/orly
   SERVICE: orly
 
 jobs:
@@ -130,7 +128,6 @@ jobs:
       - name: Deploy prebuilt binary over SSH
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_IP: ${{ secrets.DEPLOY_IP }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
           TARGET: ${{ inputs.target || 'dm1.zentext.me' }}
@@ -140,8 +137,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ -z "$DEPLOY_SSH_KEY" || -z "$DEPLOY_USER" ]]; then
-            echo "::error::Missing secrets: DEPLOY_SSH_KEY and DEPLOY_USER are required."
+          SSH_USER=root
+
+          if [[ -z "$DEPLOY_SSH_KEY" ]]; then
+            echo "::error::Missing secret: DEPLOY_SSH_KEY is required (deploys as root)."
             exit 1
           fi
 
@@ -168,35 +167,35 @@ jobs:
             echo "==> Deploying to $host"
 
             echo "  Backing up current binary..."
-            $SSH "${DEPLOY_USER}@$host" \
+            $SSH "${SSH_USER}@$host" \
               "cp -f $REMOTE_BIN ${REMOTE_BIN}.prev 2>/dev/null || true"
 
             if [[ "$RESTART" == "true" ]]; then
               echo "  Stopping service..."
-              $SSH "${DEPLOY_USER}@$host" "systemctl stop $SERVICE" || true
+              $SSH "${SSH_USER}@$host" "systemctl stop $SERVICE" || true
             fi
 
             echo "  Installing new binary..."
+            $SSH "${SSH_USER}@$host" "mkdir -p $(dirname $REMOTE_BIN)"
             scp -P "$DEPLOY_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
-              ./orly "${DEPLOY_USER}@$host:$REMOTE_BIN"
-            $SSH "${DEPLOY_USER}@$host" \
-              "chown mleku:mleku $REMOTE_BIN && chmod +x $REMOTE_BIN"
+              ./orly "${SSH_USER}@$host:$REMOTE_BIN"
+            $SSH "${SSH_USER}@$host" "chmod +x $REMOTE_BIN"
 
             if [[ "$RESTART" == "true" ]]; then
               echo "  Starting service..."
-              $SSH "${DEPLOY_USER}@$host" "systemctl start $SERVICE"
+              $SSH "${SSH_USER}@$host" "systemctl start $SERVICE"
               sleep 3
-              if $SSH "${DEPLOY_USER}@$host" "systemctl is-active $SERVICE" | grep -q active; then
+              if $SSH "${SSH_USER}@$host" "systemctl is-active $SERVICE" | grep -q active; then
                 echo "  ✔ $SERVICE active on $host"
               else
                 echo "::error::Service failed to start on $host — journalctl -u $SERVICE -n 50"
-                echo "::error::Rollback: ssh -p $DEPLOY_PORT $DEPLOY_USER@$host 'cp ${REMOTE_BIN}.prev ${REMOTE_BIN} && systemctl restart $SERVICE'"
+                echo "::error::Rollback: ssh -p $DEPLOY_PORT $SSH_USER@$host 'cp ${REMOTE_BIN}.prev ${REMOTE_BIN} && systemctl restart $SERVICE'"
                 exit 1
               fi
             else
               echo "  Skipping restart (restart=false)."
             fi
 
-            REMOTE_VER=$($SSH "${DEPLOY_USER}@$host" "$REMOTE_BIN version" 2>/dev/null || echo "unknown")
+            REMOTE_VER=$($SSH "${SSH_USER}@$host" "$REMOTE_BIN version" 2>/dev/null || echo "unknown")
             echo "  Remote version: $REMOTE_VER"
           done
