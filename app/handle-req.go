@@ -13,6 +13,7 @@ import (
 	"git.smesh.lol/orly/pkg/lol/chk"
 	"git.smesh.lol/orly/pkg/lol/log"
 	"git.smesh.lol/orly/pkg/acl"
+	"git.smesh.lol/orly/pkg/database"
 	"git.smesh.lol/orly/pkg/nostr/encoders/bech32encoding"
 	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/authenvelope"
 	"git.smesh.lol/orly/pkg/nostr/encoders/envelopes/closedenvelope"
@@ -382,6 +383,20 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 	if len(*env.Filters) == 1 && env.Filters != nil {
 		f := (*env.Filters)[0]
 		if cachedEvents, found := l.DB.GetCachedEvents(f); found {
+			// Re-check NIP-40 expiration on cached events: the query cache is only
+			// invalidated on new-event save and has a TTL, so a cached event can
+			// still be served after its expiration tag has passed. Filter them out
+			// here so expired events are never delivered on read.
+			var live []*event.E
+			for _, ev := range cachedEvents {
+				if database.CheckExpiration(ev) {
+					log.D.F("REQ %s: cache HIT, dropped expired event %s",
+						env.Subscription, hexenc.Enc(ev.ID))
+					continue
+				}
+				live = append(live, ev)
+			}
+			cachedEvents = live
 			log.D.F("REQ %s: cache HIT, sending %d cached events", env.Subscription, len(cachedEvents))
 			// Wrap cached events with current subscription ID
 			for _, ev := range cachedEvents {

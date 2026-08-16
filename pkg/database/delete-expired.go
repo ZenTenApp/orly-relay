@@ -83,6 +83,9 @@ func (d *D) DeleteExpired() {
 		}
 	}
 	if deleted > 0 {
+		// Invalidate the query cache: it may still hold these now-deleted expired
+		// events and would keep serving them on read otherwise.
+		d.InvalidateQueryCache()
 		log.I.F("DeleteExpired: deleted %d expired events", deleted)
 	}
 }
