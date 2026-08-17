@@ -1,392 +1,183 @@
 #!/bin/bash
+# deploy.sh — Mirror the GitHub Actions deployment flow locally.
+#
+# Replicates .github/workflows/deploy.yml step-for-step:
+#   1. Build the unified ./cmd/orly binary for linux/amd64 with the same
+#      flags the CI runner uses (CGO_ENABLED=0, ldflags "-s -w",
+#      GOEXPERIMENT=greenteagc,jsonv2).
+#   2. Ship the prebuilt binary to each target host over scp using an explicit
+#      SSH key (the same key the CI secret DEPLOY_SSH_KEY provides).
+#   3. SSH in as root, back up the previous binary, stop the service, install
+#      the new binary, start the service, and verify it is active (health check).
+#
+# All host info comes from flags — there is NO default host.
+#
+# Usage:
+#   ./scripts/deploy.sh \
+#       --host dm1.zentext.me \
+#       --host new.orly.dev \
+#       --key ~/.ssh/id_ed25519
+#
+# Flags (each also falls back to its $ENV unless overridden on the CLI):
+#   --host HOST        target host; repeatable for multiple hosts (required)
+#   --key PATH         SSH private key to use (req; fallback SSH_KEY)
+#   --user USER        ssh user (default root; fallback DEPLOY_USER)
+#   --ip HOST          explicit IP/host to keyscan (per run; fallback DEPLOY_IP)
+#   --port N           ssh port (default 22; fallback DEPLOY_PORT)
+#   --restart          restart service after install (default)
+#   --no-restart       do not restart the service
+#   --remote-bin PATH  remote binary path (default /root/orly; fallback REMOTE_BIN)
+#   --service NAME     systemd unit name (default orly; fallback SERVICE)
+#   --goos OS          build GOOS (default linux)
+#   --goarch ARCH      build GOARCH (default amd64)
+#   --goexperiment EXP build GOEXPERIMENT (default greenteagc,jsonv2)
+#   --cgo 0|1          build CGO_ENABLED (default 0)
+#   -h, --help         show this help
 
-# ORLY Relay Deployment Script
-# This script installs Go, builds the relay, and sets up systemd service
+set -euo pipefail
 
-set -e
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+BUILD_OUTPUT="$PROJECT_DIR/orly"
 
-# Configuration
-GO_VERSION="1.25.3"
-GOROOT="$HOME/go"
-GOPATH="$HOME"
-GOBIN="$HOME/.local/bin"
-GOENV_FILE="$HOME/.goenv"
-BASHRC_FILE="$HOME/.bashrc"
-SERVICE_NAME="orly"
-BINARY_NAME="orly"
+# --- Configuration (flags win, env fills in the rest, then defaults) ---
+HOSTS=()
+DEPLOY_KEY="${SSH_KEY:-}"
+SSH_USER="${DEPLOY_USER:-root}"
+DEPLOY_IP="${DEPLOY_IP:-}"
+DEPLOY_PORT="${DEPLOY_PORT:-22}"
+RESTART=true
+REMOTE_BIN="${REMOTE_BIN:-/root/orly}"
+SERVICE="${SERVICE:-orly}"
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+GO_VERSION="${GO_VERSION:-1.25.3}"
+CGO_ENABLED="${CGO_ENABLED:-0}"
+GOOS="${GOOS:-linux}"
+GOARCH="${GOARCH:-amd64}"
+GOEXPERIMENT="${GOEXPERIMENT:-greenteagc,jsonv2}"
 
-# Logging functions
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+# Colors
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
+log(){ echo -e "${BLUE}[deploy]${NC} $1"; }
+ok(){  echo -e "${GREEN}[deploy]${NC} $1"; }
+warn(){ echo -e "${YELLOW}[deploy]${NC} $1"; }
+err(){ echo -e "${RED}[deploy]${NC} $1" >&2; }
+
+usage() {
+    sed -n '2,50p' "$0" | sed -e 's/^# \{0,1\}//'
+    exit 0
 }
 
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
+# --- Parse flags ---
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --host)        HOSTS+=("$2"); shift 2 ;;
+        --key)         DEPLOY_KEY="$2"; shift 2 ;;
+        --user)        SSH_USER="$2"; shift 2 ;;
+        --ip)          DEPLOY_IP="$2"; shift 2 ;;
+        --port)        DEPLOY_PORT="$2"; shift 2 ;;
+        --restart)     RESTART=true; shift ;;
+        --no-restart)  RESTART=false; shift ;;
+        --remote-bin)  REMOTE_BIN="$2"; shift 2 ;;
+        --service)     SERVICE="$2"; shift 2 ;;
+        --goos)        GOOS="$2"; shift 2 ;;
+        --goarch)      GOARCH="$2"; shift 2 ;;
+        --goexperiment) GOEXPERIMENT="$2"; shift 2 ;;
+        --cgo)         CGO_ENABLED="$2"; shift 2 ;;
+        -h|--help)     usage ;;
+        *)
+            err "Unknown option: $1"
+            echo "Try: $0 --help"
+            exit 1
+            ;;
+    esac
+done
 
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
+# --- Hosts: required, from flags only ---
+if [[ ${#HOSTS[@]} -eq 0 ]]; then
+    err "No target host(s) given. Use --host <host> (repeatable)."
+    echo "Try: $0 --help"
+    exit 1
+fi
 
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Check if running as root for certain operations
-check_root() {
-    if [[ $EUID -eq 0 ]]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-# Check if bun is installed
-check_bun_installation() {
-    if command -v bun >/dev/null 2>&1; then
-        local installed_version=$(bun --version)
-        log_success "Bun $installed_version is already installed"
-        return 0
-    else
-        log_info "Bun is not installed"
-        return 1
-    fi
-}
-
-# Install bun
-install_bun() {
-    log_info "Installing Bun..."
-    
-    # Install bun using official installer
-    curl -fsSL https://bun.com/install | bash
-    
-    # Source bashrc to pick up bun in current session
-    if [[ -f "$HOME/.bashrc" ]]; then
-        source "$HOME/.bashrc"
-    fi
-    
-    # Verify installation
-    if command -v bun >/dev/null 2>&1; then
-        log_success "Bun installed successfully"
-    else
-        log_error "Failed to install Bun"
+# --- Preflight ---
+if [[ -z "$DEPLOY_KEY" ]]; then
+    err "No SSH key provided. Use --key /path/to/key (deploys as $SSH_USER)."
+    exit 1
+fi
+if [[ ! -f "$DEPLOY_KEY" ]]; then
+    err "SSH key not found: $DEPLOY_KEY"
+    exit 1
+fi
+for cmd in go scp ssh ssh-keyscan; do
+    if ! command -v "$cmd" &>/dev/null; then
+        err "Required command not found: $cmd"
         exit 1
     fi
-}
+done
 
-# Check if Go is installed and get version
-check_go_installation() {
-    if command -v go >/dev/null 2>&1; then
-        local installed_version=$(go version | grep -o 'go[0-9]\+\.[0-9]\+\.[0-9]\+' | sed 's/go//')
-        local required_version=$(echo $GO_VERSION | sed 's/go//')
-        
-        if [[ "$installed_version" == "$required_version" ]]; then
-            log_success "Go $installed_version is already installed"
-            return 0
+# --- Step 1: Build ---
+log "Building $GOOS/$GOARCH unified binary (./cmd/orly)..."
+cd "$PROJECT_DIR"
+CGO_ENABLED="$CGO_ENABLED" GOOS="$GOOS" GOARCH="$GOARCH" GOEXPERIMENT="$GOEXPERIMENT" \
+    go build -ldflags "-s -w" -o "$BUILD_OUTPUT" ./cmd/orly
+BINARY_SIZE=$(du -h "$BUILD_OUTPUT" | cut -f1)
+BINARY_ARCH=$(file "$BUILD_OUTPUT" | grep -o 'x86-64\|aarch64\|ARM' || echo 'unknown')
+ok "Built: $BUILD_OUTPUT ($BINARY_SIZE, $BINARY_ARCH)"
+
+# Smoke test the binary locally (as CI does).
+if "$BUILD_OUTPUT" version >/dev/null 2>&1; then
+    LOCAL_VERSION=$("$BUILD_OUTPUT" version 2>/dev/null || echo "unknown")
+    ok "Local smoke test passed ($LOCAL_VERSION)"
+else
+    warn "Local smoke test failed — continuing anyway"
+fi
+
+# --- Prepare SSH (mirror CI: write key, keyscan hosts) ---
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+cp "$DEPLOY_KEY" ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+for host in "${HOSTS[@]}"; do
+    ssh-keyscan -p "$DEPLOY_PORT" -H "${DEPLOY_IP:-$host}" >> ~/.ssh/known_hosts 2>/dev/null || true
+done
+chmod 644 ~/.ssh/known_hosts 2>/dev/null || true
+
+SSH="ssh -p $DEPLOY_PORT -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+SCP="scp -P $DEPLOY_PORT -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+
+# --- Step 2 + 3: Deploy and start/verify on each host ---
+for host in "${HOSTS[@]}"; do
+    log "==> Deploying to $host"
+
+    log "  Backing up current binary..."
+    $SSH "${SSH_USER}@$host" "cp -f $REMOTE_BIN ${REMOTE_BIN}.prev 2>/dev/null || true"
+
+    if [[ "$RESTART" == "true" ]]; then
+        log "  Stopping service..."
+        $SSH "${SSH_USER}@$host" "systemctl stop $SERVICE" || true
+    fi
+
+    log "  Installing new binary..."
+    $SSH "${SSH_USER}@$host" "mkdir -p $(dirname "$REMOTE_BIN")"
+    $SCP "$BUILD_OUTPUT" "${SSH_USER}@$host:$REMOTE_BIN"
+    $SSH "${SSH_USER}@$host" "chmod +x $REMOTE_BIN"
+
+    if [[ "$RESTART" == "true" ]]; then
+        log "  Starting service..."
+        $SSH "${SSH_USER}@$host" "systemctl start $SERVICE"
+        sleep 3
+        if $SSH "${SSH_USER}@$host" "systemctl is-active $SERVICE" | grep -q active; then
+            ok "  ✔ $SERVICE active on $host"
         else
-            log_warning "Go $installed_version is installed, but version $required_version is required"
-            return 1
+            err "Service failed to start on $host — journalctl -u $SERVICE -n 50"
+            err "Rollback: ssh -p $DEPLOY_PORT $SSH_USER@$host 'cp ${REMOTE_BIN}.prev ${REMOTE_BIN} && systemctl restart $SERVICE'"
+            exit 1
         fi
     else
-        log_info "Go is not installed"
-        return 1
-    fi
-}
-
-# Install Go
-install_go() {
-    log_info "Installing Go $GO_VERSION..."
-    
-    # Save original directory
-    local original_dir=$(pwd)
-    
-    # Determine architecture
-    local arch=$(uname -m)
-    case $arch in
-        x86_64) arch="amd64" ;;
-        aarch64|arm64) arch="arm64" ;;
-        armv7l) arch="armv6l" ;;
-        *) log_error "Unsupported architecture: $arch"; exit 1 ;;
-    esac
-    
-    local go_archive="go${GO_VERSION}.linux-${arch}.tar.gz"
-    local download_url="https://golang.org/dl/${go_archive}"
-    
-    # Remove existing installation if present (before download to save space/time)
-    if [[ -d "$GOROOT" ]]; then
-        log_info "Removing existing Go installation..."
-        # Make it writable in case it's read-only
-        chmod -R u+w "$GOROOT" 2>/dev/null || true
-        rm -rf "$GOROOT"
-    fi
-    
-    # Create directories
-    mkdir -p "$GOBIN"
-    
-    # Change to home directory and download Go
-    log_info "Downloading Go from $download_url..."
-    cd ~
-    wget -q "$download_url" || {
-        log_error "Failed to download Go"
-        exit 1
-    }
-    
-    # Extract Go to a temporary location first, then move to final destination
-    log_info "Extracting Go..."
-    tar -xf "$go_archive" -C /tmp
-    mv /tmp/go "$GOROOT"
-
-    # Clean up
-    rm -f "$go_archive"
-    
-    # Return to original directory
-    cd "$original_dir"
-    
-    log_success "Go $GO_VERSION installed successfully"
-}
-
-# Setup Go environment
-setup_go_environment() {
-    log_info "Setting up Go environment..."
-    
-    # Create .goenv file
-    cat > "$GOENV_FILE" << EOF
-# Go environment configuration
-export GOROOT="$GOROOT"
-export GOPATH="$GOPATH"
-export GOBIN="$GOBIN"
-export PATH="\$GOBIN:\$GOROOT/bin:\$PATH"
-EOF
-    
-    # Source the environment for current session
-    source "$GOENV_FILE"
-    
-    # Add to .bashrc if not already present
-    if ! grep -q "source $GOENV_FILE" "$BASHRC_FILE" 2>/dev/null; then
-        log_info "Adding Go environment to $BASHRC_FILE..."
-        echo "" >> "$BASHRC_FILE"
-        echo "# Go environment" >> "$BASHRC_FILE"
-        echo "if [[ -f \"$GOENV_FILE\" ]]; then" >> "$BASHRC_FILE"
-        echo "    source \"$GOENV_FILE\"" >> "$BASHRC_FILE"
-        echo "fi" >> "$BASHRC_FILE"
-        log_success "Go environment added to $BASHRC_FILE"
-    else
-        log_info "Go environment already configured in $BASHRC_FILE"
-    fi
-}
-
-# Build the application
-build_application() {
-    log_info "Building ORLY relay..."
-    
-    # Source Go environment
-    source "$GOENV_FILE"
-    
-    # Update embedded web assets
-    log_info "Updating embedded web assets..."
-    ./scripts/update-embedded-web.sh
-    
-    # Build the binary in the current directory
-    log_info "Building binary in current directory (pure Go + purego)..."
-    CGO_ENABLED=0 go build -o "$BINARY_NAME"
-    
-    # Verify libsecp256k1.so exists in repo (used by purego for runtime crypto)
-    if [[ -f "./libsecp256k1.so" ]]; then
-        chmod +x libsecp256k1.so
-        log_success "Found libsecp256k1.so in repository"
-    else
-        log_warning "libsecp256k1.so not found in repo - relay will still work but may have slower crypto"
-    fi
-    
-    if [[ -f "./$BINARY_NAME" ]]; then
-        log_success "ORLY relay built successfully"
-    else
-        log_error "Failed to build ORLY relay"
-        exit 1
-    fi
-}
-
-# Set capabilities for port 443 binding
-set_capabilities() {
-    log_info "Setting capabilities for port 443 binding..."
-    
-    if check_root; then
-        setcap 'cap_net_bind_service=+ep' "./$BINARY_NAME"
-    else
-        sudo setcap 'cap_net_bind_service=+ep' "./$BINARY_NAME"
-    fi
-    
-    log_success "Capabilities set for port 443 binding"
-}
-
-# Install binary
-install_binary() {
-    log_info "Installing binary to $GOBIN..."
-    
-    # Ensure GOBIN directory exists
-    mkdir -p "$GOBIN"
-    
-    # Copy binary and library
-    cp "./$BINARY_NAME" "$GOBIN/"
-    chmod +x "$GOBIN/$BINARY_NAME"
-    
-    # Copy library if it exists
-    if [[ -f "./libsecp256k1.so" ]]; then
-        cp "./libsecp256k1.so" "$GOBIN/"
-        log_info "Copied libsecp256k1.so to $GOBIN/"
-    fi
-    
-    log_success "Binary installed to $GOBIN/$BINARY_NAME"
-}
-
-# Create systemd service
-create_systemd_service() {
-    local port="$1"
-    log_info "Creating systemd service (port: $port)..."
-
-    local service_file="/etc/systemd/system/${SERVICE_NAME}.service"
-    local working_dir=$(pwd)
-
-    # Create service file content
-    local service_content="[Unit]
-Description=ORLY Nostr Relay
-After=network.target
-Wants=network.target
-
-[Service]
-Type=simple
-User=$USER
-Group=$USER
-WorkingDirectory=$working_dir
-Environment=ORLY_PORT=$port
-ExecStart=$GOBIN/$BINARY_NAME
-Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=$SERVICE_NAME
-
-# Network settings
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-
-[Install]
-WantedBy=multi-user.target"
-
-    # Write service file
-    if check_root; then
-        echo "$service_content" > "$service_file"
-    else
-        echo "$service_content" | sudo tee "$service_file" > /dev/null
-    fi
-    
-    # Reload systemd and enable service
-    if check_root; then
-        systemctl daemon-reload
-        systemctl enable "$SERVICE_NAME"
-    else
-        sudo systemctl daemon-reload
-        sudo systemctl enable "$SERVICE_NAME"
-    fi
-    
-    log_success "Systemd service created and enabled"
-}
-
-# Main deployment function
-main() {
-    local port="${1:-3334}"
-    log_info "Starting ORLY relay deployment (port: $port)..."
-
-    # Check if we're in the right directory
-    if [[ ! -f "go.mod" ]] || ! grep -q "git.smesh.lol/orly" go.mod; then
-        log_error "This script must be run from the git.smesh.lol/orly project root directory"
-        exit 1
+        warn "  Skipping restart (--no-restart)."
     fi
 
-    # Check and install Bun if needed
-    if ! check_bun_installation; then
-        install_bun
-    fi
+    REMOTE_VER=$($SSH "${SSH_USER}@$host" "$REMOTE_BIN version" 2>/dev/null || echo "unknown")
+    ok "  Remote version: $REMOTE_VER"
+done
 
-    # Check and install Go if needed
-    if ! check_go_installation; then
-        install_go
-        setup_go_environment
-    fi
-
-    # Build application
-    build_application
-
-    # Set capabilities
-    set_capabilities
-
-    # Install binary
-    install_binary
-
-    # Create systemd service
-    create_systemd_service "$port"
-    
-    log_success "ORLY relay deployment completed successfully!"
-    echo ""
-    log_info "Next steps:"
-    echo "  1. Reload your terminal environment: source ~/.bashrc"
-    echo "  2. Configure your relay by setting environment variables"
-    echo "  3. Start the service: sudo systemctl start $SERVICE_NAME"
-    echo "  4. Check service status: sudo systemctl status $SERVICE_NAME"
-    echo "  5. View logs: sudo journalctl -u $SERVICE_NAME -f"
-    echo ""
-    log_info "Service management commands:"
-    echo "  Start:   sudo systemctl start $SERVICE_NAME"
-    echo "  Stop:    sudo systemctl stop $SERVICE_NAME"
-    echo "  Restart: sudo systemctl restart $SERVICE_NAME"
-    echo "  Enable:  sudo systemctl enable $SERVICE_NAME --now"
-    echo "  Disable: sudo systemctl disable $SERVICE_NAME --now"
-    echo "  Status:  sudo systemctl status $SERVICE_NAME"
-    echo "  Logs:    sudo journalctl -u $SERVICE_NAME -f"
-}
-
-# Handle command line arguments
-PORT=""
-case "${1:-}" in
-    --help|-h)
-        echo "ORLY Relay Deployment Script"
-        echo ""
-        echo "Usage: $0 [options] [port]"
-        echo ""
-        echo "Arguments:"
-        echo "  port         Port number for the relay to listen on (default: 3334)"
-        echo ""
-        echo "Options:"
-        echo "  --help, -h   Show this help message"
-        echo ""
-        echo "This script will:"
-        echo "  1. Install Bun if not present"
-        echo "  2. Install Go $GO_VERSION if not present"
-        echo "  3. Set up Go environment in ~/.goenv"
-        echo "  4. Install build dependencies (requires sudo)"
-        echo "  5. Build the ORLY relay"
-        echo "  6. Set capabilities for port 443 binding"
-        echo "  7. Install the binary to ~/.local/bin"
-        echo "  8. Create and enable systemd service"
-        echo ""
-        echo "Examples:"
-        echo "  $0              # Deploy with default port 3334"
-        echo "  $0 8080         # Deploy with port 8080"
-        exit 0
-        ;;
-    [0-9]*)
-        # First argument is a number, treat it as port
-        PORT="$1"
-        shift
-        main "$PORT" "$@"
-        ;;
-    *)
-        main "$@"
-        ;;
-esac
+ok "Deployment complete."
