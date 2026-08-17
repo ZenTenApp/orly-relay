@@ -17,6 +17,7 @@ import (
 
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/reason"
 	"github.com/adrg/xdg"
 	"github.com/sosodev/duration"
 	"git.smesh.lol/orly/pkg/lol/chk"
@@ -1411,9 +1412,27 @@ func (p *P) LoadFromFile(configPath string) error {
 	return nil
 }
 
+// deny formats a NIP-01 policy rejection: "<prefix>: <detail>".
+func deny(prefix, format string, args ...any) (allowed bool, reason string, err error) {
+	return false, fmt.Sprintf(prefix+": "+format, args...), nil
+}
+
+// allow is a successful policy check with no reason string.
+func allow() (allowed bool, reason string, err error) {
+	return true, "", nil
+}
+
+// defaultPolicyResult applies DefaultPolicy and, on deny, names the kind.
+func (p *P) defaultPolicyResult(kind uint16) (allowed bool, reason string, err error) {
+	if p.getDefaultPolicyAction() {
+		return allow()
+	}
+	return deny("blocked", "kind %d denied by default policy", kind)
+}
+
 // CheckPolicy checks if an event is allowed based on the policy configuration.
 // The access parameter should be "write" for accepting events or "read" for filtering events.
-// Returns true if the event is allowed, false if denied, and an error if validation fails.
+// Returns allowed, a NIP-01 reason string on deny (empty on allow), and an error if validation fails.
 //
 // Policy evaluation order (more specific rules take precedence):
 // 1. Kinds whitelist/blacklist - if kind is blocked, deny immediately
@@ -1424,23 +1443,23 @@ func (p *P) LoadFromFile(configPath string) error {
 // Thread-safety: All follows cache access is serialized through the followsCallCh actor.
 func (p *P) CheckPolicy(
 	access string, ev *event.E, loggedInPubkey []byte, ipAddress string,
-) (allowed bool, err error) {
+) (allowed bool, reason string, err error) {
 	// Handle nil policy - this should not happen if policy is enabled
 	// If policy is enabled but p is nil, it's a configuration error
 	if p == nil {
 		log.F.Ln("FATAL: CheckPolicy called on nil policy - this indicates misconfiguration. " +
 			"If ORLY_POLICY_ENABLED=true, ensure policy configuration is valid.")
-		return false, fmt.Errorf("policy is nil but policy checking is enabled - check configuration")
+		return false, "", fmt.Errorf("policy is nil but policy checking is enabled - check configuration")
 	}
 
 	// Handle nil event
 	if ev == nil {
-		return false, fmt.Errorf("event cannot be nil")
+		return false, "", fmt.Errorf("event cannot be nil")
 	}
 
 	// Serialize access to follows whitelists through the actor
 	p.followsCall(func() {
-		allowed, err = p.checkPolicyInner(access, ev, loggedInPubkey, ipAddress)
+		allowed, reason, err = p.checkPolicyInner(access, ev, loggedInPubkey, ipAddress)
 	})
 	return
 }
@@ -1448,13 +1467,13 @@ func (p *P) CheckPolicy(
 // checkPolicyInner is the inner implementation of CheckPolicy, called within the follows actor.
 func (p *P) checkPolicyInner(
 	access string, ev *event.E, loggedInPubkey []byte, ipAddress string,
-) (allowed bool, err error) {
+) (allowed bool, reason string, err error) {
 
 	// ==========================================================================
 	// STEP 1: Check kinds whitelist/blacklist (applies before any rule checks)
 	// ==========================================================================
-	if !p.checkKindsPolicy(access, ev.Kind) {
-		return false, nil
+	if kindsOK, kindsReason := p.checkKindsPolicy(access, ev.Kind); !kindsOK {
+		return false, kindsReason, nil
 	}
 
 	// ==========================================================================
@@ -1470,12 +1489,12 @@ func (p *P) checkPolicyInner(
 				if _, err := os.Stat(rule.Script); err == nil {
 					// Script exists, try to use it
 					log.D.F("using policy script for kind %d: %s", ev.Kind, rule.Script)
-					allowed, err := p.checkScriptPolicy(
+					scriptAllowed, scriptReason, scriptErr := p.checkScriptPolicy(
 						access, ev, rule.Script, loggedInPubkey, ipAddress,
 					)
-					if err == nil {
+					if scriptErr == nil {
 						// Script ran successfully, return its decision
-						return allowed, nil
+						return scriptAllowed, scriptReason, nil
 					}
 					// Script failed, fall through to apply other criteria
 					log.W.F("policy script check failed for kind %d: %v, applying other criteria",
@@ -1490,7 +1509,7 @@ func (p *P) checkPolicyInner(
 				// Policy manager is disabled, fall back to default policy
 				log.D.F("policy manager is disabled for kind %d, falling back to default policy (%s)",
 					ev.Kind, p.DefaultPolicy)
-				return p.getDefaultPolicyAction(), nil
+				return p.defaultPolicyResult(ev.Kind)
 			}
 		}
 
@@ -1511,7 +1530,7 @@ func (p *P) checkPolicyInner(
 	// ==========================================================================
 	// STEP 4: No kind-specific or global rules - use default policy
 	// ==========================================================================
-	return p.getDefaultPolicyAction(), nil
+	return p.defaultPolicyResult(ev.Kind)
 }
 
 // checkKindsPolicy checks if the event kind is allowed for the given access type.
@@ -1523,24 +1542,24 @@ func (p *P) checkPolicyInner(
 // Permissive flags (set on Global rule):
 // - ReadAllowPermissive: Allows READ access for kinds not in whitelist (write still restricted)
 // - WriteAllowPermissive: Allows WRITE access for kinds not in whitelist (uses global rule constraints)
-func (p *P) checkKindsPolicy(access string, kind uint16) bool {
+func (p *P) checkKindsPolicy(access string, kind uint16) (allowed bool, reason string) {
 	// If whitelist is present, only allow whitelisted kinds (with permissive overrides)
 	if len(p.Kind.Whitelist) > 0 {
 		for _, allowedKind := range p.Kind.Whitelist {
 			if kind == uint16(allowedKind) {
-				return true
+				return true, ""
 			}
 		}
 		// Kind not in whitelist - check permissive flags
 		if access == "read" && p.Global.ReadAllowPermissive {
 			log.D.F("read_allow_permissive: allowing read for kind %d not in whitelist", kind)
-			return true // Allow read even though kind not whitelisted
+			return true, ""
 		}
 		if access == "write" && p.Global.WriteAllowPermissive {
 			log.D.F("write_allow_permissive: allowing write for kind %d not in whitelist (global rules apply)", kind)
-			return true // Allow write even though kind not whitelisted, global rule will be applied
+			return true, ""
 		}
-		return false
+		return false, fmt.Sprintf("blocked: kind %d is not in the kind whitelist", kind)
 	}
 
 	// If blacklist is present, deny blacklisted kinds
@@ -1548,24 +1567,24 @@ func (p *P) checkKindsPolicy(access string, kind uint16) bool {
 		for _, deniedKind := range p.Kind.Blacklist {
 			if kind == uint16(deniedKind) {
 				// Kind is explicitly blacklisted - permissive flags don't override blacklist
-				return false
+				return false, fmt.Sprintf("blocked: kind %d is blacklisted", kind)
 			}
 		}
 		// Not in blacklist - check if rule exists for implicit whitelist
 		_, hasRule := p.rules[int(kind)]
 		if hasRule {
-			return true
+			return true, ""
 		}
 		// No kind-specific rule - check permissive flags
 		if access == "read" && p.Global.ReadAllowPermissive {
 			log.D.F("read_allow_permissive: allowing read for kind %d (not blacklisted, no rule)", kind)
-			return true
+			return true, ""
 		}
 		if access == "write" && p.Global.WriteAllowPermissive {
 			log.D.F("write_allow_permissive: allowing write for kind %d (not blacklisted, no rule)", kind)
-			return true
+			return true, ""
 		}
-		return false // Only allow if there's a rule defined
+		return false, fmt.Sprintf("blocked: kind %d is not allowed", kind)
 	}
 
 	// No explicit whitelist or blacklist
@@ -1577,34 +1596,37 @@ func (p *P) checkKindsPolicy(access string, kind uint16) bool {
 	if len(p.rules) > 0 {
 		// If default_policy is explicitly "allow", don't use implicit whitelist
 		if p.DefaultPolicy == "allow" {
-			return true
+			return true, ""
 		}
 		// Implicit whitelist mode - only allow kinds with specific rules
 		_, hasRule := p.rules[int(kind)]
 		if hasRule {
-			return true
+			return true, ""
 		}
 		// No kind-specific rule, but check if global rule exists
 		if p.Global.hasAnyRules() {
-			return true // Allow through for global rule check
+			return true, ""
 		}
 		// Check permissive flags for implicit whitelist override
 		if access == "read" && p.Global.ReadAllowPermissive {
 			log.D.F("read_allow_permissive: allowing read for kind %d (implicit whitelist override)", kind)
-			return true
+			return true, ""
 		}
 		if access == "write" && p.Global.WriteAllowPermissive {
 			log.D.F("write_allow_permissive: allowing write for kind %d (implicit whitelist override)", kind)
-			return true
+			return true, ""
 		}
-		return false
+		return false, fmt.Sprintf("blocked: kind %d is not allowed", kind)
 	}
 	// No kind-specific rules - check if global rule exists
 	if p.Global.hasAnyRules() {
-		return true // Allow through for global rule check
+		return true, ""
 	}
 	// No rules at all - fall back to default policy
-	return p.getDefaultPolicyAction()
+	if p.getDefaultPolicyAction() {
+		return true, ""
+	}
+	return false, fmt.Sprintf("blocked: kind %d denied by default policy", kind)
 }
 
 // checkGlobalFollowsWhitelistAccess checks if the user is explicitly granted access
@@ -1656,7 +1678,7 @@ func (p *P) checkGlobalRulePolicy(
 	}
 
 	// Apply global rule filtering
-	allowed, err := p.checkRulePolicy(access, ev, p.Global, loggedInPubkey)
+	allowed, _, err := p.checkRulePolicy(access, ev, p.Global, loggedInPubkey)
 	if err != nil {
 		log.E.F("global rule policy check failed: %v", err)
 		return false
@@ -1680,7 +1702,7 @@ func (p *P) checkGlobalRulePolicy(
 // PRIVILEGED: Only applies to READ operations (party-involved check)
 func (p *P) checkRulePolicy(
 	access string, ev *event.E, rule Rule, loggedInPubkey []byte,
-) (allowed bool, err error) {
+) (allowed bool, reason string, err error) {
 	log.T.F("checkRulePolicy: access=%s kind=%d readFollowsFollowsBin_len=%d readFollowsWhitelistBin_len=%d HasReadFollowsWhitelist=%v",
 		access, ev.Kind, len(rule.readFollowsFollowsBin), len(rule.readFollowsWhitelistBin), rule.HasReadFollowsWhitelist())
 
@@ -1693,14 +1715,14 @@ func (p *P) checkRulePolicy(
 		if rule.SizeLimit != nil {
 			eventSize := int64(len(ev.Serialize()))
 			if eventSize > *rule.SizeLimit {
-				return false, nil
+				return deny("blocked", "event exceeds size limit (%d > %d)", eventSize, *rule.SizeLimit)
 			}
 		}
 
 		if rule.ContentLimit != nil {
 			contentSize := int64(len(ev.Content))
 			if contentSize > *rule.ContentLimit {
-				return false, nil
+				return deny("blocked", "content exceeds size limit (%d > %d)", contentSize, *rule.ContentLimit)
 			}
 		}
 
@@ -1708,7 +1730,7 @@ func (p *P) checkRulePolicy(
 		if len(rule.MustHaveTags) > 0 {
 			for _, requiredTag := range rule.MustHaveTags {
 				if ev.Tags.GetFirst([]byte(requiredTag)) == nil {
-					return false, nil
+					return deny("invalid", "missing required tag: %s", requiredTag)
 				}
 			}
 		}
@@ -1723,7 +1745,7 @@ func (p *P) checkRulePolicy(
 				key := string(t.T[0])
 				if _, ok := rule.allowedTagsSet[key]; !ok {
 					log.D.F("allowed_tags: tag key %q not in allowed set", key)
-					return false, nil
+					return deny("invalid", "tag %q is not in allowed_tags", key)
 				}
 			}
 		}
@@ -1732,20 +1754,20 @@ func (p *P) checkRulePolicy(
 		if rule.maxExpirySeconds != nil && *rule.maxExpirySeconds > 0 {
 			expiryTag := ev.Tags.GetFirst([]byte("expiration"))
 			if expiryTag == nil {
-				return false, nil // Must have expiry if max_expiry is set
+				return deny("invalid", "expiration tag required")
 			}
 			// Parse expiry timestamp and validate it's within allowed duration from created_at
 			expiryStr := string(expiryTag.Value())
 			expiryTs, parseErr := strconv.ParseInt(expiryStr, 10, 64)
 			if parseErr != nil {
 				log.D.F("invalid expiration tag value %q: %v", expiryStr, parseErr)
-				return false, nil // Invalid expiry format
+				return deny("invalid", "expiration tag is not a valid timestamp")
 			}
 			maxAllowedExpiry := ev.CreatedAt + *rule.maxExpirySeconds
 			if expiryTs >= maxAllowedExpiry {
 				log.D.F("expiration %d exceeds max allowed %d (created_at %d + max_expiry %d)",
 					expiryTs, maxAllowedExpiry, ev.CreatedAt, *rule.maxExpirySeconds)
-				return false, nil // Expiry too far in the future
+				return deny("blocked", "expiration exceeds max_expiry_duration")
 			}
 		}
 
@@ -1754,7 +1776,7 @@ func (p *P) checkRulePolicy(
 			protectedTag := ev.Tags.GetFirst([]byte("-"))
 			if protectedTag == nil {
 				log.D.F("protected_required: event missing '-' tag (NIP-70)")
-				return false, nil // Must have protected tag
+				return deny("invalid", "protected tag '-' required (NIP-70)")
 			}
 		}
 
@@ -1763,14 +1785,14 @@ func (p *P) checkRulePolicy(
 			dTags := ev.Tags.GetAll([]byte("d"))
 			if len(dTags) == 0 {
 				log.D.F("identifier_regex: event missing 'd' tag")
-				return false, nil // Must have d tag if identifier_regex is set
+				return deny("invalid", "missing d tag")
 			}
 			for _, dTag := range dTags {
 				value := string(dTag.Value())
 				if !rule.identifierRegexCache.MatchString(value) {
 					log.D.F("identifier_regex: d tag value %q does not match pattern %q",
 						value, rule.IdentifierRegex)
-					return false, nil
+					return deny("invalid", "d tag does not match identifier_regex")
 				}
 			}
 		}
@@ -1780,7 +1802,7 @@ func (p *P) checkRulePolicy(
 			currentTime := time.Now().Unix()
 			maxAllowedTime := currentTime - *rule.MaxAgeOfEvent
 			if ev.CreatedAt < maxAllowedTime {
-				return false, nil // Event is too old
+				return deny("invalid", "event created_at is too old")
 			}
 		}
 
@@ -1789,7 +1811,7 @@ func (p *P) checkRulePolicy(
 			currentTime := time.Now().Unix()
 			maxFutureTime := currentTime + *rule.MaxAgeEventInFuture
 			if ev.CreatedAt > maxFutureTime {
-				return false, nil // Event is too far in the future
+				return deny("invalid", "event created_at is too far in the future")
 			}
 		}
 
@@ -1820,7 +1842,7 @@ func (p *P) checkRulePolicy(
 					if !regex.MatchString(value) {
 						log.D.F("tag validation failed: tag %q value %q does not match pattern %q",
 							tagName, value, regexPattern)
-						return false, nil
+						return deny("invalid", "tag %q value does not match required pattern", tagName)
 					}
 				}
 			}
@@ -1836,7 +1858,7 @@ func (p *P) checkRulePolicy(
 		if len(rule.writeDenyBin) > 0 {
 			for _, deniedPubkey := range rule.writeDenyBin {
 				if utils.FastEqual(loggedInPubkey, deniedPubkey) {
-					return false, nil // Submitter explicitly denied
+					return deny("restricted", "pubkey is in write_deny")
 				}
 			}
 		} else if len(rule.WriteDeny) > 0 {
@@ -1844,7 +1866,7 @@ func (p *P) checkRulePolicy(
 			loggedInPubkeyHex := hex.Enc(loggedInPubkey)
 			for _, deniedPubkey := range rule.WriteDeny {
 				if loggedInPubkeyHex == deniedPubkey {
-					return false, nil // Submitter explicitly denied
+					return deny("restricted", "pubkey is in write_deny")
 				}
 			}
 		}
@@ -1853,7 +1875,7 @@ func (p *P) checkRulePolicy(
 		if len(rule.readDenyBin) > 0 {
 			for _, deniedPubkey := range rule.readDenyBin {
 				if utils.FastEqual(loggedInPubkey, deniedPubkey) {
-					return false, nil // Explicitly denied
+					return deny("restricted", "pubkey is in read_deny")
 				}
 			}
 		} else if len(rule.ReadDeny) > 0 {
@@ -1861,7 +1883,7 @@ func (p *P) checkRulePolicy(
 			loggedInPubkeyHex := hex.Enc(loggedInPubkey)
 			for _, deniedPubkey := range rule.ReadDeny {
 				if loggedInPubkeyHex == deniedPubkey {
-					return false, nil // Explicitly denied
+					return deny("restricted", "pubkey is in read_deny")
 				}
 			}
 		}
@@ -1876,7 +1898,7 @@ func (p *P) checkRulePolicy(
 	if rule.WriteAllowFollows && p.PolicyFollowWhitelistEnabled {
 		if p.IsPolicyFollow(loggedInPubkey) {
 			log.D.F("policy admin follow granted %s access for kind %d", access, ev.Kind)
-			return true, nil // Allow access from policy admin follow
+			return allow()
 		}
 	}
 
@@ -1885,7 +1907,7 @@ func (p *P) checkRulePolicy(
 	if rule.HasFollowsWhitelistAdmins() {
 		if rule.IsInFollowsWhitelist(loggedInPubkey) {
 			log.D.F("follows_whitelist_admins granted %s access for kind %d", access, ev.Kind)
-			return true, nil // Allow access from rule-specific admin follow
+			return allow()
 		}
 	}
 
@@ -1898,7 +1920,7 @@ func (p *P) checkRulePolicy(
 		if rule.HasReadFollowsWhitelist() {
 			if rule.IsInReadFollowsWhitelist(loggedInPubkey) {
 				log.D.F("read_follows_whitelist granted read access for kind %d", ev.Kind)
-				return true, nil
+				return allow()
 			}
 			// ReadFollowsWhitelist is set but user is not in it
 			// Continue to check other access methods (privileged, read_allow)
@@ -1908,7 +1930,7 @@ func (p *P) checkRulePolicy(
 		if rule.HasWriteFollowsWhitelist() {
 			if rule.IsInWriteFollowsWhitelist(loggedInPubkey) {
 				log.D.F("write_follows_whitelist granted write access for kind %d", ev.Kind)
-				return true, nil
+				return allow()
 			}
 			// WriteFollowsWhitelist is set but user is not in it - must check write_allow too
 		}
@@ -1951,19 +1973,19 @@ func (p *P) checkRulePolicy(
 		if hasReadRestriction {
 			// User must pass one of the configured access methods
 			if userInAllowList {
-				return true, nil
+				return allow()
 			}
 			if userIsPrivileged {
-				return true, nil
+				return allow()
 			}
 			// User is in ReadFollowsWhitelist was already checked in STEP 4
 			// User in legacy FollowsWhitelistAdmins was already checked in STEP 3
 			// If we reach here with a read restriction, deny access
-			return false, nil
+			return deny("restricted", "pubkey is not allowed to read this kind")
 		}
 
 		// No read restriction configured - read is permissive by default
-		return true, nil
+		return allow()
 	}
 
 	// ===================================================================
@@ -2003,7 +2025,7 @@ func (p *P) checkRulePolicy(
 		if hasWriteRestriction {
 			// User must pass one of the configured access methods
 			if userInAllowList {
-				return true, nil
+				return allow()
 			}
 			// User in WriteFollowsWhitelist was already checked in STEP 4
 			// User in legacy FollowsWhitelistAdmins was already checked in STEP 3
@@ -2018,18 +2040,18 @@ func (p *P) checkRulePolicy(
 					}
 					for _, allowed := range rule.writeAllowIfTaggedBin {
 						if utils.FastEqual(pt, allowed) {
-							return true, nil
+							return allow()
 						}
 					}
 				}
 			}
 
 			// If we reach here with a write restriction, deny access
-			return false, nil
+			return deny("restricted", "pubkey is not allowed to write this kind")
 		}
 
 		// No write restriction configured - write is permissive by default
-		return true, nil
+		return allow()
 	}
 
 	// ===================================================================
@@ -2037,16 +2059,16 @@ func (p *P) checkRulePolicy(
 	// ===================================================================
 
 	// If no specific rules matched, use the configured default policy
-	return p.getDefaultPolicyAction(), nil
+	return p.defaultPolicyResult(ev.Kind)
 }
 
 // checkScriptPolicy runs the policy script to determine if event should be allowed
 func (p *P) checkScriptPolicy(
 	access string, ev *event.E, scriptPath string, loggedInPubkey []byte,
 	ipAddress string,
-) (allowed bool, err error) {
+) (allowed bool, denyReason string, err error) {
 	if p.manager == nil {
-		return false, fmt.Errorf("policy manager is not initialized")
+		return false, "", fmt.Errorf("policy manager is not initialized")
 	}
 
 	// If policy is disabled, fall back to default policy immediately
@@ -2055,13 +2077,13 @@ func (p *P) checkScriptPolicy(
 			"policy rule for kind %d is inactive (policy disabled), falling back to default policy (%s)",
 			ev.Kind, p.DefaultPolicy,
 		)
-		return p.getDefaultPolicyAction(), nil
+		return p.defaultPolicyResult(ev.Kind)
 	}
 
 	// Check if script file exists
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 		// Script doesn't exist, return error so caller can fall back to other criteria
-		return false, fmt.Errorf(
+		return false, "", fmt.Errorf(
 			"policy script does not exist at %s", scriptPath,
 		)
 	}
@@ -2075,7 +2097,7 @@ func (p *P) checkScriptPolicy(
 		log.D.F("starting policy script for kind %d: %s", ev.Kind, scriptPath)
 		if err := runner.ensureRunning(); err != nil {
 			// Startup failed, return error so caller can fall back to other criteria
-			return false, fmt.Errorf(
+			return false, "", fmt.Errorf(
 				"failed to start policy script %s: %v", scriptPath, err,
 			)
 		}
@@ -2098,24 +2120,24 @@ func (p *P) checkScriptPolicy(
 			ev.Kind, scriptErr, p.DefaultPolicy,
 		)
 		// Fall back to default policy on script failure
-		return p.getDefaultPolicyAction(), nil
+		return p.defaultPolicyResult(ev.Kind)
 	}
 
 	// Handle script response
 	switch response.Action {
 	case "accept":
-		return true, nil
+		return allow()
 	case "reject":
-		return false, nil
+		return false, reason.Ensure(response.Msg, reason.Blocked), nil
 	case "shadowReject":
-		return false, nil // Treat as reject for policy purposes
+		return false, reason.Ensure(response.Msg, reason.Blocked), nil
 	default:
 		log.W.F(
 			"policy rule for kind %d returned unknown action '%s', falling back to default policy (%s)",
 			ev.Kind, response.Action, p.DefaultPolicy,
 		)
 		// Fall back to default policy for unknown actions
-		return p.getDefaultPolicyAction(), nil
+		return p.defaultPolicyResult(ev.Kind)
 	}
 }
 

@@ -190,7 +190,9 @@ func (w *RelySQLiteWrapper) Export(c context.Context, writer io.Writer, pubkeys 
 func (w *RelySQLiteWrapper) ImportEventsFromReader(ctx context.Context, rr io.Reader) error {
 	return fmt.Errorf("not implemented")
 }
-func (w *RelySQLiteWrapper) ImportEventsFromStrings(ctx context.Context, eventJSONs []string, policyManager interface{ CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error) }) error {
+func (w *RelySQLiteWrapper) ImportEventsFromStrings(ctx context.Context, eventJSONs []string, policyManager interface {
+	CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (allowed bool, reason string, err error)
+}) error {
 	return fmt.Errorf("not implemented")
 }
 func (w *RelySQLiteWrapper) GetRelayIdentitySecret() (skb []byte, err error) {

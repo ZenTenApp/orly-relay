@@ -62,7 +62,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 		event := createTestEvent(t, aliceSigner, "test", 100)
 
 		// Should be DENIED because deny list has highest priority
-		allowed, err := policy.CheckPolicy("write", event, alicePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -96,7 +96,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 		event := createTestEvent(t, aliceSigner, "secret", 200)
 
 		// Test 2a: Alice is author (privileged) but NOT in allow list - should be ALLOWED (OR logic)
-		allowed, err := policy.CheckPolicy("read", event, alicePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", event, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -107,7 +107,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 		}
 
 		// Test 2b: Bob is in allow list - should be ALLOWED
-		allowed, err = policy.CheckPolicy("read", event, bobPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", event, bobPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -119,7 +119,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 
 		// Test 2c: Charlie in p-tag but not in allow list - should be ALLOWED (OR logic)
 		addPTag(event, charliePubkey)
-		allowed, err = policy.CheckPolicy("read", event, charliePubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", event, charliePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -152,7 +152,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 		addPTag(event, bobPubkey)
 
 		// Test 3a: Alice (author) should be ALLOWED (privileged, no allow list)
-		allowed, err := policy.CheckPolicy("read", event, alicePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", event, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -165,7 +165,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 		}
 
 		// Test 3b: Bob (in p-tag) should be ALLOWED (privileged, no allow list)
-		allowed, err = policy.CheckPolicy("read", event, bobPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", event, bobPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -176,7 +176,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 		}
 
 		// Test 3c: Charlie (not involved) should be DENIED
-		allowed, err = policy.CheckPolicy("read", event, charliePubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", event, charliePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -206,7 +206,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 
 		// Test 4a: Alice should be ALLOWED (in allow list)
 		aliceEvent := createTestEvent(t, aliceSigner, "alice msg", 400)
-		allowed, err := policy.CheckPolicy("write", aliceEvent, alicePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", aliceEvent, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -218,7 +218,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 
 		// Test 4b: Bob should be DENIED (not in allow list, even with allow default)
 		bobEvent := createTestEvent(t, bobSigner, "bob msg", 400)
-		allowed, err = policy.CheckPolicy("write", bobEvent, bobPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", bobEvent, bobPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -251,7 +251,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 
 		// Test 5a: Alice in allow, not in deny - ALLOWED
 		aliceEvent := createTestEvent(t, aliceSigner, "alice", 500)
-		allowed, err := policy.CheckPolicy("write", aliceEvent, alicePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", aliceEvent, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -263,7 +263,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 
 		// Test 5b: Bob in allow AND deny - DENIED (deny wins)
 		bobEvent := createTestEvent(t, bobSigner, "bob", 500)
-		allowed, err = policy.CheckPolicy("write", bobEvent, bobPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", bobEvent, bobPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -275,7 +275,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 
 		// Test 5c: Charlie not in allow - DENIED (even though he's author of his event)
 		charlieEvent := createTestEvent(t, charlieSigner, "charlie", 500)
-		allowed, err = policy.CheckPolicy("write", charlieEvent, charliePubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", charlieEvent, charliePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -299,7 +299,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 		}
 
 		event := createTestEvent(t, aliceSigner, "test", 600)
-		allowed, err := policyAllow.CheckPolicy("write", event, alicePubkey, "127.0.0.1")
+		allowed, _, err := policyAllow.CheckPolicy("write", event, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -317,7 +317,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 			},
 		}
 
-		allowed, err = policyDeny.CheckPolicy("write", event, alicePubkey, "127.0.0.1")
+		allowed, _, err = policyDeny.CheckPolicy("write", event, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -340,7 +340,7 @@ func TestPolicyPrecedenceRules(t *testing.T) {
 		}
 
 		eventKind700 := createTestEvent(t, aliceSigner, "alice", 700)
-		allowed, err = policyWithRule.CheckPolicy("write", eventKind700, alicePubkey, "127.0.0.1")
+		allowed, _, err = policyWithRule.CheckPolicy("write", eventKind700, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}

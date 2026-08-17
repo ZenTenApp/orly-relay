@@ -358,7 +358,7 @@ func TestCheckKindsPolicy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.policy.checkKindsPolicy(tt.access, tt.kind)
+			result, _ := tt.policy.checkKindsPolicy(tt.access, tt.kind)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v", tt.expected, result)
 			}
@@ -609,7 +609,7 @@ func TestCheckRulePolicy(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			policy := &P{}
-			result, err := policy.checkRulePolicy(tt.access, tt.event, tt.rule, tt.loggedInPubkey)
+			result, _, err := policy.checkRulePolicy(tt.access, tt.event, tt.rule, tt.loggedInPubkey)
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 				return
@@ -690,7 +690,7 @@ func TestCheckPolicy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := tt.policy.CheckPolicy(tt.access, tt.event, tt.loggedInPubkey, tt.ipAddress)
+			result, _, err := tt.policy.CheckPolicy(tt.access, tt.event, tt.loggedInPubkey, tt.ipAddress)
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("Expected error but got none")
@@ -1061,7 +1061,7 @@ func TestEdgeCasesEmptyPolicy(t *testing.T) {
 	testEvent := createTestEvent(t, eventSigner, "test content", 1)
 
 	// Should allow all events when policy is empty
-	allowed, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -1074,7 +1074,7 @@ func TestEdgeCasesNilEvent(t *testing.T) {
 	policy := &P{}
 
 	// Should handle nil event gracefully
-	allowed, err := policy.CheckPolicy("write", nil, []byte("test-pubkey"), "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", nil, []byte("test-pubkey"), "127.0.0.1")
 	if err == nil {
 		t.Error("Expected error when event is nil")
 	}
@@ -1112,7 +1112,7 @@ func TestEdgeCasesLargeEvent(t *testing.T) {
 	testEvent := createTestEvent(t, eventSigner, largeContent, 1)
 
 	// Should block large event
-	allowed, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -1130,19 +1130,19 @@ func TestEdgeCasesWhitelistBlacklistConflict(t *testing.T) {
 	}
 
 	// Test kind in both whitelist and blacklist - whitelist should win
-	allowed := policy.checkKindsPolicy("write", 1)
+	allowed, _ := policy.checkKindsPolicy("write", 1)
 	if !allowed {
 		t.Error("Expected whitelist to override blacklist")
 	}
 
 	// Test kind in blacklist but not whitelist
-	allowed = policy.checkKindsPolicy("write", 2)
+	allowed, _ = policy.checkKindsPolicy("write", 2)
 	if allowed {
 		t.Error("Expected kind in blacklist but not whitelist to be blocked")
 	}
 
 	// Test kind in whitelist but not blacklist
-	allowed = policy.checkKindsPolicy("write", 5)
+	allowed, _ = policy.checkKindsPolicy("write", 5)
 	if !allowed {
 		t.Error("Expected kind in whitelist to be allowed")
 	}
@@ -1330,7 +1330,7 @@ func TestCheckPolicyWithGlobalRule(t *testing.T) {
 	event := createTestEvent(t, eventSigner, "test content", 1)
 
 	// Global rule should deny this event even though kind-specific rule would allow it
-	allowed, err := policy.CheckPolicy("write", event, loggedInPubkey, "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", event, loggedInPubkey, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy failed: %v", err)
 	}
@@ -1434,7 +1434,7 @@ func TestMaxAgeChecks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			policy := &P{}
 
-			allowed, err := policy.checkRulePolicy("write", tt.event, tt.rule, tt.loggedInPubkey)
+			allowed, _, err := policy.checkRulePolicy("write", tt.event, tt.rule, tt.loggedInPubkey)
 			if err != nil {
 				t.Fatalf("checkRulePolicy failed: %v", err)
 			}
@@ -1469,7 +1469,7 @@ func TestScriptPolicyDisabledFallsBackToDefault(t *testing.T) {
 	testEvent := createTestEvent(t, eventSigner, "test content", 1)
 
 	// Should allow the event when policy is disabled (falls back to default "allow")
-	allowed, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -1479,7 +1479,7 @@ func TestScriptPolicyDisabledFallsBackToDefault(t *testing.T) {
 
 	// Test with default policy "deny"
 	policy.DefaultPolicy = "deny"
-	allowed2, err2 := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
+	allowed2, _, err2 := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
 	if err2 != nil {
 		t.Errorf("Unexpected error: %v", err2)
 	}
@@ -1503,7 +1503,7 @@ func TestDefaultPolicyAllow(t *testing.T) {
 	testEvent := createTestEvent(t, eventSigner, "test content", 1)
 
 	// Should allow the event with default policy "allow"
-	allowed, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -1527,7 +1527,7 @@ func TestDefaultPolicyDeny(t *testing.T) {
 	testEvent := createTestEvent(t, eventSigner, "test content", 1)
 
 	// Should deny the event with default policy "deny"
-	allowed, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -1551,7 +1551,7 @@ func TestDefaultPolicyEmpty(t *testing.T) {
 	testEvent := createTestEvent(t, eventSigner, "test content", 1)
 
 	// Should allow the event with empty default policy (defaults to "allow")
-	allowed, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -1575,7 +1575,7 @@ func TestDefaultPolicyInvalid(t *testing.T) {
 	testEvent := createTestEvent(t, eventSigner, "test content", 1)
 
 	// Should allow the event with invalid default policy (defaults to "allow")
-	allowed, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -1606,7 +1606,7 @@ func TestDefaultPolicyWithSpecificRule(t *testing.T) {
 	testEvent := createTestEvent(t, eventSigner, "test content", 1)
 
 	// Should allow the event because specific rule allows it, despite default policy being "deny"
-	allowed, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -1618,7 +1618,7 @@ func TestDefaultPolicyWithSpecificRule(t *testing.T) {
 	testEvent2 := createTestEvent(t, eventSigner, "test content", 2)
 
 	// Should deny the event because no specific rule and default policy is "deny"
-	allowed2, err2 := policy.CheckPolicy("write", testEvent2, eventPubkey, "127.0.0.1")
+	allowed2, _, err2 := policy.CheckPolicy("write", testEvent2, eventPubkey, "127.0.0.1")
 	if err2 != nil {
 		t.Errorf("Unexpected error: %v", err2)
 	}
@@ -1675,7 +1675,7 @@ func TestScriptProcessingDisabledFallsBackToDefault(t *testing.T) {
 	testEvent := createTestEvent(t, eventSigner, "test content", 1)
 
 	// Should allow the event when policy is disabled (falls back to default "allow")
-	allowed, err := policy.checkScriptPolicy("write", testEvent, "policy.sh", eventPubkey, "127.0.0.1")
+	allowed, _, err := policy.checkScriptPolicy("write", testEvent, "policy.sh", eventPubkey, "127.0.0.1")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -1685,7 +1685,7 @@ func TestScriptProcessingDisabledFallsBackToDefault(t *testing.T) {
 
 	// Test with default policy "deny"
 	policy.DefaultPolicy = "deny"
-	allowed2, err2 := policy.checkScriptPolicy("write", testEvent, "policy.sh", eventPubkey, "127.0.0.1")
+	allowed2, _, err2 := policy.checkScriptPolicy("write", testEvent, "policy.sh", eventPubkey, "127.0.0.1")
 	if err2 != nil {
 		t.Errorf("Unexpected error: %v", err2)
 	}
@@ -1727,7 +1727,7 @@ func TestDefaultPolicyLogicWithRules(t *testing.T) {
 
 	// Kind 1: has rule that allows all - should be allowed
 	event1 := createTestEvent(t, testSigner, "content", 1)
-	allowed1, err1 := policy1.CheckPolicy("write", event1, loggedInPubkey, "127.0.0.1")
+	allowed1, _, err1 := policy1.CheckPolicy("write", event1, loggedInPubkey, "127.0.0.1")
 	if err1 != nil {
 		t.Errorf("Unexpected error for kind 1: %v", err1)
 	}
@@ -1737,7 +1737,7 @@ func TestDefaultPolicyLogicWithRules(t *testing.T) {
 
 	// Kind 2: has rule that denies specific pubkey - should be allowed for other pubkeys
 	event2 := createTestEvent(t, testSigner, "content", 2)
-	allowed2, err2 := policy1.CheckPolicy("write", event2, loggedInPubkey, "127.0.0.1")
+	allowed2, _, err2 := policy1.CheckPolicy("write", event2, loggedInPubkey, "127.0.0.1")
 	if err2 != nil {
 		t.Errorf("Unexpected error for kind 2: %v", err2)
 	}
@@ -1747,7 +1747,7 @@ func TestDefaultPolicyLogicWithRules(t *testing.T) {
 
 	// Kind 2: submitter in deny list should be denied
 	event2Denied := createTestEvent(t, testSigner, "content", 2)  // Event can be from anyone
-	allowed2Denied, err2Denied := policy1.CheckPolicy("write", event2Denied, deniedPubkey, "127.0.0.1")  // But submitted by denied user
+	allowed2Denied, _, err2Denied := policy1.CheckPolicy("write", event2Denied, deniedPubkey, "127.0.0.1")  // But submitted by denied user
 	if err2Denied != nil {
 		t.Errorf("Unexpected error for kind 2 denied: %v", err2Denied)
 	}
@@ -1757,7 +1757,7 @@ func TestDefaultPolicyLogicWithRules(t *testing.T) {
 
 	// Kind 3: whitelisted but no rule - should follow default policy (deny)
 	event3 := createTestEvent(t, testSigner, "content", 3)
-	allowed3, err3 := policy1.CheckPolicy("write", event3, loggedInPubkey, "127.0.0.1")
+	allowed3, _, err3 := policy1.CheckPolicy("write", event3, loggedInPubkey, "127.0.0.1")
 	if err3 != nil {
 		t.Errorf("Unexpected error for kind 3: %v", err3)
 	}
@@ -1784,7 +1784,7 @@ func TestDefaultPolicyLogicWithRules(t *testing.T) {
 
 	// Kind 1: has rule that denies specific pubkey - should be allowed for other pubkeys
 	event1Allow := createTestEvent(t, testSigner, "content", 1)
-	allowed1Allow, err1Allow := policy2.CheckPolicy("write", event1Allow, loggedInPubkey, "127.0.0.1")
+	allowed1Allow, _, err1Allow := policy2.CheckPolicy("write", event1Allow, loggedInPubkey, "127.0.0.1")
 	if err1Allow != nil {
 		t.Errorf("Unexpected error for kind 1 allow: %v", err1Allow)
 	}
@@ -1794,7 +1794,7 @@ func TestDefaultPolicyLogicWithRules(t *testing.T) {
 
 	// Kind 1: denied pubkey should be denied when they try to submit
 	event1Deny := createTestEvent(t, testSigner, "content", 1)  // Event can be authored by anyone
-	allowed1Deny, err1Deny := policy2.CheckPolicy("write", event1Deny, deniedPubkey, "127.0.0.1")  // But denied user cannot submit
+	allowed1Deny, _, err1Deny := policy2.CheckPolicy("write", event1Deny, deniedPubkey, "127.0.0.1")  // But denied user cannot submit
 	if err1Deny != nil {
 		t.Errorf("Unexpected error for kind 1 deny: %v", err1Deny)
 	}
@@ -1804,7 +1804,7 @@ func TestDefaultPolicyLogicWithRules(t *testing.T) {
 
 	// Kind 2: whitelisted but no rule - should follow default policy (allow)
 	event2Allow := createTestEvent(t, testSigner, "content", 2)
-	allowed2Allow, err2Allow := policy2.CheckPolicy("write", event2Allow, loggedInPubkey, "127.0.0.1")
+	allowed2Allow, _, err2Allow := policy2.CheckPolicy("write", event2Allow, loggedInPubkey, "127.0.0.1")
 	if err2Allow != nil {
 		t.Errorf("Unexpected error for kind 2 allow: %v", err2Allow)
 	}
@@ -1906,7 +1906,7 @@ done
 	t.Run("script_accepts_allowed_content", func(t *testing.T) {
 		testEvent := createTestEvent(t, eventSigner, "this is allowed content", 4678)
 
-		allowed, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
 		if err != nil {
 			t.Logf("Policy check failed: %v", err)
 			// Check if script exists
@@ -1939,7 +1939,7 @@ done
 	t.Run("script_rejects_disallowed_content", func(t *testing.T) {
 		testEvent := createTestEvent(t, eventSigner, "this is not permitted", 4678)
 
-		allowed, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -1984,7 +1984,7 @@ done
 		for i := 0; i < 5; i++ {
 			content := "this is allowed message " + string(rune('0'+i))
 			testEvent := createTestEvent(t, eventSigner, content, 4678)
-			_, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
+			_, _, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
 			if err != nil {
 				t.Errorf("Unexpected error on event %d: %v", i, err)
 			}
@@ -2010,7 +2010,7 @@ done
 	t.Run("different_kind_uses_default_policy", func(t *testing.T) {
 		testEvent := createTestEvent(t, eventSigner, "any content", 1) // Kind 1 has no rule
 
-		allowed, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", testEvent, eventPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2165,7 +2165,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 		// Test whitelisted kind (should pass kind check, but may fail other checks)
 		whitelistedEvent := createTestEvent(t, eventSigner, "test content", 4678)
 		addPTag(whitelistedEvent, loggedInPubkey)
-		allowed, err := policy.CheckPolicy("write", whitelistedEvent, loggedInPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", whitelistedEvent, loggedInPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2177,7 +2177,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 
 		// Test non-whitelisted kind (should be denied)
 		nonWhitelistedEvent := createTestEvent(t, eventSigner, "test content", 1)
-		allowed, err = policy.CheckPolicy("write", nonWhitelistedEvent, eventPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", nonWhitelistedEvent, eventPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2204,7 +2204,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 		// So we'll test with the pubkey set correctly
 
 		// Test read access with allowed pubkey (logged in user matches event pubkey)
-		allowed, err := policy.CheckPolicy("read", event10306, allowedPubkeyBytes, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", event10306, allowedPubkeyBytes, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2214,7 +2214,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 
 		// Test read access with non-allowed pubkey
 		_, unauthorizedPubkey := generateTestKeypair(t)
-		allowed, err = policy.CheckPolicy("read", event10306, unauthorizedPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", event10306, unauthorizedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2223,7 +2223,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 		}
 
 		// Test read access without authentication (privileged check)
-		allowed, err = policy.CheckPolicy("read", event10306, nil, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", event10306, nil, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2247,7 +2247,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 		event30520.Pubkey = allowedPubkeyBytes
 
 		// Test write access with allowed pubkey (event pubkey matches write_allow)
-		allowed, err := policy.CheckPolicy("write", event30520, allowedPubkeyBytes, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event30520, allowedPubkeyBytes, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2258,7 +2258,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 		// Test write access with non-allowed pubkey
 		unauthorizedSigner, unauthorizedPubkey := generateTestKeypair(t)
 		unauthorizedEvent := createTestEvent(t, unauthorizedSigner, "test content", 30520)
-		allowed, err = policy.CheckPolicy("write", unauthorizedEvent, unauthorizedPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", unauthorizedEvent, unauthorizedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2267,7 +2267,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 		}
 
 		// Test write access without authentication (privileged check)
-		allowed, err = policy.CheckPolicy("write", event30520, nil, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event30520, nil, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2291,7 +2291,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 		event30919.Pubkey = allowedPubkeyBytes
 
 		// Test write access with allowed pubkey (event pubkey matches write_allow)
-		allowed, err := policy.CheckPolicy("write", event30919, allowedPubkeyBytes, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event30919, allowedPubkeyBytes, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2302,7 +2302,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 		// Test write access with non-allowed pubkey
 		unauthorizedSigner, unauthorizedPubkey := generateTestKeypair(t)
 		unauthorizedEvent := createTestEvent(t, unauthorizedSigner, "test content", 30919)
-		allowed, err = policy.CheckPolicy("write", unauthorizedEvent, unauthorizedPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", unauthorizedEvent, unauthorizedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2311,7 +2311,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 		}
 
 		// Test write access without authentication (privileged check)
-		allowed, err = policy.CheckPolicy("write", event30919, nil, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event30919, nil, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2337,7 +2337,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 
 		// Test that event is DENIED when submitter (logged-in pubkey) is not in write_allow
 		// Even though the submitter is in p-tag, write_allow is about who can submit
-		allowed, err := policy.CheckPolicy("write", event30520, loggedInPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event30520, loggedInPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2348,7 +2348,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 		// Test that event is denied when submitter is not in write_allow (even without p-tag)
 		event30520NoPTag := createTestEvent(t, eventSigner, "test content", 30520)
 		event30520NoPTag.Pubkey = allowedPubkeyBytes
-		allowed, err = policy.CheckPolicy("write", event30520NoPTag, loggedInPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event30520NoPTag, loggedInPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2366,7 +2366,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 		addPTag(event4678, loggedInPubkey)
 
 		// Test with script not running (should fall back to default policy)
-		allowed, err := policy.CheckPolicy("write", event4678, loggedInPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event4678, loggedInPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2377,7 +2377,7 @@ func TestPolicyFilterProcessing(t *testing.T) {
 		}
 
 		// Test without authentication (privileged doesn't affect write operations)
-		allowed, err = policy.CheckPolicy("write", event4678, nil, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event4678, nil, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2385,6 +2385,48 @@ func TestPolicyFilterProcessing(t *testing.T) {
 		// Falls back to default policy which is "allow"
 		if !allowed {
 			t.Error("Expected event to be allowed without authentication (privileged doesn't affect write)")
+		}
+	})
+}
+
+func TestCheckPolicyReasons(t *testing.T) {
+	signer, pubkey := generateTestKeypair(t)
+
+	t.Run("kind not in whitelist", func(t *testing.T) {
+		policy := &P{
+			DefaultPolicy: "deny",
+			Kind:          Kinds{Whitelist: []int{1}},
+		}
+		ev := createTestEvent(t, signer, "x", 4)
+		allowed, reason, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if allowed {
+			t.Fatal("expected deny")
+		}
+		if reason != "blocked: kind 4 is not in the kind whitelist" {
+			t.Errorf("got %q", reason)
+		}
+	})
+
+	t.Run("missing required tag", func(t *testing.T) {
+		policy := &P{
+			DefaultPolicy: "allow",
+			rules: map[int]Rule{
+				1: {TagValidationConfig: TagValidationConfig{MustHaveTags: []string{"e"}}},
+			},
+		}
+		ev := createTestEvent(t, signer, "x", 1)
+		allowed, reason, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if allowed {
+			t.Fatal("expected deny")
+		}
+		if reason != "invalid: missing required tag: e" {
+			t.Errorf("got %q", reason)
 		}
 	})
 }

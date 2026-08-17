@@ -38,7 +38,7 @@ func TestReadAllowLogic(t *testing.T) {
 
 	// Test 1: Bob (who is in ReadAllow) should be able to READ Alice's event
 	t.Run("allowed_reader_can_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", aliceEvent, bobPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", aliceEvent, bobPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -49,7 +49,7 @@ func TestReadAllowLogic(t *testing.T) {
 
 	// Test 2: Charlie (who is NOT in ReadAllow) should NOT be able to READ Alice's event
 	t.Run("disallowed_reader_cannot_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", aliceEvent, charliePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", aliceEvent, charliePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -60,7 +60,7 @@ func TestReadAllowLogic(t *testing.T) {
 
 	// Test 3: Alice (the author) should NOT be able to READ her own event if she's not in ReadAllow
 	t.Run("author_not_in_readallow_cannot_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", aliceEvent, alicePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", aliceEvent, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -71,7 +71,7 @@ func TestReadAllowLogic(t *testing.T) {
 
 	// Test 4: Unauthenticated user should NOT be able to READ
 	t.Run("unauthenticated_cannot_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", aliceEvent, nil, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", aliceEvent, nil, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -108,7 +108,7 @@ func TestReadDenyLogic(t *testing.T) {
 
 	// Test 1: Bob (who is NOT in ReadDeny) should be able to READ Alice's event
 	t.Run("non_denied_reader_can_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", aliceEvent, bobPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", aliceEvent, bobPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -119,7 +119,7 @@ func TestReadDenyLogic(t *testing.T) {
 
 	// Test 2: Charlie (who IS in ReadDeny) should NOT be able to READ Alice's event
 	t.Run("denied_reader_cannot_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", aliceEvent, charliePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", aliceEvent, charliePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -130,7 +130,7 @@ func TestReadDenyLogic(t *testing.T) {
 
 	// Test 3: Alice (the author, not in ReadDeny) should be able to READ her own event
 	t.Run("author_not_denied_can_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", aliceEvent, alicePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", aliceEvent, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -217,7 +217,7 @@ func TestSamplePolicyFromUser(t *testing.T) {
 		heartbeatEvent.Pubkey = server1Pubkey // Set to server1's pubkey
 
 		// Test 1: Admin (in read_allow) should be able to READ the heartbeat
-		allowed, err := policy.CheckPolicy("read", heartbeatEvent, adminPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", heartbeatEvent, adminPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -226,7 +226,7 @@ func TestSamplePolicyFromUser(t *testing.T) {
 		}
 
 		// Test 2: Server1 (in read_allow) should be able to READ the heartbeat
-		allowed, err = policy.CheckPolicy("read", heartbeatEvent, server1Pubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", heartbeatEvent, server1Pubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -235,7 +235,7 @@ func TestSamplePolicyFromUser(t *testing.T) {
 		}
 
 		// Test 3: Server2 (in read_allow) should be able to READ the heartbeat
-		allowed, err = policy.CheckPolicy("read", heartbeatEvent, server2Pubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", heartbeatEvent, server2Pubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -244,7 +244,7 @@ func TestSamplePolicyFromUser(t *testing.T) {
 		}
 
 		// Test 4: Random user (NOT in read_allow) should NOT be able to READ the heartbeat
-		allowed, err = policy.CheckPolicy("read", heartbeatEvent, randomPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", heartbeatEvent, randomPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -253,7 +253,7 @@ func TestSamplePolicyFromUser(t *testing.T) {
 		}
 
 		// Test 5: Unauthenticated user should NOT be able to READ (privileged + read_allow)
-		allowed, err = policy.CheckPolicy("read", heartbeatEvent, nil, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", heartbeatEvent, nil, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -270,7 +270,7 @@ func TestSamplePolicyFromUser(t *testing.T) {
 		addPTag(requestEvent, adminPubkey)
 
 		// Test 1: Admin (in read_allow) should be able to READ the request
-		allowed, err := policy.CheckPolicy("read", requestEvent, adminPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", requestEvent, adminPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -280,7 +280,7 @@ func TestSamplePolicyFromUser(t *testing.T) {
 
 		// Test 2: Server1 (NOT in read_allow for kind 10306) should NOT be able to READ
 		// Even though server1 might be allowed for kind 30166
-		allowed, err = policy.CheckPolicy("read", requestEvent, server1Pubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", requestEvent, server1Pubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -290,7 +290,7 @@ func TestSamplePolicyFromUser(t *testing.T) {
 
 		// Test 3: Random user (author) SHOULD be able to READ
 		// OR logic: Random user is the author so privileged check passes -> ALLOWED
-		allowed, err = policy.CheckPolicy("read", requestEvent, randomPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", requestEvent, randomPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -328,7 +328,7 @@ func TestReadAllowWithPrivileged(t *testing.T) {
 
 	// Test 1: Bob (in ReadAllow AND in p tag) should be able to READ
 	t.Run("bob_in_readallow_and_ptag", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, bobPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, bobPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -340,7 +340,7 @@ func TestReadAllowWithPrivileged(t *testing.T) {
 	// Test 2: Alice (author, but NOT in ReadAllow) SHOULD be able to READ
 	// OR logic: Alice is involved (author) so privileged check passes -> ALLOWED
 	t.Run("alice_author_but_not_in_readallow", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, alicePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -351,7 +351,7 @@ func TestReadAllowWithPrivileged(t *testing.T) {
 
 	// Test 3: Charlie (NOT in ReadAllow, NOT in p tag) should NOT be able to READ
 	t.Run("charlie_not_authorized", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, charliePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, charliePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -365,7 +365,7 @@ func TestReadAllowWithPrivileged(t *testing.T) {
 	addPTag(evWithCharlie, charliePubkey)
 
 	t.Run("charlie_in_ptag_but_not_readallow", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", evWithCharlie, charliePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", evWithCharlie, charliePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -403,7 +403,7 @@ func TestReadAllowWriteAllowIndependent(t *testing.T) {
 
 	// Test 1: Alice can WRITE her own event
 	t.Run("alice_can_write", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("write", aliceEvent, alicePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", aliceEvent, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -414,7 +414,7 @@ func TestReadAllowWriteAllowIndependent(t *testing.T) {
 
 	// Test 2: Alice CANNOT READ her own event (not in ReadAllow)
 	t.Run("alice_cannot_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", aliceEvent, alicePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", aliceEvent, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -428,7 +428,7 @@ func TestReadAllowWriteAllowIndependent(t *testing.T) {
 
 	// Test 3: Bob CANNOT WRITE (not in WriteAllow)
 	t.Run("bob_cannot_write", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("write", bobEvent, bobPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", bobEvent, bobPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -439,7 +439,7 @@ func TestReadAllowWriteAllowIndependent(t *testing.T) {
 
 	// Test 4: Bob CAN READ Alice's event (in ReadAllow)
 	t.Run("bob_can_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", aliceEvent, bobPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", aliceEvent, bobPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -457,7 +457,7 @@ func TestReadAllowWriteAllowIndependent(t *testing.T) {
 		charlieEvent.Pubkey = charliePubkey // Set to Charlie's pubkey
 
 		// Charlie's event should be denied for write (Charlie not in WriteAllow)
-		allowed, err := policy.CheckPolicy("write", charlieEvent, charliePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", charlieEvent, charliePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -466,7 +466,7 @@ func TestReadAllowWriteAllowIndependent(t *testing.T) {
 		}
 
 		// Charlie should not be able to READ Alice's event (not in ReadAllow)
-		allowed, err = policy.CheckPolicy("read", aliceEvent, charliePubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", aliceEvent, charliePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -496,7 +496,7 @@ func TestReadAccessEdgeCases(t *testing.T) {
 
 	// Test 1: Nil loggedInPubkey with ReadAllow should be denied
 	t.Run("nil_pubkey_with_readallow", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", event, nil, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", event, nil, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}

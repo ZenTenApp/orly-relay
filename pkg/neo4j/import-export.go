@@ -181,7 +181,9 @@ func (n *N) ImportEventsFromReader(ctx context.Context, rr io.Reader) error {
 func (n *N) ImportEventsFromStrings(
 	ctx context.Context,
 	eventJSONs []string,
-	policyManager interface{ CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error) },
+	policyManager interface {
+		CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (allowed bool, reason string, err error)
+	},
 ) error {
 	for _, eventJSON := range eventJSONs {
 		ev := &event.E{}
@@ -191,7 +193,7 @@ func (n *N) ImportEventsFromStrings(
 
 		// Check policy if manager is provided
 		if policyManager != nil {
-			if allowed, err := policyManager.CheckPolicy("write", ev, ev.Pubkey[:], "import"); err != nil || !allowed {
+			if allowed, _, err := policyManager.CheckPolicy("write", ev, ev.Pubkey[:], "import"); err != nil || !allowed {
 				continue
 			}
 		}

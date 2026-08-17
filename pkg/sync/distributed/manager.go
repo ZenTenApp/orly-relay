@@ -22,7 +22,7 @@ import (
 
 // PolicyChecker is an interface for checking event policies
 type PolicyChecker interface {
-	CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error)
+	CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (allowed bool, reason string, err error)
 }
 
 // RelayGroupConfigProvider provides relay group configuration

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/reason"
 	"git.smesh.lol/orly/pkg/event/authorization"
 	"git.smesh.lol/orly/pkg/event/processing"
 	"git.smesh.lol/orly/pkg/event/routing"
@@ -141,16 +142,16 @@ func NewService(
 func (s *Service) Ingest(ctx context.Context, ev *event.E, connCtx *ConnectionContext) Result {
 	// Stage 1: Event validation (ID, timestamp, signature)
 	if result := s.validator.ValidateEvent(ev); !result.Valid {
-		return Rejected(result.Msg)
+		return Rejected(result.PrefixedMessage())
 	}
 
 	// Stage 2: Sprocket check (if enabled)
 	if s.sprocket != nil && s.sprocket.IsEnabled() {
 		if s.sprocket.IsDisabled() {
-			return Rejected("sprocket disabled - events rejected until sprocket is restored")
+			return Rejected(reason.Ensure("sprocket disabled - events rejected until sprocket is restored", reason.Error))
 		}
 		if !s.sprocket.IsRunning() {
-			return Rejected("sprocket not running - events rejected until sprocket starts")
+			return Rejected(reason.Ensure("sprocket not running - events rejected until sprocket starts", reason.Error))
 		}
 
 		response, err := s.sprocket.ProcessEvent(ev)
@@ -162,7 +163,7 @@ func (s *Service) Ingest(ctx context.Context, ev *event.E, connCtx *ConnectionCo
 		case "accept":
 			// Continue processing
 		case "reject":
-			return Rejected(response.Msg)
+			return Rejected(reason.Ensure(response.Msg, reason.Blocked))
 		case "shadowReject":
 			// Accept but don't save
 			return AcceptedNotSaved("")
@@ -207,7 +208,7 @@ func (s *Service) Ingest(ctx context.Context, ev *event.E, connCtx *ConnectionCo
 	// Stage 5: NIP-70 protected tag validation (only when ACL is active)
 	if s.aclMode != nil && s.aclMode() != "none" {
 		if result := s.validator.ValidateProtectedTag(ev, connCtx.AuthedPubkey); !result.Valid {
-			return Rejected(result.Msg)
+			return Rejected(result.PrefixedMessage())
 		}
 	}
 
@@ -247,7 +248,7 @@ func (s *Service) Ingest(ctx context.Context, ev *event.E, connCtx *ConnectionCo
 func (s *Service) IngestWithRawValidation(ctx context.Context, rawJSON []byte, ev *event.E, connCtx *ConnectionContext) Result {
 	// Stage 0: Raw JSON validation
 	if result := s.validator.ValidateRawJSON(rawJSON); !result.Valid {
-		return Rejected(result.Msg)
+		return Rejected(result.PrefixedMessage())
 	}
 
 	return s.Ingest(ctx, ev, connCtx)

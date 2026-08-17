@@ -116,3 +116,10 @@ var Ok = OKs{
 		).Write(l)
 	},
 }
+
+// writeReasonedOK sends ["OK", id, false, "<prefix>: <detail>"] using the
+// NIP-01 prefix already present in msg, or blocked: if none is found.
+func writeReasonedOK(l *Listener, id []byte, msg string) error {
+	prefix, detail := reason.Split(msg)
+	return okenvelope.NewFrom(id, false, prefix.F("%s", detail)).Write(l)
+}

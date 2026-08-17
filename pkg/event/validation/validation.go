@@ -5,6 +5,7 @@ package validation
 
 import (
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
+	"git.smesh.lol/orly/pkg/nostr/encoders/reason"
 )
 
 // ReasonCode identifies the type of validation failure for response formatting.
@@ -42,6 +43,25 @@ func Invalid(msg string) Result {
 // Error returns an error validation result.
 func Error(msg string) Result {
 	return Result{Valid: false, Code: ReasonError, Msg: msg}
+}
+
+// PrefixedMessage returns the validation failure as a NIP-01 reason string.
+// Messages that already have a known prefix are returned unchanged.
+func (r Result) PrefixedMessage() string {
+	if r.Valid {
+		return ""
+	}
+	if _, _, found := reason.Parse(r.Msg); found {
+		return r.Msg
+	}
+	switch r.Code {
+	case ReasonInvalid:
+		return reason.Ensure(r.Msg, reason.Invalid)
+	case ReasonError:
+		return reason.Ensure(r.Msg, reason.Error)
+	default:
+		return reason.Ensure(r.Msg, reason.Blocked)
+	}
 }
 
 // Validator validates events before processing.

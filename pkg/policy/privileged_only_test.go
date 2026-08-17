@@ -59,7 +59,7 @@ func TestPrivilegedOnlyBug(t *testing.T) {
 
 	// Test 1: Alice (author) should be able to read
 	t.Run("alice_author_can_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, alicePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -70,7 +70,7 @@ func TestPrivilegedOnlyBug(t *testing.T) {
 
 	// Test 2: Bob (in p-tag) should be able to read
 	t.Run("bob_recipient_can_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, bobPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, bobPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -81,7 +81,7 @@ func TestPrivilegedOnlyBug(t *testing.T) {
 
 	// Test 3: Charlie (third party) should NOT be able to read
 	t.Run("charlie_third_party_denied", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, charliePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, charliePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -92,7 +92,7 @@ func TestPrivilegedOnlyBug(t *testing.T) {
 
 	// Test 4: Unauthenticated user should NOT be able to read
 	t.Run("unauthenticated_denied", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, nil, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, nil, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -143,7 +143,7 @@ func TestPrivilegedWithReadAllowBug(t *testing.T) {
 
 	// Test 1: Alice (author, party) should be able to read via privileged
 	t.Run("alice_party_can_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, alicePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -154,7 +154,7 @@ func TestPrivilegedWithReadAllowBug(t *testing.T) {
 
 	// Test 2: Bob (in p-tag, party) should be able to read via privileged
 	t.Run("bob_party_can_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, bobPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, bobPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -165,7 +165,7 @@ func TestPrivilegedWithReadAllowBug(t *testing.T) {
 
 	// Test 3: Dave (in read_allow, NOT party) should be able to read via OR logic
 	t.Run("dave_read_allow_can_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, davePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, davePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -176,7 +176,7 @@ func TestPrivilegedWithReadAllowBug(t *testing.T) {
 
 	// Test 4: Charlie (NOT in read_allow, NOT party) should NOT be able to read
 	t.Run("charlie_denied", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, charliePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, charliePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -222,7 +222,7 @@ func TestNoReadAllowNoPrivileged(t *testing.T) {
 
 	// Test: Third party should be able to read (no restrictions)
 	t.Run("charlie_can_read_unrestricted", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, charliePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, charliePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -233,7 +233,7 @@ func TestNoReadAllowNoPrivileged(t *testing.T) {
 
 	// Test: Unauthenticated should also be able to read
 	t.Run("unauthenticated_can_read_unrestricted", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, nil, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, nil, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -305,7 +305,7 @@ func TestPrivilegedWithBinaryEncodedPTags(t *testing.T) {
 
 	// Test: Bob (in p-tag) should be able to read even with binary-encoded tag
 	t.Run("bob_binary_ptag_can_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", &ev, bobPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", &ev, bobPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -316,7 +316,7 @@ func TestPrivilegedWithBinaryEncodedPTags(t *testing.T) {
 
 	// Test: Alice (author) should be able to read
 	t.Run("alice_author_can_read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", &ev, alicePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", &ev, alicePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -327,7 +327,7 @@ func TestPrivilegedWithBinaryEncodedPTags(t *testing.T) {
 
 	// Test: Charlie (third party) should NOT be able to read
 	t.Run("charlie_denied", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", &ev, charliePubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", &ev, charliePubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}

@@ -138,7 +138,7 @@ func TestPolicyIntegration(t *testing.T) {
 	// Test policy checks directly
 	t.Run("policy checks", func(t *testing.T) {
 		// Test 1: Event 30520 with allowed pubkey should be allowed
-		allowed, err := policy.CheckPolicy("write", event30520Allowed, allowedSigner.Pub(), "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event30520Allowed, allowedSigner.Pub(), "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -147,7 +147,7 @@ func TestPolicyIntegration(t *testing.T) {
 		}
 
 		// Test 2: Event 30520 with unauthorized pubkey should be denied
-		allowed, err = policy.CheckPolicy("write", event30520Unauthorized, unauthorizedSigner.Pub(), "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event30520Unauthorized, unauthorizedSigner.Pub(), "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -156,7 +156,7 @@ func TestPolicyIntegration(t *testing.T) {
 		}
 
 		// Test 3: Event 10306 should be readable by allowed user
-		allowed, err = policy.CheckPolicy("read", event10306Allowed, allowedSigner.Pub(), "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", event10306Allowed, allowedSigner.Pub(), "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -165,7 +165,7 @@ func TestPolicyIntegration(t *testing.T) {
 		}
 
 		// Test 4: Event 10306 should NOT be readable by unauthorized user
-		allowed, err = policy.CheckPolicy("read", event10306Allowed, unauthorizedSigner.Pub(), "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", event10306Allowed, unauthorizedSigner.Pub(), "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -174,7 +174,7 @@ func TestPolicyIntegration(t *testing.T) {
 		}
 
 		// Test 5: Event 10306 should NOT be readable without authentication
-		allowed, err = policy.CheckPolicy("read", event10306Allowed, nil, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", event10306Allowed, nil, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -183,7 +183,7 @@ func TestPolicyIntegration(t *testing.T) {
 		}
 
 		// Test 6: Event 30520 should NOT be writable without authentication
-		allowed, err = policy.CheckPolicy("write", event30520Allowed, nil, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event30520Allowed, nil, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -192,7 +192,7 @@ func TestPolicyIntegration(t *testing.T) {
 		}
 
 		// Test 7: Event 4678 should fall back to default policy (allow) when script not running
-		allowed, err = policy.CheckPolicy("write", event4678Allowed, allowedSigner.Pub(), "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event4678Allowed, allowedSigner.Pub(), "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -201,7 +201,7 @@ func TestPolicyIntegration(t *testing.T) {
 		}
 
 		// Test 8: Event 4678 write should be allowed without authentication (privileged doesn't affect write)
-		allowed, err = policy.CheckPolicy("write", event4678Allowed, nil, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event4678Allowed, nil, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -279,7 +279,7 @@ func TestPolicyIntegration(t *testing.T) {
 
 		for _, check := range checks {
 			t.Run(check.name, func(t *testing.T) {
-				allowed, err := policy.CheckPolicy(check.access, check.event, check.loggedInPubkey, "127.0.0.1")
+				allowed, _, err := policy.CheckPolicy(check.access, check.event, check.loggedInPubkey, "127.0.0.1")
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 					return
@@ -452,7 +452,7 @@ func TestPolicyWithRelay(t *testing.T) {
 
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
-			allowed, err := policy.CheckPolicy("write", testEvent, scenario.loggedInPubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("write", testEvent, scenario.loggedInPubkey, "127.0.0.1")
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 				return
@@ -502,7 +502,7 @@ func TestPolicyWithRelay(t *testing.T) {
 
 	for _, scenario := range readScenarios {
 		t.Run(scenario.name, func(t *testing.T) {
-			allowed, err := policy.CheckPolicy("read", readEvent, scenario.loggedInPubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("read", readEvent, scenario.loggedInPubkey, "127.0.0.1")
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 				return

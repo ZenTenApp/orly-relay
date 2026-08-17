@@ -177,7 +177,7 @@ func TestTagValidationBasic(t *testing.T) {
 				t.Fatalf("Failed to re-sign event: %v", err)
 			}
 
-			allowed, err := policy.CheckPolicy("write", ev, signer.Pub(), "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("write", ev, signer.Pub(), "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy returned error: %v", err)
 			}
@@ -251,7 +251,7 @@ func TestTagValidationMultipleSameTag(t *testing.T) {
 				t.Fatalf("Failed to re-sign event: %v", err)
 			}
 
-			allowed, err := policy.CheckPolicy("write", ev, signer.Pub(), "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("write", ev, signer.Pub(), "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy returned error: %v", err)
 			}
@@ -348,7 +348,7 @@ func TestTagValidationEmptyTag(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	allowed, err := policy.CheckPolicy("write", ev, signer.Pub(), "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", ev, signer.Pub(), "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy returned error: %v", err)
 	}
@@ -405,7 +405,7 @@ func TestTagValidationWithWriteAllowFollows(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	allowed, err := policy.CheckPolicy("write", ev, signer.Pub(), "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", ev, signer.Pub(), "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy returned error: %v", err)
 	}
@@ -425,7 +425,7 @@ func TestTagValidationWithWriteAllowFollows(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	allowed2, err := policy.CheckPolicy("write", ev2, signer.Pub(), "127.0.0.1")
+	allowed2, _, err := policy.CheckPolicy("write", ev2, signer.Pub(), "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy returned error: %v", err)
 	}
@@ -462,7 +462,7 @@ func TestTagValidationGlobalRule(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	allowed1, _ := policy.CheckPolicy("write", ev1, signer1.Pub(), "127.0.0.1")
+	allowed1, _, _ := policy.CheckPolicy("write", ev1, signer1.Pub(), "127.0.0.1")
 	if !allowed1 {
 		t.Error("Expected valid e tag to be allowed")
 	}
@@ -474,7 +474,7 @@ func TestTagValidationGlobalRule(t *testing.T) {
 		t.Fatalf("Failed to sign event: %v", err)
 	}
 
-	allowed2, _ := policy.CheckPolicy("write", ev2, signer2.Pub(), "127.0.0.1")
+	allowed2, _, _ := policy.CheckPolicy("write", ev2, signer2.Pub(), "127.0.0.1")
 	if allowed2 {
 		t.Error("Expected invalid e tag to be rejected")
 	}

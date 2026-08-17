@@ -438,7 +438,9 @@ func (c *Client) ImportEventsFromReader(ctx context.Context, rr io.Reader) error
 	return nil
 }
 
-func (c *Client) ImportEventsFromStrings(ctx context.Context, eventJSONs []string, policyManager interface{ CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error) }) error {
+func (c *Client) ImportEventsFromStrings(ctx context.Context, eventJSONs []string, policyManager interface {
+	CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (allowed bool, reason string, err error)
+}) error {
 	_, err := c.client.ImportEventsFromStrings(ctx, &orlydbv1.ImportEventsFromStringsRequest{
 		EventJsons:  eventJSONs,
 		CheckPolicy: policyManager != nil,

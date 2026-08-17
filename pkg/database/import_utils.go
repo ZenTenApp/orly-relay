@@ -57,7 +57,9 @@ func (d *D) ImportEventsFromReader(ctx context.Context, rr io.Reader) error {
 }
 
 // ImportEventsFromStrings imports events from a slice of JSON strings with policy filtering
-func (d *D) ImportEventsFromStrings(ctx context.Context, eventJSONs []string, policyManager interface{ CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error) }) error {
+func (d *D) ImportEventsFromStrings(ctx context.Context, eventJSONs []string, policyManager interface {
+	CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (allowed bool, reason string, err error)
+}) error {
 	// Create a reader from the string slice
 	reader := strings.NewReader(strings.Join(eventJSONs, "\n"))
 	return d.processJSONLEventsWithPolicy(ctx, reader, policyManager)
@@ -69,7 +71,9 @@ func (d *D) processJSONLEvents(ctx context.Context, rr io.Reader) error {
 }
 
 // processJSONLEventsWithPolicy processes JSONL events from a reader with optional policy filtering
-func (d *D) processJSONLEventsWithPolicy(ctx context.Context, rr io.Reader, policyManager interface{ CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error) }) error {
+func (d *D) processJSONLEventsWithPolicy(ctx context.Context, rr io.Reader, policyManager interface {
+	CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (allowed bool, reason string, err error)
+}) error {
 	// Create a scanner to read the buffer line by line
 	scan := bufio.NewScanner(rr)
 	scanBuf := make([]byte, maxLen)
@@ -109,7 +113,7 @@ func (d *D) processJSONLEventsWithPolicy(ctx context.Context, rr io.Reader, poli
 		if policyManager != nil {
 			// For sync imports, we treat events as coming from system/trusted source
 			// Use nil pubkey and empty remote to indicate system-level import
-			allowed, policyErr := policyManager.CheckPolicy("write", ev, nil, "")
+			allowed, _, policyErr := policyManager.CheckPolicy("write", ev, nil, "")
 			if policyErr != nil {
 				log.W.F("policy check failed for event %x: %v", ev.ID, policyErr)
 				ev.Free()

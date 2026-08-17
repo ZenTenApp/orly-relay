@@ -29,14 +29,21 @@ func (m *mockACLRegistry) Active() string {
 type mockPolicyManager struct {
 	enabled bool
 	allowed bool
+	reason  string
 }
 
 func (m *mockPolicyManager) IsEnabled() bool {
 	return m.enabled
 }
 
-func (m *mockPolicyManager) CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error) {
-	return m.allowed, nil
+func (m *mockPolicyManager) CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, string, error) {
+	if m.allowed {
+		return true, "", nil
+	}
+	if m.reason != "" {
+		return false, m.reason, nil
+	}
+	return false, "blocked: event blocked by policy", nil
 }
 
 // mockSyncManager is a mock implementation of SyncManager for testing.
@@ -157,7 +164,7 @@ func TestAuthorize_Blocked(t *testing.T) {
 	if decision.Allowed {
 		t.Error("blocked access should be denied")
 	}
-	if decision.DenyReason != "IP address blocked" {
+	if decision.DenyReason != "blocked: IP address blocked" {
 		t.Errorf("expected blocked reason, got: %s", decision.DenyReason)
 	}
 }
@@ -175,7 +182,7 @@ func TestAuthorize_Banned(t *testing.T) {
 	if decision.Allowed {
 		t.Error("banned access should be denied")
 	}
-	if decision.DenyReason != "pubkey banned" {
+	if decision.DenyReason != "blocked: pubkey banned" {
 		t.Errorf("expected banned reason, got: %s", decision.DenyReason)
 	}
 }
@@ -279,8 +286,15 @@ func TestAuthorize_PolicyCheck(t *testing.T) {
 	if decision.Allowed {
 		t.Error("policy rejection should deny")
 	}
-	if decision.DenyReason != "event blocked by policy" {
+	if decision.DenyReason != "blocked: event blocked by policy" {
 		t.Errorf("expected policy blocked reason, got: %s", decision.DenyReason)
+	}
+
+	specific := &mockPolicyManager{enabled: true, allowed: false, reason: "invalid: missing required tag: e"}
+	s = New(cfg, acl, specific, nil)
+	decision = s.Authorize(ev, ev.Pubkey, "127.0.0.1", 1)
+	if decision.DenyReason != "invalid: missing required tag: e" {
+		t.Errorf("expected specific policy reason, got: %s", decision.DenyReason)
 	}
 }
 
