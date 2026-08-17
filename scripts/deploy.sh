@@ -32,6 +32,9 @@
 #   --goarch ARCH      build GOARCH (default amd64)
 #   --goexperiment EXP build GOEXPERIMENT (default greenteagc,jsonv2)
 #   --cgo 0|1          build CGO_ENABLED (default 0)
+#   --version VER      version string to inject (default from pkg/version/version)
+#   --commit SHA       git commit sha to inject (default from git rev-parse)
+#   --build-date DATE  build timestamp to inject (default now)
 #   -h, --help         show this help
 
 set -euo pipefail
@@ -55,6 +58,11 @@ CGO_ENABLED="${CGO_ENABLED:-0}"
 GOOS="${GOOS:-linux}"
 GOARCH="${GOARCH:-amd64}"
 GOEXPERIMENT="${GOEXPERIMENT:-greenteagc,jsonv2}"
+
+# Version information injected at build time via -ldflags (mirrors CI).
+VERSION="${VERSION:-$(cat "$PROJECT_DIR/pkg/version/version" | tr -d '[:space:]')}"
+COMMIT="${COMMIT:-$(git -C "$PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)}"
+BUILD_DATE="${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
 # Colors
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
@@ -84,6 +92,9 @@ while [[ $# -gt 0 ]]; do
         --goarch)      GOARCH="$2"; shift 2 ;;
         --goexperiment) GOEXPERIMENT="$2"; shift 2 ;;
         --cgo)         CGO_ENABLED="$2"; shift 2 ;;
+        --version)     VERSION="$2"; shift 2 ;;
+        --commit)      COMMIT="$2"; shift 2 ;;
+        --build-date)  BUILD_DATE="$2"; shift 2 ;;
         -h|--help)     usage ;;
         *)
             err "Unknown option: $1"
@@ -118,9 +129,11 @@ done
 
 # --- Step 1: Build ---
 log "Building $GOOS/$GOARCH unified binary (./cmd/orly)..."
+log "Version: $VERSION (commit: $COMMIT)"
 cd "$PROJECT_DIR"
+LDFLAGS="-s -w -X main.Version=$VERSION -X main.Commit=$COMMIT -X main.BuildDate=$BUILD_DATE"
 CGO_ENABLED="$CGO_ENABLED" GOOS="$GOOS" GOARCH="$GOARCH" GOEXPERIMENT="$GOEXPERIMENT" \
-    go build -ldflags "-s -w" -o "$BUILD_OUTPUT" ./cmd/orly
+    go build -ldflags "$LDFLAGS" -o "$BUILD_OUTPUT" ./cmd/orly
 BINARY_SIZE=$(du -h "$BUILD_OUTPUT" | cut -f1)
 BINARY_ARCH=$(file "$BUILD_OUTPUT" | grep -o 'x86-64\|aarch64\|ARM' || echo 'unknown')
 ok "Built: $BUILD_OUTPUT ($BINARY_SIZE, $BINARY_ARCH)"
