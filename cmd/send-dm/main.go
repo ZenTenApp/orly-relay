@@ -19,6 +19,7 @@ import (
 
 func main() {
 	expSec := flag.Int("expiration", 0, "expire the DM N seconds from now (adds NIP-40 expiration tag)")
+	clientName := flag.String("client", "send-dm", "value for the required client tag")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: send-dm [flags] <relay-url> <recipient-pubkey-hex> <message>\n")
 		fmt.Fprintf(os.Stderr, "  set NOSTR_SECRET_KEY=<hex> to use a specific key (else a throwaway key is generated)\n")
@@ -72,13 +73,20 @@ func main() {
 		log.F.F("encrypt: %v", err)
 	}
 
-	// Build kind 4 DM
-	tagList := []*tag.T{tag.NewFromAny("p", recipientHex)}
+	// Build kind 4 DM. Policy on the test relay requires p, expiration, and client.
+	if *clientName == "" {
+		log.F.F("client tag value must not be empty")
+	}
+	tagList := []*tag.T{
+		tag.NewFromAny("p", recipientHex),
+		tag.NewFromAny("client", *clientName),
+	}
 	if *expSec > 0 {
 		expTS := time.Now().Unix() + int64(*expSec)
 		tagList = append(tagList, tag.NewFromAny("expiration", strconv.FormatInt(expTS, 10)))
 		fmt.Printf("expiration: %s (in %d seconds)\n", time.Unix(expTS, 0).UTC().Format(time.RFC3339), *expSec)
 	}
+	fmt.Printf("client: %s\n", *clientName)
 	tags := tag.NewS(tagList...)
 	ev := &event.E{
 		Content:   []byte(ciphertext),
