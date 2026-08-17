@@ -21,7 +21,7 @@
 # Flags (each also falls back to its $ENV unless overridden on the CLI):
 #   --host HOST        target host; repeatable for multiple hosts (required)
 #   --key PATH         SSH private key to use (req; fallback SSH_KEY)
-#   --user USER        ssh user (default root; fallback DEPLOY_USER)
+#                      passed with ssh/scp -i; never copied to ~/.ssh/id_ed25519
 #   --ip HOST          explicit IP/host to keyscan (per run; fallback DEPLOY_IP)
 #   --port N           ssh port (default 22; fallback DEPLOY_PORT)
 #   --restart          restart service after install (default)
@@ -46,7 +46,7 @@ BUILD_OUTPUT="$PROJECT_DIR/orly"
 # --- Configuration (flags win, env fills in the rest, then defaults) ---
 HOSTS=()
 DEPLOY_KEY="${SSH_KEY:-}"
-SSH_USER="${DEPLOY_USER:-root}"
+SSH_USER="root"
 DEPLOY_IP="${DEPLOY_IP:-}"
 DEPLOY_PORT="${DEPLOY_PORT:-22}"
 RESTART=true
@@ -81,7 +81,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --host)        HOSTS+=("$2"); shift 2 ;;
         --key)         DEPLOY_KEY="$2"; shift 2 ;;
-        --user)        SSH_USER="$2"; shift 2 ;;
+        --user)
+            err "--user is not accepted. Deploy is root-only."
+            exit 1
+            ;;
         --ip)          DEPLOY_IP="$2"; shift 2 ;;
         --port)        DEPLOY_PORT="$2"; shift 2 ;;
         --restart)     RESTART=true; shift ;;
@@ -146,16 +149,15 @@ else
     warn "Local smoke test failed — continuing anyway"
 fi
 
-# --- Prepare SSH (mirror CI: write key, keyscan hosts) ---
+# --- Prepare SSH (use the given key in place; never copy it to id_ed25519) ---
 mkdir -p ~/.ssh && chmod 700 ~/.ssh
-cp "$DEPLOY_KEY" ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
 for host in "${HOSTS[@]}"; do
     ssh-keyscan -p "$DEPLOY_PORT" -H "${DEPLOY_IP:-$host}" >> ~/.ssh/known_hosts 2>/dev/null || true
 done
 chmod 644 ~/.ssh/known_hosts 2>/dev/null || true
 
-SSH="ssh -p $DEPLOY_PORT -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
-SCP="scp -P $DEPLOY_PORT -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+SSH="ssh -p $DEPLOY_PORT -i $DEPLOY_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+SCP="scp -P $DEPLOY_PORT -i $DEPLOY_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
 
 # --- Step 2 + 3: Deploy and start/verify on each host ---
 for host in "${HOSTS[@]}"; do
@@ -167,6 +169,31 @@ for host in "${HOSTS[@]}"; do
     if [[ "$RESTART" == "true" ]]; then
         log "  Stopping service..."
         $SSH "${SSH_USER}@$host" "systemctl stop $SERVICE" || true
+        # Reap any leftover orly processes so the new install is the only binary.
+        $SSH "${SSH_USER}@$host" "REMOTE_BIN='$REMOTE_BIN' bash -s" <<'REMOTE'
+set -euo pipefail
+for pid in /proc/[0-9]*; do
+    exe=$(readlink -f "$pid/exe" 2>/dev/null || true)
+    [ -n "$exe" ] || continue
+    case "$exe" in
+        *orly*) ;;
+        *) continue ;;
+    esac
+    echo "  killing leftover pid=${pid##*/} exe=$exe"
+    kill -TERM "${pid##*/}" 2>/dev/null || true
+done
+sleep 1
+for pid in /proc/[0-9]*; do
+    exe=$(readlink -f "$pid/exe" 2>/dev/null || true)
+    [ -n "$exe" ] || continue
+    case "$exe" in
+        *orly*) ;;
+        *) continue ;;
+    esac
+    echo "  killing leftover pid=${pid##*/} exe=$exe (SIGKILL)"
+    kill -KILL "${pid##*/}" 2>/dev/null || true
+done
+REMOTE
     fi
 
     log "  Installing new binary..."
@@ -185,6 +212,45 @@ for host in "${HOSTS[@]}"; do
             err "Rollback: ssh -p $DEPLOY_PORT $SSH_USER@$host 'cp ${REMOTE_BIN}.prev ${REMOTE_BIN} && systemctl restart $SERVICE'"
             exit 1
         fi
+        log "  Verifying single $REMOTE_BIN as root..."
+        $SSH "${SSH_USER}@$host" "REMOTE_BIN='$REMOTE_BIN' SERVICE='$SERVICE' bash -s" <<'REMOTE'
+set -euo pipefail
+unit_user=$(systemctl show -p User --value "$SERVICE" 2>/dev/null || true)
+if [ -n "$unit_user" ] && [ "$unit_user" != "root" ]; then
+    echo "ERROR: systemd unit $SERVICE User=$unit_user (must be root)" >&2
+    exit 1
+fi
+found=0
+bad=0
+for pid in /proc/[0-9]*; do
+    exe=$(readlink -f "$pid/exe" 2>/dev/null || true)
+    [ -n "$exe" ] || continue
+    case "$exe" in
+        *orly*) ;;
+        *) continue ;;
+    esac
+    found=$((found+1))
+    user=$(stat -c %U "$pid" 2>/dev/null || echo unknown)
+    cmd=$(tr '\0' ' ' < "$pid/cmdline" 2>/dev/null || true)
+    echo "  pid=${pid##*/} user=$user exe=$exe cmd=$cmd"
+    if [ "$exe" != "$REMOTE_BIN" ]; then
+        echo "ERROR: unexpected orly executable: $exe (pid ${pid##*/})" >&2
+        bad=1
+    fi
+    if [ "$user" != "root" ]; then
+        echo "ERROR: orly process not running as root: user=$user pid=${pid##*/}" >&2
+        bad=1
+    fi
+done
+if [ "$found" -eq 0 ]; then
+    echo "ERROR: no orly process found after start" >&2
+    exit 1
+fi
+if [ "$bad" -ne 0 ]; then
+    exit 1
+fi
+echo "ok: $found orly process(es), all $REMOTE_BIN as root"
+REMOTE
     else
         warn "  Skipping restart (--no-restart)."
     fi
