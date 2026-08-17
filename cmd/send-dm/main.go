@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"git.smesh.lol/orly/pkg/nostr/crypto/encryption"
@@ -16,14 +18,23 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 4 {
-		fmt.Fprintf(os.Stderr, "usage: send-dm <relay-url> <recipient-pubkey-hex> <message>\n")
-		fmt.Fprintf(os.Stderr, "  set NOSTR_SECRET_KEY=<hex> to use a specific key\n")
+	expSec := flag.Int("expiration", 0, "expire the DM N seconds from now (adds NIP-40 expiration tag)")
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "usage: send-dm [flags] <relay-url> <recipient-pubkey-hex> <message>\n")
+		fmt.Fprintf(os.Stderr, "  set NOSTR_SECRET_KEY=<hex> to use a specific key (else a throwaway key is generated)\n")
+		fmt.Fprintf(os.Stderr, "flags:\n")
+		flag.PrintDefaults()
+	}
+	flag.Parse()
+
+	args := flag.Args()
+	if len(args) < 3 {
+		flag.Usage()
 		os.Exit(1)
 	}
-	relayURL := os.Args[1]
-	recipientHex := os.Args[2]
-	message := os.Args[3]
+	relayURL := args[0]
+	recipientHex := args[1]
+	message := args[2]
 
 	var secretBytes []byte
 	var err error
@@ -62,11 +73,18 @@ func main() {
 	}
 
 	// Build kind 4 DM
+	tagList := []*tag.T{tag.NewFromAny("p", recipientHex)}
+	if *expSec > 0 {
+		expTS := time.Now().Unix() + int64(*expSec)
+		tagList = append(tagList, tag.NewFromAny("expiration", strconv.FormatInt(expTS, 10)))
+		fmt.Printf("expiration: %s (in %d seconds)\n", time.Unix(expTS, 0).UTC().Format(time.RFC3339), *expSec)
+	}
+	tags := tag.NewS(tagList...)
 	ev := &event.E{
 		Content:   []byte(ciphertext),
 		CreatedAt: time.Now().Unix(),
 		Kind:      4,
-		Tags:      tag.NewS(tag.NewFromAny("p", recipientHex)),
+		Tags:      tags,
 	}
 	if err := ev.Sign(signer); err != nil {
 		log.F.F("sign: %v", err)
@@ -83,6 +101,15 @@ func main() {
 		log.F.F("dial: %v", err)
 	}
 	defer conn.Close()
+
+	// NIP-42: wait briefly for the relay's AUTH challenge, then authenticate
+	// so writes are accepted when the relay enforces auth for publish.
+	time.Sleep(200 * time.Millisecond)
+	authErr := conn.Auth(ctx, signer)
+	if authErr != nil {
+		log.F.F("auth: %v", authErr)
+	}
+	fmt.Println("authenticated to relay")
 
 	if err := conn.Publish(ctx, ev); err != nil {
 		log.F.F("publish: %v", err)
