@@ -5,8 +5,10 @@ package database
 import (
 	"bytes"
 	"context"
+	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"git.smesh.lol/orly/pkg/lol/chk"
@@ -36,6 +38,43 @@ func CheckExpiration(ev *event.E) (expired bool) {
 		}
 	}
 	return
+}
+
+// debugPubkeys holds pubkeys (hex, from ORLY_DEBUG_PUBKEYS, comma-separated) for
+// which we emit extra per-event query diagnostics. Empty means the feature is off.
+var debugPubkeys = loadDebugPubkeys()
+
+func loadDebugPubkeys() map[string]struct{} {
+	m := map[string]struct{}{}
+	if s := os.Getenv("ORLY_DEBUG_PUBKEYS"); s != "" {
+		for _, p := range strings.Split(s, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				m[p] = struct{}{}
+			}
+		}
+	}
+	return m
+}
+
+// debugInterest reports whether an event should be logged in detail: true when its
+// author or any of its "p"-tag recipients is in ORLY_DEBUG_PUBKEYS.
+func debugInterest(ev *event.E) bool {
+	if ev == nil || len(debugPubkeys) == 0 {
+		return false
+	}
+	if _, ok := debugPubkeys[hex.Enc(ev.Pubkey)]; ok {
+		return true
+	}
+	if ev.Tags != nil {
+		for _, t := range *ev.Tags {
+			if t.Len() >= 2 && bytes.Equal(t.Key(), []byte("p")) {
+				if _, ok := debugPubkeys[hex.Enc(t.Value())]; ok {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func (d *D) QueryEvents(c context.Context, f *filter.F) (
@@ -197,7 +236,8 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 		if idPkTs, err = d.QueryForIds(c, f); chk.E(err) {
 			return
 		}
-		// log.T.F("QueryEvents: QueryForIds returned %d candidates", len(idPkTs))
+		log.T.F("QueryEvents: QueryForIds returned %d candidates (authors=%d kinds=%d tags=%d)",
+			len(idPkTs), f.Authors.Len(), f.Kinds.Len(), f.Tags.Len())
 		// Create a map to store versions of replaceable events
 		// If wantMultipleVersions is true, we keep multiple versions (sorted by timestamp)
 		// Otherwise, we keep only the latest
@@ -386,7 +426,14 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 			// but this second pass rebuilds the result set from allEvents without
 			// the expiration filter, so re-check here to keep them out of results.
 			if CheckExpiration(ev) {
+				if debugInterest(ev) {
+					log.T.F("QueryEvents: DROPPED expired id=%s", hex.Enc(ev.ID))
+				}
 				continue
+			}
+			if debugInterest(ev) {
+				log.T.F("QueryEvents: processing candidate id=%s kind=%d author=%s",
+					hex.Enc(ev.ID), ev.Kind, hex.Enc(ev.Pubkey))
 			}
 			// Add logging for tag filter debugging
 			if f.Tags != nil && f.Tags.Len() > 0 {
@@ -442,20 +489,20 @@ func (d *D) QueryEventsWithOptions(c context.Context, f *filter.F, includeDelete
 						if eventHasTag {
 							tagMatches++
 						}
-						// log.T.F(
-						// 	"QueryEvents: tag filter %s (actual key: %s) matches: %v (total matches: %d/%d)",
-						// 	string(filterKey), string(actualKey), eventHasTag,
-						// 	tagMatches, f.Tags.Len(),
-						// )
+						if debugInterest(ev) {
+							log.T.F("QueryEvents: tag filter %s (key=%s) matched=%v (total %d/%d)",
+								string(filterKey), string(actualKey), eventHasTag,
+								tagMatches, f.Tags.Len())
+						}
 					}
 				}
 
 				// If not all tags match, skip this event
 				if tagMatches < f.Tags.Len() {
-					// log.T.F(
-					// 	"QueryEvents: event ID=%s SKIPPED - only matches %d/%d required tags",
-					// 	hex.Enc(ev.ID), tagMatches, f.Tags.Len(),
-					// )
+					if debugInterest(ev) {
+						log.T.F("QueryEvents: DROPPED id=%s tag mismatch (%d/%d); event tags=%v",
+							hex.Enc(ev.ID), tagMatches, f.Tags.Len(), ev.Tags)
+					}
 					continue
 				}
 				// log.T.F(

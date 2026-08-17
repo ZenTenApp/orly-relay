@@ -132,6 +132,20 @@ var Main = &Logger{}
 func init() {
 	// Main = &Logger{}
 	Main.Log, Main.Check, Main.Errorf = New(os.Stderr, 2)
+
+	// Debug aid: if ORLY_LOG_FILE is set, redirect all relay logs to that file
+	// and force trace level so the query-path instrumentation below is captured.
+	// Useful for isolating a single REQ when journald is too noisy.
+	if lf := os.Getenv("ORLY_LOG_FILE"); lf != "" {
+		if f, err := os.OpenFile(lf, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			Writer = f
+			Main.Log, Main.Check, Main.Errorf = New(Writer, 2)
+			SetLoggers(Trace)
+			Main.Log.I.F("orly debug logging enabled -> %s", lf)
+			return
+		}
+	}
+
 	ll := os.Getenv("LOG_LEVEL")
 	if ll == "" {
 		SetLogLevel("info")
