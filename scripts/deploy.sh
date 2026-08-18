@@ -133,39 +133,38 @@ else
     warn "Local smoke test failed — continuing anyway"
 fi
 
-# --- Prepare SSH (mirror CI: write key, keyscan hosts) ---
+# --- Prepare SSH (keyscan hosts) ---
 mkdir -p ~/.ssh && chmod 700 ~/.ssh
-cp "$DEPLOY_KEY" ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
 for host in "${HOSTS[@]}"; do
     ssh-keyscan -p "$DEPLOY_PORT" -H "${DEPLOY_IP:-$host}" >> ~/.ssh/known_hosts 2>/dev/null || true
 done
 chmod 644 ~/.ssh/known_hosts 2>/dev/null || true
 
-SSH="ssh -p $DEPLOY_PORT -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
-SCP="scp -P $DEPLOY_PORT -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+SSH=(ssh -i "$DEPLOY_KEY" -p "$DEPLOY_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
+SCP=(scp -i "$DEPLOY_KEY" -P "$DEPLOY_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new)
 
 # --- Step 2 + 3: Deploy and start/verify on each host ---
 for host in "${HOSTS[@]}"; do
     log "==> Deploying to $host"
 
     log "  Backing up current binary..."
-    $SSH "${SSH_USER}@$host" "cp -f $REMOTE_BIN ${REMOTE_BIN}.prev 2>/dev/null || true"
+    "${SSH[@]}" "${SSH_USER}@$host" "cp -f $REMOTE_BIN ${REMOTE_BIN}.prev 2>/dev/null || true"
 
     if [[ "$RESTART" == "true" ]]; then
         log "  Stopping service..."
-        $SSH "${SSH_USER}@$host" "systemctl stop $SERVICE" || true
+        "${SSH[@]}" "${SSH_USER}@$host" "systemctl stop $SERVICE" || true
     fi
 
     log "  Installing new binary..."
-    $SSH "${SSH_USER}@$host" "mkdir -p $(dirname "$REMOTE_BIN")"
-    $SCP "$BUILD_OUTPUT" "${SSH_USER}@$host:$REMOTE_BIN"
-    $SSH "${SSH_USER}@$host" "chmod +x $REMOTE_BIN"
+    "${SSH[@]}" "${SSH_USER}@$host" "mkdir -p $(dirname "$REMOTE_BIN")"
+    "${SCP[@]}" "$BUILD_OUTPUT" "${SSH_USER}@$host:$REMOTE_BIN"
+    "${SSH[@]}" "${SSH_USER}@$host" "chmod +x $REMOTE_BIN"
 
     if [[ "$RESTART" == "true" ]]; then
         log "  Starting service..."
-        $SSH "${SSH_USER}@$host" "systemctl start $SERVICE"
+        "${SSH[@]}" "${SSH_USER}@$host" "systemctl start $SERVICE"
         sleep 3
-        if $SSH "${SSH_USER}@$host" "systemctl is-active $SERVICE" | grep -q active; then
+        if "${SSH[@]}" "${SSH_USER}@$host" "systemctl is-active $SERVICE" | grep -q active; then
             ok "  ✔ $SERVICE active on $host"
         else
             err "Service failed to start on $host — journalctl -u $SERVICE -n 50"
@@ -176,7 +175,7 @@ for host in "${HOSTS[@]}"; do
         warn "  Skipping restart (--no-restart)."
     fi
 
-    REMOTE_VER=$($SSH "${SSH_USER}@$host" "$REMOTE_BIN version" 2>/dev/null || echo "unknown")
+    REMOTE_VER=$("${SSH[@]}" "${SSH_USER}@$host" "$REMOTE_BIN version" 2>/dev/null || echo "unknown")
     ok "  Remote version: $REMOTE_VER"
 done
 
