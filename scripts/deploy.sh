@@ -7,7 +7,7 @@
 #      GOEXPERIMENT=greenteagc,jsonv2).
 #   2. Ship the prebuilt binary to each target host over scp using an explicit
 #      SSH key (the same key the CI secret DEPLOY_SSH_KEY provides).
-#   3. SSH in as root, back up the previous binary, stop the service, install
+#   3. SSH in, use sudo when needed to back up the previous binary, stop the service, install
 #      the new binary, start the service, and verify it is active (health check).
 #
 # All host info comes from flags — there is NO default host.
@@ -143,28 +143,46 @@ chmod 644 ~/.ssh/known_hosts 2>/dev/null || true
 SSH=(ssh -i "$DEPLOY_KEY" -p "$DEPLOY_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
 SCP=(scp -i "$DEPLOY_KEY" -P "$DEPLOY_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new)
 
+run_remote() {
+    local host="$1"
+    shift
+    "${SSH[@]}" "${SSH_USER}@$host" "$@"
+}
+
+run_privileged_remote() {
+    local host="$1"
+    shift
+
+    if [[ "$SSH_USER" == "root" ]]; then
+        run_remote "$host" "$@"
+    else
+        "${SSH[@]}" -tt "${SSH_USER}@$host" "sudo $*"
+    fi
+}
+
 # --- Step 2 + 3: Deploy and start/verify on each host ---
 for host in "${HOSTS[@]}"; do
     log "==> Deploying to $host"
+    REMOTE_STAGING="/tmp/orly-deploy-${SERVICE}-$$"
 
     log "  Backing up current binary..."
-    "${SSH[@]}" "${SSH_USER}@$host" "cp -f $REMOTE_BIN ${REMOTE_BIN}.prev 2>/dev/null || true"
+    run_privileged_remote "$host" "cp -f $REMOTE_BIN ${REMOTE_BIN}.prev 2>/dev/null || true"
 
     if [[ "$RESTART" == "true" ]]; then
         log "  Stopping service..."
-        "${SSH[@]}" "${SSH_USER}@$host" "systemctl stop $SERVICE" || true
+        run_privileged_remote "$host" "systemctl stop $SERVICE" || true
     fi
 
     log "  Installing new binary..."
-    "${SSH[@]}" "${SSH_USER}@$host" "mkdir -p $(dirname "$REMOTE_BIN")"
-    "${SCP[@]}" "$BUILD_OUTPUT" "${SSH_USER}@$host:$REMOTE_BIN"
-    "${SSH[@]}" "${SSH_USER}@$host" "chmod +x $REMOTE_BIN"
+    "${SCP[@]}" "$BUILD_OUTPUT" "${SSH_USER}@$host:$REMOTE_STAGING"
+    run_privileged_remote "$host" "mkdir -p $(dirname "$REMOTE_BIN") && install -m 0755 $REMOTE_STAGING $REMOTE_BIN && rm -f $REMOTE_STAGING"
 
     if [[ "$RESTART" == "true" ]]; then
         log "  Starting service..."
-        "${SSH[@]}" "${SSH_USER}@$host" "systemctl start $SERVICE"
+        run_privileged_remote "$host" "systemctl start $SERVICE"
         sleep 3
-        if "${SSH[@]}" "${SSH_USER}@$host" "systemctl is-active $SERVICE" | grep -q active; then
+        log "  Checking service status..."
+        if run_privileged_remote "$host" "systemctl is-active --quiet $SERVICE"; then
             ok "  ✔ $SERVICE active on $host"
         else
             err "Service failed to start on $host — journalctl -u $SERVICE -n 50"
@@ -175,8 +193,6 @@ for host in "${HOSTS[@]}"; do
         warn "  Skipping restart (--no-restart)."
     fi
 
-    REMOTE_VER=$("${SSH[@]}" "${SSH_USER}@$host" "$REMOTE_BIN version" 2>/dev/null || echo "unknown")
-    ok "  Remote version: $REMOTE_VER"
 done
 
 ok "Deployment complete."
