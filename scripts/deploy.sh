@@ -9,6 +9,8 @@
 #      SSH key (the same key the CI secret DEPLOY_SSH_KEY provides).
 #   3. SSH in, use sudo when needed to back up the previous binary, stop the service, install
 #      the new binary, start the service, and verify it is active (health check).
+#   4. With --bootstrap, provision a fresh Ubuntu server with the systemd unit,
+#      Nginx reverse proxy, and Let's Encrypt certificate before deploying.
 #
 # All host info comes from flags — there is NO default host.
 #
@@ -26,12 +28,17 @@
 #   --port N           ssh port (default 22; fallback DEPLOY_PORT)
 #   --restart          restart service after install (default)
 #   --no-restart       do not restart the service
-#   --remote-bin PATH  remote binary path (default /root/orly; fallback REMOTE_BIN)
+#   --remote-bin PATH  remote binary path (default /usr/local/bin/orly; fallback REMOTE_BIN)
 #   --service NAME     systemd unit name (default orly; fallback SERVICE)
 #   --goos OS          build GOOS (default linux)
 #   --goarch ARCH      build GOARCH (default amd64)
 #   --goexperiment EXP build GOEXPERIMENT (default greenteagc,jsonv2)
 #   --cgo 0|1          build CGO_ENABLED (default 0)
+#   --bootstrap        provision the systemd service and Nginx/TLS for a fresh server
+#   --domain DOMAIN    relay domain for Nginx/TLS; repeatable (required with --bootstrap)
+#   --email EMAIL      Let's Encrypt email address (required with --bootstrap)
+#   --relay-port N     local relay port behind Nginx (default 7777; fallback RELAY_PORT)
+#   --configure-firewall allow ports 80 and 443 with UFW when bootstrapping
 #   -h, --help         show this help
 
 set -euo pipefail
@@ -47,8 +54,13 @@ SSH_USER="${DEPLOY_USER:-root}"
 DEPLOY_IP="${DEPLOY_IP:-}"
 DEPLOY_PORT="${DEPLOY_PORT:-22}"
 RESTART=true
-REMOTE_BIN="${REMOTE_BIN:-/root/orly}"
+REMOTE_BIN="${REMOTE_BIN:-/usr/local/bin/orly}"
 SERVICE="${SERVICE:-orly}"
+BOOTSTRAP=false
+DOMAINS=()
+LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
+RELAY_PORT="${RELAY_PORT:-7777}"
+CONFIGURE_FIREWALL=false
 
 GO_VERSION="${GO_VERSION:-1.25.3}"
 CGO_ENABLED="${CGO_ENABLED:-0}"
@@ -84,6 +96,11 @@ while [[ $# -gt 0 ]]; do
         --goarch)      GOARCH="$2"; shift 2 ;;
         --goexperiment) GOEXPERIMENT="$2"; shift 2 ;;
         --cgo)         CGO_ENABLED="$2"; shift 2 ;;
+        --bootstrap)   BOOTSTRAP=true; shift ;;
+        --domain)      DOMAINS+=("$2"); shift 2 ;;
+        --email)       LETSENCRYPT_EMAIL="$2"; shift 2 ;;
+        --relay-port)  RELAY_PORT="$2"; shift 2 ;;
+        --configure-firewall) CONFIGURE_FIREWALL=true; shift ;;
         -h|--help)     usage ;;
         *)
             err "Unknown option: $1"
@@ -107,6 +124,10 @@ if [[ -z "$DEPLOY_KEY" ]]; then
 fi
 if [[ ! -f "$DEPLOY_KEY" ]]; then
     err "SSH key not found: $DEPLOY_KEY"
+    exit 1
+fi
+if [[ "$BOOTSTRAP" == "true" ]] && [[ ${#DOMAINS[@]} -eq 0 || -z "$LETSENCRYPT_EMAIL" ]]; then
+    err "--bootstrap requires at least one --domain and --email."
     exit 1
 fi
 for cmd in go scp ssh ssh-keyscan; do
@@ -160,10 +181,125 @@ run_privileged_remote() {
     fi
 }
 
+write_privileged_remote() {
+    local host="$1"
+    local destination="$2"
+
+    if [[ "$SSH_USER" == "root" ]]; then
+        "${SSH[@]}" "${SSH_USER}@$host" "tee $destination >/dev/null"
+    else
+        "${SSH[@]}" -tt "${SSH_USER}@$host" "sudo tee $destination >/dev/null"
+    fi
+}
+
+bootstrap_host() {
+    local host="$1"
+    local domain_args=()
+    local server_names
+    local certbot_args=()
+    local nginx_config policy_config service_config
+
+    for domain in "${DOMAINS[@]}"; do
+        domain_args+=("-d" "$domain")
+    done
+    server_names="${DOMAINS[*]}"
+    certbot_args="${domain_args[*]}"
+
+    nginx_config=$(cat <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $server_names;
+
+    location / {
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header Host \$host;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_http_version 1.1;
+        proxy_pass http://127.0.0.1:$RELAY_PORT;
+    }
+}
+EOF
+)
+    service_config=$(cat <<EOF
+[Unit]
+Description=ORLY Nostr Relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=orly
+Group=orly
+WorkingDirectory=/var/lib/orly
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=ORLY_POLICY_ENABLED=true
+Environment=ORLY_POLICY_PATH=/etc/orly/policy.json
+Environment=ORLY_AUTH_REQUIRED=true
+Environment=ORLY_APP_NAME=ORLY
+Environment=ORLY_DATA_DIR=/var/lib/orly
+ExecStart=$REMOTE_BIN
+Environment=ORLY_LISTEN=127.0.0.1
+Environment=ORLY_PORT=$RELAY_PORT
+Environment=ORLY_LOG_LEVEL=trace
+Environment=ORLY_DB_LOG_LEVEL=error
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+)
+    policy_config=$(cat <<'EOF'
+{
+  "kind": {
+    "whitelist": [4]
+  },
+  "rules": {
+    "4": {
+      "description": "Nostr DM events",
+      "privileged": true,
+      "size_limit": 4096,
+      "max_age_of_event": 3600,
+      "max_age_event_in_future": 60,
+      "max_expiry_duration": "P3D",
+      "must_have_tags": ["p", "expiration"]
+    }
+  }
+}
+EOF
+)
+
+    log "  Bootstrapping $host (Nginx, TLS, and $SERVICE.service)..."
+    run_privileged_remote "$host" "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y nginx certbot python3-certbot-nginx"
+    run_privileged_remote "$host" "id -u orly >/dev/null 2>&1 || useradd --system --user-group --home-dir /var/lib/orly --create-home --shell /usr/sbin/nologin orly"
+    run_privileged_remote "$host" "install -d -o orly -g orly -m 0750 /var/lib/orly && install -d -o root -g orly -m 0750 /etc/orly"
+    run_privileged_remote "$host" "install -d -m 0755 /etc/nginx/sites-available /etc/nginx/sites-enabled"
+    printf '%s' "$nginx_config" | write_privileged_remote "$host" "/etc/nginx/sites-available/$SERVICE"
+    run_privileged_remote "$host" "rm -f /etc/nginx/sites-enabled/default && ln -sf /etc/nginx/sites-available/$SERVICE /etc/nginx/sites-enabled/$SERVICE && nginx -t && systemctl enable --now nginx"
+
+    if [[ "$CONFIGURE_FIREWALL" == "true" ]]; then
+        run_privileged_remote "$host" "if command -v ufw >/dev/null; then ufw allow 80/tcp && ufw allow 443/tcp; fi"
+    fi
+
+    run_privileged_remote "$host" "certbot --nginx --non-interactive --agree-tos --redirect -m '$LETSENCRYPT_EMAIL' $certbot_args"
+    printf '%s' "$policy_config" | write_privileged_remote "$host" "/etc/orly/policy.json"
+    run_privileged_remote "$host" "chown root:orly /etc/orly/policy.json && chmod 0640 /etc/orly/policy.json"
+    printf '%s' "$service_config" | write_privileged_remote "$host" "/etc/systemd/system/$SERVICE.service"
+    run_privileged_remote "$host" "systemctl daemon-reload && systemctl enable $SERVICE"
+}
+
 # --- Step 2 + 3: Deploy and start/verify on each host ---
 for host in "${HOSTS[@]}"; do
     log "==> Deploying to $host"
     REMOTE_STAGING="/tmp/orly-deploy-${SERVICE}-$$"
+
+    if [[ "$BOOTSTRAP" == "true" ]]; then
+        bootstrap_host "$host"
+    fi
 
     log "  Backing up current binary..."
     run_privileged_remote "$host" "cp -f $REMOTE_BIN ${REMOTE_BIN}.prev 2>/dev/null || true"
