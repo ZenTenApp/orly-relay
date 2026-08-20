@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # deploy.sh — Mirror the GitHub Actions deployment flow locally.
 #
 # Replicates .github/workflows/deploy.yml step-for-step:
@@ -85,33 +85,76 @@ warn(){ echo -e "${YELLOW}[deploy]${NC} $1"; }
 err(){ echo -e "${RED}[deploy]${NC} $1" >&2; }
 
 usage() {
-    sed -n '2,50p' "$0" | sed -e 's/^# \{0,1\}//'
+    awk 'NR==1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"
     exit 0
+}
+
+require_cmd() {
+    local cmd="$1"
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        err "Required command not found: $cmd"
+        exit 1
+    fi
+}
+
+# Expand ~ and make the key path absolute. This avoids surprising failures
+# when SSH tools are invoked from another directory.
+resolve_key_path() {
+    local key="$1"
+    if [[ "$key" == ~* ]]; then
+        key="${key/#\~/$HOME}"
+    fi
+    if [[ "$key" != /* ]]; then
+        key="$(pwd)/$key"
+    fi
+    printf '%s' "$key"
 }
 
 # --- Parse flags ---
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --host)        HOSTS+=("$2"); shift 2 ;;
-        --key)         DEPLOY_KEY="$2"; shift 2 ;;
-        --user)        SSH_USER="$2"; shift 2 ;;
-        --ip)          DEPLOY_IP="$2"; shift 2 ;;
-        --port)        DEPLOY_PORT="$2"; shift 2 ;;
+        --host)
+            [[ $# -ge 2 && -n "${2:-}" ]] || { err "--host requires a hostname."; exit 1; }
+            HOSTS+=("$2"); shift 2 ;;
+        --key)
+            [[ $# -ge 2 && -n "${2:-}" ]] || { err "--key requires a path."; exit 1; }
+            DEPLOY_KEY="$2"; shift 2 ;;
+        --user)
+            [[ $# -ge 2 && -n "${2:-}" ]] || { err "--user requires a username."; exit 1; }
+            SSH_USER="$2"; shift 2 ;;
+        --ip)
+            [[ $# -ge 2 && -n "${2:-}" ]] || { err "--ip requires a host or address."; exit 1; }
+            DEPLOY_IP="$2"; shift 2 ;;
+        --port)
+            [[ $# -ge 2 && "${2:-}" =~ ^[0-9]+$ && "$2" -ge 1 && "$2" -le 65535 ]] || { err "--port requires an integer from 1 to 65535."; exit 1; }
+            DEPLOY_PORT="$2"; shift 2 ;;
         --restart)     RESTART=true; shift ;;
         --no-restart)  RESTART=false; shift ;;
-        --remote-bin)  REMOTE_BIN="$2"; shift 2 ;;
-        --service)     SERVICE="$2"; shift 2 ;;
-        --goos)        GOOS="$2"; shift 2 ;;
-        --goarch)      GOARCH="$2"; shift 2 ;;
-        --goexperiment) GOEXPERIMENT="$2"; shift 2 ;;
-        --cgo)         CGO_ENABLED="$2"; shift 2 ;;
-        --version)     VERSION="$2"; shift 2 ;;
-        --commit)      COMMIT="$2"; shift 2 ;;
-        --build-date)  BUILD_DATE="$2"; shift 2 ;;
+        --remote-bin)
+            [[ $# -ge 2 && -n "${2:-}" ]] || { err "--remote-bin requires a path."; exit 1; }
+            REMOTE_BIN="$2"; shift 2 ;;
+        --service)
+            [[ $# -ge 2 && -n "${2:-}" ]] || { err "--service requires a unit name."; exit 1; }
+            SERVICE="$2"; shift 2 ;;
+        --goos)        [[ $# -ge 2 && -n "${2:-}" ]] || { err "--goos requires a value."; exit 1; }; GOOS="$2"; shift 2 ;;
+        --goarch)      [[ $# -ge 2 && -n "${2:-}" ]] || { err "--goarch requires a value."; exit 1; }; GOARCH="$2"; shift 2 ;;
+        --goexperiment) [[ $# -ge 2 && -n "${2:-}" ]] || { err "--goexperiment requires a value."; exit 1; }; GOEXPERIMENT="$2"; shift 2 ;;
+        --cgo)
+            [[ $# -ge 2 && ( "${2:-}" == 0 || "${2:-}" == 1 ) ]] || { err "--cgo requires 0 or 1."; exit 1; }
+            CGO_ENABLED="$2"; shift 2 ;;
+        --version)     [[ $# -ge 2 && -n "${2:-}" ]] || { err "--version requires a value."; exit 1; }; VERSION="$2"; shift 2 ;;
+        --commit)      [[ $# -ge 2 && -n "${2:-}" ]] || { err "--commit requires a value."; exit 1; }; COMMIT="$2"; shift 2 ;;
+        --build-date)  [[ $# -ge 2 && -n "${2:-}" ]] || { err "--build-date requires a value."; exit 1; }; BUILD_DATE="$2"; shift 2 ;;
         --bootstrap)   BOOTSTRAP=true; shift ;;
-        --domain)      DOMAINS+=("$2"); shift 2 ;;
-        --email)       LETSENCRYPT_EMAIL="$2"; shift 2 ;;
-        --relay-port)  RELAY_PORT="$2"; shift 2 ;;
+        --domain)
+            [[ $# -ge 2 && -n "${2:-}" ]] || { err "--domain requires a domain name."; exit 1; }
+            DOMAINS+=("$2"); shift 2 ;;
+        --email)
+            [[ $# -ge 2 && -n "${2:-}" ]] || { err "--email requires an address."; exit 1; }
+            LETSENCRYPT_EMAIL="$2"; shift 2 ;;
+        --relay-port)
+            [[ $# -ge 2 && "${2:-}" =~ ^[0-9]+$ && "$2" -ge 1 && "$2" -le 65535 ]] || { err "--relay-port requires an integer from 1 to 65535."; exit 1; }
+            RELAY_PORT="$2"; shift 2 ;;
         --configure-firewall) CONFIGURE_FIREWALL=true; shift ;;
         -h|--help)     usage ;;
         *)
@@ -134,8 +177,21 @@ if [[ -z "$DEPLOY_KEY" ]]; then
     err "No SSH key provided. Use --key /path/to/key (deploys as $SSH_USER)."
     exit 1
 fi
+DEPLOY_KEY="$(resolve_key_path "$DEPLOY_KEY")"
 if [[ ! -f "$DEPLOY_KEY" ]]; then
     err "SSH key not found: $DEPLOY_KEY"
+    exit 1
+fi
+if [[ ! -r "$DEPLOY_KEY" ]]; then
+    err "SSH key is not readable: $DEPLOY_KEY"
+    exit 1
+fi
+if ! [[ "$DEPLOY_PORT" =~ ^[0-9]+$ ]] || [[ "$DEPLOY_PORT" -lt 1 || "$DEPLOY_PORT" -gt 65535 ]]; then
+    err "Invalid SSH port: $DEPLOY_PORT"
+    exit 1
+fi
+if ! [[ "$RELAY_PORT" =~ ^[0-9]+$ ]] || [[ "$RELAY_PORT" -lt 1 || "$RELAY_PORT" -gt 65535 ]]; then
+    err "Invalid relay port: $RELAY_PORT"
     exit 1
 fi
 if [[ "$BOOTSTRAP" == "true" ]] && [[ ${#DOMAINS[@]} -eq 0 || -z "$LETSENCRYPT_EMAIL" ]]; then
@@ -143,10 +199,7 @@ if [[ "$BOOTSTRAP" == "true" ]] && [[ ${#DOMAINS[@]} -eq 0 || -z "$LETSENCRYPT_E
     exit 1
 fi
 for cmd in go scp ssh ssh-keyscan; do
-    if ! command -v "$cmd" &>/dev/null; then
-        err "Required command not found: $cmd"
-        exit 1
-    fi
+    require_cmd "$cmd"
 done
 
 # --- Step 1: Build ---
@@ -168,15 +221,22 @@ else
     warn "Local smoke test failed — continuing anyway"
 fi
 
-# --- Prepare SSH (keyscan hosts) ---
-mkdir -p ~/.ssh && chmod 700 ~/.ssh
-for host in "${HOSTS[@]}"; do
-    ssh-keyscan -p "$DEPLOY_PORT" -H "${DEPLOY_IP:-$host}" >> ~/.ssh/known_hosts 2>/dev/null || true
-done
-chmod 644 ~/.ssh/known_hosts 2>/dev/null || true
+# --- Prepare SSH ---
+# Keep host-key state ephemeral: deploying must not alter ~/.ssh or any default
+# identity file. The supplied key is used in place via -i.
+SSH_WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/orly-deploy.XXXXXX")"
+cleanup_ssh_workdir() { rm -rf "$SSH_WORKDIR"; }
+trap cleanup_ssh_workdir EXIT
 
-SSH=(ssh -i "$DEPLOY_KEY" -p "$DEPLOY_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
-SCP=(scp -i "$DEPLOY_KEY" -P "$DEPLOY_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new)
+KNOWN_HOSTS="${SSH_WORKDIR}/known_hosts"
+: > "$KNOWN_HOSTS"
+chmod 600 "$KNOWN_HOSTS"
+for host in "${HOSTS[@]}"; do
+    ssh-keyscan -p "$DEPLOY_PORT" -H "${DEPLOY_IP:-$host}" >> "$KNOWN_HOSTS" 2>/dev/null || true
+done
+
+SSH=(ssh -i "$DEPLOY_KEY" -p "$DEPLOY_PORT" -o IdentitiesOnly=yes -o IdentityFile="$DEPLOY_KEY" -o UserKnownHostsFile="$KNOWN_HOSTS" -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
+SCP=(scp -i "$DEPLOY_KEY" -P "$DEPLOY_PORT" -o IdentitiesOnly=yes -o IdentityFile="$DEPLOY_KEY" -o UserKnownHostsFile="$KNOWN_HOSTS" -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=accept-new)
 
 run_remote() {
     local host="$1"
