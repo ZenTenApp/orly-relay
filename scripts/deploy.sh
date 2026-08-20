@@ -43,6 +43,15 @@
 #   --email EMAIL      Let's Encrypt email address (required with --bootstrap)
 #   --relay-port N     local relay port behind Nginx (default 7777; fallback RELAY_PORT)
 #   --configure-firewall allow ports 80 and 443 with UFW when bootstrapping
+#   --acl-mode MODE    ORLY_ACL_MODE for the bootstrap unit (e.g. curating; fallback ORLY_ACL_MODE)
+#   --owners NPUBS     ORLY_OWNERS for the bootstrap unit (fallback ORLY_OWNERS)
+#   --admins NPUBS     ORLY_ADMINS for the bootstrap unit (fallback ORLY_ADMINS)
+#   --log-file PATH    ORLY_LOG_FILE for the bootstrap unit (fallback ORLY_LOG_FILE)
+#   --debug-pubkeys H  ORLY_DEBUG_PUBKEYS for the bootstrap unit (fallback ORLY_DEBUG_PUBKEYS)
+#
+# The repo-root policy.json is the canonical policy source. Bootstrap ships it
+# to /etc/orly/policy.json and sets ORLY_POLICY_PATH to that location, so the
+# relay picks it up automatically.
 #   -h, --help         show this help
 
 set -euo pipefail
@@ -66,6 +75,14 @@ LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 RELAY_PORT="${RELAY_PORT:-7777}"
 CONFIGURE_FIREWALL=false
 
+# Optional production-server settings carried into the bootstrap unit.
+# Only emitted in the unit when set (flags win; env vars fill in).
+ACL_MODE="${ORLY_ACL_MODE:-}"
+OWNERS="${ORLY_OWNERS:-}"
+ADMINS="${ORLY_ADMINS:-}"
+LOG_FILE="${ORLY_LOG_FILE:-}"
+DEBUG_PUBKEYS="${ORLY_DEBUG_PUBKEYS:-}"
+
 GO_VERSION="${GO_VERSION:-1.25.3}"
 CGO_ENABLED="${CGO_ENABLED:-0}"
 GOOS="${GOOS:-linux}"
@@ -85,7 +102,7 @@ warn(){ echo -e "${YELLOW}[deploy]${NC} $1"; }
 err(){ echo -e "${RED}[deploy]${NC} $1" >&2; }
 
 usage() {
-    sed -n '2,50p' "$0" | sed -e 's/^# \{0,1\}//'
+    sed -n '2,55p' "$0" | sed -e 's/^# \{0,1\}//'
     exit 0
 }
 
@@ -113,6 +130,11 @@ while [[ $# -gt 0 ]]; do
         --email)       LETSENCRYPT_EMAIL="$2"; shift 2 ;;
         --relay-port)  RELAY_PORT="$2"; shift 2 ;;
         --configure-firewall) CONFIGURE_FIREWALL=true; shift ;;
+        --acl-mode)    ACL_MODE="$2"; shift 2 ;;
+        --owners)      OWNERS="$2"; shift 2 ;;
+        --admins)      ADMINS="$2"; shift 2 ;;
+        --log-file)    LOG_FILE="$2"; shift 2 ;;
+        --debug-pubkeys) DEBUG_PUBKEYS="$2"; shift 2 ;;
         -h|--help)     usage ;;
         *)
             err "Unknown option: $1"
@@ -262,30 +284,27 @@ Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
+EOF
+)
+    # Optional env vars, emitted only when set, so the bootstrap unit reproduces
+    # the production server settings (ACL mode, owners/admins, logging, tracing).
+    extra_env=$(
+        [[ -n "$ACL_MODE" ]] && printf 'Environment=ORLY_ACL_MODE=%s\n' "$ACL_MODE"
+        [[ -n "$OWNERS" ]] && printf 'Environment=ORLY_OWNERS=%s\n' "$OWNERS"
+        [[ -n "$ADMINS" ]] && printf 'Environment=ORLY_ADMINS=%s\n' "$ADMINS"
+        [[ -n "$LOG_FILE" ]] && printf 'Environment=ORLY_LOG_FILE=%s\n' "$LOG_FILE"
+        [[ -n "$DEBUG_PUBKEYS" ]] && printf 'Environment=ORLY_DEBUG_PUBKEYS=%s\n' "$DEBUG_PUBKEYS"
+    )
+    if [[ -n "$extra_env" ]]; then
+        service_config+=$'\n'"$extra_env"
+    fi
+    service_config+=$'\n\n[Install]\nWantedBy=multi-user.target\n'
 
-[Install]
-WantedBy=multi-user.target
-EOF
-)
-    policy_config=$(cat <<'EOF'
-{
-  "kind": {
-    "whitelist": [4]
-  },
-  "rules": {
-    "4": {
-      "description": "Nostr DM events",
-      "privileged": true,
-      "size_limit": 4096,
-      "max_age_of_event": 3600,
-      "max_age_event_in_future": 60,
-      "max_expiry_duration": "P3D",
-      "must_have_tags": ["p", "expiration"]
-    }
-  }
-}
-EOF
-)
+    policy_source="$PROJECT_DIR/policy.json"
+    if [[ ! -f "$policy_source" ]]; then
+        err "Policy source not found: $policy_source"
+        exit 1
+    fi
 
     log "  Bootstrapping $host (Nginx, TLS, and $SERVICE.service)..."
     run_privileged_remote "$host" "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y nginx certbot python3-certbot-nginx"
@@ -300,8 +319,8 @@ EOF
     fi
 
     run_privileged_remote "$host" "certbot --nginx --non-interactive --agree-tos --redirect -m '$LETSENCRYPT_EMAIL' $certbot_args"
-    printf '%s' "$policy_config" | write_privileged_remote "$host" "/etc/orly/policy.json"
-    run_privileged_remote "$host" "chown root:orly /etc/orly/policy.json && chmod 0640 /etc/orly/policy.json"
+    "${SCP[@]}" "$policy_source" "${SSH_USER}@$host:/tmp/orly-policy-$$"
+    run_privileged_remote "$host" "install -m 0640 -o root -g orly /tmp/orly-policy-$$ /etc/orly/policy.json && rm -f /tmp/orly-policy-$$"
     printf '%s' "$service_config" | write_privileged_remote "$host" "/etc/systemd/system/$SERVICE.service"
     run_privileged_remote "$host" "systemctl daemon-reload && systemctl enable $SERVICE"
 }

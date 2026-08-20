@@ -1,0 +1,16 @@
+{
+  "kind": {
+    "whitelist": [4]
+  },
+  "rules": {
+    "4": {
+      "description": "Nostr DM events",
+      "privileged": true,
+      "size_limit": 4096,
+      "max_age_of_event": 3600,
+      "max_age_event_in_future": 60,
+      "max_expiry_duration": "P3D",
+      "must_have_tags": ["p", "expiration", "client"]
+    }
+  }
+}
