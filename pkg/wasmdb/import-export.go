@@ -150,7 +150,7 @@ func (w *W) ImportEventsFromStrings(
 	ctx context.Context,
 	eventJSONs []string,
 	policyManager interface {
-		CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error)
+		CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (allowed bool, reason string, err error)
 	},
 ) error {
 	imported := 0
@@ -171,7 +171,7 @@ func (w *W) ImportEventsFromStrings(
 
 		// Check policy if manager is provided
 		if policyManager != nil {
-			allowed, err := policyManager.CheckPolicy("write", ev, ev.Pubkey, "import")
+			allowed, _, err := policyManager.CheckPolicy("write", ev, ev.Pubkey, "import")
 			if err != nil || !allowed {
 				w.Logger.Debugf("ImportEventsFromStrings: policy rejected event")
 				continue

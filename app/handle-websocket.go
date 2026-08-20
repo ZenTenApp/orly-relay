@@ -62,13 +62,11 @@ whitelist:
 		ip = remote[:idx]
 	}
 
-	// Check per-IP connection limit (hard limit 10)
+	// Check per-IP connection limit. The value comes from ORLY_MAX_CONN_PER_IP
+	// (default 100); a non-positive value falls back to the default.
 	maxConnPerIP := s.Config.MaxConnectionsPerIP
 	if maxConnPerIP <= 0 {
-		maxConnPerIP = 10
-	}
-	if maxConnPerIP > 10 {
-		maxConnPerIP = 10 // Hard limit
+		maxConnPerIP = 100
 	}
 
 	allowed, currentConns := s.ConnIPCheckAndInc(ip, maxConnPerIP)

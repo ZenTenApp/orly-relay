@@ -68,7 +68,7 @@ func TestDefaultPermissiveRead(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			allowed, err := policy.CheckPolicy("read", ev, tt.pubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("read", ev, tt.pubkey, "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy error: %v", err)
 			}
@@ -123,7 +123,7 @@ func TestDefaultPermissiveWrite(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ev := createTestEvent(t, tt.signer, "test content", 1)
-			allowed, err := policy.CheckPolicy("write", ev, tt.pubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("write", ev, tt.pubkey, "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy error: %v", err)
 			}
@@ -197,7 +197,7 @@ func TestReadFollowsWhitelist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			allowed, err := policy.CheckPolicy("read", ev, tt.pubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("read", ev, tt.pubkey, "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy error: %v", err)
 			}
@@ -209,7 +209,7 @@ func TestReadFollowsWhitelist(t *testing.T) {
 
 	// Verify write is still default-permissive (no write restriction)
 	t.Run("write is still default permissive", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("write", ev, unfollowedPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", ev, unfollowedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -274,7 +274,7 @@ func TestWriteFollowsWhitelist(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ev := createTestEvent(t, tt.signer, "test content", 1)
-			allowed, err := policy.CheckPolicy("write", ev, tt.pubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("write", ev, tt.pubkey, "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy error: %v", err)
 			}
@@ -287,7 +287,7 @@ func TestWriteFollowsWhitelist(t *testing.T) {
 	// Verify read is still default-permissive (no read restriction)
 	t.Run("read is still default permissive", func(t *testing.T) {
 		ev := createTestEvent(t, unfollowedSigner, "test content", 1)
-		allowed, err := policy.CheckPolicy("read", ev, unfollowedPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, unfollowedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -327,7 +327,7 @@ func TestGlobalReadFollowsWhitelist(t *testing.T) {
 		ev := createTestEvent(t, authorSigner, "test content", 1)
 
 		// Followed user can read
-		allowed, err := policy.CheckPolicy("read", ev, followedPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, followedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -336,7 +336,7 @@ func TestGlobalReadFollowsWhitelist(t *testing.T) {
 		}
 
 		// Unfollowed user denied
-		allowed, err = policy.CheckPolicy("read", ev, unfollowedPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", ev, unfollowedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -374,7 +374,7 @@ func TestGlobalWriteFollowsWhitelist(t *testing.T) {
 	t.Run("kind 1", func(t *testing.T) {
 		// Followed user can write
 		ev := createTestEvent(t, followedSigner, "test content", 1)
-		allowed, err := policy.CheckPolicy("write", ev, followedPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", ev, followedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -384,7 +384,7 @@ func TestGlobalWriteFollowsWhitelist(t *testing.T) {
 
 		// Unfollowed user denied
 		ev = createTestEvent(t, unfollowedSigner, "test content", 1)
-		allowed, err = policy.CheckPolicy("write", ev, unfollowedPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", ev, unfollowedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -429,7 +429,7 @@ func TestPrivilegedOnlyAppliesToReadDP(t *testing.T) {
 
 	// READ tests
 	t.Run("author can read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, authorPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, authorPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -439,7 +439,7 @@ func TestPrivilegedOnlyAppliesToReadDP(t *testing.T) {
 	})
 
 	t.Run("recipient can read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, recipientPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, recipientPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -449,7 +449,7 @@ func TestPrivilegedOnlyAppliesToReadDP(t *testing.T) {
 	})
 
 	t.Run("third party cannot read", func(t *testing.T) {
-		allowed, err := policy.CheckPolicy("read", ev, thirdPartyPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", ev, thirdPartyPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -461,7 +461,7 @@ func TestPrivilegedOnlyAppliesToReadDP(t *testing.T) {
 	// WRITE tests - privileged should NOT affect write
 	t.Run("third party CAN write (privileged doesn't affect write)", func(t *testing.T) {
 		ev := createTestEvent(t, thirdPartySigner, "test content", 4)
-		allowed, err := policy.CheckPolicy("write", ev, thirdPartyPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", ev, thirdPartyPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -558,7 +558,7 @@ func TestCombinedReadWriteFollowsWhitelists(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ev := createTestEvent(t, tt.signer, "test content", 30023)
-			allowed, err := policy.CheckPolicy(tt.access, ev, tt.pubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy(tt.access, ev, tt.pubkey, "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy error: %v", err)
 			}
@@ -629,7 +629,7 @@ func TestReadAllowWithReadFollowsWhitelist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			allowed, err := policy.CheckPolicy("read", ev, tt.pubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("read", ev, tt.pubkey, "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy error: %v", err)
 			}
@@ -716,7 +716,7 @@ func TestWriteAllowIfTagged(t *testing.T) {
 
 	t.Run("group_A_writes_freely", func(t *testing.T) {
 		ev := createTestEvent(t, groupASigner, "hello", 1)
-		allowed, err := pol.CheckPolicy("write", ev, groupAPubkey, "127.0.0.1")
+		allowed, _, err := pol.CheckPolicy("write", ev, groupAPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -728,7 +728,7 @@ func TestWriteAllowIfTagged(t *testing.T) {
 	t.Run("group_B_with_p_tag_allowed", func(t *testing.T) {
 		ev := createTestEvent(t, groupBSigner, "replying to group A", 1)
 		addPTag(ev, groupAPubkey)
-		allowed, err := pol.CheckPolicy("write", ev, groupBPubkey, "127.0.0.1")
+		allowed, _, err := pol.CheckPolicy("write", ev, groupBPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -739,7 +739,7 @@ func TestWriteAllowIfTagged(t *testing.T) {
 
 	t.Run("group_B_without_p_tag_denied", func(t *testing.T) {
 		ev := createTestEvent(t, groupBSigner, "no tag", 1)
-		allowed, err := pol.CheckPolicy("write", ev, groupBPubkey, "127.0.0.1")
+		allowed, _, err := pol.CheckPolicy("write", ev, groupBPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -751,7 +751,7 @@ func TestWriteAllowIfTagged(t *testing.T) {
 	t.Run("random_user_with_p_tag_allowed", func(t *testing.T) {
 		ev := createTestEvent(t, randomSigner, "mentioning group A", 1)
 		addPTag(ev, groupAPubkey)
-		allowed, err := pol.CheckPolicy("write", ev, randomPubkey, "127.0.0.1")
+		allowed, _, err := pol.CheckPolicy("write", ev, randomPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -762,7 +762,7 @@ func TestWriteAllowIfTagged(t *testing.T) {
 
 	t.Run("random_user_without_p_tag_denied", func(t *testing.T) {
 		ev := createTestEvent(t, randomSigner, "no tag", 1)
-		allowed, err := pol.CheckPolicy("write", ev, randomPubkey, "127.0.0.1")
+		allowed, _, err := pol.CheckPolicy("write", ev, randomPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -798,7 +798,7 @@ func TestWriteAllowIfTaggedStandalone(t *testing.T) {
 	t.Run("with_tag_allowed", func(t *testing.T) {
 		ev := createTestEvent(t, writerSigner, "tagged", 1)
 		addPTag(ev, gatePubkey)
-		allowed, err := pol.CheckPolicy("write", ev, writerPubkey, "127.0.0.1")
+		allowed, _, err := pol.CheckPolicy("write", ev, writerPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}
@@ -809,7 +809,7 @@ func TestWriteAllowIfTaggedStandalone(t *testing.T) {
 
 	t.Run("without_tag_denied", func(t *testing.T) {
 		ev := createTestEvent(t, writerSigner, "no tag", 1)
-		allowed, err := pol.CheckPolicy("write", ev, writerPubkey, "127.0.0.1")
+		allowed, _, err := pol.CheckPolicy("write", ev, writerPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("CheckPolicy error: %v", err)
 		}

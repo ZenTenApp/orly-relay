@@ -41,7 +41,9 @@ func NewNIP11Cache(ttl time.Duration) *NIP11Cache {
 }
 
 // NewManager creates a new distributed sync manager with backward compatible signature
-func NewManager(ctx context.Context, db *database.D, nodeID, relayURL string, peers []string, relayGroupMgr *RelayGroupManager, policyManager interface{ CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error) }) *Manager {
+func NewManager(ctx context.Context, db *database.D, nodeID, relayURL string, peers []string, relayGroupMgr *RelayGroupManager, policyManager interface {
+	CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (allowed bool, reason string, err error)
+}) *Manager {
 	cfg := &distributed.Config{
 		NodeID:        nodeID,
 		RelayURL:      relayURL,

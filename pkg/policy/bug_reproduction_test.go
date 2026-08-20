@@ -35,7 +35,7 @@ func TestBugReproduction_Kind1AllowedWithWhitelist4678(t *testing.T) {
 
 	t.Run("Kind 1 should be REJECTED (not in whitelist)", func(t *testing.T) {
 		event := createTestEvent(t, testSigner, "Hello Nostr!", 1)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -49,7 +49,7 @@ func TestBugReproduction_Kind1AllowedWithWhitelist4678(t *testing.T) {
 
 	t.Run("Kind 4678 should be ALLOWED (in whitelist)", func(t *testing.T) {
 		event := createTestEvent(t, testSigner, "Zenotp event", 4678)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -105,7 +105,7 @@ func TestBugReproduction_WithPolicyManager(t *testing.T) {
 
 	t.Run("Kind 1 should be REJECTED with PolicyManager", func(t *testing.T) {
 		event := createTestEvent(t, testSigner, "Hello Nostr!", 1)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -120,7 +120,7 @@ func TestBugReproduction_WithPolicyManager(t *testing.T) {
 
 	t.Run("Kind 4678 should be ALLOWED with PolicyManager", func(t *testing.T) {
 		event := createTestEvent(t, testSigner, "Zenotp event", 4678)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -168,11 +168,11 @@ func TestBugReproduction_DebugPolicyFlow(t *testing.T) {
 	t.Logf("=== Policy Check Flow ===")
 
 	// Step 1: Check kinds policy
-	kindsAllowed := policy.checkKindsPolicy("write", event.Kind)
+	kindsAllowed, _ := policy.checkKindsPolicy("write", event.Kind)
 	t.Logf("1. checkKindsPolicy(access=write, kind=%d) returned: %v", event.Kind, kindsAllowed)
 
 	// Full policy check
-	allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 	t.Logf("2. CheckPolicy returned: allowed=%v, err=%v", allowed, err)
 
 	if allowed {
@@ -253,7 +253,7 @@ func TestBugFix_FailSafeWhenConfigMissing(t *testing.T) {
 		}
 
 		event := createTestEvent(t, testSigner, "Hello Nostr!", 1)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -273,7 +273,7 @@ func TestBugFix_FailSafeWhenConfigMissing(t *testing.T) {
 		}
 
 		event := createTestEvent(t, testSigner, "Hello Nostr!", 1)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}

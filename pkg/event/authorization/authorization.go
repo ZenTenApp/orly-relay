@@ -5,6 +5,7 @@ package authorization
 import (
 	"git.smesh.lol/orly/pkg/nostr/encoders/event"
 	"git.smesh.lol/orly/pkg/nostr/encoders/hex"
+	"git.smesh.lol/orly/pkg/nostr/encoders/reason"
 )
 
 // Decision carries authorization context through the event processing pipeline.
@@ -57,7 +58,8 @@ type PolicyManager interface {
 	// IsEnabled returns whether policy is enabled.
 	IsEnabled() bool
 	// CheckPolicy checks if an action is allowed by policy.
-	CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error)
+	// reason is a NIP-01 message (prefix: detail) when allowed is false.
+	CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (allowed bool, reason string, err error)
 }
 
 // SyncManager abstracts the sync manager for peer relay checking.
@@ -108,22 +110,25 @@ func (s *Service) Authorize(ev *event.E, authedPubkey []byte, remote string, eve
 
 	// Check policy if enabled
 	if s.policy != nil && s.policy.IsEnabled() {
-		allowed, err := s.policy.CheckPolicy("write", ev, authedPubkey, remote)
+		allowed, policyReason, err := s.policy.CheckPolicy("write", ev, authedPubkey, remote)
 		if err != nil {
-			return Deny("policy check failed", false)
+			return Deny("error: policy check failed", false)
 		}
 		if !allowed {
-			return Deny("event blocked by policy", false)
+			if policyReason == "" {
+				policyReason = "blocked: event blocked by policy"
+			}
+			return Deny(policyReason, false)
 		}
 
 		// Check ACL policy for managed ACL mode
 		if s.acl != nil && s.acl.Active() == "managed" {
 			allowed, err := s.acl.CheckPolicy(ev)
 			if err != nil {
-				return Deny("ACL policy check failed", false)
+				return Deny(reason.Ensure(err.Error(), reason.Error), false)
 			}
 			if !allowed {
-				return Deny("event blocked by ACL policy", false)
+				return Deny("blocked: event blocked by ACL policy", false)
 			}
 		}
 	}
@@ -175,10 +180,10 @@ func (s *Service) Authorize(ev *event.E, authedPubkey []byte, remote string, eve
 			decision.RequireAuth = true
 		case "blocked":
 			decision.Allowed = false
-			decision.DenyReason = "IP address blocked"
+			decision.DenyReason = "blocked: IP address blocked"
 		case "banned":
 			decision.Allowed = false
-			decision.DenyReason = "pubkey banned"
+			decision.DenyReason = "blocked: pubkey banned"
 		default:
 			// write/admin/owner - allowed
 			decision.Allowed = true

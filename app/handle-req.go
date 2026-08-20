@@ -682,7 +682,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 	if l.policyManager.IsEnabled() {
 		var policyFilteredEvents event.S
 		for _, ev := range events {
-			allowed, policyErr := l.policyManager.CheckPolicy("read", ev, l.authedPubkey.Load(), l.remote)
+			allowed, _, policyErr := l.policyManager.CheckPolicy("read", ev, l.authedPubkey.Load(), l.remote)
 			if chk.E(policyErr) {
 				log.E.F("policy check failed for read: %v", policyErr)
 				// Default to allow on policy error

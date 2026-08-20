@@ -60,7 +60,9 @@ type Database interface {
 	Import(rr io.Reader)
 	Export(c context.Context, w io.Writer, pubkeys ...[]byte)
 	ImportEventsFromReader(ctx context.Context, rr io.Reader) error
-	ImportEventsFromStrings(ctx context.Context, eventJSONs []string, policyManager interface{ CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error) }) error
+	ImportEventsFromStrings(ctx context.Context, eventJSONs []string, policyManager interface {
+		CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (allowed bool, reason string, err error)
+	}) error
 
 	// Relay identity
 	GetRelayIdentitySecret() (skb []byte, err error)

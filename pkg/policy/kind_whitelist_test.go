@@ -25,7 +25,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 		}
 
 		event := createTestEvent(t, testSigner, "test", 1)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -47,7 +47,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 		}
 
 		event := createTestEvent(t, testSigner, "test", 3)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -69,7 +69,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 		}
 
 		event := createTestEvent(t, testSigner, "test", 10)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -90,7 +90,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 		}
 
 		event := createTestEvent(t, testSigner, "test", 99)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -110,7 +110,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 		}
 
 		event := createTestEvent(t, testSigner, "test", 1)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -130,7 +130,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 		}
 
 		event := createTestEvent(t, testSigner, "test", 99)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -158,7 +158,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 
 		// Even with global rule, kind not in whitelist should be rejected
 		event := createTestEvent(t, testSigner, "test", 99)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -181,7 +181,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 
 		// Kind 10 is blacklisted, should be rejected
 		event := createTestEvent(t, testSigner, "test", 10)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -205,7 +205,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 		// Kind 99 is not blacklisted but has no rule
 		// With blacklist present + rules, implicit whitelist applies
 		event := createTestEvent(t, testSigner, "test", 99)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -229,7 +229,7 @@ func TestKindWhitelistComprehensive(t *testing.T) {
 
 		// Kind 10 is in BOTH whitelist and blacklist - whitelist should win
 		event := createTestEvent(t, testSigner, "test", 10)
-		allowed, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -270,7 +270,7 @@ func TestKindWhitelistRealWorld(t *testing.T) {
 
 		// Test kind 1 (allowed)
 		event1 := createTestEvent(t, testSigner, "Hello world", 1)
-		allowed, err := policy.CheckPolicy("write", event1, testPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event1, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -280,7 +280,7 @@ func TestKindWhitelistRealWorld(t *testing.T) {
 
 		// Test kind 4 (NOT in whitelist, should be rejected)
 		event4 := createTestEvent(t, testSigner, "DM", 4)
-		allowed, err = policy.CheckPolicy("write", event4, testPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event4, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -290,7 +290,7 @@ func TestKindWhitelistRealWorld(t *testing.T) {
 
 		// Test kind 30023 by authorized user (allowed)
 		event30023Auth := createTestEvent(t, testSigner, "Article", 30023)
-		allowed, err = policy.CheckPolicy("write", event30023Auth, testPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event30023Auth, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -300,7 +300,7 @@ func TestKindWhitelistRealWorld(t *testing.T) {
 
 		// Test kind 30023 by unauthorized user (should fail rule check)
 		event30023Unauth := createTestEvent(t, testSigner, "Article", 30023)
-		allowed, err = policy.CheckPolicy("write", event30023Unauth, otherPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event30023Unauth, otherPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -310,7 +310,7 @@ func TestKindWhitelistRealWorld(t *testing.T) {
 
 		// Test kind 9735 (NOT in whitelist, should be rejected even with valid signature)
 		event9735 := createTestEvent(t, testSigner, "Zap", 9735)
-		allowed, err = policy.CheckPolicy("write", event9735, testPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event9735, testPubkey, "127.0.0.1")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}

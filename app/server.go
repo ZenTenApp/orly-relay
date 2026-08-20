@@ -1896,7 +1896,7 @@ func (w *authPolicyManagerWrapper) IsEnabled() bool {
 	return w.pm.IsEnabled()
 }
 
-func (w *authPolicyManagerWrapper) CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, error) {
+func (w *authPolicyManagerWrapper) CheckPolicy(action string, ev *event.E, pubkey []byte, remote string) (bool, string, error) {
 	return w.pm.CheckPolicy(action, ev, pubkey, remote)
 }
 

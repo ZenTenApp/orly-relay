@@ -84,12 +84,15 @@ func TestAllowedTagsBasic(t *testing.T) {
 				t.Fatalf("Failed to re-sign event: %v", err)
 			}
 
-			allowed, err := policy.CheckPolicy("write", ev, signer.Pub(), "127.0.0.1")
+			allowed, denyReason, err := policy.CheckPolicy("write", ev, signer.Pub(), "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy returned error: %v", err)
 			}
 			if allowed != tt.expectAllow {
 				t.Errorf("CheckPolicy() = %v, expected %v", allowed, tt.expectAllow)
+			}
+			if !tt.expectAllow && !strings.HasPrefix(denyReason, "invalid: tag ") {
+				t.Errorf("expected invalid: tag reason, got %q", denyReason)
 			}
 		})
 	}
@@ -121,7 +124,7 @@ func TestAllowedTagsPerKind(t *testing.T) {
 	if err := ev.Sign(signer); chk.E(err) {
 		t.Fatalf("Failed to sign: %v", err)
 	}
-	allowed, err := policy.CheckPolicy("write", ev, signer.Pub(), "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", ev, signer.Pub(), "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy error: %v", err)
 	}
@@ -135,7 +138,7 @@ func TestAllowedTagsPerKind(t *testing.T) {
 	if err := ev2.Sign(signer2); chk.E(err) {
 		t.Fatalf("Failed to sign: %v", err)
 	}
-	allowed2, err := policy.CheckPolicy("write", ev2, signer2.Pub(), "127.0.0.1")
+	allowed2, _, err := policy.CheckPolicy("write", ev2, signer2.Pub(), "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy error: %v", err)
 	}
@@ -166,7 +169,7 @@ func TestAllowedTagsGlobalRule(t *testing.T) {
 	if err := ev.Sign(signer); chk.E(err) {
 		t.Fatalf("Failed to sign: %v", err)
 	}
-	allowed, err := policy.CheckPolicy("write", ev, signer.Pub(), "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", ev, signer.Pub(), "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy error: %v", err)
 	}
@@ -181,7 +184,7 @@ func TestAllowedTagsGlobalRule(t *testing.T) {
 	if err := ev2.Sign(signer2); chk.E(err) {
 		t.Fatalf("Failed to sign: %v", err)
 	}
-	allowed2, err := policy.CheckPolicy("write", ev2, signer2.Pub(), "127.0.0.1")
+	allowed2, _, err := policy.CheckPolicy("write", ev2, signer2.Pub(), "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy error: %v", err)
 	}
@@ -309,7 +312,7 @@ func TestAllowedTagsReadUnaffected(t *testing.T) {
 	if err := ev.Sign(signer); chk.E(err) {
 		t.Fatalf("Failed to sign: %v", err)
 	}
-	allowed, err := policy.CheckPolicy("read", ev, signer.Pub(), "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("read", ev, signer.Pub(), "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy error: %v", err)
 	}

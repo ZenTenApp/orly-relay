@@ -69,7 +69,7 @@ func (l *Listener) HandleEvent(msg []byte) (err error) {
 	// Stage 5: DM stranger rate limit check
 	if l.dmRateLimiter != nil {
 		if allowed, msg := l.dmRateLimiter.CheckDM(l.ctx, env.E); !allowed {
-			if err := Ok.Blocked(l, env, msg); chk.E(err) {
+			if err := writeReasonedOK(l, env.Id(), msg); chk.E(err) {
 				return err
 			}
 			return nil
@@ -151,7 +151,7 @@ func (l *Listener) handleSpecialKinds(env *eventenvelope.Submission) (bool, erro
 			// Use the event's author pubkey (already signature-verified) for membership check
 			if !l.channelMembership.IsChannelMember(env.E, env.E.Pubkey, l.ctx) {
 				log.D.F("HandleEvent: channel write denied for pubkey %s (not a member)", hex.Enc(env.E.Pubkey))
-				if err := Ok.Blocked(l, env, "restricted: not a channel member"); chk.E(err) {
+				if err := writeReasonedOK(l, env.Id(), "restricted: not a channel member"); chk.E(err) {
 					return true, err
 				}
 				return true, nil
@@ -168,7 +168,7 @@ func (l *Listener) handleSpecialKinds(env *eventenvelope.Submission) (bool, erro
 			if !l.channelMembership.IsChannelMemberByID(channelIDHex, env.E.Kind, env.E.Pubkey, l.ctx) {
 				log.D.F("HandleEvent: channel reference write denied for pubkey %s kind %d (not a member of channel %s)",
 					hex.Enc(env.E.Pubkey), env.E.Kind, channelIDHex)
-				if err := Ok.Blocked(l, env, "restricted: not a channel member"); chk.E(err) {
+				if err := writeReasonedOK(l, env.Id(), "restricted: not a channel member"); chk.E(err) {
 					return true, err
 				}
 				return true, nil
@@ -187,7 +187,11 @@ func (l *Listener) sendIngestionResult(env *eventenvelope.Submission, result ing
 		} else {
 			log.E.F("HandleEvent: ingestion error: %v", result.Error)
 		}
-		return Ok.Error(l, env, result.Error.Error())
+		errMsg := result.Error.Error()
+		if _, _, found := reason.Parse(errMsg); found {
+			return writeReasonedOK(l, env.Id(), errMsg)
+		}
+		return Ok.Error(l, env, errMsg)
 	}
 
 	if result.RequireAuth {
@@ -203,12 +207,7 @@ func (l *Listener) sendIngestionResult(env *eventenvelope.Submission, result ing
 	}
 
 	if !result.Accepted {
-		// Route rate-limited messages through Ok.RateLimited for correct NIP-01 prefix
-		if strings.HasPrefix(result.Message, "rate-limited: ") {
-			msg := strings.TrimPrefix(result.Message, "rate-limited: ")
-			return Ok.RateLimited(l, env, msg)
-		}
-		return Ok.Blocked(l, env, result.Message)
+		return writeReasonedOK(l, env.Id(), result.Message)
 	}
 
 	// Success

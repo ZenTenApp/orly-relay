@@ -8,7 +8,8 @@
 #   2. Ship the prebuilt binary to each target host over scp using an explicit
 #      SSH key (the same key the CI secret DEPLOY_SSH_KEY provides).
 #   3. SSH in, use sudo when needed to back up the previous binary, stop the service, install
-#      the new binary, start the service, and verify it is active (health check).
+#      the new binary, start the service, verify it is active (health check), reap stray
+#      orly processes, and confirm exactly one binary runs as the service user.
 #   4. With --bootstrap, provision a fresh Ubuntu server with the systemd unit,
 #      Nginx reverse proxy, and Let's Encrypt certificate before deploying.
 #
@@ -34,6 +35,9 @@
 #   --goarch ARCH      build GOARCH (default amd64)
 #   --goexperiment EXP build GOEXPERIMENT (default greenteagc,jsonv2)
 #   --cgo 0|1          build CGO_ENABLED (default 0)
+#   --version VER      version string to inject (default from pkg/version/version)
+#   --commit SHA       git commit sha to inject (default from git rev-parse)
+#   --build-date DATE  build timestamp to inject (default now)
 #   --bootstrap        provision the systemd service and Nginx/TLS for a fresh server
 #   --domain DOMAIN    relay domain for Nginx/TLS; repeatable (required with --bootstrap)
 #   --email EMAIL      Let's Encrypt email address (required with --bootstrap)
@@ -68,6 +72,11 @@ GOOS="${GOOS:-linux}"
 GOARCH="${GOARCH:-amd64}"
 GOEXPERIMENT="${GOEXPERIMENT:-greenteagc,jsonv2}"
 
+# Version information injected at build time via -ldflags (mirrors CI).
+VERSION="${VERSION:-$(cat "$PROJECT_DIR/pkg/version/version" | tr -d '[:space:]')}"
+COMMIT="${COMMIT:-$(git -C "$PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)}"
+BUILD_DATE="${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+
 # Colors
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 log(){ echo -e "${BLUE}[deploy]${NC} $1"; }
@@ -96,6 +105,9 @@ while [[ $# -gt 0 ]]; do
         --goarch)      GOARCH="$2"; shift 2 ;;
         --goexperiment) GOEXPERIMENT="$2"; shift 2 ;;
         --cgo)         CGO_ENABLED="$2"; shift 2 ;;
+        --version)     VERSION="$2"; shift 2 ;;
+        --commit)      COMMIT="$2"; shift 2 ;;
+        --build-date)  BUILD_DATE="$2"; shift 2 ;;
         --bootstrap)   BOOTSTRAP=true; shift ;;
         --domain)      DOMAINS+=("$2"); shift 2 ;;
         --email)       LETSENCRYPT_EMAIL="$2"; shift 2 ;;
@@ -139,9 +151,11 @@ done
 
 # --- Step 1: Build ---
 log "Building $GOOS/$GOARCH unified binary (./cmd/orly)..."
+log "Version: $VERSION (commit: $COMMIT)"
 cd "$PROJECT_DIR"
+LDFLAGS="-s -w -X main.Version=$VERSION -X main.Commit=$COMMIT -X main.BuildDate=$BUILD_DATE"
 CGO_ENABLED="$CGO_ENABLED" GOOS="$GOOS" GOARCH="$GOARCH" GOEXPERIMENT="$GOEXPERIMENT" \
-    go build -ldflags "-s -w" -o "$BUILD_OUTPUT" ./cmd/orly
+    go build -ldflags "$LDFLAGS" -o "$BUILD_OUTPUT" ./cmd/orly
 BINARY_SIZE=$(du -h "$BUILD_OUTPUT" | cut -f1)
 BINARY_ARCH=$(file "$BUILD_OUTPUT" | grep -o 'x86-64\|aarch64\|ARM' || echo 'unknown')
 ok "Built: $BUILD_OUTPUT ($BINARY_SIZE, $BINARY_ARCH)"
@@ -307,6 +321,31 @@ for host in "${HOSTS[@]}"; do
     if [[ "$RESTART" == "true" ]]; then
         log "  Stopping service..."
         run_privileged_remote "$host" "systemctl stop $SERVICE" || true
+        # Reap any leftover orly processes so the new install is the only binary.
+        run_privileged_remote "$host" "REMOTE_BIN='$REMOTE_BIN' bash -s" <<'REMOTE'
+set -euo pipefail
+for pid in /proc/[0-9]*; do
+    exe=$(readlink -f "$pid/exe" 2>/dev/null || true)
+    [ -n "$exe" ] || continue
+    case "$exe" in
+        *orly*) ;;
+        *) continue ;;
+    esac
+    echo "  killing leftover pid=${pid##*/} exe=$exe"
+    kill -TERM "${pid##*/}" 2>/dev/null || true
+done
+sleep 1
+for pid in /proc/[0-9]*; do
+    exe=$(readlink -f "$pid/exe" 2>/dev/null || true)
+    [ -n "$exe" ] || continue
+    case "$exe" in
+        *orly*) ;;
+        *) continue ;;
+    esac
+    echo "  killing leftover pid=${pid##*/} exe=$exe (SIGKILL)"
+    kill -KILL "${pid##*/}" 2>/dev/null || true
+done
+REMOTE
     fi
 
     log "  Installing new binary..."
@@ -325,6 +364,42 @@ for host in "${HOSTS[@]}"; do
             err "Rollback: ssh -p $DEPLOY_PORT $SSH_USER@$host 'cp ${REMOTE_BIN}.prev ${REMOTE_BIN} && systemctl restart $SERVICE'"
             exit 1
         fi
+        log "  Verifying single $REMOTE_BIN as the service user..."
+        run_privileged_remote "$host" "REMOTE_BIN='$REMOTE_BIN' SERVICE='$SERVICE' bash -s" <<'REMOTE'
+set -euo pipefail
+unit_user=$(systemctl show -p User --value "$SERVICE" 2>/dev/null || true)
+[ -n "$unit_user" ] || unit_user=root
+found=0
+bad=0
+for pid in /proc/[0-9]*; do
+    exe=$(readlink -f "$pid/exe" 2>/dev/null || true)
+    [ -n "$exe" ] || continue
+    case "$exe" in
+        *orly*) ;;
+        *) continue ;;
+    esac
+    found=$((found+1))
+    user=$(stat -c %U "$pid" 2>/dev/null || echo unknown)
+    cmd=$(tr '\0' ' ' < "$pid/cmdline" 2>/dev/null || true)
+    echo "  pid=${pid##*/} user=$user exe=$exe cmd=$cmd"
+    if [ "$exe" != "$REMOTE_BIN" ]; then
+        echo "ERROR: unexpected orly executable: $exe (pid ${pid##*/})" >&2
+        bad=1
+    fi
+    if [ "$user" != "$unit_user" ]; then
+        echo "ERROR: orly process not running as $unit_user: got $user pid=${pid##*/}" >&2
+        bad=1
+    fi
+done
+if [ "$found" -eq 0 ]; then
+    echo "ERROR: no orly process found after start" >&2
+    exit 1
+fi
+if [ "$bad" -ne 0 ]; then
+    exit 1
+fi
+echo "ok: $found orly process(es), all $REMOTE_BIN as $unit_user"
+REMOTE
     else
         warn "  Skipping restart (--no-restart)."
     fi

@@ -183,7 +183,7 @@ func TestMaxExpiryDuration(t *testing.T) {
 				}
 			}
 
-			allowed, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy error: %v", err)
 			}
@@ -225,7 +225,7 @@ func TestMaxExpiryDurationPrecedence(t *testing.T) {
 		t.Fatalf("Failed to sign: %v", err)
 	}
 
-	allowed, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy error: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestMaxExpiryDurationWriteOnly(t *testing.T) {
 	}
 
 	// Write should fail (no expiry tag when max_expiry_duration is set)
-	allowed, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy write error: %v", err)
 	}
@@ -273,7 +273,7 @@ func TestMaxExpiryDurationWriteOnly(t *testing.T) {
 	}
 
 	// Read should succeed (validation constraints don't apply to reads)
-	allowed, err = policy.CheckPolicy("read", ev, pubkey, "127.0.0.1")
+	allowed, _, err = policy.CheckPolicy("read", ev, pubkey, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy read error: %v", err)
 	}
@@ -290,7 +290,7 @@ func TestMaxExpiryDurationWriteOnly(t *testing.T) {
 	}
 
 	// Write should fail (expiry exceeds limit)
-	allowed, err = policy.CheckPolicy("write", ev2, pubkey, "127.0.0.1")
+	allowed, _, err = policy.CheckPolicy("write", ev2, pubkey, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy write error: %v", err)
 	}
@@ -299,7 +299,7 @@ func TestMaxExpiryDurationWriteOnly(t *testing.T) {
 	}
 
 	// Read should still succeed
-	allowed, err = policy.CheckPolicy("read", ev2, pubkey, "127.0.0.1")
+	allowed, _, err = policy.CheckPolicy("read", ev2, pubkey, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy read error: %v", err)
 	}
@@ -358,7 +358,7 @@ func TestProtectedRequired(t *testing.T) {
 				}
 			}
 
-			allowed, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy error: %v", err)
 			}
@@ -460,7 +460,7 @@ func TestIdentifierRegex(t *testing.T) {
 				}
 			}
 
-			allowed, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy error: %v", err)
 			}
@@ -499,7 +499,7 @@ func TestIdentifierRegexMultipleDTags(t *testing.T) {
 		t.Fatalf("Failed to sign: %v", err)
 	}
 
-	allowed, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy error: %v", err)
 	}
@@ -569,7 +569,7 @@ func TestFollowsWhitelistAdmins(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ev := createTestEventForNewFields(t, tt.signer, "test content", 1)
 
-			allowed, err := policy.CheckPolicy("write", ev, tt.pubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("write", ev, tt.pubkey, "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy error: %v", err)
 			}
@@ -710,7 +710,7 @@ func TestMaxExpiryDurationWithSizeLimit(t *testing.T) {
 				t.Fatalf("Failed to sign: %v", err)
 			}
 
-			allowed, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy error: %v", err)
 			}
@@ -801,7 +801,7 @@ func TestProtectedRequiredWithPrivileged(t *testing.T) {
 				t.Fatalf("Failed to sign: %v", err)
 			}
 
-			allowed, err := policy.CheckPolicy(tt.accessType, ev, tt.readerPubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy(tt.accessType, ev, tt.readerPubkey, "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy error: %v", err)
 			}
@@ -898,7 +898,7 @@ func TestIdentifierRegexWithTagValidation(t *testing.T) {
 				t.Fatalf("Failed to sign: %v", err)
 			}
 
-			allowed, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy error: %v", err)
 			}
@@ -974,7 +974,7 @@ func TestFollowsWhitelistAdminsWithWriteAllow(t *testing.T) {
 
 			ev := createTestEventForNewFields(t, tt.signer, "test", 1)
 
-			allowed, err := policy.CheckPolicy("write", ev, tt.pubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("write", ev, tt.pubkey, "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy error: %v", err)
 			}
@@ -1078,7 +1078,7 @@ func TestAllNewFieldsCombined(t *testing.T) {
 				t.Fatalf("Failed to sign: %v", err)
 			}
 
-			allowed, err := policy.CheckPolicy("write", ev, userPubkey, "127.0.0.1")
+			allowed, _, err := policy.CheckPolicy("write", ev, userPubkey, "127.0.0.1")
 			if err != nil {
 				t.Fatalf("CheckPolicy error: %v", err)
 			}
@@ -1123,7 +1123,7 @@ func TestNewFieldsInGlobalRule(t *testing.T) {
 		t.Fatalf("Failed to sign: %v", err)
 	}
 
-	allowed, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
+	allowed, _, err := policy.CheckPolicy("write", ev, pubkey, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy error: %v", err)
 	}
@@ -1139,7 +1139,7 @@ func TestNewFieldsInGlobalRule(t *testing.T) {
 		t.Fatalf("Failed to sign: %v", err)
 	}
 
-	allowed, err = policy.CheckPolicy("write", ev2, pubkey, "127.0.0.1")
+	allowed, _, err = policy.CheckPolicy("write", ev2, pubkey, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy error: %v", err)
 	}
@@ -1154,7 +1154,7 @@ func TestNewFieldsInGlobalRule(t *testing.T) {
 		t.Fatalf("Failed to sign: %v", err)
 	}
 
-	allowed, err = policy.CheckPolicy("write", ev2, pubkey, "127.0.0.1")
+	allowed, _, err = policy.CheckPolicy("write", ev2, pubkey, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CheckPolicy error: %v", err)
 	}

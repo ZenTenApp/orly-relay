@@ -69,7 +69,7 @@ func TestPolicyDefinitionOfDone(t *testing.T) {
 
 		// Test: Kind 1 should be allowed (in whitelist)
 		event1 := createTestEvent(t, allowedSigner, "kind 1 event", 1)
-		allowed, err := policy.CheckPolicy("write", event1, allowedPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event1, allowedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -81,7 +81,7 @@ func TestPolicyDefinitionOfDone(t *testing.T) {
 
 		// Test: Kind 5 should be denied (not in whitelist)
 		event5 := createTestEvent(t, allowedSigner, "kind 5 event", 5)
-		allowed, err = policy.CheckPolicy("write", event5, allowedPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event5, allowedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -93,7 +93,7 @@ func TestPolicyDefinitionOfDone(t *testing.T) {
 
 		// Test: Kind 3 should be allowed (in whitelist)
 		event3 := createTestEvent(t, allowedSigner, "kind 3 event", 3)
-		allowed, err = policy.CheckPolicy("write", event3, allowedPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event3, allowedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -130,7 +130,7 @@ func TestPolicyDefinitionOfDone(t *testing.T) {
 
 		// Test: Allowed user can write kind 10
 		event10Allowed := createTestEvent(t, allowedSigner, "kind 10 from allowed user", 10)
-		allowed, err := policy.CheckPolicy("write", event10Allowed, allowedPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event10Allowed, allowedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -142,7 +142,7 @@ func TestPolicyDefinitionOfDone(t *testing.T) {
 
 		// Test: Unauthorized user cannot write kind 10
 		event10Unauthorized := createTestEvent(t, unauthorizedSigner, "kind 10 from unauthorized user", 10)
-		allowed, err = policy.CheckPolicy("write", event10Unauthorized, unauthorizedPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event10Unauthorized, unauthorizedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -181,7 +181,7 @@ func TestPolicyDefinitionOfDone(t *testing.T) {
 		event20 := createTestEvent(t, allowedSigner, "kind 20 event", 20)
 
 		// Test: Allowed user can read kind 20
-		allowed, err := policy.CheckPolicy("read", event20, allowedPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", event20, allowedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -192,7 +192,7 @@ func TestPolicyDefinitionOfDone(t *testing.T) {
 		}
 
 		// Test: Unauthorized user cannot read kind 20
-		allowed, err = policy.CheckPolicy("read", event20, unauthorizedPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", event20, unauthorizedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -203,7 +203,7 @@ func TestPolicyDefinitionOfDone(t *testing.T) {
 		}
 
 		// Test: Unauthenticated user cannot read kind 20
-		allowed, err = policy.CheckPolicy("read", event20, nil, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", event20, nil, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -240,7 +240,7 @@ func TestPolicyDefinitionOfDone(t *testing.T) {
 
 		// Test 1: Author can read their own event
 		event30Author := createTestEvent(t, allowedSigner, "kind 30 authored by allowed user", 30)
-		allowed, err := policy.CheckPolicy("read", event30Author, allowedPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("read", event30Author, allowedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -253,7 +253,7 @@ func TestPolicyDefinitionOfDone(t *testing.T) {
 		// Test 2: User in p-tag can read the event
 		event30WithPTag := createTestEvent(t, allowedSigner, "kind 30 with unauthorized in p-tag", 30)
 		addPTag(event30WithPTag, unauthorizedPubkey) // Add unauthorized user to p-tag
-		allowed, err = policy.CheckPolicy("read", event30WithPTag, unauthorizedPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", event30WithPTag, unauthorizedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -265,7 +265,7 @@ func TestPolicyDefinitionOfDone(t *testing.T) {
 
 		// Test 3: Third party (not author, not in p-tag) cannot read
 		event30NoAccess := createTestEvent(t, allowedSigner, "kind 30 for allowed only", 30)
-		allowed, err = policy.CheckPolicy("read", event30NoAccess, thirdPartyPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", event30NoAccess, thirdPartyPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -276,7 +276,7 @@ func TestPolicyDefinitionOfDone(t *testing.T) {
 		}
 
 		// Test 4: Unauthenticated user cannot read privileged event
-		allowed, err = policy.CheckPolicy("read", event30NoAccess, nil, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", event30NoAccess, nil, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -344,7 +344,7 @@ done
 
 		// Test: Event with "accept" content should be accepted
 		eventAccept := createTestEvent(t, allowedSigner, "accept", 40)
-		allowed, err := policy.CheckPolicy("write", eventAccept, allowedPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", eventAccept, allowedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Logf("Script check failed (expected if script not running): %v", err)
 			t.Log("SKIP: Script execution requires policy manager to be fully running")
@@ -392,7 +392,7 @@ done
 
 		// Test 1: Kind 50 with allowed user should pass
 		event50Allowed := createTestEvent(t, allowedSigner, "kind 50 allowed", 50)
-		allowed, err := policy.CheckPolicy("write", event50Allowed, allowedPubkey, "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event50Allowed, allowedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -404,7 +404,7 @@ done
 
 		// Test 2: Kind 50 with unauthorized user should fail
 		event50Unauthorized := createTestEvent(t, unauthorizedSigner, "kind 50 unauthorized", 50)
-		allowed, err = policy.CheckPolicy("write", event50Unauthorized, unauthorizedPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event50Unauthorized, unauthorizedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -416,7 +416,7 @@ done
 
 		// Test 3: Kind 100 (not in whitelist) should fail regardless of user
 		event100 := createTestEvent(t, allowedSigner, "kind 100 not in whitelist", 100)
-		allowed, err = policy.CheckPolicy("write", event100, allowedPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event100, allowedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -428,7 +428,7 @@ done
 
 		// Test 4: Kind 51 (privileged) - author can write
 		event51Author := createTestEvent(t, allowedSigner, "kind 51 by author", 51)
-		allowed, err = policy.CheckPolicy("write", event51Author, allowedPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("write", event51Author, allowedPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -439,7 +439,7 @@ done
 		}
 
 		// Test 5: Kind 51 (privileged) - third party cannot read
-		allowed, err = policy.CheckPolicy("read", event51Author, thirdPartyPubkey, "127.0.0.1")
+		allowed, _, err = policy.CheckPolicy("read", event51Author, thirdPartyPubkey, "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -475,7 +475,7 @@ func TestDefaultPolicy(t *testing.T) {
 
 		// Event without specific rule should be allowed
 		event := createTestEvent(t, allowedSigner, "test event", 999)
-		allowed, err := policy.CheckPolicy("write", event, allowedSigner.Pub(), "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, allowedSigner.Pub(), "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -503,7 +503,7 @@ func TestDefaultPolicy(t *testing.T) {
 
 		// Event without specific rule should be denied
 		event := createTestEvent(t, allowedSigner, "test event", 999)
-		allowed, err := policy.CheckPolicy("write", event, allowedSigner.Pub(), "127.0.0.1")
+		allowed, _, err := policy.CheckPolicy("write", event, allowedSigner.Pub(), "127.0.0.1")
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
