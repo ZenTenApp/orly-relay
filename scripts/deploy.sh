@@ -168,15 +168,52 @@ else
     warn "Local smoke test failed — continuing anyway"
 fi
 
-# --- Prepare SSH (keyscan hosts) ---
-mkdir -p ~/.ssh && chmod 700 ~/.ssh
-for host in "${HOSTS[@]}"; do
-    ssh-keyscan -p "$DEPLOY_PORT" -H "${DEPLOY_IP:-$host}" >> ~/.ssh/known_hosts 2>/dev/null || true
-done
-chmod 644 ~/.ssh/known_hosts 2>/dev/null || true
+# --- Prepare SSH ---
+# Keep deployment host keys outside ~/.ssh. This script must not create,
+# replace, or otherwise modify the caller's default identity.
+SSH_WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/orly-deploy.XXXXXX")"
+cleanup_ssh_workdir() {
+    rm -rf "$SSH_WORKDIR"
+}
+trap cleanup_ssh_workdir EXIT
 
-SSH=(ssh -i "$DEPLOY_KEY" -p "$DEPLOY_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
-SCP=(scp -i "$DEPLOY_KEY" -P "$DEPLOY_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new)
+KNOWN_HOSTS="$SSH_WORKDIR/known_hosts"
+: > "$KNOWN_HOSTS"
+chmod 600 "$KNOWN_HOSTS"
+
+DEFAULT_IDENTITY="${HOME}/.ssh/id_ed25519"
+if [[ -e "$DEFAULT_IDENTITY" ]]; then
+    DEFAULT_IDENTITY_FINGERPRINT="$(cksum "$DEFAULT_IDENTITY" | awk '{print $1" "$2}')"
+else
+    DEFAULT_IDENTITY_FINGERPRINT=""
+fi
+
+assert_default_identity_untouched() {
+    if [[ ! -e "$DEFAULT_IDENTITY" ]]; then
+        if [[ -n "$DEFAULT_IDENTITY_FINGERPRINT" ]]; then
+            err "Refusing to continue: ${DEFAULT_IDENTITY} was removed during deploy."
+            exit 1
+        fi
+        return 0
+    fi
+    if [[ -z "$DEFAULT_IDENTITY_FINGERPRINT" ]]; then
+        err "Refusing to continue: ${DEFAULT_IDENTITY} was created during deploy."
+        exit 1
+    fi
+    local now
+    now="$(cksum "$DEFAULT_IDENTITY" | awk '{print $1" "$2}')"
+    if [[ "$now" != "$DEFAULT_IDENTITY_FINGERPRINT" ]]; then
+        err "Refusing to continue: ${DEFAULT_IDENTITY} changed during deploy."
+        exit 1
+    fi
+}
+
+for host in "${HOSTS[@]}"; do
+    ssh-keyscan -p "$DEPLOY_PORT" -H "${DEPLOY_IP:-$host}" >> "$KNOWN_HOSTS" 2>/dev/null || true
+done
+
+SSH=(ssh -i "$DEPLOY_KEY" -p "$DEPLOY_PORT" -o IdentitiesOnly=yes -o IdentityFile="$DEPLOY_KEY" -o UserKnownHostsFile="$KNOWN_HOSTS" -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
+SCP=(scp -i "$DEPLOY_KEY" -P "$DEPLOY_PORT" -o IdentitiesOnly=yes -o IdentityFile="$DEPLOY_KEY" -o UserKnownHostsFile="$KNOWN_HOSTS" -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=accept-new)
 
 run_remote() {
     local host="$1"
@@ -405,5 +442,7 @@ REMOTE
     fi
 
 done
+
+assert_default_identity_untouched
 
 ok "Deployment complete."
