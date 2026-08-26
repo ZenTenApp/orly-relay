@@ -53,7 +53,9 @@ Environment=ORLY_GC_ENABLED=false
 Environment=ORLY_RATE_LIMIT_TARGET_MB=2000
 
 # Connection and query limits
-Environment=ORLY_MAX_CONN_PER_IP=5
+# WS upgrade bucket per IP per minute (default 10 caused "blocked after 10 requests")
+Environment=ORLY_HTTP_GUARD_WS_PER_MIN=120
+Environment=ORLY_MAX_CONN_PER_IP=100
 Environment=ORLY_QUERY_RESULT_LIMIT=256
 
 # Enable pprof HTTP endpoint for debugging
