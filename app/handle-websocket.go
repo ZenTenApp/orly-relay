@@ -79,10 +79,17 @@ whitelist:
 	// Track global connection count
 	s.activeConnCount.Add(1)
 
-	// Decrement connection counts when this function returns
+	// Decrement connection counts when this function returns. ipDecd guards
+	// against double-decrement: the teardown defer below releases the per-IP
+	// slot as soon as the read loop exits, while this fallback covers early
+	// returns that occur before the read loop starts.
+	ipDecd := false
 	defer func() {
 		s.activeConnCount.Add(-1)
-		s.ConnIPDec(ip)
+		if !ipDecd {
+			s.ConnIPDec(ip)
+			ipDecd = true
+		}
 	}()
 
 	// Localhost connections are exempt from rate limiting — split-IPC internal
@@ -217,6 +224,14 @@ whitelist:
 	go s.Pinger(ctx, listener, ticker)
 	defer func() {
 		log.D.F("closing websocket connection from %s", remote)
+
+		// Release the per-IP connection slot immediately. This must not wait
+		// for the rest of teardown; otherwise a slow/hung teardown would keep
+		// the IP blocked even after the socket is gone.
+		if !ipDecd {
+			s.ConnIPDec(ip)
+			ipDecd = true
+		}
 
 		// Cancel all active subscriptions first (via actor)
 		listener.SubCancelAll()

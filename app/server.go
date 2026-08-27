@@ -79,7 +79,7 @@ type Server struct {
 
 	// Per-IP connection tracking actor
 	connIPCheck actor.Func[connIPCheckArgs, connIPCheckResp]
-	connIPDec   actor.Inbox[string]
+	connIPDec   actor.Func[connIPDecArgs, connIPDecResp]
 	connIPLC    actor.Lifecycle
 
 	// Global connection and subscription counters for adaptive rate limiting

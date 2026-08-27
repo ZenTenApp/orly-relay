@@ -17,9 +17,14 @@ type connIPCheckResp struct {
 	current int
 }
 
+type connIPDecArgs struct {
+	IP string
+}
+type connIPDecResp struct{}
+
 func (s *Server) startConnPerIPActor() {
 	s.connIPCheck = actor.NewFunc[connIPCheckArgs, connIPCheckResp]()
-	s.connIPDec = actor.NewInbox[string](16)
+	s.connIPDec = actor.NewFunc[connIPDecArgs, connIPDecResp]()
 	s.connIPLC = actor.NewLifecycle()
 	actor.Go(s.connIPLC, func() {
 		m := make(map[string]int)
@@ -33,11 +38,12 @@ func (s *Server) startConnPerIPActor() {
 					m[msg.Req.IP]++
 					msg.Reply(connIPCheckResp{allowed: true, current: current + 1})
 				}
-			case ip := <-s.connIPDec.Recv():
-				m[ip]--
-				if m[ip] <= 0 {
-					delete(m, ip)
+			case msg := <-s.connIPDec.Recv():
+				m[msg.Req.IP]--
+				if m[msg.Req.IP] <= 0 {
+					delete(m, msg.Req.IP)
 				}
+				msg.Reply(connIPDecResp{})
 			case <-s.Ctx.Done():
 				return
 			}
@@ -51,7 +57,7 @@ func (s *Server) ConnIPCheckAndInc(ip string, max int) (allowed bool, current in
 }
 
 func (s *Server) ConnIPDec(ip string) {
-	s.connIPDec.TrySend(ip)
+	s.connIPDec.Call(connIPDecArgs{IP: ip})
 }
 
 // -- challenge actor types --
