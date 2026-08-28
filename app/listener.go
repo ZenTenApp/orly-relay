@@ -76,6 +76,7 @@ type Listener struct {
 	handlerDoneCh    chan handlerDoneReq
 	handlerWaitCh    chan handlerWaitReq
 	handlerActorDone chan struct{}
+	handlerStopCh    chan struct{}
 
 	handlerSem       chan struct{}       // Limits concurrent message handlers per connection
 
@@ -90,6 +91,7 @@ type Listener struct {
 	subCancelAllCh   chan subCancelAllReq
 	subGetCh         chan subGetReq
 	subActorDone     chan struct{}
+	subStopCh        chan struct{}
 
 	// Flow control counters (atomic for concurrent access)
 	droppedMessages      atomic.Int64
@@ -111,6 +113,7 @@ func (l *Listener) initActors() {
 	l.handlerDoneCh = make(chan handlerDoneReq, 128)
 	l.handlerWaitCh = make(chan handlerWaitReq)
 	l.handlerActorDone = make(chan struct{})
+	l.handlerStopCh = make(chan struct{}, 1)
 	go l.handlerTrackingActor()
 
 	// Auth gate: starts unlocked (one token available)
@@ -123,6 +126,7 @@ func (l *Listener) initActors() {
 	l.subCancelAllCh = make(chan subCancelAllReq)
 	l.subGetCh = make(chan subGetReq)
 	l.subActorDone = make(chan struct{})
+	l.subStopCh = make(chan struct{}, 1)
 	go l.subscriptionActor()
 }
 
@@ -148,7 +152,7 @@ func (l *Listener) handlerTrackingActor() {
 			} else {
 				waiters = append(waiters, req.resp)
 			}
-		case <-l.ctx.Done():
+		case <-l.handlerStopCh:
 			// drain remaining
 			for {
 				select {
@@ -188,7 +192,7 @@ func (l *Listener) subscriptionActor() {
 		case req := <-l.subGetCh:
 			cancelFunc, exists := subs[req.id]
 			req.resp <- subGetResp{cancel: cancelFunc, exists: exists}
-		case <-l.ctx.Done():
+		case <-l.subStopCh:
 			for _, cancelFunc := range subs {
 				cancelFunc()
 			}
@@ -214,6 +218,17 @@ func (l *Listener) HandlerWait() {
 	<-resp
 }
 
+// HandlerStop signals the handler tracking actor to shut down. It must be
+// called only after HandlerWait has returned (all handlers done). The actor
+// deliberately does NOT stop on ctx cancellation so that HandlerWait remains
+// reliable after cancel() unblocks handlers.
+func (l *Listener) HandlerStop() {
+	select {
+	case l.handlerStopCh <- struct{}{}:
+	default:
+	}
+}
+
 // SubSet stores a subscription cancel function
 func (l *Listener) SubSet(id string, cancel context.CancelFunc) {
 	l.subSetCh <- subSetReq{id: id, cancel: cancel}
@@ -237,6 +252,18 @@ func (l *Listener) SubGet(id string) (context.CancelFunc, bool) {
 	l.subGetCh <- subGetReq{id: id, resp: resp}
 	r := <-resp
 	return r.cancel, r.exists
+}
+
+// SubStop signals the subscription actor to shut down. It must be called
+// only after all subscription operations for this connection are done (i.e.
+// after HandlerWait). Like the handler actor, the subscription actor
+// deliberately survives ctx cancellation so SubCancelAll remains reliable
+// after the read loop cancels the connection context.
+func (l *Listener) SubStop() {
+	select {
+	case l.subStopCh <- struct{}{}:
+	default:
+	}
 }
 
 // AuthLock acquires the auth gate exclusively (for AUTH processing)

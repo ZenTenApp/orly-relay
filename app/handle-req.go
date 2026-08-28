@@ -614,9 +614,13 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		}
 
 		// Filter privileged events based on kind.
-		// When auth is required, privileged kinds need party-involvement checks
-		// to protect DM metadata.
-		if !l.Config.PrivilegedOpen && l.Config.AuthRequired && kind.IsPrivileged(ev.Kind) && accessLevel != "admin" {
+		// Privileged kinds need party-involvement checks to protect DM metadata
+		// whenever any auth mechanism is enabled. This MUST match the live
+		// subscription path (subscriptionRequiresAuth) so historical and live
+		// queries behave identically.
+		if !l.Config.PrivilegedOpen &&
+			(l.Config.AuthRequired || l.Config.AuthToWrite || acl.Registry.GetMode() != "none") &&
+			kind.IsPrivileged(ev.Kind) && accessLevel != "admin" {
 			log.T.C(
 				func() string {
 					return fmt.Sprintf(
@@ -941,22 +945,7 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 		// Register subscription with publisher BEFORE EOSE so events arriving
 		// between query completion and EOSE are buffered in the receiver channel
 		// instead of being silently dropped.
-		authRequired := !l.Config.PrivilegedOpen && acl.Registry.GetMode() != "none"
-		if !authRequired {
-			for _, f := range subbedFilters {
-				if f != nil && f.Kinds != nil {
-					for _, k := range f.Kinds.K {
-						if kind.IsChannelKind(k.K) && !kind.IsDiscoverableChannelKind(k.K) {
-							authRequired = true
-							break
-						}
-					}
-				}
-				if authRequired {
-					break
-				}
-			}
-		}
+		authRequired := l.subscriptionRequiresAuth(&subbedFilters)
 		l.publishers.Receive(
 			&W{
 				Conn:         l.conn,
@@ -1108,4 +1097,35 @@ func (l *Listener) HandleReq(msg []byte) (err error) {
 
 	log.T.F("HandleReq: COMPLETED processing from %s", l.remote)
 	return
+}
+
+// subscriptionRequiresAuth reports whether a live subscription must enforce
+// per-event access checks on privileged kinds (DMs, gift-wraps, channels, etc.).
+//
+// This MUST be consistent with the historical REQ query path (the privileged
+// filtering block near the query loop) so that a live subscription cannot leak
+// a privileged event to someone who is not a party to it.
+//
+// History: this used to only check acl.Registry.GetMode() != "none", which
+// meant a relay deployed with ORLY_AUTH_REQUIRED=true (but ACL mode "none",
+// the default) skipped the party-involvement gate for live subscriptions while
+// the historical query path still enforced it. That asymmetry let any
+// authenticated user receive all kind-4 DMs via a live {"kinds":[4]} filter.
+// auth (ORLY_AUTH_REQUIRED / ORLY_AUTH_TO_WRITE) is now honored here too.
+func (l *Listener) subscriptionRequiresAuth(subbedFilters *filter.S) bool {
+	authRequired := !l.Config.PrivilegedOpen &&
+		(l.Config.AuthRequired || l.Config.AuthToWrite || acl.Registry.GetMode() != "none")
+	if !authRequired {
+		// Non-discoverable channel kinds (42-44) always require access control.
+		for _, f := range *subbedFilters {
+			if f != nil && f.Kinds != nil {
+				for _, k := range f.Kinds.K {
+					if kind.IsChannelKind(k.K) && !kind.IsDiscoverableChannelKind(k.K) {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return authRequired
 }

@@ -295,6 +295,10 @@ Environment=ORLY_LISTEN=127.0.0.1
 Environment=ORLY_PORT=$RELAY_PORT
 Environment=ORLY_LOG_LEVEL=trace
 Environment=ORLY_DB_LOG_LEVEL=error
+# Per-IP rate limiting — raised from defaults to avoid blocking clients
+# after 10 WebSocket upgrades (HTTP Guard default) / 100 conns.
+Environment=ORLY_HTTP_GUARD_WS_PER_MIN=120
+Environment=ORLY_MAX_CONN_PER_IP=100
 Restart=always
 RestartSec=10
 StandardOutput=journal
