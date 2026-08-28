@@ -278,6 +278,15 @@ whitelist:
 		close(listener.writeChan)
 		// Wait for write worker to finish
 		<-listener.writeDone
+
+		// Stop the handler tracking actor explicitly. It survives ctx
+		// cancellation so HandlerWait above can complete reliably.
+		listener.HandlerStop()
+		<-listener.handlerActorDone
+
+		// Stop the subscription actor explicitly (same reason as handler actor).
+		listener.SubStop()
+		<-listener.subActorDone
 	}()
 	for {
 		select {
