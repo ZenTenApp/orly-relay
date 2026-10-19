@@ -114,3 +114,4 @@ build/libsecp256k1-*
 build/SHA256SUMS-*
 
 cmd/benchmark/data.claude/skills/skill-creator/scripts/__pycache__/
+.pi/
