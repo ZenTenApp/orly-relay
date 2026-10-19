@@ -99,7 +99,11 @@ jobs:
         run: |
           set -e
           VERSION=$(cat pkg/version/version | tr -d '[:space:]')
-          go build -ldflags "-s -w" -o orly ./cmd/orly
+          # -trimpath keeps compiled-in source paths relative to the workspace
+          # rather than the runner's absolute checkout path (pkg/lol prints
+          # them into every log line via runtime.Caller).
+          go build -gcflags=all=-trimpath="$PWD" -asmflags=all=-trimpath="$PWD" \
+            -ldflags "-s -w" -o orly ./cmd/orly
           echo "Built: $(file orly)"
           ls -lh orly
 

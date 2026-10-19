@@ -16,6 +16,14 @@ GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 BUILD_FLAGS = CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=$(GOARCH)
 
+# Keep compiled-in source paths relative to this checkout. pkg/lol renders the
+# caller's file:line into every log line via runtime.Caller, so an untrimmed
+# build embeds the absolute build-machine path (e.g. /Users/you/code/...) and
+# prints it in production logs. Override with `make TRIMPATH= ...` if needed.
+TRIMPATH = -gcflags=all=-trimpath=$(CURDIR) -asmflags=all=-trimpath=$(CURDIR)
+GOFLAGS := $(strip $(GOFLAGS) $(TRIMPATH))
+export GOFLAGS
+
 # GOBIN for installed binaries (defaults to ~/go/bin)
 GOBIN ?= $(shell go env GOBIN)
 ifeq ($(GOBIN),)

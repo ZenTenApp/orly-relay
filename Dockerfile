@@ -22,7 +22,12 @@ RUN go mod download
 COPY . .
 
 # Build the unified binary (includes all subcommands: relay, bridge, db, acl, launcher)
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly -ldflags="-w -s" ./cmd/orly
+# -trimpath keeps compiled-in source paths relative to /build (pkg/lol prints
+# them into every log line) instead of embedding this image's absolute path.
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o orly \
+    -gcflags=all=-trimpath=/build \
+    -asmflags=all=-trimpath=/build \
+    -ldflags="-w -s" ./cmd/orly
 
 # Stage 2: Runtime stage
 # Use Debian slim instead of Alpine because Debian's libsecp256k1 includes

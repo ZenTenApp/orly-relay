@@ -122,7 +122,8 @@ jobs:
             path="${entry##*:}"
             echo "  Building ${name}..."
             GOEXPERIMENT=greenteagc,jsonv2 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
-              go build -ldflags "-s -w" -o "release-binaries/${name}-${VERSION}-linux-amd64" "${path}"
+              go build -gcflags=all=-trimpath="$PWD" -asmflags=all=-trimpath="$PWD" \
+                -ldflags "-s -w" -o "release-binaries/${name}-${VERSION}-linux-amd64" "${path}"
           done
 
           # Build for ARM64
@@ -132,7 +133,8 @@ jobs:
             path="${entry##*:}"
             echo "  Building ${name}..."
             GOEXPERIMENT=greenteagc,jsonv2 GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
-              go build -ldflags "-s -w" -o "release-binaries/${name}-${VERSION}-linux-arm64" "${path}"
+              go build -gcflags=all=-trimpath="$PWD" -asmflags=all=-trimpath="$PWD" \
+                -ldflags "-s -w" -o "release-binaries/${name}-${VERSION}-linux-arm64" "${path}"
           done
 
           # Create checksums

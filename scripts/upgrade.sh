@@ -147,8 +147,11 @@ fi
 
 # --- Step 2: Build unified binary ---
 log "Building unified binary for ${TARGET_GOOS}/${TARGET_GOARCH}..."
+# -trimpath keeps compiled-in source paths relative to the repo root instead of
+# the absolute build path (pkg/lol prints them in every log line).
+TRIMPATH_FLAGS="-gcflags=all=-trimpath=$PROJECT_DIR -asmflags=all=-trimpath=$PROJECT_DIR"
 CGO_ENABLED=0 GOOS="$TARGET_GOOS" GOARCH="$TARGET_GOARCH" \
-    go build -ldflags "-s -w" -o "$BUILD_OUTPUT" ./cmd/orly
+    go build $TRIMPATH_FLAGS -ldflags "-s -w" -o "$BUILD_OUTPUT" ./cmd/orly
 
 BINARY_SIZE=$(du -h "$BUILD_OUTPUT" | cut -f1)
 ok "Built: $BUILD_OUTPUT ($BINARY_SIZE)"
