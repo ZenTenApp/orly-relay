@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -345,6 +346,9 @@ func TimeStamper() (s string) {
 // GetLoc returns the code location of the caller.
 func GetLoc(skip int) (output string) {
 	_, file, line, _ := runtime.Caller(skip)
+	if idx := strings.Index(file, "git.smesh.lol/"); idx != -1 {
+		file = file[idx+len("git.smesh.lol/"):]
+	}
 	output = fmt.Sprintf("%s:%d", file, line)
 	return
 }
