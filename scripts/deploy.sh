@@ -153,9 +153,13 @@ done
 log "Building $GOOS/$GOARCH unified binary (./cmd/orly)..."
 log "Version: $VERSION (commit: $COMMIT)"
 cd "$PROJECT_DIR"
+# -trimpath keeps compiled-in source paths relative to this checkout instead of
+# embedding the absolute build path. pkg/lol prints the caller's file:line into
+# every log line via runtime.Caller, so an untrimmed build leaks it to prod.
+TRIMPATH_FLAGS="-gcflags=all=-trimpath=$PWD -asmflags=all=-trimpath=$PWD"
 LDFLAGS="-s -w -X main.Version=$VERSION -X main.Commit=$COMMIT -X main.BuildDate=$BUILD_DATE"
 CGO_ENABLED="$CGO_ENABLED" GOOS="$GOOS" GOARCH="$GOARCH" GOEXPERIMENT="$GOEXPERIMENT" \
-    go build -ldflags "$LDFLAGS" -o "$BUILD_OUTPUT" ./cmd/orly
+    go build $TRIMPATH_FLAGS -ldflags "$LDFLAGS" -o "$BUILD_OUTPUT" ./cmd/orly
 BINARY_SIZE=$(du -h "$BUILD_OUTPUT" | cut -f1)
 BINARY_ARCH=$(file "$BUILD_OUTPUT" | grep -o 'x86-64\|aarch64\|ARM' || echo 'unknown')
 ok "Built: $BUILD_OUTPUT ($BINARY_SIZE, $BINARY_ARCH)"

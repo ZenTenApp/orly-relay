@@ -47,6 +47,11 @@ export CGO_ENABLED=0
 export GOOS=linux
 export GOARCH=amd64
 
+# -trimpath keeps compiled-in source paths relative to this checkout instead of
+# the absolute build path (pkg/lol prints them in every log line via
+# runtime.Caller).
+TRIMPATH_FLAGS="-gcflags=all=-trimpath=$PWD -asmflags=all=-trimpath=$PWD"
+
 # Build web UI if bun is available
 if command -v bun &>/dev/null && [[ -d "app/web" ]]; then
     log_info "Building web UI..."
@@ -55,7 +60,7 @@ fi
 
 # Build unified binary (includes launcher, db, acl subcommands)
 log_info "Building orly (unified binary with subcommands)..."
-go build -ldflags "-s -w" -o "$BUILD_DIR/orly" ./cmd/orly
+go build $TRIMPATH_FLAGS -ldflags "-s -w" -o "$BUILD_DIR/orly" ./cmd/orly
 
 log_info "Build complete. Binary in $BUILD_DIR"
 ls -la "$BUILD_DIR"

@@ -11,6 +11,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
+# -trimpath keeps compiled-in source paths relative to the repo root instead of
+# the absolute build path (pkg/lol prints them in every log line).
+TRIMPATH_FLAGS="-gcflags=all=-trimpath=$REPO_ROOT -asmflags=all=-trimpath=$REPO_ROOT"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -48,7 +52,7 @@ build_platform() {
     
     # Build with CGO_ENABLED=0 (pure Go with purego)
     if CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch \
-        go build -ldflags "-s -w -X main.version=${VERSION}" \
+        go build $TRIMPATH_FLAGS -ldflags "-s -w -X main.version=${VERSION}" \
         -o "${output_path}" . 2>&1; then
         
         echo -e "${GREEN}✓ Built: ${output_name}${NC}"
