@@ -303,6 +303,19 @@ Environment=ORLY_DB_LOG_LEVEL=error
 # after 10 WebSocket upgrades (HTTP Guard default) / 100 conns.
 Environment=ORLY_HTTP_GUARD_WS_PER_MIN=120
 Environment=ORLY_MAX_CONN_PER_IP=100
+# Memory target for the rate limiter. Left at 0 (auto), the relay derives it
+# from the kernel's "free" RAM at startup, which excludes reclaimable page
+# cache and is tiny on most servers (e.g. 97MB free of 1.9GB). The target
+# then clamps to the 128MB minimum, the relay crosses the emergency threshold
+# (~1.17x target) within days, and refuses every new WebSocket connection
+# ("refusing connection: emergency mode active") until restarted. Set this to
+# ~50% of total RAM.
+Environment=ORLY_RATE_LIMIT_TARGET_MB=1024
+# Soft heap limit for the Go GC, set a little below the target above. Without
+# it Go keeps freed memory instead of returning it to the OS, so RSS never
+# falls below the recovery threshold (~0.83x target) and emergency mode never
+# exits. With it the GC works harder near the limit, keeping RSS under target.
+Environment=GOMEMLIMIT=900MiB
 Restart=always
 RestartSec=10
 StandardOutput=journal
